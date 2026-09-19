@@ -88,6 +88,11 @@ from agent_comms import Thread  # noqa: E402
 class TestAgentTurn:
     """``!agent`` prompts forward to a real agent binary."""
 
+    pytestmark = pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="agent-turn tests exec shell-script stubs; POSIX only",
+    )
+
     def _agent_with_stub(self, tmp_path: Path, wired) -> CommsAgent:
         stub = tmp_path / "fake-agent"
         stub.write_text("#!/bin/sh\ncat\n")
