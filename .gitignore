@@ -21,6 +21,7 @@ coverage.xml
 /read_markers.json
 /ledger.json
 /state.json
+/*.lock
 
 # Editors / OS
 .DS_Store

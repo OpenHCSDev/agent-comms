@@ -214,7 +214,9 @@ class TestEndToEndLifecycle:
         agent._client = FakeClient()
 
         async def prompt_flow() -> None:
-            await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "checking inbox"}])
+            await agent.prompt(
+                session_id="s1", prompt=[{"type": "text", "text": "!relay checking inbox"}]
+            )
 
         asyncio.run(prompt_flow())
         assert len(sent) == 1

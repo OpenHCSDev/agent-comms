@@ -5,17 +5,14 @@ attach to the coordination wire natively: each client session is one thread
 on the wire, prompts are messages on the bus, and replies come back as
 ``agent_message_chunk`` session updates.
 
-Two turn modes:
+Two turn modes share one session:
 
-- **relay** (default): the prompt is broadcast on the wire and the thread's
-  inbox drains back as agent messages. You are talking to the *room*.
-- **agent**: the prompt also goes to a real coding agent (pi, headless
-  ``--print`` mode) whose streamed reply is forwarded to the client and
-  posted to the thread's channel, so other threads can read it.
+- **agent** (default): the prompt runs a real coding agent (pi, headless
+  ``--print`` mode) and streams its thinking, tools, and response.
+- **relay**: ``@peer``, ``#channel``, or ``!relay`` sends directly to the
+  coordination wire without launching another coding turn.
 
-Turn mode is chosen per prompt: a leading ``!agent `` selects the agent
-turn; everything else relays. This keeps the wire semantics in the core and
-lets one Toad session act as both a chat participant and a working agent.
+The explicit ``!agent`` prefix remains accepted for compatibility.
 """
 
 from __future__ import annotations
@@ -50,6 +47,7 @@ from .operations import Comms, wire
 
 GLOBAL_TARGET = "#all"
 AGENT_PREFIX = "!agent "
+RELAY_PREFIX = "!relay "
 DEFAULT_AGENT_BIN = "pi"
 DEFAULT_AGENT_ARGS = [
     "--print",
@@ -71,9 +69,8 @@ IDLE_GRACE = 1.0  # peers idle for this long -> drain and end the turn
 class CommsAgent:
     """ACP agent bound to one Comms wire.
 
-    Session -> thread. A prompt broadcasts the text to the session's thread
-    on the global channel, drains the thread's inbox back to the client as
-    agent messages, then acknowledges.
+    Session -> thread. Coding prompts run the configured backend; targeted
+    prompts relay through the shared wire and drain replies back to the client.
     """
 
     def __init__(
@@ -147,20 +144,31 @@ class CommsAgent:
         self._comms.registry.require(thread_name)
         text = self._prompt_text(prompt)
         agent_task: str | None = None
+        relay_text: str | None = None
         if text.startswith(AGENT_PREFIX):
             agent_task = text[len(AGENT_PREFIX) :].strip()
-        target, body = parse_target(text)
+        elif text.startswith(RELAY_PREFIX):
+            relay_text = text[len(RELAY_PREFIX) :].strip()
+        elif text.lstrip().startswith(("@", "#")):
+            relay_text = text
+        else:
+            agent_task = text.strip()
         sent_seq = 0
-        if body:
+        if relay_text:
+            target, body = parse_target(relay_text)
             self._comms.send(thread_name, target, body)
             sent_seq = self._comms.bus.total_messages()
-        self._debug_log(f"prompt:start sender={thread_name} target={target} sent_seq={sent_seq}")
+        self._debug_log(
+            f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'} "
+            f"sent_seq={sent_seq}"
+        )
         await self._drain_inbox(session_id, thread_name)
         if agent_task:
             await self._run_agent_turn(session_id, thread_name, agent_task)
-        # Hold the turn open while replies arrive: clients render updates
-        # during a turn, so the room's answers stream into the chat live.
-        await self._collect_replies(session_id, thread_name, sent_seq)
+        else:
+            # Hold relay turns open while room replies arrive. Native channel
+            # and DM views remain available for longer-running conversations.
+            await self._collect_replies(session_id, thread_name, sent_seq)
         self._debug_log("prompt:returning")
         self._ensure_live_drain(session_id, thread_name)
         return PromptResponse(stop_reason="end_turn")
@@ -310,7 +318,6 @@ class CommsAgent:
         """Stream a real coding agent's reply: events to the client, status to the wire."""
         thread = self._comms.registry.require(thread_name)
         self._comms.set_activity(thread_name, ActivityState.THINKING, task[:80])
-        await self._emit_event(session_id, {"type": "thinking", "text": f"thinking: {task[:80]}"})
         worktree = thread.worktree if Path(thread.worktree).is_dir() else str(Path.cwd())
         env_extra = {"AGENT_COMMS_THREAD": thread_name}
         reply_parts: list[str] = []
@@ -333,7 +340,7 @@ class CommsAgent:
                     self._comms.set_activity(
                         thread_name, ActivityState.WORKING, event.get("title", "")
                     )
-                elif kind == "tool_end" and event.get("ok"):
+                elif kind == "tool_end":
                     self._comms.set_activity(thread_name, ActivityState.THINKING, task[:80])
                 await self._emit_event(session_id, event)
         finally:
@@ -368,31 +375,49 @@ class CommsAgent:
             if text:
                 await self._emit_text(session_id, text)
         elif kind == "tool_start":
+            start_update = ToolCallStart(
+                session_update="tool_call",
+                tool_call_id=event["id"],
+                title=event.get("title") or event.get("name") or "tool",
+                kind=cast(Any, backend.tool_kind(event.get("name") or "other")),
+                status="in_progress",
+            )
+            if event.get("args") is not None:
+                start_update.raw_input = event["args"]
             await self._client.session_update(
                 session_id=session_id,
-                update=ToolCallStart(
-                    session_update="tool_call",
-                    tool_call_id=event["id"],
-                    title=event.get("title") or event.get("name") or "tool",
-                    kind=cast(Any, backend.tool_kind(event.get("name") or "other")),
-                    status="in_progress",
-                ),
+                update=start_update,
             )
+        elif kind == "tool_progress":
+            progress_update = ToolCallProgress(
+                session_update="tool_call_update",
+                tool_call_id=event["id"],
+                status="in_progress",
+            )
+            output = event.get("output") or ""
+            if output:
+                progress_update.content = [
+                    ContentToolCallContent(
+                        type="content",
+                        content=TextContentBlock(type="text", text=output),
+                    )
+                ]
+            await self._client.session_update(session_id=session_id, update=progress_update)
         elif kind == "tool_end":
-            update = ToolCallProgress(
+            end_update = ToolCallProgress(
                 session_update="tool_call_update",
                 tool_call_id=event["id"],
                 status="completed" if event.get("ok") else "failed",
             )
             output = event.get("output") or ""
             if output:
-                update.content = [
+                end_update.content = [
                     ContentToolCallContent(
                         type="content",
                         content=TextContentBlock(type="text", text=output),
                     )
                 ]
-            await self._client.session_update(session_id=session_id, update=update)
+            await self._client.session_update(session_id=session_id, update=end_update)
         elif kind == "thinking":
             await self._client.session_update(
                 session_id=session_id,

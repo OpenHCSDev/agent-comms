@@ -26,24 +26,39 @@ class TestRpcParsing:
             [
                 '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"hel"}}',
                 '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"lo"}}',
+                '{"type":"message_update","assistantMessageEvent":'
+                '{"type":"thinking_delta","delta":"Checking the workspace"}}',
                 '{"type":"tool_execution_start","toolCallId":"t1",'
                 '"toolName":"bash","args":{"command":"echo hi"}}',
+                '{"type":"tool_execution_update","toolCallId":"t1","toolName":"bash",'
+                '"partialResult":{"content":[{"type":"text","text":"running"}]}}',
                 '{"type":"tool_execution_end","toolCallId":"t1","toolName":"bash",'
                 '"result":{"content":[{"type":"text","text":"hi"}]},"isError":false}',
                 '{"type":"message_update",'
                 '"assistantMessageEvent":{"type":"text_delta","delta":" done"}}',
-                '{"type":"agent_end","messages":[]}',
+                '{"type":"agent_settled"}',
             ]
         )
         stub = _stub(tmp_path, f"#!/bin/sh\ntrue\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
         events = [e async for e in backend.stream_agent_events(stub, [], "task", str(tmp_path))]
         # pi-named stub triggers rpc mode; prompt goes to stdin.
         types = [e["type"] for e in events]
-        assert types == ["chunk", "chunk", "tool_start", "tool_end", "chunk", "done"]
-        tool_start = events[2]
+        assert types == [
+            "chunk",
+            "chunk",
+            "thinking",
+            "tool_start",
+            "tool_progress",
+            "tool_end",
+            "chunk",
+            "done",
+        ]
+        assert events[2]["text"] == "Checking the workspace"
+        tool_start = events[3]
         assert tool_start["name"] == "bash" and tool_start["id"] == "t1"
         assert "echo hi" in tool_start["title"]
-        tool_end = events[3]
+        assert events[4]["output"] == "running"
+        tool_end = events[5]
         assert tool_end["ok"] is True and "hi" in tool_end["output"]
         assert events[-1]["text"] == "hello done" and events[-1]["ok"] is True
 
@@ -55,7 +70,7 @@ class TestRpcParsing:
                 '"sessionName":"work"}}',
                 '{"type":"message_update","usage":{"totalTokens":125},'
                 '"assistantMessageEvent":{"type":"text_delta","delta":"ok"}}',
-                '{"type":"agent_end"}',
+                '{"type":"agent_settled"}',
                 '{"type":"response","command":"get_session_stats","success":true,"data":'
                 '{"contextUsage":{"tokens":200,"contextWindow":1000,"percent":20}}}',
             ]
@@ -67,17 +82,17 @@ class TestRpcParsing:
         assert info[-1]["context_used"] == 200
         assert info[-1]["context_size"] == 1000
 
-    async def test_failed_tool_marks_done_not_ok(self, tmp_path):
+    async def test_failed_tool_does_not_fail_recovered_turn(self, tmp_path):
         rpc_lines = "\n".join(
             [
                 '{"type":"tool_execution_start","toolCallId":"t1","toolName":"bash","args":{}}',
                 '{"type":"tool_execution_end","toolCallId":"t1","toolName":"bash","result":{"content":[{"type":"text","text":"boom"}]},"isError":true}',
-                '{"type":"agent_end"}',
+                '{"type":"agent_settled"}',
             ]
         )
         stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
         events = [e async for e in backend.stream_agent_events(stub, [], "t", str(tmp_path))]
-        assert events[-1]["ok"] is False
+        assert events[-1]["ok"] is True
         tool_end = events[1]
         assert tool_end["ok"] is False
 
