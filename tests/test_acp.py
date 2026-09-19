@@ -263,3 +263,67 @@ class TestCrossClient:
         assert "from the cli side" in sent[0].content.text
         # The ACP prompt itself is visible on the CLI side.
         assert [m.body for m in comms.inbox("cli-agent")] == ["checking inbox"]
+
+
+class TestLiveDrain:
+    async def test_messages_arrive_after_prompt_without_new_prompt(self, tmp_path):
+        """The background drain pushes inbox messages live between prompts."""
+        import asyncio
+
+        agent = CommsAgent(wire(tmp_path / "wire"))
+        sent: list = []
+
+        class FakeClient:
+            async def session_update(self, session_id=None, update=None, **kw):
+                sent.append(update)
+
+        agent._client = FakeClient()
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "hi room"}])
+        assert not any("cli" in (u.content.text or "") for u in sent)
+
+        # A peer DMs the session thread AFTER the prompt finished.
+        agent._comms.register(Thread(name="cli", tags=frozenset(), worktree="/wt"))
+        agent._comms.send("cli", "proj", "live push")
+
+        # Wait for the background drain loop to fire.
+        for _ in range(30):
+            await asyncio.sleep(0.1)
+            if any("live push" in (u.content.text or "") for u in sent):
+                break
+        assert any("live push" in (u.content.text or "") for u in sent)
+
+        # The drain acknowledged it; it won't be delivered twice.
+        await asyncio.sleep(1.2)
+        live_pushes = [u for u in sent if "live push" in (u.content.text or "")]
+        assert len(live_pushes) == 1
+
+    async def test_cancel_stops_background_drain(self, tmp_path):
+        import asyncio
+
+        agent = CommsAgent(wire(tmp_path / "wire"))
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "hi"}])
+        assert "s1" in agent._drain_tasks
+        await agent.cancel(session_id="s1")
+        await asyncio.sleep(0.05)
+        assert "s1" not in agent._drain_tasks
+        assert agent._drain_tasks.get("s1") is None or agent._drain_tasks["s1"].done()
+
+
+class TestFullHistory:
+    def test_full_history_is_everything_in_order(self, tmp_path):
+        from agent_comms.operations import wire
+
+        comms = wire(tmp_path / "wire")
+        comms.register(Thread(name="a", tags=frozenset({"x"}), worktree="/wt"))
+        comms.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+        comms.send("a", "#all", "one")
+        comms.send("a", "b", "dm")
+        comms.send("b", "#x", "tagged")
+        bodies = [(m.sender, m.target, m.body) for m in comms.full_history()]
+        assert bodies == [
+            ("a", "#all", "one"),
+            ("a", "b", "dm"),
+            ("b", "#x", "tagged"),
+        ]

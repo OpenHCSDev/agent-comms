@@ -53,9 +53,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("who", help="Presence: who is in the chat")
 
-    p_history = sub.add_parser("history", help="Full history of a DM or channel")
+    p_history = sub.add_parser("history", help="Full history of a DM, channel, or everything")
     p_history.add_argument("--with", dest="with_thread", default=None, help="DM with this thread")
     p_history.add_argument("--channel", default=None, help="Channel (#all, #tag)")
+    p_history.add_argument("--everything", action="store_true", help="Every message on the wire")
     p_history.add_argument("--as", dest="me", default=None, help="Your thread (for --with)")
 
     sub.add_parser("channels", help="Derived channel list")
@@ -117,8 +118,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "channels":
             _emit({"channels": list(comms.channels())})
         elif args.command == "history":
-            if args.with_thread and args.channel:
-                return _fail("history takes --with or --channel, not both")
+            selected = sum(bool(x) for x in (args.with_thread, args.channel, args.everything))
+            if selected != 1:
+                return _fail("history takes exactly one of --with, --channel, --everything")
             if args.with_thread:
                 if not args.me:
                     return _fail("history --with requires --as (your thread)")
@@ -131,7 +133,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     }
                 )
             else:
-                return _fail("history requires --with or --channel")
+                _emit({"everything": [m.to_wire() for m in comms.full_history()]})
         elif args.command == "threads":
             _emit({"threads": list(comms.list_threads(active_only=args.active_only))})
         elif args.command == "thread":

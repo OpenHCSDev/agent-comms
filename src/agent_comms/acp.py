@@ -51,6 +51,7 @@ DEFAULT_AGENT_ARGS = [
     "--model",
     "z-ai/glm-5.3-flash",
 ]
+LIVE_DRAIN_INTERVAL = 1.0
 
 
 class CommsAgent:
@@ -75,6 +76,7 @@ class CommsAgent:
             if agent_args is not None
             else (arg_env.split() if arg_env else list(DEFAULT_AGENT_ARGS))
         )
+        self._drain_tasks: dict[str, asyncio.Task[None]] = {}
 
     def on_connect(self, client: Any) -> None:
         """Called by AgentSideConnection with the client-facing connection."""
@@ -102,6 +104,7 @@ class CommsAgent:
         self._next += 1
         session_id = f"s{self._next}"
         self._sessions[session_id] = thread_name
+        self._ensure_live_drain(session_id, thread_name)
         return NewSessionResponse(session_id=session_id)
 
     async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
@@ -116,9 +119,13 @@ class CommsAgent:
         await self._drain_inbox(session_id, thread_name)
         if agent_task:
             await self._run_agent_turn(session_id, thread_name, agent_task)
+        self._ensure_live_drain(session_id, thread_name)
         return PromptResponse(stop_reason="end_turn")
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
+        task = self._drain_tasks.pop(session_id, None)
+        if task is not None:
+            task.cancel()
         thread_name = self._sessions.get(session_id)
         if thread_name:
             self._comms.acknowledge(thread_name)
@@ -158,6 +165,18 @@ class CommsAgent:
         thread = Thread(name=name, tags=frozenset({"acp"}), worktree=cwd)
         self._comms.register(thread)
         return name
+
+    def _ensure_live_drain(self, session_id: str, thread_name: str) -> None:
+        """Keep one background task per session pushing inbox messages live."""
+        if session_id in self._drain_tasks and not self._drain_tasks[session_id].done():
+            return
+
+        async def loop() -> None:
+            while True:
+                await asyncio.sleep(LIVE_DRAIN_INTERVAL)
+                await self._drain_inbox(session_id, thread_name)
+
+        self._drain_tasks[session_id] = asyncio.create_task(loop())
 
     async def _drain_inbox(self, session_id: str, thread_name: str) -> None:
         from .declarations import ThreadStatus

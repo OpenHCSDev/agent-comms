@@ -132,3 +132,45 @@ async def test_refresh_updates_presence(app, wired):
         await pilot.pause()
         sidebar = widget_text(app.query_one("#sidebar"))
         assert "newcomer" in sidebar
+
+
+async def test_everything_view_first_and_shows_all_traffic(wired):
+    wired.send("PR111", "fixer", "a dm")
+    wired.broadcast("PR111", "a broadcast")
+    app = CommsApp(wired, thread_name="fixer")
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app._views()[0] == "*all"
+        chat = widget_text(app.query_one("#inbox"))
+        assert "a dm" in chat and "a broadcast" in chat
+        # DM and channel traffic both visible in the combined view.
+        assert "@fixer" in chat or "fixer" in chat
+
+
+async def test_everything_view_sends_to_global(wired):
+    app = CommsApp(wired, thread_name="fixer")
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app._current == "*all"
+        prompt = app.query_one("#prompt")
+        prompt.focus()
+        prompt.value = "hello everyone"
+        await pilot.press("enter")
+        await pilot.pause()
+        # Sent to the global channel, not a DM.
+        history = [m.body for m in wired.channel_history("#all")]
+        assert "hello everyone" in history
+
+
+async def test_live_refresh_without_keypress(wired):
+    import asyncio
+
+    app = CommsApp(wired, thread_name="fixer")
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        # Someone messages the thread from outside; no key pressed.
+        wired.send("PR111", "fixer", "pushed live")
+        await asyncio.sleep(1.4)
+        await pilot.pause()
+        chat = widget_text(app.query_one("#inbox"))
+        assert "pushed live" in chat

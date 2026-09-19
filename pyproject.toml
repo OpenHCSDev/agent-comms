@@ -51,6 +51,7 @@ Issues = "https://github.com/OpenHCSDev/agent-comms/issues"
 [project.scripts]
 agent-comms = "agent_comms.cli:main"
 agent-comms-acp = "agent_comms.acp:main"
+agent-comms-agent = "agent_comms.agent_loop:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent_comms"]

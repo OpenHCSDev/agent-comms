@@ -94,6 +94,10 @@ class Comms:
         """Full history of one channel (``#all`` or a tag channel)."""
         return self.bus.channel_history(target)
 
+    def full_history(self) -> Sequence[Message]:
+        """Every message on the wire, in seq order (the combined view)."""
+        return self.bus.full_history()
+
     def channels(self) -> Sequence[str]:
         """Derived channel list: ``#all`` plus one channel per tag in use."""
         return self.bus.channels()
