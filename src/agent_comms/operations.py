@@ -78,18 +78,18 @@ class Comms:
         """Declare a message addressed to every peer."""
         return self.send(sender, "broadcast", body)
 
-    def inbox(self, name: str) -> Sequence[Message]:
-        """Undelivered messages for one thread."""
-        return self.bus.inbox(name)
+    def inbox(self, name: str, target: str | None = None) -> Sequence[Message]:
+        """Undelivered messages for one thread, optionally scoped to a conversation."""
+        return self.bus.inbox(name, target)
 
-    def acknowledge(self, name: str) -> int:
-        """Mark inbox delivered. Returns count acknowledged."""
-        messages = self.inbox(name)
-        self.bus.mark_delivered(name)
+    def acknowledge(self, name: str, target: str | None = None) -> int:
+        """Mark an inbox or one conversation delivered. Returns count acknowledged."""
+        messages = self.inbox(name, target)
+        self.bus.mark_delivered(name, target)
         return len(messages)
 
-    def pending_count(self, name: str) -> int:
-        return len(self.inbox(name))
+    def pending_count(self, name: str, target: str | None = None) -> int:
+        return len(self.inbox(name, target))
 
     # ─── IRC views ────────────────────────────────────────────────────────────
 

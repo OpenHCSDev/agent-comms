@@ -18,8 +18,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -31,6 +33,112 @@ class UnregisteredThreadError(ValueError):
 
 class RelationViolationError(ValueError):
     """A required relation between declarations cannot be proved."""
+
+
+@contextmanager
+def _store_lock(store_path: Path) -> Iterator[None]:
+    """Hold an exclusive process lock associated with a wire store."""
+    store_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = store_path.with_name(f".{store_path.name}.lock")
+    with open(lock_path, "a+b") as lock_file:
+        if os.name == "nt":
+            import msvcrt
+
+            lock_file.seek(0, os.SEEK_END)
+            if lock_file.tell() == 0:
+                lock_file.write(b"\0")
+                lock_file.flush()
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)  # type: ignore[attr-defined]
+        else:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                lock_file.seek(0)
+                msvcrt.locking(  # type: ignore[attr-defined]
+                    lock_file.fileno(), msvcrt.LK_UNLCK, 1  # type: ignore[attr-defined]
+                )
+            else:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Replace a snapshot without exposing a partially written file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    temporary_path = Path(temporary)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            output.write(text)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def _repair_trailing_jsonl(path: Path) -> None:
+    """Complete a valid unterminated record or quarantine a truncated one."""
+    if not path.exists():
+        return
+    data = path.read_bytes()
+    if not data or data.endswith(b"\n"):
+        return
+    boundary = data.rfind(b"\n") + 1
+    tail = data[boundary:]
+    try:
+        json.loads(tail)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        corrupt_path = path.with_name(f"{path.name}.corrupt")
+        with open(corrupt_path, "ab") as corrupt:
+            corrupt.write(tail + b"\n")
+            corrupt.flush()
+            os.fsync(corrupt.fileno())
+        with open(path, "r+b") as output:
+            output.truncate(boundary)
+            output.flush()
+            os.fsync(output.fileno())
+    else:
+        with open(path, "ab") as output:
+            output.write(b"\n")
+            output.flush()
+            os.fsync(output.fileno())
+
+
+def _jsonl_records(path: Path) -> list[Mapping]:
+    """Read complete JSONL records, tolerating only a truncated final record."""
+    if not path.exists():
+        return []
+    lines = path.read_text().splitlines(keepends=True)
+    records: list[Mapping] = []
+    for index, raw_line in enumerate(lines):
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            is_tail = index == len(lines) - 1 and not raw_line.endswith(("\n", "\r"))
+            if is_tail:
+                break
+            raise
+        if not isinstance(record, Mapping):
+            raise ValueError(f"JSONL record in {path} must be an object.")
+        records.append(record)
+    return records
+
+
+def _append_jsonl(path: Path, record: Mapping) -> None:
+    """Append one durable record. Caller must hold the store lock."""
+    _repair_trailing_jsonl(path)
+    with open(path, "ab") as output:
+        output.write(json.dumps(record).encode() + b"\n")
+        output.flush()
+        os.fsync(output.fileno())
 
 
 class ThreadStatus(Enum):
@@ -98,8 +206,8 @@ class ActivityLog:
 
     def emit(self, activity: Activity) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self._path, "a") as f:
-            f.write(json.dumps(activity.to_wire()) + "\n")
+        with _store_lock(self._path):
+            _append_jsonl(self._path, activity.to_wire())
 
     def current(self, thread: str) -> Activity:
         """Latest activity for one thread; idle when stale or unknown."""
@@ -127,13 +235,8 @@ class ActivityLog:
         }
 
     def _load(self) -> list[Activity]:
-        if not self._path.exists():
-            return []
-        return [
-            Activity.from_wire(json.loads(line))
-            for line in self._path.read_text().splitlines()
-            if line.strip()
-        ]
+        with _store_lock(self._path):
+            return [Activity.from_wire(record) for record in _jsonl_records(self._path)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,12 +293,13 @@ class RuntimeInfoStore:
         self._path = store_path
 
     def set(self, info: AgentRuntimeInfo) -> None:
-        values = self._load()
-        values[info.thread] = info
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
-            json.dumps({name: value.to_wire() for name, value in values.items()}, indent=2)
-        )
+        with _store_lock(self._path):
+            values = self._load_unlocked()
+            values[info.thread] = info
+            _atomic_write_text(
+                self._path,
+                json.dumps({name: value.to_wire() for name, value in values.items()}, indent=2),
+            )
 
     def get(self, thread: str) -> AgentRuntimeInfo | None:
         return self._load().get(thread)
@@ -204,6 +308,10 @@ class RuntimeInfoStore:
         return self._load()
 
     def _load(self) -> dict[str, AgentRuntimeInfo]:
+        with _store_lock(self._path):
+            return self._load_unlocked()
+
+    def _load_unlocked(self) -> dict[str, AgentRuntimeInfo]:
         if not self._path.exists():
             return {}
         raw = json.loads(self._path.read_text())
@@ -357,6 +465,13 @@ class ThreadRegistry:
         self._load()
 
     def _load(self) -> None:
+        with _store_lock(self._path):
+            self._load_unlocked()
+
+    def _load_unlocked(self) -> None:
+        self._threads.clear()
+        self._statuses.clear()
+        self._last_seen.clear()
         if not self._path.exists():
             return
         raw = json.loads(self._path.read_text())
@@ -373,9 +488,9 @@ class ThreadRegistry:
             self._statuses[name] = ThreadStatus(data.get("status", "running"))
             self._last_seen[name] = data.get("last_seen", 0.0)
 
-    def _save(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
+    def _save_unlocked(self) -> None:
+        _atomic_write_text(
+            self._path,
             json.dumps(
                 {
                     "threads": {
@@ -393,55 +508,69 @@ class ThreadRegistry:
                     }
                 },
                 indent=2,
-            )
+            ),
         )
 
     def register(self, thread: Thread, status: ThreadStatus = ThreadStatus.RUNNING) -> None:
-        self._threads[thread.name] = thread
-        self._statuses[thread.name] = status
-        self._last_seen[thread.name] = time.time()
-        self._save()
+        with _store_lock(self._path):
+            self._load_unlocked()
+            self._threads[thread.name] = thread
+            self._statuses[thread.name] = status
+            self._last_seen[thread.name] = time.time()
+            self._save_unlocked()
 
     def unregister(self, name: str) -> None:
-        if name not in self._threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-        self._statuses[name] = ThreadStatus.STOPPED
-        self._save()
+        with _store_lock(self._path):
+            self._load_unlocked()
+            if name not in self._threads:
+                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+            self._statuses[name] = ThreadStatus.STOPPED
+            self._save_unlocked()
 
     def remove(self, name: str) -> None:
         """Drop the declaration entirely (rollback, not a status change)."""
-        if name not in self._threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-        del self._threads[name]
-        self._statuses.pop(name, None)
-        self._save()
+        with _store_lock(self._path):
+            self._load_unlocked()
+            if name not in self._threads:
+                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+            del self._threads[name]
+            self._statuses.pop(name, None)
+            self._last_seen.pop(name, None)
+            self._save_unlocked()
 
     def heartbeat(self, name: str) -> None:
-        if name not in self._threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-        self._statuses[name] = ThreadStatus.RUNNING
-        self._last_seen[name] = time.time()
-        self._save()
+        with _store_lock(self._path):
+            self._load_unlocked()
+            if name not in self._threads:
+                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+            self._statuses[name] = ThreadStatus.RUNNING
+            self._last_seen[name] = time.time()
+            self._save_unlocked()
 
     def last_seen(self, name: str) -> float:
+        self._load()
         if name not in self._threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         return self._last_seen.get(name, 0.0)
 
     def require(self, name: str) -> Thread:
+        self._load()
         if name not in self._threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         return self._threads[name]
 
     def status(self, name: str) -> ThreadStatus:
+        self._load()
         if name not in self._statuses:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         return self._statuses[name]
 
     def all_threads(self) -> Mapping[str, Thread]:
+        self._load()
         return dict(self._threads)
 
     def active_threads(self) -> Mapping[str, Thread]:
+        self._load()
         return {
             name: t
             for name, t in self._threads.items()
@@ -449,9 +578,11 @@ class ThreadRegistry:
         }
 
     def peers(self, exclude: str) -> Sequence[str]:
+        self._load()
         return [name for name in self._threads if name != exclude]
 
     def __contains__(self, name: str) -> bool:
+        self._load()
         return name in self._threads
 
 
@@ -478,22 +609,24 @@ class MessageBus:
         ):
             raise UnregisteredThreadError(f"Target {message.target!r} is not a registered thread.")
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        stored = Message(
-            sender=message.sender,
-            target=GLOBAL_CHANNEL if message.target == "broadcast" else message.target,
-            body=message.body,
-            type=message.type,
-            timestamp=message.timestamp,
-            seq=self._next_seq(),
-        )
-        with open(self._path, "a") as f:
-            f.write(json.dumps(stored.to_wire()) + "\n")
+        with _store_lock(self._path):
+            messages = self._load_log_unlocked()
+            stored = Message(
+                sender=message.sender,
+                target=GLOBAL_CHANNEL if message.target == "broadcast" else message.target,
+                body=message.body,
+                type=message.type,
+                timestamp=message.timestamp,
+                seq=max((existing.seq for existing in messages), default=0) + 1,
+            )
+            _append_jsonl(self._path, stored.to_wire())
         return stored.message_id
 
     def _next_seq(self) -> int:
-        return self.total_messages() + 1
+        messages = self._load_log()
+        return max((message.seq for message in messages), default=0) + 1
 
-    def _delivered_to(self, message: Message, name: str) -> bool:
+    def _delivered_to(self, message: Message, name: str, tags: frozenset[str]) -> bool:
         if message.sender == name:
             return False
         target = message.target
@@ -502,23 +635,51 @@ class MessageBus:
         if target in BROADCAST_ALIASES:
             return True
         if is_channel_target(target):
-            return channel_tag(target) in self._registry.require(name).tags
+            return channel_tag(target) in tags
         return False
 
-    def inbox(self, name: str) -> Sequence[Message]:
-        if name not in self._registry:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-        last_read = self._read_markers().get(name, 0)
+    @staticmethod
+    def _marker_key(name: str, target: str) -> str:
+        return json.dumps([name, target], separators=(",", ":"))
+
+    @staticmethod
+    def _in_scope(message: Message, name: str, target: str) -> bool:
+        normalized = GLOBAL_CHANNEL if target == "broadcast" else target
+        if is_channel_target(normalized):
+            return message.target == normalized
+        return {message.sender, message.target} == {name, target}
+
+    @staticmethod
+    def _message_scope(message: Message, name: str) -> str:
+        if is_channel_target(message.target):
+            return message.target
+        return message.sender if message.target == name else message.target
+
+    def inbox(self, name: str, target: str | None = None) -> Sequence[Message]:
+        thread = self._registry.require(name)
+        if target is not None and not is_channel_target(target) and target != "broadcast":
+            self._registry.require(target)
+        markers = self._read_markers()
+        global_read = markers.get(name, 0)
         return [
-            msg for msg in self._load_log() if self._delivered_to(msg, name) and msg.seq > last_read
+            msg
+            for msg in self._load_log()
+            if self._delivered_to(msg, name, thread.tags)
+            and (target is None or self._in_scope(msg, name, target))
+            and msg.seq
+            > max(
+                global_read,
+                markers.get(self._marker_key(name, self._message_scope(msg, name)), 0),
+            )
         ]
 
-    def mark_delivered(self, name: str) -> None:
-        inbox = self.inbox(name)
+    def mark_delivered(self, name: str, target: str | None = None) -> None:
+        inbox = self.inbox(name, target)
         if not inbox:
             return
         markers = self._read_markers()
-        markers[name] = max(msg.seq for msg in inbox)
+        key = name if target is None else self._marker_key(name, target)
+        markers[key] = max(msg.seq for msg in inbox)
         self._write_markers(markers)
 
     def dm_history(self, a: str, b: str) -> Sequence[Message]:
@@ -550,6 +711,11 @@ class MessageBus:
 
     def _read_markers(self) -> dict[str, int]:
         marker_path = self._path.parent / "read_markers.json"
+        with _store_lock(marker_path):
+            return self._read_markers_unlocked(marker_path)
+
+    @staticmethod
+    def _read_markers_unlocked(marker_path: Path) -> dict[str, int]:
         if not marker_path.exists():
             return {}
         markers: dict[str, int] = json.loads(marker_path.read_text())
@@ -557,17 +723,18 @@ class MessageBus:
 
     def _write_markers(self, markers: dict[str, int]) -> None:
         marker_path = self._path.parent / "read_markers.json"
-        marker_path.parent.mkdir(parents=True, exist_ok=True)
-        marker_path.write_text(json.dumps(markers, indent=2))
+        with _store_lock(marker_path):
+            current = self._read_markers_unlocked(marker_path)
+            for name, sequence in markers.items():
+                current[name] = max(sequence, current.get(name, 0))
+            _atomic_write_text(marker_path, json.dumps(current, indent=2))
 
     def _load_log(self) -> list[Message]:
-        if not self._path.exists():
-            return []
-        return [
-            Message.from_wire(json.loads(line))
-            for line in self._path.read_text().splitlines()
-            if line.strip()
-        ]
+        with _store_lock(self._path):
+            return self._load_log_unlocked()
+
+    def _load_log_unlocked(self) -> list[Message]:
+        return [Message.from_wire(record) for record in _jsonl_records(self._path)]
 
 
 # ─── Shared Ledger ────────────────────────────────────────────────────────────
@@ -583,23 +750,28 @@ class SharedLedger:
         self._load()
 
     def _load(self) -> None:
-        if self._path.exists():
-            self._data = json.loads(self._path.read_text())
+        with _store_lock(self._path):
+            self._load_unlocked()
 
-    def _save(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(json.dumps(self._data, indent=2))
+    def _load_unlocked(self) -> None:
+        self._data = json.loads(self._path.read_text()) if self._path.exists() else {}
+
+    def _save_unlocked(self) -> None:
+        _atomic_write_text(self._path, json.dumps(self._data, indent=2))
 
     def read(self) -> Mapping[str, object]:
+        self._load()
         return dict(self._data)
 
     def merge(self, updates: Mapping[str, object], author: str) -> None:
         for key in updates:
             if not isinstance(key, str):
                 raise ValueError(f"Ledger key must be a string, got {type(key).__name__}.")
-        self._data.update(updates)
-        self._data["last_updated_by"] = author
-        self._save()
+        with _store_lock(self._path):
+            self._load_unlocked()
+            self._data.update(updates)
+            self._data["last_updated_by"] = author
+            self._save_unlocked()
 
 
 # ─── Runtime thread resolution ────────────────────────────────────────────────
