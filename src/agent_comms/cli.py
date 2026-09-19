@@ -53,6 +53,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("who", help="Presence: who is in the chat")
 
+    sub.add_parser("status", help="Live activity: what each thread is doing right now")
+
     p_history = sub.add_parser("history", help="Full history of a DM, channel, or everything")
     p_history.add_argument("--with", dest="with_thread", default=None, help="DM with this thread")
     p_history.add_argument("--channel", default=None, help="Channel (#all, #tag)")
@@ -115,6 +117,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             _emit({"acknowledged": comms.acknowledge(args.thread)})
         elif args.command == "who":
             _emit({"who": list(comms.who())})
+        elif args.command == "status":
+            _emit(
+                {
+                    "status": [
+                        {
+                            "thread": thread,
+                            "state": activity.state.value,
+                            "detail": activity.detail,
+                            "ts": activity.timestamp,
+                        }
+                        for thread, activity in sorted(comms.all_activity().items())
+                    ]
+                }
+            )
         elif args.command == "channels":
             _emit({"channels": list(comms.channels())})
         elif args.command == "history":

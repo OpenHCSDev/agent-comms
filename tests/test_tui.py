@@ -174,3 +174,26 @@ async def test_live_refresh_without_keypress(wired):
         await pilot.pause()
         chat = widget_text(app.query_one("#inbox"))
         assert "pushed live" in chat
+
+
+async def test_sidebar_shows_live_activity(wired):
+    from agent_comms.declarations import ActivityState
+
+    wired.set_activity("PR111", ActivityState.WORKING, "bash: echo hi")
+    app = CommsApp(wired, thread_name="fixer")
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sidebar = widget_text(app.query_one("#sidebar"))
+        assert "⟳ working" in sidebar
+        assert "bash: echo hi" in sidebar
+
+
+async def test_sidebar_hides_idle_activity(wired):
+    from agent_comms.declarations import ActivityState
+
+    wired.set_activity("PR111", ActivityState.IDLE)
+    app = CommsApp(wired, thread_name="fixer")
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sidebar = widget_text(app.query_one("#sidebar"))
+        assert "⟳" not in sidebar

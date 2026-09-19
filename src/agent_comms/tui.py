@@ -22,7 +22,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Footer, Header, Input, Static
 
-from .declarations import GLOBAL_CHANNEL
+from .declarations import GLOBAL_CHANNEL, Activity
 from .operations import Comms, wire
 
 EVERYTHING_VIEW = "*all"
@@ -43,9 +43,16 @@ def _fmt_age(ts: float, now: float | None = None) -> str:
 
 
 class Sidebar(Static):
-    """Who's here + channel list with pending counts."""
+    """Who's here + channel list with pending counts and live activity."""
 
-    def show(self, channels: Sequence[str], who: Sequence[Mapping], current: str) -> None:
+    def show(
+        self,
+        channels: Sequence[str],
+        who: Sequence[Mapping],
+        current: str,
+        activity: Mapping[str, Activity] | None = None,
+    ) -> None:
+        activity = activity or {}
         lines = ["CHANNELS"]
         for channel in channels:
             marker = "›" if channel == current else " "
@@ -60,6 +67,12 @@ class Sidebar(Static):
                 f" {marker} {row['name']}{pending} [{row['status']},"
                 f" {_fmt_age(row['last_seen'])}]{task}"
             )
+            act = activity.get(row["name"])
+            if act is not None and act.state.value != "idle":  # type: ignore[union-attr]
+                age = _fmt_age(act.timestamp)  # type: ignore[union-attr]
+                suffix = f", {age}" if age != "never" else ""
+                detail = f" {act.detail}" if act.detail else ""  # type: ignore[union-attr]
+                lines.append(f"     ⟳ {act.state.value}{detail}{suffix}")  # type: ignore[union-attr]
         self.update("\n".join(lines))
 
 
@@ -150,7 +163,9 @@ class CommsApp(App[None]):
             with contextlib.suppress(Exception):
                 self._comms.heartbeat(self._me)
         channels = [EVERYTHING_VIEW, *self._comms.channels()]
-        self.query_one("#sidebar", Sidebar).show(channels, self._comms.who(), self._current)
+        self.query_one("#sidebar", Sidebar).show(
+            channels, self._comms.who(), self._current, self._comms.all_activity()
+        )
         title = self._current
         if self._current == EVERYTHING_VIEW:
             messages = [m.to_wire() for m in self._comms.full_history()]

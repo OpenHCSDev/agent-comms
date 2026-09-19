@@ -39,6 +39,103 @@ class ThreadStatus(Enum):
     STOPPED = "stopped"
 
 
+class ActivityState(Enum):
+    IDLE = "idle"
+    THINKING = "thinking"
+    WORKING = "working"
+
+
+@dataclass(frozen=True, slots=True)
+class Activity:
+    """Declares one thread's current activity (what it is doing right now).
+
+    Emitted by participants and agent turns so other clients can show live
+    feedback. Appended to ``activity.jsonl``; the latest event per thread is
+    the thread's state. Empty detail is valid (plain thinking).
+    """
+
+    thread: str
+    state: ActivityState
+    detail: str = ""
+    timestamp: float = field(default_factory=time.time)
+
+    def __post_init__(self) -> None:
+        if not self.thread:
+            raise RelationViolationError("Activity thread cannot be empty.")
+        if self.detail and self.state is ActivityState.IDLE:
+            raise RelationViolationError("Idle activity cannot carry a detail.")
+        if len(self.detail) > 200:
+            raise ValueError("Activity detail cannot exceed 200 characters.")
+
+    def to_wire(self) -> dict:
+        return {
+            "thread": self.thread,
+            "state": self.state.value,
+            "detail": self.detail,
+            "ts": self.timestamp,
+        }
+
+    @classmethod
+    def from_wire(cls, data: Mapping) -> Activity:
+        return cls(
+            thread=data["thread"],
+            state=ActivityState(data["state"]),
+            detail=data.get("detail", ""),
+            timestamp=data.get("ts", 0.0),
+        )
+
+
+class ActivityLog:
+    """Persists Activity events as an append-only JSONL log.
+
+    The latest event per thread is its current activity; stale events
+    (older than ``stale_after`` seconds) read as idle.
+    """
+
+    def __init__(self, store_path: Path, stale_after: float = 120.0):
+        self._path = store_path
+        self._stale_after = stale_after
+
+    def emit(self, activity: Activity) -> None:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self._path, "a") as f:
+            f.write(json.dumps(activity.to_wire()) + "\n")
+
+    def current(self, thread: str) -> Activity:
+        """Latest activity for one thread; idle when stale or unknown."""
+        events = [e for e in self._load() if e.thread == thread]
+        if not events:
+            return Activity(thread=thread, state=ActivityState.IDLE)
+        latest = events[-1]
+        if time.time() - latest.timestamp > self._stale_after:
+            return Activity(thread=thread, state=ActivityState.IDLE)
+        return latest
+
+    def all_current(self) -> dict[str, Activity]:
+        """Latest activity per thread (idle included for known threads)."""
+        result: dict[str, Activity] = {}
+        for event in self._load():
+            result[event.thread] = event
+        now = time.time()
+        return {
+            thread: (
+                activity
+                if now - activity.timestamp <= self._stale_after
+                else Activity(thread=thread, state=ActivityState.IDLE)
+            )
+            for thread, activity in result.items()
+        }
+
+    def _load(self) -> list[Activity]:
+        if not self._path.exists():
+            return []
+        return [
+            Activity.from_wire(json.loads(line))
+            for line in self._path.read_text().splitlines()
+            if line.strip()
+        ]
+
+
 class MessageType(Enum):
     INFO = "info"
     QUESTION = "question"

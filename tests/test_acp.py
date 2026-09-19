@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.declarations import UnregisteredThreadError
 from agent_comms.operations import wire
 
 
@@ -156,7 +157,7 @@ class TestAgentTurn:
             session_id="s1", prompt=[{"type": "text", "text": "!agent hello"}]
         )
         assert response.stop_reason == "end_turn"
-        assert any("not found" in u.content.text for u in sent)
+        assert any("not found" in (u.content.text or "") for u in sent)
 
     async def test_plain_prompt_does_not_launch_agent(self, wired, tmp_path):
         agent = self._agent_with_stub(tmp_path, wired)
@@ -327,3 +328,127 @@ class TestFullHistory:
             ("a", "b", "dm"),
             ("b", "#x", "tagged"),
         ]
+
+
+class TestAgentTurnForwarding:
+    """!agent turns stream rpc events into ACP updates + wire activity."""
+
+    def _rpc_stub(self, tmp_path: Path) -> str:
+        rpc_lines = "\n".join(
+            [
+                '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"running"}}',
+                '{"type":"tool_execution_start","toolCallId":"t1","toolName":"bash","args":{"command":"pwd"}}',
+                '{"type":"tool_execution_end","toolCallId":"t1","toolName":"bash",'
+                '"result":{"content":[{"type":"text","text":"/wt"}]},"isError":false}',
+                '{"type":"message_update",'
+                '"assistantMessageEvent":{"type":"text_delta","delta":" finished"}}',
+                '{"type":"agent_end"}',
+            ]
+        )
+        stub = tmp_path / "pi-stub"
+        stub.write_text(f"#!/bin/sh\ncat >/dev/null\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
+        stub.chmod(0o755)
+        return str(stub)
+
+    async def test_turn_forwards_tool_calls_and_thinking(self, wired, tmp_path):
+        import sys as _sys
+
+        if _sys.platform == "win32":
+            pytest.skip("shell-script stub; POSIX only")
+        agent = CommsAgent(wired, agent_bin=self._rpc_stub(tmp_path), agent_args=[])
+        sent: list = []
+
+        class FakeClient:
+            async def session_update(self, session_id=None, update=None, **kw):
+                sent.append(update)
+
+        agent._client = FakeClient()
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "!agent do a thing"}])
+        kinds = [type(u).__name__ for u in sent]
+        assert kinds == [
+            "AgentThoughtChunk",  # thinking activity before backend starts
+            "AgentMessageChunk",  # "running"
+            "ToolCallStart",  # bash: pwd
+            "ToolCallProgress",  # completed
+            "AgentMessageChunk",  # " finished"
+        ]
+        tool_call = sent[2]
+        assert tool_call.tool_call_id == "t1"
+        assert tool_call.title.startswith("bash:")
+        assert tool_call.kind == "execute"
+        progress = sent[3]
+        assert progress.status == "completed"
+        assert progress.content[0].content.text == "/wt"
+
+    async def test_turn_sets_wire_activity(self, wired, tmp_path):
+        import sys as _sys
+
+        if _sys.platform == "win32":
+            pytest.skip("shell-script stub; POSIX only")
+        agent = CommsAgent(wired, agent_bin=self._rpc_stub(tmp_path), agent_args=[])
+        agent._client = None  # no client: activity still recorded
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "!agent do a thing"}])
+        # Turn finished -> idle again.
+        assert wired.activity_of("proj").state.value == "idle"
+        # The full trail was recorded: thinking -> working -> thinking -> idle.
+        states = [e.state.value for e in wired.activity._load() if e.thread == "proj"]
+        assert states == ["thinking", "working", "thinking", "idle"]
+
+
+class TestActivityLayer:
+    def test_emit_and_read_current(self, wired):
+        from agent_comms import ActivityState
+
+        wired.registry.require("PR111")
+        wired.set_activity("PR111", ActivityState.WORKING, "bash: echo hi")
+        activity = wired.activity_of("PR111")
+        assert activity.state is ActivityState.WORKING
+        assert activity.detail == "bash: echo hi"
+
+    def test_idle_cannot_carry_detail(self, wired):
+        from agent_comms import ActivityState
+
+        with pytest.raises(Exception, match="Idle"):
+            wired.set_activity("PR111", ActivityState.IDLE, "junk")
+
+    def test_unknown_thread_fail_closed(self, wired):
+        from agent_comms import ActivityState
+
+        with pytest.raises(UnregisteredThreadError):
+            wired.set_activity("ghost", ActivityState.THINKING)
+
+    def test_stale_activity_reads_idle(self, wired):
+        import time as _time
+
+        from agent_comms.declarations import Activity, ActivityState
+
+        wired.activity.emit(Activity(thread="PR111", state=ActivityState.WORKING, detail="old"))
+        # Tamper the timestamp to be stale.
+        import json as _json
+
+        log = wired.activity._path
+        lines = [_json.loads(line) for line in log.read_text().splitlines()]
+        lines[-1]["ts"] = _time.time() - 1000
+        log.write_text("\n".join(_json.dumps(line) for line in lines))
+        assert wired.activity_of("PR111").state is ActivityState.IDLE
+
+    def test_activity_persistence(self, tmp_path):
+        from agent_comms.declarations import Activity, ActivityLog, ActivityState
+
+        path = tmp_path / "activity.jsonl"
+        log = ActivityLog(path)
+        log.emit(Activity(thread="a", state=ActivityState.WORKING, detail="bash"))
+        assert ActivityLog(path).current("a").detail == "bash"
+
+    def test_all_current_latest_per_thread(self, tmp_path):
+        from agent_comms.declarations import Activity, ActivityLog, ActivityState
+
+        log = ActivityLog(tmp_path / "activity.jsonl")
+        log.emit(Activity(thread="a", state=ActivityState.THINKING))
+        log.emit(Activity(thread="a", state=ActivityState.WORKING, detail="bash"))
+        log.emit(Activity(thread="b", state=ActivityState.THINKING))
+        current = log.all_current()
+        assert current["a"].state is ActivityState.WORKING
+        assert current["b"].state is ActivityState.THINKING

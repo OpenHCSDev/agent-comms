@@ -139,3 +139,22 @@ class TestCliSubprocess:
         )
         assert result.returncode == 0
         assert json.loads(result.stdout) == {"registered": "a"}
+
+
+class TestStatusCommand:
+    def test_status_empty_wire(self, cli, tmp_path):
+        code, out = cli(tmp_path, "status")
+        assert out == {"status": []}
+
+    def test_status_shows_activity(self, cli, tmp_path):
+        from agent_comms.declarations import ActivityState
+
+        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
+        from agent_comms.operations import wire
+
+        comms = wire(tmp_path)
+        comms.set_activity("a", ActivityState.WORKING, "bash: echo hi")
+        code, out = cli(tmp_path, "status")
+        row = out["status"][0]
+        assert row["thread"] == "a" and row["state"] == "working"
+        assert row["detail"] == "bash: echo hi"
