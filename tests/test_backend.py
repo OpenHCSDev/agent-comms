@@ -35,7 +35,7 @@ class TestRpcParsing:
                 '{"type":"agent_end","messages":[]}',
             ]
         )
-        stub = _stub(tmp_path, f"#!/bin/sh\ncat >/dev/null\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
+        stub = _stub(tmp_path, f"#!/bin/sh\ntrue\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
         events = [e async for e in backend.stream_agent_events(stub, [], "task", str(tmp_path))]
         # pi-named stub triggers rpc mode; prompt goes to stdin.
         types = [e["type"] for e in events]

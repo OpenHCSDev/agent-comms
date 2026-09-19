@@ -346,7 +346,7 @@ class TestAgentTurnForwarding:
             ]
         )
         stub = tmp_path / "pi-stub"
-        stub.write_text(f"#!/bin/sh\ncat >/dev/null\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
+        stub.write_text(f"#!/bin/sh\ntrue\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
         stub.chmod(0o755)
         return str(stub)
 

@@ -105,9 +105,10 @@ async def stream_agent_events(
 
     assert proc.stdout is not None
     if stdin_payload is not None and proc.stdin is not None:
+        # pi's rpc protocol keeps stdin open while it streams; closing it
+        # after the prompt makes the backend exit before responding.
         proc.stdin.write(stdin_payload)
         await proc.stdin.drain()
-        proc.stdin.close()
 
     text_parts: list[str] = []
     ok = True
@@ -172,5 +173,7 @@ async def stream_agent_events(
         elif kind == "agent_end":
             break
 
+    if proc.stdin is not None:
+        proc.stdin.close()
     await proc.wait()
     yield {"type": "done", "text": "".join(text_parts).strip(), "ok": ok and not fail_reason}
