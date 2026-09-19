@@ -17,6 +17,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .declarations import (
+    Activity,
+    ActivityLog,
+    ActivityState,
     Message,
     MessageBus,
     MessageType,
@@ -52,6 +55,7 @@ class Comms:
         self.registry = ThreadRegistry(self.root / "registry.json")
         self.bus = MessageBus(self.root / "bus.jsonl", self.registry)
         self.ledger = SharedLedger(self.root / "ledger.json")
+        self.activity = ActivityLog(self.root / "activity.jsonl")
 
     # ─── Messaging ────────────────────────────────────────────────────────────
 
@@ -97,6 +101,19 @@ class Comms:
     def full_history(self) -> Sequence[Message]:
         """Every message on the wire, in seq order (the combined view)."""
         return self.bus.full_history()
+
+    # ─── Activity (live feedback) ─────────────────────────────────────────────
+
+    def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:
+        """Declare a thread's current activity (thinking/working/idle)."""
+        self.registry.require(thread)
+        self.activity.emit(Activity(thread=thread, state=state, detail=detail))
+
+    def activity_of(self, thread: str) -> Activity:
+        return self.activity.current(thread)
+
+    def all_activity(self) -> Mapping[str, Activity]:
+        return self.activity.all_current()
 
     def channels(self) -> Sequence[str]:
         """Derived channel list: ``#all`` plus one channel per tag in use."""

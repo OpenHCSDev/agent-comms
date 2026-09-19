@@ -23,21 +23,26 @@ from __future__ import annotations
 import asyncio
 import os
 import re
-import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from acp import RequestError, run_agent
 from acp.schema import (
     AgentCapabilities,
     AgentMessageChunk,
+    AgentThoughtChunk,
+    ContentToolCallContent,
     Implementation,
     InitializeResponse,
     NewSessionResponse,
     PromptResponse,
     TextContentBlock,
+    ToolCallProgress,
+    ToolCallStart,
 )
 
+from . import backend
+from .declarations import ActivityState
 from .operations import Comms, wire
 
 GLOBAL_TARGET = "#all"
@@ -198,45 +203,32 @@ class CommsAgent:
         self._comms.acknowledge(thread_name)
 
     async def _run_agent_turn(self, session_id: str, thread_name: str, task: str) -> None:
-        """Stream a real coding agent's reply into the session and the wire."""
+        """Stream a real coding agent's reply: events to the client, status to the wire."""
         thread = self._comms.registry.require(thread_name)
-        if shutil.which(self._agent_bin) is None:
-            await self._emit_text(
-                session_id,
-                f"agent backend {self._agent_bin!r} not found on PATH; "
-                "reply relayed to the room only",
-            )
-            return
+        self._comms.set_activity(thread_name, ActivityState.THINKING, task[:80])
+        await self._emit_event(session_id, {"type": "thinking", "text": f"thinking: {task[:80]}"})
         worktree = thread.worktree if Path(thread.worktree).is_dir() else str(Path.cwd())
-        env = os.environ.copy()
-        env.setdefault("AGENT_COMMS_THREAD", thread_name)
+        env_extra = {"AGENT_COMMS_THREAD": thread_name}
+        reply_parts: list[str] = []
         try:
-            proc = await asyncio.create_subprocess_exec(
-                self._agent_bin,
-                *self._agent_args,
-                task,
-                cwd=worktree,
-                env=env,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-                stdin=asyncio.subprocess.DEVNULL,
-            )
-        except OSError as exc:
-            await self._emit_text(session_id, f"agent launch failed: {exc}")
-            return
-        assert proc.stdout is not None
-        reply: list[str] = []
-        while True:
-            chunk = await proc.stdout.read(4096)
-            if not chunk:
-                break
-            piece = chunk.decode(errors="replace")
-            reply.append(piece)
-            await self._emit_text(session_id, piece)
-        await proc.wait()
-        body = "".join(reply).strip()
-        if body:
-            self._comms.send(thread_name, GLOBAL_TARGET, body[:4000])
+            async for event in backend.stream_agent_events(
+                self._agent_bin, self._agent_args, task, worktree, env_extra
+            ):
+                kind = event.get("type")
+                if kind == "chunk":
+                    reply_parts.append(event.get("text") or "")
+                elif kind == "tool_start":
+                    self._comms.set_activity(
+                        thread_name, ActivityState.WORKING, event.get("title", "")
+                    )
+                elif kind == "tool_end" and event.get("ok"):
+                    self._comms.set_activity(thread_name, ActivityState.THINKING, task[:80])
+                await self._emit_event(session_id, event)
+        finally:
+            body = "".join(reply_parts).strip()
+            if body:
+                self._comms.send(thread_name, GLOBAL_TARGET, body[:4000])
+            self._comms.set_activity(thread_name, ActivityState.IDLE)
 
     async def _emit_text(self, session_id: str, text: str) -> None:
         if self._client is None or not text:
@@ -248,6 +240,58 @@ class CommsAgent:
                 content=TextContentBlock(type="text", text=text),
             ),
         )
+
+    # ─── Unified event forwarding ─────────────────────────────────────────────
+    # One abstraction maps server events to ACP session updates. Toad, Zed,
+    # and VS Code render these natively; the same events also feed the
+    # wire-level activity log for headless clients.
+
+    async def _emit_event(self, session_id: str, event: dict[str, Any]) -> None:
+        """Forward one backend/wire event to the ACP client."""
+        if self._client is None:
+            return
+        kind = event.get("type")
+        if kind == "chunk":
+            text = event.get("text") or ""
+            if text:
+                await self._emit_text(session_id, text)
+        elif kind == "tool_start":
+            await self._client.session_update(
+                session_id=session_id,
+                update=ToolCallStart(
+                    session_update="tool_call",
+                    tool_call_id=event["id"],
+                    title=event.get("title") or event.get("name") or "tool",
+                    kind=cast(Any, backend.tool_kind(event.get("name") or "other")),
+                    status="in_progress",
+                ),
+            )
+        elif kind == "tool_end":
+            update = ToolCallProgress(
+                session_update="tool_call_update",
+                tool_call_id=event["id"],
+                status="completed" if event.get("ok") else "failed",
+            )
+            output = event.get("output") or ""
+            if output:
+                update.content = [
+                    ContentToolCallContent(
+                        type="content",
+                        content=TextContentBlock(type="text", text=output),
+                    )
+                ]
+            await self._client.session_update(session_id=session_id, update=update)
+        elif kind == "thinking":
+            await self._client.session_update(
+                session_id=session_id,
+                update=AgentThoughtChunk(
+                    session_update="agent_thought_chunk",
+                    content=TextContentBlock(type="text", text=event.get("text") or ""),
+                ),
+            )
+        elif kind == "done":
+            if not event.get("ok") and event.get("text"):
+                await self._emit_text(session_id, f"[agent error] {event['text']}")
 
     @staticmethod
     def _prompt_text(prompt: list[Any]) -> str:

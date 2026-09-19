@@ -4,6 +4,9 @@ __version__ = "0.1.0"
 
 from .declarations import (
     GLOBAL_CHANNEL,
+    Activity,
+    ActivityLog,
+    ActivityState,
     Message,
     MessageBus,
     MessageType,
@@ -19,6 +22,9 @@ from .operations import Comms, ForkSpec, wire
 
 __all__ = [
     "Thread",
+    "Activity",
+    "ActivityLog",
+    "ActivityState",
     "Message",
     "ThreadRegistry",
     "MessageBus",

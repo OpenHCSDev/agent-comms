@@ -108,3 +108,55 @@ class TestParticipantLifecycle:
         await participant._tick("bot")
         # No crash, no reply.
         assert comms.pending_count("human") == 0
+
+
+class TestParticipantActivity:
+    async def test_activity_trail_thinking_working_idle(self, tmp_path, monkeypatch):
+        from agent_comms import ActivityState
+
+        root = tmp_path / "wire"
+        stub = _echo_stub(tmp_path, "on-it")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
+        monkeypatch.chdir(tmp_path)
+        comms = wire(root)
+        comms.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+        comms.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+
+        participant = Participant(root=root, agent_bin=str(stub), agent_args=[])
+        participant.start()
+        comms.send("human", "bot", "fix the flake")
+        await participant._tick("bot")
+
+        states = [e.state.value for e in comms.activity._load() if e.thread == "bot"]
+        assert states == ["thinking", "idle"]
+        assert comms.activity_of("bot").state is ActivityState.IDLE
+
+    async def test_working_activity_on_tool_use(self, tmp_path, monkeypatch):
+
+        root = tmp_path / "wire"
+        rpc_lines = "\n".join(
+            [
+                '{"type":"tool_execution_start","toolCallId":"t1","toolName":"bash","args":{"command":"pwd"}}',
+                '{"type":"tool_execution_end","toolCallId":"t1","toolName":"bash","result":{"content":[]},"isError":false}',
+                '{"type":"agent_end"}',
+            ]
+        )
+        stub = tmp_path / "pi-bot"
+        stub.write_text(f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
+        stub.chmod(0o755)
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
+        monkeypatch.chdir(tmp_path)
+        comms = wire(root)
+        comms.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+        comms.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+
+        participant = Participant(root=root, agent_bin=str(stub), agent_args=[])
+        participant.start()
+        comms.send("human", "bot", "check cwd")
+        await participant._tick("bot")
+
+        states = [(e.state.value, e.detail) for e in comms.activity._load() if e.thread == "bot"]
+        assert ("working", "bash: ") in [(s, d) for s, d in states] or any(
+            s == "working" for s, d in states
+        )
+        assert states[-1] == ("idle", "")

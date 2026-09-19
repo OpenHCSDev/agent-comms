@@ -16,12 +16,12 @@ from __future__ import annotations
 
 import asyncio
 import os
-import shutil
 import sys
 from contextlib import suppress
 from pathlib import Path
 
-from .declarations import GLOBAL_CHANNEL, Message, is_channel_target
+from . import backend
+from .declarations import GLOBAL_CHANNEL, ActivityState, Message, is_channel_target
 from .operations import wire
 
 DEFAULT_AGENT_BIN = "pi"
@@ -97,51 +97,38 @@ class Participant:
             await self._respond(name, message)
 
     async def _respond(self, name: str, message: Message) -> None:
-        reply = await self._ask_agent(message)
-        if not reply:
-            return
-        if is_channel_target(message.target) or message.target == "broadcast":
-            target = GLOBAL_CHANNEL if message.target == "broadcast" else message.target
-        else:
-            target = message.sender
-        self._comms.send(name, target, reply[:MAX_REPLY_CHARS])
+        self._comms.set_activity(name, ActivityState.THINKING, message.body[:80])
+        reply = await self._ask_agent(name, message)
+        if reply:
+            if is_channel_target(message.target) or message.target == "broadcast":
+                target = GLOBAL_CHANNEL if message.target == "broadcast" else message.target
+            else:
+                target = message.sender
+            self._comms.send(name, target, reply[:MAX_REPLY_CHARS])
+        self._comms.set_activity(name, ActivityState.IDLE)
 
     # ─── Backend ──────────────────────────────────────────────────────────────
 
-    async def _ask_agent(self, message: Message) -> str:
-        if shutil.which(self._agent_bin) is None:
-            print(
-                f"backend {self._agent_bin!r} not on PATH; message dropped: {message.body[:60]}",
-                file=sys.stderr,
-                flush=True,
-            )
-            return ""
+    async def _ask_agent(self, name: str, message: Message) -> str:
         sender = None
         if message.sender in self._comms.registry:
             sender = self._comms.registry.require(message.sender)
         worktree = sender.worktree if sender and Path(sender.worktree).is_dir() else os.getcwd()
+        reply_parts: list[str] = []
         try:
-            proc = await asyncio.create_subprocess_exec(
-                self._agent_bin,
-                *self._agent_args,
-                message.body,
-                cwd=worktree,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-                stdin=asyncio.subprocess.DEVNULL,
-            )
+            async for event in backend.stream_agent_events(
+                self._agent_bin, self._agent_args, message.body, worktree
+            ):
+                kind = event.get("type")
+                if kind == "chunk":
+                    reply_parts.append(event.get("text") or "")
+                elif kind == "tool_start":
+                    self._comms.set_activity(name, ActivityState.WORKING, event.get("title", ""))
+                elif kind == "tool_end" and event.get("ok"):
+                    self._comms.set_activity(name, ActivityState.THINKING, message.body[:80])
         except OSError as exc:
             print(f"agent launch failed: {exc}", file=sys.stderr, flush=True)
-            return ""
-        assert proc.stdout is not None
-        chunks: list[bytes] = []
-        while True:
-            chunk = await proc.stdout.read(4096)
-            if not chunk:
-                break
-            chunks.append(chunk)
-        await proc.wait()
-        return b"".join(chunks).decode(errors="replace").strip()
+        return "".join(reply_parts).strip()
 
 
 def main() -> int:
