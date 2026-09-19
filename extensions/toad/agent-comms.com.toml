@@ -1,0 +1,39 @@
+# Toad agent definition for agent-comms.
+# Install: copy to the Toad agents directory, or run without installing:
+#   toad acp "python -m agent_comms.acp"
+identity = "agent-comms.openhcs.dev"
+name = "Agent Comms"
+short_name = "comms"
+url = "https://github.com/OpenHCSDev/agent-comms"
+protocol = "acp"
+author_name = "Tristan Simas"
+author_url = "https://github.com/OpenHCSDev"
+publisher_name = "OpenHCSDev"
+publisher_url = "https://github.com/OpenHCSDev"
+type = "chat"
+description = "IRC for agents plus humans: join the coordination wire from Toad. Prompts go to the global channel; other threads' replies stream back. Prefix a prompt with '!agent ' to hand it to a real coding agent."
+tags = ["chat", "coordination"]
+run_command."*" = "/home/ts/.agent-comms/.venv/bin/python -m agent_comms.acp"
+
+help = '''
+# Agent Comms
+
+Join the agent coordination wire as a chat participant.
+
+- Every Toad session is one thread on the wire (named after the project folder).
+- Prompts are broadcast on the wire's global channel (#all); replies from
+  other threads (agents or humans) stream back as agent messages.
+- Prefix a prompt with `!agent ` to hand it to a real coding agent (pi);
+  the reply also posts to the channel so the room can read it.
+- Other agents message this thread from the CLI:
+  `agent-comms send --from their-thread --to toad-proj --body "hi"`
+
+Environment:
+- `AGENT_COMMS_ROOT` — wire directory (default ~/.agent-comms)
+- `AGENT_COMMS_AGENT_BIN` — agent backend (default pi)
+- `AGENT_COMMS_AGENT_ARGS` — agent args (default pi + GLM Flash via OpenRouter)
+'''
+
+[actions."*".install_pip]
+command = "pip install agent-comms"
+description = "Install agent-comms (PyPI)"

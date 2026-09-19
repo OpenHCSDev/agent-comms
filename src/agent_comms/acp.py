@@ -1,221 +1,253 @@
-"""OpenHCS agent communications — ACP server.
+"""Agent communications — ACP server on the official protocol library.
 
-Implements a minimal Agent Client Protocol agent over stdio so that ACP
-clients (Toad, Zed, VS Code) can attach to the coordination wire natively.
-Pure standard library.
+Implements an Agent Client Protocol agent so ACP clients (Toad, Zed, VS Code)
+attach to the coordination wire natively: each client session is one thread
+on the wire, prompts are messages on the bus, and replies come back as
+``agent_message_chunk`` session updates.
 
-Protocol shape (see agentclientprotocol.com):
+Two turn modes:
 
-- JSON-RPC 2.0, one message per line on stdin/stdout.
-- ``initialize`` -> respond with protocol version and agent capabilities.
-- ``session/new`` -> declare a thread for the session, return sessionId.
-- ``session/prompt`` -> declare a message in the bus for that thread, drain
-  the thread's inbox back as ``session/update`` notifications (agent message
-  chunks), respond with ``stopReason: endTurn``.
+- **relay** (default): the prompt is broadcast on the wire and the thread's
+  inbox drains back as agent messages. You are talking to the *room*.
+- **agent**: the prompt also goes to a real coding agent (pi, headless
+  ``--print`` mode) whose streamed reply is forwarded to the client and
+  posted to the thread's channel, so other threads can read it.
 
-The server does not own semantics; it delegates everything to Comms
-operations. Unregistered references surface as JSON-RPC errors.
+Turn mode is chosen per prompt: a leading ``!agent `` selects the agent
+turn; everything else relays. This keeps the wire semantics in the core and
+lets one Toad session act as both a chat participant and a working agent.
 """
 
 from __future__ import annotations
 
-import json
-import sys
-from collections.abc import Iterable, Mapping, Sequence
+import asyncio
+import os
+import re
+import shutil
 from pathlib import Path
 from typing import Any
 
+from acp import RequestError, run_agent
+from acp.schema import (
+    AgentCapabilities,
+    AgentMessageChunk,
+    Implementation,
+    InitializeResponse,
+    NewSessionResponse,
+    PromptResponse,
+    TextContentBlock,
+)
+
 from .operations import Comms, wire
 
-PROTOCOL_VERSION = 1
+GLOBAL_TARGET = "#all"
+AGENT_PREFIX = "!agent "
+DEFAULT_AGENT_BIN = "pi"
+DEFAULT_AGENT_ARGS = [
+    "--print",
+    "--no-session",
+    "--provider",
+    "openrouter",
+    "--model",
+    "z-ai/glm-5.3-flash",
+]
 
-JSONRPC_PARSE_ERROR = -32700
-JSONRPC_INVALID_REQUEST = -32600
-JSONRPC_METHOD_NOT_FOUND = -32601
-JSONRPC_INVALID_PARAMS = -32602
-JSONRPC_INTERNAL_ERROR = -32603
 
-LineReader = Iterable[str]
+class CommsAgent:
+    """ACP agent bound to one Comms wire.
 
-
-class AcpServer:
-    """One ACP agent bound to one Comms wire."""
+    Session -> thread. A prompt broadcasts the text to the session's thread
+    on the global channel, drains the thread's inbox back to the client as
+    agent messages, then acknowledges.
+    """
 
     def __init__(
-        self,
-        comms: Comms,
-        reader: LineReader | None = None,
-        writer: Any | None = None,
+        self, comms: Comms, agent_bin: str | None = None, agent_args: list[str] | None = None
     ):
         self._comms = comms
-        self._reader = reader if reader is not None else sys.stdin
-        self._writer = writer if writer is not None else sys.stdout
         self._sessions: dict[str, str] = {}
-        self._next_session = 0
+        self._next = 0
+        self._client: Any = None
+        self._agent_bin = agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", DEFAULT_AGENT_BIN)
+        arg_env = os.environ.get("AGENT_COMMS_AGENT_ARGS", "")
+        self._agent_args = (
+            agent_args
+            if agent_args is not None
+            else (arg_env.split() if arg_env else list(DEFAULT_AGENT_ARGS))
+        )
 
-    # ─── Wire protocol ────────────────────────────────────────────────────────
+    def on_connect(self, client: Any) -> None:
+        """Called by AgentSideConnection with the client-facing connection."""
+        self._client = client
 
-    def serve(self) -> None:
-        """Read requests until EOF; write exactly one response per request."""
-        for line in self._reader:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                message = json.loads(line)
-            except json.JSONDecodeError:
-                self._write(
-                    {
-                        "jsonrpc": "2.0",
-                        "id": None,
-                        "error": {"code": JSONRPC_PARSE_ERROR, "message": "Parse error"},
-                    }
-                )
-                continue
-            if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
-                self._write(
-                    {
-                        "jsonrpc": "2.0",
-                        "id": message.get("id") if isinstance(message, dict) else None,
-                        "error": {
-                            "code": JSONRPC_INVALID_REQUEST,
-                            "message": "Not a JSON-RPC 2.0 request",
-                        },
-                    }
-                )
-                continue
-            response = self.handle(message)
-            if response is not None:
-                self._write(response)
+    # ─── ACP methods ─────────────────────────────────────────────────────────
 
-    def _write(self, payload: Mapping[str, Any]) -> None:
-        self._writer.write(json.dumps(payload) + "\n")
-        self._writer.flush()
+    async def initialize(
+        self,
+        protocol_version: int,
+        client_capabilities: Any = None,
+        client_info: Any = None,
+    ) -> InitializeResponse:
+        return InitializeResponse(
+            protocol_version=protocol_version,
+            agent_capabilities=AgentCapabilities(load_session=False),
+            agent_info=Implementation(name="agent-comms", title="Agent Comms", version="0.1.0"),
+            auth_methods=[],
+        )
 
-    # ─── Dispatch ─────────────────────────────────────────────────────────────
+    async def new_session(
+        self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
+    ) -> NewSessionResponse:
+        thread_name = self._ensure_thread(self._thread_name_for(cwd), cwd)
+        self._next += 1
+        session_id = f"s{self._next}"
+        self._sessions[session_id] = thread_name
+        return NewSessionResponse(session_id=session_id)
 
-    def handle(self, message: Mapping[str, Any]) -> dict[str, Any] | None:
-        method = str(message.get("method") or "")
-        request_id = message.get("id")
-        params = message.get("params") or {}
+    async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
+        thread_name = self._require_session(session_id)
+        self._comms.registry.require(thread_name)
+        text = self._prompt_text(prompt)
+        agent_task: str | None = None
+        if text.startswith(AGENT_PREFIX):
+            agent_task = text[len(AGENT_PREFIX) :].strip()
+        if text:
+            self._comms.send(thread_name, GLOBAL_TARGET, text)
+        await self._drain_inbox(session_id, thread_name)
+        if agent_task:
+            await self._run_agent_turn(session_id, thread_name, agent_task)
+        return PromptResponse(stop_reason="end_turn")
 
-        handler = {
-            "initialize": self._on_initialize,
-            "session/new": self._on_session_new,
-            "session/prompt": self._on_session_prompt,
-        }.get(method)
+    async def cancel(self, session_id: str, **kwargs: Any) -> None:
+        thread_name = self._sessions.get(session_id)
+        if thread_name:
+            self._comms.acknowledge(thread_name)
 
-        if handler is None:
-            # Notifications (no id) never get responses; unknown requests do.
-            if request_id is None:
-                return None
-            return self._error(request_id, JSONRPC_METHOD_NOT_FOUND, f"Method not found: {method}")
+    async def authenticate(self, method_id: str, **kwargs: Any) -> None:
+        raise RequestError.auth_required({"reason": "agent-comms requires no authentication"})
 
-        try:
-            result = handler(params)
-        except (ValueError, KeyError) as exc:
-            if request_id is None:
-                return None
-            return self._error(request_id, JSONRPC_INVALID_PARAMS, str(exc))
-        except Exception as exc:  # noqa: BLE001 - surface to client, keep serving
-            if request_id is None:
-                return None
-            return self._error(request_id, JSONRPC_INTERNAL_ERROR, str(exc))
+    # ─── Helpers ─────────────────────────────────────────────────────────────
 
-        if request_id is None:
-            return None
-        return {"jsonrpc": "2.0", "id": request_id, "result": result}
+    def _require_session(self, session_id: str) -> str:
+        thread_name = self._sessions.get(session_id)
+        if thread_name is None:
+            raise RequestError.invalid_params({"reason": f"Unknown sessionId: {session_id!r}"})
+        return thread_name
 
     @staticmethod
-    def _error(request_id: Any, code: int, message: str) -> dict[str, Any]:
-        return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+    def _thread_name_for(cwd: str) -> str:
+        leaf = re.sub(r"[^A-Za-z0-9_-]+", "-", Path(cwd).name or "session").strip("-")
+        return leaf or "session"
 
-    # ─── ACP methods ──────────────────────────────────────────────────────────
+    def _ensure_thread(self, name: str, cwd: str) -> str:
+        """Register (or reuse) the thread for this session.
 
-    def _on_initialize(self, params: Mapping[str, Any]) -> dict[str, Any]:
-        return {
-            "protocolVersion": PROTOCOL_VERSION,
-            "agentCapabilities": {
-                "loadSession": False,
-                "promptCapabilities": {"audio": False, "embeddedContext": False},
-            },
-            "authMethods": [],
-        }
-
-    def _on_session_new(self, params: Mapping[str, Any]) -> dict[str, Any]:
-        cwd = params.get("cwd") or Path.cwd().as_posix()
-        thread_name = params.get("thread") or params.get("agentId") or "acp-session"
+        Same name with a different worktree gets folder-disambiguated so a
+        thread's folder can never be silently re-pointed.
+        """
         from .declarations import Thread
 
-        thread = Thread(
-            name=thread_name,
-            tags=frozenset({"acp"}),
-            worktree=cwd,
-            parent=params.get("parent"),
-            task=params.get("task"),
-        )
+        if name in self._comms.registry:
+            existing = self._comms.registry.require(name)
+            if existing.worktree == cwd:
+                return name
+            suffix = 2
+            while f"{name}-{suffix}" in self._comms.registry:
+                suffix += 1
+            name = f"{name}-{suffix}"
+        thread = Thread(name=name, tags=frozenset({"acp"}), worktree=cwd)
         self._comms.register(thread)
-        self._next_session += 1
-        session_id = f"s{self._next_session}"
-        self._sessions[session_id] = thread_name
-        return {"sessionId": session_id}
+        return name
 
-    def _on_session_prompt(self, params: Mapping[str, Any]) -> dict[str, Any]:
-        session_id = params.get("sessionId")
-        if session_id not in self._sessions:
-            raise ValueError(f"Unknown sessionId: {session_id!r}")
-        thread_name = self._sessions[session_id]
-        self._comms.registry.require(thread_name)
+    async def _drain_inbox(self, session_id: str, thread_name: str) -> None:
         from .declarations import ThreadStatus
 
         if self._comms.registry.status(thread_name) is ThreadStatus.STOPPED:
-            raise ValueError(f"Thread {thread_name!r} is stopped; refusing prompt.")
-
-        prompt_text = self._prompt_text(params.get("prompt"))
-        self._comms.send(
-            sender=thread_name,
-            target="broadcast",
-            body=prompt_text,
-        )
-
+            return
         for message in self._comms.inbox(thread_name):
-            self._write(
-                {
-                    "jsonrpc": "2.0",
-                    "method": "session/update",
-                    "params": {
-                        "sessionId": session_id,
-                        "update": {
-                            "sessionUpdate": "agent_message_chunk",
-                            "content": {
-                                "type": "text",
-                                "text": f"[{message.sender}] {message.body}",
-                            },
-                        },
-                    },
-                }
+            if self._client is None:
+                break
+            await self._client.session_update(
+                session_id=session_id,
+                update=AgentMessageChunk(
+                    session_update="agent_message_chunk",
+                    content=TextContentBlock(
+                        type="text", text=f"[{message.sender}] {message.body}"
+                    ),
+                ),
             )
         self._comms.acknowledge(thread_name)
-        return {"stopReason": "endTurn"}
+
+    async def _run_agent_turn(self, session_id: str, thread_name: str, task: str) -> None:
+        """Stream a real coding agent's reply into the session and the wire."""
+        thread = self._comms.registry.require(thread_name)
+        if shutil.which(self._agent_bin) is None:
+            await self._emit_text(
+                session_id,
+                f"agent backend {self._agent_bin!r} not found on PATH; "
+                "reply relayed to the room only",
+            )
+            return
+        worktree = thread.worktree if Path(thread.worktree).is_dir() else str(Path.cwd())
+        env = os.environ.copy()
+        env.setdefault("AGENT_COMMS_THREAD", thread_name)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                self._agent_bin,
+                *self._agent_args,
+                task,
+                cwd=worktree,
+                env=env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+                stdin=asyncio.subprocess.DEVNULL,
+            )
+        except OSError as exc:
+            await self._emit_text(session_id, f"agent launch failed: {exc}")
+            return
+        assert proc.stdout is not None
+        reply: list[str] = []
+        while True:
+            chunk = await proc.stdout.read(4096)
+            if not chunk:
+                break
+            piece = chunk.decode(errors="replace")
+            reply.append(piece)
+            await self._emit_text(session_id, piece)
+        await proc.wait()
+        body = "".join(reply).strip()
+        if body:
+            self._comms.send(thread_name, GLOBAL_TARGET, body[:4000])
+
+    async def _emit_text(self, session_id: str, text: str) -> None:
+        if self._client is None or not text:
+            return
+        await self._client.session_update(
+            session_id=session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=text),
+            ),
+        )
 
     @staticmethod
-    def _prompt_text(prompt: Any) -> str:
-        if prompt is None:
-            return ""
-        if isinstance(prompt, str):
-            return prompt
-        if isinstance(prompt, Sequence):
-            chunks = []
-            for block in prompt:
-                if isinstance(block, Mapping):
-                    chunks.append(str(block.get("text", "")))
-            return "\n".join(chunk for chunk in chunks if chunk)
-        return str(prompt)
+    def _prompt_text(prompt: list[Any]) -> str:
+        chunks: list[str] = []
+        for block in prompt:
+            if isinstance(block, dict):
+                chunks.append(str(block.get("text", "")))
+            else:
+                chunks.append(str(getattr(block, "text", "") or ""))
+        return "\n".join(chunk for chunk in chunks if chunk)
 
 
 def main() -> int:
     comms = wire()
-    AcpServer(comms).serve()
+
+    async def run() -> None:
+        await run_agent(CommsAgent(comms))  # type: ignore[arg-type]
+
+    asyncio.run(run())
     return 0
 
 

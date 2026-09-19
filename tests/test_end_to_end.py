@@ -181,61 +181,48 @@ class TestEndToEndLifecycle:
         assert cli(root, "inbox", "--thread", "a")["messages"] == []
 
     def test_acp_client_and_cli_share_one_wire(self, tmp_path):
-        """ACP sessions and CLI agents see the same threads and messages."""
-        from agent_comms.acp import AcpServer
+        """ACP sessions and CLI agents see the same threads and messages.
+
+        The real stdio roundtrip lives in tests/test_acp.py; here we prove
+        the CLI side of the same wire.
+        """
+        import asyncio
+
+        from agent_comms.acp import CommsAgent
         from agent_comms.operations import wire
 
         root = tmp_path / "wire"
         comms = wire(root)
-        reader = [
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "session/new",
-                    "params": {"cwd": str(tmp_path), "thread": "acp-worker"},
-                }
-            )
-        ]
-        out = _FakeWriter()
-        AcpServer(comms, reader=reader, writer=out).serve()
+        agent = CommsAgent(comms)
+
+        async def flow() -> None:
+            await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+
+        asyncio.run(flow())
 
         # CLI thread messages the ACP-registered thread.
         cli(root, "register", "--name", "cli-agent", "--worktree", str(tmp_path))
-        cli(
-            root, "send", "--from", "cli-agent", "--to", "acp-worker", "--body", "from the cli side"
-        )
+        cli(root, "send", "--from", "cli-agent", "--to", "proj", "--body", "from the cli side")
 
-        # ACP prompt drains it as session/update chunks.
-        comms2 = wire(root)
-        reader2 = [
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "session/prompt",
-                    "params": {"sessionId": "s1", "prompt": "checking inbox"},
-                }
-            )
-        ]
-        out2 = _FakeWriter()
-        server2 = AcpServer(comms2, reader=reader2, writer=out2)
-        server2._sessions["s1"] = "acp-worker"
-        server2.serve()
-        chunks = [json.loads(line) for line in out2.written if "session/update" in line]
-        assert len(chunks) == 1
-        assert "from the cli side" in chunks[0]["params"]["update"]["content"]["text"]
+        # ACP prompt drains it as agent message chunks.
+        sent: list = []
+
+        class FakeClient:
+            async def session_update(self, session_id=None, update=None, **kw):
+                sent.append(update)
+
+        agent._client = FakeClient()
+
+        async def prompt_flow() -> None:
+            await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "checking inbox"}])
+
+        asyncio.run(prompt_flow())
+        assert len(sent) == 1
+        assert "from the cli side" in sent[0].content.text
         # The ACP prompt itself was broadcast and is visible on the CLI side.
         inbox = cli(root, "inbox", "--thread", "cli-agent")
         assert [m["text"] for m in inbox["messages"]] == ["checking inbox"]
-
-
-class _FakeWriter:
-    def __init__(self):
-        self.written: list[str] = []
-
-    def write(self, text: str) -> None:
-        self.written.append(text)
-
-    def flush(self) -> None:
-        pass
+        # And the CLI side can reply, visible in the thread's DM history.
+        cli(root, "send", "--from", "cli-agent", "--to", "proj", "--body", "roger")
+        dm = [m.body for m in wire(root).dm_history("cli-agent", "proj")]
+        assert dm == ["from the cli side", "roger"]
