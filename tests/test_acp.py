@@ -58,7 +58,7 @@ class TestHandlers:
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         response = await agent.prompt(
-            session_id="s1", prompt=[{"type": "text", "text": "hello all"}]
+            session_id="s1", prompt=[{"type": "text", "text": "!relay hello all"}]
         )
         assert response.stop_reason == "end_turn"
         history = agent._comms.channel_history("#all")
@@ -98,7 +98,7 @@ class TestAgentTurn:
 
     def _agent_with_stub(self, tmp_path: Path, wired) -> CommsAgent:
         stub = tmp_path / "fake-agent"
-        stub.write_text("#!/bin/sh\ncat\n")
+        stub.write_text("#!/bin/sh\nprintf '%s' \"$1\"\n")
         stub.chmod(0o755)
         return CommsAgent(wired, agent_bin=str(stub), agent_args=[])
 
@@ -122,9 +122,7 @@ class TestAgentTurn:
         assert True  # stub streams via stdout; covered by wire assertions below
         # The reply was posted to the wire (stub echoes the task).
         history = [m.body for m in agent._comms.channel_history("#all")]
-        assert "!agent fix the flake" in history  # the prompt (verbatim, incl. prefix)
-        # stub echoes stdin; agent got the task as argv, stdin closed -> empty.
-        # So only the prompt is on the wire.
+        assert "fix the flake" in history
 
     async def test_agent_turn_runs_in_thread_worktree(self, wired, tmp_path):
         worktree = tmp_path / "somewhere"
@@ -175,19 +173,14 @@ class TestAgentTurn:
         assert response.stop_reason == "end_turn"
         assert any("not found" in (u.content.text or "") for u in sent)
 
-    async def test_plain_prompt_does_not_launch_agent(self, wired, tmp_path):
+    async def test_plain_prompt_launches_agent(self, wired, tmp_path):
         agent = self._agent_with_stub(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        import unittest.mock as mock
-
-        async def no_exec(*a, **kw):
-            raise AssertionError("agent launched on plain prompt")
-
-        with mock.patch("asyncio.create_subprocess_exec", no_exec):
-            response = await agent.prompt(
-                session_id="s1", prompt=[{"type": "text", "text": "just chat"}]
-            )
+        response = await agent.prompt(
+            session_id="s1", prompt=[{"type": "text", "text": "just chat"}]
+        )
         assert response.stop_reason == "end_turn"
+        assert [message.body for message in wired.channel_history("#all")] == ["just chat"]
 
 
 class TestWireProtocol:
@@ -218,7 +211,7 @@ class TestWireProtocol:
                 "method": "session/prompt",
                 "params": {
                     "sessionId": "s1",
-                    "prompt": [{"type": "text", "text": "anyone alive?"}],
+                    "prompt": [{"type": "text", "text": "!relay anyone alive?"}],
                 },
             },
         ]
@@ -296,7 +289,9 @@ class TestCrossClient:
                     sent.append(update)
 
             agent._client = FakeClient()
-            await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "checking inbox"}])
+            await agent.prompt(
+                session_id="s1", prompt=[{"type": "text", "text": "!relay checking inbox"}]
+            )
 
         asyncio.run(flow())
         assert len(sent) == 1
@@ -321,7 +316,7 @@ class TestLiveDrain:
 
         agent._client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "hi room"}])
+        await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "!relay hi room"}])
         assert not any("cli" in (u.content.text or "") for u in sent)
 
         # A peer DMs the session thread AFTER the prompt finished.
@@ -347,7 +342,7 @@ class TestLiveDrain:
             wire(tmp_path / "wire"), reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05
         )
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "hi"}])
+        await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "!relay hi"}])
         assert "s1" in agent._drain_tasks
         await agent.cancel(session_id="s1")
         await asyncio.sleep(0.05)
@@ -379,13 +374,17 @@ class TestAgentTurnForwarding:
     def _rpc_stub(self, tmp_path: Path) -> str:
         rpc_lines = "\n".join(
             [
+                '{"type":"message_update","assistantMessageEvent":'
+                '{"type":"thinking_delta","delta":"Inspecting files"}}',
                 '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"running"}}',
                 '{"type":"tool_execution_start","toolCallId":"t1","toolName":"bash","args":{"command":"pwd"}}',
+                '{"type":"tool_execution_update","toolCallId":"t1","toolName":"bash",'
+                '"partialResult":{"content":[{"type":"text","text":"working"}]}}',
                 '{"type":"tool_execution_end","toolCallId":"t1","toolName":"bash",'
                 '"result":{"content":[{"type":"text","text":"/wt"}]},"isError":false}',
                 '{"type":"message_update",'
                 '"assistantMessageEvent":{"type":"text_delta","delta":" finished"}}',
-                '{"type":"agent_end"}',
+                '{"type":"agent_settled"}',
             ]
         )
         stub = tmp_path / "pi-stub"
@@ -417,17 +416,22 @@ class TestAgentTurnForwarding:
         await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "!agent do a thing"}])
         kinds = [type(u).__name__ for u in sent]
         assert kinds == [
-            "AgentThoughtChunk",  # thinking activity before backend starts
+            "AgentThoughtChunk",  # actual backend thinking
             "AgentMessageChunk",  # "running"
-            "ToolCallStart",  # bash: pwd
+            "ToolCallStart",  # Run pwd
+            "ToolCallProgress",  # live output
             "ToolCallProgress",  # completed
             "AgentMessageChunk",  # " finished"
         ]
+        assert sent[0].content.text == "Inspecting files"
         tool_call = sent[2]
         assert tool_call.tool_call_id == "t1"
-        assert tool_call.title.startswith("bash:")
+        assert tool_call.title == "Run pwd"
         assert tool_call.kind == "execute"
-        progress = sent[3]
+        assert tool_call.raw_input == {"command": "pwd"}
+        assert sent[3].status == "in_progress"
+        assert sent[3].content[0].content.text == "working"
+        progress = sent[4]
         assert progress.status == "completed"
         assert progress.content[0].content.text == "/wt"
 

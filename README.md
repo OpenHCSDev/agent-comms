@@ -20,7 +20,7 @@ Unknown references raise — the system is fail-closed.
 - **CLI** (`agent-comms`) — JSON over stdout; the adapter surface for the pi
   extension and other process-based clients.
 - **ACP server** (`agent-comms-acp`) — Agent Client Protocol agent over
-  stdio, so Toad, Zed, and VS Code connect natively. Pure stdlib.
+  stdio, so Toad, Zed, and VS Code connect natively (`agent-comms[acp]`).
 - **TUI** (`agent_comms.tui`) — Textual overview client for humans. Optional
   dep (`agent-comms[tui]`).
 - **Pi extension** (`extensions/pi-agent-comms/`) — thin TypeScript shim that
@@ -40,6 +40,11 @@ Install the optional ACP server and Textual TUI dependencies together:
 ```bash
 pip install "agent-comms[all]"
 ```
+
+In an ACP client, normal prompts run the configured coding agent and stream
+thinking and tool progress. Use `@name message`, `#channel message`, or
+`!relay message` for coordination-only messages that should not launch a
+coding turn.
 
 ```python
 from pathlib import Path

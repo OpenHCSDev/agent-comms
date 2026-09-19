@@ -66,6 +66,38 @@ def _short_args(raw: Any, limit: int = 80) -> str:
     return text[:limit] + ("…" if len(text) > limit else "")
 
 
+def _tool_title(name: str, args: Any) -> str:
+    """Build a concise activity label from structured tool arguments."""
+    values = args if isinstance(args, dict) else {}
+    if name == "bash":
+        detail = values.get("command")
+        action = "Run"
+    elif name in {"read", "write", "edit"}:
+        detail = values.get("path") or values.get("file_path")
+        action = name.title()
+    elif name == "grep":
+        pattern = values.get("pattern")
+        path = values.get("path")
+        detail = f"{pattern} in {path}" if pattern and path else pattern or path
+        action = "Search"
+    elif name == "glob":
+        detail = values.get("pattern") or values.get("path")
+        action = "Find"
+    else:
+        detail = None
+        action = name.replace("_", " ").title()
+    return f"{action} {_short_args(detail, 120)}" if detail else action
+
+
+def _result_text(result: Any, limit: int = 4000) -> str:
+    if not isinstance(result, dict):
+        return ""
+    text = "".join(
+        block.get("text", "") for block in (result.get("content") or []) if isinstance(block, dict)
+    )
+    return text[:limit] + ("…" if len(text) > limit else "")
+
+
 async def stream_agent_events(
     agent_bin: str,
     agent_args: Sequence[str],
@@ -204,30 +236,38 @@ async def stream_agent_events(
                     "context_size": context_size,
                 }
             delta_event = payload.get("assistantMessageEvent") or {}
-            if delta_event.get("type") == "text_delta":
+            delta_type = delta_event.get("type")
+            if delta_type == "text_delta":
                 piece = delta_event.get("delta") or ""
                 text_parts.append(piece)
                 yield {"type": "chunk", "text": piece}
+            elif delta_type == "thinking_delta":
+                piece = delta_event.get("delta") or ""
+                if piece:
+                    yield {"type": "thinking", "text": piece}
         elif kind == "tool_execution_start":
             name = payload.get("toolName") or "tool"
-            detail = _short_args(payload.get("args") or "")
+            args = payload.get("args") or {}
             tool_id = payload.get("toolCallId") or name
-            yield {"type": "tool_start", "id": tool_id, "name": name, "title": f"{name}: {detail}"}
+            yield {
+                "type": "tool_start",
+                "id": tool_id,
+                "name": name,
+                "title": _tool_title(name, args),
+                "args": args,
+            }
+        elif kind == "tool_execution_update":
+            yield {
+                "type": "tool_progress",
+                "id": payload.get("toolCallId") or payload.get("toolName") or "tool",
+                "name": payload.get("toolName") or "tool",
+                "output": _result_text(payload.get("partialResult")),
+            }
         elif kind == "tool_execution_end":
             name = payload.get("toolName") or "tool"
             result = payload.get("result") or {}
-            output = _short_args(
-                "".join(
-                    block.get("text", "")
-                    for block in (result.get("content") or [])
-                    if isinstance(block, dict)
-                ),
-                200,
-            )
+            output = _result_text(result)
             is_ok = payload.get("isError") is not True
-            if not is_ok:
-                ok = False
-                fail_reason = f"tool {name} failed: {output}"
             yield {
                 "type": "tool_end",
                 "id": payload.get("toolCallId") or name,
@@ -235,7 +275,7 @@ async def stream_agent_events(
                 "ok": is_ok,
                 "output": output,
             }
-        elif kind in {"agent_end", "agent_settled"} and not stats_requested:
+        elif kind == "agent_settled" and not stats_requested:
             if proc.stdin is not None:
                 stats_requested = True
                 try:
