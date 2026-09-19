@@ -209,3 +209,67 @@ class TestCrossWireIsolation:
         assert "only-in-a" in a.registry
         with pytest.raises(UnregisteredThreadError):
             b.registry.require("only-in-a")
+
+
+class TestReDeclarationPreservesProvenance:
+    """Regression: a child that re-registers without tag env must keep
+    the tags its fork declared, or it silently loses channel access."""
+
+    def test_empty_tags_inherit_previous(self, wired):
+        wired.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/wt1"))
+        assert wired.registry.require("fixer").tags == frozenset({"auth"})
+
+    def test_explicit_tags_replace_previous(self, wired):
+        wired.register(Thread(name="fixer", tags=frozenset({"docs"}), worktree="/tmp/wt1"))
+        assert wired.registry.require("fixer").tags == frozenset({"docs"})
+
+    def test_missing_session_file_inherits_previous(self, wired, tmp_path):
+        wired.register(
+            Thread(
+                name="PR111",
+                tags=frozenset({"base"}),
+                worktree="/tmp/wt1",
+                session_file=str(tmp_path / "s.json"),
+            )
+        )
+        wired.register(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1"))
+        assert wired.registry.require("PR111").session_file == str(tmp_path / "s.json")
+
+    def test_fresh_declaration_is_unaffected(self, wired):
+        wired.register(Thread(name="fresh", tags=frozenset(), worktree="/wt"))
+        assert wired.registry.require("fresh").tags == frozenset()
+
+    def test_tagless_child_keeps_channel_after_reregister(self, wired):
+        wired.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/wt1"))
+        wired.send("PR111", "#auth", "only tagged fixer sees this")
+        assert wired.pending_count("fixer") == 1
+
+    def test_fork_env_carries_neutral_tag_names(self, wired, monkeypatch, tmp_path):
+        session = tmp_path / "session.json"
+        session.write_text("{}")
+        wired.register(
+            Thread(
+                name="PR111", tags=frozenset(), worktree=str(tmp_path), session_file=str(session)
+            )
+        )
+        captured: dict = {}
+
+        class FakePopen:
+            def __init__(self, args, env=None, **kwargs):
+                captured["env"] = dict(env)
+                self.pid = 1
+
+        monkeypatch.setattr("agent_comms.operations.subprocess.Popen", FakePopen)
+        wired.fork(ForkSpec(name="kid", parent="PR111", task="t", tags=frozenset({"ci"})))
+        assert captured["env"]["AGENT_COMMS_TAGS"] == "ci"
+        assert captured["env"]["AGENT_COMMS_THREAD"] == "kid"
+        assert captured["env"]["PI_AGENT_TAGS"] == "ci"
+
+    def test_current_thread_reads_agent_comms_tags(self, monkeypatch, tmp_path):
+        from agent_comms import current_thread
+
+        monkeypatch.delenv("PI_AGENT_ID", raising=False)
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
+        monkeypatch.setenv("AGENT_COMMS_TAGS", "ci, docs")
+        monkeypatch.chdir(tmp_path)
+        assert current_thread().tags == frozenset({"ci", "docs"})

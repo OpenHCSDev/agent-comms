@@ -119,7 +119,31 @@ class Comms:
     # ─── Threads ──────────────────────────────────────────────────────────────
 
     def register(self, thread: Thread) -> None:
-        """Declare a thread in the registry."""
+        """Declare a thread in the registry.
+
+        Re-declaring an existing thread cannot silently drop provenance:
+        empty tags inherit the prior declaration's tags (a child that does
+        not receive tag env still keeps its channel subscriptions), and a
+        missing session_file keeps the prior one. Explicit values always win.
+        """
+        existing = self.registry.all_threads().get(thread.name)
+        tags = thread.tags
+        session_file = thread.session_file
+        if existing is not None:
+            if not tags:
+                tags = existing.tags
+            if session_file is None:
+                session_file = existing.session_file
+        if tags != thread.tags or session_file != thread.session_file:
+            thread = Thread(
+                name=thread.name,
+                tags=tags,
+                worktree=thread.worktree,
+                parent=thread.parent,
+                task=thread.task,
+                pid=thread.pid,
+                session_file=session_file,
+            )
         self.registry.register(thread)
 
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
@@ -185,12 +209,16 @@ class Comms:
         self.registry.register(child)
 
         env = os.environ.copy()
+        tag_env = ",".join(sorted(spec.tags))
         env.update(
             {
                 "PI_AGENT_ID": spec.name,
                 "PI_PARENT_ID": spec.parent,
                 "PI_TASK": spec.task,
-                "PI_AGENT_TAGS": ",".join(sorted(spec.tags)),
+                "PI_AGENT_TAGS": tag_env,
+                # Non-pi harnesses read the neutral names.
+                "AGENT_COMMS_THREAD": spec.name,
+                "AGENT_COMMS_TAGS": tag_env,
                 "PI_WORKTREE": parent.worktree,
             }
         )

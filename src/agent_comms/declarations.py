@@ -440,7 +440,8 @@ def current_thread() -> Thread:
         raise UnregisteredThreadError(
             "PI_AGENT_ID is not set. This process is not an orchestrated thread."
         )
-    tags = frozenset(t.strip() for t in os.environ.get("PI_AGENT_TAGS", "").split(",") if t.strip())
+    tag_env = os.environ.get("PI_AGENT_TAGS") or os.environ.get("AGENT_COMMS_TAGS", "")
+    tags = frozenset(t.strip() for t in tag_env.split(",") if t.strip())
     return Thread(
         name=name,
         tags=tags,
