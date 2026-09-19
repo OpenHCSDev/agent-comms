@@ -25,6 +25,9 @@ from textual.widgets import Footer, Header, Input, Static
 from .declarations import GLOBAL_CHANNEL
 from .operations import Comms, wire
 
+EVERYTHING_VIEW = "*all"
+REFRESH_INTERVAL = 1.0
+
 
 def _fmt_age(ts: float, now: float | None = None) -> str:
     if ts <= 0:
@@ -65,8 +68,9 @@ class ChatView(Static):
 
     @staticmethod
     def _field(message: object, key: str) -> str:
+        wire_key = {"sender": "from", "target": "to"}.get(key, key)
         if isinstance(message, Mapping):
-            return str(message.get(key if key != "sender" else "from", ""))
+            return str(message.get(wire_key, ""))
         return str(getattr(message, key, ""))
 
     def show_messages(self, title: str, messages: Sequence[Mapping]) -> None:
@@ -104,7 +108,7 @@ class CommsApp(App[None]):
         super().__init__()
         self._comms = comms
         self._me = thread_name
-        self._current = GLOBAL_CHANNEL
+        self._current = EVERYTHING_VIEW
         self._fork_mode = False
 
     def compose(self) -> ComposeResult:
@@ -121,6 +125,7 @@ class CommsApp(App[None]):
         if self._me is None:
             prompt = self.query_one("#prompt", Input)
             prompt.placeholder = "log in: type your name and press enter"
+        self.set_interval(REFRESH_INTERVAL, self.refresh_data)
         self.refresh_data()
 
     # ─── Views ────────────────────────────────────────────────────────────────
@@ -130,10 +135,12 @@ class CommsApp(App[None]):
         dms = sorted(self._comms.registry.active_threads())
         if self._me and self._me in dms:
             dms.remove(self._me)
-        return channels + [f"@{name}" for name in dms]
+        return [EVERYTHING_VIEW, *channels, *(f"@{name}" for name in dms)]
 
     def _current_target(self) -> str:
         """Resolve the current view to a send target."""
+        if self._current == EVERYTHING_VIEW:
+            return GLOBAL_CHANNEL
         if self._current.startswith("@"):
             return self._current[1:]
         return self._current
@@ -142,17 +149,16 @@ class CommsApp(App[None]):
         if self._me:
             with contextlib.suppress(Exception):
                 self._comms.heartbeat(self._me)
-        self.query_one("#sidebar", Sidebar).show(
-            self._comms.channels(), self._comms.who(), self._current
-        )
+        channels = [EVERYTHING_VIEW, *self._comms.channels()]
+        self.query_one("#sidebar", Sidebar).show(channels, self._comms.who(), self._current)
         title = self._current
-        if self._current.startswith("@"):
+        if self._current == EVERYTHING_VIEW:
+            messages = [m.to_wire() for m in self._comms.full_history()]
+        elif self._current.startswith("@"):
             peer = self._current[1:]
             messages = []
             if self._me:
                 messages = [m.to_wire() for m in self._comms.dm_history(self._me, peer)]
-            else:
-                messages = []
         else:
             messages = [m.to_wire() for m in self._comms.channel_history(self._current)]
         self.query_one("#inbox", ChatView).show_messages(title, messages)
@@ -209,7 +215,7 @@ class CommsApp(App[None]):
             thread = Thread(name=name, tags=frozenset({"human"}), worktree=str(Path.cwd()))
             self._comms.register(thread)
             self._me = name
-            self._current = GLOBAL_CHANNEL
+            self._current = EVERYTHING_VIEW
             self.refresh_data()
             return
 

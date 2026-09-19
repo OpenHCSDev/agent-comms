@@ -363,6 +363,10 @@ class MessageBus:
         normalized = GLOBAL_CHANNEL if target == "broadcast" else target
         return [msg for msg in self._load_log() if msg.target == normalized]
 
+    def full_history(self) -> Sequence[Message]:
+        """Every message on the wire, in seq order (the combined view)."""
+        return self._load_log()
+
     def channels(self) -> Sequence[str]:
         """Derived channel list: the global channel plus one per tag in use."""
         tags: set[str] = set()
