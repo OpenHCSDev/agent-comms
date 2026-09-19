@@ -20,10 +20,12 @@ from .declarations import (
     Activity,
     ActivityLog,
     ActivityState,
+    AgentRuntimeInfo,
     Message,
     MessageBus,
     MessageType,
     RelationViolationError,
+    RuntimeInfoStore,
     SharedLedger,
     Thread,
     ThreadRegistry,
@@ -56,6 +58,7 @@ class Comms:
         self.bus = MessageBus(self.root / "bus.jsonl", self.registry)
         self.ledger = SharedLedger(self.root / "ledger.json")
         self.activity = ActivityLog(self.root / "activity.jsonl")
+        self.runtime_info = RuntimeInfoStore(self.root / "runtime_info.json")
 
     # ─── Messaging ────────────────────────────────────────────────────────────
 
@@ -115,6 +118,34 @@ class Comms:
     def all_activity(self) -> Mapping[str, Activity]:
         return self.activity.all_current()
 
+    def set_agent_info(
+        self,
+        thread: str,
+        *,
+        model: str | None = None,
+        session_name: str | None = None,
+        context_used: int | None = None,
+        context_size: int | None = None,
+    ) -> None:
+        """Record the latest model and context metadata for a thread."""
+        self.registry.require(thread)
+        self.runtime_info.set(
+            AgentRuntimeInfo(
+                thread=thread,
+                model=model,
+                session_name=session_name,
+                context_used=context_used,
+                context_size=context_size,
+            )
+        )
+
+    def agent_info_of(self, thread: str) -> AgentRuntimeInfo | None:
+        self.registry.require(thread)
+        return self.runtime_info.get(thread)
+
+    def all_agent_info(self) -> Mapping[str, AgentRuntimeInfo]:
+        return self.runtime_info.all()
+
     def channels(self) -> Sequence[str]:
         """Derived channel list: ``#all`` plus one channel per tag in use."""
         return self.bus.channels()
@@ -122,7 +153,9 @@ class Comms:
     def who(self) -> Sequence[Mapping]:
         """Presence: who is in the chat, with status and unread counts."""
         rows = []
+        runtime_info = self.runtime_info.all()
         for name, t in sorted(self.registry.all_threads().items()):
+            info = runtime_info.get(name)
             rows.append(
                 {
                     "name": name,
@@ -133,6 +166,11 @@ class Comms:
                     "worktree": t.worktree,
                     "last_seen": self.registry.last_seen(name),
                     "pending": self.pending_count(name),
+                    "model": info.model if info else None,
+                    "session_name": info.session_name if info else None,
+                    "context_used": info.context_used if info else None,
+                    "context_size": info.context_size if info else None,
+                    "context_percent": info.context_percent if info else None,
                 }
             )
         return rows

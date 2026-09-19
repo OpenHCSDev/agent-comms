@@ -29,6 +29,18 @@ Unknown references raise — the system is fail-closed.
 
 ## Quick start
 
+Install the core CLI and library from PyPI:
+
+```bash
+pip install agent-comms
+```
+
+Install the optional ACP server and Textual TUI dependencies together:
+
+```bash
+pip install "agent-comms[all]"
+```
+
 ```python
 from pathlib import Path
 from agent_comms import Thread, wire
@@ -64,6 +76,22 @@ black src tests
 ruff check src tests
 mypy src
 ```
+
+## Releasing
+
+Distribution artifacts are built and validated automatically when a GitHub
+release is published. Publishing uses PyPI Trusted Publishing through the
+`pypi` GitHub environment; no long-lived API token is stored in the repository.
+
+Before the first release, configure a pending PyPI trusted publisher for:
+
+- Owner: `OpenHCSDev`
+- Repository: `agent-comms`
+- Workflow: `publish-to-pypi.yml`
+- Environment: `pypi`
+
+Set the version in `src/agent_comms/__init__.py`, run the development checks,
+and publish a GitHub release for the matching tag.
 
 ## License
 

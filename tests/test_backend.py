@@ -47,6 +47,26 @@ class TestRpcParsing:
         assert tool_end["ok"] is True and "hi" in tool_end["output"]
         assert events[-1]["text"] == "hello done" and events[-1]["ok"] is True
 
+    async def test_rpc_model_and_context_metadata(self, tmp_path):
+        rpc_lines = "\n".join(
+            [
+                '{"type":"response","command":"get_state","success":true,"data":'
+                '{"model":{"provider":"openrouter","id":"z-ai/glm","contextWindow":1000},'
+                '"sessionName":"work"}}',
+                '{"type":"message_update","usage":{"totalTokens":125},'
+                '"assistantMessageEvent":{"type":"text_delta","delta":"ok"}}',
+                '{"type":"agent_end"}',
+                '{"type":"response","command":"get_session_stats","success":true,"data":'
+                '{"contextUsage":{"tokens":200,"contextWindow":1000,"percent":20}}}',
+            ]
+        )
+        stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
+        events = [e async for e in backend.stream_agent_events(stub, [], "t", str(tmp_path))]
+        info = [event for event in events if event["type"] == "agent_info"]
+        assert info[0]["model"] == "openrouter/z-ai/glm"
+        assert info[-1]["context_used"] == 200
+        assert info[-1]["context_size"] == 1000
+
     async def test_failed_tool_marks_done_not_ok(self, tmp_path):
         rpc_lines = "\n".join(
             [
