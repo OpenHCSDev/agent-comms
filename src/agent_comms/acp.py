@@ -57,6 +57,10 @@ DEFAULT_AGENT_ARGS = [
     "z-ai/glm-5.3-flash",
 ]
 LIVE_DRAIN_INTERVAL = 1.0
+NO_REPLY_WINDOW = 2.5  # silence: end the turn after this long with nothing
+REPLY_WINDOW = 8.0  # once replies flow, keep collecting at most this long
+REPLY_QUIET = 1.5  # after the last reply, wait this long then end the turn
+REPLY_POLL = 0.25
 
 
 class CommsAgent:
@@ -68,7 +72,13 @@ class CommsAgent:
     """
 
     def __init__(
-        self, comms: Comms, agent_bin: str | None = None, agent_args: list[str] | None = None
+        self,
+        comms: Comms,
+        agent_bin: str | None = None,
+        agent_args: list[str] | None = None,
+        reply_window: float | None = None,
+        no_reply_window: float | None = None,
+        reply_quiet: float | None = None,
     ):
         self._comms = comms
         self._sessions: dict[str, str] = {}
@@ -82,6 +92,21 @@ class CommsAgent:
             else (arg_env.split() if arg_env else list(DEFAULT_AGENT_ARGS))
         )
         self._drain_tasks: dict[str, asyncio.Task[None]] = {}
+        self._reply_window = (
+            reply_window
+            if reply_window is not None
+            else float(os.environ.get("AGENT_COMMS_REPLY_WINDOW", str(REPLY_WINDOW)))
+        )
+        self._no_reply_window = (
+            no_reply_window
+            if no_reply_window is not None
+            else float(os.environ.get("AGENT_COMMS_NO_REPLY_WINDOW", str(NO_REPLY_WINDOW)))
+        )
+        self._reply_quiet = (
+            reply_quiet
+            if reply_quiet is not None
+            else float(os.environ.get("AGENT_COMMS_REPLY_QUIET", str(REPLY_QUIET)))
+        )
 
     def on_connect(self, client: Any) -> None:
         """Called by AgentSideConnection with the client-facing connection."""
@@ -124,8 +149,30 @@ class CommsAgent:
         await self._drain_inbox(session_id, thread_name)
         if agent_task:
             await self._run_agent_turn(session_id, thread_name, agent_task)
+        # Hold the turn open while replies arrive: clients render updates
+        # during a turn, so the room's answers stream into the chat live.
+        await self._collect_replies(session_id, thread_name)
         self._ensure_live_drain(session_id, thread_name)
         return PromptResponse(stop_reason="end_turn")
+
+    async def _collect_replies(self, session_id: str, thread_name: str) -> None:
+        """Stream inbox messages into the open turn until quiet or timeout."""
+        waited = 0.0
+        quiet = 0.0
+        got_reply = False
+        while True:
+            await asyncio.sleep(REPLY_POLL)
+            waited += REPLY_POLL
+            quiet += REPLY_POLL
+            pushed = await self._drain_count(session_id, thread_name)
+            if pushed:
+                got_reply = True
+                quiet = 0.0
+            if got_reply:
+                if quiet >= self._reply_quiet or waited >= self._reply_window:
+                    break
+            elif waited >= self._no_reply_window:
+                break
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
         task = self._drain_tasks.pop(session_id, None)
@@ -183,11 +230,13 @@ class CommsAgent:
 
         self._drain_tasks[session_id] = asyncio.create_task(loop())
 
-    async def _drain_inbox(self, session_id: str, thread_name: str) -> None:
+    async def _drain_inbox(self, session_id: str, thread_name: str) -> int:
+        """Push undelivered messages to the client; returns count pushed."""
         from .declarations import ThreadStatus
 
         if self._comms.registry.status(thread_name) is ThreadStatus.STOPPED:
-            return
+            return 0
+        pushed = 0
         for message in self._comms.inbox(thread_name):
             if self._client is None:
                 break
@@ -200,7 +249,12 @@ class CommsAgent:
                     ),
                 ),
             )
+            pushed += 1
         self._comms.acknowledge(thread_name)
+        return pushed
+
+    async def _drain_count(self, session_id: str, thread_name: str) -> int:
+        return await self._drain_inbox(session_id, thread_name)
 
     async def _run_agent_turn(self, session_id: str, thread_name: str, task: str) -> None:
         """Stream a real coding agent's reply: events to the client, status to the wire."""

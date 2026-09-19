@@ -18,7 +18,9 @@ from agent_comms.operations import wire
 
 class TestHandlers:
     def _agent(self, tmp_path: Path) -> CommsAgent:
-        return CommsAgent(wire(tmp_path / "wire"))
+        return CommsAgent(
+            wire(tmp_path / "wire"), reply_window=0.1, no_reply_window=0.1, reply_quiet=0.05
+        )
 
     async def test_initialize_echoes_protocol_version(self, tmp_path):
         agent = self._agent(tmp_path)
@@ -130,7 +132,14 @@ class TestAgentTurn:
         stub = tmp_path / "cwd-capture"
         stub.write_text("#!/bin/sh\npwd\n")
         stub.chmod(0o755)
-        agent = CommsAgent(wired, agent_bin=str(stub), agent_args=[])
+        agent = CommsAgent(
+            wired,
+            agent_bin=str(stub),
+            agent_args=[],
+            reply_window=0.2,
+            no_reply_window=0.1,
+            reply_quiet=0.05,
+        )
         sent: list = []
 
         class FakeClient:
@@ -144,7 +153,14 @@ class TestAgentTurn:
         assert any(str(worktree) in body for body in history)
 
     async def test_missing_agent_bin_is_reported_not_raised(self, wired, tmp_path):
-        agent = CommsAgent(wired, agent_bin="definitely-not-a-real-binary-xyz", agent_args=[])
+        agent = CommsAgent(
+            wired,
+            agent_bin="definitely-not-a-real-binary-xyz",
+            agent_args=[],
+            reply_window=0.2,
+            no_reply_window=0.1,
+            reply_quiet=0.05,
+        )
         sent: list = []
 
         class FakeClient:
@@ -214,16 +230,39 @@ class TestWireProtocol:
             stderr=subprocess.PIPE,
             text=True,
             env=env,
+            bufsize=1,
         )
+        out_lines: list[str] = []
         try:
-            out, err = proc.communicate(
-                stdin_text if (stdin_text := stdin_text) else stdin_text, timeout=30
-            )
+            # A real client keeps stdin open while reading; closing stdin
+            # mid-turn would EOF the server before the prompt completes.
+            assert proc.stdin is not None and proc.stdout is not None
+            proc.stdin.write(stdin_text)
+            proc.stdin.flush()
+            deadline = 30.0
+            import time as _time
+
+            start = _time.monotonic()
+            while _time.monotonic() - start < deadline:
+                line = proc.stdout.readline()
+                if not line:
+                    break
+                out_lines.append(line)
+                try:
+                    message = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if message.get("id") == 3 and "result" in message:
+                    break
         finally:
-            if proc.poll() is None:
+            if proc.stdin is not None:
+                proc.stdin.close()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
                 proc.kill()
         responses = {
-            m.get("id"): m for m in (json.loads(line) for line in out.splitlines() if line.strip())
+            m.get("id"): m for m in (json.loads(line) for line in out_lines if line.strip())
         }
         assert responses[1]["result"]["protocolVersion"] == 1
         assert responses[2]["result"]["sessionId"] == "s1"
@@ -271,7 +310,9 @@ class TestLiveDrain:
         """The background drain pushes inbox messages live between prompts."""
         import asyncio
 
-        agent = CommsAgent(wire(tmp_path / "wire"))
+        agent = CommsAgent(
+            wire(tmp_path / "wire"), reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05
+        )
         sent: list = []
 
         class FakeClient:
@@ -302,7 +343,9 @@ class TestLiveDrain:
     async def test_cancel_stops_background_drain(self, tmp_path):
         import asyncio
 
-        agent = CommsAgent(wire(tmp_path / "wire"))
+        agent = CommsAgent(
+            wire(tmp_path / "wire"), reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05
+        )
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "hi"}])
         assert "s1" in agent._drain_tasks
@@ -355,7 +398,14 @@ class TestAgentTurnForwarding:
 
         if _sys.platform == "win32":
             pytest.skip("shell-script stub; POSIX only")
-        agent = CommsAgent(wired, agent_bin=self._rpc_stub(tmp_path), agent_args=[])
+        agent = CommsAgent(
+            wired,
+            agent_bin=self._rpc_stub(tmp_path),
+            agent_args=[],
+            reply_window=0.2,
+            no_reply_window=0.1,
+            reply_quiet=0.05,
+        )
         sent: list = []
 
         class FakeClient:
@@ -386,7 +436,14 @@ class TestAgentTurnForwarding:
 
         if _sys.platform == "win32":
             pytest.skip("shell-script stub; POSIX only")
-        agent = CommsAgent(wired, agent_bin=self._rpc_stub(tmp_path), agent_args=[])
+        agent = CommsAgent(
+            wired,
+            agent_bin=self._rpc_stub(tmp_path),
+            agent_args=[],
+            reply_window=0.2,
+            no_reply_window=0.1,
+            reply_quiet=0.05,
+        )
         agent._client = None  # no client: activity still recorded
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "!agent do a thing"}])
