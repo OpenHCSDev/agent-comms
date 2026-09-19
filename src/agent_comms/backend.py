@@ -114,8 +114,11 @@ async def stream_agent_events(
     if stdin_payload is not None and proc.stdin is not None:
         # pi's rpc protocol keeps stdin open while it streams; closing it
         # after the prompt makes the backend exit before responding.
-        proc.stdin.write(stdin_payload)
-        await proc.stdin.drain()
+        try:
+            proc.stdin.write(stdin_payload)
+            await proc.stdin.drain()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     text_parts: list[str] = []
     ok = True
@@ -234,13 +237,26 @@ async def stream_agent_events(
             }
         elif kind in {"agent_end", "agent_settled"} and not stats_requested:
             if proc.stdin is not None:
-                proc.stdin.write((json.dumps({"type": "get_session_stats"}) + "\n").encode())
-                await proc.stdin.drain()
                 stats_requested = True
+                try:
+                    proc.stdin.write((json.dumps({"type": "get_session_stats"}) + "\n").encode())
+                    await proc.stdin.drain()
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
             else:
                 break
 
     if proc.stdin is not None:
         proc.stdin.close()
-    await proc.wait()
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=5.0)
+    except TimeoutError:
+        proc.terminate()
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=5.0)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+        ok = False
+        fail_reason = "agent backend did not exit"
     yield {"type": "done", "text": "".join(text_parts).strip(), "ok": ok and not fail_reason}

@@ -30,6 +30,24 @@ class TestMessaging:
         assert wired.pending_count("fixer") == 0
         assert wired.acknowledge("fixer") == 0
 
+    def test_scoped_ack_only_clears_selected_conversation(self, wired):
+        wired.send("PR111", "fixer", "direct")
+        wired.send("PR111", "#all", "global")
+
+        assert wired.acknowledge("fixer", "PR111") == 1
+        assert wired.pending_count("fixer", "PR111") == 0
+        assert wired.pending_count("fixer", "#all") == 1
+        assert wired.pending_count("fixer") == 1
+
+    def test_scoped_channel_ack_does_not_clear_dm(self, wired):
+        wired.send("PR111", "fixer", "direct")
+        wired.send("PR111", "#all", "global")
+
+        assert wired.acknowledge("fixer", "#all") == 1
+        assert wired.pending_count("fixer", "#all") == 0
+        assert wired.pending_count("fixer", "PR111") == 1
+        assert wired.pending_count("fixer") == 1
+
     def test_inbox_order_follows_seq(self, wired):
         for i in range(5):
             wired.send("PR111", "fixer", f"m{i}")
