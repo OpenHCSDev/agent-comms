@@ -144,8 +144,9 @@ class CommsAgent:
         agent_task: str | None = None
         if text.startswith(AGENT_PREFIX):
             agent_task = text[len(AGENT_PREFIX) :].strip()
-        if text:
-            self._comms.send(thread_name, GLOBAL_TARGET, text)
+        target, body = parse_target(text)
+        if body:
+            self._comms.send(thread_name, target, body)
         await self._drain_inbox(session_id, thread_name)
         if agent_task:
             await self._run_agent_turn(session_id, thread_name, agent_task)
@@ -356,6 +357,27 @@ class CommsAgent:
             else:
                 chunks.append(str(getattr(block, "text", "") or ""))
         return "\n".join(chunk for chunk in chunks if chunk)
+
+
+def parse_target(text: str) -> tuple[str, str]:
+    """Split a leading target prefix off a prompt.
+
+    ``@name body`` -> DM; ``#channel body`` -> channel; empty body with a
+    bare target composes nothing; otherwise the global channel. The prefix
+    is consumed, never broadcast.
+    """
+    stripped = text.strip()
+    if stripped.startswith("@") and len(stripped) > 1:
+        parts = stripped[1:].split(maxsplit=1)
+        name = parts[0].rstrip("@#")
+        if name and len(parts) == 2 and parts[1].strip():
+            return name, parts[1].strip()
+    if stripped.startswith("#") and len(stripped) > 1:
+        parts = stripped[1:].split(maxsplit=1)
+        channel = parts[0].rstrip("@#")
+        if channel and len(parts) == 2 and parts[1].strip():
+            return f"#{channel}", parts[1].strip()
+    return GLOBAL_TARGET, stripped
 
 
 def main() -> int:

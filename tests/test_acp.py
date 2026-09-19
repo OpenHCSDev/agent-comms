@@ -509,3 +509,37 @@ class TestActivityLayer:
         current = log.all_current()
         assert current["a"].state is ActivityState.WORKING
         assert current["b"].state is ActivityState.THINKING
+
+
+class TestTargetPrefix:
+    def test_dm_prefix(self):
+        from agent_comms.acp import parse_target
+
+        assert parse_target("@fixer hello there") == ("fixer", "hello there")
+
+    def test_channel_prefix(self):
+        from agent_comms.acp import parse_target
+
+        assert parse_target("#ci flake again") == ("#ci", "flake again")
+
+    def test_plain_goes_global(self):
+        from agent_comms.acp import parse_target
+
+        assert parse_target("plain text") == ("#all", "plain text")
+
+    def test_bare_target_not_sent(self):
+        from agent_comms.acp import parse_target
+
+        # A bare "@name" with no body composes nothing — sent to global
+        # verbatim so the room sees an incomplete line rather than dropping it.
+        assert parse_target("@fixer")[0] == "#all"
+
+    async def test_dm_prompt_reaches_only_target(self, wired):
+        agent = CommsAgent(wired, reply_window=0.1, no_reply_window=0.05, reply_quiet=0.02)
+        wired.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
+        await agent.new_session(cwd="/wt/proj", mcp_servers=[])
+        await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "@peer hi peer"}])
+        # DM delivered, not broadcast.
+        assert wired.pending_count("peer") == 1
+        assert wired.pending_count("PR111") == 0
+        assert [m.body for m in wired.dm_history("proj", "peer")] == ["hi peer"]
