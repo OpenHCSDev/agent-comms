@@ -21,8 +21,10 @@ lets one Toad session act as both a chat participant and a working agent.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any, cast
 
@@ -61,6 +63,8 @@ NO_REPLY_WINDOW = 2.5  # silence: end the turn after this long with nothing
 REPLY_WINDOW = 8.0  # once replies flow, keep collecting at most this long
 REPLY_QUIET = 1.5  # after the last reply, wait this long then end the turn
 REPLY_POLL = 0.25
+ACTIVITY_WINDOW = 60.0  # keep the turn open while a peer is thinking/working
+IDLE_GRACE = 1.0  # peers idle for this long -> drain and end the turn
 
 
 class CommsAgent:
@@ -145,22 +149,39 @@ class CommsAgent:
         if text.startswith(AGENT_PREFIX):
             agent_task = text[len(AGENT_PREFIX) :].strip()
         target, body = parse_target(text)
+        sent_seq = 0
         if body:
             self._comms.send(thread_name, target, body)
+            sent_seq = self._comms.bus.total_messages()
+        self._debug_log(f"prompt:start sender={thread_name} target={target} sent_seq={sent_seq}")
         await self._drain_inbox(session_id, thread_name)
         if agent_task:
             await self._run_agent_turn(session_id, thread_name, agent_task)
         # Hold the turn open while replies arrive: clients render updates
         # during a turn, so the room's answers stream into the chat live.
-        await self._collect_replies(session_id, thread_name)
+        await self._collect_replies(session_id, thread_name, sent_seq)
+        self._debug_log("prompt:returning")
         self._ensure_live_drain(session_id, thread_name)
         return PromptResponse(stop_reason="end_turn")
 
-    async def _collect_replies(self, session_id: str, thread_name: str) -> None:
-        """Stream inbox messages into the open turn until quiet or timeout."""
+    def _debug_log(self, message: str) -> None:
+        debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
+        if debug_path:
+            with open(debug_path, "a") as debug_log:
+                debug_log.write(f"[{time.time():.3f}] {message}\n")
+
+    async def _collect_replies(self, session_id: str, thread_name: str, sent_seq: int = 0) -> None:
+        """Stream inbox messages into the open turn until quiet or timeout.
+
+        While a peer is on it (activity thinking/working, or a peer's read
+        marker past our message), the turn stays open — the client shows
+        its spinner, and replies drain the moment they land.
+        """
         waited = 0.0
         quiet = 0.0
         got_reply = False
+        idle_for = 0.0
+        debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
         while True:
             await asyncio.sleep(REPLY_POLL)
             waited += REPLY_POLL
@@ -169,11 +190,31 @@ class CommsAgent:
             if pushed:
                 got_reply = True
                 quiet = 0.0
+                idle_for = 0.0
             if got_reply:
                 if quiet >= self._reply_quiet or waited >= self._reply_window:
+                    self._debug_log(f"collect:break got_reply waited={waited}")
                     break
-            elif waited >= self._no_reply_window:
+                continue
+            # No reply yet: keep waiting while a peer is on it.
+            peer_progress = self._peer_progress(thread_name, sent_seq)
+            idle_for = 0.0 if peer_progress else idle_for + REPLY_POLL
+            if idle_for >= IDLE_GRACE and waited >= self._no_reply_window:
                 break
+            if waited >= ACTIVITY_WINDOW:
+                break
+
+    def _peer_progress(self, thread_name: str, sent_seq: int) -> bool:
+        """True when a peer is active on, or has read, our message."""
+        for name, activity in self._comms.all_activity().items():
+            if name != thread_name and activity.state is not ActivityState.IDLE:
+                return True
+        if sent_seq:
+            markers = self._comms.bus._read_markers()
+            for name, marker in markers.items():
+                if name != thread_name and marker >= sent_seq:
+                    return True
+        return False
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
         task = self._drain_tasks.pop(session_id, None)
@@ -227,9 +268,17 @@ class CommsAgent:
         async def loop() -> None:
             while True:
                 await asyncio.sleep(LIVE_DRAIN_INTERVAL)
-                await self._drain_inbox(session_id, thread_name)
+                try:
+                    await self._drain_inbox(session_id, thread_name)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as error:
+                    # Never let the drain task die silently: a dead drain
+                    # means replies stop reaching the client.
+                    self._debug_log(f"live-drain error: {error!r}")
 
-        self._drain_tasks[session_id] = asyncio.create_task(loop())
+        task = asyncio.create_task(loop())
+        self._drain_tasks[session_id] = task
 
     async def _drain_inbox(self, session_id: str, thread_name: str) -> int:
         """Push undelivered messages to the client; returns count pushed."""
@@ -381,10 +430,49 @@ def parse_target(text: str) -> tuple[str, str]:
 
 
 def main() -> int:
+    debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
+    if debug_path:
+        import logging
+
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s %(name)s %(levelname)s %(message)s",
+            filename=debug_path + ".log",
+        )
     comms = wire()
 
     async def run() -> None:
-        await run_agent(CommsAgent(comms))  # type: ignore[arg-type]
+        if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
+
+            async def watchdog() -> None:
+                while True:
+                    await asyncio.sleep(5)
+                    tasks = [t for t in asyncio.all_tasks() if not t.done()]
+                    with open(os.environ["AGENT_COMMS_DEBUG_LOG"], "a") as debug_log:
+                        debug_log.write(f"=== watchdog: {len(tasks)} tasks ===\n")
+                        for task in tasks:
+                            stack = task.get_stack()
+                            innermost = [
+                                f"{frame.f_code.co_filename.split('/')[-1]}:{frame.f_lineno}"
+                                for frame in stack
+                                if frame
+                            ][-4:]
+                            debug_log.write(f"  {task.get_name()}: {' <- '.join(innermost)}\n")
+
+            asyncio.create_task(watchdog())
+        agent = CommsAgent(comms)
+
+        def observe(event: Any) -> None:
+            agent._debug_log(
+                f"{event.direction.value}: {json.dumps(event.message)[:200]}"
+                if hasattr(event, "message")
+                else f"{event.direction.value}"
+            )
+
+        conn_kwargs: dict[str, Any] = {}
+        if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
+            conn_kwargs["observers"] = [observe]
+        await run_agent(agent, **conn_kwargs)  # type: ignore[arg-type]
 
     asyncio.run(run())
     return 0
