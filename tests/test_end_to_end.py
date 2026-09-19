@@ -11,8 +11,16 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).parents[1]
 SRC = REPO / "src"
+
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="E2E fork uses a shell-script pi stub; POSIX only "
+    "(fork mechanics covered by unit tests)",
+)
 
 
 def cli(root: Path, *argv: str) -> dict:
