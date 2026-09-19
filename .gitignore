@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+htmlcov/
+.coverage
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# venvs
+.venv/
+.venv_juno/
+
+# Runtime state (never commit coordination data)
+/registry.json
+/bus.jsonl
+/read_markers.json
+/ledger.json
+/state.json
+
+# Editors / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/

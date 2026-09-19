@@ -1,0 +1,84 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-comms"
+dynamic = ["version"]
+description = "Declaration-owned multi-agent coordination for OpenHCS: threads, JSONL message bus, shared ledger, Textual TUI, and ACP server"
+authors = [{ name = "Tristan Simas", email = "tristan.simas@mail.mcgill.ca" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Communications",
+]
+keywords = ["agents", "coordination", "message-bus", "acp", "textual", "multi-agent"]
+
+dependencies = []
+
+[project.optional-dependencies]
+tui = [
+    "textual>=8.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-asyncio>=0.23",
+    "black==26.5.1",
+    "ruff==0.16.0",
+    "mypy==2.3.0",
+    "textual>=8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/OpenHCSDev/agent-comms"
+Repository = "https://github.com/OpenHCSDev/agent-comms"
+Issues = "https://github.com/OpenHCSDev/agent-comms/issues"
+
+[project.scripts]
+agent-comms = "agent_comms.cli:main"
+agent-comms-acp = "agent_comms.acp:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_comms"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "extensions", "README.md", "LICENSE"]
+
+[tool.hatch.version]
+path = "src/agent_comms/__init__.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--cov=agent_comms --cov-report=term-missing --cov-fail-under=85"
+asyncio_mode = "auto"
+
+[tool.black]
+line-length = 100
+target-version = ["py311", "py312", "py313"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
