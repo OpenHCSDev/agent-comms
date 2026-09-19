@@ -38,6 +38,17 @@ class TestMessaging:
 
 
 class TestThreadOps:
+    def test_runtime_info_is_exposed_in_presence(self, wired):
+        wired.set_agent_info("fixer", model="openrouter/model", context_used=25, context_size=100)
+        row = next(row for row in wired.who() if row["name"] == "fixer")
+        assert row["model"] == "openrouter/model"
+        assert row["context_percent"] == 25
+        assert wired.agent_info_of("fixer").context_used == 25
+
+    def test_runtime_info_rejects_unknown_thread(self, wired):
+        with pytest.raises(UnregisteredThreadError):
+            wired.set_agent_info("ghost", model="model")
+
     def test_list_threads_shape(self, wired):
         rows = {row["name"]: row for row in wired.list_threads()}
         assert set(rows) == {"PR111", "fixer"}

@@ -41,6 +41,7 @@ from acp.schema import (
     TextContentBlock,
     ToolCallProgress,
     ToolCallStart,
+    UsageUpdate,
 )
 
 from . import backend
@@ -181,7 +182,6 @@ class CommsAgent:
         quiet = 0.0
         got_reply = False
         idle_for = 0.0
-        debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
         while True:
             await asyncio.sleep(REPLY_POLL)
             waited += REPLY_POLL
@@ -321,6 +321,14 @@ class CommsAgent:
                 kind = event.get("type")
                 if kind == "chunk":
                     reply_parts.append(event.get("text") or "")
+                elif kind == "agent_info":
+                    self._comms.set_agent_info(
+                        thread_name,
+                        model=event.get("model"),
+                        session_name=event.get("session_name"),
+                        context_used=event.get("context_used"),
+                        context_size=event.get("context_size"),
+                    )
                 elif kind == "tool_start":
                     self._comms.set_activity(
                         thread_name, ActivityState.WORKING, event.get("title", "")
@@ -393,6 +401,18 @@ class CommsAgent:
                     content=TextContentBlock(type="text", text=event.get("text") or ""),
                 ),
             )
+        elif kind == "agent_info":
+            used = event.get("context_used")
+            size = event.get("context_size")
+            if used is not None and size:
+                await self._client.session_update(
+                    session_id=session_id,
+                    update=UsageUpdate(
+                        session_update="usage_update",
+                        used=used,
+                        size=size,
+                    ),
+                )
         elif kind == "done":
             if not event.get("ok") and event.get("text"):
                 await self._emit_text(session_id, f"[agent error] {event['text']}")

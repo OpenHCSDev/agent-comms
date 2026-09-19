@@ -136,6 +136,80 @@ class ActivityLog:
         ]
 
 
+@dataclass(frozen=True, slots=True)
+class AgentRuntimeInfo:
+    """Declares mutable runtime metadata for one registered thread."""
+
+    thread: str
+    model: str | None = None
+    session_name: str | None = None
+    context_used: int | None = None
+    context_size: int | None = None
+    timestamp: float = field(default_factory=time.time)
+
+    def __post_init__(self) -> None:
+        if not self.thread:
+            raise RelationViolationError("Runtime-info thread cannot be empty.")
+        if self.context_used is not None and self.context_used < 0:
+            raise ValueError("Context usage cannot be negative.")
+        if self.context_size is not None and self.context_size < 0:
+            raise ValueError("Context size cannot be negative.")
+
+    @property
+    def context_percent(self) -> float | None:
+        if self.context_used is None or not self.context_size:
+            return None
+        return self.context_used / self.context_size * 100
+
+    def to_wire(self) -> dict:
+        return {
+            "thread": self.thread,
+            "model": self.model,
+            "session_name": self.session_name,
+            "context_used": self.context_used,
+            "context_size": self.context_size,
+            "ts": self.timestamp,
+        }
+
+    @classmethod
+    def from_wire(cls, data: Mapping) -> AgentRuntimeInfo:
+        return cls(
+            thread=data["thread"],
+            model=data.get("model"),
+            session_name=data.get("session_name"),
+            context_used=data.get("context_used"),
+            context_size=data.get("context_size"),
+            timestamp=data.get("ts", 0.0),
+        )
+
+
+class RuntimeInfoStore:
+    """Persists the latest runtime metadata for each thread."""
+
+    def __init__(self, store_path: Path):
+        self._path = store_path
+
+    def set(self, info: AgentRuntimeInfo) -> None:
+        values = self._load()
+        values[info.thread] = info
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.write_text(
+            json.dumps({name: value.to_wire() for name, value in values.items()}, indent=2)
+        )
+
+    def get(self, thread: str) -> AgentRuntimeInfo | None:
+        return self._load().get(thread)
+
+    def all(self) -> Mapping[str, AgentRuntimeInfo]:
+        return self._load()
+
+    def _load(self) -> dict[str, AgentRuntimeInfo]:
+        if not self._path.exists():
+            return {}
+        raw = json.loads(self._path.read_text())
+        return {name: AgentRuntimeInfo.from_wire(data) for name, data in raw.items()}
+
+
 class MessageType(Enum):
     INFO = "info"
     QUESTION = "question"

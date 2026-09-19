@@ -4,10 +4,12 @@ from pathlib import Path
 import pytest
 
 from agent_comms import (
+    AgentRuntimeInfo,
     Message,
     MessageBus,
     MessageType,
     RelationViolationError,
+    RuntimeInfoStore,
     SharedLedger,
     Thread,
     ThreadRegistry,
@@ -15,6 +17,24 @@ from agent_comms import (
     UnregisteredThreadError,
     current_thread,
 )
+
+
+class TestAgentRuntimeInfo:
+    def test_context_percent_and_persistence(self, tmp_path: Path):
+        info = AgentRuntimeInfo(
+            thread="a", model="provider/model", context_used=25, context_size=100
+        )
+        assert info.context_percent == 25
+        store = RuntimeInfoStore(tmp_path / "runtime.json")
+        store.set(info)
+        assert store.get("a") == info
+
+    def test_unknown_context_stays_unknown(self):
+        assert AgentRuntimeInfo(thread="a", context_size=100).context_percent is None
+
+    def test_negative_context_is_rejected(self):
+        with pytest.raises(ValueError, match="negative"):
+            AgentRuntimeInfo(thread="a", context_used=-1)
 
 
 class TestThreadDeclaration:

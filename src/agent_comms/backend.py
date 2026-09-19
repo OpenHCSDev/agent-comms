@@ -12,6 +12,8 @@ Events (dicts):
     {"type": "chunk",      "text": str}
     {"type": "tool_start", "id": str, "name": str, "title": str}
     {"type": "tool_end",   "id": str, "name": str, "ok": bool, "output": str}
+    {"type": "agent_info", "model": str | None, "context_used": int | None,
+                            "context_size": int | None, "session_name": str | None}
     {"type": "done",       "text": str, "ok": bool}
 
 The runner never raises on backend failure; it yields ``done`` with
@@ -81,7 +83,12 @@ async def stream_agent_events(
     argv: list[str]
     if rpc_args is not None:
         argv = [agent_bin, *rpc_args]
-        stdin_payload = (json.dumps({"type": "prompt", "message": task}) + "\n").encode()
+        stdin_payload = (
+            json.dumps({"type": "get_state"})
+            + "\n"
+            + json.dumps({"type": "prompt", "message": task})
+            + "\n"
+        ).encode()
     else:
         argv = [agent_bin, *agent_args, task]
 
@@ -127,8 +134,22 @@ async def stream_agent_events(
         yield {"type": "done", "text": "".join(text_parts).strip(), "ok": code == 0}
         return
 
-    # RPC mode: JSON lines with agent events.
-    async for line in proc.stdout:
+    # RPC mode: JSON lines with agent events. Keep stdin open after the turn
+    # long enough to ask Pi for its authoritative current context estimate.
+    model_name: str | None = None
+    session_name: str | None = None
+    context_used: int | None = None
+    context_size: int | None = None
+    stats_requested = False
+    while True:
+        try:
+            line = await asyncio.wait_for(
+                proc.stdout.readline(), timeout=5.0 if stats_requested else None
+            )
+        except TimeoutError:
+            break
+        if not line:
+            break
         line = line.strip()
         if not line:
             continue
@@ -137,7 +158,48 @@ async def stream_agent_events(
         except json.JSONDecodeError:
             continue
         kind = payload.get("type")
-        if kind == "message_update":
+        if kind == "response" and payload.get("success"):
+            command = payload.get("command")
+            data = payload.get("data") or {}
+            if command == "get_state":
+                model = data.get("model") or {}
+                provider = model.get("provider")
+                model_id = model.get("id") or model.get("name")
+                model_name = (
+                    f"{provider}/{model_id}" if provider and model_id else model_id or provider
+                )
+                session_name = data.get("sessionName")
+                context_size = model.get("contextWindow")
+                yield {
+                    "type": "agent_info",
+                    "model": model_name,
+                    "session_name": session_name,
+                    "context_used": context_used,
+                    "context_size": context_size,
+                }
+            elif command == "get_session_stats":
+                context = data.get("contextUsage") or {}
+                context_used = context.get("tokens")
+                context_size = context.get("contextWindow") or context_size
+                yield {
+                    "type": "agent_info",
+                    "model": model_name,
+                    "session_name": session_name,
+                    "context_used": context_used,
+                    "context_size": context_size,
+                }
+                break
+        elif kind == "message_update":
+            usage = payload.get("usage") or {}
+            if usage.get("totalTokens") is not None:
+                context_used = usage["totalTokens"]
+                yield {
+                    "type": "agent_info",
+                    "model": model_name,
+                    "session_name": session_name,
+                    "context_used": context_used,
+                    "context_size": context_size,
+                }
             delta_event = payload.get("assistantMessageEvent") or {}
             if delta_event.get("type") == "text_delta":
                 piece = delta_event.get("delta") or ""
@@ -170,8 +232,13 @@ async def stream_agent_events(
                 "ok": is_ok,
                 "output": output,
             }
-        elif kind == "agent_end":
-            break
+        elif kind in {"agent_end", "agent_settled"} and not stats_requested:
+            if proc.stdin is not None:
+                proc.stdin.write((json.dumps({"type": "get_session_stats"}) + "\n").encode())
+                await proc.stdin.drain()
+                stats_requested = True
+            else:
+                break
 
     if proc.stdin is not None:
         proc.stdin.close()

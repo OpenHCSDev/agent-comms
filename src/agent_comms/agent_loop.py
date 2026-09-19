@@ -122,6 +122,14 @@ class Participant:
                 kind = event.get("type")
                 if kind == "chunk":
                     reply_parts.append(event.get("text") or "")
+                elif kind == "agent_info":
+                    self._comms.set_agent_info(
+                        name,
+                        model=event.get("model"),
+                        session_name=event.get("session_name"),
+                        context_used=event.get("context_used"),
+                        context_size=event.get("context_size"),
+                    )
                 elif kind == "tool_start":
                     self._comms.set_activity(name, ActivityState.WORKING, event.get("title", ""))
                 elif kind == "tool_end" and event.get("ok"):

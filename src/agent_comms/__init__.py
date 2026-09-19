@@ -7,10 +7,12 @@ from .declarations import (
     Activity,
     ActivityLog,
     ActivityState,
+    AgentRuntimeInfo,
     Message,
     MessageBus,
     MessageType,
     RelationViolationError,
+    RuntimeInfoStore,
     SharedLedger,
     Thread,
     ThreadRegistry,
@@ -22,6 +24,7 @@ from .operations import Comms, ForkSpec, wire
 
 __all__ = [
     "Thread",
+    "AgentRuntimeInfo",
     "Activity",
     "ActivityLog",
     "ActivityState",
@@ -33,6 +36,7 @@ __all__ = [
     "MessageType",
     "UnregisteredThreadError",
     "RelationViolationError",
+    "RuntimeInfoStore",
     "GLOBAL_CHANNEL",
     "current_thread",
     "Comms",
