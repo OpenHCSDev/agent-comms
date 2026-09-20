@@ -41,9 +41,11 @@ class TestHandlers:
     async def test_same_cwd_reuses_thread(self, tmp_path):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
+        agent._comms.stop("proj")
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         names = list(agent._comms.registry.all_threads())
         assert names == ["proj"]
+        assert agent._comms.registry.status("proj").value == "running"
 
     async def test_same_leaf_different_cwd_disambiguates(self, tmp_path):
         agent = self._agent(tmp_path)

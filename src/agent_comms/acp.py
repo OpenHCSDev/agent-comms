@@ -261,6 +261,7 @@ class CommsAgent:
         if name in self._comms.registry:
             existing = self._comms.registry.require(name)
             if existing.worktree == cwd:
+                self._comms.heartbeat(name)
                 return name
             suffix = 2
             while f"{name}-{suffix}" in self._comms.registry:
