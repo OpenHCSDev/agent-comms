@@ -113,6 +113,10 @@ class TestEndToEndLifecycle:
         detail = cli(root, "thread", "--name", "kid")
         assert detail["parent"] == "PR111" and detail["task"] == "review the diff"
         assert detail["pid"] > 0
+        # This test manually drives the participant below. Stop the persistent
+        # fork owner first; the runtime suite exercises its automatic delivery.
+        cli(root, "stop", "--name", "kid")
+        assert not comms._process_alive(detail["pid"])
 
         # 3. Child registers itself the way a real pi process would.
         run_python(
@@ -219,8 +223,13 @@ class TestEndToEndLifecycle:
             )
 
         asyncio.run(prompt_flow())
-        assert len(sent) == 1
-        assert "from the cli side" in sent[0].content.text
+        incoming = [
+            update
+            for update in sent
+            if "incoming" in (update.field_meta or {}).get("agentComms", {})
+        ]
+        assert len(incoming) == 1
+        assert "from the cli side" in incoming[0].content.text
         # The ACP prompt itself was broadcast and is visible on the CLI side.
         inbox = cli(root, "inbox", "--thread", "cli-agent")
         assert [m["text"] for m in inbox["messages"]] == ["checking inbox"]

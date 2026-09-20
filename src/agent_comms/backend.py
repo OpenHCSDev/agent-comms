@@ -138,6 +138,7 @@ async def stream_agent_events(
     session_file: str | None = None,
     steering_queue: asyncio.Queue[str] | None = None,
     finish_event: asyncio.Event | None = None,
+    fork_session: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run the backend and yield events. Always ends with a ``done`` event."""
     if shutil.which(agent_bin) is None and not Path(agent_bin).is_file():
@@ -150,7 +151,7 @@ async def stream_agent_events(
     if rpc_args is not None:
         argv = [agent_bin, *rpc_args]
         if session_file:
-            argv += ["--session", session_file]
+            argv += ["--fork" if fork_session else "--session", session_file]
         stdin_payload = (
             json.dumps({"type": "get_state"})
             + "\n"
@@ -172,7 +173,7 @@ async def stream_agent_events(
                 asyncio.subprocess.PIPE if stdin_payload is not None else asyncio.subprocess.DEVNULL
             ),
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
             start_new_session=os.name == "posix",
         )
     except OSError as exc:
@@ -184,6 +185,16 @@ async def stream_agent_events(
         _ACTIVE_PROCESSES[owner] = proc
 
     assert proc.stdout is not None
+    assert proc.stderr is not None
+
+    async def stderr_tail() -> str:
+        tail = b""
+        assert proc.stderr is not None
+        while chunk := await proc.stderr.read(4096):
+            tail = (tail + chunk)[-16_000:]
+        return tail.decode(errors="replace").strip()
+
+    stderr_task = asyncio.create_task(stderr_tail())
     if stdin_payload is not None and proc.stdin is not None:
         # pi's rpc protocol keeps stdin open while it streams; closing it
         # after the prompt makes the backend exit before responding.
@@ -209,7 +220,16 @@ async def stream_agent_events(
         code = await proc.wait()
         if owner is not None:
             _ACTIVE_PROCESSES.pop(owner, None)
-        yield {"type": "done", "text": "".join(text_parts).strip(), "ok": code == 0}
+        error_text = await stderr_task
+        yield {
+            "type": "done",
+            "text": (
+                "".join(text_parts).strip()
+                if code == 0
+                else error_text or f"Backend exited with code {code}"
+            ),
+            "ok": code == 0,
+        }
         return
 
     steering_task: asyncio.Task[None] | None = None
@@ -219,7 +239,14 @@ async def stream_agent_events(
         async def forward_steering() -> None:
             while True:
                 message = await steering_queue.get()
-                stdin.write((json.dumps({"type": "prompt", "message": message}) + "\n").encode())
+                stdin.write(
+                    (
+                        json.dumps(
+                            {"type": "prompt", "message": message, "streamingBehavior": "steer"}
+                        )
+                        + "\n"
+                    ).encode()
+                )
                 await stdin.drain()
 
         steering_task = asyncio.create_task(forward_steering())
@@ -386,4 +413,14 @@ async def stream_agent_events(
         fail_reason = "agent backend did not exit"
     if owner is not None:
         _ACTIVE_PROCESSES.pop(owner, None)
-    yield {"type": "done", "text": "".join(text_parts).strip(), "ok": ok and not fail_reason}
+    error_text = await stderr_task
+    success = ok and not fail_reason and proc.returncode == 0
+    yield {
+        "type": "done",
+        "text": (
+            "".join(text_parts).strip()
+            if success
+            else fail_reason or error_text or f"Backend exited with code {proc.returncode}"
+        ),
+        "ok": success,
+    }

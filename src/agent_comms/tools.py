@@ -162,6 +162,7 @@ def _delete(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
         "activity_events_removed": result.activity_events_removed,
         "runtime_removed": result.runtime_removed,
         "ledger_references_removed": result.ledger_references_removed,
+        "detached_children": list(result.detached_children),
     }
 
 
@@ -256,12 +257,12 @@ TOOLS = (
     ToolDeclaration(
         "comms_delete",
         "Delete Comms Thread",
-        "Permanently delete a stopped, child-free thread and its owned wire state.",
+        "Delete a stopped thread and its owned wire state; detach and preserve its children.",
         (
             ToolParameter(
                 "name",
                 "string",
-                "Stopped, child-free thread name",
+                "Stopped thread name",
                 context_value="subject",
             ),
         ),
