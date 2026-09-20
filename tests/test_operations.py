@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 
@@ -261,6 +262,46 @@ class TestThreadOps:
         wired.stop("fixer")
         with pytest.raises(RelationViolationError, match="running"):
             wired.rename_self("renamed")
+
+    def test_managed_rename_normalizes_title_and_proves_owner(self, wired):
+        wired.register(
+            Thread(
+                name="generated-7",
+                tags=frozenset({"acp"}),
+                worktree="/tmp/project",
+                pid=os.getpid(),
+            )
+        )
+
+        result = wired.rename_managed_thread("generated-7", "testing 123", owner_pid=os.getpid())
+
+        assert result.previous == "generated-7"
+        assert result.current == "testing-123"
+        assert wired.registry.require("generated-7").name == "testing-123"
+        with pytest.raises(RelationViolationError, match="does not own"):
+            wired.rename_managed_thread("testing-123", "wrong", owner_pid=os.getpid() + 1)
+
+    def test_managed_rename_disambiguates_duplicate_titles(self, wired):
+        wired.register(
+            Thread(
+                name="testing-123",
+                tags=frozenset(),
+                worktree="/tmp/other",
+                pid=123,
+            )
+        )
+        wired.register(
+            Thread(
+                name="generated-7",
+                tags=frozenset({"acp"}),
+                worktree="/tmp/project",
+                pid=456,
+            )
+        )
+
+        result = wired.rename_managed_thread("generated-7", "testing 123", owner_pid=456)
+
+        assert result.current == "testing-123-2"
 
     def test_old_alias_cannot_be_reused(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
