@@ -180,4 +180,55 @@ export default function (pi: ExtensionAPI) {
 			};
 		},
 	});
+
+	pi.registerTool({
+		name: "comms_stop",
+		label: "Stop Comms Thread",
+		description:
+			"Stop a registered thread through the shared agent-comms lifecycle policy. Running processes are signalled only after their identity is verified.",
+		parameters: Type.Object({
+			name: Type.String({ description: "Thread name" }),
+		}),
+		async execute(_id, params) {
+			const result = run(["stop", "--name", params.name]);
+			return {
+				content: [{ type: "text", text: `stopped ${result.stopped}` }],
+				details: result,
+			};
+		},
+	});
+
+	pi.registerTool({
+		name: "comms_archive",
+		label: "Archive Comms Thread",
+		description:
+			"Archive a stopped thread through the shared agent-comms lifecycle policy while retaining its messages.",
+		parameters: Type.Object({
+			name: Type.String({ description: "Stopped thread name" }),
+		}),
+		async execute(_id, params) {
+			const result = run(["archive", "--name", params.name]);
+			return {
+				content: [{ type: "text", text: `archived ${result.archived}` }],
+				details: result,
+			};
+		},
+	});
+
+	pi.registerTool({
+		name: "comms_delete",
+		label: "Delete Comms Thread",
+		description:
+			"Permanently delete a stopped, child-free thread and its owned wire state through the shared agent-comms lifecycle policy.",
+		parameters: Type.Object({
+			name: Type.String({ description: "Stopped, child-free thread name" }),
+		}),
+		async execute(_id, params) {
+			const result = run(["delete", "--name", params.name]);
+			return {
+				content: [{ type: "text", text: `deleted ${result.deleted}` }],
+				details: result,
+			};
+		},
+	});
 }

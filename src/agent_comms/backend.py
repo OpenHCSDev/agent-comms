@@ -26,6 +26,7 @@ import asyncio
 import json
 import os
 import shutil
+import signal
 from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,36 @@ _TOOL_KINDS = {
     "grep": "search",
     "glob": "search",
 }
+_ACTIVE_PROCESSES: dict[asyncio.Task[Any], asyncio.subprocess.Process] = {}
+
+
+async def terminate_task_process(task: asyncio.Task[Any]) -> None:
+    """Terminate the backend subprocess owned by an agent turn task."""
+    proc = _ACTIVE_PROCESSES.pop(task, None)
+    if proc is None:
+        return
+    if proc.stdin is not None:
+        proc.stdin.close()
+    if proc.returncode is not None:
+        return
+    try:
+        if os.name == "posix":
+            os.killpg(proc.pid, signal.SIGTERM)
+        else:
+            proc.terminate()
+    except ProcessLookupError:
+        return
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=1.0)
+    except TimeoutError:
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+        except ProcessLookupError:
+            return
+        await proc.wait()
 
 
 def rpc_args_for(bin_name: str, args: Sequence[str]) -> list[str] | None:
@@ -137,10 +168,15 @@ async def stream_agent_events(
             ),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
+            start_new_session=os.name == "posix",
         )
     except OSError as exc:
         yield {"type": "done", "text": f"agent launch failed: {exc}", "ok": False}
         return
+
+    owner = asyncio.current_task()
+    if owner is not None:
+        _ACTIVE_PROCESSES[owner] = proc
 
     assert proc.stdout is not None
     if stdin_payload is not None and proc.stdin is not None:
@@ -166,6 +202,8 @@ async def stream_agent_events(
             text_parts.append(piece)
             yield {"type": "chunk", "text": piece}
         code = await proc.wait()
+        if owner is not None:
+            _ACTIVE_PROCESSES.pop(owner, None)
         yield {"type": "done", "text": "".join(text_parts).strip(), "ok": code == 0}
         return
 
@@ -301,4 +339,6 @@ async def stream_agent_events(
             await proc.wait()
         ok = False
         fail_reason = "agent backend did not exit"
+    if owner is not None:
+        _ACTIVE_PROCESSES.pop(owner, None)
     yield {"type": "done", "text": "".join(text_parts).strip(), "ok": ok and not fail_reason}

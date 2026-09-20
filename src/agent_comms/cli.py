@@ -83,6 +83,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_stop = sub.add_parser("stop", help="Mark thread stopped")
     p_stop.add_argument("--name", required=True)
 
+    p_archive = sub.add_parser("archive", help="Archive a stopped thread")
+    p_archive.add_argument("--name", required=True)
+
+    p_delete = sub.add_parser("delete", help="Permanently delete a stopped thread")
+    p_delete.add_argument("--name", required=True)
+
     p_rename = sub.add_parser("rename-self", help="Rename your own running thread")
     p_rename.add_argument("--to", dest="new_name", required=True)
 
@@ -176,13 +182,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "stop":
             comms.stop(args.name)
             _emit({"stopped": args.name})
-        elif args.command == "rename-self":
-            result = comms.rename_self(args.new_name)
+        elif args.command == "archive":
+            comms.archive(args.name)
+            _emit({"archived": args.name})
+        elif args.command == "delete":
+            delete_result = comms.delete(args.name)
             _emit(
                 {
-                    "previous": result.previous,
-                    "current": result.current,
-                    "changed": result.changed,
+                    "deleted": delete_result.name,
+                    "messages_removed": delete_result.messages_removed,
+                    "markers_removed": delete_result.markers_removed,
+                    "activity_events_removed": delete_result.activity_events_removed,
+                    "runtime_removed": delete_result.runtime_removed,
+                    "ledger_references_removed": delete_result.ledger_references_removed,
+                }
+            )
+        elif args.command == "rename-self":
+            rename_result = comms.rename_self(args.new_name)
+            _emit(
+                {
+                    "previous": rename_result.previous,
+                    "current": rename_result.current,
+                    "changed": rename_result.changed,
                 }
             )
         elif args.command == "fork":
