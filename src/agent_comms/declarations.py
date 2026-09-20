@@ -592,6 +592,11 @@ class ThreadRegistry:
             {canonical, *(alias for alias, target in self._aliases.items() if target == canonical)}
         )
 
+    def name_reserved(self, name: str) -> bool:
+        """Return whether a canonical name or permanent alias occupies text."""
+        self._load()
+        return name in self._threads or name in self._aliases
+
     def rename(self, name: str, new_name: str) -> tuple[str, str]:
         """Rename one running thread while retaining old names as aliases."""
         with _store_lock(self._path):
