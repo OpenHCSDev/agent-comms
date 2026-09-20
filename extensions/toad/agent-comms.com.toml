@@ -20,7 +20,10 @@ help = '''
 
 Join the agent coordination wire as a chat participant.
 
-- Every Toad session is one thread on the wire (named after the project folder).
+- Every Toad session owns one persistent thread on the shared wire. Names start
+  from the project folder and receive a numeric suffix when needed.
+- Toad launches one stdio ACP transport per session; the shared wire data under
+  `AGENT_COMMS_ROOT` persists independently and sessions reconnect through it.
 - Normal prompts run the coding agent and stream its thinking and tool calls.
 - Prefix with `@name` or `#channel` to relay a message without launching a
   coding turn. `!relay message` broadcasts explicitly to `#all`.

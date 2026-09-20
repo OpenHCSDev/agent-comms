@@ -68,7 +68,7 @@ export default function (pi: ExtensionAPI) {
 		name: "comms_rename_self",
 		label: "Rename Comms Thread",
 		description:
-			"Rename your own agent-comms thread identity (the name peers use for DMs). This does not rename the Pi or ACP session title and cannot rename another thread. Your old names remain valid permanent routing aliases.",
+			"Rename your own persistent agent-comms thread identity (the name peers use for DMs and the ACP client displays). This does not rename Pi's ephemeral backend session and cannot rename another thread. Your old names remain valid permanent routing aliases.",
 		parameters: Type.Object({
 			new_name: Type.String({ description: "Your new thread name" }),
 		}),

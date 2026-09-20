@@ -32,20 +32,22 @@ class TestHandlers:
     async def test_new_session_registers_thread_from_cwd(self, tmp_path):
         agent = self._agent(tmp_path)
         response = await agent.new_session(cwd="/home/me/my-project", mcp_servers=[])
-        assert response.session_id == "s1"
+        assert response.session_id == "my-project"
+        assert response.field_meta["agentComms"]["thread"] == "my-project"
         assert "my-project" in agent._comms.registry
         thread = agent._comms.registry.require("my-project")
         assert thread.worktree == "/home/me/my-project"
         assert thread.tags == frozenset({"acp"})
 
-    async def test_same_cwd_reuses_thread(self, tmp_path):
+    async def test_same_cwd_allocates_distinct_threads(self, tmp_path):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         agent._comms.stop("proj")
-        await agent.new_session(cwd="/wt/proj", mcp_servers=[])
+        response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         names = list(agent._comms.registry.all_threads())
-        assert names == ["proj"]
-        assert agent._comms.registry.status("proj").value == "running"
+        assert names == ["proj", "proj-2"]
+        assert response.session_id == "proj-2"
+        assert agent._comms.registry.status("proj").value == "stopped"
 
     async def test_same_leaf_different_cwd_disambiguates(self, tmp_path):
         agent = self._agent(tmp_path)
@@ -53,14 +55,35 @@ class TestHandlers:
         await agent.new_session(cwd="/b/proj", mcp_servers=[])
         names = sorted(agent._comms.registry.all_threads())
         assert names == ["proj", "proj-2"]
-        assert agent._comms.registry.require("proj").worktree == "/wt" or True
-        assert agent._comms.registry.require("proj-2").worktree == "/b/proj" or True
+        assert agent._comms.registry.require("proj").worktree == "/a/proj"
+        assert agent._comms.registry.require("proj-2").worktree == "/b/proj"
+
+    async def test_separate_servers_in_same_cwd_get_distinct_threads(self, tmp_path):
+        first = self._agent(tmp_path)
+        second = self._agent(tmp_path)
+        first_response = await first.new_session(cwd="/wt/proj", mcp_servers=[])
+        second_response = await second.new_session(cwd="/wt/proj", mcp_servers=[])
+        assert first_response.session_id == "proj"
+        assert second_response.session_id == "proj-2"
+
+    async def test_load_session_reconnects_persistent_thread(self, tmp_path):
+        first = self._agent(tmp_path)
+        response = await first.new_session(cwd="/wt/proj", mcp_servers=[])
+        await first.shutdown()
+        assert first._comms.registry.status("proj").value == "stopped"
+
+        second = self._agent(tmp_path)
+        loaded = await second.load_session(
+            cwd="/wt/proj", session_id=response.session_id, mcp_servers=[]
+        )
+        assert second._comms.registry.status("proj").value == "running"
+        assert loaded.field_meta["agentComms"]["thread"] == "proj"
 
     async def test_prompt_broadcasts_to_global_channel(self, tmp_path):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         response = await agent.prompt(
-            session_id="s1", prompt=[{"type": "text", "text": "!relay hello all"}]
+            session_id="proj", prompt=[{"type": "text", "text": "!relay hello all"}]
         )
         assert response.stop_reason == "end_turn"
         history = agent._comms.channel_history("#all")
@@ -83,7 +106,7 @@ class TestHandlers:
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         agent._comms.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
         agent._comms.send("peer", "proj", "hello")
-        await agent.cancel(session_id="s1")
+        await agent.cancel(session_id="proj")
         assert agent._comms.pending_count("proj") == 0
 
 
@@ -117,7 +140,7 @@ class TestAgentTurn:
         agent._client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         await agent.prompt(
-            session_id="s1",
+            session_id="proj",
             prompt=[{"type": "text", "text": "!agent fix the flake"}],
         )
         # The reply was streamed to the client.
@@ -148,7 +171,9 @@ class TestAgentTurn:
 
         agent._client = FakeClient()
         await agent.new_session(cwd=str(worktree), mcp_servers=[])
-        await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "!agent where am i"}])
+        await agent.prompt(
+            session_id="somewhere", prompt=[{"type": "text", "text": "!agent where am i"}]
+        )
         history = [m.body for m in agent._comms.channel_history("#all")]
         assert any(str(worktree) in body for body in history)
 
@@ -170,7 +195,7 @@ class TestAgentTurn:
         agent._client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         response = await agent.prompt(
-            session_id="s1", prompt=[{"type": "text", "text": "!agent hello"}]
+            session_id="proj", prompt=[{"type": "text", "text": "!agent hello"}]
         )
         assert response.stop_reason == "end_turn"
         assert any("not found" in (u.content.text or "") for u in sent)
@@ -179,12 +204,12 @@ class TestAgentTurn:
         agent = self._agent_with_stub(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         response = await agent.prompt(
-            session_id="s1", prompt=[{"type": "text", "text": "just chat"}]
+            session_id="proj", prompt=[{"type": "text", "text": "just chat"}]
         )
         assert response.stop_reason == "end_turn"
         assert [message.body for message in wired.channel_history("#all")] == ["just chat"]
 
-    async def test_agent_session_name_updates_client_once(self, wired, tmp_path, monkeypatch):
+    async def test_pi_session_name_stays_runtime_metadata(self, wired, tmp_path, monkeypatch):
         agent = self._agent_with_stub(tmp_path, wired)
         sent: list = []
 
@@ -208,15 +233,41 @@ class TestAgentTurn:
         agent._client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
 
-        await agent._run_agent_turn("s1", "proj", "name this session")
+        await agent._run_agent_turn("proj", "proj", "name this session")
 
         title_updates = [
             update
             for update in sent
             if getattr(update, "session_update", None) == "session_info_update"
         ]
-        assert len(title_updates) == 1
-        assert title_updates[0].title == "Agent-chosen title"
+        assert title_updates == []
+        assert wired.agent_info_of("proj").session_name == "Agent-chosen title"
+
+    async def test_thread_rename_updates_acp_title(self, wired, tmp_path, monkeypatch):
+        agent = self._agent_with_stub(tmp_path, wired)
+        sent: list = []
+
+        class FakeClient:
+            async def session_update(self, session_id=None, update=None, **kw):
+                sent.append(update)
+
+        async def events(*args, **kwargs):
+            monkeypatch.setenv("PI_AGENT_ID", "proj")
+            wired.rename_self("renamed-proj")
+            yield {"type": "tool_end", "id": "rename", "ok": True, "output": "renamed"}
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        agent._client = FakeClient()
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        await agent._run_agent_turn("proj", "proj", "rename yourself")
+
+        title_updates = [
+            update
+            for update in sent
+            if getattr(update, "session_update", None) == "session_info_update"
+        ]
+        assert [update.title for update in title_updates] == ["renamed-proj"]
+        assert agent._sessions["proj"] == "renamed-proj"
 
 
 class TestWireProtocol:
@@ -246,7 +297,7 @@ class TestWireProtocol:
                 "id": 3,
                 "method": "session/prompt",
                 "params": {
-                    "sessionId": "s1",
+                    "sessionId": "proj",
                     "prompt": [{"type": "text", "text": "!relay anyone alive?"}],
                 },
             },
@@ -294,7 +345,7 @@ class TestWireProtocol:
             m.get("id"): m for m in (json.loads(line) for line in out_lines if line.strip())
         }
         assert responses[1]["result"]["protocolVersion"] == 1
-        assert responses[2]["result"]["sessionId"] == "s1"
+        assert responses[2]["result"]["sessionId"] == "proj"
         assert responses[3]["result"]["stopReason"] == "end_turn"
         # The wire got the thread and the prompt.
         comms = wire(root)
@@ -326,7 +377,7 @@ class TestCrossClient:
 
             agent._client = FakeClient()
             await agent.prompt(
-                session_id="s1", prompt=[{"type": "text", "text": "!relay checking inbox"}]
+                session_id="proj", prompt=[{"type": "text", "text": "!relay checking inbox"}]
             )
 
         asyncio.run(flow())
@@ -352,7 +403,7 @@ class TestLiveDrain:
 
         agent._client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "!relay hi room"}])
+        await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "!relay hi room"}])
         assert not any("cli" in (u.content.text or "") for u in sent)
 
         # A peer DMs the session thread AFTER the prompt finished.
@@ -378,12 +429,12 @@ class TestLiveDrain:
             wire(tmp_path / "wire"), reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05
         )
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "!relay hi"}])
-        assert "s1" in agent._drain_tasks
-        await agent.cancel(session_id="s1")
+        await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "!relay hi"}])
+        assert "proj" in agent._drain_tasks
+        await agent.cancel(session_id="proj")
         await asyncio.sleep(0.05)
-        assert "s1" not in agent._drain_tasks
-        assert agent._drain_tasks.get("s1") is None or agent._drain_tasks["s1"].done()
+        assert "proj" not in agent._drain_tasks
+        assert agent._drain_tasks.get("proj") is None or agent._drain_tasks["proj"].done()
 
 
 class TestFullHistory:
@@ -449,7 +500,9 @@ class TestAgentTurnForwarding:
 
         agent._client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "!agent do a thing"}])
+        await agent.prompt(
+            session_id="proj", prompt=[{"type": "text", "text": "!agent do a thing"}]
+        )
         kinds = [type(u).__name__ for u in sent]
         assert kinds == [
             "AgentThoughtChunk",  # actual backend thinking
@@ -486,7 +539,9 @@ class TestAgentTurnForwarding:
         )
         agent._client = None  # no client: activity still recorded
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "!agent do a thing"}])
+        await agent.prompt(
+            session_id="proj", prompt=[{"type": "text", "text": "!agent do a thing"}]
+        )
         # Turn finished -> idle again.
         assert wired.activity_of("proj").state.value == "idle"
         # The full trail was recorded: thinking -> working -> thinking -> idle.
@@ -578,7 +633,7 @@ class TestTargetPrefix:
         agent = CommsAgent(wired, reply_window=0.1, no_reply_window=0.05, reply_quiet=0.02)
         wired.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        await agent.prompt(session_id="s1", prompt=[{"type": "text", "text": "@peer hi peer"}])
+        await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "@peer hi peer"}])
         # DM delivered, not broadcast.
         assert wired.pending_count("peer") == 1
         assert wired.pending_count("PR111") == 0
