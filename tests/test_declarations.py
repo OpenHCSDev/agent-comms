@@ -134,6 +134,18 @@ class TestThreadRegistry:
         with pytest.raises(UnregisteredThreadError):
             registry.unregister("ghost")
 
+    def test_deleting_thread_cannot_be_revived(self, tmp_path: Path):
+        registry = ThreadRegistry(tmp_path / "registry.json")
+        thread = Thread(name="a", tags=frozenset(), worktree="/wt")
+        registry.register(thread)
+        registry.unregister("a")
+        registry.begin_delete("a")
+        assert registry.status("a") is ThreadStatus.DELETING
+        with pytest.raises(RelationViolationError, match="permanently deleted"):
+            registry.heartbeat("a")
+        with pytest.raises(RelationViolationError, match="permanently deleted"):
+            registry.register(thread)
+
     def test_active_threads_excludes_stopped(self, tmp_path: Path):
         registry = ThreadRegistry(tmp_path / "registry.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt"))

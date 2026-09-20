@@ -18,6 +18,7 @@ coverage.xml
 # Runtime state (never commit coordination data)
 /registry.json
 /bus.jsonl
+/bus_meta.json
 /read_markers.json
 /ledger.json
 /state.json

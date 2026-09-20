@@ -34,6 +34,7 @@ from .declarations import (
     ThreadRegistry,
     ThreadStatus,
     UnregisteredThreadError,
+    _store_lock,
     current_thread,
 )
 
@@ -53,6 +54,16 @@ class ForkSpec:
             raise ValueError("Fork task cannot be empty.")
 
 
+@dataclass(frozen=True, slots=True)
+class DeleteThreadResult:
+    name: str
+    messages_removed: int
+    markers_removed: int
+    activity_events_removed: int
+    runtime_removed: bool
+    ledger_references_removed: int
+
+
 class Comms:
     """Wire of registry, bus, and ledger rooted at one directory."""
 
@@ -63,6 +74,7 @@ class Comms:
         self.ledger = SharedLedger(self.root / "ledger.json")
         self.activity = ActivityLog(self.root / "activity.jsonl")
         self.runtime_info = RuntimeInfoStore(self.root / "runtime_info.json")
+        self._wire_lock_path = self.root / "wire"
 
     # ─── Messaging ────────────────────────────────────────────────────────────
 
@@ -74,9 +86,10 @@ class Comms:
         type: MessageType = MessageType.INFO,
     ) -> str:
         """Declare a message and route it through the bus."""
-        if sender not in self.registry:
-            raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
-        return self.bus.send(Message(sender=sender, target=target, body=body, type=type))
+        with _store_lock(self._wire_lock_path):
+            if sender not in self.registry:
+                raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
+            return self.bus.send(Message(sender=sender, target=target, body=body, type=type))
 
     def broadcast(self, sender: str, body: str) -> str:
         """Declare a message addressed to every peer."""
@@ -88,9 +101,10 @@ class Comms:
 
     def acknowledge(self, name: str, target: str | None = None) -> int:
         """Mark an inbox or one conversation delivered. Returns count acknowledged."""
-        messages = self.inbox(name, target)
-        self.bus.mark_delivered(name, target)
-        return len(messages)
+        with _store_lock(self._wire_lock_path):
+            messages = self.inbox(name, target)
+            self.bus.mark_delivered(name, target)
+            return len(messages)
 
     def pending_count(self, name: str, target: str | None = None) -> int:
         return len(self.inbox(name, target))
@@ -113,8 +127,9 @@ class Comms:
 
     def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:
         """Declare a thread's current activity (thinking/working/idle)."""
-        self.registry.require(thread)
-        self.activity.emit(Activity(thread=thread, state=state, detail=detail))
+        with _store_lock(self._wire_lock_path):
+            self.registry.require(thread)
+            self.activity.emit(Activity(thread=thread, state=state, detail=detail))
 
     def activity_of(self, thread: str) -> Activity:
         return self.activity.current(thread)
@@ -132,16 +147,17 @@ class Comms:
         context_size: int | None = None,
     ) -> None:
         """Record the latest model and context metadata for a thread."""
-        self.registry.require(thread)
-        self.runtime_info.set(
-            AgentRuntimeInfo(
-                thread=thread,
-                model=model,
-                session_name=session_name,
-                context_used=context_used,
-                context_size=context_size,
+        with _store_lock(self._wire_lock_path):
+            self.registry.require(thread)
+            self.runtime_info.set(
+                AgentRuntimeInfo(
+                    thread=thread,
+                    model=model,
+                    session_name=session_name,
+                    context_used=context_used,
+                    context_size=context_size,
+                )
             )
-        )
 
     def agent_info_of(self, thread: str) -> AgentRuntimeInfo | None:
         self.registry.require(thread)
@@ -159,7 +175,10 @@ class Comms:
         rows = []
         runtime_info = self.runtime_info.all()
         for name, t in sorted(self.registry.all_threads().items()):
-            if self.registry.status(name) is ThreadStatus.ARCHIVED:
+            if self.registry.status(name) in {
+                ThreadStatus.ARCHIVED,
+                ThreadStatus.DELETING,
+            }:
                 continue
             info = runtime_info.get(name)
             rows.append(
@@ -191,25 +210,26 @@ class Comms:
         not receive tag env still keeps its channel subscriptions), and a
         missing session_file keeps the prior one. Explicit values always win.
         """
-        existing = self.registry.all_threads().get(thread.name)
-        tags = thread.tags
-        session_file = thread.session_file
-        if existing is not None:
-            if not tags:
-                tags = existing.tags
-            if session_file is None:
-                session_file = existing.session_file
-        if tags != thread.tags or session_file != thread.session_file:
-            thread = Thread(
-                name=thread.name,
-                tags=tags,
-                worktree=thread.worktree,
-                parent=thread.parent,
-                task=thread.task,
-                pid=thread.pid,
-                session_file=session_file,
-            )
-        self.registry.register(thread)
+        with _store_lock(self._wire_lock_path):
+            existing = self.registry.all_threads().get(thread.name)
+            tags = thread.tags
+            session_file = thread.session_file
+            if existing is not None:
+                if not tags:
+                    tags = existing.tags
+                if session_file is None:
+                    session_file = existing.session_file
+            if tags != thread.tags or session_file != thread.session_file:
+                thread = Thread(
+                    name=thread.name,
+                    tags=tags,
+                    worktree=thread.worktree,
+                    parent=thread.parent,
+                    task=thread.task,
+                    pid=thread.pid,
+                    session_file=session_file,
+                )
+            self.registry.register(thread)
 
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
         """Summarize threads with status and pending counts."""
@@ -243,12 +263,21 @@ class Comms:
         }
 
     def heartbeat(self, name: str) -> None:
-        self.registry.heartbeat(name)
+        with _store_lock(self._wire_lock_path):
+            self.registry.heartbeat(name)
 
     def stop(self, name: str) -> None:
         """Stop a registered participant and retain it in history."""
+        with _store_lock(self._wire_lock_path):
+            self._stop_unlocked(name)
+
+    def _stop_unlocked(self, name: str) -> None:
         thread = self.registry.require(name)
-        if self.registry.status(name) in {ThreadStatus.STOPPED, ThreadStatus.ARCHIVED}:
+        if self.registry.status(name) in {
+            ThreadStatus.STOPPED,
+            ThreadStatus.ARCHIVED,
+            ThreadStatus.DELETING,
+        }:
             return
         if thread.pid <= 0 or thread.pid == os.getpid():
             self.registry.unregister(name)
@@ -312,14 +341,46 @@ class Comms:
 
     def archive(self, name: str) -> None:
         """Hide a stopped participant from presence while retaining messages."""
-        if self.registry.status(name) is not ThreadStatus.STOPPED:
-            raise RelationViolationError("Stop a running thread before archiving it.")
-        self.registry.archive(name)
-        self.runtime_info.remove(name)
+        with _store_lock(self._wire_lock_path):
+            if self.registry.status(name) is not ThreadStatus.STOPPED:
+                raise RelationViolationError("Stop a running thread before archiving it.")
+            self.registry.archive(name)
+            self.runtime_info.remove(name)
+
+    def delete(self, name: str) -> DeleteThreadResult:
+        """Permanently remove one stopped, child-free thread and its owned state."""
+        with _store_lock(self._wire_lock_path):
+            threads = self.registry.all_threads()
+            self.registry.require(name)
+            children = sorted(thread.name for thread in threads.values() if thread.parent == name)
+            if children:
+                raise RelationViolationError(
+                    f"Cannot delete {name!r}; child threads still reference it: "
+                    + ", ".join(children)
+                )
+            self.registry.begin_delete(name)
+            messages_removed, markers_removed = self.bus.remove_thread(name)
+            activity_removed = self.activity.remove_thread(name)
+            runtime_removed = self.runtime_info.get(name) is not None
+            self.runtime_info.remove(name)
+            ledger_removed = self.ledger.remove_thread(name)
+            self.registry.remove(name)
+            return DeleteThreadResult(
+                name=name,
+                messages_removed=messages_removed,
+                markers_removed=markers_removed,
+                activity_events_removed=activity_removed,
+                runtime_removed=runtime_removed,
+                ledger_references_removed=ledger_removed,
+            )
 
     # ─── Forking ──────────────────────────────────────────────────────────────
 
     def fork(self, spec: ForkSpec, pi_bin: str = "pi") -> Thread:
+        with _store_lock(self._wire_lock_path):
+            return self._fork_unlocked(spec, pi_bin)
+
+    def _fork_unlocked(self, spec: ForkSpec, pi_bin: str) -> Thread:
         """Spawn a child pi thread from the parent's session.
 
         Proves the parent is registered and has a session file, declares the
@@ -395,16 +456,17 @@ class Comms:
         return self.ledger.read()
 
     def ledger_merge(self, updates: Mapping[str, object], author: str) -> None:
-        if author not in self.registry:
-            raise UnregisteredThreadError(f"Author {author!r} is not registered.")
-        self.ledger.merge(updates, author)
+        with _store_lock(self._wire_lock_path):
+            if author not in self.registry:
+                raise UnregisteredThreadError(f"Author {author!r} is not registered.")
+            self.ledger.merge(updates, author)
 
     # ─── Runtime ──────────────────────────────────────────────────────────────
 
     def adopt_current(self) -> Thread:
         """Declare and register the current process's thread from env."""
         thread = current_thread()
-        self.registry.register(thread)
+        self.register(thread)
         return thread
 
     def poll(self, name: str | None = None) -> Mapping:
