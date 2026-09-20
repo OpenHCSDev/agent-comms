@@ -95,6 +95,7 @@ class CommsAgent:
             else (arg_env.split() if arg_env else list(DEFAULT_AGENT_ARGS))
         )
         self._drain_tasks: dict[str, asyncio.Task[None]] = {}
+        self._turn_tasks: dict[str, asyncio.Task[Any]] = {}
         self._session_titles: dict[str, str] = {}
         self._reply_window = (
             reply_window
@@ -171,38 +172,49 @@ class CommsAgent:
         return LoadSessionResponse(field_meta=self._session_metadata(thread.name))
 
     async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
-        thread_name = await self._sync_session_identity(session_id)
-        self._comms.registry.require(thread_name)
-        text = self._prompt_text(prompt)
-        agent_task: str | None = None
-        relay_text: str | None = None
-        if text.startswith(AGENT_PREFIX):
-            agent_task = text[len(AGENT_PREFIX) :].strip()
-        elif text.startswith(RELAY_PREFIX):
-            relay_text = text[len(RELAY_PREFIX) :].strip()
-        elif text.lstrip().startswith(("@", "#")):
-            relay_text = text
-        else:
-            agent_task = text.strip()
-        sent_seq = 0
-        if relay_text:
-            target, body = parse_target(relay_text)
-            self._comms.send(thread_name, target, body)
-            sent_seq = self._comms.bus.total_messages()
-        self._debug_log(
-            f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'} "
-            f"sent_seq={sent_seq}"
-        )
-        await self._drain_inbox(session_id)
-        if agent_task:
-            await self._run_agent_turn(session_id, thread_name, agent_task)
-        else:
-            # Hold relay turns open while room replies arrive. Native channel
-            # and DM views remain available for longer-running conversations.
-            await self._collect_replies(session_id, thread_name, sent_seq)
-        self._debug_log("prompt:returning")
-        self._ensure_live_drain(session_id)
-        return PromptResponse(stop_reason="end_turn")
+        turn_task = asyncio.current_task()
+        assert turn_task is not None
+        self._turn_tasks[session_id] = turn_task
+        try:
+            thread_name = await self._sync_session_identity(session_id)
+            self._comms.registry.require(thread_name)
+            text = self._prompt_text(prompt)
+            agent_task: str | None = None
+            relay_text: str | None = None
+            if text.startswith(AGENT_PREFIX):
+                agent_task = text[len(AGENT_PREFIX) :].strip()
+            elif text.startswith(RELAY_PREFIX):
+                relay_text = text[len(RELAY_PREFIX) :].strip()
+            elif text.lstrip().startswith(("@", "#")):
+                relay_text = text
+            else:
+                agent_task = text.strip()
+            sent_seq = 0
+            if relay_text:
+                target, body = parse_target(relay_text)
+                self._comms.send(thread_name, target, body)
+                sent_seq = self._comms.bus.total_messages()
+            self._debug_log(
+                f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'} "
+                f"sent_seq={sent_seq}"
+            )
+            await self._drain_inbox(session_id)
+            if agent_task:
+                await self._run_agent_turn(session_id, thread_name, agent_task)
+            else:
+                # Hold relay turns open while room replies arrive. Native channel
+                # and DM views remain available for longer-running conversations.
+                await self._collect_replies(session_id, thread_name, sent_seq)
+            self._debug_log("prompt:returning")
+            return PromptResponse(stop_reason="end_turn")
+        except asyncio.CancelledError:
+            self._debug_log("prompt:cancelled")
+            await backend.terminate_task_process(turn_task)
+            return PromptResponse(stop_reason="cancelled")
+        finally:
+            if self._turn_tasks.get(session_id) is turn_task:
+                self._turn_tasks.pop(session_id, None)
+            self._ensure_live_drain(session_id)
 
     def _debug_log(self, message: str) -> None:
         debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
@@ -256,9 +268,11 @@ class CommsAgent:
         return False
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
-        task = self._drain_tasks.pop(session_id, None)
+        task = self._turn_tasks.get(session_id)
         if task is not None:
             task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            await backend.terminate_task_process(task)
         thread_name = self._sessions.get(session_id)
         if thread_name:
             self._comms.acknowledge(thread_name)
@@ -401,6 +415,16 @@ class CommsAgent:
 
     async def shutdown(self) -> None:
         """Stop drains and mark threads owned by this ACP connection offline."""
+        turns = list(self._turn_tasks.values())
+        self._turn_tasks.clear()
+        for task in turns:
+            task.cancel()
+        if turns:
+            await asyncio.gather(*turns, return_exceptions=True)
+            await asyncio.gather(
+                *(backend.terminate_task_process(task) for task in turns),
+                return_exceptions=True,
+            )
         tasks = list(self._drain_tasks.values())
         self._drain_tasks.clear()
         for task in tasks:

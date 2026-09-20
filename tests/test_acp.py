@@ -4,7 +4,9 @@ Exercises the agent the way real clients (Toad, Zed) do: through
 ``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
 """
 
+import asyncio
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -122,6 +124,32 @@ class TestHandlers:
         await agent.cancel(session_id="proj")
         assert agent._comms.pending_count("proj") == 0
 
+    async def test_cancel_ends_active_relay_turn(self, tmp_path):
+        agent = CommsAgent(
+            wire(tmp_path / "wire"),
+            reply_window=30,
+            no_reply_window=30,
+            reply_quiet=30,
+        )
+        await agent.new_session(cwd="/wt/proj", mcp_servers=[])
+        prompt = asyncio.create_task(
+            agent.prompt(
+                session_id="proj",
+                prompt=[{"type": "text", "text": "!relay wait for a reply"}],
+            )
+        )
+        for _ in range(20):
+            if "proj" in agent._turn_tasks:
+                break
+            await asyncio.sleep(0)
+
+        await agent.cancel(session_id="proj")
+
+        assert (await asyncio.wait_for(prompt, timeout=1)).stop_reason == "cancelled"
+        assert "proj" not in agent._turn_tasks
+        assert not agent._drain_tasks["proj"].done()
+        await agent.shutdown()
+
 
 from agent_comms import Thread  # noqa: E402
 
@@ -221,6 +249,33 @@ class TestAgentTurn:
         )
         assert response.stop_reason == "end_turn"
         assert [message.body for message in wired.channel_history("#all")] == ["just chat"]
+
+    async def test_cancel_terminates_active_backend_process(self, wired, tmp_path):
+        pid_path = tmp_path / "backend.pid"
+        stub = tmp_path / "slow-agent"
+        stub.write_text(f"#!/bin/sh\necho $$ > {pid_path}\nexec sleep 30\n")
+        stub.chmod(0o755)
+        agent = CommsAgent(wired, agent_bin=str(stub), agent_args=[])
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        prompt = asyncio.create_task(
+            agent.prompt(
+                session_id="proj",
+                prompt=[{"type": "text", "text": "run until cancelled"}],
+            )
+        )
+        for _ in range(100):
+            if pid_path.exists():
+                break
+            await asyncio.sleep(0.01)
+        assert pid_path.exists()
+        pid = int(pid_path.read_text())
+
+        await agent.cancel(session_id="proj")
+
+        assert (await asyncio.wait_for(prompt, timeout=2)).stop_reason == "cancelled"
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
+        await agent.shutdown()
 
     async def test_pi_session_name_stays_runtime_metadata(self, wired, tmp_path, monkeypatch):
         agent = self._agent_with_stub(tmp_path, wired)
@@ -435,9 +490,7 @@ class TestLiveDrain:
         live_pushes = [u for u in sent if "live push" in (u.content.text or "")]
         assert len(live_pushes) == 1
 
-    async def test_cancel_stops_background_drain(self, tmp_path):
-        import asyncio
-
+    async def test_cancel_keeps_background_drain_live(self, tmp_path):
         agent = CommsAgent(
             wire(tmp_path / "wire"), reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05
         )
@@ -446,8 +499,9 @@ class TestLiveDrain:
         assert "proj" in agent._drain_tasks
         await agent.cancel(session_id="proj")
         await asyncio.sleep(0.05)
-        assert "proj" not in agent._drain_tasks
-        assert agent._drain_tasks.get("proj") is None or agent._drain_tasks["proj"].done()
+        assert "proj" in agent._drain_tasks
+        assert not agent._drain_tasks["proj"].done()
+        await agent.shutdown()
 
 
 class TestFullHistory:
