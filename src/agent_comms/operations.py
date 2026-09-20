@@ -283,8 +283,9 @@ class Comms:
         tags: frozenset[str],
         worktree: str,
         pid: int = 0,
+        start_at_latest: bool = False,
     ) -> Thread:
-        """Atomically register a uniquely named thread on this wire."""
+        """Atomically register a unique thread and optionally baseline its inbox."""
         with _store_lock(self._wire_lock_path):
             name = base_name
             suffix = 2
@@ -298,6 +299,8 @@ class Comms:
                 pid=pid,
             )
             self.registry.register(thread)
+            if start_at_latest:
+                self.bus.mark_delivered_through(thread.name, self.bus.latest_sequence())
             return thread
 
     def rename_self(self, new_name: str) -> RenameThreadResult:

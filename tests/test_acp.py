@@ -39,6 +39,19 @@ class TestHandlers:
         assert thread.worktree == "/home/me/my-project"
         assert thread.tags == frozenset({"acp"})
 
+    async def test_new_session_starts_after_existing_wire_history(self, tmp_path):
+        agent = self._agent(tmp_path)
+        agent._comms.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
+        agent._comms.send("peer", "#all", "old message")
+
+        response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
+        assert agent._comms.inbox(response.session_id) == []
+
+        agent._comms.send("peer", "#all", "new message")
+        assert [message.body for message in agent._comms.inbox(response.session_id)] == [
+            "new message"
+        ]
+
     async def test_same_cwd_allocates_distinct_threads(self, tmp_path):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])

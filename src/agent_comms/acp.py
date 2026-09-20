@@ -139,6 +139,7 @@ class CommsAgent:
             tags=frozenset({"acp"}),
             worktree=cwd,
             pid=os.getpid(),
+            start_at_latest=True,
         )
         thread_name = thread.name
         session_id = thread_name
