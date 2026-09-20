@@ -20,7 +20,8 @@ import json
 import os
 import tempfile
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections import deque
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
@@ -109,27 +110,29 @@ def _repair_trailing_jsonl(path: Path) -> None:
             os.fsync(output.fileno())
 
 
+def _iter_jsonl_records(path: Path) -> Iterator[tuple[Mapping, int]]:
+    """Yield JSONL records and encoded sizes without materializing the log."""
+    if not path.exists():
+        return
+    with open(path, "rb") as records:
+        for raw_line in records:
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                if not raw_line.endswith((b"\n", b"\r")):
+                    break
+                raise
+            if not isinstance(record, Mapping):
+                raise ValueError(f"JSONL record in {path} must be an object.")
+            yield record, len(raw_line)
+
+
 def _jsonl_records(path: Path) -> list[Mapping]:
     """Read complete JSONL records, tolerating only a truncated final record."""
-    if not path.exists():
-        return []
-    lines = path.read_text().splitlines(keepends=True)
-    records: list[Mapping] = []
-    for index, raw_line in enumerate(lines):
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            is_tail = index == len(lines) - 1 and not raw_line.endswith(("\n", "\r"))
-            if is_tail:
-                break
-            raise
-        if not isinstance(record, Mapping):
-            raise ValueError(f"JSONL record in {path} must be an object.")
-        records.append(record)
-    return records
+    return [record for record, _ in _iter_jsonl_records(path)]
 
 
 def _append_jsonl(path: Path, record: Mapping) -> None:
@@ -499,6 +502,33 @@ class Message:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class MessagePage:
+    """A bounded, ascending page from the durable message log.
+
+    Cursors are message sequence numbers and are exclusive when passed back as
+    ``before`` or ``after``. A single oversized message is returned by itself
+    so every cursor can make progress despite the byte budget.
+    """
+
+    messages: tuple[Message, ...]
+    has_older: bool
+    has_newer: bool
+
+    def __post_init__(self) -> None:
+        sequences = [message.seq for message in self.messages]
+        if sequences != sorted(sequences) or len(sequences) != len(set(sequences)):
+            raise ValueError("Message pages must contain unique messages in seq order.")
+
+    @property
+    def oldest_seq(self) -> int | None:
+        return self.messages[0].seq if self.messages else None
+
+    @property
+    def newest_seq(self) -> int | None:
+        return self.messages[-1].seq if self.messages else None
+
+
 # ─── Thread Registry ──────────────────────────────────────────────────────────
 # Persists Thread instances and their statuses. Fail-closed: referencing an
 # unregistered thread raises UnregisteredThreadError.
@@ -785,24 +815,24 @@ class MessageBus:
             raise RelationViolationError(f"Thread {sender!r} cannot message itself.")
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with _store_lock(self._path):
-            messages = self._load_log_unlocked()
             sequence_path = self._path.parent / "bus_meta.json"
             last_sequence = self._read_last_sequence(sequence_path)
+            if not last_sequence and self._path.exists():
+                last_sequence = self._max_sequence_unlocked()
             stored = Message(
                 sender=sender,
                 target=GLOBAL_CHANNEL if target == "broadcast" else target,
                 body=message.body,
                 type=message.type,
                 timestamp=message.timestamp,
-                seq=max(last_sequence, max((existing.seq for existing in messages), default=0)) + 1,
+                seq=last_sequence + 1,
             )
             _atomic_write_text(sequence_path, json.dumps({"last_seq": stored.seq}, indent=2))
             _append_jsonl(self._path, stored.to_wire())
         return stored.message_id
 
     def _next_seq(self) -> int:
-        messages = self._load_log()
-        return max((message.seq for message in messages), default=0) + 1
+        return self.latest_sequence() + 1
 
     def _delivered_to(self, message: Message, name: str, tags: frozenset[str]) -> bool:
         if self._registry.canonical_name(message.sender) == name:
@@ -885,6 +915,106 @@ class MessageBus:
         normalized = GLOBAL_CHANNEL if target == "broadcast" else target
         return [msg for msg in self._load_log() if msg.target == normalized]
 
+    def dm_history_page(
+        self,
+        a: str,
+        b: str,
+        *,
+        before: int | None = None,
+        after: int | None = None,
+        limit: int = 100,
+        max_bytes: int = 256 * 1024,
+    ) -> MessagePage:
+        """Return one bounded page between two threads in ascending order."""
+        a = self._registry.require(a).name
+        b = self._registry.require(b).name
+        a_names = self._registry.aliases_for(a)
+        b_names = self._registry.aliases_for(b)
+        return self._history_page(
+            lambda message: (message.sender in a_names and message.target in b_names)
+            or (message.sender in b_names and message.target in a_names),
+            before=before,
+            after=after,
+            limit=limit,
+            max_bytes=max_bytes,
+        )
+
+    def channel_history_page(
+        self,
+        target: str,
+        *,
+        before: int | None = None,
+        after: int | None = None,
+        limit: int = 100,
+        max_bytes: int = 256 * 1024,
+    ) -> MessagePage:
+        """Return one bounded page from a channel in ascending order."""
+        if not (is_channel_target(target) or target == "broadcast"):
+            raise ValueError(f"{target!r} is not a channel target.")
+        normalized = GLOBAL_CHANNEL if target == "broadcast" else target
+        return self._history_page(
+            lambda message: message.target == normalized,
+            before=before,
+            after=after,
+            limit=limit,
+            max_bytes=max_bytes,
+        )
+
+    def _history_page(
+        self,
+        matches: Callable[[Message], bool],
+        *,
+        before: int | None,
+        after: int | None,
+        limit: int,
+        max_bytes: int,
+    ) -> MessagePage:
+        if before is not None and after is not None:
+            raise ValueError("History pages accept either before or after, not both.")
+        if (before is not None and before < 0) or (after is not None and after < 0):
+            raise ValueError("History cursors cannot be negative.")
+        if limit <= 0:
+            raise ValueError("History page limit must be positive.")
+        if max_bytes <= 0:
+            raise ValueError("History page byte budget must be positive.")
+
+        page: deque[tuple[Message, int]] = deque()
+        page_bytes = 0
+        has_older = False
+        has_newer = False
+        with _store_lock(self._path):
+            for record, encoded_size in _iter_jsonl_records(self._path):
+                message = Message.from_wire(record)
+                if not matches(message):
+                    continue
+                if before is not None and message.seq >= before:
+                    has_newer = True
+                    continue
+                if after is not None and message.seq <= after:
+                    has_older = True
+                    continue
+
+                if after is not None:
+                    if len(page) >= limit or (page and page_bytes + encoded_size > max_bytes):
+                        has_newer = True
+                        continue
+                    page.append((message, encoded_size))
+                    page_bytes += encoded_size
+                    continue
+
+                page.append((message, encoded_size))
+                page_bytes += encoded_size
+                while len(page) > limit or (len(page) > 1 and page_bytes > max_bytes):
+                    _, removed_size = page.popleft()
+                    page_bytes -= removed_size
+                    has_older = True
+
+        return MessagePage(
+            messages=tuple(message for message, _ in page),
+            has_older=has_older,
+            has_newer=has_newer,
+        )
+
     def full_history(self) -> Sequence[Message]:
         """Every message on the wire, in seq order (the combined view)."""
         return self._load_log()
@@ -897,7 +1027,15 @@ class MessageBus:
         return [GLOBAL_CHANNEL] + sorted(f"#{tag}" for tag in tags)
 
     def total_messages(self) -> int:
-        return len(self._load_log())
+        with _store_lock(self._path):
+            return sum(1 for _ in _iter_jsonl_records(self._path))
+
+    def latest_sequence(self) -> int:
+        """Return the global high-water sequence without loading message bodies."""
+        sequence_path = self._path.parent / "bus_meta.json"
+        with _store_lock(self._path):
+            sequence = self._read_last_sequence(sequence_path)
+            return sequence if sequence else self._max_sequence_unlocked()
 
     def _read_markers(self) -> dict[str, int]:
         marker_path = self._path.parent / "read_markers.json"
@@ -925,6 +1063,12 @@ class MessageBus:
 
     def _load_log_unlocked(self) -> list[Message]:
         return [Message.from_wire(record) for record in _jsonl_records(self._path)]
+
+    def _max_sequence_unlocked(self) -> int:
+        return max(
+            (int(record.get("seq", 0)) for record, _ in _iter_jsonl_records(self._path)),
+            default=0,
+        )
 
     def rename_thread(self, old_name: str, new_name: str) -> None:
         """Move read markers to canonical names without rewriting message history."""

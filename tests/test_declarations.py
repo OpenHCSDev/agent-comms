@@ -267,6 +267,73 @@ class TestMessageBus:
         # The bus assigns the sequence number at send time.
         assert lines[0]["seq"] == 1
 
+    def test_channel_history_pages_use_exclusive_sequence_cursors(self, tmp_path: Path):
+        bus = self._bus(tmp_path)
+        for index in range(8):
+            target = "#all" if index != 4 else "b"
+            bus.send(
+                Message(
+                    sender="a",
+                    target=target,
+                    body=f"m{index + 1}",
+                    type=MessageType.INFO,
+                )
+            )
+
+        latest = bus.channel_history_page("#all", limit=3)
+        assert [message.seq for message in latest.messages] == [6, 7, 8]
+        assert latest.has_older
+        assert not latest.has_newer
+        assert latest.oldest_seq == 6
+        assert latest.newest_seq == 8
+
+        older = bus.channel_history_page("#all", before=6, limit=3)
+        assert [message.seq for message in older.messages] == [2, 3, 4]
+        assert older.has_older
+        assert older.has_newer
+
+        newer = bus.channel_history_page("#all", after=4, limit=2)
+        assert [message.seq for message in newer.messages] == [6, 7]
+        assert newer.has_older
+        assert newer.has_newer
+
+    def test_dm_history_page_handles_aliases_and_byte_budget(self, tmp_path: Path):
+        bus = self._bus(tmp_path)
+        bus.send(Message(sender="a", target="b", body="x" * 1000, type=MessageType.INFO))
+        bus.send(Message(sender="b", target="a", body="small", type=MessageType.INFO))
+        bus._registry.rename("a", "renamed")
+
+        first = bus.dm_history_page("renamed", "b", after=0, max_bytes=10)
+        assert [message.seq for message in first.messages] == [1]
+        assert first.has_newer
+
+        second = bus.dm_history_page("renamed", "b", after=1, max_bytes=10)
+        assert [message.seq for message in second.messages] == [2]
+        assert second.has_older
+
+    def test_paged_history_and_send_do_not_materialize_full_log(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        bus = self._bus(tmp_path)
+        for index in range(5):
+            bus.send(Message(sender="a", target="#all", body=str(index), type=MessageType.INFO))
+
+        monkeypatch.setattr(
+            bus,
+            "_load_log_unlocked",
+            lambda: pytest.fail("paged paths must stream the log"),
+        )
+        assert bus.channel_history_page("#all", limit=2).newest_seq == 5
+        bus.send(Message(sender="a", target="#all", body="next", type=MessageType.INFO))
+        assert bus.latest_sequence() == 6
+
+    def test_history_page_validates_bounds(self, tmp_path: Path):
+        bus = self._bus(tmp_path)
+        with pytest.raises(ValueError, match="either before or after"):
+            bus.channel_history_page("#all", before=2, after=1)
+        with pytest.raises(ValueError, match="positive"):
+            bus.channel_history_page("#all", limit=0)
+
 
 class TestSharedLedger:
     def test_merge_and_read(self, tmp_path: Path):

@@ -58,6 +58,15 @@ class TestMessaging:
         bodies = [m.body for m in wired.inbox("fixer")]
         assert bodies == [f"m{i}" for i in range(5)]
 
+    def test_shared_history_page_contract(self, wired):
+        for index in range(5):
+            wired.send("PR111", "#all", f"m{index}")
+
+        page = wired.channel_history_page("#all", limit=2)
+        assert [message.body for message in page.messages] == ["m3", "m4"]
+        assert page.has_older
+        assert wired.message_high_water() == 5
+
 
 class TestThreadOps:
     def test_runtime_info_is_exposed_in_presence(self, wired):
