@@ -362,6 +362,7 @@ class CommsAgent:
             "AGENT_COMMS_ROOT": str(self._comms.root),
         }
         reply_parts: list[str] = []
+        settled = False
         try:
             async for event in backend.stream_agent_events(
                 self._agent_bin, self._agent_args, task, worktree, env_extra
@@ -385,13 +386,17 @@ class CommsAgent:
                 elif kind == "tool_end":
                     thread_name = await self._sync_session_identity(session_id)
                     self._comms.set_activity(thread_name, ActivityState.THINKING, task[:80])
+                elif kind == "settled":
+                    self._comms.set_activity(thread_name, ActivityState.IDLE)
+                    settled = True
                 await self._emit_event(session_id, event)
         finally:
             thread_name = await self._sync_session_identity(session_id)
             body = "".join(reply_parts).strip()
             if body:
                 self._comms.send(thread_name, GLOBAL_TARGET, body[:4000])
-            self._comms.set_activity(thread_name, ActivityState.IDLE)
+            if not settled:
+                self._comms.set_activity(thread_name, ActivityState.IDLE)
 
     async def shutdown(self) -> None:
         """Stop drains and mark threads owned by this ACP connection offline."""
@@ -498,6 +503,15 @@ class CommsAgent:
                         size=size,
                     ),
                 )
+        elif kind == "settled":
+            await self._client.session_update(
+                session_id=session_id,
+                update=AgentMessageChunk(
+                    session_update="agent_message_chunk",
+                    content=TextContentBlock(type="text", text=""),
+                    field_meta={"agentComms": {"turnSettled": True}},
+                ),
+            )
         elif kind == "done":
             if not event.get("ok") and event.get("text"):
                 await self._emit_text(session_id, f"[agent error] {event['text']}")

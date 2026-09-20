@@ -51,6 +51,7 @@ class TestRpcParsing:
             "tool_progress",
             "tool_end",
             "chunk",
+            "settled",
             "done",
         ]
         assert events[2]["text"] == "Checking the workspace"

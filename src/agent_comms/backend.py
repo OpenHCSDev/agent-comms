@@ -276,6 +276,7 @@ async def stream_agent_events(
                 "output": output,
             }
         elif kind == "agent_settled" and not stats_requested:
+            yield {"type": "settled"}
             if proc.stdin is not None:
                 stats_requested = True
                 try:

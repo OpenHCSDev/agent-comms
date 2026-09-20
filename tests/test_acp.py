@@ -511,6 +511,7 @@ class TestAgentTurnForwarding:
             "ToolCallProgress",  # live output
             "ToolCallProgress",  # completed
             "AgentMessageChunk",  # " finished"
+            "AgentMessageChunk",  # turn-settled metadata
         ]
         assert sent[0].content.text == "Inspecting files"
         tool_call = sent[2]
@@ -523,6 +524,7 @@ class TestAgentTurnForwarding:
         progress = sent[4]
         assert progress.status == "completed"
         assert progress.content[0].content.text == "/wt"
+        assert sent[-1].field_meta == {"agentComms": {"turnSettled": True}}
 
     async def test_turn_sets_wire_activity(self, wired, tmp_path):
         import sys as _sys
