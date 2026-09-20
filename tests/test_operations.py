@@ -132,6 +132,28 @@ class TestThreadOps:
         wired.heartbeat("fixer")
         assert wired.registry.status("fixer").value == "running"
 
+    def test_attach_session_preserves_declaration_and_updates_runtime(self, wired, tmp_path):
+        wired.stop("fixer")
+        session_file = tmp_path / "session.jsonl"
+
+        attached = wired.attach_session("fixer", str(session_file), pid=123)
+
+        assert attached.tags == frozenset({"auth"})
+        assert attached.parent == "PR111"
+        assert attached.task == "fix auth"
+        assert attached.pid == 123
+        assert attached.session_file == str(session_file.resolve())
+        assert wired.registry.status("fixer").value == "running"
+
+    def test_release_only_allows_the_calling_thread(self, wired, monkeypatch):
+        monkeypatch.setenv("PI_AGENT_ID", "fixer")
+
+        with pytest.raises(RelationViolationError, match="cannot release"):
+            wired.release("PR111")
+
+        wired.release("fixer")
+        assert wired.registry.status("fixer").value == "stopped"
+
     def test_stop_terminates_registered_process(self, wired, monkeypatch):
         signals = []
         alive = [True]

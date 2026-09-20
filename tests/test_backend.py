@@ -1,5 +1,6 @@
 """Streaming backend: rpc parsing, text fallback, failure handling."""
 
+import asyncio
 import sys
 from pathlib import Path
 
@@ -68,7 +69,7 @@ class TestRpcParsing:
             [
                 '{"type":"response","command":"get_state","success":true,"data":'
                 '{"model":{"provider":"openrouter","id":"z-ai/glm","contextWindow":1000},'
-                '"sessionName":"work"}}',
+                '"sessionName":"work","sessionFile":"/tmp/pi-session.jsonl"}}',
                 '{"type":"message_update","usage":{"totalTokens":125},'
                 '"assistantMessageEvent":{"type":"text_delta","delta":"ok"}}',
                 '{"type":"agent_settled"}',
@@ -80,8 +81,87 @@ class TestRpcParsing:
         events = [e async for e in backend.stream_agent_events(stub, [], "t", str(tmp_path))]
         info = [event for event in events if event["type"] == "agent_info"]
         assert info[0]["model"] == "openrouter/z-ai/glm"
+        assert info[0]["session_file"] == "/tmp/pi-session.jsonl"
         assert info[-1]["context_used"] == 200
         assert info[-1]["context_size"] == 1000
+
+    async def test_rpc_resumes_session_and_forwards_live_prompts(self, tmp_path):
+        args_path = tmp_path / "args"
+        steering_path = tmp_path / "steering"
+        session_path = tmp_path / "session.jsonl"
+        stub = _stub(
+            tmp_path,
+            f"""#!/bin/sh
+printf '%s' "$*" > '{args_path}'
+IFS= read -r state
+IFS= read -r prompt
+IFS= read -r steering
+printf '%s' "$steering" > '{steering_path}'
+cat <<'EOF'
+{{"type":"response","command":"get_state","success":true,"data":{{"sessionFile":"{session_path}"}}}}
+{{"type":"agent_settled"}}
+{{"type":"response","command":"get_session_stats","success":true,"data":{{"contextUsage":{{}}}}}}
+EOF
+""",
+        )
+        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue.put_nowait("[peer] ping")
+
+        events = [
+            event
+            async for event in backend.stream_agent_events(
+                stub,
+                [],
+                "parent task",
+                str(tmp_path),
+                session_file=str(session_path),
+                steering_queue=queue,
+            )
+        ]
+
+        assert f"--session {session_path}" in args_path.read_text()
+        assert '"message": "[peer] ping"' in steering_path.read_text()
+        assert any(
+            event.get("session_file") == str(session_path)
+            for event in events
+            if event["type"] == "agent_info"
+        )
+
+    async def test_rpc_stays_open_for_steered_child_reply(self, tmp_path):
+        stub = _stub(
+            tmp_path,
+            """#!/bin/sh
+IFS= read -r state
+IFS= read -r prompt
+echo '{"type":"agent_settled"}'
+IFS= read -r steering
+echo '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"pong"}}'
+echo '{"type":"agent_settled"}'
+IFS= read -r state_after
+IFS= read -r stats
+echo '{"type":"response","command":"get_session_stats","success":true,"data":{"contextUsage":{}}}'
+""",
+        )
+        queue: asyncio.Queue[str] = asyncio.Queue()
+        finish = asyncio.Event()
+        events = []
+
+        async for event in backend.stream_agent_events(
+            stub,
+            [],
+            "coordinate",
+            str(tmp_path),
+            steering_queue=queue,
+            finish_event=finish,
+        ):
+            events.append(event)
+            if event["type"] == "settled":
+                if not any(item["type"] == "chunk" for item in events):
+                    queue.put_nowait("[child] ping")
+                else:
+                    finish.set()
+
+        assert [event["text"] for event in events if event["type"] == "chunk"] == ["pong"]
 
     async def test_failed_tool_does_not_fail_recovered_turn(self, tmp_path):
         rpc_lines = "\n".join(

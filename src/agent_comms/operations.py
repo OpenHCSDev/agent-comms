@@ -10,6 +10,7 @@ acting, and raises on unregistered references.
 
 from __future__ import annotations
 
+import json
 import os
 import signal
 import subprocess
@@ -38,6 +39,31 @@ from .declarations import (
     _store_lock,
     current_thread,
 )
+
+
+def _session_model(session_file: Path) -> tuple[str, str] | None:
+    """Read the last model choice from a pi session file.
+
+    Non-interactive pi requires an explicit provider/model, so forks replay the
+    parent's final ``model_change`` entry. Returns ``(provider, model_id)`` or
+    ``None`` when the session carries no model record.
+    """
+    try:
+        lines = session_file.read_text().splitlines()
+    except OSError:
+        return None
+    model: tuple[str, str] | None = None
+    for line in lines:
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if entry.get("type") == "model_change":
+            provider = entry.get("provider")
+            model_id = entry.get("modelId")
+            if provider and model_id:
+                model = (str(provider), str(model_id))
+    return model
 
 
 @dataclass(frozen=True, slots=True)
@@ -362,10 +388,39 @@ class Comms:
         with _store_lock(self._wire_lock_path):
             self.registry.heartbeat(name)
 
+    def attach_session(self, name: str, session_file: str, *, pid: int | None = None) -> Thread:
+        """Attach authoritative Pi runtime state to an existing thread."""
+        current = self.registry.require(name)
+        attached = Thread(
+            name=current.name,
+            tags=current.tags,
+            worktree=current.worktree,
+            parent=current.parent,
+            task=current.task,
+            pid=current.pid if pid is None else pid,
+            session_file=str(Path(session_file).expanduser().resolve()),
+        )
+        self.register(attached)
+        self.heartbeat(attached.name)
+        return self.registry.require(attached.name)
+
     def stop(self, name: str) -> None:
         """Stop a registered participant and retain it in history."""
         with _store_lock(self._wire_lock_path):
             self._stop_unlocked(name)
+
+    def release(self, name: str) -> None:
+        """Let the calling participant mark itself stopped without signalling."""
+        caller = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")
+        if not caller:
+            raise RelationViolationError(
+                "Voluntary release requires PI_AGENT_ID or AGENT_COMMS_THREAD."
+            )
+        with _store_lock(self._wire_lock_path):
+            canonical = self.registry.require(name).name
+            if self.registry.require(caller).name != canonical:
+                raise RelationViolationError(f"Thread {caller!r} cannot release {canonical!r}.")
+            self.registry.unregister(canonical)
 
     def _stop_unlocked(self, name: str) -> None:
         thread = self.registry.require(name)
@@ -522,6 +577,14 @@ class Comms:
             pi_bin,
             "--fork",
             parent.session_file,
+        ]
+        # Non-interactive pi refuses to run without an explicit model, so pass
+        # the parent's last model choice through to the child.
+        model = _session_model(Path(parent.session_file))
+        if model:
+            provider, model_id = model
+            args += ["--provider", provider, "--model", model_id]
+        args += [
             "-p",
             spec.prompt or spec.task,
         ]

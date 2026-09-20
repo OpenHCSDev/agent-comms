@@ -135,6 +135,9 @@ async def stream_agent_events(
     task: str,
     cwd: str,
     env_extra: dict[str, str] | None = None,
+    session_file: str | None = None,
+    steering_queue: asyncio.Queue[str] | None = None,
+    finish_event: asyncio.Event | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run the backend and yield events. Always ends with a ``done`` event."""
     if shutil.which(agent_bin) is None and not Path(agent_bin).is_file():
@@ -146,6 +149,8 @@ async def stream_agent_events(
     argv: list[str]
     if rpc_args is not None:
         argv = [agent_bin, *rpc_args]
+        if session_file:
+            argv += ["--session", session_file]
         stdin_payload = (
             json.dumps({"type": "get_state"})
             + "\n"
@@ -207,18 +212,59 @@ async def stream_agent_events(
         yield {"type": "done", "text": "".join(text_parts).strip(), "ok": code == 0}
         return
 
+    steering_task: asyncio.Task[None] | None = None
+    if steering_queue is not None and proc.stdin is not None:
+        stdin = proc.stdin
+
+        async def forward_steering() -> None:
+            while True:
+                message = await steering_queue.get()
+                stdin.write((json.dumps({"type": "prompt", "message": message}) + "\n").encode())
+                await stdin.drain()
+
+        steering_task = asyncio.create_task(forward_steering())
+
     # RPC mode: JSON lines with agent events. Keep stdin open after the turn
     # long enough to ask Pi for its authoritative current context estimate.
     model_name: str | None = None
     session_name: str | None = None
+    active_session_file = session_file
     context_used: int | None = None
     context_size: int | None = None
     stats_requested = False
+
+    async def request_stats() -> None:
+        nonlocal stats_requested
+        if proc.stdin is None or stats_requested:
+            return
+        stats_requested = True
+        try:
+            proc.stdin.write((json.dumps({"type": "get_state"}) + "\n").encode())
+            proc.stdin.write((json.dumps({"type": "get_session_stats"}) + "\n").encode())
+            await proc.stdin.drain()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     while True:
         try:
-            line = await asyncio.wait_for(
-                proc.stdout.readline(), timeout=5.0 if stats_requested else None
-            )
+            if finish_event is not None and not stats_requested:
+                read_task = asyncio.create_task(proc.stdout.readline())
+                finish_task = asyncio.create_task(finish_event.wait())
+                done, _ = await asyncio.wait(
+                    {read_task, finish_task}, return_when=asyncio.FIRST_COMPLETED
+                )
+                if finish_task in done:
+                    read_task.cancel()
+                    await asyncio.gather(read_task, return_exceptions=True)
+                    await request_stats()
+                    continue
+                finish_task.cancel()
+                await asyncio.gather(finish_task, return_exceptions=True)
+                line = read_task.result()
+            else:
+                line = await asyncio.wait_for(
+                    proc.stdout.readline(), timeout=5.0 if stats_requested else None
+                )
         except TimeoutError:
             break
         if not line:
@@ -242,11 +288,13 @@ async def stream_agent_events(
                     f"{provider}/{model_id}" if provider and model_id else model_id or provider
                 )
                 session_name = data.get("sessionName")
+                active_session_file = data.get("sessionFile") or active_session_file
                 context_size = model.get("contextWindow")
                 yield {
                     "type": "agent_info",
                     "model": model_name,
                     "session_name": session_name,
+                    "session_file": active_session_file,
                     "context_used": context_used,
                     "context_size": context_size,
                 }
@@ -258,6 +306,7 @@ async def stream_agent_events(
                     "type": "agent_info",
                     "model": model_name,
                     "session_name": session_name,
+                    "session_file": active_session_file,
                     "context_used": context_used,
                     "context_size": context_size,
                 }
@@ -270,6 +319,7 @@ async def stream_agent_events(
                     "type": "agent_info",
                     "model": model_name,
                     "session_name": session_name,
+                    "session_file": active_session_file,
                     "context_used": context_used,
                     "context_size": context_size,
                 }
@@ -315,17 +365,12 @@ async def stream_agent_events(
             }
         elif kind == "agent_settled" and not stats_requested:
             yield {"type": "settled"}
-            if proc.stdin is not None:
-                stats_requested = True
-                try:
-                    proc.stdin.write((json.dumps({"type": "get_state"}) + "\n").encode())
-                    proc.stdin.write((json.dumps({"type": "get_session_stats"}) + "\n").encode())
-                    await proc.stdin.drain()
-                except (BrokenPipeError, ConnectionResetError):
-                    pass
-            else:
-                break
+            if finish_event is None:
+                await request_stats()
 
+    if steering_task is not None:
+        steering_task.cancel()
+        await asyncio.gather(steering_task, return_exceptions=True)
     if proc.stdin is not None:
         proc.stdin.close()
     try:
