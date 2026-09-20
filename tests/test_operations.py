@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import sys
@@ -79,6 +80,73 @@ class TestMessaging:
 
 
 class TestThreadOps:
+    def test_thread_transcript_normalizes_persisted_pi_events(self, wired, tmp_path):
+        session_file = tmp_path / "session.jsonl"
+        records = [
+            {
+                "type": "message",
+                "message": {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "demo request"}],
+                },
+            },
+            {
+                "type": "message",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "thinking", "thinking": "considering"},
+                        {
+                            "type": "toolCall",
+                            "id": "call-1",
+                            "name": "comms_send",
+                            "arguments": {"to": "child"},
+                        },
+                    ],
+                },
+            },
+            {
+                "type": "message",
+                "message": {
+                    "role": "toolResult",
+                    "toolCallId": "call-1",
+                    "toolName": "comms_send",
+                    "content": [{"type": "text", "text": "sent"}],
+                    "isError": False,
+                },
+            },
+            {
+                "type": "message",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "demo complete"}],
+                },
+            },
+        ]
+        session_file.write_text("\n".join(json.dumps(record) for record in records))
+        wired.register(
+            Thread(
+                name="transcript-thread",
+                tags=frozenset(),
+                worktree=str(tmp_path),
+                session_file=str(session_file),
+            )
+        )
+
+        events = wired.thread_transcript("transcript-thread")
+
+        assert [event.kind for event in events] == [
+            "user",
+            "thinking",
+            "tool_start",
+            "tool_end",
+            "assistant",
+        ]
+        assert events[2].raw_input == {"to": "child"}
+        assert events[3].text == "sent"
+        row = next(row for row in wired.presence() if row["name"] == "transcript-thread")
+        assert row["resumable"] is True
+
     def test_claim_thread_can_baseline_inbox_atomically(self, wired):
         wired.send("PR111", "#all", "before claim")
         claimed = wired.claim_thread(

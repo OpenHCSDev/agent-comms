@@ -99,6 +99,18 @@ class RenameThreadResult:
     changed: bool
 
 
+@dataclass(frozen=True, slots=True)
+class TranscriptEvent:
+    """One normalized event from a thread's persisted Pi transcript."""
+
+    kind: str
+    text: str = ""
+    tool_call_id: str = ""
+    tool_name: str = ""
+    raw_input: object | None = None
+    ok: bool = True
+
+
 class Comms:
     """Wire of registry, bus, and ledger rooted at one directory."""
 
@@ -270,11 +282,110 @@ class Comms:
                 "context_used": info.context_used if info else None,
                 "context_size": info.context_size if info else None,
                 "context_percent": info.context_percent if info else None,
+                "resumable": bool(t.session_file),
             }
             if include_pending:
                 row["pending"] = self.pending_count(name)
             rows.append(row)
         return rows
+
+    def thread_transcript(
+        self,
+        name: str,
+        *,
+        max_messages: int = 500,
+        max_bytes: int = 4 * 1024 * 1024,
+    ) -> Sequence[TranscriptEvent]:
+        """Return a bounded normalized tail of one thread's Pi session transcript."""
+        thread = self.registry.require(name)
+        if not thread.session_file or max_messages <= 0 or max_bytes <= 0:
+            return ()
+        path = Path(thread.session_file)
+        try:
+            size = path.stat().st_size
+            start = max(0, size - max_bytes)
+            with path.open("rb") as transcript:
+                transcript.seek(start)
+                if start:
+                    transcript.readline()
+                lines = transcript.readlines()
+        except OSError:
+            return ()
+
+        records: list[list[TranscriptEvent]] = []
+        for raw_line in lines:
+            try:
+                payload = json.loads(raw_line)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            if payload.get("type") != "message" or not isinstance(
+                message := payload.get("message"), dict
+            ):
+                continue
+            events = self._transcript_message_events(message)
+            if events:
+                records.append(events)
+
+        truncated = start > 0 or len(records) > max_messages
+        records = records[-max_messages:]
+        events = [event for record in records for event in record]
+        if truncated:
+            events.insert(
+                0,
+                TranscriptEvent(
+                    "notice",
+                    "Earlier transcript content was omitted from this bounded view.",
+                ),
+            )
+        return tuple(events)
+
+    @staticmethod
+    def _transcript_message_events(message: Mapping[str, object]) -> list[TranscriptEvent]:
+        role = message.get("role")
+        content = message.get("content")
+        if isinstance(content, str):
+            parts: Sequence[object] = ({"type": "text", "text": content},)
+        elif isinstance(content, list):
+            parts = content
+        else:
+            return []
+
+        events: list[TranscriptEvent] = []
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            kind = part.get("type")
+            if role == "user" and kind == "text":
+                events.append(TranscriptEvent("user", str(part.get("text") or "")))
+            elif role == "assistant" and kind == "thinking":
+                events.append(TranscriptEvent("thinking", str(part.get("thinking") or "")))
+            elif role == "assistant" and kind == "text":
+                events.append(TranscriptEvent("assistant", str(part.get("text") or "")))
+            elif role == "assistant" and kind == "toolCall":
+                events.append(
+                    TranscriptEvent(
+                        "tool_start",
+                        tool_call_id=str(part.get("id") or ""),
+                        tool_name=str(part.get("name") or "tool"),
+                        raw_input=part.get("arguments"),
+                    )
+                )
+            elif role == "toolResult":
+                output = "\n".join(
+                    str(item.get("text") or "")
+                    for item in parts
+                    if isinstance(item, dict) and item.get("type") == "text"
+                )
+                return [
+                    TranscriptEvent(
+                        "tool_end",
+                        text=output[:16_000],
+                        tool_call_id=str(message.get("toolCallId") or ""),
+                        tool_name=str(message.get("toolName") or "tool"),
+                        ok=not bool(message.get("isError")),
+                    )
+                ]
+        return events
 
     # ─── Threads ──────────────────────────────────────────────────────────────
 

@@ -84,16 +84,56 @@ class TestHandlers:
     async def test_load_session_reconnects_persistent_thread(self, tmp_path):
         first = self._agent(tmp_path)
         response = await first.new_session(cwd="/wt/proj", mcp_servers=[])
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text(
+            "\n".join(
+                [
+                    json.dumps(
+                        {
+                            "type": "message",
+                            "message": {
+                                "role": "user",
+                                "content": [{"type": "text", "text": "replayed user"}],
+                            },
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "type": "message",
+                            "message": {
+                                "role": "assistant",
+                                "content": [{"type": "text", "text": "replayed response"}],
+                            },
+                        }
+                    ),
+                ]
+            )
+        )
+        first._comms.attach_session("proj", str(session_file), pid=os.getpid())
         await first.shutdown()
         assert first._comms.registry.status("proj").value == "stopped"
 
         second = self._agent(tmp_path)
+
+        class FakeClient:
+            def __init__(self):
+                self.updates = []
+
+            async def session_update(self, session_id=None, update=None, **kwargs):
+                self.updates.append(update)
+
+        client = FakeClient()
+        second._client = client
         loaded = await second.load_session(
             cwd="/wt/proj", session_id=response.session_id, mcp_servers=[]
         )
         assert second._comms.registry.status("proj").value == "running"
         assert second._comms.registry.require("proj").pid == os.getpid()
         assert loaded.field_meta["agentComms"]["thread"] == "proj"
+        assert [update.session_update for update in client.updates] == [
+            "user_message_chunk",
+            "agent_message_chunk",
+        ]
 
     async def test_prompt_broadcasts_to_global_channel(self, tmp_path):
         agent = self._agent(tmp_path)
