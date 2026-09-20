@@ -907,6 +907,26 @@ class MessageBus:
                 )
             )
 
+    def pending_counts(self, name: str) -> Mapping[str, int]:
+        """Count one thread's unread messages by conversation in one log pass."""
+        thread = self._registry.require(name)
+        name = thread.name
+        markers = self._read_markers()
+        global_read = markers.get(name, 0)
+        counts: dict[str, int] = {}
+        with _store_lock(self._path):
+            for message in self._iter_log_unlocked():
+                if not self._delivered_to(message, name, thread.tags):
+                    continue
+                scope = self._message_scope(message, name)
+                if message.seq <= max(
+                    global_read,
+                    markers.get(self._marker_key(name, scope), 0),
+                ):
+                    continue
+                counts[scope] = counts.get(scope, 0) + 1
+        return counts
+
     def mark_delivered(self, name: str, target: str | None = None) -> int:
         """Mark unread messages delivered and return the count without retaining them."""
         thread = self._registry.require(name)

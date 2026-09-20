@@ -58,6 +58,15 @@ class TestMessaging:
         bodies = [m.body for m in wired.inbox("fixer")]
         assert bodies == [f"m{i}" for i in range(5)]
 
+    def test_pending_counts_groups_all_conversations_in_one_result(self, wired):
+        wired.send("PR111", "fixer", "direct one")
+        wired.send("PR111", "fixer", "direct two")
+        wired.send("PR111", "#all", "global")
+
+        assert wired.pending_counts("fixer") == {"PR111": 2, "#all": 1}
+        wired.acknowledge("fixer", "PR111")
+        assert wired.pending_counts("fixer") == {"#all": 1}
+
     def test_shared_history_page_contract(self, wired):
         for index in range(5):
             wired.send("PR111", "#all", f"m{index}")
@@ -87,6 +96,10 @@ class TestThreadOps:
         assert row["model"] == "openrouter/model"
         assert row["context_percent"] == 25
         assert wired.agent_info_of("fixer").context_used == 25
+
+    def test_presence_omits_expensive_viewer_pending_counts(self, wired):
+        rows = {row["name"]: row for row in wired.presence()}
+        assert "pending" not in rows["fixer"]
 
     def test_runtime_info_rejects_unknown_thread(self, wired):
         with pytest.raises(UnregisteredThreadError):
