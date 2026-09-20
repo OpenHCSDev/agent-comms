@@ -329,7 +329,7 @@ class Comms:
             ThreadStatus.DELETING,
         }:
             return
-        if thread.pid <= 0 or thread.pid == os.getpid():
+        if thread.pid <= 0 or thread.pid == os.getpid() or not self._process_alive(thread.pid):
             self.registry.unregister(name)
             return
 
