@@ -44,7 +44,7 @@ from acp.schema import (
 )
 
 from . import backend
-from .declarations import ActivityState, ThreadStatus
+from .declarations import ActivityState, Thread, ThreadStatus
 from .operations import Comms, wire
 
 GLOBAL_TARGET = "#all"
@@ -53,7 +53,6 @@ RELAY_PREFIX = "!relay "
 DEFAULT_AGENT_BIN = "pi"
 DEFAULT_AGENT_ARGS = [
     "--print",
-    "--no-session",
     "--provider",
     "openrouter",
     "--model",
@@ -96,6 +95,7 @@ class CommsAgent:
         )
         self._drain_tasks: dict[str, asyncio.Task[None]] = {}
         self._turn_tasks: dict[str, asyncio.Task[Any]] = {}
+        self._backend_inboxes: dict[str, asyncio.Queue[str]] = {}
         self._session_titles: dict[str, str] = {}
         self._reply_window = (
             reply_window
@@ -198,10 +198,10 @@ class CommsAgent:
                 f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'} "
                 f"sent_seq={sent_seq}"
             )
-            await self._drain_inbox(session_id)
             if agent_task:
                 await self._run_agent_turn(session_id, thread_name, agent_task)
             else:
+                await self._drain_inbox(session_id)
                 # Hold relay turns open while room replies arrive. Native channel
                 # and DM views remain available for longer-running conversations.
                 await self._collect_replies(session_id, thread_name, sent_seq)
@@ -344,21 +344,28 @@ class CommsAgent:
         thread_name = await self._sync_session_identity(session_id)
         if self._comms.registry.status(thread_name) is ThreadStatus.STOPPED:
             return 0
+        backend_inbox = self._backend_inboxes.get(session_id)
+        if self._client is None and backend_inbox is None:
+            return 0
         pushed = 0
         for message in self._comms.inbox(thread_name):
-            if self._client is None:
-                break
-            await self._client.session_update(
-                session_id=session_id,
-                update=AgentMessageChunk(
-                    session_update="agent_message_chunk",
-                    content=TextContentBlock(
-                        type="text", text=f"[{message.sender}] {message.body}"
+            if backend_inbox is not None:
+                backend_inbox.put_nowait(
+                    f"[agent-comms from {message.sender} to {message.target}]\n" f"{message.body}"
+                )
+            if self._client is not None:
+                await self._client.session_update(
+                    session_id=session_id,
+                    update=AgentMessageChunk(
+                        session_update="agent_message_chunk",
+                        content=TextContentBlock(
+                            type="text", text=f"[{message.sender}] {message.body}"
+                        ),
                     ),
-                ),
-            )
+                )
             pushed += 1
-        self._comms.acknowledge(thread_name)
+        if pushed:
+            self._comms.acknowledge(thread_name)
         return pushed
 
     async def _drain_count(self, session_id: str) -> int:
@@ -378,15 +385,59 @@ class CommsAgent:
         }
         reply_parts: list[str] = []
         settled = False
+        backend_inbox: asyncio.Queue[str] = asyncio.Queue()
+        finish_event = asyncio.Event()
+        initial_children = {
+            child.name
+            for child in self._comms.registry.all_threads().values()
+            if child.parent == thread_name
+        }
+        child_monitor: asyncio.Task[None] | None = None
+
+        def active_new_children() -> set[str]:
+            active: set[str] = set()
+            for child in self._comms.registry.all_threads().values():
+                if child.parent != thread_name or child.name in initial_children:
+                    continue
+                try:
+                    if self._comms.registry.status(child.name) is ThreadStatus.RUNNING:
+                        active.add(child.name)
+                except Exception:
+                    continue
+            return active
+
+        self._backend_inboxes[session_id] = backend_inbox
         try:
+            await self._drain_inbox(session_id)
             async for event in backend.stream_agent_events(
-                self._agent_bin, self._agent_args, task, worktree, env_extra
+                self._agent_bin,
+                self._agent_args,
+                task,
+                worktree,
+                env_extra,
+                session_file=thread.session_file,
+                steering_queue=backend_inbox,
+                finish_event=finish_event,
             ):
                 kind = event.get("type")
                 if kind == "chunk":
                     reply_parts.append(event.get("text") or "")
                 elif kind == "agent_info":
                     session_name = event.get("session_name")
+                    session_file = event.get("session_file")
+                    if session_file:
+                        current = self._comms.registry.require(thread_name)
+                        self._comms.register(
+                            Thread(
+                                name=current.name,
+                                tags=current.tags,
+                                worktree=current.worktree,
+                                parent=current.parent,
+                                task=current.task,
+                                pid=current.pid,
+                                session_file=str(session_file),
+                            )
+                        )
                     self._comms.set_agent_info(
                         thread_name,
                         model=event.get("model"),
@@ -404,8 +455,24 @@ class CommsAgent:
                 elif kind == "settled":
                     self._comms.set_activity(thread_name, ActivityState.IDLE)
                     settled = True
+                    if not active_new_children():
+                        finish_event.set()
+                    elif child_monitor is None:
+
+                        async def wait_for_children() -> None:
+                            deadline = time.monotonic() + ACTIVITY_WINDOW
+                            while active_new_children() and time.monotonic() < deadline:
+                                await asyncio.sleep(REPLY_POLL)
+                            finish_event.set()
+
+                        child_monitor = asyncio.create_task(wait_for_children())
                 await self._emit_event(session_id, event)
         finally:
+            if child_monitor is not None:
+                child_monitor.cancel()
+                await asyncio.gather(child_monitor, return_exceptions=True)
+            if self._backend_inboxes.get(session_id) is backend_inbox:
+                self._backend_inboxes.pop(session_id, None)
             thread_name = await self._sync_session_identity(session_id)
             body = "".join(reply_parts).strip()
             if body:

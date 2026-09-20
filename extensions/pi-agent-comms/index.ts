@@ -47,6 +47,59 @@ function run(args: string[]): Record<string, unknown> {
 }
 
 export default function (pi: ExtensionAPI) {
+	const forkThread = process.env.PI_PARENT_ID
+		? process.env.PI_AGENT_ID || process.env.AGENT_COMMS_THREAD
+		: undefined;
+	const task = process.env.PI_TASK || "";
+	const activity = (state: string, detail = "") => {
+		if (!forkThread) return;
+		try {
+			run([
+				"activity",
+				"--name",
+				forkThread,
+				"--state",
+				state,
+				"--detail",
+				detail.slice(0, 240),
+			]);
+		} catch {
+			// Activity reporting must never disrupt the agent turn.
+		}
+	};
+
+	if (forkThread) {
+		pi.on("session_start", async (_event, ctx) => {
+			const sessionFile = ctx.sessionManager.getSessionFile();
+			if (sessionFile) {
+				run([
+					"attach-session",
+					"--name",
+					forkThread,
+					"--session-file",
+					sessionFile,
+					"--pid",
+					String(process.pid),
+				]);
+			}
+		});
+		pi.on("agent_start", async () => activity("thinking", task));
+		pi.on("tool_call", async (event) => {
+			const input = JSON.stringify(event.input ?? {});
+			activity("working", `${event.toolName}: ${input}`);
+		});
+		pi.on("tool_result", async () => activity("thinking", task));
+		pi.on("agent_settled", async () => activity("idle"));
+		pi.on("session_shutdown", async () => {
+			activity("idle");
+			try {
+				run(["release", "--name", forkThread]);
+			} catch {
+				// The owner may already have stopped or deleted the thread.
+			}
+		});
+	}
+
 	const catalog = run(["tools"]).tools as ToolDeclaration[];
 	for (const declaration of catalog) {
 		pi.registerTool({

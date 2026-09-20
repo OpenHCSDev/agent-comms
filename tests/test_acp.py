@@ -311,6 +311,45 @@ class TestAgentTurn:
         assert title_updates == []
         assert wired.agent_info_of("proj").session_name == "Agent-chosen title"
 
+    async def test_backend_session_is_persisted_and_live_inbox_is_steered(
+        self, wired, tmp_path, monkeypatch
+    ):
+        agent = self._agent_with_stub(tmp_path, wired)
+        session_file = tmp_path / "pi-session.jsonl"
+        calls: list[dict] = []
+        steered: list[str] = []
+
+        class FakeClient:
+            async def session_update(self, **kwargs):
+                pass
+
+        async def events(*args, **kwargs):
+            calls.append(kwargs)
+            queue = kwargs["steering_queue"]
+            while not queue.empty():
+                steered.append(queue.get_nowait())
+            yield {
+                "type": "agent_info",
+                "session_file": str(session_file),
+                "model": "test/model",
+            }
+            yield {"type": "settled"}
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        agent._client = FakeClient()
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        wired.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path / "proj")))
+        wired.send("peer", "proj", "ping parent")
+
+        await agent._run_agent_turn("proj", "proj", "coordinate with the child")
+        await agent._run_agent_turn("proj", "proj", "continue")
+
+        assert "ping parent" in steered[0]
+        assert wired.registry.require("proj").session_file == str(session_file)
+        assert calls[0]["session_file"] is None
+        assert calls[1]["session_file"] == str(session_file)
+        assert calls[0]["finish_event"].is_set()
+
     async def test_thread_rename_updates_acp_title(self, wired, tmp_path, monkeypatch):
         agent = self._agent_with_stub(tmp_path, wired)
         sent: list = []

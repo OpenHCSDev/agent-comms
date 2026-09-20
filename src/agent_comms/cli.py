@@ -15,7 +15,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from .declarations import MessageType
+from .declarations import ActivityState, MessageType
 from .operations import Comms, ForkSpec, wire
 
 
@@ -86,8 +86,25 @@ def build_parser() -> argparse.ArgumentParser:
     p_heartbeat = sub.add_parser("heartbeat", help="Mark thread running")
     p_heartbeat.add_argument("--name", required=True)
 
+    p_attach = sub.add_parser(
+        "attach-session", help="Attach a live Pi session to a registered thread"
+    )
+    p_attach.add_argument("--name", required=True)
+    p_attach.add_argument("--session-file", required=True)
+    p_attach.add_argument("--pid", type=int, default=None)
+
+    p_activity = sub.add_parser("activity", help="Publish current thread activity")
+    p_activity.add_argument("--name", required=True)
+    p_activity.add_argument(
+        "--state", choices=[state.value for state in ActivityState], required=True
+    )
+    p_activity.add_argument("--detail", default="")
+
     p_stop = sub.add_parser("stop", help="Mark thread stopped")
     p_stop.add_argument("--name", required=True)
+
+    p_release = sub.add_parser("release", help="Voluntarily mark the calling thread stopped")
+    p_release.add_argument("--name", required=True)
 
     p_archive = sub.add_parser("archive", help="Archive a stopped thread")
     p_archive.add_argument("--name", required=True)
@@ -196,9 +213,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "heartbeat":
             comms.heartbeat(args.name)
             _emit({"heartbeat": args.name})
+        elif args.command == "attach-session":
+            attached = comms.attach_session(args.name, args.session_file, pid=args.pid)
+            _emit(
+                {
+                    "attached": attached.name,
+                    "session_file": attached.session_file,
+                    "pid": attached.pid,
+                }
+            )
+        elif args.command == "activity":
+            comms.set_activity(args.name, ActivityState(args.state), args.detail)
+            _emit({"activity": args.name, "state": args.state})
         elif args.command == "stop":
             comms.stop(args.name)
             _emit({"stopped": args.name})
+        elif args.command == "release":
+            comms.release(args.name)
+            _emit({"released": args.name})
         elif args.command == "archive":
             comms.archive(args.name)
             _emit({"archived": args.name})
