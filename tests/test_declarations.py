@@ -327,6 +327,22 @@ class TestMessageBus:
         bus.send(Message(sender="a", target="#all", body="next", type=MessageType.INFO))
         assert bus.latest_sequence() == 6
 
+    def test_unread_count_and_acknowledge_stream_the_log(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        bus = self._bus(tmp_path)
+        for index in range(5):
+            bus.send(Message(sender="a", target="b", body=str(index), type=MessageType.INFO))
+        monkeypatch.setattr(
+            bus,
+            "_load_log_unlocked",
+            lambda: pytest.fail("unread operations must stream the log"),
+        )
+
+        assert bus.pending_count("b") == 5
+        assert bus.mark_delivered("b") == 5
+        assert bus.pending_count("b") == 0
+
     def test_history_page_validates_bounds(self, tmp_path: Path):
         bus = self._bus(tmp_path)
         with pytest.raises(ValueError, match="either before or after"):

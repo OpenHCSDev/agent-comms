@@ -873,26 +873,69 @@ class MessageBus:
             target = self._registry.require(target).name
         markers = self._read_markers()
         global_read = markers.get(name, 0)
-        return [
-            msg
-            for msg in self._load_log()
-            if self._delivered_to(msg, name, thread.tags)
-            and (target is None or self._in_scope(msg, name, target))
-            and msg.seq
-            > max(
-                global_read,
-                markers.get(self._marker_key(name, self._message_scope(msg, name)), 0),
-            )
-        ]
+        with _store_lock(self._path):
+            return [
+                msg
+                for msg in self._iter_log_unlocked()
+                if self._delivered_to(msg, name, thread.tags)
+                and (target is None or self._in_scope(msg, name, target))
+                and msg.seq
+                > max(
+                    global_read,
+                    markers.get(self._marker_key(name, self._message_scope(msg, name)), 0),
+                )
+            ]
 
-    def mark_delivered(self, name: str, target: str | None = None) -> None:
-        inbox = self.inbox(name, target)
-        if not inbox:
-            return
+    def pending_count(self, name: str, target: str | None = None) -> int:
+        """Count unread messages without retaining their bodies."""
+        thread = self._registry.require(name)
+        name = thread.name
+        if target is not None and not is_channel_target(target) and target != "broadcast":
+            target = self._registry.require(target).name
         markers = self._read_markers()
+        global_read = markers.get(name, 0)
+        with _store_lock(self._path):
+            return sum(
+                1
+                for msg in self._iter_log_unlocked()
+                if self._delivered_to(msg, name, thread.tags)
+                and (target is None or self._in_scope(msg, name, target))
+                and msg.seq
+                > max(
+                    global_read,
+                    markers.get(self._marker_key(name, self._message_scope(msg, name)), 0),
+                )
+            )
+
+    def mark_delivered(self, name: str, target: str | None = None) -> int:
+        """Mark unread messages delivered and return the count without retaining them."""
+        thread = self._registry.require(name)
+        name = thread.name
+        if target is not None and not is_channel_target(target) and target != "broadcast":
+            target = self._registry.require(target).name
+        markers = self._read_markers()
+        global_read = markers.get(name, 0)
+        count = 0
+        latest = 0
+        with _store_lock(self._path):
+            for msg in self._iter_log_unlocked():
+                if (
+                    self._delivered_to(msg, name, thread.tags)
+                    and (target is None or self._in_scope(msg, name, target))
+                    and msg.seq
+                    > max(
+                        global_read,
+                        markers.get(self._marker_key(name, self._message_scope(msg, name)), 0),
+                    )
+                ):
+                    count += 1
+                    latest = msg.seq
+        if not count:
+            return 0
         key = name if target is None else self._marker_key(name, target)
-        markers[key] = max(msg.seq for msg in inbox)
+        markers[key] = latest
         self._write_markers(markers)
+        return count
 
     def mark_delivered_through(self, name: str, sequence: int) -> None:
         """Advance a thread's global inbox cursor without loading messages."""
@@ -1069,7 +1112,11 @@ class MessageBus:
             return self._load_log_unlocked()
 
     def _load_log_unlocked(self) -> list[Message]:
-        return [Message.from_wire(record) for record in _jsonl_records(self._path)]
+        return list(self._iter_log_unlocked())
+
+    def _iter_log_unlocked(self) -> Iterator[Message]:
+        for record, _ in _iter_jsonl_records(self._path):
+            yield Message.from_wire(record)
 
     def _max_sequence_unlocked(self) -> int:
         return max(
