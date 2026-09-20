@@ -254,7 +254,7 @@ class Comms:
         with _store_lock(self._wire_lock_path):
             name = base_name
             suffix = 2
-            while name in self.registry:
+            while self.registry.name_reserved(name):
                 name = f"{base_name}-{suffix}"
                 suffix += 1
             thread = Thread(

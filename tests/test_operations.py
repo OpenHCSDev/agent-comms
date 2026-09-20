@@ -220,6 +220,16 @@ class TestThreadOps:
         with pytest.raises(RelationViolationError, match="permanent alias"):
             wired.register(Thread(name="reviewer", tags=frozenset(), worktree="/tmp"))
 
+    def test_claim_skips_alias_after_canonical_thread_is_deleted(self, wired, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
+        wired.rename_self("reviewer")
+        wired.stop("reviewer")
+        wired.delete("reviewer")
+
+        claimed = wired.claim_thread("fixer", tags=frozenset({"acp"}), worktree="/tmp/project")
+
+        assert claimed.name == "fixer-2"
+
     def test_delete_requires_stopped_thread(self, wired):
         with pytest.raises(RelationViolationError, match="Stop"):
             wired.delete("fixer")
