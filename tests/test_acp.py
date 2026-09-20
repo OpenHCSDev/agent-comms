@@ -92,6 +92,7 @@ class TestHandlers:
             cwd="/wt/proj", session_id=response.session_id, mcp_servers=[]
         )
         assert second._comms.registry.status("proj").value == "running"
+        assert second._comms.registry.require("proj").pid == os.getpid()
         assert loaded.field_meta["agentComms"]["thread"] == "proj"
 
     async def test_prompt_broadcasts_to_global_channel(self, tmp_path):

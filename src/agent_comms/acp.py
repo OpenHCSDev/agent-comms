@@ -165,6 +165,17 @@ class CommsAgent:
             raise RequestError.invalid_params(
                 {"reason": "The saved thread belongs to a different working directory."}
             )
+        self._comms.register(
+            Thread(
+                name=thread.name,
+                tags=thread.tags,
+                worktree=thread.worktree,
+                parent=thread.parent,
+                task=thread.task,
+                pid=os.getpid(),
+                session_file=thread.session_file,
+            )
+        )
         self._comms.heartbeat(thread.name)
         self._sessions[session_id] = thread.name
         self._session_titles[session_id] = thread.name

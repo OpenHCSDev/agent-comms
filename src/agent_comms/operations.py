@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -344,14 +345,38 @@ class Comms:
         if not caller:
             raise RelationViolationError("Self rename requires PI_AGENT_ID or AGENT_COMMS_THREAD.")
         with _store_lock(self._wire_lock_path):
-            previous, current = self.registry.rename(caller, new_name)
-            if previous == current:
-                return RenameThreadResult(previous, current, False)
-            self.bus.rename_thread(previous, current)
-            self.activity.rename_thread(previous, current)
-            self.runtime_info.rename_thread(previous, current)
-            self.ledger.rename_thread(previous, current)
-            return RenameThreadResult(previous, current, True)
+            return self._rename_thread(caller, new_name)
+
+    def rename_managed_thread(
+        self, name: str, display_name: str, *, owner_pid: int
+    ) -> RenameThreadResult:
+        """Rename a locally managed running thread after proving process ownership."""
+        with _store_lock(self._wire_lock_path):
+            thread = self.registry.require(name)
+            if owner_pid <= 0 or thread.pid != owner_pid:
+                raise RelationViolationError(
+                    f"Process {owner_pid} does not own thread {thread.name!r}."
+                )
+            base_name = re.sub(r"[^A-Za-z0-9_-]+", "-", display_name).strip("-_") or "session"
+
+            new_name = base_name
+            suffix = 2
+            while self.registry.name_reserved(new_name):
+                if self.registry.canonical_name(new_name) == thread.name:
+                    return RenameThreadResult(thread.name, thread.name, False)
+                new_name = f"{base_name}-{suffix}"
+                suffix += 1
+            return self._rename_thread(thread.name, new_name)
+
+    def _rename_thread(self, name: str, new_name: str) -> RenameThreadResult:
+        previous, current = self.registry.rename(name, new_name)
+        if previous == current:
+            return RenameThreadResult(previous, current, False)
+        self.bus.rename_thread(previous, current)
+        self.activity.rename_thread(previous, current)
+        self.runtime_info.rename_thread(previous, current)
+        self.ledger.rename_thread(previous, current)
+        return RenameThreadResult(previous, current, True)
 
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
         """Summarize threads with status and pending counts."""
