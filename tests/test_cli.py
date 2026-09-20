@@ -69,6 +69,15 @@ class TestCliSuccess:
         code, out = cli(tmp_path, "heartbeat", "--name", "a")
         assert out == {"heartbeat": "a"}
 
+    def test_rename_self_uses_process_identity(self, cli, tmp_path, monkeypatch):
+        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
+        code, out = cli(tmp_path, "rename-self", "--to", "renamed")
+        assert code == 0
+        assert out == {"previous": "a", "current": "renamed", "changed": True}
+        _, detail = cli(tmp_path, "thread", "--name", "a")
+        assert detail["name"] == "renamed"
+
     def test_ledger_read_and_merge(self, cli, tmp_path):
         merge_file = tmp_path / "merge.json"
         merge_file.write_text(json.dumps({"k": "v"}))

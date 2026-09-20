@@ -66,6 +66,32 @@ class TestParticipantChannels:
 
 
 class TestParticipantLifecycle:
+    async def test_renamed_participant_keeps_running_with_canonical_identity(
+        self, tmp_path, monkeypatch
+    ):
+        root = tmp_path / "wire"
+        identity = tmp_path / "identity-agent"
+        identity.write_text(
+            '#!/bin/sh\ncat >/dev/null\nprintf \'%s|%s\' "$PI_AGENT_ID" "$AGENT_COMMS_ROOT"\n'
+        )
+        identity.chmod(0o755)
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
+        monkeypatch.chdir(tmp_path)
+        comms = wire(root)
+        comms.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+
+        participant = Participant(root=root, agent_bin=str(identity), agent_args=[])
+        participant.start()
+        comms.rename_self("auditor")
+        comms.send("human", "bot", "identity check")
+
+        await participant._tick("bot")
+
+        assert participant._thread_name == "auditor"
+        replies = [message for message in comms.dm_history("human", "auditor")]
+        assert replies[-1].sender == "auditor"
+        assert replies[-1].body == f"auditor|{root}"
+
     async def test_replies_run_in_sender_worktree(self, tmp_path, monkeypatch):
         root = tmp_path / "wire"
         sender_wt = tmp_path / "sender-wt"

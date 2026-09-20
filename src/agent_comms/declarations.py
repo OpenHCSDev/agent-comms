@@ -243,13 +243,24 @@ class ActivityLog:
     def remove_thread(self, thread: str) -> int:
         """Remove all persisted activity for one thread."""
         with _store_lock(self._path):
-            records = _jsonl_records(self._path)
+            records = [dict(record) for record in _jsonl_records(self._path)]
             retained = [record for record in records if record.get("thread") != thread]
             _atomic_write_text(
                 self._path,
                 "".join(f"{json.dumps(record)}\n" for record in retained),
             )
         return len(records) - len(retained)
+
+    def rename_thread(self, old_name: str, new_name: str) -> None:
+        with _store_lock(self._path):
+            records = [dict(record) for record in _jsonl_records(self._path)]
+            for record in records:
+                if record.get("thread") == old_name:
+                    record["thread"] = new_name
+            _atomic_write_text(
+                self._path,
+                "".join(f"{json.dumps(record)}\n" for record in records),
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -324,6 +335,23 @@ class RuntimeInfoStore:
         with _store_lock(self._path):
             values = self._load_unlocked()
             values.pop(thread, None)
+            _atomic_write_text(
+                self._path,
+                json.dumps({name: value.to_wire() for name, value in values.items()}, indent=2),
+            )
+
+    def rename_thread(self, old_name: str, new_name: str) -> None:
+        with _store_lock(self._path):
+            values = self._load_unlocked()
+            if info := values.pop(old_name, None):
+                values[new_name] = AgentRuntimeInfo(
+                    thread=new_name,
+                    model=info.model,
+                    session_name=info.session_name,
+                    context_used=info.context_used,
+                    context_size=info.context_size,
+                    timestamp=info.timestamp,
+                )
             _atomic_write_text(
                 self._path,
                 json.dumps({name: value.to_wire() for name, value in values.items()}, indent=2),
@@ -484,6 +512,7 @@ class ThreadRegistry:
         self._threads: dict[str, Thread] = {}
         self._statuses: dict[str, ThreadStatus] = {}
         self._last_seen: dict[str, float] = {}
+        self._aliases: dict[str, str] = {}
         self._load()
 
     def _load(self) -> None:
@@ -494,9 +523,11 @@ class ThreadRegistry:
         self._threads.clear()
         self._statuses.clear()
         self._last_seen.clear()
+        self._aliases.clear()
         if not self._path.exists():
             return
         raw = json.loads(self._path.read_text())
+        self._aliases.update(raw.get("aliases", {}))
         for name, data in raw.get("threads", {}).items():
             self._threads[name] = Thread(
                 name=name,
@@ -527,7 +558,8 @@ class ThreadRegistry:
                             "last_seen": self._last_seen.get(name, 0.0),
                         }
                         for name, t in self._threads.items()
-                    }
+                    },
+                    "aliases": dict(sorted(self._aliases.items())),
                 },
                 indent=2,
             ),
@@ -536,6 +568,10 @@ class ThreadRegistry:
     def register(self, thread: Thread, status: ThreadStatus = ThreadStatus.RUNNING) -> None:
         with _store_lock(self._path):
             self._load_unlocked()
+            if thread.name in self._aliases:
+                raise RelationViolationError(
+                    f"Thread name {thread.name!r} is a permanent alias and cannot be reused."
+                )
             if self._statuses.get(thread.name) is ThreadStatus.DELETING:
                 raise RelationViolationError(
                     f"Thread {thread.name!r} is being permanently deleted."
@@ -545,9 +581,70 @@ class ThreadRegistry:
             self._last_seen[thread.name] = time.time()
             self._save_unlocked()
 
+    def canonical_name(self, name: str) -> str:
+        self._load()
+        return self._aliases.get(name, name)
+
+    def aliases_for(self, name: str) -> frozenset[str]:
+        self._load()
+        canonical = self._aliases.get(name, name)
+        return frozenset(
+            {canonical, *(alias for alias, target in self._aliases.items() if target == canonical)}
+        )
+
+    def rename(self, name: str, new_name: str) -> tuple[str, str]:
+        """Rename one running thread while retaining old names as aliases."""
+        with _store_lock(self._path):
+            self._load_unlocked()
+            canonical = self._aliases.get(name, name)
+            if canonical not in self._threads:
+                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+            if new_name == canonical:
+                return canonical, canonical
+            current = self._threads[canonical]
+            if self._statuses[canonical] is not ThreadStatus.RUNNING:
+                raise RelationViolationError("Only a running thread can rename itself.")
+            if new_name in self._threads or new_name in self._aliases:
+                raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
+            # Constructing the replacement proves the new name is valid.
+            replacement = Thread(
+                name=new_name,
+                tags=current.tags,
+                worktree=current.worktree,
+                parent=current.parent,
+                task=current.task,
+                pid=current.pid,
+                session_file=current.session_file,
+            )
+            status = self._statuses.pop(canonical)
+            last_seen = self._last_seen.pop(canonical)
+            del self._threads[canonical]
+            self._threads[new_name] = replacement
+            self._statuses[new_name] = status
+            self._last_seen[new_name] = last_seen
+
+            for child_name, child in tuple(self._threads.items()):
+                if child.parent == canonical:
+                    self._threads[child_name] = Thread(
+                        name=child.name,
+                        tags=child.tags,
+                        worktree=child.worktree,
+                        parent=new_name,
+                        task=child.task,
+                        pid=child.pid,
+                        session_file=child.session_file,
+                    )
+            for alias, target in tuple(self._aliases.items()):
+                if target == canonical:
+                    self._aliases[alias] = new_name
+            self._aliases[canonical] = new_name
+            self._save_unlocked()
+            return canonical, new_name
+
     def unregister(self, name: str) -> None:
         with _store_lock(self._path):
             self._load_unlocked()
+            name = self._aliases.get(name, name)
             if name not in self._threads:
                 raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
             self._statuses[name] = ThreadStatus.STOPPED
@@ -556,6 +653,7 @@ class ThreadRegistry:
     def archive(self, name: str) -> None:
         with _store_lock(self._path):
             self._load_unlocked()
+            name = self._aliases.get(name, name)
             if name not in self._threads:
                 raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
             self._statuses[name] = ThreadStatus.ARCHIVED
@@ -564,6 +662,7 @@ class ThreadRegistry:
     def begin_delete(self, name: str) -> None:
         with _store_lock(self._path):
             self._load_unlocked()
+            name = self._aliases.get(name, name)
             if name not in self._threads:
                 raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
             status = self._statuses.get(name)
@@ -582,16 +681,20 @@ class ThreadRegistry:
         """Drop the declaration entirely (rollback, not a status change)."""
         with _store_lock(self._path):
             self._load_unlocked()
+            name = self._aliases.get(name, name)
             if name not in self._threads:
                 raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
             del self._threads[name]
             self._statuses.pop(name, None)
             self._last_seen.pop(name, None)
+            if name in self._aliases.values():
+                self._aliases[name] = name
             self._save_unlocked()
 
     def heartbeat(self, name: str) -> None:
         with _store_lock(self._path):
             self._load_unlocked()
+            name = self._aliases.get(name, name)
             if name not in self._threads:
                 raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
             if self._statuses.get(name) is ThreadStatus.DELETING:
@@ -602,18 +705,21 @@ class ThreadRegistry:
 
     def last_seen(self, name: str) -> float:
         self._load()
+        name = self._aliases.get(name, name)
         if name not in self._threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         return self._last_seen.get(name, 0.0)
 
     def require(self, name: str) -> Thread:
         self._load()
+        name = self._aliases.get(name, name)
         if name not in self._threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         return self._threads[name]
 
     def status(self, name: str) -> ThreadStatus:
         self._load()
+        name = self._aliases.get(name, name)
         if name not in self._statuses:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         return self._statuses[name]
@@ -633,10 +739,12 @@ class ThreadRegistry:
 
     def peers(self, exclude: str) -> Sequence[str]:
         self._load()
+        exclude = self._aliases.get(exclude, exclude)
         return [name for name in self._threads if name != exclude]
 
     def __contains__(self, name: str) -> bool:
         self._load()
+        name = self._aliases.get(name, name)
         return name in self._threads
 
 
@@ -662,14 +770,22 @@ class MessageBus:
             and message.target not in self._registry
         ):
             raise UnregisteredThreadError(f"Target {message.target!r} is not a registered thread.")
+        sender = self._registry.canonical_name(message.sender)
+        target = message.target
+        if (
+            not is_channel_target(target)
+            and target != "broadcast"
+            and self._registry.canonical_name(target) == sender
+        ):
+            raise RelationViolationError(f"Thread {sender!r} cannot message itself.")
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with _store_lock(self._path):
             messages = self._load_log_unlocked()
             sequence_path = self._path.parent / "bus_meta.json"
             last_sequence = self._read_last_sequence(sequence_path)
             stored = Message(
-                sender=message.sender,
-                target=GLOBAL_CHANNEL if message.target == "broadcast" else message.target,
+                sender=sender,
+                target=GLOBAL_CHANNEL if target == "broadcast" else target,
                 body=message.body,
                 type=message.type,
                 timestamp=message.timestamp,
@@ -684,10 +800,10 @@ class MessageBus:
         return max((message.seq for message in messages), default=0) + 1
 
     def _delivered_to(self, message: Message, name: str, tags: frozenset[str]) -> bool:
-        if message.sender == name:
+        if self._registry.canonical_name(message.sender) == name:
             return False
         target = message.target
-        if target == name:
+        if not is_channel_target(target) and self._registry.canonical_name(target) == name:
             return True
         if target in BROADCAST_ALIASES:
             return True
@@ -699,23 +815,27 @@ class MessageBus:
     def _marker_key(name: str, target: str) -> str:
         return json.dumps([name, target], separators=(",", ":"))
 
-    @staticmethod
-    def _in_scope(message: Message, name: str, target: str) -> bool:
+    def _in_scope(self, message: Message, name: str, target: str) -> bool:
         normalized = GLOBAL_CHANNEL if target == "broadcast" else target
         if is_channel_target(normalized):
             return message.target == normalized
-        return {message.sender, message.target} == {name, target}
+        return {
+            self._registry.canonical_name(message.sender),
+            self._registry.canonical_name(message.target),
+        } == {name, target}
 
-    @staticmethod
-    def _message_scope(message: Message, name: str) -> str:
+    def _message_scope(self, message: Message, name: str) -> str:
         if is_channel_target(message.target):
             return message.target
-        return message.sender if message.target == name else message.target
+        sender = self._registry.canonical_name(message.sender)
+        target = self._registry.canonical_name(message.target)
+        return sender if target == name else target
 
     def inbox(self, name: str, target: str | None = None) -> Sequence[Message]:
         thread = self._registry.require(name)
+        name = thread.name
         if target is not None and not is_channel_target(target) and target != "broadcast":
-            self._registry.require(target)
+            target = self._registry.require(target).name
         markers = self._read_markers()
         global_read = markers.get(name, 0)
         return [
@@ -741,9 +861,17 @@ class MessageBus:
 
     def dm_history(self, a: str, b: str) -> Sequence[Message]:
         """Full conversation between two threads, in seq order."""
-        self._registry.require(a)
-        self._registry.require(b)
-        return [msg for msg in self._load_log() if {msg.sender, msg.target} == {a, b}]
+        a = self._registry.require(a).name
+        b = self._registry.require(b).name
+        return [
+            msg
+            for msg in self._load_log()
+            if {
+                self._registry.canonical_name(msg.sender),
+                self._registry.canonical_name(msg.target),
+            }
+            == {a, b}
+        ]
 
     def channel_history(self, target: str) -> Sequence[Message]:
         """Full history of one channel (``#all`` or a tag channel)."""
@@ -793,6 +921,26 @@ class MessageBus:
     def _load_log_unlocked(self) -> list[Message]:
         return [Message.from_wire(record) for record in _jsonl_records(self._path)]
 
+    def rename_thread(self, old_name: str, new_name: str) -> None:
+        """Move read markers to canonical names without rewriting message history."""
+        marker_path = self._path.parent / "read_markers.json"
+        with _store_lock(marker_path):
+            markers = self._read_markers_unlocked(marker_path)
+            renamed: dict[str, int] = {}
+            for key, sequence in markers.items():
+                if key == old_name:
+                    key = new_name
+                else:
+                    try:
+                        scope = json.loads(key)
+                    except json.JSONDecodeError:
+                        scope = None
+                    if isinstance(scope, list) and len(scope) == 2:
+                        scope = [new_name if value == old_name else value for value in scope]
+                        key = json.dumps(scope, separators=(",", ":"))
+                renamed[key] = max(sequence, renamed.get(key, 0))
+            _atomic_write_text(marker_path, json.dumps(renamed, indent=2))
+
     @staticmethod
     def _read_last_sequence(sequence_path: Path) -> int:
         if not sequence_path.exists():
@@ -802,10 +950,13 @@ class MessageBus:
 
     def remove_thread(self, name: str) -> tuple[int, int]:
         """Purge messages and read markers owned by or targeting a thread."""
+        names = self._registry.aliases_for(name)
         with _store_lock(self._path):
             messages = self._load_log_unlocked()
             retained = [
-                message for message in messages if message.sender != name and message.target != name
+                message
+                for message in messages
+                if message.sender not in names and message.target not in names
             ]
             sequence_path = self._path.parent / "bus_meta.json"
             high_water = max(
@@ -823,13 +974,15 @@ class MessageBus:
             markers = self._read_markers_unlocked(marker_path)
 
             def references_thread(key: str) -> bool:
-                if key == name:
+                if key in names:
                     return True
                 try:
                     scope = json.loads(key)
                 except json.JSONDecodeError:
                     return False
-                return isinstance(scope, list) and len(scope) == 2 and name in scope
+                return (
+                    isinstance(scope, list) and len(scope) == 2 and bool(names.intersection(scope))
+                )
 
             retained_markers = {
                 key: sequence for key, sequence in markers.items() if not references_thread(key)
@@ -908,6 +1061,38 @@ class SharedLedger:
             self._data = cleaned if isinstance(cleaned, dict) else {}
             self._save_unlocked()
         return removed
+
+    def rename_thread(self, old_name: str, new_name: str) -> int:
+        """Replace exact structural references without touching free text."""
+
+        def rename(value: object) -> tuple[object, int]:
+            if isinstance(value, dict):
+                result: dict[str, object] = {}
+                changed = 0
+                for key, child in value.items():
+                    renamed_child, count = rename(child)
+                    renamed_key = new_name if key == old_name else key
+                    result[renamed_key] = renamed_child
+                    changed += count + (renamed_key != key)
+                return result, changed
+            if isinstance(value, list):
+                result_list: list[object] = []
+                changed = 0
+                for child in value:
+                    renamed_child, count = rename(child)
+                    result_list.append(renamed_child)
+                    changed += count
+                return result_list, changed
+            if value == old_name:
+                return new_name, 1
+            return value, 0
+
+        with _store_lock(self._path):
+            self._load_unlocked()
+            renamed, changed = rename(self._data)
+            self._data = renamed if isinstance(renamed, dict) else {}
+            self._save_unlocked()
+        return changed
 
 
 # ─── Runtime thread resolution ────────────────────────────────────────────────
