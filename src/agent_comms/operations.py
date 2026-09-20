@@ -115,6 +115,10 @@ class Comms:
     def pending_count(self, name: str, target: str | None = None) -> int:
         return self.bus.pending_count(name, target)
 
+    def pending_counts(self, name: str) -> Mapping[str, int]:
+        """Unread counts by channel or DM peer, computed in one log pass."""
+        return self.bus.pending_counts(name)
+
     # ─── IRC views ────────────────────────────────────────────────────────────
 
     def dm_history(self, a: str, b: str) -> Sequence[Message]:
@@ -210,6 +214,13 @@ class Comms:
 
     def who(self) -> Sequence[Mapping]:
         """Presence: who is in the chat, with status and unread counts."""
+        return self._presence(include_pending=True)
+
+    def presence(self) -> Sequence[Mapping]:
+        """Presence without viewer-specific unread scans."""
+        return self._presence(include_pending=False)
+
+    def _presence(self, *, include_pending: bool) -> Sequence[Mapping]:
         rows = []
         runtime_info = self.runtime_info.all()
         for name, t in sorted(self.registry.all_threads().items()):
@@ -219,23 +230,23 @@ class Comms:
             }:
                 continue
             info = runtime_info.get(name)
-            rows.append(
-                {
-                    "name": name,
-                    "status": self.registry.status(name).value,
-                    "tags": sorted(t.tags),
-                    "task": t.task,
-                    "parent": t.parent,
-                    "worktree": t.worktree,
-                    "last_seen": self.registry.last_seen(name),
-                    "pending": self.pending_count(name),
-                    "model": info.model if info else None,
-                    "session_name": info.session_name if info else None,
-                    "context_used": info.context_used if info else None,
-                    "context_size": info.context_size if info else None,
-                    "context_percent": info.context_percent if info else None,
-                }
-            )
+            row = {
+                "name": name,
+                "status": self.registry.status(name).value,
+                "tags": sorted(t.tags),
+                "task": t.task,
+                "parent": t.parent,
+                "worktree": t.worktree,
+                "last_seen": self.registry.last_seen(name),
+                "model": info.model if info else None,
+                "session_name": info.session_name if info else None,
+                "context_used": info.context_used if info else None,
+                "context_size": info.context_size if info else None,
+                "context_percent": info.context_percent if info else None,
+            }
+            if include_pending:
+                row["pending"] = self.pending_count(name)
+            rows.append(row)
         return rows
 
     # ─── Threads ──────────────────────────────────────────────────────────────
