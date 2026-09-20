@@ -1,0 +1,74 @@
+import pytest
+
+from agent_comms import Thread
+from agent_comms.tools import (
+    context_tool_catalog,
+    invoke_context_tool,
+    invoke_tool,
+    tool_catalog,
+)
+
+
+class TestToolCatalog:
+    def test_catalog_has_unique_json_schema_declarations(self):
+        catalog = tool_catalog()
+        names = [tool["name"] for tool in catalog]
+        assert len(names) == len(set(names))
+        assert {"comms_send", "comms_inbox", "comms_stop", "comms_archive", "comms_delete"} <= set(
+            names
+        )
+        assert all(tool["parameters"]["additionalProperties"] is False for tool in catalog)
+
+    def test_thread_context_actions_are_declared_in_display_order(self):
+        actions = context_tool_catalog("thread")
+        assert [action["name"] for action in actions] == [
+            "comms_fork",
+            "comms_stop",
+            "comms_archive",
+            "comms_delete",
+            "comms_ack",
+        ]
+        assert actions[0]["context_bindings"] == {"parent": "subject"}
+
+    def test_inbox_ack_behavior_is_owned_by_declared_tool(self, comms):
+        comms.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
+        comms.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+        comms.send("a", "b", "hello")
+
+        result = invoke_tool(comms, "comms_inbox", {"thread": "b"})
+
+        assert result["messages"][0]["text"] == "hello"
+        assert result["acknowledged"] == 1
+        assert comms.pending_count("b") == 0
+
+    def test_delete_tool_uses_shared_lifecycle_policy(self, comms):
+        comms.register(Thread(name="running", tags=frozenset(), worktree="/wt"))
+        with pytest.raises(ValueError, match="Stop a running thread"):
+            invoke_tool(comms, "comms_delete", {"name": "running"})
+        comms.stop("running")
+
+        result = invoke_tool(comms, "comms_delete", {"name": "running"})
+
+        assert result["deleted"] == "running"
+        assert "running" not in comms.registry
+
+    def test_arguments_are_validated_before_dispatch(self, comms):
+        with pytest.raises(ValueError, match="Missing required argument"):
+            invoke_tool(comms, "comms_stop", {})
+        with pytest.raises(ValueError, match="Unknown arguments"):
+            invoke_tool(comms, "comms_stop", {"name": "a", "force": True})
+        with pytest.raises(ValueError, match="must be boolean"):
+            invoke_tool(comms, "comms_threads", {"active_only": "yes"})
+
+    def test_ack_can_target_one_conversation(self, comms):
+        comms.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
+        comms.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+        comms.register(Thread(name="c", tags=frozenset(), worktree="/wt"))
+        comms.send("a", "b", "from a")
+        comms.send("c", "b", "from c")
+
+        result = invoke_context_tool(comms, "comms_ack", subject="a", actor="b")
+
+        assert result == {"acknowledged": 1}
+        assert comms.pending_count("b", "a") == 0
+        assert comms.pending_count("b", "c") == 1

@@ -39,6 +39,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
+    sub.add_parser("tools", help="Emit the shared adapter tool catalog")
+
+    p_invoke = sub.add_parser("invoke", help="Invoke one declared adapter tool")
+    p_invoke.add_argument("--tool", required=True)
+    p_invoke.add_argument("--arguments", default="{}", help="Tool arguments as a JSON object")
+
     p_send = sub.add_parser("send", help="Send to a thread (DM), #channel, or #all")
     p_send.add_argument("--from", dest="sender", required=True)
     p_send.add_argument("--to", dest="target", required=True)
@@ -117,7 +123,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     comms: Comms = wire(Path(args.root).expanduser() if args.root else None)
 
     try:
-        if args.command == "send":
+        if args.command == "tools":
+            from .tools import tool_catalog
+
+            _emit({"tools": tool_catalog()})
+        elif args.command == "invoke":
+            from .tools import invoke_tool
+
+            arguments = json.loads(args.arguments)
+            if not isinstance(arguments, dict):
+                return _fail("invoke --arguments must be a JSON object")
+            _emit(invoke_tool(comms, args.tool, arguments))
+        elif args.command == "send":
             mid = comms.send(args.sender, args.target, args.body, MessageType(args.type))
             _emit({"id": mid})
         elif args.command == "inbox":
