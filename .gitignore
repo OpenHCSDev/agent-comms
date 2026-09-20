@@ -29,3 +29,4 @@ coverage.xml
 .idea/
 .vscode/
 /activity.jsonl
+/runtime_info.json

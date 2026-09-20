@@ -145,6 +145,7 @@ class ThreadStatus(Enum):
     RUNNING = "running"
     IDLE = "idle"
     STOPPED = "stopped"
+    ARCHIVED = "archived"
 
 
 class ActivityState(Enum):
@@ -306,6 +307,15 @@ class RuntimeInfoStore:
 
     def all(self) -> Mapping[str, AgentRuntimeInfo]:
         return self._load()
+
+    def remove(self, thread: str) -> None:
+        with _store_lock(self._path):
+            values = self._load_unlocked()
+            values.pop(thread, None)
+            _atomic_write_text(
+                self._path,
+                json.dumps({name: value.to_wire() for name, value in values.items()}, indent=2),
+            )
 
     def _load(self) -> dict[str, AgentRuntimeInfo]:
         with _store_lock(self._path):
@@ -527,6 +537,14 @@ class ThreadRegistry:
             self._statuses[name] = ThreadStatus.STOPPED
             self._save_unlocked()
 
+    def archive(self, name: str) -> None:
+        with _store_lock(self._path):
+            self._load_unlocked()
+            if name not in self._threads:
+                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+            self._statuses[name] = ThreadStatus.ARCHIVED
+            self._save_unlocked()
+
     def remove(self, name: str) -> None:
         """Drop the declaration entirely (rollback, not a status change)."""
         with _store_lock(self._path):
@@ -574,7 +592,7 @@ class ThreadRegistry:
         return {
             name: t
             for name, t in self._threads.items()
-            if self._statuses.get(name) != ThreadStatus.STOPPED
+            if self._statuses.get(name) not in {ThreadStatus.STOPPED, ThreadStatus.ARCHIVED}
         }
 
     def peers(self, exclude: str) -> Sequence[str]:

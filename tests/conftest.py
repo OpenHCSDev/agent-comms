@@ -21,7 +21,7 @@ def comms(root: Path) -> Comms:
 @pytest.fixture
 def wired(comms: Comms) -> Comms:
     """A wire with PR111 (parent) and fixer (child) registered."""
-    comms.register(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1", pid=100))
+    comms.register(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1"))
     comms.register(
         Thread(
             name="fixer",
@@ -29,7 +29,7 @@ def wired(comms: Comms) -> Comms:
             worktree="/tmp/wt1",
             parent="PR111",
             task="fix auth",
-            pid=200,
+            pid=0,
         )
     )
     return comms

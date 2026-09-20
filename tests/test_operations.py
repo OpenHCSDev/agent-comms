@@ -1,3 +1,6 @@
+import subprocess
+import sys
+
 import pytest
 
 from agent_comms import (
@@ -83,7 +86,7 @@ class TestThreadOps:
         detail = wired.thread_detail("fixer")
         assert detail["is_fork"] is True
         assert detail["task"] == "fix auth"
-        assert detail["pid"] == 200
+        assert detail["pid"] == 0
 
     def test_thread_detail_fail_closed(self, wired):
         with pytest.raises(UnregisteredThreadError):
@@ -93,6 +96,76 @@ class TestThreadOps:
         wired.stop("fixer")
         wired.heartbeat("fixer")
         assert wired.registry.status("fixer").value == "running"
+
+    def test_stop_terminates_registered_process(self, wired, monkeypatch):
+        signals = []
+        wired.register(
+            Thread(
+                name="signal-test",
+                tags=frozenset(),
+                worktree="/tmp",
+                pid=200,
+            )
+        )
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._is_local_participant",
+            lambda *args: True,
+        )
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._process_alive",
+            lambda *args: False,
+        )
+        monkeypatch.setattr("agent_comms.operations.os.getpgid", lambda pid: pid)
+        monkeypatch.setattr(
+            "agent_comms.operations.os.killpg",
+            lambda pid, sig: signals.append((pid, sig)),
+        )
+
+        wired.stop("signal-test")
+
+        assert signals == [(200, __import__("signal").SIGTERM)]
+        assert wired.registry.status("signal-test").value == "stopped"
+
+    def test_archive_requires_stopped_thread(self, wired):
+        wired.send("PR111", "fixer", "kept after archive")
+        with pytest.raises(RelationViolationError, match="Stop"):
+            wired.archive("fixer")
+        wired.stop("fixer")
+        wired.archive("fixer")
+        assert wired.registry.status("fixer").value == "archived"
+        assert not any(row["name"] == "fixer" for row in wired.who())
+        assert "fixer" not in wired.registry.active_threads()
+        assert [message.body for message in wired.dm_history("PR111", "fixer")] == [
+            "kept after archive"
+        ]
+
+    @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="uses /proc")
+    def test_stop_terminates_real_process(self, wired):
+        env = dict(
+            __import__("os").environ,
+            AGENT_COMMS_THREAD="live-process",
+            AGENT_COMMS_ROOT=str(wired.root),
+        )
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            start_new_session=True,
+            env=env,
+        )
+        wired.register(
+            Thread(
+                name="live-process",
+                tags=frozenset(),
+                worktree="/tmp",
+                pid=process.pid,
+            )
+        )
+        try:
+            wired.stop("live-process")
+            assert process.wait(timeout=5) == -__import__("signal").SIGTERM
+            assert wired.registry.status("live-process").value == "stopped"
+        finally:
+            if process.poll() is None:
+                process.kill()
 
 
 class TestFork:

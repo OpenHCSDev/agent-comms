@@ -11,7 +11,10 @@ acting, and raises on unregistered references.
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
+import sys
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +32,7 @@ from .declarations import (
     SharedLedger,
     Thread,
     ThreadRegistry,
+    ThreadStatus,
     UnregisteredThreadError,
     current_thread,
 )
@@ -155,6 +159,8 @@ class Comms:
         rows = []
         runtime_info = self.runtime_info.all()
         for name, t in sorted(self.registry.all_threads().items()):
+            if self.registry.status(name) is ThreadStatus.ARCHIVED:
+                continue
             info = runtime_info.get(name)
             rows.append(
                 {
@@ -240,7 +246,76 @@ class Comms:
         self.registry.heartbeat(name)
 
     def stop(self, name: str) -> None:
+        """Stop a registered participant and retain it in history."""
+        thread = self.registry.require(name)
+        if self.registry.status(name) in {ThreadStatus.STOPPED, ThreadStatus.ARCHIVED}:
+            return
+        if thread.pid <= 0 or thread.pid == os.getpid():
+            self.registry.unregister(name)
+            return
+
+        if not self._is_local_participant(thread):
+            raise RelationViolationError(
+                f"Refusing to signal unverifiable process {thread.pid} for {name!r}."
+            )
+        try:
+            if os.getpgid(thread.pid) == thread.pid:
+                os.killpg(thread.pid, signal.SIGTERM)
+            else:
+                os.kill(thread.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            self.registry.unregister(name)
+            return
+
+        deadline = time.monotonic() + 3.0
+        while self._process_alive(thread.pid) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        if self._process_alive(thread.pid):
+            if os.getpgid(thread.pid) == thread.pid:
+                os.killpg(thread.pid, signal.SIGKILL)
+            else:
+                os.kill(thread.pid, signal.SIGKILL)
+            deadline = time.monotonic() + 1.0
+            while self._process_alive(thread.pid) and time.monotonic() < deadline:
+                time.sleep(0.05)
+        if self._process_alive(thread.pid):
+            raise RuntimeError(f"Process {thread.pid} did not stop.")
         self.registry.unregister(name)
+
+    @staticmethod
+    def _process_alive(pid: int) -> bool:
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text().split()
+            if len(stat) > 2 and stat[2] == "Z":
+                return False
+            os.kill(pid, 0)
+        except (OSError, ProcessLookupError):
+            return False
+        return True
+
+    def _is_local_participant(self, thread: Thread) -> bool:
+        """Prove a PID belongs to the named participant before signaling it."""
+        if not sys.platform.startswith("linux"):
+            return False
+        try:
+            entries = Path(f"/proc/{thread.pid}/environ").read_bytes().split(b"\0")
+        except OSError:
+            return False
+        environ = dict(item.split(b"=", 1) for item in entries if item and b"=" in item)
+        expected = thread.name.encode()
+        name_matches = any(
+            item in {b"AGENT_COMMS_THREAD=" + expected, b"PI_AGENT_ID=" + expected}
+            for item in entries
+        )
+        root = Path(environ.get(b"AGENT_COMMS_ROOT", b"~/.agent-comms").decode()).expanduser()
+        return name_matches and root.resolve() == self.root.resolve()
+
+    def archive(self, name: str) -> None:
+        """Hide a stopped participant from presence while retaining messages."""
+        if self.registry.status(name) is not ThreadStatus.STOPPED:
+            raise RelationViolationError("Stop a running thread before archiving it.")
+        self.registry.archive(name)
+        self.runtime_info.remove(name)
 
     # ─── Forking ──────────────────────────────────────────────────────────────
 

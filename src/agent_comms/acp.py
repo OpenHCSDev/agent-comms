@@ -35,6 +35,7 @@ from acp.schema import (
     InitializeResponse,
     NewSessionResponse,
     PromptResponse,
+    SessionInfoUpdate,
     TextContentBlock,
     ToolCallProgress,
     ToolCallStart,
@@ -94,6 +95,7 @@ class CommsAgent:
             else (arg_env.split() if arg_env else list(DEFAULT_AGENT_ARGS))
         )
         self._drain_tasks: dict[str, asyncio.Task[None]] = {}
+        self._session_titles: dict[str, str] = {}
         self._reply_window = (
             reply_window
             if reply_window is not None
@@ -329,13 +331,27 @@ class CommsAgent:
                 if kind == "chunk":
                     reply_parts.append(event.get("text") or "")
                 elif kind == "agent_info":
+                    session_name = event.get("session_name")
                     self._comms.set_agent_info(
                         thread_name,
                         model=event.get("model"),
-                        session_name=event.get("session_name"),
+                        session_name=session_name,
                         context_used=event.get("context_used"),
                         context_size=event.get("context_size"),
                     )
+                    if (
+                        self._client is not None
+                        and session_name
+                        and self._session_titles.get(session_id) != session_name
+                    ):
+                        await self._client.session_update(
+                            session_id=session_id,
+                            update=SessionInfoUpdate(
+                                session_update="session_info_update",
+                                title=session_name,
+                            ),
+                        )
+                        self._session_titles[session_id] = session_name
                 elif kind == "tool_start":
                     self._comms.set_activity(
                         thread_name, ActivityState.WORKING, event.get("title", "")
