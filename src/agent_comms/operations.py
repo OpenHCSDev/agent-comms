@@ -242,6 +242,30 @@ class Comms:
                 )
             self.registry.register(thread)
 
+    def claim_thread(
+        self,
+        base_name: str,
+        *,
+        tags: frozenset[str],
+        worktree: str,
+        pid: int = 0,
+    ) -> Thread:
+        """Atomically register a uniquely named thread on this wire."""
+        with _store_lock(self._wire_lock_path):
+            name = base_name
+            suffix = 2
+            while name in self.registry:
+                name = f"{base_name}-{suffix}"
+                suffix += 1
+            thread = Thread(
+                name=name,
+                tags=tags,
+                worktree=worktree,
+                pid=pid,
+            )
+            self.registry.register(thread)
+            return thread
+
     def rename_self(self, new_name: str) -> RenameThreadResult:
         """Rename the caller's own running thread, retaining its old aliases."""
         caller = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")

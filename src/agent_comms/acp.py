@@ -33,6 +33,7 @@ from acp.schema import (
     ContentToolCallContent,
     Implementation,
     InitializeResponse,
+    LoadSessionResponse,
     NewSessionResponse,
     PromptResponse,
     SessionInfoUpdate,
@@ -43,7 +44,7 @@ from acp.schema import (
 )
 
 from . import backend
-from .declarations import ActivityState
+from .declarations import ActivityState, ThreadStatus
 from .operations import Comms, wire
 
 GLOBAL_TARGET = "#all"
@@ -85,7 +86,6 @@ class CommsAgent:
     ):
         self._comms = comms
         self._sessions: dict[str, str] = {}
-        self._next = 0
         self._client: Any = None
         self._agent_bin = agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", DEFAULT_AGENT_BIN)
         arg_env = os.environ.get("AGENT_COMMS_AGENT_ARGS", "")
@@ -126,7 +126,7 @@ class CommsAgent:
     ) -> InitializeResponse:
         return InitializeResponse(
             protocol_version=protocol_version,
-            agent_capabilities=AgentCapabilities(load_session=False),
+            agent_capabilities=AgentCapabilities(load_session=True),
             agent_info=Implementation(name="agent-comms", title="Agent Comms", version="0.1.0"),
             auth_methods=[],
         )
@@ -134,15 +134,43 @@ class CommsAgent:
     async def new_session(
         self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> NewSessionResponse:
-        thread_name = self._ensure_thread(self._thread_name_for(cwd), cwd)
-        self._next += 1
-        session_id = f"s{self._next}"
+        thread = self._comms.claim_thread(
+            self._thread_name_for(cwd),
+            tags=frozenset({"acp"}),
+            worktree=cwd,
+            pid=os.getpid(),
+        )
+        thread_name = thread.name
+        session_id = thread_name
         self._sessions[session_id] = thread_name
-        self._ensure_live_drain(session_id, thread_name)
-        return NewSessionResponse(session_id=session_id)
+        self._session_titles[session_id] = thread_name
+        self._ensure_live_drain(session_id)
+        return NewSessionResponse(
+            session_id=session_id,
+            field_meta=self._session_metadata(thread_name),
+        )
+
+    async def load_session(
+        self,
+        cwd: str,
+        session_id: str,
+        mcp_servers: list[Any] | None = None,
+        **kwargs: Any,
+    ) -> LoadSessionResponse:
+        """Reconnect an ACP client to its persistent wire thread."""
+        thread = self._comms.registry.require(session_id)
+        if Path(thread.worktree).resolve() != Path(cwd).resolve():
+            raise RequestError.invalid_params(
+                {"reason": "The saved thread belongs to a different working directory."}
+            )
+        self._comms.heartbeat(thread.name)
+        self._sessions[session_id] = thread.name
+        self._session_titles[session_id] = thread.name
+        self._ensure_live_drain(session_id)
+        return LoadSessionResponse(field_meta=self._session_metadata(thread.name))
 
     async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
-        thread_name = self._require_session(session_id)
+        thread_name = await self._sync_session_identity(session_id)
         self._comms.registry.require(thread_name)
         text = self._prompt_text(prompt)
         agent_task: str | None = None
@@ -164,7 +192,7 @@ class CommsAgent:
             f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'} "
             f"sent_seq={sent_seq}"
         )
-        await self._drain_inbox(session_id, thread_name)
+        await self._drain_inbox(session_id)
         if agent_task:
             await self._run_agent_turn(session_id, thread_name, agent_task)
         else:
@@ -172,7 +200,7 @@ class CommsAgent:
             # and DM views remain available for longer-running conversations.
             await self._collect_replies(session_id, thread_name, sent_seq)
         self._debug_log("prompt:returning")
-        self._ensure_live_drain(session_id, thread_name)
+        self._ensure_live_drain(session_id)
         return PromptResponse(stop_reason="end_turn")
 
     def _debug_log(self, message: str) -> None:
@@ -196,7 +224,7 @@ class CommsAgent:
             await asyncio.sleep(REPLY_POLL)
             waited += REPLY_POLL
             quiet += REPLY_POLL
-            pushed = await self._drain_count(session_id, thread_name)
+            pushed = await self._drain_count(session_id)
             if pushed:
                 got_reply = True
                 quiet = 0.0
@@ -250,28 +278,33 @@ class CommsAgent:
         leaf = re.sub(r"[^A-Za-z0-9_-]+", "-", Path(cwd).name or "session").strip("-")
         return leaf or "session"
 
-    def _ensure_thread(self, name: str, cwd: str) -> str:
-        """Register (or reuse) the thread for this session.
+    def _session_metadata(self, thread_name: str) -> dict[str, Any]:
+        return {
+            "agentComms": {
+                "thread": thread_name,
+                "wireRoot": str(self._comms.root.resolve()),
+                "persistence": "shared on-disk wire",
+                "transport": "per-session stdio ACP",
+            }
+        }
 
-        Same name with a different worktree gets folder-disambiguated so a
-        thread's folder can never be silently re-pointed.
-        """
-        from .declarations import Thread
+    async def _sync_session_identity(self, session_id: str) -> str:
+        """Follow permanent aliases and publish the canonical wire name."""
+        cached_name = self._require_session(session_id)
+        thread_name = self._comms.registry.require(cached_name).name
+        self._sessions[session_id] = thread_name
+        if self._client is not None and self._session_titles.get(session_id) != thread_name:
+            await self._client.session_update(
+                session_id=session_id,
+                update=SessionInfoUpdate(
+                    session_update="session_info_update",
+                    title=thread_name,
+                ),
+            )
+            self._session_titles[session_id] = thread_name
+        return thread_name
 
-        if name in self._comms.registry:
-            existing = self._comms.registry.require(name)
-            if existing.worktree == cwd:
-                self._comms.heartbeat(name)
-                return existing.name
-            suffix = 2
-            while f"{name}-{suffix}" in self._comms.registry:
-                suffix += 1
-            name = f"{name}-{suffix}"
-        thread = Thread(name=name, tags=frozenset({"acp"}), worktree=cwd)
-        self._comms.register(thread)
-        return name
-
-    def _ensure_live_drain(self, session_id: str, thread_name: str) -> None:
+    def _ensure_live_drain(self, session_id: str) -> None:
         """Keep one background task per session pushing inbox messages live."""
         if session_id in self._drain_tasks and not self._drain_tasks[session_id].done():
             return
@@ -280,7 +313,7 @@ class CommsAgent:
             while True:
                 await asyncio.sleep(LIVE_DRAIN_INTERVAL)
                 try:
-                    await self._drain_inbox(session_id, thread_name)
+                    await self._drain_inbox(session_id)
                 except asyncio.CancelledError:
                     raise
                 except Exception as error:
@@ -291,10 +324,9 @@ class CommsAgent:
         task = asyncio.create_task(loop())
         self._drain_tasks[session_id] = task
 
-    async def _drain_inbox(self, session_id: str, thread_name: str) -> int:
+    async def _drain_inbox(self, session_id: str) -> int:
         """Push undelivered messages to the client; returns count pushed."""
-        from .declarations import ThreadStatus
-
+        thread_name = await self._sync_session_identity(session_id)
         if self._comms.registry.status(thread_name) is ThreadStatus.STOPPED:
             return 0
         pushed = 0
@@ -314,8 +346,8 @@ class CommsAgent:
         self._comms.acknowledge(thread_name)
         return pushed
 
-    async def _drain_count(self, session_id: str, thread_name: str) -> int:
-        return await self._drain_inbox(session_id, thread_name)
+    async def _drain_count(self, session_id: str) -> int:
+        return await self._drain_inbox(session_id)
 
     async def _run_agent_turn(self, session_id: str, thread_name: str, task: str) -> None:
         """Stream a real coding agent's reply: events to the client, status to the wire."""
@@ -346,31 +378,36 @@ class CommsAgent:
                         context_used=event.get("context_used"),
                         context_size=event.get("context_size"),
                     )
-                    if (
-                        self._client is not None
-                        and session_name
-                        and self._session_titles.get(session_id) != session_name
-                    ):
-                        await self._client.session_update(
-                            session_id=session_id,
-                            update=SessionInfoUpdate(
-                                session_update="session_info_update",
-                                title=session_name,
-                            ),
-                        )
-                        self._session_titles[session_id] = session_name
                 elif kind == "tool_start":
                     self._comms.set_activity(
                         thread_name, ActivityState.WORKING, event.get("title", "")
                     )
                 elif kind == "tool_end":
+                    thread_name = await self._sync_session_identity(session_id)
                     self._comms.set_activity(thread_name, ActivityState.THINKING, task[:80])
                 await self._emit_event(session_id, event)
         finally:
+            thread_name = await self._sync_session_identity(session_id)
             body = "".join(reply_parts).strip()
             if body:
                 self._comms.send(thread_name, GLOBAL_TARGET, body[:4000])
             self._comms.set_activity(thread_name, ActivityState.IDLE)
+
+    async def shutdown(self) -> None:
+        """Stop drains and mark threads owned by this ACP connection offline."""
+        tasks = list(self._drain_tasks.values())
+        self._drain_tasks.clear()
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        for name in set(self._sessions.values()):
+            try:
+                canonical = self._comms.registry.require(name).name
+                if self._comms.registry.status(canonical) is ThreadStatus.RUNNING:
+                    self._comms.stop(canonical)
+            except Exception as error:
+                self._debug_log(f"shutdown error: {error!r}")
 
     async def _emit_text(self, session_id: str, text: str) -> None:
         if self._client is None or not text:
@@ -540,7 +577,10 @@ def main() -> int:
         conn_kwargs: dict[str, Any] = {}
         if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
             conn_kwargs["observers"] = [observe]
-        await run_agent(agent, **conn_kwargs)  # type: ignore[arg-type]
+        try:
+            await run_agent(agent, **conn_kwargs)  # type: ignore[arg-type]
+        finally:
+            await agent.shutdown()
 
     asyncio.run(run())
     return 0

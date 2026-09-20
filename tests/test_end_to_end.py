@@ -215,7 +215,7 @@ class TestEndToEndLifecycle:
 
         async def prompt_flow() -> None:
             await agent.prompt(
-                session_id="s1", prompt=[{"type": "text", "text": "!relay checking inbox"}]
+                session_id="proj", prompt=[{"type": "text", "text": "!relay checking inbox"}]
             )
 
         asyncio.run(prompt_flow())

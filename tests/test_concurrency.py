@@ -24,6 +24,12 @@ def _register_thread(root: str, name: str, start: Event) -> None:
     wire(root).register(Thread(name=name, tags=frozenset({"worker"}), worktree="/tmp"))
 
 
+def _claim_thread(root: str, result_queue: Any, start: Event) -> None:
+    start.wait()
+    thread = wire(root).claim_thread("project", tags=frozenset({"acp"}), worktree="/tmp/project")
+    result_queue.put(thread.name)
+
+
 def _write_runtime_state(root: str, name: str, start: Event) -> None:
     comms = wire(root)
     start.wait()
@@ -109,6 +115,28 @@ class TestConcurrentWire:
         assert {name: comms.ledger_read()[name] for name in names} == {
             name: "ready" for name in names
         }
+
+    def test_concurrent_claims_allocate_unique_names(self, tmp_path: Path) -> None:
+        root = tmp_path / "wire"
+        ctx = multiprocessing.get_context("spawn")
+        start = ctx.Event()
+        result_queue = ctx.Queue()
+        processes = [
+            ctx.Process(target=_claim_thread, args=(str(root), result_queue, start))
+            for _ in range(6)
+        ]
+        for process in processes:
+            process.start()
+        start.set()
+        for process in processes:
+            process.join(timeout=30)
+            if process.is_alive():
+                process.terminate()
+                process.join()
+            assert process.exitcode == 0
+
+        names = {result_queue.get(timeout=5) for _ in processes}
+        assert names == {"project", *(f"project-{index}" for index in range(2, 7))}
 
     def test_delete_cannot_leave_late_messages(self, tmp_path: Path) -> None:
         root = tmp_path / "wire"
