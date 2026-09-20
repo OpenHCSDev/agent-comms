@@ -110,12 +110,10 @@ class Comms:
     def acknowledge(self, name: str, target: str | None = None) -> int:
         """Mark an inbox or one conversation delivered. Returns count acknowledged."""
         with _store_lock(self._wire_lock_path):
-            messages = self.inbox(name, target)
-            self.bus.mark_delivered(name, target)
-            return len(messages)
+            return self.bus.mark_delivered(name, target)
 
     def pending_count(self, name: str, target: str | None = None) -> int:
-        return len(self.inbox(name, target))
+        return self.bus.pending_count(name, target)
 
     # ─── IRC views ────────────────────────────────────────────────────────────
 
