@@ -100,6 +100,7 @@ class TestThreadOps:
 
     def test_stop_terminates_registered_process(self, wired, monkeypatch):
         signals = []
+        alive = [True]
         wired.register(
             Thread(
                 name="signal-test",
@@ -114,7 +115,7 @@ class TestThreadOps:
         )
         monkeypatch.setattr(
             "agent_comms.operations.Comms._process_alive",
-            lambda *args: False,
+            lambda *args: alive.pop() if alive else False,
         )
         monkeypatch.setattr("agent_comms.operations.os.getpgid", lambda pid: pid)
         monkeypatch.setattr(
@@ -126,6 +127,28 @@ class TestThreadOps:
 
         assert signals == [(200, __import__("signal").SIGTERM)]
         assert wired.registry.status("signal-test").value == "stopped"
+
+    def test_stop_marks_dead_process_stopped_without_signaling(self, wired, monkeypatch):
+        wired.register(
+            Thread(
+                name="dead-process",
+                tags=frozenset(),
+                worktree="/tmp",
+                pid=200,
+            )
+        )
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._process_alive",
+            lambda *args: False,
+        )
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._is_local_participant",
+            lambda *args: pytest.fail("dead processes need no ownership check"),
+        )
+
+        wired.stop("dead-process")
+
+        assert wired.registry.status("dead-process").value == "stopped"
 
     def test_archive_requires_stopped_thread(self, wired):
         wired.send("PR111", "fixer", "kept after archive")
