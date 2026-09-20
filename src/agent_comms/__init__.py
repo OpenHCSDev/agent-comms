@@ -22,6 +22,7 @@ from .declarations import (
     current_thread,
 )
 from .operations import Comms, DeleteThreadResult, ForkSpec, RenameThreadResult, wire
+from .tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
 
 __all__ = [
     "Thread",
@@ -46,4 +47,8 @@ __all__ = [
     "RenameThreadResult",
     "ForkSpec",
     "wire",
+    "tool_catalog",
+    "context_tool_catalog",
+    "invoke_tool",
+    "invoke_context_tool",
 ]

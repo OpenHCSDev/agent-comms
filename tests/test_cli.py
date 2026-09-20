@@ -36,6 +36,21 @@ def cli(capsys):
 
 
 class TestCliSuccess:
+    def test_tool_catalog_and_generic_invocation(self, cli, tmp_path):
+        code, out = cli(tmp_path, "tools")
+        assert code == 0
+        assert "comms_delete" in {tool["name"] for tool in out["tools"]}
+        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
+        code, out = cli(
+            tmp_path,
+            "invoke",
+            "--tool",
+            "comms_threads",
+            "--arguments",
+            '{"active_only": true}',
+        )
+        assert code == 0 and out["threads"][0]["name"] == "a"
+
     def test_register_and_threads(self, cli, tmp_path):
         code, out = cli(tmp_path, "register", "--name", "a", "--worktree", "/wt", "--tags", "x,y")
         assert code == 0 and out == {"registered": "a"}
@@ -115,6 +130,10 @@ class TestCliSuccess:
 
 
 class TestCliFailClosed:
+    def test_generic_invocation_rejects_non_object_arguments(self, cli, tmp_path):
+        code, out = cli(tmp_path, "invoke", "--tool", "comms_threads", "--arguments", "[]")
+        assert code == 1 and "JSON object" in out["error"]
+
     def test_unknown_sender_is_error_exit_code(self, cli, tmp_path):
         cli(tmp_path, "register", "--name", "b", "--worktree", "/wt")
         code, out = cli(tmp_path, "send", "--from", "ghost", "--to", "b", "--body", "hi")
