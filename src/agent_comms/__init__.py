@@ -20,7 +20,7 @@ from .declarations import (
     UnregisteredThreadError,
     current_thread,
 )
-from .operations import Comms, ForkSpec, wire
+from .operations import Comms, DeleteThreadResult, ForkSpec, wire
 
 __all__ = [
     "Thread",
@@ -40,6 +40,7 @@ __all__ = [
     "GLOBAL_CHANNEL",
     "current_thread",
     "Comms",
+    "DeleteThreadResult",
     "ForkSpec",
     "wire",
 ]

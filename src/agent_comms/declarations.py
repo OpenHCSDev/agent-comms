@@ -146,6 +146,7 @@ class ThreadStatus(Enum):
     IDLE = "idle"
     STOPPED = "stopped"
     ARCHIVED = "archived"
+    DELETING = "deleting"
 
 
 class ActivityState(Enum):
@@ -238,6 +239,17 @@ class ActivityLog:
     def _load(self) -> list[Activity]:
         with _store_lock(self._path):
             return [Activity.from_wire(record) for record in _jsonl_records(self._path)]
+
+    def remove_thread(self, thread: str) -> int:
+        """Remove all persisted activity for one thread."""
+        with _store_lock(self._path):
+            records = _jsonl_records(self._path)
+            retained = [record for record in records if record.get("thread") != thread]
+            _atomic_write_text(
+                self._path,
+                "".join(f"{json.dumps(record)}\n" for record in retained),
+            )
+        return len(records) - len(retained)
 
 
 @dataclass(frozen=True, slots=True)
@@ -524,6 +536,10 @@ class ThreadRegistry:
     def register(self, thread: Thread, status: ThreadStatus = ThreadStatus.RUNNING) -> None:
         with _store_lock(self._path):
             self._load_unlocked()
+            if self._statuses.get(thread.name) is ThreadStatus.DELETING:
+                raise RelationViolationError(
+                    f"Thread {thread.name!r} is being permanently deleted."
+                )
             self._threads[thread.name] = thread
             self._statuses[thread.name] = status
             self._last_seen[thread.name] = time.time()
@@ -545,6 +561,23 @@ class ThreadRegistry:
             self._statuses[name] = ThreadStatus.ARCHIVED
             self._save_unlocked()
 
+    def begin_delete(self, name: str) -> None:
+        with _store_lock(self._path):
+            self._load_unlocked()
+            if name not in self._threads:
+                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+            status = self._statuses.get(name)
+            if status not in {
+                ThreadStatus.STOPPED,
+                ThreadStatus.ARCHIVED,
+                ThreadStatus.DELETING,
+            }:
+                raise RelationViolationError(
+                    "Stop a running thread before permanently deleting it."
+                )
+            self._statuses[name] = ThreadStatus.DELETING
+            self._save_unlocked()
+
     def remove(self, name: str) -> None:
         """Drop the declaration entirely (rollback, not a status change)."""
         with _store_lock(self._path):
@@ -561,6 +594,8 @@ class ThreadRegistry:
             self._load_unlocked()
             if name not in self._threads:
                 raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+            if self._statuses.get(name) is ThreadStatus.DELETING:
+                raise RelationViolationError(f"Thread {name!r} is being permanently deleted.")
             self._statuses[name] = ThreadStatus.RUNNING
             self._last_seen[name] = time.time()
             self._save_unlocked()
@@ -592,7 +627,8 @@ class ThreadRegistry:
         return {
             name: t
             for name, t in self._threads.items()
-            if self._statuses.get(name) not in {ThreadStatus.STOPPED, ThreadStatus.ARCHIVED}
+            if self._statuses.get(name)
+            not in {ThreadStatus.STOPPED, ThreadStatus.ARCHIVED, ThreadStatus.DELETING}
         }
 
     def peers(self, exclude: str) -> Sequence[str]:
@@ -629,14 +665,17 @@ class MessageBus:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with _store_lock(self._path):
             messages = self._load_log_unlocked()
+            sequence_path = self._path.parent / "bus_meta.json"
+            last_sequence = self._read_last_sequence(sequence_path)
             stored = Message(
                 sender=message.sender,
                 target=GLOBAL_CHANNEL if message.target == "broadcast" else message.target,
                 body=message.body,
                 type=message.type,
                 timestamp=message.timestamp,
-                seq=max((existing.seq for existing in messages), default=0) + 1,
+                seq=max(last_sequence, max((existing.seq for existing in messages), default=0)) + 1,
             )
+            _atomic_write_text(sequence_path, json.dumps({"last_seq": stored.seq}, indent=2))
             _append_jsonl(self._path, stored.to_wire())
         return stored.message_id
 
@@ -754,6 +793,50 @@ class MessageBus:
     def _load_log_unlocked(self) -> list[Message]:
         return [Message.from_wire(record) for record in _jsonl_records(self._path)]
 
+    @staticmethod
+    def _read_last_sequence(sequence_path: Path) -> int:
+        if not sequence_path.exists():
+            return 0
+        data = json.loads(sequence_path.read_text())
+        return int(data.get("last_seq", 0))
+
+    def remove_thread(self, name: str) -> tuple[int, int]:
+        """Purge messages and read markers owned by or targeting a thread."""
+        with _store_lock(self._path):
+            messages = self._load_log_unlocked()
+            retained = [
+                message for message in messages if message.sender != name and message.target != name
+            ]
+            sequence_path = self._path.parent / "bus_meta.json"
+            high_water = max(
+                self._read_last_sequence(sequence_path),
+                max((message.seq for message in messages), default=0),
+            )
+            _atomic_write_text(sequence_path, json.dumps({"last_seq": high_water}, indent=2))
+            _atomic_write_text(
+                self._path,
+                "".join(f"{json.dumps(message.to_wire())}\n" for message in retained),
+            )
+
+        marker_path = self._path.parent / "read_markers.json"
+        with _store_lock(marker_path):
+            markers = self._read_markers_unlocked(marker_path)
+
+            def references_thread(key: str) -> bool:
+                if key == name:
+                    return True
+                try:
+                    scope = json.loads(key)
+                except json.JSONDecodeError:
+                    return False
+                return isinstance(scope, list) and len(scope) == 2 and name in scope
+
+            retained_markers = {
+                key: sequence for key, sequence in markers.items() if not references_thread(key)
+            }
+            _atomic_write_text(marker_path, json.dumps(retained_markers, indent=2))
+        return len(messages) - len(retained), len(markers) - len(retained_markers)
+
 
 # ─── Shared Ledger ────────────────────────────────────────────────────────────
 # Persists the coordination state (ownership map, stack direction, notes).
@@ -790,6 +873,41 @@ class SharedLedger:
             self._data.update(updates)
             self._data["last_updated_by"] = author
             self._save_unlocked()
+
+    def remove_thread(self, name: str) -> int:
+        """Remove exact structural references to a thread identity."""
+
+        def clean(value: object) -> tuple[object, int]:
+            if isinstance(value, dict):
+                result: dict[str, object] = {}
+                removed = 0
+                for key, child in value.items():
+                    if key == name or child == name:
+                        removed += 1
+                        continue
+                    cleaned, count = clean(child)
+                    result[key] = cleaned
+                    removed += count
+                return result, removed
+            if isinstance(value, list):
+                result_list: list[object] = []
+                removed = 0
+                for child in value:
+                    if child == name:
+                        removed += 1
+                        continue
+                    cleaned, count = clean(child)
+                    result_list.append(cleaned)
+                    removed += count
+                return result_list, removed
+            return value, 0
+
+        with _store_lock(self._path):
+            self._load_unlocked()
+            cleaned, removed = clean(self._data)
+            self._data = cleaned if isinstance(cleaned, dict) else {}
+            self._save_unlocked()
+        return removed
 
 
 # ─── Runtime thread resolution ────────────────────────────────────────────────

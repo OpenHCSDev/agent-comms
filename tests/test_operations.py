@@ -4,6 +4,7 @@ import sys
 import pytest
 
 from agent_comms import (
+    ActivityState,
     ForkSpec,
     MessageType,
     RelationViolationError,
@@ -138,6 +139,51 @@ class TestThreadOps:
         assert [message.body for message in wired.dm_history("PR111", "fixer")] == [
             "kept after archive"
         ]
+
+    def test_delete_requires_stopped_thread(self, wired):
+        with pytest.raises(RelationViolationError, match="Stop"):
+            wired.delete("fixer")
+
+    def test_delete_rejects_parent_with_registered_children(self, wired):
+        wired.stop("PR111")
+        with pytest.raises(RelationViolationError, match="child threads"):
+            wired.delete("PR111")
+
+    def test_delete_purges_owned_state_and_preserves_sequence(self, wired):
+        wired.send("PR111", "fixer", "inbound dm")
+        wired.send("fixer", "PR111", "outbound dm")
+        wired.send("fixer", "#all", "authored channel")
+        wired.send("PR111", "#all", "retained channel")
+        wired.acknowledge("fixer", "PR111")
+        wired.acknowledge("PR111", "fixer")
+        wired.set_activity("fixer", ActivityState.WORKING, "delete me")
+        wired.set_agent_info("fixer", model="test/model")
+        wired.ledger_merge(
+            {
+                "fixer": {"state": "owned"},
+                "owner": "fixer",
+                "members": ["fixer", "PR111"],
+            },
+            author="fixer",
+        )
+
+        wired.stop("fixer")
+        result = wired.delete("fixer")
+
+        assert result.messages_removed == 3
+        assert result.markers_removed == 2
+        assert result.activity_events_removed == 1
+        assert result.runtime_removed
+        assert result.ledger_references_removed == 4
+        assert "fixer" not in wired.registry
+        assert [message.body for message in wired.full_history()] == ["retained channel"]
+        assert "fixer" not in wired.all_activity()
+        assert "fixer" not in wired.all_agent_info()
+        assert wired.ledger_read() == {"members": ["PR111"]}
+        assert all("fixer" not in key for key in wired.bus._read_markers())
+
+        wired.send("PR111", "#all", "after delete")
+        assert [message.seq for message in wired.full_history()] == [4, 5]
 
     @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="uses /proc")
     def test_stop_terminates_real_process(self, wired):

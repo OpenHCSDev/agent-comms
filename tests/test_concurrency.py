@@ -9,7 +9,7 @@ from multiprocessing.synchronize import Event
 from pathlib import Path
 from typing import Any
 
-from agent_comms import ActivityState, Thread, wire
+from agent_comms import ActivityState, Thread, UnregisteredThreadError, wire
 
 
 def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
@@ -30,6 +30,23 @@ def _write_runtime_state(root: str, name: str, start: Event) -> None:
     comms.set_agent_info(name, model=f"provider/{name}", context_used=25, context_size=100)
     comms.set_activity(name, ActivityState.WORKING, f"work-{name}")
     comms.ledger_merge({name: "ready"}, author=name)
+
+
+def _send_while_deleting(root: str, name: str, start: Event) -> None:
+    comms = wire(root)
+    start.wait()
+    for index in range(100):
+        try:
+            comms.send(name, "#all", f"race:{index}")
+        except UnregisteredThreadError:
+            return
+
+
+def _delete_thread(root: str, name: str, start: Event) -> None:
+    comms = wire(root)
+    start.wait()
+    comms.stop(name)
+    comms.delete(name)
 
 
 def _run_concurrently(
@@ -92,6 +109,36 @@ class TestConcurrentWire:
         assert {name: comms.ledger_read()[name] for name in names} == {
             name: "ready" for name in names
         }
+
+    def test_delete_cannot_leave_late_messages(self, tmp_path: Path) -> None:
+        root = tmp_path / "wire"
+        comms = wire(root)
+        comms.register(Thread(name="delete-me", tags=frozenset(), worktree="/tmp"))
+        comms.register(Thread(name="keeper", tags=frozenset(), worktree="/tmp"))
+
+        ctx = multiprocessing.get_context("spawn")
+        start = ctx.Event()
+        sender = ctx.Process(
+            target=_send_while_deleting,
+            args=(str(root), "delete-me", start),
+        )
+        deleter = ctx.Process(
+            target=_delete_thread,
+            args=(str(root), "delete-me", start),
+        )
+        sender.start()
+        deleter.start()
+        start.set()
+        for process in (sender, deleter):
+            process.join(timeout=30)
+            if process.is_alive():
+                process.terminate()
+                process.join()
+            assert process.exitcode == 0
+
+        result = wire(root)
+        assert "delete-me" not in result.registry
+        assert all(message.sender != "delete-me" for message in result.full_history())
 
 
 class TestCrashRecovery:
