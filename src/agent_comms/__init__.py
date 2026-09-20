@@ -21,7 +21,14 @@ from .declarations import (
     UnregisteredThreadError,
     current_thread,
 )
-from .operations import Comms, DeleteThreadResult, ForkSpec, RenameThreadResult, wire
+from .operations import (
+    Comms,
+    DeleteThreadResult,
+    ForkSpec,
+    RenameThreadResult,
+    TranscriptEvent,
+    wire,
+)
 from .tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
 
 __all__ = [
@@ -45,6 +52,7 @@ __all__ = [
     "Comms",
     "DeleteThreadResult",
     "RenameThreadResult",
+    "TranscriptEvent",
     "ForkSpec",
     "wire",
     "tool_catalog",

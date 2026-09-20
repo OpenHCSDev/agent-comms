@@ -41,6 +41,7 @@ from acp.schema import (
     ToolCallProgress,
     ToolCallStart,
     UsageUpdate,
+    UserMessageChunk,
 )
 
 from . import backend
@@ -180,6 +181,20 @@ class CommsAgent:
         self._sessions[session_id] = thread.name
         self._session_titles[session_id] = thread.name
         self._ensure_live_drain(session_id)
+        for event in self._comms.thread_transcript(thread.name):
+            await self._emit_event(
+                session_id,
+                {
+                    "type": event.kind,
+                    "text": event.text,
+                    "id": event.tool_call_id,
+                    "name": event.tool_name,
+                    "title": event.tool_name,
+                    "args": event.raw_input,
+                    "output": event.text,
+                    "ok": event.ok,
+                },
+            )
         return LoadSessionResponse(field_meta=self._session_metadata(thread.name))
 
     async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
@@ -538,7 +553,17 @@ class CommsAgent:
         if self._client is None:
             return
         kind = event.get("type")
-        if kind == "chunk":
+        if kind == "user":
+            text = event.get("text") or ""
+            if text:
+                await self._client.session_update(
+                    session_id=session_id,
+                    update=UserMessageChunk(
+                        session_update="user_message_chunk",
+                        content=TextContentBlock(type="text", text=text),
+                    ),
+                )
+        elif kind in {"chunk", "assistant", "notice"}:
             text = event.get("text") or ""
             if text:
                 await self._emit_text(session_id, text)
