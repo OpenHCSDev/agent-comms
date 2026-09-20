@@ -64,6 +64,13 @@ class DeleteThreadResult:
     ledger_references_removed: int
 
 
+@dataclass(frozen=True, slots=True)
+class RenameThreadResult:
+    previous: str
+    current: str
+    changed: bool
+
+
 class Comms:
     """Wire of registry, bus, and ledger rooted at one directory."""
 
@@ -128,11 +135,11 @@ class Comms:
     def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:
         """Declare a thread's current activity (thinking/working/idle)."""
         with _store_lock(self._wire_lock_path):
-            self.registry.require(thread)
-            self.activity.emit(Activity(thread=thread, state=state, detail=detail))
+            canonical = self.registry.require(thread).name
+            self.activity.emit(Activity(thread=canonical, state=state, detail=detail))
 
     def activity_of(self, thread: str) -> Activity:
-        return self.activity.current(thread)
+        return self.activity.current(self.registry.require(thread).name)
 
     def all_activity(self) -> Mapping[str, Activity]:
         return self.activity.all_current()
@@ -148,10 +155,10 @@ class Comms:
     ) -> None:
         """Record the latest model and context metadata for a thread."""
         with _store_lock(self._wire_lock_path):
-            self.registry.require(thread)
+            canonical = self.registry.require(thread).name
             self.runtime_info.set(
                 AgentRuntimeInfo(
-                    thread=thread,
+                    thread=canonical,
                     model=model,
                     session_name=session_name,
                     context_used=context_used,
@@ -160,8 +167,7 @@ class Comms:
             )
 
     def agent_info_of(self, thread: str) -> AgentRuntimeInfo | None:
-        self.registry.require(thread)
-        return self.runtime_info.get(thread)
+        return self.runtime_info.get(self.registry.require(thread).name)
 
     def all_agent_info(self) -> Mapping[str, AgentRuntimeInfo]:
         return self.runtime_info.all()
@@ -211,7 +217,8 @@ class Comms:
         missing session_file keeps the prior one. Explicit values always win.
         """
         with _store_lock(self._wire_lock_path):
-            existing = self.registry.all_threads().get(thread.name)
+            canonical = self.registry.canonical_name(thread.name)
+            existing = self.registry.all_threads().get(canonical)
             tags = thread.tags
             session_file = thread.session_file
             if existing is not None:
@@ -219,9 +226,13 @@ class Comms:
                     tags = existing.tags
                 if session_file is None:
                     session_file = existing.session_file
-            if tags != thread.tags or session_file != thread.session_file:
+            if (
+                canonical != thread.name
+                or tags != thread.tags
+                or session_file != thread.session_file
+            ):
                 thread = Thread(
-                    name=thread.name,
+                    name=canonical,
                     tags=tags,
                     worktree=thread.worktree,
                     parent=thread.parent,
@@ -230,6 +241,21 @@ class Comms:
                     session_file=session_file,
                 )
             self.registry.register(thread)
+
+    def rename_self(self, new_name: str) -> RenameThreadResult:
+        """Rename the caller's own running thread, retaining its old aliases."""
+        caller = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")
+        if not caller:
+            raise RelationViolationError("Self rename requires PI_AGENT_ID or AGENT_COMMS_THREAD.")
+        with _store_lock(self._wire_lock_path):
+            previous, current = self.registry.rename(caller, new_name)
+            if previous == current:
+                return RenameThreadResult(previous, current, False)
+            self.bus.rename_thread(previous, current)
+            self.activity.rename_thread(previous, current)
+            self.runtime_info.rename_thread(previous, current)
+            self.ledger.rename_thread(previous, current)
+            return RenameThreadResult(previous, current, True)
 
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
         """Summarize threads with status and pending counts."""
@@ -331,9 +357,10 @@ class Comms:
         except OSError:
             return False
         environ = dict(item.split(b"=", 1) for item in entries if item and b"=" in item)
-        expected = thread.name.encode()
+        expected = {name.encode() for name in self.registry.aliases_for(thread.name)}
         name_matches = any(
-            item in {b"AGENT_COMMS_THREAD=" + expected, b"PI_AGENT_ID=" + expected}
+            item.startswith((b"AGENT_COMMS_THREAD=", b"PI_AGENT_ID="))
+            and item.split(b"=", 1)[1] in expected
             for item in entries
         )
         root = Path(environ.get(b"AGENT_COMMS_ROOT", b"~/.agent-comms").decode()).expanduser()
@@ -342,31 +369,34 @@ class Comms:
     def archive(self, name: str) -> None:
         """Hide a stopped participant from presence while retaining messages."""
         with _store_lock(self._wire_lock_path):
-            if self.registry.status(name) is not ThreadStatus.STOPPED:
+            canonical = self.registry.require(name).name
+            if self.registry.status(canonical) is not ThreadStatus.STOPPED:
                 raise RelationViolationError("Stop a running thread before archiving it.")
-            self.registry.archive(name)
-            self.runtime_info.remove(name)
+            self.registry.archive(canonical)
+            self.runtime_info.remove(canonical)
 
     def delete(self, name: str) -> DeleteThreadResult:
         """Permanently remove one stopped, child-free thread and its owned state."""
         with _store_lock(self._wire_lock_path):
+            canonical = self.registry.require(name).name
             threads = self.registry.all_threads()
-            self.registry.require(name)
-            children = sorted(thread.name for thread in threads.values() if thread.parent == name)
+            children = sorted(
+                thread.name for thread in threads.values() if thread.parent == canonical
+            )
             if children:
                 raise RelationViolationError(
                     f"Cannot delete {name!r}; child threads still reference it: "
                     + ", ".join(children)
                 )
-            self.registry.begin_delete(name)
-            messages_removed, markers_removed = self.bus.remove_thread(name)
-            activity_removed = self.activity.remove_thread(name)
-            runtime_removed = self.runtime_info.get(name) is not None
-            self.runtime_info.remove(name)
-            ledger_removed = self.ledger.remove_thread(name)
-            self.registry.remove(name)
+            self.registry.begin_delete(canonical)
+            messages_removed, markers_removed = self.bus.remove_thread(canonical)
+            activity_removed = self.activity.remove_thread(canonical)
+            runtime_removed = self.runtime_info.get(canonical) is not None
+            self.runtime_info.remove(canonical)
+            ledger_removed = self.ledger.remove_thread(canonical)
+            self.registry.remove(canonical)
             return DeleteThreadResult(
-                name=name,
+                name=canonical,
                 messages_removed=messages_removed,
                 markers_removed=markers_removed,
                 activity_events_removed=activity_removed,

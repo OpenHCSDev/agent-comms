@@ -51,13 +51,35 @@ export default function (pi: ExtensionAPI) {
 				Type.Boolean({ description: "Exclude stopped threads" }),
 			),
 		}),
-		async execute() {
+		async execute(_id, params) {
 			const args = ["threads"];
-			// Caller context (env PI_AGENT_ID etc.) is handled by the Python core.
+			if (params.active_only) args.push("--active-only");
 			const result = run(args);
 			return {
 				content: [
 					{ type: "text", text: JSON.stringify(result, null, 2) },
+				],
+				details: result,
+			};
+		},
+	});
+
+	pi.registerTool({
+		name: "comms_rename_self",
+		label: "Rename Comms Thread",
+		description:
+			"Rename your own agent-comms thread identity (the name peers use for DMs). This does not rename the Pi or ACP session title and cannot rename another thread. Your old names remain valid permanent routing aliases.",
+		parameters: Type.Object({
+			new_name: Type.String({ description: "Your new thread name" }),
+		}),
+		async execute(_id, params) {
+			const result = run(["rename-self", "--to", params.new_name]);
+			return {
+				content: [
+					{
+						type: "text",
+						text: `renamed thread ${result.previous} to ${result.current}; ${result.previous} remains a routing alias`,
+					},
 				],
 				details: result,
 			};

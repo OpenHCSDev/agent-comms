@@ -140,6 +140,63 @@ class TestThreadOps:
             "kept after archive"
         ]
 
+    def test_rename_self_preserves_routing_history_and_state(self, wired, monkeypatch):
+        wired.send("fixer", "PR111", "before rename")
+        assert wired.acknowledge("PR111", "fixer") == 1
+        wired.set_activity("PR111", ActivityState.WORKING, "renaming")
+        wired.set_agent_info("PR111", model="test/model")
+        wired.ledger_merge({"owner": "PR111", "members": ["PR111", "fixer"]}, author="PR111")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
+
+        result = wired.rename_self("planner")
+
+        assert result.previous == "PR111"
+        assert result.current == "planner"
+        assert result.changed
+        assert wired.registry.require("PR111").name == "planner"
+        assert wired.registry.require("planner").tags == frozenset({"base"})
+        assert wired.registry.require("fixer").parent == "planner"
+        assert wired.activity_of("planner").detail == "renaming"
+        assert wired.agent_info_of("planner").model == "test/model"
+        assert wired.ledger_read()["owner"] == "planner"
+        assert wired.pending_count("planner", "fixer") == 0
+
+        wired.send("fixer", "PR111", "old alias routes")
+        wired.send("PR111", "fixer", "old process sends canonically")
+        assert [message.body for message in wired.inbox("planner", "fixer")] == ["old alias routes"]
+        history = wired.dm_history("PR111", "fixer")
+        assert [message.body for message in history] == [
+            "before rename",
+            "old alias routes",
+            "old process sends canonically",
+        ]
+        assert history[-2].target == "PR111"
+        assert history[-1].sender == "planner"
+        with pytest.raises(RelationViolationError, match="cannot message itself"):
+            wired.send("PR111", "planner", "alias self-DM")
+
+    def test_rename_self_rejects_collisions_and_stopped_threads(self, wired, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
+        with pytest.raises(RelationViolationError, match="already in use"):
+            wired.rename_self("PR111")
+        wired.stop("fixer")
+        with pytest.raises(RelationViolationError, match="running"):
+            wired.rename_self("renamed")
+
+    def test_old_alias_cannot_be_reused(self, wired, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
+        wired.rename_self("reviewer")
+        with pytest.raises(RelationViolationError, match="permanent alias"):
+            wired.registry.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/other"))
+
+    def test_delete_reserves_renamed_identity(self, wired, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
+        wired.rename_self("reviewer")
+        wired.stop("reviewer")
+        wired.delete("reviewer")
+        with pytest.raises(RelationViolationError, match="permanent alias"):
+            wired.register(Thread(name="reviewer", tags=frozenset(), worktree="/tmp"))
+
     def test_delete_requires_stopped_thread(self, wired):
         with pytest.raises(RelationViolationError, match="Stop"):
             wired.delete("fixer")

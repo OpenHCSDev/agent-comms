@@ -83,6 +83,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_stop = sub.add_parser("stop", help="Mark thread stopped")
     p_stop.add_argument("--name", required=True)
 
+    p_rename = sub.add_parser("rename-self", help="Rename your own running thread")
+    p_rename.add_argument("--to", dest="new_name", required=True)
+
     p_fork = sub.add_parser("fork", help="Fork a child pi thread")
     p_fork.add_argument("--name", required=True)
     p_fork.add_argument("--parent", required=True)
@@ -173,6 +176,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "stop":
             comms.stop(args.name)
             _emit({"stopped": args.name})
+        elif args.command == "rename-self":
+            result = comms.rename_self(args.new_name)
+            _emit(
+                {
+                    "previous": result.previous,
+                    "current": result.current,
+                    "changed": result.changed,
+                }
+            )
         elif args.command == "fork":
             spec = ForkSpec(
                 name=args.name,

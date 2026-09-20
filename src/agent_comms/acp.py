@@ -262,7 +262,7 @@ class CommsAgent:
             existing = self._comms.registry.require(name)
             if existing.worktree == cwd:
                 self._comms.heartbeat(name)
-                return name
+                return existing.name
             suffix = 2
             while f"{name}-{suffix}" in self._comms.registry:
                 suffix += 1
@@ -320,9 +320,15 @@ class CommsAgent:
     async def _run_agent_turn(self, session_id: str, thread_name: str, task: str) -> None:
         """Stream a real coding agent's reply: events to the client, status to the wire."""
         thread = self._comms.registry.require(thread_name)
+        thread_name = thread.name
+        self._sessions[session_id] = thread_name
         self._comms.set_activity(thread_name, ActivityState.THINKING, task[:80])
         worktree = thread.worktree if Path(thread.worktree).is_dir() else str(Path.cwd())
-        env_extra = {"AGENT_COMMS_THREAD": thread_name}
+        env_extra = {
+            "AGENT_COMMS_THREAD": thread_name,
+            "PI_AGENT_ID": thread_name,
+            "AGENT_COMMS_ROOT": str(self._comms.root),
+        }
         reply_parts: list[str] = []
         try:
             async for event in backend.stream_agent_events(

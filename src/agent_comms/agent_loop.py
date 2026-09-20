@@ -66,10 +66,10 @@ class Participant:
         except UnregisteredThreadError:
             name = os.environ.get("AGENT_COMMS_THREAD") or "participant"
             thread = Thread(name=name, tags=frozenset({"bot"}), worktree=os.getcwd())
-        self._thread_name = thread.name
         self._comms.register(thread)
+        self._thread_name = self._comms.registry.require(thread.name).name
         print(
-            f"participant {thread.name!r} live on wire {self._comms.root}"
+            f"participant {self._thread_name!r} live on wire {self._comms.root}"
             f" (backend: {self._agent_bin}, tags: {sorted(thread.tags)})",
             flush=True,
         )
@@ -88,6 +88,8 @@ class Participant:
     # ─── One poll ─────────────────────────────────────────────────────────────
 
     async def _tick(self, name: str) -> None:
+        name = self._comms.registry.require(name).name
+        self._thread_name = name
         self._comms.heartbeat(name)
         inbox = self._comms.inbox(name)
         if not inbox:
@@ -110,14 +112,32 @@ class Participant:
     # ─── Backend ──────────────────────────────────────────────────────────────
 
     async def _ask_agent(self, name: str, message: Message) -> str:
+        thread = self._comms.registry.require(name)
+        name = thread.name
         sender = None
         if message.sender in self._comms.registry:
             sender = self._comms.registry.require(message.sender)
         worktree = sender.worktree if sender and Path(sender.worktree).is_dir() else os.getcwd()
+        prompt = (
+            f"You are agent-comms thread {name!r}. Message #{message.seq} from "
+            f"{message.sender!r} to {message.target!r} follows. Use agent-comms tools "
+            "for requested coordination or lifecycle actions. Do not call comms_send "
+            "for your reply; your final response is delivered automatically.\n\n"
+            f"{message.body}"
+        )
+        env_extra = {
+            "AGENT_COMMS_THREAD": name,
+            "PI_AGENT_ID": name,
+            "AGENT_COMMS_ROOT": str(self._comms.root),
+        }
         reply_parts: list[str] = []
         try:
             async for event in backend.stream_agent_events(
-                self._agent_bin, self._agent_args, message.body, worktree
+                self._agent_bin,
+                self._agent_args,
+                prompt,
+                worktree,
+                env_extra,
             ):
                 kind = event.get("type")
                 if kind == "chunk":
