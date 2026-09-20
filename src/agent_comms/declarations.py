@@ -894,6 +894,13 @@ class MessageBus:
         markers[key] = max(msg.seq for msg in inbox)
         self._write_markers(markers)
 
+    def mark_delivered_through(self, name: str, sequence: int) -> None:
+        """Advance a thread's global inbox cursor without loading messages."""
+        canonical = self._registry.require(name).name
+        if sequence < 0:
+            raise ValueError("Delivery sequence cannot be negative.")
+        self._write_markers({canonical: sequence})
+
     def dm_history(self, a: str, b: str) -> Sequence[Message]:
         """Full conversation between two threads, in seq order."""
         a = self._registry.require(a).name

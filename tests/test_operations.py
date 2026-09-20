@@ -69,6 +69,18 @@ class TestMessaging:
 
 
 class TestThreadOps:
+    def test_claim_thread_can_baseline_inbox_atomically(self, wired):
+        wired.send("PR111", "#all", "before claim")
+        claimed = wired.claim_thread(
+            "viewer",
+            tags=frozenset({"acp"}),
+            worktree="/tmp/project",
+            start_at_latest=True,
+        )
+        assert wired.inbox(claimed.name) == []
+        wired.send("PR111", "#all", "after claim")
+        assert [message.body for message in wired.inbox(claimed.name)] == ["after claim"]
+
     def test_runtime_info_is_exposed_in_presence(self, wired):
         wired.set_agent_info("fixer", model="openrouter/model", context_used=25, context_size=100)
         row = next(row for row in wired.who() if row["name"] == "fixer")
