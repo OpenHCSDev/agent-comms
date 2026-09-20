@@ -279,6 +279,7 @@ async def stream_agent_events(
             if proc.stdin is not None:
                 stats_requested = True
                 try:
+                    proc.stdin.write((json.dumps({"type": "get_state"}) + "\n").encode())
                     proc.stdin.write((json.dumps({"type": "get_session_stats"}) + "\n").encode())
                     await proc.stdin.drain()
                 except (BrokenPipeError, ConnectionResetError):

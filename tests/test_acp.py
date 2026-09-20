@@ -182,6 +182,40 @@ class TestAgentTurn:
         assert response.stop_reason == "end_turn"
         assert [message.body for message in wired.channel_history("#all")] == ["just chat"]
 
+    async def test_agent_session_name_updates_client_once(self, wired, tmp_path, monkeypatch):
+        agent = self._agent_with_stub(tmp_path, wired)
+        sent: list = []
+
+        class FakeClient:
+            async def session_update(self, session_id=None, update=None, **kw):
+                sent.append(update)
+
+        async def events(*args, **kwargs):
+            yield {
+                "type": "agent_info",
+                "session_name": "Agent-chosen title",
+                "model": "test/model",
+            }
+            yield {
+                "type": "agent_info",
+                "session_name": "Agent-chosen title",
+                "model": "test/model",
+            }
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        agent._client = FakeClient()
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+
+        await agent._run_agent_turn("s1", "proj", "name this session")
+
+        title_updates = [
+            update
+            for update in sent
+            if getattr(update, "session_update", None) == "session_info_update"
+        ]
+        assert len(title_updates) == 1
+        assert title_updates[0].title == "Agent-chosen title"
+
 
 class TestWireProtocol:
     def test_real_stdio_roundtrip(self, tmp_path):
