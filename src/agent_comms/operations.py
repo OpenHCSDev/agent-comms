@@ -26,6 +26,7 @@ from .declarations import (
     AgentRuntimeInfo,
     Message,
     MessageBus,
+    MessagePage,
     MessageType,
     RelationViolationError,
     RuntimeInfoStore,
@@ -125,6 +126,39 @@ class Comms:
     def channel_history(self, target: str) -> Sequence[Message]:
         """Full history of one channel (``#all`` or a tag channel)."""
         return self.bus.channel_history(target)
+
+    def dm_history_page(
+        self,
+        a: str,
+        b: str,
+        *,
+        before: int | None = None,
+        after: int | None = None,
+        limit: int = 100,
+        max_bytes: int = 256 * 1024,
+    ) -> MessagePage:
+        """Bounded DM history for any client adapter."""
+        return self.bus.dm_history_page(
+            a, b, before=before, after=after, limit=limit, max_bytes=max_bytes
+        )
+
+    def channel_history_page(
+        self,
+        target: str,
+        *,
+        before: int | None = None,
+        after: int | None = None,
+        limit: int = 100,
+        max_bytes: int = 256 * 1024,
+    ) -> MessagePage:
+        """Bounded channel history for any client adapter."""
+        return self.bus.channel_history_page(
+            target, before=before, after=after, limit=limit, max_bytes=max_bytes
+        )
+
+    def message_high_water(self) -> int:
+        """Global message cursor used by polling clients to avoid idle scans."""
+        return self.bus.latest_sequence()
 
     def full_history(self) -> Sequence[Message]:
         """Every message on the wire, in seq order (the combined view)."""
