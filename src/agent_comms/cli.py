@@ -244,6 +244,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "activity_events_removed": delete_result.activity_events_removed,
                     "runtime_removed": delete_result.runtime_removed,
                     "ledger_references_removed": delete_result.ledger_references_removed,
+                    "detached_children": list(delete_result.detached_children),
                 }
             )
         elif args.command == "rename-self":

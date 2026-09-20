@@ -23,7 +23,7 @@ import time
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 
@@ -570,6 +570,11 @@ class ThreadRegistry:
             )
             self._statuses[name] = ThreadStatus(data.get("status", "running"))
             self._last_seen[name] = data.get("last_seen", 0.0)
+        # Older stores retained aliases after deletion. Only a retained thread
+        # (including an archived one) can own a name reservation.
+        self._aliases = {
+            alias: target for alias, target in self._aliases.items() if target in self._threads
+        }
 
     def _save_unlocked(self) -> None:
         _atomic_write_text(
@@ -712,19 +717,26 @@ class ThreadRegistry:
             self._statuses[name] = ThreadStatus.DELETING
             self._save_unlocked()
 
-    def remove(self, name: str) -> None:
-        """Drop the declaration entirely (rollback, not a status change)."""
+    def remove(self, name: str) -> tuple[str, ...]:
+        """Remove a declaration and atomically detach its surviving children."""
         with _store_lock(self._path):
             self._load_unlocked()
             name = self._aliases.get(name, name)
             if name not in self._threads:
                 raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+            detached = tuple(
+                sorted(child.name for child in self._threads.values() if child.parent == name)
+            )
+            for child_name in detached:
+                self._threads[child_name] = replace(self._threads[child_name], parent=None)
             del self._threads[name]
             self._statuses.pop(name, None)
             self._last_seen.pop(name, None)
-            if name in self._aliases.values():
-                self._aliases[name] = name
+            self._aliases = {
+                alias: target for alias, target in self._aliases.items() if target != name
+            }
             self._save_unlocked()
+            return detached
 
     def heartbeat(self, name: str) -> None:
         with _store_lock(self._path):
@@ -984,6 +996,19 @@ class MessageBus:
             raise ValueError(f"{target!r} is not a channel target.")
         normalized = GLOBAL_CHANNEL if target == "broadcast" else target
         return [msg for msg in self._load_log() if msg.target == normalized]
+
+    def incoming_page(self, name: str, *, after: int, limit: int = 100) -> MessagePage:
+        """A bounded delivery stream independent of UI read acknowledgments."""
+        thread = self._registry.require(name)
+        aliases = self._registry.aliases_for(thread.name)
+        targets = {*aliases, GLOBAL_CHANNEL, "broadcast", *(f"#{tag}" for tag in thread.tags)}
+        return self._history_page(
+            lambda message: message.sender not in aliases and message.target in targets,
+            before=None,
+            after=after,
+            limit=limit,
+            max_bytes=256 * 1024,
+        )
 
     def dm_history_page(
         self,

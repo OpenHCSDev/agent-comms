@@ -229,7 +229,8 @@ class TestAgentTurn:
         assert True  # stub streams via stdout; covered by wire assertions below
         # The reply was posted to the wire (stub echoes the task).
         history = [m.body for m in agent._comms.channel_history("#all")]
-        assert "fix the flake" in history
+        assert len(history) == 1 and history[0].endswith("fix the flake")
+        assert "you are thread 'proj'" in history[0]
 
     async def test_agent_turn_runs_in_thread_worktree(self, wired, tmp_path):
         worktree = tmp_path / "somewhere"
@@ -289,7 +290,8 @@ class TestAgentTurn:
             session_id="proj", prompt=[{"type": "text", "text": "just chat"}]
         )
         assert response.stop_reason == "end_turn"
-        assert [message.body for message in wired.channel_history("#all")] == ["just chat"]
+        replies = wired.channel_history("#all")
+        assert len(replies) == 1 and replies[0].body.endswith("just chat")
 
     async def test_cancel_terminates_active_backend_process(self, wired, tmp_path):
         pid_path = tmp_path / "backend.pid"
@@ -529,8 +531,13 @@ class TestCrossClient:
             )
 
         asyncio.run(flow())
-        assert len(sent) == 1
-        assert "from the cli side" in sent[0].content.text
+        incoming = [
+            update
+            for update in sent
+            if "incoming" in (update.field_meta or {}).get("agentComms", {})
+        ]
+        assert len(incoming) == 1
+        assert "from the cli side" in incoming[0].content.text
         # The ACP prompt itself is visible on the CLI side.
         assert [m.body for m in comms.inbox("cli-agent")] == ["checking inbox"]
 
@@ -652,6 +659,7 @@ class TestAgentTurnForwarding:
         )
         kinds = [type(u).__name__ for u in sent]
         assert kinds == [
+            "AgentMessageChunk",  # turn-started metadata before any model output
             "AgentThoughtChunk",  # actual backend thinking
             "AgentMessageChunk",  # "running"
             "ToolCallStart",  # Run pwd
@@ -660,18 +668,21 @@ class TestAgentTurnForwarding:
             "AgentMessageChunk",  # " finished"
             "AgentMessageChunk",  # turn-settled metadata
         ]
-        assert sent[0].content.text == "Inspecting files"
-        tool_call = sent[2]
+        turn_id = sent[0].field_meta["agentComms"]["turnId"]
+        assert turn_id and sent[0].field_meta["agentComms"]["turnStarted"]
+        assert sent[1].content.text == "Inspecting files"
+        tool_call = sent[3]
         assert tool_call.tool_call_id == "t1"
         assert tool_call.title == "Run pwd"
         assert tool_call.kind == "execute"
         assert tool_call.raw_input == {"command": "pwd"}
-        assert sent[3].status == "in_progress"
-        assert sent[3].content[0].content.text == "working"
-        progress = sent[4]
+        assert sent[4].status == "in_progress"
+        assert sent[4].content[0].content.text == "working"
+        progress = sent[5]
         assert progress.status == "completed"
         assert progress.content[0].content.text == "/wt"
-        assert sent[-1].field_meta == {"agentComms": {"turnSettled": True}}
+        assert sent[-1].field_meta == {"agentComms": {"turnSettled": True, "turnId": turn_id}}
+        assert not agent._active_turns
 
     async def test_turn_sets_wire_activity(self, wired, tmp_path):
         import sys as _sys

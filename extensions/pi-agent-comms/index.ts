@@ -51,6 +51,7 @@ export default function (pi: ExtensionAPI) {
 		? process.env.PI_AGENT_ID || process.env.AGENT_COMMS_THREAD
 		: undefined;
 	const task = process.env.PI_TASK || "";
+	const managed = process.env.AGENT_COMMS_MANAGED === "1";
 	const activity = (state: string, detail = "") => {
 		if (!forkThread) return;
 		try {
@@ -78,8 +79,7 @@ export default function (pi: ExtensionAPI) {
 					forkThread,
 					"--session-file",
 					sessionFile,
-					"--pid",
-					String(process.pid),
+					...(managed ? [] : ["--pid", String(process.pid)]),
 				]);
 			}
 		});
@@ -92,6 +92,7 @@ export default function (pi: ExtensionAPI) {
 		pi.on("agent_settled", async () => activity("idle"));
 		pi.on("session_shutdown", async () => {
 			activity("idle");
+			if (managed) return;
 			try {
 				run(["release", "--name", forkThread]);
 			} catch {

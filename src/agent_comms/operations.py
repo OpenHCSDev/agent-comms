@@ -90,6 +90,7 @@ class DeleteThreadResult:
     activity_events_removed: int
     runtime_removed: bool
     ledger_references_removed: int
+    detached_children: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +151,13 @@ class Comms:
         """Mark an inbox or one conversation delivered. Returns count acknowledged."""
         with _store_lock(self._wire_lock_path):
             return self.bus.mark_delivered(name, target)
+
+    def incoming_page(self, name: str, *, after: int, limit: int = 100) -> MessagePage:
+        return self.bus.incoming_page(name, after=after, limit=limit)
+
+    def acknowledge_through(self, name: str, sequence: int) -> None:
+        with _store_lock(self._wire_lock_path):
+            self.bus.mark_delivered_through(self.registry.require(name).name, sequence)
 
     def pending_count(self, name: str, target: str | None = None) -> int:
         return self.bus.pending_count(name, target)
@@ -262,6 +270,7 @@ class Comms:
     def _presence(self, *, include_pending: bool) -> Sequence[Mapping]:
         rows = []
         runtime_info = self.runtime_info.all()
+        activities = self.activity.all_current()
         for name, t in sorted(self.registry.all_threads().items()):
             if self.registry.status(name) in {
                 ThreadStatus.ARCHIVED,
@@ -269,6 +278,7 @@ class Comms:
             }:
                 continue
             info = runtime_info.get(name)
+            activity = activities.get(name)
             row = {
                 "name": name,
                 "status": self.registry.status(name).value,
@@ -283,6 +293,8 @@ class Comms:
                 "context_size": info.context_size if info else None,
                 "context_percent": info.context_percent if info else None,
                 "resumable": bool(t.session_file),
+                "activity": activity.state.value if activity else ActivityState.IDLE.value,
+                "activity_detail": activity.detail if activity else "",
             }
             if include_pending:
                 row["pending"] = self.pending_count(name)
@@ -492,6 +504,7 @@ class Comms:
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
         """Summarize threads with status and pending counts."""
         threads = self.registry.active_threads() if active_only else self.registry.all_threads()
+        activities = self.activity.all_current()
         return [
             {
                 "name": name,
@@ -501,6 +514,8 @@ class Comms:
                 "tags": sorted(t.tags),
                 "worktree": t.worktree,
                 "pending": self.pending_count(name),
+                "activity": activities[name].state.value if name in activities else "idle",
+                "activity_detail": activities[name].detail if name in activities else "",
             }
             for name, t in sorted(threads.items())
         ]
@@ -523,6 +538,18 @@ class Comms:
     def heartbeat(self, name: str) -> None:
         with _store_lock(self._wire_lock_path):
             self.registry.heartbeat(name)
+
+    def acquire_thread(self, name: str, *, owner_pid: int) -> Thread:
+        """Claim an offline thread, or return its existing live owner unchanged."""
+        from dataclasses import replace
+
+        with _store_lock(self._wire_lock_path):
+            thread = self.registry.require(name)
+            if thread.pid > 0 and thread.pid != owner_pid and self._process_alive(thread.pid):
+                return thread
+            owned = replace(thread, pid=owner_pid)
+            self.registry.register(owned)
+            return owned
 
     def attach_session(self, name: str, session_file: str, *, pid: int | None = None) -> Thread:
         """Attach authoritative Pi runtime state to an existing thread."""
@@ -625,7 +652,27 @@ class Comms:
             for item in entries
         )
         root = Path(environ.get(b"AGENT_COMMS_ROOT", b"~/.agent-comms").decode()).expanduser()
-        return name_matches and root.resolve() == self.root.resolve()
+        if root.resolve() != self.root.resolve():
+            return False
+        if name_matches:
+            return True
+        # ACP owners created before their generated identity was known prove
+        # ownership via their wire-scoped Unix socket and kernel credentials.
+        import socket
+        import struct
+
+        from .runtime import socket_path
+
+        try:
+            with socket.socket(socket.AF_UNIX) as connection:
+                connection.settimeout(0.5)
+                connection.connect(str(socket_path(self.root, thread.pid)))
+                pid, uid, _ = struct.unpack(
+                    "3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+                )
+                return bool(pid == thread.pid and uid == os.getuid())
+        except OSError:
+            return False
 
     def archive(self, name: str) -> None:
         """Hide a stopped participant from presence while retaining messages."""
@@ -637,25 +684,16 @@ class Comms:
             self.runtime_info.remove(canonical)
 
     def delete(self, name: str) -> DeleteThreadResult:
-        """Permanently remove one stopped, child-free thread and its owned state."""
+        """Remove a stopped thread and its owned state, preserving its children."""
         with _store_lock(self._wire_lock_path):
             canonical = self.registry.require(name).name
-            threads = self.registry.all_threads()
-            children = sorted(
-                thread.name for thread in threads.values() if thread.parent == canonical
-            )
-            if children:
-                raise RelationViolationError(
-                    f"Cannot delete {name!r}; child threads still reference it: "
-                    + ", ".join(children)
-                )
             self.registry.begin_delete(canonical)
             messages_removed, markers_removed = self.bus.remove_thread(canonical)
             activity_removed = self.activity.remove_thread(canonical)
             runtime_removed = self.runtime_info.get(canonical) is not None
             self.runtime_info.remove(canonical)
             ledger_removed = self.ledger.remove_thread(canonical)
-            self.registry.remove(canonical)
+            detached_children = self.registry.remove(canonical)
             return DeleteThreadResult(
                 name=canonical,
                 messages_removed=messages_removed,
@@ -663,6 +701,7 @@ class Comms:
                 activity_events_removed=activity_removed,
                 runtime_removed=runtime_removed,
                 ledger_references_removed=ledger_removed,
+                detached_children=detached_children,
             )
 
     # ─── Forking ──────────────────────────────────────────────────────────────
@@ -679,6 +718,10 @@ class Comms:
         if the launch fails the registration is rolled back.
         """
         parent = self.registry.require(spec.parent)
+        if self.registry.name_reserved(spec.name):
+            raise RelationViolationError(
+                f"Thread {spec.name!r} already exists; reuse it instead of forking it again."
+            )
         if not parent.session_file:
             raise RelationViolationError(
                 f"Parent thread {spec.parent!r} has no session file to fork."
@@ -693,6 +736,7 @@ class Comms:
             pid=0,
         )
         self.registry.register(child)
+        self.bus.mark_delivered_through(child.name, self.bus.latest_sequence())
 
         env = os.environ.copy()
         tag_env = ",".join(sorted(spec.tags))
@@ -706,24 +750,19 @@ class Comms:
                 "AGENT_COMMS_THREAD": spec.name,
                 "AGENT_COMMS_TAGS": tag_env,
                 "PI_WORKTREE": parent.worktree,
+                "AGENT_COMMS_ROOT": str(self.root.resolve()),
+                "AGENT_COMMS_AGENT_BIN": pi_bin,
+                "PI_PROMPT": spec.prompt or spec.task,
             }
         )
 
-        args = [
-            pi_bin,
-            "--fork",
-            parent.session_file,
-        ]
+        args = [sys.executable, "-m", "agent_comms.worker"]
         # Non-interactive pi refuses to run without an explicit model, so pass
         # the parent's last model choice through to the child.
         model = _session_model(Path(parent.session_file))
         if model:
             provider, model_id = model
-            args += ["--provider", provider, "--model", model_id]
-        args += [
-            "-p",
-            spec.prompt or spec.task,
-        ]
+            env["AGENT_COMMS_AGENT_ARGS"] = f"--print --provider {provider} --model {model_id}"
         try:
             proc = subprocess.Popen(
                 args,
@@ -778,7 +817,7 @@ class Comms:
             "thread": self.thread_detail(name),
             "inbox": [m.to_wire() for m in self.inbox(name)],
             "ledger": self.ledger_read(),
-            "peers": list(self.registry.peers(name)),
+            "peers": [person for person in self.presence() if person["name"] != name],
         }
 
 

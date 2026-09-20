@@ -377,15 +377,16 @@ class TestThreadOps:
         with pytest.raises(RelationViolationError, match="permanent alias"):
             wired.registry.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/other"))
 
-    def test_delete_reserves_renamed_identity(self, wired, monkeypatch):
+    def test_delete_releases_renamed_identity(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         wired.rename_self("reviewer")
         wired.stop("reviewer")
         wired.delete("reviewer")
-        with pytest.raises(RelationViolationError, match="permanent alias"):
-            wired.register(Thread(name="reviewer", tags=frozenset(), worktree="/tmp"))
+        wired.register(Thread(name="reviewer", tags=frozenset(), worktree="/tmp"))
+        assert wired.registry.require("reviewer").name == "reviewer"
+        assert "fixer" not in wired.registry
 
-    def test_claim_skips_alias_after_canonical_thread_is_deleted(self, wired, monkeypatch):
+    def test_claim_reuses_alias_after_canonical_thread_is_deleted(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         wired.rename_self("reviewer")
         wired.stop("reviewer")
@@ -393,16 +394,45 @@ class TestThreadOps:
 
         claimed = wired.claim_thread("fixer", tags=frozenset({"acp"}), worktree="/tmp/project")
 
-        assert claimed.name == "fixer-2"
+        assert claimed.name == "fixer"
+
+    def test_legacy_deleted_aliases_do_not_reserve_names(self, wired):
+        import json
+
+        path = wired.root / "registry.json"
+        data = json.loads(path.read_text())
+        data["aliases"] = {"deleted-old": "deleted-name", "deleted-name": "deleted-name"}
+        path.write_text(json.dumps(data))
+        claimed = wired.claim_thread("deleted-name", tags=frozenset(), worktree="/tmp")
+        assert claimed.name == "deleted-name"
+        assert "deleted-old" not in wired.registry
 
     def test_delete_requires_stopped_thread(self, wired):
         with pytest.raises(RelationViolationError, match="Stop"):
             wired.delete("fixer")
 
-    def test_delete_rejects_parent_with_registered_children(self, wired):
+    def test_delete_detaches_children_without_changing_their_state(self, wired, tmp_path):
+        from dataclasses import replace
+
+        session = tmp_path / "child.jsonl"
+        session.write_text("persisted child transcript\n")
+        child = replace(wired.registry.require("fixer"), session_file=str(session))
+        wired.register(child)
+        wired.register(Thread(name="grandchild", tags=frozenset(), worktree="/tmp", parent="fixer"))
+        wired.set_activity("fixer", ActivityState.THINKING, "still working")
+        wired.send("fixer", "grandchild", "keep this exchange")
+        last_seen = wired.registry.last_seen("fixer")
         wired.stop("PR111")
-        with pytest.raises(RelationViolationError, match="child threads"):
-            wired.delete("PR111")
+        result = wired.delete("PR111")
+        assert result.detached_children == ("fixer",)
+        assert "PR111" not in wired.registry
+        assert wired.registry.require("fixer") == replace(child, parent=None)
+        assert wired.registry.require("grandchild").parent == "fixer"
+        assert wired.registry.status("fixer").value == "running"
+        assert wired.registry.last_seen("fixer") == last_seen
+        assert wired.activity_of("fixer").state is ActivityState.THINKING
+        assert session.read_text() == "persisted child transcript\n"
+        assert [m.body for m in wired.dm_history("fixer", "grandchild")] == ["keep this exchange"]
 
     def test_delete_purges_owned_state_and_preserves_sequence(self, wired):
         wired.send("PR111", "fixer", "inbound dm")
@@ -508,7 +538,8 @@ class TestFork:
         child = wired.fork(ForkSpec(name="kid", parent="PR111", task="do it"))
 
         assert child.pid == 4242
-        assert launched["args"][1:3] == ["--fork", str(session)]
+        assert launched["args"][1:] == ["-m", "agent_comms.worker"]
+        assert launched["env"]["AGENT_COMMS_ROOT"] == str(wired.root.resolve())
         assert launched["env"]["PI_AGENT_ID"] == "kid"
         assert launched["env"]["PI_PARENT_ID"] == "PR111"
         assert launched["env"]["PI_TASK"] == "do it"
@@ -529,11 +560,12 @@ class TestFork:
         class FakePopen:
             def __init__(self, args, **kwargs):
                 captured["args"] = args
+                captured["env"] = kwargs["env"]
                 self.pid = 1
 
         monkeypatch.setattr("agent_comms.operations.subprocess.Popen", FakePopen)
         wired.fork(ForkSpec(name="kid", parent="PR111", task="the task"))
-        assert captured["args"][-2:] == ["-p", "the task"]
+        assert captured["env"]["PI_PROMPT"] == "the task"
 
     def test_fork_rolls_back_when_launch_raises(self, wired, monkeypatch, tmp_path):
         session = tmp_path / "session.json"
@@ -569,7 +601,8 @@ class TestPollAndWire:
         snap = wired.poll("fixer")
         assert snap["thread"]["name"] == "fixer"
         assert len(snap["inbox"]) == 1
-        assert snap["peers"] == ["PR111"]
+        assert [peer["name"] for peer in snap["peers"]] == ["PR111"]
+        assert snap["peers"][0]["activity"] == "idle"
         assert "ledger" in snap
 
     def test_poll_current_thread_from_env(self, wired, monkeypatch, tmp_path):

@@ -121,6 +121,7 @@ EOF
 
         assert f"--session {session_path}" in args_path.read_text()
         assert '"message": "[peer] ping"' in steering_path.read_text()
+        assert '"streamingBehavior": "steer"' in steering_path.read_text()
         assert any(
             event.get("session_file") == str(session_path)
             for event in events
