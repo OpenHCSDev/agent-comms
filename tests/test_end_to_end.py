@@ -80,6 +80,7 @@ class TestEndToEndLifecycle:
         # emulate that here so the parent is forkable.
         from agent_comms import Thread
         from agent_comms.operations import wire as wire_root
+        from agent_comms.runtime import socket_path
 
         comms = wire_root(root)
         parent = comms.registry.require("PR111")
@@ -116,7 +117,8 @@ class TestEndToEndLifecycle:
         # This test manually drives the participant below. Stop the persistent
         # fork owner first; the runtime suite exercises its automatic delivery.
         cli(root, "stop", "--name", "kid")
-        assert not comms._process_alive(detail["pid"])
+        assert comms.registry.status("kid").value == "stopped"
+        assert not socket_path(root, detail["pid"]).exists()
 
         # 3. Child registers itself the way a real pi process would.
         run_python(
