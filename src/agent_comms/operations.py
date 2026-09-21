@@ -647,6 +647,7 @@ class Comms:
             finally:
                 kernel.CloseHandle(handle)
         try:
+            os.kill(pid, 0)
             if sys.platform.startswith("linux"):
                 stat = Path(f"/proc/{pid}/stat").read_text().split()
                 if len(stat) > 2 and stat[2] == "Z":
@@ -660,7 +661,6 @@ class Comms:
                 ).stdout.strip()
                 if not status or status.startswith("Z"):
                     return False
-            os.kill(pid, 0)
         except (OSError, ProcessLookupError):
             return False
         return True

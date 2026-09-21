@@ -285,6 +285,19 @@ class TestThreadOps:
             assert wired._process_alive(os.getpid())
             assert not wired._process_alive(2**30)
 
+    def test_process_liveness_checks_pid_before_spawning_ps(self, wired, monkeypatch):
+        def missing_process(pid, signal):
+            raise ProcessLookupError
+
+        with monkeypatch.context() as patch:
+            patch.setattr("agent_comms.operations.sys.platform", "darwin")
+            patch.setattr("agent_comms.operations.os.kill", missing_process)
+            patch.setattr(
+                "agent_comms.operations.subprocess.run",
+                lambda *args, **kwargs: pytest.fail("ps must not run for a missing PID"),
+            )
+            assert not wired._process_alive(123)
+
     def test_windows_process_liveness_uses_handles_not_kill(self, wired, monkeypatch):
         import ctypes
         from types import SimpleNamespace

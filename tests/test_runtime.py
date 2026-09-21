@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+from contextlib import suppress
 
 import pytest
 
@@ -151,7 +152,8 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
         await second.shutdown()
         await asyncio.to_thread(comms.stop, "child")
         # Reap the child started by fork (otherwise /proc retains a zombie).
-        await asyncio.to_thread(os.waitpid, child.pid, 0)
+        with suppress(ChildProcessError):
+            await asyncio.to_thread(os.waitpid, child.pid, 0)
     comms.delete("child")
     assert "child" not in comms.registry
     assert "renamed-child" not in comms.registry

@@ -15,6 +15,7 @@ routes between agent subprocesses. See agentclientprotocol.com.
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
@@ -50,7 +51,16 @@ def _store_lock(store_path: Path) -> Iterator[None]:
                 lock_file.write(b"\0")
                 lock_file.flush()
             lock_file.seek(0)
-            msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)  # type: ignore[attr-defined]
+            while True:
+                try:
+                    msvcrt.locking(  # type: ignore[attr-defined]
+                        lock_file.fileno(), msvcrt.LK_NBLCK, 1  # type: ignore[attr-defined]
+                    )
+                    break
+                except OSError as error:
+                    if error.errno not in {errno.EACCES, errno.EDEADLK}:
+                        raise
+                    time.sleep(0.01)
         else:
             import fcntl
 
