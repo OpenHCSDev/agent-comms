@@ -627,10 +627,39 @@ class Comms:
 
     @staticmethod
     def _process_alive(pid: int) -> bool:
+        if sys.platform == "win32":
+            import ctypes
+
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel.OpenProcess.argtypes = [ctypes.c_uint, ctypes.c_int, ctypes.c_uint]
+            kernel.OpenProcess.restype = ctypes.c_void_p
+            kernel.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint)]
+            kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+            handle = kernel.OpenProcess(0x1000, False, pid)
+            if not handle:
+                return ctypes.get_last_error() == 5  # Access denied still means it exists.
+            try:
+                code = ctypes.c_uint()
+                return (
+                    bool(kernel.GetExitCodeProcess(handle, ctypes.byref(code)))
+                    and code.value == 259
+                )
+            finally:
+                kernel.CloseHandle(handle)
         try:
-            stat = Path(f"/proc/{pid}/stat").read_text().split()
-            if len(stat) > 2 and stat[2] == "Z":
-                return False
+            if sys.platform.startswith("linux"):
+                stat = Path(f"/proc/{pid}/stat").read_text().split()
+                if len(stat) > 2 and stat[2] == "Z":
+                    return False
+            else:
+                status = subprocess.run(
+                    ["ps", "-p", str(pid), "-o", "stat="],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                ).stdout.strip()
+                if not status or status.startswith("Z"):
+                    return False
             os.kill(pid, 0)
         except (OSError, ProcessLookupError):
             return False
@@ -638,6 +667,25 @@ class Comms:
 
     def _is_local_participant(self, thread: Thread) -> bool:
         """Prove a PID belongs to the named participant before signaling it."""
+        if sys.platform == "darwin":
+            import socket
+
+            from .runtime import socket_path
+
+            deadline = time.monotonic() + 2
+            while True:
+                try:
+                    with socket.socket(socket.AF_UNIX) as connection:
+                        connection.settimeout(0.5)
+                        connection.connect(str(socket_path(self.root, thread.pid)))
+                        # SOL_LOCAL / LOCAL_PEERPID: kernel-authenticated owner PID.
+                        return bool(connection.getsockopt(0, 2) == thread.pid)
+                except (FileNotFoundError, ConnectionRefusedError):
+                    if time.monotonic() >= deadline:
+                        return False
+                    time.sleep(0.05)
+                except OSError:
+                    return False
         if not sys.platform.startswith("linux"):
             return False
         try:
