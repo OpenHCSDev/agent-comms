@@ -7,14 +7,21 @@ or changes the registry PID. The socket is scoped to the wire and owner PID.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import Any, cast
 
 
 def socket_path(root: Path, pid: int) -> Path:
-    return root / "runtime" / f"{pid}.sock"
+    path = root / "runtime" / f"{pid}.sock"
+    if len(os.fsencode(path)) < 100:
+        return path
+    # Darwin's temporary paths routinely exceed sockaddr_un.sun_path.
+    digest = hashlib.sha256(os.fsencode(root.resolve())).hexdigest()[:24]
+    return Path(tempfile.gettempdir()) / f"ac-{digest}-{pid}.sock"
 
 
 class SocketClient:
@@ -38,7 +45,7 @@ class RuntimeServer:
         self.path = socket_path(agent._comms.root, os.getpid())
 
     async def start(self) -> None:
-        if self.server is not None:
+        if self.server is not None or os.name == "nt":
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.server = await asyncio.start_unix_server(

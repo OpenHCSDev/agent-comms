@@ -223,6 +223,7 @@ class TestThreadOps:
         wired.release("fixer")
         assert wired.registry.status("fixer").value == "stopped"
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX process-group signaling")
     def test_stop_terminates_registered_process(self, wired, monkeypatch):
         signals = []
         alive = [True]
@@ -274,6 +275,43 @@ class TestThreadOps:
         wired.stop("dead-process")
 
         assert wired.registry.status("dead-process").value == "stopped"
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX ps process lookup")
+    def test_process_liveness_without_linux_proc(self, wired, monkeypatch):
+        import os
+
+        with monkeypatch.context() as patch:
+            patch.setattr("agent_comms.operations.sys.platform", "darwin")
+            assert wired._process_alive(os.getpid())
+            assert not wired._process_alive(2**30)
+
+    def test_windows_process_liveness_uses_handles_not_kill(self, wired, monkeypatch):
+        import ctypes
+        from types import SimpleNamespace
+
+        closed = []
+        exit_code = [259]
+
+        def open_process(*args):
+            return 42
+
+        def get_exit_code(handle, pointer):
+            pointer._obj.value = exit_code[0]
+            return 1
+
+        def close_handle(handle):
+            closed.append(handle)
+
+        kernel = SimpleNamespace(
+            OpenProcess=open_process, GetExitCodeProcess=get_exit_code, CloseHandle=close_handle
+        )
+        with monkeypatch.context() as patch:
+            patch.setattr("agent_comms.operations.sys.platform", "win32")
+            patch.setattr(ctypes, "WinDLL", lambda *args, **kwargs: kernel, raising=False)
+            assert wired._process_alive(123)
+            exit_code[0] = 0
+            assert not wired._process_alive(123)
+        assert closed == [42, 42]
 
     def test_archive_requires_stopped_thread(self, wired):
         wired.send("PR111", "fixer", "kept after archive")

@@ -16,7 +16,10 @@ async def run() -> None:
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, stopped.set)
+        try:
+            loop.add_signal_handler(sig, stopped.set)
+        except NotImplementedError:
+            signal.signal(sig, lambda *_: loop.call_soon_threadsafe(stopped.set))
     initial: asyncio.Task | None = None
     try:
         await agent.load_session(thread.worktree, name)

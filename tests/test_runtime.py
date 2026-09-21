@@ -8,7 +8,7 @@ import pytest
 from agent_comms import ForkSpec, Thread
 from agent_comms.acp import CommsAgent
 from agent_comms.operations import wire
-from agent_comms.runtime import socket_path
+from agent_comms.runtime import RuntimeProxy, socket_path
 
 
 async def until(predicate, timeout=10):
@@ -18,6 +18,48 @@ async def until(predicate, timeout=10):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime and /bin/echo backend")
+async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path):
+    comms = wire(tmp_path / ("long-wire-" * 16))
+    owner = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    client = CommsAgent(comms)
+    updates = []
+
+    class Client:
+        async def session_update(self, session_id, update):
+            updates.append(update)
+
+    client.on_connect(Client())
+    response = await owner.new_session(str(tmp_path / "project"))
+    path = socket_path(comms.root, os.getpid())
+    assert len(os.fsencode(path)) < 100
+    proxy = RuntimeProxy(client, response.session_id, path)
+    try:
+        metadata = await proxy.subscribe()
+        assert metadata["agentComms"]["ownerPid"] == os.getpid()
+        updates.clear()
+        result = await proxy.request(
+            "prompt", prompt=[{"type": "text", "text": "socket roundtrip"}]
+        )
+        assert result["stopReason"] == "end_turn"
+        await until(
+            lambda: any(
+                u.get("_meta", {}).get("agentComms", {}).get("turnSettled") for u in updates
+            )
+        )
+        assert any("socket roundtrip" in u.get("content", {}).get("text", "") for u in updates)
+        assert await proxy.request("cancel") == {}
+        invalid = RuntimeProxy(client, "missing-thread", path)
+        with pytest.raises(RuntimeError, match="not registered"):
+            await invalid.request("cancel")
+    finally:
+        await proxy.close()
+        await owner.shutdown()
+    assert not path.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime and /bin/echo backend")
 async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate(tmp_path):
     comms = wire(tmp_path / "wire")
     session = tmp_path / "parent.jsonl"
