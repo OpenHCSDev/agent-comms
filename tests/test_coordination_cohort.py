@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -35,6 +36,10 @@ from agent_comms.declarations import (
 )
 from agent_comms.exporting import WireExportFormat, WireExportLimit, WireExportScope
 from agent_comms.operations import Comms
+
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="private initial bus requires POSIX owner/directory durability"
+)
 
 
 def _root(tmp_path: Path) -> tuple[Comms, MutationStore, str, dict[str, str]]:

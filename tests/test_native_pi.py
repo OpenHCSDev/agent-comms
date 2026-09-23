@@ -26,6 +26,10 @@ from agent_comms.native_pi import (
 INPUT_ID = "a" * 32
 DIGEST = "b" * 64
 
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="native Pi proof and owner-only UID checks require POSIX"
+)
+
 
 def _evidence(tmp_path: Path) -> Path:
     sessions = tmp_path / "sessions"

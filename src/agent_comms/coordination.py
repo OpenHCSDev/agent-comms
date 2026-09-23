@@ -2265,7 +2265,10 @@ class CoordinationStore:
             info = self.path.lstat()
         if not stat.S_ISREG(info.st_mode):
             raise IntegrityViolationError("coordination database must be a regular file")
-        if stat.S_IMODE(info.st_mode) != 0o600:
+        # NTFS ACLs, not POSIX mode bits, define privacy on Windows. The
+        # disposable private execution path is Linux-only; keep the schema
+        # usable here without pretending chmod supplies a Windows ACL.
+        if os.name != "nt" and stat.S_IMODE(info.st_mode) != 0o600:
             os.chmod(self.path, 0o600, follow_symlinks=False)
 
     def _initialize_schema(self) -> None:
@@ -2314,6 +2317,8 @@ class CoordinationStore:
             raise
 
     def _enforce_private_modes(self) -> None:
+        if os.name == "nt":
+            return  # POSIX no-follow chmod cannot establish an NTFS ACL.
         for suffix in ("", "-journal", "-wal", "-shm"):
             candidate = Path(f"{self.path}{suffix}")
             # SQLite may unlink a journal between observation and chmod.

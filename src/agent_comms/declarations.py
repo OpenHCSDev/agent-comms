@@ -249,7 +249,9 @@ def _atomic_write_text(path: Path, text: str, *, fsync_parent: bool = False) -> 
             output.flush()
             os.fsync(output.fileno())
         os.replace(temporary_path, path)
-        if fsync_parent:
+        # Windows does not expose directory fsync; Linux-only private claim
+        # opt-in still requires the full parent-durability boundary below.
+        if fsync_parent and os.name == "posix":
             directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
             try:
                 os.fsync(directory_fd)

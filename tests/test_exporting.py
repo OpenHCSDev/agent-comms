@@ -48,7 +48,7 @@ def exporter(
 
 
 def records(path):
-    return [json.loads(line) for line in path.read_text().splitlines()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
 def test_wire_export_declarations_are_explicit_and_fail_loud():
