@@ -310,8 +310,32 @@ class TestThreadOps:
 
         with monkeypatch.context() as patch:
             patch.setattr("agent_comms.operations.sys.platform", "darwin")
+            patch.setenv("PATH", "")  # The E2E CLI uses this exact environment.
             assert wired._process_alive(os.getpid())
             assert not wired._process_alive(2**30)
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX ps process lookup")
+    def test_process_liveness_unknown_ps_result_never_marks_live_pid_dead(self, wired, monkeypatch):
+        import os
+        import subprocess
+
+        with monkeypatch.context() as patch:
+            patch.setattr("agent_comms.operations.sys.platform", "darwin")
+            patch.setattr(
+                "agent_comms.operations.subprocess.run",
+                lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError("ps")),
+            )
+            assert wired._process_alive(os.getpid())
+            patch.setattr(
+                "agent_comms.operations.subprocess.run",
+                lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 1, "", ""),
+            )
+            assert wired._process_alive(os.getpid())
+            patch.setattr(
+                "agent_comms.operations.subprocess.run",
+                lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, "Z", ""),
+            )
+            assert not wired._process_alive(os.getpid())
 
     def test_process_liveness_checks_pid_before_spawning_ps(self, wired, monkeypatch):
         def missing_process(pid, signal):

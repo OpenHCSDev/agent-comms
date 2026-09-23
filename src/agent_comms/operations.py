@@ -2153,22 +2153,34 @@ class Comms:
                 kernel.CloseHandle(handle)
         try:
             os.kill(pid, 0)
-            if sys.platform.startswith("linux"):
-                stat = Path(f"/proc/{pid}/stat").read_text().split()
-                if len(stat) > 2 and stat[2] == "Z":
-                    return False
-            else:
-                status = subprocess.run(
-                    ["ps", "-p", str(pid), "-o", "stat="],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                ).stdout.strip()
-                if not status or status.startswith("Z"):
-                    return False
-        except (OSError, ProcessLookupError):
+        except ProcessLookupError:
             return False
-        return True
+        except OSError:
+            # An inaccessible PID is not proof of death. Never unregister a
+            # possibly live owner merely because its liveness probe failed.
+            return True
+        if sys.platform.startswith("linux"):
+            try:
+                stat = Path(f"/proc/{pid}/stat").read_text().split()
+            except FileNotFoundError:
+                return False
+            except OSError:
+                return True
+            return not (len(stat) > 2 and stat[2] == "Z")
+        try:
+            # A caller may deliberately clear PATH (including CLI subprocesses).
+            # Do not mistake failure to locate ps for a dead macOS owner.
+            probe = subprocess.run(
+                ["/bin/ps", "-p", str(pid), "-o", "stat="],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except OSError:
+            return True
+        if probe.returncode != 0:
+            return True  # Unknown, not an authoritative dead-process receipt.
+        return not probe.stdout.strip().startswith("Z")
 
     def _is_local_participant(self, thread: Thread) -> bool:
         """Prove a PID belongs to the named participant before signaling it."""
