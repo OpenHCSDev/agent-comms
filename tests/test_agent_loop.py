@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms import Thread
 from agent_comms.agent_loop import Participant
-from agent_comms.operations import wire
+from agent_comms.operations import Comms, wire
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="participant tests exec shell-script stubs; POSIX only"
@@ -52,17 +52,79 @@ class TestParticipantChannels:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
         monkeypatch.chdir(tmp_path)
         comms = wire(root)
-        comms.register(Thread(name="human", tags=frozenset({"ci"}), worktree=str(tmp_path)))
         comms.register(Thread(name="bot", tags=frozenset({"ci", "bot"}), worktree=str(tmp_path)))
 
         participant = Participant(root=root, agent_bin=str(stub), agent_args=[])
         participant.start()
 
-        comms.send("human", "#ci", "flake again")
+        comms.send_user_message("#ci", "flake again", worktree=str(tmp_path))
         await participant._tick("bot")
 
         channel = [m.body for m in comms.channel_history("#ci")]
         assert channel == ["flake again", "seen"]
+
+    async def test_informational_agent_chatter_is_observed_without_reply(
+        self, tmp_path, monkeypatch
+    ):
+        root = tmp_path / "wire"
+        stub = _echo_stub(tmp_path, "must-not-send")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
+        monkeypatch.chdir(tmp_path)
+        comms = wire(root)
+        for name in ("sender", "bot"):
+            comms.register(Thread(name=name, tags=frozenset({"ci"}), worktree=str(tmp_path)))
+        participant = Participant(root=root, agent_bin=str(stub), agent_args=[])
+        participant.start()
+
+        comms.send("sender", "#ci", "status only")
+        await participant._tick("bot")
+
+        assert [message.body for message in comms.channel_history("#ci")] == ["status only"]
+        assert comms.pending_count("bot") == 0
+
+    async def test_legacy_loop_refuses_private_wire_before_ack_even_after_start(
+        self, tmp_path, monkeypatch
+    ):
+        root = tmp_path / "wire"
+        monkeypatch.delenv("PI_AGENT_ID", raising=False)
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
+        monkeypatch.chdir(tmp_path)
+        comms = Comms(root, private_initial_writes=True)
+        for name in ("sender", "bot"):
+            comms.register(Thread(name=name, tags=frozenset({"ci"}), worktree=str(tmp_path)))
+        participant = Participant(root=root, agent_bin="/bin/true", agent_args=[])
+        participant.start()
+
+        comms.initialize_private_initial_protocol()
+        committed = comms.send_initial_cohort("sender", "#ci", "unmentioned agent update")
+        assert committed.seq == 1
+        assert comms.pending_count("bot") == 1
+        with pytest.raises(RuntimeError, match="private cohort wire"):
+            await participant._tick("bot")
+        assert comms.pending_count("bot") == 1
+        with pytest.raises(RuntimeError, match="private cohort wire"):
+            Participant(root=root, agent_bin="/bin/true", agent_args=[]).start()
+        assert comms.pending_count("bot") == 1
+
+    async def test_unmentioned_observer_does_not_answer_mentioned_request(
+        self, tmp_path, monkeypatch
+    ):
+        root = tmp_path / "wire"
+        stub = _echo_stub(tmp_path, "must-not-send")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
+        monkeypatch.chdir(tmp_path)
+        comms = wire(root)
+        for name in ("bot", "peer"):
+            comms.register(Thread(name=name, tags=frozenset({"ci"}), worktree=str(tmp_path)))
+        participant = Participant(root=root, agent_bin=str(stub), agent_args=[])
+        participant.start()
+
+        comms.send_user_message("#ci", "@peer investigate", worktree=str(tmp_path))
+        await participant._tick("bot")
+
+        assert [message.body for message in comms.channel_history("#ci")] == ["@peer investigate"]
+        assert comms.pending_count("bot") == 0
+        assert comms.pending_count("peer") == 1
 
 
 class TestParticipantLifecycle:

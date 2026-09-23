@@ -10,9 +10,12 @@ import asyncio
 import hashlib
 import json
 import os
+import secrets
 import tempfile
 from pathlib import Path
 from typing import Any, cast
+
+from .declarations import _atomic_write_text
 
 
 def socket_path(root: Path, pid: int) -> Path:
@@ -27,6 +30,8 @@ def socket_path(root: Path, pid: int) -> Path:
 class SocketClient:
     def __init__(self, writer: asyncio.StreamWriter):
         self.writer = writer
+        self.transcript_snapshots = False
+        self.transcript_diffs = False
 
     async def session_update(self, *, session_id: str, update: Any) -> None:
         self.writer.write(
@@ -43,14 +48,22 @@ class RuntimeServer:
         self.server: asyncio.Server | None = None
         self.clients: dict[str, set[SocketClient]] = {}
         self.path = socket_path(agent._comms.root, os.getpid())
+        self._token = secrets.token_hex(32) if os.name == "nt" else None
 
     async def start(self) -> None:
-        if self.server is not None or os.name == "nt":
+        if self.server is not None:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.server = await asyncio.start_unix_server(
-            self.handle, path=self.path, limit=8 * 1024 * 1024
-        )
+        if self._token is None:
+            self.server = await asyncio.start_unix_server(
+                self.handle, path=self.path, limit=8 * 1024 * 1024
+            )
+        else:
+            self.server = await asyncio.start_server(
+                self.handle, "127.0.0.1", 0, limit=8 * 1024 * 1024
+            )
+            port = self.server.sockets[0].getsockname()[1]
+            _atomic_write_text(self.path, json.dumps({"port": port, "token": self._token}))
 
     async def session_update(self, *, session_id: str, update: Any) -> None:
         if self.agent._client is not None:
@@ -66,6 +79,10 @@ class RuntimeServer:
         session_id = None
         try:
             request = json.loads(await reader.readline())
+            if self._token is not None and not secrets.compare_digest(
+                str(request.get("token", "")), self._token
+            ):
+                raise PermissionError("Invalid owner attachment token")
             name = self.agent._comms.registry.require(request["thread"]).name
             session_id = next(
                 key
@@ -74,16 +91,24 @@ class RuntimeServer:
             )
             action = request["action"]
             if action == "subscribe":
+                client.transcript_snapshots = request.get("transcriptSnapshots", False)
+                client.transcript_diffs = request.get("transcriptDiffs", False)
                 self.clients.setdefault(session_id, set()).add(client)
                 await self.agent._replay_transcript(session_id, name, client=client)
                 await self.agent.replay_turn_state(session_id, client=client)
-                writer.write(
-                    (json.dumps({"ready": self.agent._session_metadata(name)}) + "\n").encode()
-                )
+                await self.agent._emit_queue_state(session_id, client=client)
+                metadata = self.agent._session_metadata(name)
+                metadata["configOptions"] = [
+                    option.model_dump(by_alias=True, exclude_none=True)
+                    for option in await self.agent._config_options(name)
+                ]
+                writer.write((json.dumps({"ready": metadata}) + "\n").encode())
                 await writer.drain()
                 await reader.read()
             elif action == "prompt":
-                result = await self.agent.prompt(session_id, request["prompt"])
+                result = await self.agent.prompt(
+                    session_id, request["prompt"], field_meta=request.get("meta", {})
+                )
                 writer.write(
                     (
                         json.dumps({"result": result.model_dump(by_alias=True, exclude_none=True)})
@@ -94,6 +119,27 @@ class RuntimeServer:
             elif action == "cancel":
                 await self.agent.cancel(session_id)
                 writer.write(b'{"result": {}}\n')
+                await writer.drain()
+            elif action == "clear_queue":
+                await self.agent.clear_queued_inputs(session_id)
+                writer.write(b'{"result": {}}\n')
+                await writer.drain()
+            elif action == "compact":
+                result = await self.agent.compact_context(session_id, request.get("instructions"))
+                writer.write((json.dumps({"result": result}) + "\n").encode())
+                await writer.drain()
+            elif action == "set_config_option":
+                result = await self.agent.set_config_option(
+                    session_id=session_id,
+                    config_id=request["config_id"],
+                    value=request["value"],
+                )
+                writer.write(
+                    (
+                        json.dumps({"result": result.model_dump(by_alias=True, exclude_none=True)})
+                        + "\n"
+                    ).encode()
+                )
                 await writer.drain()
         except (Exception, asyncio.CancelledError) as error:
             if not isinstance(error, asyncio.CancelledError):
@@ -124,6 +170,16 @@ class RuntimeProxy:
         self.path = path
         self.writer: asyncio.StreamWriter | None = None
         self.task: asyncio.Task[None] | None = None
+        self._token: str | None = None
+
+    async def _connect(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        if not self.path.is_socket():
+            endpoint = json.loads(self.path.read_text())
+            self._token = str(endpoint["token"])
+            return await asyncio.open_connection(
+                "127.0.0.1", int(endpoint["port"]), limit=8 * 1024 * 1024
+            )
+        return await asyncio.open_unix_connection(self.path, limit=8 * 1024 * 1024)
 
     async def subscribe(self) -> dict[str, Any]:
         # The registry ownership change precedes socket startup by a few event
@@ -131,16 +187,25 @@ class RuntimeProxy:
         deadline = asyncio.get_running_loop().time() + 2
         while True:
             try:
-                reader, self.writer = await asyncio.open_unix_connection(
-                    self.path, limit=8 * 1024 * 1024
-                )
+                reader, self.writer = await self._connect()
                 break
             except (FileNotFoundError, ConnectionRefusedError):
                 if asyncio.get_running_loop().time() >= deadline:
                     raise
                 await asyncio.sleep(0.05)
         self.writer.write(
-            (json.dumps({"action": "subscribe", "thread": self.session_id}) + "\n").encode()
+            (
+                json.dumps(
+                    {
+                        "action": "subscribe",
+                        "thread": self.session_id,
+                        "transcriptSnapshots": self.agent._transcript_snapshots,
+                        "transcriptDiffs": self.agent._transcript_diffs,
+                        **({"token": self._token} if self._token is not None else {}),
+                    }
+                )
+                + "\n"
+            ).encode()
         )
         await self.writer.drain()
         while line := await reader.readline():
@@ -164,11 +229,19 @@ class RuntimeProxy:
             await self.update(json.loads(line))
 
     async def request(self, action: str, **kwargs: Any) -> dict[str, Any]:
-        reader, writer = await asyncio.open_unix_connection(self.path, limit=8 * 1024 * 1024)
+        reader, writer = await self._connect()
         try:
             writer.write(
                 (
-                    json.dumps({"action": action, "thread": self.session_id, **kwargs}) + "\n"
+                    json.dumps(
+                        {
+                            "action": action,
+                            "thread": self.session_id,
+                            **kwargs,
+                            **({"token": self._token} if self._token is not None else {}),
+                        }
+                    )
+                    + "\n"
                 ).encode()
             )
             await writer.drain()

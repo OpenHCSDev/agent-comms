@@ -14,6 +14,7 @@ from agent_comms import (
     UnregisteredThreadError,
     wire,
 )
+from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
 
 
 class TestMessaging:
@@ -146,6 +147,33 @@ class TestThreadOps:
         assert events[3].text == "sent"
         row = next(row for row in wired.presence() if row["name"] == "transcript-thread")
         assert row["resumable"] is True
+
+    def test_thread_transcript_includes_saved_compaction_summary(self, wired, tmp_path):
+        session_file = tmp_path / "compacted.jsonl"
+        session_file.write_text(
+            json.dumps(
+                {
+                    "type": "compaction",
+                    "summary": "Important decisions and remaining work.",
+                    "tokensBefore": 12000,
+                }
+            )
+            + "\n"
+        )
+        wired.register(
+            Thread(
+                name="compacted-thread",
+                tags=frozenset(),
+                worktree=str(tmp_path),
+                session_file=str(session_file),
+            )
+        )
+
+        events = wired.thread_transcript_page("compacted-thread").events
+
+        assert len(events) == 1
+        assert events[0].kind == "notice"
+        assert "Important decisions" in events[0].text
 
     def test_claim_thread_can_baseline_inbox_atomically(self, wired):
         wired.send("PR111", "#all", "before claim")
@@ -485,6 +513,45 @@ class TestThreadOps:
         assert session.read_text() == "persisted child transcript\n"
         assert [m.body for m in wired.dm_history("fixer", "grandchild")] == ["keep this exchange"]
 
+    @pytest.mark.parametrize("authority", ["unrelated_sideband", "protocol_marker", "torn_row"])
+    def test_delete_rejects_private_or_uncertain_wire_before_begin_delete(
+        self, wired, authority: str
+    ) -> None:
+        wired.send("PR111", "#all", "unrelated retained row")
+        wired.send("fixer", "PR111", "subject to legacy purge")
+        wired.stop("fixer")
+        path = wired.bus._path
+        sequence_path = path.parent / "bus_meta.json"
+        aliases = wired.registry.aliases_for("fixer")
+        if authority == "unrelated_sideband":
+            records = path.read_bytes().splitlines(keepends=True)
+            row = json.loads(records[0])
+            row[PRIVATE_WIRE_FIELD] = {"publication_key": "SECRET"}
+            records[0] = (json.dumps(row) + "\n").encode()
+            path.write_bytes(b"".join(records))
+        elif authority == "protocol_marker":
+            metadata = json.loads(sequence_path.read_text())
+            metadata["writer_protocol_version"] = 1
+            sequence_path.write_text(json.dumps(metadata))
+        else:
+            with path.open("ab") as stream:
+                stream.write(b'{"truncated":')
+        before_bus, before_meta = path.read_bytes(), sequence_path.read_bytes()
+
+        with pytest.raises(RelationViolationError, match="Private|Incomplete"):
+            wired.delete("fixer")
+
+        if authority == "protocol_marker":
+            # A forged marker without a committed private registry guard
+            # forbids even read projection, not just destructive deletion.
+            with pytest.raises(RelationViolationError, match="Private registry guard"):
+                wired.registry.status("fixer")
+        else:
+            assert wired.registry.status("fixer").value == "stopped"
+            assert wired.registry.aliases_for("fixer") == aliases
+        assert path.read_bytes() == before_bus
+        assert sequence_path.read_bytes() == before_meta
+
     def test_delete_purges_owned_state_and_preserves_sequence(self, wired):
         wired.send("PR111", "fixer", "inbound dm")
         wired.send("fixer", "PR111", "outbound dm")
@@ -586,11 +653,13 @@ class TestFork:
                 self.pid = 4242
 
         monkeypatch.setattr("agent_comms.operations.subprocess.Popen", FakePopen)
+        monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/opt/pi-coding-agent/bin/pi")
         child = wired.fork(ForkSpec(name="kid", parent="PR111", task="do it"))
 
         assert child.pid == 4242
         assert launched["args"][1:] == ["-m", "agent_comms.worker"]
         assert launched["env"]["AGENT_COMMS_ROOT"] == str(wired.root.resolve())
+        assert launched["env"]["AGENT_COMMS_AGENT_BIN"] == "/opt/pi-coding-agent/bin/pi"
         assert launched["env"]["PI_AGENT_ID"] == "kid"
         assert launched["env"]["PI_PARENT_ID"] == "PR111"
         assert launched["env"]["PI_TASK"] == "do it"
@@ -637,6 +706,42 @@ class TestFork:
 
 
 class TestLedgerOps:
+    def test_recent_transcript_is_bounded_and_ordered(self, wired, tmp_path):
+        import json
+
+        from agent_comms.operations import _session_model
+
+        path = tmp_path / "large-session.jsonl"
+        with path.open("w") as stream:
+            stream.write(
+                json.dumps({"type": "model_change", "provider": "test", "modelId": "one"}) + "\n"
+            )
+            # A giant record crossing the tail boundary must never trigger an
+            # unbounded readline or hide the newest small records.
+            stream.write(
+                json.dumps(
+                    {
+                        "type": "message",
+                        "message": {"role": "assistant", "content": "x" * 2_000_000},
+                    }
+                )
+                + "\n"
+            )
+            for index in range(100):
+                stream.write(
+                    json.dumps(
+                        {"type": "message", "message": {"role": "assistant", "content": str(index)}}
+                    )
+                    + "\n"
+                )
+        wired.register(
+            Thread(name="large", tags=frozenset(), worktree=str(tmp_path), session_file=str(path))
+        )
+        events = wired.thread_transcript("large")
+        assert events[0].kind == "notice"
+        assert [event.text for event in events[1:]] == [str(index) for index in range(80, 100)]
+        assert _session_model(path) == ("test", "one")
+
     def test_merge_requires_registered_author(self, wired):
         with pytest.raises(UnregisteredThreadError, match="Author"):
             wired.ledger_merge({"k": "v"}, author="ghost")

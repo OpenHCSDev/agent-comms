@@ -20,7 +20,8 @@ async def until(predicate, timeout=10):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime and /bin/echo backend")
-async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path):
+async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/one,test/two")
     comms = wire(tmp_path / ("long-wire-" * 16))
     owner = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
     client = CommsAgent(comms)
@@ -38,6 +39,9 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path):
     try:
         metadata = await proxy.subscribe()
         assert metadata["agentComms"]["ownerPid"] == os.getpid()
+        changed = await proxy.request("set_config_option", config_id="model", value="test/two")
+        assert changed["configOptions"][0]["currentValue"] == "test/two"
+        assert comms.registry.require(response.session_id).model == "test/two"
         updates.clear()
         result = await proxy.request(
             "prompt", prompt=[{"type": "text", "text": "socket roundtrip"}]
@@ -57,6 +61,32 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path):
         await proxy.close()
         await owner.shutdown()
     assert not path.exists()
+
+
+async def test_loopback_owner_transport_authenticates_attachments(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/one")
+    comms = wire(tmp_path / "wire")
+    owner = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    owner._runtime._token = "owner-attachment-token"
+    response = await owner.new_session(str(tmp_path))
+    proxy = RuntimeProxy(CommsAgent(comms), response.session_id, owner._runtime.path)
+    try:
+        metadata = await proxy.subscribe()
+        assert metadata["agentComms"]["ownerPid"] == os.getpid()
+        assert await proxy.request("cancel") == {}
+        port = owner._runtime.server.sockets[0].getsockname()[1]
+        reader, writer = await asyncio.open_connection("127.0.0.1", port)
+        try:
+            writer.write(b'{"action":"subscribe","thread":"ignored","token":"wrong"}\n')
+            await writer.drain()
+            assert b"Invalid owner attachment token" in await reader.readline()
+        finally:
+            writer.close()
+            await writer.wait_closed()
+    finally:
+        await proxy.close()
+        await owner.shutdown()
+    assert not owner._runtime.path.exists()
 
 
 @pytest.mark.asyncio
@@ -91,10 +121,8 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
     try:
         await until(lambda: socket_path(comms.root, child.pid).exists())
         await until(
-            lambda: any(
-                m.sender == "child" and "initial turn" in m.body
-                for m in comms.channel_history("#all")
-            )
+            lambda: "child" in comms.all_activity()
+            and comms.activity_of("child").state.value == "idle"
         )
         assert comms.registry.require("child").pid == child.pid
         assert comms.registry.status("child").value == "running"
@@ -107,8 +135,9 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
         comms.acknowledge("child")  # Reading in a UI must not eat the agent's delivery.
         await until(
             lambda: any(
-                m.sender == "child" and "second round" in m.body
-                for m in comms.channel_history("#all")
+                "second round" in u.get("content", {}).get("text", "")
+                and "incoming" not in u.get("_meta", {}).get("agentComms", {})
+                for u in second_updates
             )
         )
         for updates in (first_updates, second_updates):
@@ -121,12 +150,14 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
             assert incoming[0]["sender"] == "parent"
             assert "second round" in incoming[0]["body"]
         responses = [
-            m
-            for m in comms.channel_history("#all")
-            if m.sender == "child" and "second round" in m.body
+            u["content"]["text"]
+            for u in second_updates
+            if "second round" in u.get("content", {}).get("text", "")
+            and "incoming" not in u.get("_meta", {}).get("agentComms", {})
         ]
         assert len(responses) == 1
-        assert "old broadcast must not be delivered" not in responses[0].body
+        assert "old broadcast must not be delivered" not in responses[0]
+        assert not any(m.sender == "child" for m in comms.full_history())
         # A UI prompt is forwarded to that same owner, not run by either client.
         response = await second.prompt("child", [{"type": "text", "text": "third round"}])
         assert response.stop_reason == "end_turn"

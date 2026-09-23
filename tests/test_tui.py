@@ -54,8 +54,9 @@ async def test_cycle_to_dm_and_send(app, wired):
         prompt.value = "ping"
         await pilot.press("enter")
         await pilot.pause()
-        # The message went somewhere valid (current view target).
+        # #any is a projection; its composer explicitly targets #all.
         assert wired.bus.total_messages() == 1
+        assert wired.full_history()[0].target == "#all"
 
 
 async def test_login_flow_registers_human(app, wired):

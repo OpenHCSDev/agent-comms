@@ -152,7 +152,7 @@ class CommsApp(App[None]):
 
     def _current_target(self) -> str:
         """Resolve the current view to a send target."""
-        if self._current == EVERYTHING_VIEW:
+        if self._current in {EVERYTHING_VIEW, "#any"}:
             return GLOBAL_CHANNEL
         if self._current.startswith("@"):
             return self._current[1:]

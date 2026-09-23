@@ -2,9 +2,10 @@
 
 Turns any thread into a live participant: it adopts its identity from the
 environment (``AGENT_COMMS_THREAD`` / ``PI_AGENT_ID``), polls its inbox,
-runs every incoming message through a real agent backend (pi by default),
-and replies to the sender. Channel messages get channel replies; DMs get
-DM replies.
+runs response-eligible messages through a real agent backend (pi by default),
+and replies to the sender. Observed informational/mentioned-only rows remain
+in wire history but do not launch a turn. Channel messages get channel replies;
+DMs get DM replies.
 
 This is how an agent (pi, opencode, anything that can run headless) joins
 the chat without an ACP client: launch it and it answers its DMs.
@@ -15,6 +16,7 @@ the chat without an ACP client: launch it and it answers its DMs.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 from contextlib import suppress
@@ -58,9 +60,28 @@ class Participant:
 
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
+    def _require_legacy_wire(self) -> None:
+        """Never ACK a private cohort with the old inbox-based participant loop.
+
+        This is a fail-closed compatibility guard, not proof that every old
+        process has quiesced before a production protocol cutover.
+        """
+        metadata = self._comms.root / "bus_meta.json"
+        try:
+            value = json.loads(metadata.read_text())
+        except FileNotFoundError:
+            return
+        except (OSError, ValueError) as error:
+            raise RuntimeError("Cannot verify the participant bus protocol") from error
+        if not isinstance(value, dict):
+            raise RuntimeError("Cannot verify the participant bus protocol")
+        if "writer_protocol_version" in value:
+            raise RuntimeError("Legacy participant cannot consume a private cohort wire")
+
     def start(self) -> None:
         from .declarations import Thread, UnregisteredThreadError, current_thread
 
+        self._require_legacy_wire()
         try:
             thread = current_thread()
         except UnregisteredThreadError:
@@ -88,6 +109,7 @@ class Participant:
     # ─── One poll ─────────────────────────────────────────────────────────────
 
     async def _tick(self, name: str) -> None:
+        self._require_legacy_wire()
         name = self._comms.registry.require(name).name
         self._thread_name = name
         self._comms.heartbeat(name)
@@ -96,7 +118,8 @@ class Participant:
             return
         self._comms.acknowledge(name)
         for message in inbox:
-            await self._respond(name, message)
+            if message.starts_turn_for(name):
+                await self._respond(name, message)
 
     async def _respond(self, name: str, message: Message) -> None:
         self._comms.set_activity(name, ActivityState.THINKING, message.body[:80])
