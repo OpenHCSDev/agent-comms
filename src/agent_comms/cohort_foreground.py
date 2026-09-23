@@ -213,13 +213,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         json.dumps(
             {"disposition": "NO_WAKE", "wire_seq": result.wire_seq}
             if isinstance(result, NoWakeReceipt)
-            else {
-                "disposition": result.disposition.value,
-                "claim_id": result.claim_id,
-                "response_message_id": result.response_message_id,
-            }
-            if result is not None
-            else {"disposition": "NO_SELECTED_CLAIM"}
+            else (
+                {
+                    "disposition": result.disposition.value,
+                    "claim_id": result.claim_id,
+                    "response_message_id": result.response_message_id,
+                }
+                if result is not None
+                else {"disposition": "NO_SELECTED_CLAIM"}
+            )
         ),
         flush=True,
     )

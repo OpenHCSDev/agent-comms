@@ -34,6 +34,7 @@ class Collaboration:
     Creation timestamps identify the registered incarnations. A new thread
     reusing a deleted name does not inherit that thread's work relationships.
     """
+
     owner: str
     peer: str
     owner_created: float
@@ -87,8 +88,11 @@ class ThreadRelationships:
         self._limited = False
 
     def revision(self) -> tuple:
-        return (*self.comms.revision().files, file_revision(self.path),
-                self.comms.revision().expiry_tick)
+        return (
+            *self.comms.revision().files,
+            file_revision(self.path),
+            self.comms.revision().expiry_tick,
+        )
 
     def _load(self) -> dict:
         try:
@@ -112,17 +116,21 @@ class ThreadRelationships:
             # Normalize surviving aliases, but NEVER filter persistent records
             # through today's registry. Missing/replaced endpoints remain
             # copyable historical declarations, including their work notes.
-            edges.append(replace(
-                edge,
-                owner=owner if first and first.created_at == edge.owner_created else edge.owner,
-                peer=peer if second and second.created_at == edge.peer_created else edge.peer,
-            ))
+            edges.append(
+                replace(
+                    edge,
+                    owner=owner if first and first.created_at == edge.owner_created else edge.owner,
+                    peer=peer if second and second.created_at == edge.peer_created else edge.peer,
+                )
+            )
         return edges
 
     @staticmethod
     def _incident(edge: Collaboration, thread) -> bool:
-        return ((edge.owner, edge.owner_created) == (thread.name, thread.created_at)
-                or (edge.peer, edge.peer_created) == (thread.name, thread.created_at))
+        return (edge.owner, edge.owner_created) == (thread.name, thread.created_at) or (
+            edge.peer,
+            edge.peer_created,
+        ) == (thread.name, thread.created_at)
 
     @staticmethod
     def _counterpart(edge: Collaboration, thread) -> tuple[str, float]:
@@ -135,14 +143,18 @@ class ThreadRelationships:
         if (edge.owner, edge.owner_created) == (thread.name, thread.created_at):
             return edge
         return Collaboration(
-            thread.name, edge.owner, thread.created_at, edge.owner_created,
-            edge.note, edge.created_at, edge.updated_at,
+            thread.name,
+            edge.owner,
+            thread.created_at,
+            edge.owner_created,
+            edge.note,
+            edge.created_at,
+            edge.updated_at,
         )
 
     @staticmethod
     def _pair_identity(edge: Collaboration) -> frozenset[tuple[str, float]]:
-        return frozenset(((edge.owner, edge.owner_created),
-                          (edge.peer, edge.peer_created)))
+        return frozenset(((edge.owner, edge.owner_created), (edge.peer, edge.peer_created)))
 
     @staticmethod
     def _unique_edges(edges: list[Collaboration]) -> list[Collaboration]:
@@ -162,10 +174,13 @@ class ThreadRelationships:
                 result.append(newest)
             else:
                 notes = tuple(dict.fromkeys(edge.note for edge in pair if edge.note))
-                result.append(replace(
-                    newest, note="\n".join(notes),
-                    created_at=min(edge.created_at for edge in pair),
-                ))
+                result.append(
+                    replace(
+                        newest,
+                        note="\n".join(notes),
+                        created_at=min(edge.created_at for edge in pair),
+                    )
+                )
         return result
 
     def collaborations(self, owner: str) -> tuple[Collaboration, ...]:
@@ -173,9 +188,9 @@ class ThreadRelationships:
             registry = self.comms.registry.snapshot()
             thread = self.comms.registry.require(owner)
             edges = self._unique_edges(self._canonical_edges(self._load(), registry))
-            return tuple(self._orient(edge, thread)
-                         for edge in edges
-                         if self._incident(edge, thread))
+            return tuple(
+                self._orient(edge, thread) for edge in edges if self._incident(edge, thread)
+            )
 
     def edit(self, owner: str, action: str, peer: str, note: str = "") -> Collaboration | None:
         if action not in {"add", "update", "remove"}:
@@ -190,15 +205,20 @@ class ThreadRelationships:
             canonical_peer = registry.aliases.get(peer, peer)
             state = self._load()
             edges = self._canonical_edges(state, registry)
-            pair = [edge for edge in edges
-                    if {edge.owner, edge.peer} == {first.name, canonical_peer}]
+            pair = [
+                edge for edge in edges if {edge.owner, edge.peer} == {first.name, canonical_peer}
+            ]
             second_live = registry.threads.get(canonical_peer)
-            active = [edge for edge in pair if self._incident(edge, first)
-                      and second_live is not None
-                      and self._counterpart(edge, first) == (second_live.name,
-                                                            second_live.created_at)]
-            unavailable = [edge for edge in pair if self._incident(edge, first)
-                           and edge not in active]
+            active = [
+                edge
+                for edge in pair
+                if self._incident(edge, first)
+                and second_live is not None
+                and self._counterpart(edge, first) == (second_live.name, second_live.created_at)
+            ]
+            unavailable = [
+                edge for edge in pair if self._incident(edge, first) and edge not in active
+            ]
             existing = (active or unavailable or [None])[0]
             if action == "remove":
                 # Either participant can end the single shared relationship.
@@ -206,8 +226,9 @@ class ThreadRelationships:
                 # A reused caller name cannot remove another incarnation's row.
                 if existing is not None:
                     identity = self._pair_identity(existing)
-                    state["collaborations"] = [asdict(edge) for edge in edges if
-                                               self._pair_identity(edge) != identity]
+                    state["collaborations"] = [
+                        asdict(edge) for edge in edges if self._pair_identity(edge) != identity
+                    ]
                     self._save(state)
                 return None
             second = self.comms.registry.require(peer)
@@ -232,7 +253,8 @@ class ThreadRelationships:
                 existing.owner_created if existing else first.created_at,
                 existing.peer_created if existing else second.created_at,
                 note,
-                min(edge.created_at for edge in active) if active else now, now,
+                min(edge.created_at for edge in active) if active else now,
+                now,
             )
             edges = [edge for edge in edges if edge not in active]
             edges.append(result)
@@ -248,13 +270,23 @@ class ThreadRelationships:
             thread = self.comms.registry.require(owner)
             registry = self.comms.registry.snapshot()
             state = self._load()
-            state["orders"] = [row for row in state["orders"] if not (
-                registry.aliases.get(row["owner"], row["owner"]) == thread.name
-                and row["owner_created"] == thread.created_at
-                and row["group"] == group
-            )]
-            state["orders"].append({"owner": thread.name, "owner_created": thread.created_at,
-                                    "group": group, "order": order.value})
+            state["orders"] = [
+                row
+                for row in state["orders"]
+                if not (
+                    registry.aliases.get(row["owner"], row["owner"]) == thread.name
+                    and row["owner_created"] == thread.created_at
+                    and row["group"] == group
+                )
+            ]
+            state["orders"].append(
+                {
+                    "owner": thread.name,
+                    "owner_created": thread.created_at,
+                    "group": group,
+                    "order": order.value,
+                }
+            )
             self._save(state)
         return order
 
@@ -278,8 +310,11 @@ class ThreadRelationships:
                 lines.pop(0)  # The first record may be partial.
             complete = [line for line in lines if line.endswith(b"\n")]
             limited = bool(start) or len(complete) > self.RECENT_MESSAGES
-            messages = tuple(Message.from_wire(json.loads(line))
-                             for line in complete[-self.RECENT_MESSAGES:] if line.strip())
+            messages = tuple(
+                Message.from_wire(json.loads(line))
+                for line in complete[-self.RECENT_MESSAGES :]
+                if line.strip()
+            )
             self._recent_revision = revision
             self._recent, self._limited = messages, limited
             return messages, limited
@@ -292,17 +327,24 @@ class ThreadRelationships:
             state = self._load()
             edges = self._canonical_edges(state, registry)
             delivery = self.comms.bus._delivery_scope(thread.name)
-        people = {view.thread.name: view for view in self.comms.thread_views(
-            show_stopped=True, show_archived=True)}
+        people = {
+            view.thread.name: view
+            for view in self.comms.thread_views(show_stopped=True, show_archived=True)
+        }
         messages, limited = self._recent_messages()
+
         def canonical(name):
             return registry.aliases.get(name, name)
 
         def entry(name, *, message=None, detail=""):
             name = name if is_channel_target(name) else canonical(name)
             return RelationshipEntry(
-                name, "channel" if is_channel_target(name) else "thread", people.get(name),
-                message.seq if message else 0, message.timestamp if message else 0, detail,
+                name,
+                "channel" if is_channel_target(name) else "thread",
+                people.get(name),
+                message.seq if message else 0,
+                message.timestamp if message else 0,
+                detail,
             )
 
         inbound, outbound = {}, {}
@@ -311,8 +353,11 @@ class ThreadRelationships:
                 continue
             detail = f"{message.sender} → {message.target}\n{message.body[:240]}"
             if canonical(message.sender) == thread.name:
-                key = (canonical(message.target)
-                       if not is_channel_target(message.target) else message.target)
+                key = (
+                    canonical(message.target)
+                    if not is_channel_target(message.target)
+                    else message.target
+                )
                 outbound.setdefault(key, entry(message.target, message=message, detail=detail))
             elif delivery.delivers(message):
                 # Expose both the sender and the actual channel, not a fake author.
@@ -326,24 +371,34 @@ class ThreadRelationships:
 
         orders = {"children": ThreadSort.CREATED, "collaborating": ThreadSort.LAST_ACTIVITY}
         for row in state["orders"]:
-            if (canonical(row["owner"]) == thread.name and row["owner_created"] == thread.created_at
-                    and row["group"] in orders):
+            if (
+                canonical(row["owner"]) == thread.name
+                and row["owner_created"] == thread.created_at
+                and row["group"] in orders
+            ):
                 orders[row["group"]] = ThreadSort(row["order"])
         # Existing declaration-owned timestamp sort, shared with channel members.
-        sent = (self.comms.last_sent_timestamps()
-                if ThreadSort.LAST_MESSAGE in orders.values() else {})
+        sent = (
+            self.comms.last_sent_timestamps() if ThreadSort.LAST_MESSAGE in orders.values() else {}
+        )
 
         def ordered(entries, group):
             def key(item):
                 person = item.person
-                return orders[group].key(item.target,
+                return orders[group].key(
+                    item.target,
                     person.thread.created_at if person else 0,
                     person.activity.timestamp if person else 0,
-                    sent.get(item.target, 0) if person else 0)
+                    sent.get(item.target, 0) if person else 0,
+                )
+
             return tuple(sorted(entries, key=key))
 
-        children = [entry(child.name) for child in registry.threads.values()
-                    if child.parent and canonical(child.parent) == thread.name]
+        children = [
+            entry(child.name)
+            for child in registry.threads.values()
+            if child.parent and canonical(child.parent) == thread.name
+        ]
         collaborating = []
         for edge in self._unique_edges(edges):
             if not self._incident(edge, thread):
@@ -351,21 +406,34 @@ class ThreadRelationships:
             other_name, other_created = self._counterpart(edge, thread)
             person = people.get(other_name)
             available = person is not None and person.thread.created_at == other_created
-            collaborating.append(RelationshipEntry(
-                other_name, "thread", person if available else None,
-                detail=edge.note, available=available,
-            ))
-        return ThreadCommsSnapshot(thread.name, str(self.comms.root.resolve()), (
-            RelationshipGroup("inbound", "Last inbound", tuple(inbound.values())),
-            RelationshipGroup("outbound", "Last outbound", tuple(outbound.values())),
-            RelationshipGroup(
-                "parent", "Parent fork", (entry(thread.parent),) if thread.parent else ()
+            collaborating.append(
+                RelationshipEntry(
+                    other_name,
+                    "thread",
+                    person if available else None,
+                    detail=edge.note,
+                    available=available,
+                )
+            )
+        return ThreadCommsSnapshot(
+            thread.name,
+            str(self.comms.root.resolve()),
+            (
+                RelationshipGroup("inbound", "Last inbound", tuple(inbound.values())),
+                RelationshipGroup("outbound", "Last outbound", tuple(outbound.values())),
+                RelationshipGroup(
+                    "parent", "Parent fork", (entry(thread.parent),) if thread.parent else ()
+                ),
+                RelationshipGroup(
+                    "children", "Children", ordered(children, "children"), orders["children"]
+                ),
+                RelationshipGroup(
+                    "collaborating",
+                    "Collaborating",
+                    ordered(collaborating, "collaborating"),
+                    orders["collaborating"],
+                ),
             ),
-            RelationshipGroup(
-                "children", "Children", ordered(children, "children"), orders["children"]
-            ),
-            RelationshipGroup(
-                "collaborating", "Collaborating", ordered(collaborating, "collaborating"),
-                orders["collaborating"],
-            ),
-        ), limited, len(messages))
+            limited,
+            len(messages),
+        )

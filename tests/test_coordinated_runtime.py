@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 import threading
 from dataclasses import replace
 from pathlib import Path
@@ -35,6 +36,25 @@ from agent_comms.coordination_store import (
 from agent_comms.declarations import MessageBus, Thread
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, NativeTurnResult
 from agent_comms.operations import Comms
+
+
+@pytest.fixture
+def tmp_path():
+    """The sealed runtime permits only owner-only disposable /var/tmp roots.
+
+    CI's standard pytest temp root is /tmp; on hosts without a safe /var/tmp
+    (including Windows and macOS with a symlinked /var), these Linux-only
+    opt-in process tests are inapplicable rather than weakening the runtime guard.
+    """
+    if (
+        os.name != "posix"
+        or not Path("/var/tmp").is_dir()
+        or Path("/var").is_symlink()
+        or Path("/var/tmp").is_symlink()
+    ):
+        pytest.skip("sealed runtime requires a real, disposable /var/tmp root")
+    with tempfile.TemporaryDirectory(prefix="ac-sealed-test-", dir="/var/tmp") as root:
+        yield Path(root)
 
 
 def _root(tmp_path: Path, *, direct: bool = False, mentioned: bool = False):

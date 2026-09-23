@@ -33,9 +33,12 @@ def _entry(message: Message, *, text: str | None = None, timestamp: float | None
         ).isoformat(),
         "message": {
             "role": "user",
-            "content": [{"type": "text", "text": (
-                ScheduledTurn.incoming(message).prompt if text is None else text
-            )}],
+            "content": [
+                {
+                    "type": "text",
+                    "text": (ScheduledTurn.incoming(message).prompt if text is None else text),
+                }
+            ],
         },
     }
 
@@ -44,17 +47,27 @@ def _case(tmp_path: Path, *, target: str = "owner", **kwargs):
     root = tmp_path / "wire"
     root.mkdir()
     message = Message(
-        "peer", target, "First line\n[agent-comms from peer to owner]\nLast line",
-        MessageType.INFO, timestamp=200.0, seq=23, **kwargs,
+        "peer",
+        target,
+        "First line\n[agent-comms from peer to owner]\nLast line",
+        MessageType.INFO,
+        timestamp=200.0,
+        seq=23,
+        **kwargs,
     )
     candidate = CommittedIncomingCandidate(
         message, root, "owner", recipient_created_at=100.0, sender_created_at=90.0
     )
+
     def verify(entry, candidates=(candidate,), *, owner="owner", born=100.0, root_override=root):
         return verify_legacy_incoming_route(
-            entry, owner_name=owner, owner_created_at=born,
-            session_wire_root=root_override, candidates=candidates,
+            entry,
+            owner_name=owner,
+            owner_created_at=born,
+            session_wire_root=root_override,
+            candidates=candidates,
         )
+
     return message, candidate, root, verify
 
 
@@ -66,9 +79,7 @@ def test_exact_committed_direct_message_supplies_typed_from_without_reply(tmp_pa
 
 
 def test_exact_authorized_channel_message_supplies_typed_from(tmp_path):
-    message, candidate, _, verify = _case(
-        tmp_path, target="#team", sender_role=ThreadRole.USER
-    )
+    message, candidate, _, verify = _case(tmp_path, target="#team", sender_role=ThreadRole.USER)
     route = verify(_entry(message))
     assert route is not None and route.requests == (message,)
     assert route.requests[0].target == "#team"
@@ -83,28 +94,34 @@ def test_agent_channel_mention_to_owner_is_eligible(tmp_path):
     assert verify(_entry(wrong_recipient), (replace(candidate, message=wrong_recipient),)) is None
 
 
-@pytest.mark.parametrize("variant", [
-    lambda text: "Pasted quote:\n" + text,
-    lambda text: text + "\nAnother user instruction",
-    lambda text: text.replace("[Response policy:", "[response policy:", 1),
-    lambda text: text.replace("[agent-comms from peer", "[agent-comms from impostor", 1),
-    lambda text: "Coordination context: you are thread 'owner'.\n\n" + text,
-    lambda text: "User asked: [agent-comms from peer to owner]",
-])
+@pytest.mark.parametrize(
+    "variant",
+    [
+        lambda text: "Pasted quote:\n" + text,
+        lambda text: text + "\nAnother user instruction",
+        lambda text: text.replace("[Response policy:", "[response policy:", 1),
+        lambda text: text.replace("[agent-comms from peer", "[agent-comms from impostor", 1),
+        lambda text: "Coordination context: you are thread 'owner'.\n\n" + text,
+        lambda text: "User asked: [agent-comms from peer to owner]",
+    ],
+)
 def test_arbitrary_or_partial_user_content_is_not_routed(tmp_path, variant):
     message, _, _, verify = _case(tmp_path)
     assert verify(_entry(message, text=variant(ScheduledTurn.incoming(message).prompt))) is None
 
 
-@pytest.mark.parametrize("mutation", [
-    lambda entry: entry.update(type="event"),
-    lambda entry: entry["message"].update(role="assistant"),
-    lambda entry: entry["message"].update(content=[
-        *entry["message"]["content"], {"type": "text", "text": " extra"}
-    ]),
-    lambda entry: entry["message"].update(content="not one Pi text block"),
-    lambda entry: entry.update(timestamp="not-a-timestamp"),
-])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda entry: entry.update(type="event"),
+        lambda entry: entry["message"].update(role="assistant"),
+        lambda entry: entry["message"].update(
+            content=[*entry["message"]["content"], {"type": "text", "text": " extra"}]
+        ),
+        lambda entry: entry["message"].update(content="not one Pi text block"),
+        lambda entry: entry.update(timestamp="not-a-timestamp"),
+    ],
+)
 def test_non_pi_or_non_user_entry_cannot_be_routed(tmp_path, mutation):
     message, _, _, verify = _case(tmp_path)
     entry = _entry(message)
@@ -140,10 +157,16 @@ def test_plain_user_text_does_not_iterate_bus_candidates(tmp_path):
         def __iter__(self):
             raise AssertionError("ordinary user text caused candidate scan")
 
-    assert verify_legacy_incoming_route(
-        _entry(message, text="An unrelated question"), owner_name="owner",
-        owner_created_at=100.0, session_wire_root=root, candidates=NoScan(),
-    ) is None
+    assert (
+        verify_legacy_incoming_route(
+            _entry(message, text="An unrelated question"),
+            owner_name="owner",
+            owner_created_at=100.0,
+            session_wire_root=root,
+            candidates=NoScan(),
+        )
+        is None
+    )
 
 
 def test_duplicate_identical_committed_messages_fail_closed(tmp_path):
@@ -154,8 +177,9 @@ def test_duplicate_identical_committed_messages_fail_closed(tmp_path):
 
 def test_more_than_bounded_candidates_fail_closed(tmp_path):
     message, candidate, _, verify = _case(tmp_path)
-    others = tuple(replace(candidate, message=replace(message, body=f"other {n}"))
-                   for n in range(256))
+    others = tuple(
+        replace(candidate, message=replace(message, body=f"other {n}")) for n in range(256)
+    )
     assert verify(_entry(message), (candidate, *others)) is None
 
 
@@ -183,8 +207,7 @@ def test_once_per_page_index_preserves_unique_and_duplicate_matches(tmp_path):
 def test_page_index_is_bounded_and_retains_ambiguous_duplicate_rows(tmp_path):
     message, candidate, _, verify = _case(tmp_path)
     assert index_legacy_incoming_candidates(candidate for _ in range(8193)) is None
-    duplicates = tuple(replace(candidate, message=replace(message, seq=24 + n))
-                       for n in range(300))
+    duplicates = tuple(replace(candidate, message=replace(message, seq=24 + n)) for n in range(300))
     index = index_legacy_incoming_candidates((candidate, *duplicates))
     assert index is not None
     retained = index.candidates_for(_entry(message))

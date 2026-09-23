@@ -144,7 +144,14 @@ class CommsApp(App[None]):
     # ─── Views ────────────────────────────────────────────────────────────────
 
     def _views(self) -> list[str]:
-        channels = list(self._comms.channels())
+        # Aggregate and saved projection views can be read but cannot receive a send.
+        # Keep the keyboard's send-oriented cycle on authoritative conversations.
+        projections = self._comms.saved_views()
+        channels = [
+            name
+            for name in self._comms.channels()
+            if name not in ("#any", "#none") and name not in projections
+        ]
         dms = sorted(self._comms.registry.active_threads())
         if self._me and self._me in dms:
             dms.remove(self._me)

@@ -49,6 +49,7 @@ from . import backend
 from .declarations import ActivityState, Thread, ThreadStatus
 from .operations import Comms, wire
 from .runtime import RuntimeProxy, RuntimeServer, socket_path
+from .tool_results import tool_result_content
 
 GLOBAL_TARGET = "#all"
 AGENT_PREFIX = "!agent "
@@ -215,6 +216,27 @@ class CommsAgent:
         return LoadSessionResponse(field_meta=self._session_metadata(thread.name))
 
     async def _replay_transcript(self, session_id: str, name: str, client: Any = None) -> None:
+        if getattr(client, "transcript_snapshots", False):
+            page = await asyncio.to_thread(self._comms.thread_transcript_page, name)
+            await client.session_update(
+                session_id=session_id,
+                update=AgentMessageChunk(
+                    session_update="agent_message_chunk",
+                    content=TextContentBlock(type="text", text=""),
+                    field_meta={
+                        "agentComms": {
+                            "transcript": [
+                                event.to_wire(
+                                    include_diff=getattr(client, "transcript_diffs", False)
+                                )
+                                for event in page.events
+                            ],
+                            "transcriptPage": page.metadata(),
+                        }
+                    },
+                ),
+            )
+            return
         for event in self._comms.thread_transcript(name):
             await self._emit_event(
                 session_id,
@@ -227,6 +249,7 @@ class CommsAgent:
                     "args": event.raw_input,
                     "output": event.text,
                     "ok": event.ok,
+                    "diff": event.diff,
                 },
                 client=client,
             )
@@ -725,14 +748,12 @@ class CommsAgent:
                 tool_call_id=event["id"],
                 status="completed" if event.get("ok") else "failed",
             )
-            output = event.get("output") or ""
-            if output:
-                end_update.content = [
-                    ContentToolCallContent(
-                        type="content",
-                        content=TextContentBlock(type="text", text=output),
-                    )
-                ]
+            end_update.content = [
+                ContentToolCallContent.model_validate(item)
+                for item in tool_result_content(
+                    event["id"], event.get("output") or "", event.get("diff")
+                )
+            ]
             await client.session_update(session_id=session_id, update=end_update)
         elif kind == "thinking":
             await client.session_update(

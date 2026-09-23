@@ -17,9 +17,12 @@ def _entry(message, *, text=None, row_id="input"):
         "timestamp": (datetime.now(UTC) + timedelta(seconds=2)).isoformat(),
         "message": {
             "role": "user",
-            "content": [{"type": "text", "text": (
-                ScheduledTurn.incoming(message).prompt if text is None else text
-            )}],
+            "content": [
+                {
+                    "type": "text",
+                    "text": (ScheduledTurn.incoming(message).prompt if text is None else text),
+                }
+            ],
         },
     }
 
@@ -33,9 +36,14 @@ def _case(tmp_path):
     session = tmp_path / "session.jsonl"
     comms = wire(root)
     for name in ("peer", "owner", "other"):
-        comms.register(Thread(name, frozenset(), str(tmp_path), session_file=(
-            str(session) if name == "owner" else None
-        )))
+        comms.register(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                session_file=(str(session) if name == "owner" else None),
+            )
+        )
     return comms, session
 
 
@@ -66,9 +74,14 @@ def test_attached_foreign_session_with_identical_message_never_infers_local_from
     source_session = tmp_path / "B-pi-session.jsonl"
     source = wire(source_root)
     for name in ("peer", "owner"):
-        source.register(Thread(name, frozenset(), str(tmp_path), session_file=(
-            str(source_session) if name == "owner" else None
-        )))
+        source.register(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                session_file=(str(source_session) if name == "owner" else None),
+            )
+        )
     foreign = source.send_message("peer", "owner", "the same routine message")
     _session(source_session, _entry(foreign))
 
@@ -119,11 +132,16 @@ def test_existing_stored_route_wins_and_plain_pages_never_scan_bus(tmp_path, mon
     comms.transcript_routes.record(
         str(session), ("input",), __import__("agent_comms").TurnRouting((message,), None)
     )
-    monkeypatch.setattr(comms.bus, "_record_snapshot", lambda **_: (_ for _ in ()).throw(
-        AssertionError("Transcript pages should not scan the bus")
-    ))
+    monkeypatch.setattr(
+        comms.bus,
+        "_record_snapshot",
+        lambda **_: (_ for _ in ()).throw(
+            AssertionError("Transcript pages should not scan the bus")
+        ),
+    )
     assert comms.thread_transcript_page("owner").events[0].routing.requests == (message,)
-    _session(session, {"type": "message", "id": "ordinary", "message": {
-        "role": "user", "content": "hello"
-    }})
+    _session(
+        session,
+        {"type": "message", "id": "ordinary", "message": {"role": "user", "content": "hello"}},
+    )
     assert comms.thread_transcript_page("owner").events[0].routing is None

@@ -31,6 +31,8 @@ from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from typing import Any
 
+from .tool_results import ToolDiff
+
 RPC_FLAG = "--mode"
 RPC_VALUE = "rpc"
 _TOOL_KINDS = {
@@ -389,6 +391,7 @@ async def stream_agent_events(
                 "name": name,
                 "ok": is_ok,
                 "output": output,
+                "diff": ToolDiff.from_result(name, result, is_ok),
             }
         elif kind == "agent_settled" and not stats_requested:
             yield {"type": "settled"}

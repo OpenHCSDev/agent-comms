@@ -1674,14 +1674,17 @@ class ThreadRegistry:
                 raise RelationViolationError("Private registry guard marker is absent")
             return None
         if (
-            set(marker) not in (
+            set(marker)
+            not in (
                 {"last_seq", "writer_protocol_version", "wire_root_id"},
                 {"last_seq", "writer_protocol_version", "wire_root_id", "claim_envelopes_version"},
             )
             or (
                 "claim_envelopes_version" in marker
-                and (type(marker["claim_envelopes_version"]) is not int
-                     or marker["claim_envelopes_version"] != 1)
+                and (
+                    type(marker["claim_envelopes_version"]) is not int
+                    or marker["claim_envelopes_version"] != 1
+                )
             )
             or type(marker["writer_protocol_version"]) is not int
             or marker["writer_protocol_version"] != 1
@@ -2658,14 +2661,17 @@ class MessageBus:
             raise RelationViolationError("Private bus protocol marker is invalid.") from error
         if (
             not isinstance(metadata, dict)
-            or set(metadata) not in (
+            or set(metadata)
+            not in (
                 {"last_seq", "writer_protocol_version", "wire_root_id"},
                 {"last_seq", "writer_protocol_version", "wire_root_id", "claim_envelopes_version"},
             )
             or (
                 "claim_envelopes_version" in metadata
-                and (type(metadata["claim_envelopes_version"]) is not int
-                     or metadata["claim_envelopes_version"] != 1)
+                and (
+                    type(metadata["claim_envelopes_version"]) is not int
+                    or metadata["claim_envelopes_version"] != 1
+                )
             )
             or type(metadata.get("last_seq")) is not int
             or not 0 <= metadata["last_seq"] <= MAX_WIRE_SEQ

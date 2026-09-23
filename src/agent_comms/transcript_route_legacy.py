@@ -140,10 +140,14 @@ def index_legacy_incoming_candidates(
         # than allocating for unlimited duplicate messages.
         if len(bucket) < 3:
             bucket.append(candidate)
-    return LegacyIncomingIndex(MappingProxyType({
-        header: MappingProxyType({digest: tuple(rows) for digest, rows in digests.items()})
-        for header, digests in grouped.items()
-    }))
+    return LegacyIncomingIndex(
+        MappingProxyType(
+            {
+                header: MappingProxyType({digest: tuple(rows) for digest, rows in digests.items()})
+                for header, digests in grouped.items()
+            }
+        )
+    )
 
 
 def verify_legacy_incoming_route(

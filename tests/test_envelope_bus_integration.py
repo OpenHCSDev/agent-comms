@@ -48,9 +48,8 @@ def test_marker_is_explicit_fresh_private_default_off(tmp_path: Path) -> None:
     with pytest.raises(RelationViolationError, match="disabled"):
         ordinary.initialize_private_claim_protocol()
     comms = marked(tmp_path)
-    assert (
-        comms.initialize_private_claim_protocol()
-        == (json.loads((comms.root / "bus_meta.json").read_text())["wire_root_id"])
+    assert comms.initialize_private_claim_protocol() == (
+        json.loads((comms.root / "bus_meta.json").read_text())["wire_root_id"]
     )
     assert comms.bus.full_history() == []
 

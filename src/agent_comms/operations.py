@@ -1894,9 +1894,8 @@ class Comms:
             ):
                 return current
             progress = (
-                (f"{current.progress}\n\n" if current != started_goal and current.progress else "")
-                + diagnostic
-            )
+                f"{current.progress}\n\n" if current != started_goal and current.progress else ""
+            ) + diagnostic
             blocked = replace(current, status="blocked", progress=progress)
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
             return blocked
