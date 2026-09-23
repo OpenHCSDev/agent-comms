@@ -215,10 +215,18 @@ class CommsAgent:
         self._ensure_live_drain(session_id)
         return LoadSessionResponse(field_meta=self._session_metadata(thread.name))
 
-    async def _replay_transcript(self, session_id: str, name: str, client: Any = None) -> None:
-        if getattr(client, "transcript_snapshots", False):
+    async def _replay_transcript(
+        self,
+        session_id: str,
+        name: str,
+        client: Any = None,
+        *,
+        snapshots: bool = False,
+        diffs: bool = False,
+    ) -> None:
+        if snapshots:
             page = await asyncio.to_thread(self._comms.thread_transcript_page, name)
-            await client.session_update(
+            await (client or self._runtime).session_update(
                 session_id=session_id,
                 update=AgentMessageChunk(
                     session_update="agent_message_chunk",
@@ -226,10 +234,7 @@ class CommsAgent:
                     field_meta={
                         "agentComms": {
                             "transcript": [
-                                event.to_wire(
-                                    include_diff=getattr(client, "transcript_diffs", False)
-                                )
-                                for event in page.events
+                                event.to_wire(include_diff=diffs) for event in page.events
                             ],
                             "transcriptPage": page.metadata(),
                         }

@@ -98,8 +98,6 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path):
     assert saved.diff == live["diff"]
 
     class Client:
-        transcript_snapshots = False
-
         def __init__(self):
             self.updates = []
 
@@ -117,12 +115,10 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path):
     await agent._replay_transcript("worker", "worker", client)
     assert client.updates[-1]["content"] == live_content
     # A newer owner must not send extra TranscriptEvent fields to an old UI.
-    client.transcript_snapshots = True
-    await agent._replay_transcript("worker", "worker", client)
+    await agent._replay_transcript("worker", "worker", client, snapshots=True)
     snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
     assert "diff" not in snapshot[0]
-    client.transcript_diffs = True
-    await agent._replay_transcript("worker", "worker", client)
+    await agent._replay_transcript("worker", "worker", client, snapshots=True, diffs=True)
     snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
     assert TranscriptEvent.from_wire(snapshot[0]).diff == live["diff"]
 
