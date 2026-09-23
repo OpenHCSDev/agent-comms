@@ -31,6 +31,11 @@ from agent_comms.declarations import Thread, ThreadStatus
 from agent_comms.native_pi import NativeContextProof, NativeTurnResult
 from agent_comms.operations import Comms
 
+pytestmark = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="foreground private roots require a real /var/tmp ancestry and Linux owner checks",
+)
+
 
 def _wire(base: Path) -> tuple[Path, str, Comms]:
     root = base / "wire"

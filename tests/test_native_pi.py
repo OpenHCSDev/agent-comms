@@ -373,6 +373,9 @@ async def test_cancelled_native_turn_reaps_its_real_subprocess(tmp_path: Path, m
     assert started[0].returncode is not None
 
 
+@pytest.mark.skipif(
+    sys.platform == "darwin", reason="copied native process group control is Linux-only"
+)
 @pytest.mark.parametrize("stop_reason", ["stop", "error", "length"])
 async def test_context_proof_alone_cannot_validate_a_failed_model_reply(
     tmp_path: Path, monkeypatch, stop_reason: str
@@ -440,6 +443,9 @@ send({'type':'agent_settled'})
             await operation
 
 
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="trusted copied package requires a real /var/tmp ancestry"
+)
 def test_seven_compiled_pins_include_bedrock_and_reject_its_drift(monkeypatch) -> None:
     import agent_comms.native_pi as native
 

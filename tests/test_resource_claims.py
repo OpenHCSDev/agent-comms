@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("fcntl", reason="POSIX advisory file locks are required")
+
 from agent_comms.resource_claims import (
     ClaimError,
     ClaimNotOwned,

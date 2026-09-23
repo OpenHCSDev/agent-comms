@@ -11,10 +11,12 @@ import json
 import time
 from dataclasses import asdict, dataclass, replace
 from threading import RLock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .declarations import (
     Message,
+    RegistrySnapshot,
+    Thread,
     ThreadSort,
     ThreadView,
     _atomic_write_text,
@@ -83,7 +85,7 @@ class ThreadRelationships:
         self.comms = comms
         self.path = comms.root / "relationships.json"
         self._lock = RLock()
-        self._recent_revision = None
+        self._recent_revision: tuple[int, int, int, int] | None = None
         self._recent: tuple[Message, ...] = ()
         self._limited = False
 
@@ -94,19 +96,21 @@ class ThreadRelationships:
             self.comms.revision().expiry_tick,
         )
 
-    def _load(self) -> dict:
+    def _load(self) -> dict[str, Any]:
         try:
             state = json.loads(self.path.read_text())
         except FileNotFoundError:
             return {"version": 1, "collaborations": [], "orders": []}
-        if state.get("version") != 1:
+        if not isinstance(state, dict) or state.get("version") != 1:
             raise ValueError("Unsupported relationship store version")
         return state
 
-    def _save(self, state: dict) -> None:
+    def _save(self, state: dict[str, Any]) -> None:
         _atomic_write_text(self.path, json.dumps(state, indent=2) + "\n", fsync_parent=True)
 
-    def _canonical_edges(self, state: dict, registry) -> list[Collaboration]:
+    def _canonical_edges(
+        self, state: dict[str, Any], registry: RegistrySnapshot
+    ) -> list[Collaboration]:
         edges = []
         for raw in state["collaborations"]:
             edge = Collaboration(**raw)
@@ -126,20 +130,20 @@ class ThreadRelationships:
         return edges
 
     @staticmethod
-    def _incident(edge: Collaboration, thread) -> bool:
+    def _incident(edge: Collaboration, thread: Thread) -> bool:
         return (edge.owner, edge.owner_created) == (thread.name, thread.created_at) or (
             edge.peer,
             edge.peer_created,
         ) == (thread.name, thread.created_at)
 
     @staticmethod
-    def _counterpart(edge: Collaboration, thread) -> tuple[str, float]:
+    def _counterpart(edge: Collaboration, thread: Thread) -> tuple[str, float]:
         if (edge.owner, edge.owner_created) == (thread.name, thread.created_at):
             return edge.peer, edge.peer_created
         return edge.owner, edge.owner_created
 
     @staticmethod
-    def _orient(edge: Collaboration, thread) -> Collaboration:
+    def _orient(edge: Collaboration, thread: Thread) -> Collaboration:
         if (edge.owner, edge.owner_created) == (thread.name, thread.created_at):
             return edge
         return Collaboration(
@@ -219,7 +223,7 @@ class ThreadRelationships:
             unavailable = [
                 edge for edge in pair if self._incident(edge, first) and edge not in active
             ]
-            existing = (active or unavailable or [None])[0]
+            existing: Collaboration | None = next(iter(active or unavailable), None)
             if action == "remove":
                 # Either participant can end the single shared relationship.
                 # Prefer a live incarnation, leaving historical notes intact.
@@ -262,10 +266,11 @@ class ThreadRelationships:
             self._save(state)
             return self._orient(result, first)
 
-    def set_order(self, owner: str, group: str, order: ThreadSort) -> ThreadSort:
+    def set_order(self, owner: str, group: str, order: ThreadSort | str) -> ThreadSort:
         if group not in {"children", "collaborating"}:
             raise ValueError("This relationship group has no selectable sort")
-        order = ThreadSort(order)
+        if isinstance(order, str):
+            order = ThreadSort(order)
         with _store_lock(self.comms._wire_lock_path), _store_lock(self.path):
             thread = self.comms.registry.require(owner)
             registry = self.comms.registry.snapshot()
@@ -333,10 +338,12 @@ class ThreadRelationships:
         }
         messages, limited = self._recent_messages()
 
-        def canonical(name):
+        def canonical(name: str) -> str:
             return registry.aliases.get(name, name)
 
-        def entry(name, *, message=None, detail=""):
+        def entry(
+            name: str, *, message: Message | None = None, detail: str = ""
+        ) -> RelationshipEntry:
             name = name if is_channel_target(name) else canonical(name)
             return RelationshipEntry(
                 name,
@@ -347,7 +354,8 @@ class ThreadRelationships:
                 detail,
             )
 
-        inbound, outbound = {}, {}
+        inbound: dict[str, RelationshipEntry] = {}
+        outbound: dict[str, RelationshipEntry] = {}
         for message in reversed(messages):
             if message.notice or message.membership is not None:
                 continue
@@ -382,8 +390,8 @@ class ThreadRelationships:
             self.comms.last_sent_timestamps() if ThreadSort.LAST_MESSAGE in orders.values() else {}
         )
 
-        def ordered(entries, group):
-            def key(item):
+        def ordered(entries: list[RelationshipEntry], group: str) -> tuple[RelationshipEntry, ...]:
+            def key(item: RelationshipEntry) -> tuple[float, float, str]:
                 person = item.person
                 return orders[group].key(
                     item.target,

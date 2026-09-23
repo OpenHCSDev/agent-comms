@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -13,6 +14,10 @@ import pytest
 from agent_comms.coordination import CoordinationStore
 from agent_comms.recovery_gateway import RecoveryGateway
 from agent_comms.recovery_gateway_client import read_gateway_projection
+
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="Unix domain gateway client requires POSIX sockets"
+)
 
 
 @pytest.fixture
@@ -25,6 +30,7 @@ def root():
         shutil.rmtree(private)
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="gateway requires Linux SO_PEERCRED")
 async def test_existing_gateway_restart_returns_only_redacted_owner_dto(root: Path) -> None:
     with CoordinationStore(root / "coordination.sqlite3") as store:
         db = store._connection

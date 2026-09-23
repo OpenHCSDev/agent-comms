@@ -25,6 +25,11 @@ from agent_comms.envelope_claim_transitions import ClaimConflict, ClaimTransitio
 from agent_comms.exporting import WireExportFormat, WireExportLimit, WireExportScope
 from agent_comms.operations import Comms
 
+pytestmark = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="private claim-bus fsync/kill fixtures require Linux /var/tmp and /proc/self/fd",
+)
+
 
 def marked(tmp_path: Path) -> Comms:
     comms = Comms(tmp_path / "wire", private_initial_writes=True, private_claim_writes=True)

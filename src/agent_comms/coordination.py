@@ -19,7 +19,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from enum import IntFlag, StrEnum
 from pathlib import Path
-from typing import Final
+from typing import Final, Self
 
 from .declarations import Message, MessageType
 
@@ -2328,7 +2328,7 @@ class CoordinationStore:
         self._connection.close()
         self._enforce_private_modes()
 
-    def __enter__(self) -> CoordinationStore:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_exc: object) -> None:

@@ -24,9 +24,13 @@ from dataclasses import asdict, dataclass, fields, replace
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from .channels import ChannelCatalog
+
+if TYPE_CHECKING:
+    from .relationships import ThreadRelationships
 from .declarations import (
     Activity,
     ActivityLog,
@@ -287,7 +291,7 @@ class Comms:
     """Wire of registry, bus, and ledger rooted at one directory."""
 
     @cached_property
-    def relationships(self):
+    def relationships(self) -> ThreadRelationships:
         """Explicit work declarations and read-only thread relationship views."""
         from .relationships import ThreadRelationships
 
