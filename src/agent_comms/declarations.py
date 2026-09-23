@@ -2454,6 +2454,8 @@ class MessageBus:
 
     def _assert_private_directory(self) -> None:
         """Require a nonredirectable, owned ancestry (root sticky /tmp permitted)."""
+        if os.name != "posix":
+            raise RelationViolationError("Private bus requires POSIX ownership and modes.")
         # Walk the lexical absolute spelling, not only a relative root up to
         # Path('.'); resolve() would hide symlink ancestors instead of rejecting them.
         if ".." in self._path.parts:

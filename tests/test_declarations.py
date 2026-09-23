@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,14 @@ from agent_comms import (
     UnregisteredThreadError,
     current_thread,
 )
+
+
+@pytest.mark.skipif(os.name == "posix", reason="Windows private-bus fail-closed contract")
+def test_private_bus_rejects_unattestable_windows_ownership(tmp_path: Path) -> None:
+    registry = ThreadRegistry(tmp_path / "registry.json")
+    bus = MessageBus(tmp_path / "bus.jsonl", registry, private_initial_writes=True)
+    with pytest.raises(RelationViolationError, match="POSIX ownership"):
+        bus.initialize_private_protocol()
 
 
 class TestAgentRuntimeInfo:
