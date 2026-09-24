@@ -1069,6 +1069,7 @@ class Comms:
     ) -> None:
         viewer = self.user_identity(worktree).name
         with _store_lock(self._wire_lock_path):
+            captured_keys = None
             if through is not None:
                 if expected_scope is None or expected_scope.channel != target:
                     raise ValueError("Channel display scope missing; refresh the displayed page.")
@@ -1077,8 +1078,22 @@ class Comms:
                 current = next((scope for scope in basis[2] if scope.channel == target), None)
                 if current != expected_scope or self._display_basis_revision() != revision:
                     raise ValueError("Channel display changed; refresh the displayed page.")
+                channel = basis[1][target]
+                if channel.exact and channel.builtin is None:
+                    keys = [self.bus._view_marker_key(viewer, target, "exact")]
+                    if channel.any_mode:
+                        participant_basis = self.bus.any_participant_basis(channel, basis[0])
+                        keys.append(
+                            self.bus._view_marker_key(viewer, target, "any", participant_basis)
+                        )
+                    captured_keys = tuple(keys)
+                else:
+                    captured_keys = (self.bus._marker_key(viewer, target),)
             self.bus.mark_view_read(
-                viewer, target, self.bus.latest_sequence() if through is None else through
+                viewer,
+                target,
+                self.bus.latest_sequence() if through is None else through,
+                captured_keys=captured_keys,
             )
 
     def mark_user_view_read(self, target: str, *, worktree: str) -> None:

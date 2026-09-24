@@ -2448,16 +2448,29 @@ class MessageBus:
             )
         return activity, counts
 
-    def mark_view_read(self, viewer: str, target: str, through: int) -> None:
-        viewer = self._registry.require(viewer).name
-        channel = self._channels.resolve(target)
-        if channel.exact and channel.builtin is None:
-            markers = {self._view_marker_key(viewer, channel.name, "exact"): through}
-            if channel.any_mode:
-                basis = self.any_participant_basis(channel, self._registry.snapshot())
-                markers[self._view_marker_key(viewer, channel.name, "any", basis)] = through
+    def mark_view_read(
+        self,
+        viewer: str,
+        target: str,
+        through: int,
+        *,
+        captured_keys: tuple[str, ...] | None = None,
+    ) -> None:
+        if captured_keys is not None:
+            # A painted page's keys were derived from its validated display
+            # basis. Re-reading registry membership here could acknowledge a
+            # DM that became visible after the page was painted.
+            markers = {key: through for key in captured_keys}
         else:
-            markers = {self._marker_key(viewer, channel.name): through}
+            viewer = self._registry.require(viewer).name
+            channel = self._channels.resolve(target)
+            if channel.exact and channel.builtin is None:
+                markers = {self._view_marker_key(viewer, channel.name, "exact"): through}
+                if channel.any_mode:
+                    basis = self.any_participant_basis(channel, self._registry.snapshot())
+                    markers[self._view_marker_key(viewer, channel.name, "any", basis)] = through
+            else:
+                markers = {self._marker_key(viewer, channel.name): through}
         current = self._read_markers()
         if any(current.get(key, 0) < sequence for key, sequence in markers.items()):
             self._write_markers(markers)

@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -93,6 +94,38 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
     assert (
         wire(tmp_path).viewer_snapshot(str(tmp_path)).channel_unread["#team"] == unread_after_join
     )
+
+
+def test_any_mode_mark_keeps_captured_basis_if_registry_changes_during_write(tmp_path, monkeypatch):
+    comms = wire(tmp_path)
+    comms.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
+    comms.register(Thread("bob", frozenset({"team"}), str(tmp_path)))
+    comms.register(Thread("carol", frozenset(), str(tmp_path)))
+    comms.register(Thread("dave", frozenset(), str(tmp_path)))
+    comms.set_channel_any_mode("#team", True)
+    comms.send_message("carol", "dave", "hidden old DM")
+    comms.send_message("alice", "bob", "painted DM")
+    painted = comms.channel_display_page("#team", worktree=str(tmp_path))
+    assert [message.seq for message in painted.messages] == [2]
+
+    original_mark = comms.bus.mark_view_read
+    joined = []
+
+    def join_before_marker(*args, **kwargs):
+        carol = comms.registry.require("carol")
+        comms.registry.register(replace(carol, tags=frozenset({"team"})))
+        joined.append(True)
+        original_mark(*args, **kwargs)
+
+    monkeypatch.setattr(comms.bus, "mark_view_read", join_before_marker)
+    comms.mark_channel_view_read(
+        "#team",
+        worktree=str(tmp_path),
+        through=painted.newest_seq,
+        expected_scope=painted.display_scope,
+    )
+    assert joined
+    assert wire(tmp_path).viewer_snapshot(str(tmp_path)).channel_unread["#team"] >= 1
 
 
 def test_v1_exact_channel_marker_resets_with_notice(tmp_path):
