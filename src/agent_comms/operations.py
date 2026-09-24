@@ -1682,16 +1682,14 @@ class Comms:
                     title=title,
                 )
             self._require_available_new_tags(thread.tags)
-            # A fresh external registration may replace an owner even when
-            # its PID was reused. The running owner can also re-declare itself
-            # during normal startup; that confirmation keeps its admission.
-            # A stopped owner still rotates when it becomes active again.
+            # A fresh public registration is a new owner admission even when
+            # the OS has reused its PID and the project path is unchanged.
+            # Metadata setters re-register the saved declaration internally.
             new_owner = (
                 existing is not None
                 and existing.pid > 0
                 and thread.pid > 0
                 and thread.created_at != existing.created_at
-                and (thread.pid != os.getpid() or not self.registry.status(canonical).active)
             )
             self.registry.register(thread, new_owner=new_owner)
 
