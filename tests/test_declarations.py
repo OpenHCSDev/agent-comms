@@ -5,6 +5,7 @@ import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -620,6 +621,85 @@ class TestMessageBus:
             bus.send(Message(sender="a", target="b", body=f"m{i}", type=MessageType.INFO))
         seqs = [m.seq for m in bus.inbox("b")]
         assert seqs == list(range(1, 11))
+
+    @pytest.mark.skipif(sys.platform != "linux", reason="fsync fault uses Linux /proc/self/fd")
+    @pytest.mark.parametrize("private", [False, True])
+    def test_sequence_reservation_parent_fsync_precedes_append(
+        self, monkeypatch: pytest.MonkeyPatch, private: bool
+    ) -> None:
+        """A crash cut at the metadata directory sync cannot leave a new row."""
+        with TemporaryDirectory(prefix="ac-bus-seq-", dir="/var/tmp") as dirname:
+            root = Path(dirname)
+            bus = self._bus(root)
+            for body in ("first", "second"):
+                bus.send(Message(sender="a", target="b", body=body, type=MessageType.INFO))
+            if private:
+                sequence_path = root / "bus_meta.json"
+                marker = json.loads(sequence_path.read_text())
+                marker.update(writer_protocol_version=1, wire_root_id="a" * 32)
+                sequence_path.write_text(json.dumps(marker))
+                sequence_path.chmod(0o600)
+                bus._path.chmod(0o600)
+                _test_only_guard_for_handcrafted_marker(bus._registry)
+                bus = MessageBus(bus._path, bus._registry, private_response_writes=True)
+
+            original_fsync = os.fsync
+
+            def fail_metadata_directory_sync(fd: int) -> None:
+                if os.readlink(f"/proc/self/fd/{fd}") == str(root):
+                    raise OSError("injected metadata parent fsync failure")
+                original_fsync(fd)
+
+            with monkeypatch.context() as patch:
+                patch.setattr(os, "fsync", fail_metadata_directory_sync)
+                with pytest.raises(OSError, match="metadata parent fsync failure"):
+                    if private:
+                        intended = Message(
+                            sender="a", target="b", body="interrupted", type=MessageType.INFO
+                        )
+                        bus.publish_keyed_response(response_intent(intended))
+                    else:
+                        bus.send(
+                            Message(
+                                sender="a", target="b", body="interrupted", type=MessageType.INFO
+                            )
+                        )
+
+            reopened = MessageBus(bus._path, bus._registry, private_response_writes=private)
+            assert [message.seq for message in reopened.full_history()] == [1, 2]
+            if private:
+                next_message = Message(
+                    sender="a", target="b", body="after restart", type=MessageType.INFO
+                )
+                reopened.publish_keyed_response(response_intent(next_message))
+            else:
+                reopened.send(
+                    Message(sender="a", target="b", body="after restart", type=MessageType.INFO)
+                )
+            sequences = [message.seq for message in reopened.full_history()]
+            assert sequences == [1, 2, 4]
+
+    @pytest.mark.skipif(os.name != "posix", reason="real /var/tmp durability fixture")
+    def test_reopen_never_reuses_sequence_after_metadata_rollback(self) -> None:
+        """A retained bus row still owns its sequence if metadata rolled back."""
+        with TemporaryDirectory(prefix="ac-bus-seq-", dir="/var/tmp") as dirname:
+            root = Path(dirname)
+            bus = self._bus(root)
+            for body in ("first", "second"):
+                bus.send(Message(sender="a", target="b", body=body, type=MessageType.INFO))
+            sequence_path = root / "bus_meta.json"
+            old_metadata = sequence_path.read_bytes()
+            bus.send(Message(sender="a", target="b", body="third", type=MessageType.INFO))
+
+            # Deterministic crash cut: the last fsynced row survives while an
+            # older metadata directory entry is recovered on reboot.
+            stale = root / "bus_meta.stale"
+            stale.write_bytes(old_metadata)
+            os.replace(stale, sequence_path)
+
+            reopened = MessageBus(bus._path, bus._registry)
+            reopened.send(Message(sender="a", target="b", body="new", type=MessageType.INFO))
+            assert [message.seq for message in reopened.full_history()] == [1, 2, 3, 4]
 
     def test_ack_only_clears_up_to_latest(self, tmp_path: Path):
         bus = self._bus(tmp_path)

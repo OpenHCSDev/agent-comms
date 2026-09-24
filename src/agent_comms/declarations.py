@@ -2481,13 +2481,15 @@ class MessageBus:
             metadata = json.loads(sequence_path.read_text()) if sequence_path.exists() else {}
             if not isinstance(metadata, dict) or "writer_protocol_version" in metadata:
                 raise RelationViolationError("Legacy append is unavailable after private cutover.")
-            last_sequence = self._read_last_sequence(sequence_path)
-            if not last_sequence and self._path.exists():
-                last_sequence = self._max_sequence_unlocked()
+            last_sequence = max(
+                self._read_last_sequence(sequence_path), self._last_row_sequence_unlocked()
+            )
             stored = self._prepare_message_unlocked(
                 message, sender=sender, target=target, sequence=last_sequence + 1
             )
-            _atomic_write_text(sequence_path, json.dumps({"last_seq": stored.seq}, indent=2))
+            _atomic_write_text(
+                sequence_path, json.dumps({"last_seq": stored.seq}, indent=2), fsync_parent=True
+            )
             _append_jsonl(self._path, stored.to_wire())
         return stored
 
@@ -2614,8 +2616,8 @@ class MessageBus:
                 raise RelationViolationError("Claim read barrier is unavailable.")
             sender, target = self._validate_publish_request(message)
             projection, verified_sequence = self._claim_projection_unlocked(metadata)
-            # Metadata is a reservation hint: its rename can roll back while
-            # the existing bus inode retains a separately fsynced append.
+            # The verified bus high-water also covers rows left by an earlier
+            # uncertain append. Reserve and sync the next sequence before use.
             last_sequence = max(int(metadata["last_seq"]), verified_sequence)
             if last_sequence >= MAX_WIRE_SEQ:
                 raise RelationViolationError("Claim bus sequence is exhausted.")
@@ -2834,17 +2836,16 @@ class MessageBus:
     def _append_private_unlocked(
         self, metadata: dict[str, int | str], row: Mapping[str, object]
     ) -> None:
-        """Reserve a sequence hint, append one row, then sync the parent.
+        """Durably reserve a sequence, append one row, then sync its parent.
 
-        A failed parent fsync leaves the outcome UNKNOWN; a later crash may
-        retain the fsynced bus append while losing only the marker rename.
+        A failed append or bus parent sync leaves the outcome UNKNOWN.
         """
         encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
         if len(encoded) > 8 * 1024 * 1024:
             raise RelationViolationError("Private bus row exceeds the byte limit.")
         sequence_path = self._path.parent / "bus_meta.json"
         metadata["last_seq"] = row["seq"]  # type: ignore[assignment]
-        _atomic_write_text(sequence_path, json.dumps(metadata, indent=2))
+        _atomic_write_text(sequence_path, json.dumps(metadata, indent=2), fsync_parent=True)
         descriptor = os.open(
             self._path, os.O_APPEND | os.O_CREAT | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600
         )
@@ -3764,6 +3765,40 @@ class MessageBus:
             default=0,
         )
 
+    def _last_row_sequence_unlocked(self) -> int:
+        """Read the final complete row without rescanning the whole bus on send."""
+        try:
+            with self._path.open("rb") as records:
+                records.seek(0, os.SEEK_END)
+                end = records.tell()
+
+                def previous_newline(before: int) -> int:
+                    cursor = before
+                    while cursor:
+                        start = max(0, cursor - 64 * 1024)
+                        records.seek(start)
+                        offset = records.read(cursor - start).rfind(b"\n")
+                        if offset >= 0:
+                            return start + offset
+                        cursor = start
+                    return -1
+
+                last_newline = previous_newline(end)
+                if last_newline < 0:
+                    return 0  # An incomplete first row is repaired before append.
+                prior_newline = previous_newline(last_newline)
+                records.seek(prior_newline + 1)
+                raw = records.read(last_newline - prior_newline - 1)
+        except FileNotFoundError:
+            return 0
+        try:
+            row = json.loads(raw, object_pairs_hook=unique_wire_object)
+            if type(row) is not dict or type(row.get("seq")) is not int or row["seq"] < 1:
+                raise ValueError("Invalid last bus sequence")
+            return int(row["seq"])
+        except (ValueError, UnicodeError) as error:
+            raise RelationViolationError("Malformed last bus row blocks publication.") from error
+
     def rename_thread(self, old_name: str, new_name: str) -> None:
         """Move read markers to canonical names without rewriting message history."""
         marker_path = self._path.parent / "read_markers.json"
@@ -3831,7 +3866,9 @@ class MessageBus:
                 self._read_last_sequence(sequence_path),
                 max((message.seq for message in messages), default=0),
             )
-            _atomic_write_text(sequence_path, json.dumps({"last_seq": high_water}, indent=2))
+            _atomic_write_text(
+                sequence_path, json.dumps({"last_seq": high_water}, indent=2), fsync_parent=True
+            )
             _atomic_write_text(
                 self._path,
                 "".join(f"{json.dumps(message.to_wire())}\n" for message in retained),
