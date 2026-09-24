@@ -1,4 +1,4 @@
-"""Explicit default-off sender for one disposable private N/K cohort.
+"""Sender for one private N/K cohort.
 
 Start each recipient with ``python -m agent_comms.cohort_foreground`` and wait
 for its ready receipt before sending. This command publishes one frozen initial
@@ -27,12 +27,12 @@ def publish_one(
     sender: str,
     target: str,
     body: str,
-    opt_in: bool = False,
+    opt_in: bool = True,
 ) -> tuple[int, str]:
-    """Publish exactly one private initial; never infer opt-in from the root."""
+    """Publish exactly one private initial on an initialized root."""
     root = Path(root).absolute()
     if not opt_in or root == Path("/var/tmp") or not root.is_relative_to("/var/tmp"):
-        raise PublicationActivationBlocked("cohort sender requires disposable /var/tmp opt-in")
+        raise PublicationActivationBlocked("cohort sender requires a private /var/tmp root")
     _private_session_dir(root)
     comms = Comms(root, private_initial_writes=True)
     with _store_lock(comms.bus._path):
@@ -50,7 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--from", dest="sender", required=True)
     parser.add_argument("--to", dest="target", required=True)
     parser.add_argument("--body", required=True)
-    parser.add_argument("--opt-in", action="store_true", required=True)
+    parser.add_argument("--opt-in", action="store_true", default=True, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     try:
         seq, message_id = publish_one(

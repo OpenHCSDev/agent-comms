@@ -265,8 +265,6 @@ def test_cli_main_ready_then_single_go_offline_model_boundary(
                 "team",
                 "--native-package",
                 str(root / "fake-pi"),
-                "--private-opt-in",
-                "--native-model-opt-in",
             ]
         )
         == 0
@@ -325,7 +323,7 @@ def test_partial_go_frame_times_out_without_provider(monkeypatch: pytest.MonkeyP
         os.close(write_fd)
 
 
-def test_no_implicit_root_or_optin_and_no_owner_replacement(tmp_path: Path) -> None:
+def test_private_root_marker_and_no_owner_replacement(tmp_path: Path) -> None:
     root, comms, root_id = _private_root(tmp_path)
     with patch("agent_comms.nk_foreground._trusted_package", return_value=None):
         with pytest.raises(PublicationActivationBlocked):
@@ -336,6 +334,7 @@ def test_no_implicit_root_or_optin_and_no_owner_replacement(tmp_path: Path) -> N
                 task="task",
                 tags=frozenset({"team"}),
                 native_package=root / "fake-pi",
+                opt_in=False,
             )
         with pytest.raises(RelationViolationError):
             reserve_foreground_owner(
@@ -355,7 +354,6 @@ def test_no_implicit_root_or_optin_and_no_owner_replacement(tmp_path: Path) -> N
             task="task",
             tags=frozenset({"team"}),
             native_package=root / "fake-pi",
-            opt_in=True,
         )
         assert first.name == "beta"
         with pytest.raises(RelationViolationError, match="already exists"):

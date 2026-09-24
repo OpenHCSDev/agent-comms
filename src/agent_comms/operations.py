@@ -314,8 +314,8 @@ class Comms:
         self,
         root: Path,
         *,
-        private_initial_writes: bool = False,
-        private_claim_writes: bool = False,
+        private_initial_writes: bool = True,
+        private_claim_writes: bool = True,
     ) -> None:
         from .view_unread import transcript_read_state
 
@@ -370,7 +370,7 @@ class Comms:
         claims: Sequence[str | Path] = (),
         releases: Sequence[str | Path] = (),
     ) -> Message:
-        """Return one committed envelope; optional claims are default-off."""
+        """Return one committed envelope, including optional guarded claims."""
         with _store_lock(self._wire_lock_path):
             if sender not in self.registry:
                 raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
@@ -399,12 +399,12 @@ class Comms:
             return self.bus.publish(message)
 
     def initialize_private_initial_protocol(self) -> str:
-        """Explicit fresh-root opt-in; ordinary production Comms cannot issue a marker."""
+        """Initialize the private protocol on a fresh owner-only root."""
         with _store_lock(self._wire_lock_path):
             return self.bus.initialize_private_protocol()
 
     def initialize_private_claim_protocol(self) -> str:
-        """Explicit default-off claim read barrier on a fresh marked private bus."""
+        """Initialize the claim read barrier on a fresh marked private bus."""
         with _store_lock(self._wire_lock_path):
             return self.bus.initialize_private_claim_protocol()
 

@@ -421,7 +421,7 @@ async def run_one_sealed_claim(
     wire_root_id: str,
     owner_name: str,
     native_package: Path,
-    opt_in: bool = False,
+    opt_in: bool = True,
     after_seq: int = 0,
     session_file: Path | None = None,
 ) -> CoordinatedTurn | None:
@@ -432,7 +432,7 @@ async def run_one_sealed_claim(
     """
     root = Path(root).absolute()
     if not opt_in or root == Path("/var/tmp") or not root.is_relative_to("/var/tmp"):
-        raise PublicationActivationBlocked("coordinated runtime requires disposable opt-in root")
+        raise PublicationActivationBlocked("coordinated runtime requires a private /var/tmp root")
     _private_session_dir(root)
     _trusted_package(native_package)  # fail BEFORE any claim is reserved
     comms = Comms(root)

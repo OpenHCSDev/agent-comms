@@ -281,7 +281,6 @@ raise SystemExit(f.main(sys.argv[1:]))
                 sys.executable,
                 "-c",
                 script,
-                "--opt-in",
                 "--root",
                 str(root),
                 "--wire-root-id",
@@ -317,7 +316,6 @@ raise SystemExit(f.main(sys.argv[1:]))
                     sys.executable,
                     "-m",
                     "agent_comms.cohort_send",
-                    "--opt-in",
                     "--root",
                     str(root),
                     "--wire-root-id",
@@ -498,7 +496,22 @@ async def test_failed_model_reservation_is_not_polled_or_replayed(
         assert len(calls) == 1
 
 
-def test_sender_requires_explicit_private_root_and_exact_marker(tmp_path: Path) -> None:
+def test_sender_is_enabled_on_an_initialized_private_root() -> None:
+    with TemporaryDirectory(prefix="ac-foreground-", dir="/var/tmp") as dirname:
+        root, root_id, comms = _wire(Path(dirname))
+        comms.register(Thread("beta", frozenset(), dirname, pid=os.getpid()))
+        sequence, message_id = cohort_send.publish_one(
+            root,
+            wire_root_id=root_id,
+            sender="sender",
+            target="beta",
+            body="private message",
+        )
+        assert sequence == 1
+        assert message_id == comms.full_history()[0].message_id
+
+
+def test_sender_requires_private_root_and_exact_marker(tmp_path: Path) -> None:
     with pytest.raises(PublicationActivationBlocked):
         cohort_send.publish_one(
             tmp_path,

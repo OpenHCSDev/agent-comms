@@ -351,16 +351,14 @@ def test_reader_rejects_later_corrupt_row_even_for_earlier_valid_seq(tmp_path: P
     assert store._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0] == 0
 
 
-def test_default_off_and_existing_bus_cannot_acquire_private_marker(tmp_path: Path) -> None:
+def test_existing_bus_cannot_acquire_private_marker(tmp_path: Path) -> None:
     root = tmp_path / "legacy"
     root.mkdir(mode=0o700)
     default = Comms(root)
-    with pytest.raises(RelationViolationError, match="disabled"):
-        default.initialize_private_initial_protocol()
     default.registry.register(Thread(name="sender", tags=frozenset(), worktree=str(root)))
     default.registry.register(Thread(name="Alice", tags=frozenset(), worktree=str(root)))
     default.send_message("sender", "Alice", "ordinary")
-    gated = Comms(root, private_initial_writes=True)
+    gated = Comms(root)
     before = (root / "bus.jsonl").read_bytes()
     with pytest.raises(RelationViolationError, match="fresh bus root"):
         gated.initialize_private_initial_protocol()

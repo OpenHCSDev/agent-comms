@@ -20,6 +20,13 @@ from agent_comms.declarations import ActivityState, UnregisteredThreadError
 from agent_comms.operations import wire
 
 
+@pytest.fixture(autouse=True)
+def _model_catalog_without_a_local_pi_process(monkeypatch):
+    # These ACP handler tests use fake backends. Keep model discovery local so
+    # an installed Pi process cannot make an unrelated handler test stall.
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/z-ai/glm-5.3-flash")
+
+
 def _update_text(update) -> str:
     """Update text for chunk-like updates; config updates carry none."""
     content = getattr(update, "content", None)

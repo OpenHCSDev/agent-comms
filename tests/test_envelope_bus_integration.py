@@ -1,4 +1,4 @@
-"""Default-off claim-envelope bus durability boundary (no production send activation)."""
+"""Claim-envelope bus durability boundary on an initialized private root."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def marked(tmp_path: Path) -> Comms:
-    comms = Comms(tmp_path / "wire", private_initial_writes=True, private_claim_writes=True)
+    comms = Comms(tmp_path / "wire")
     root_id = comms.initialize_private_initial_protocol()
     assert comms.initialize_private_claim_protocol() == root_id
     marker = comms.root / "bus_meta.json"  # existing private-root marker, not claim authority
@@ -49,9 +49,9 @@ def _sample_line(*, complete: bool = True) -> bytes:
     return json.dumps(row).encode() + (b"\n" if complete else b"")
 
 
-def test_marker_is_explicit_fresh_private_default_off(tmp_path: Path) -> None:
+def test_marker_requires_fresh_private_root_and_claim_protocol(tmp_path: Path) -> None:
     ordinary = Comms(tmp_path / "ordinary")
-    with pytest.raises(RelationViolationError, match="disabled"):
+    with pytest.raises(RelationViolationError, match="marker"):
         ordinary.initialize_private_claim_protocol()
     comms = marked(tmp_path)
     assert comms.initialize_private_claim_protocol() == (
@@ -294,7 +294,7 @@ def test_public_rename_preserves_claim_release_then_new_owner_wins(
     next_thread = comms.claim_thread("alice", tags=frozenset({"team"}), worktree=str(worktree))
     assert next_thread.name != "alice" and next_thread.created_at != original.created_at
 
-    reopened = Comms(comms.root, private_claim_writes=True)
+    reopened = Comms(comms.root)
     assert reopened.claim_projection()[path].owner == "alice"
     with pytest.raises(ClaimTransitionError, match="exact owner"):
         reopened.send_message(

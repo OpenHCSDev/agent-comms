@@ -1,4 +1,4 @@
-"""Explicit, default-off private same-DB input attempts for the coordinated runner.
+"""Private same-DB input attempts for the coordinated runner.
 
 A row reserves one input ID *before* Pi starts. Its optional context fields are
 written only from a live native Pi event, never reconstructed from a journal on

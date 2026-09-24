@@ -1,4 +1,4 @@
-"""Receipt-backed default-off runner with real bus/SQLite and fake Pi unit boundary.
+"""Receipt-backed runner with real bus/SQLite and fake Pi unit boundary.
 
 These fakes test state transitions only. Parent owns real patched Pi/provider process
 acceptance and final post-merge review; no fake can establish Pi model authority.
@@ -44,7 +44,7 @@ def tmp_path():
 
     CI's standard pytest temp root is /tmp; on hosts without a safe /var/tmp
     (including Windows and macOS with a symlinked /var), these Linux-only
-    opt-in process tests are inapplicable rather than weakening the runtime guard.
+    private-root process tests are inapplicable rather than weakening the runtime guard.
     """
     if (
         os.name != "posix"
@@ -820,10 +820,10 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
     assert not (root / "read_markers.json").exists()
 
 
-async def test_default_off_before_any_bus_or_sql_mutation(tmp_path: Path) -> None:
+async def test_untrusted_pi_fails_before_any_bus_or_sql_mutation(tmp_path: Path) -> None:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    with pytest.raises(PublicationActivationBlocked):
+    with pytest.raises(NativePiUnavailable):
         await run_one_sealed_claim(
             root, wire_root_id="0" * 32, owner_name="alpha", native_package=tmp_path
         )

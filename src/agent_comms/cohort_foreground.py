@@ -1,4 +1,4 @@
-"""One-shot, foreground, default-off recipient owner for a disposable N/K root.
+"""One-shot foreground recipient owner for a private N/K root.
 
 Start this process *before* publishing an initial cohort. It registers a fresh
 recipient under its own PID, prints a ready receipt, accepts at most one
@@ -6,7 +6,7 @@ selected claim, then exits. The sender must separately initialize the private
 protocol and publish the cohort after readiness. No inbox ACK, daemon, retry,
 monitor, production cutover, or recovery decision is made here.
 
-    python -m agent_comms.cohort_foreground --opt-in --root /var/tmp/my-private-wire \\
+    python -m agent_comms.cohort_foreground --root /var/tmp/my-private-wire \\
         --wire-root-id ID --name recipient --worktree /path/to/project \\
         --tags team --native-package /path/to/reviewed/copied/pi
 """
@@ -45,9 +45,9 @@ class NoWakeReceipt:
 
 def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool) -> None:
     # Do not create a root, registry, SQLite database, or provider opportunity
-    # when the opt-in, owner-only directory, or reviewed copied Pi is absent.
+    # when the owner-only directory or reviewed copied Pi is absent.
     if not opt_in or root == Path("/var/tmp") or not root.is_relative_to("/var/tmp"):
-        raise PublicationActivationBlocked("foreground cohort requires disposable /var/tmp opt-in")
+        raise PublicationActivationBlocked("foreground cohort requires a private /var/tmp root")
     _private_session_dir(root)
     _trusted_package(native_package)
     comms = Comms(root)
@@ -92,7 +92,7 @@ async def run_foreground_once(
     worktree: Path,
     tags: frozenset[str],
     native_package: Path,
-    opt_in: bool = False,
+    opt_in: bool = True,
     wait_seconds: float = 60.0,
     ready: Callable[[Thread], None] | None = None,
 ) -> CoordinatedTurn | NoWakeReceipt | None:
@@ -184,7 +184,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--tags", default="", help="Comma-separated recipient tags")
     parser.add_argument("--native-package", type=Path, required=True)
     parser.add_argument("--wait-seconds", type=float, default=60.0)
-    parser.add_argument("--opt-in", action="store_true", required=True)
+    parser.add_argument("--opt-in", action="store_true", default=True, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
     def ready(thread: Thread) -> None:

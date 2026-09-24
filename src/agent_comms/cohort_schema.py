@@ -1,4 +1,4 @@
-"""Explicit, private, default-off coordinator cohort schema extension.
+"""Private coordinator cohort schema extension.
 
 This module installs no authority during ordinary store construction. A sealed
 receipt is a SQL cohort boundary, NOT proof of a bus manifest, owner identity,

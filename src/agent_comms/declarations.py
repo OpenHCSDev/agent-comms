@@ -2674,7 +2674,7 @@ class MessageBus:
             path = path.parent
 
     def initialize_private_protocol(self) -> str:
-        """Explicit, default-off marker issuer for a NEW, isolated bus root only.
+        """Marker issuer for a NEW, isolated bus root only.
 
         Operational old-writer quiescence remains required for any future live
         cutover; this issuer refuses a legacy log rather than guessing it.
@@ -2714,7 +2714,7 @@ class MessageBus:
                 return root_id
 
     def initialize_private_claim_protocol(self) -> str:
-        """Default-off gate for a NEW marked root, before ANY bus message exists.
+        """Claim gate for a NEW marked root, before ANY bus message exists.
 
         The version flag in the EXISTING private bus marker is only a read
         barrier. Claim ownership lives in one bus envelope, not in metadata
@@ -3030,7 +3030,7 @@ class MessageBus:
     def publish_initial_cohort(self, message: Message, *, control: str = "ordinary") -> Message:
         """Commit public envelope and FULL N private decisions in the SAME fsynced row.
 
-        This default-off path assumes cooperating Comms writers hold the global
+        This private path assumes cooperating Comms writers hold the global
         wire lock. It never publishes from a caller-supplied audience or claim.
         """
         from .audience_manifest import MAX_WIRE_SEQ, FrozenRecipient, freeze_audience

@@ -1,4 +1,4 @@
-"""Pure, default-off claim transitions for a *future* single-authority bus envelope.
+"""Pure claim transitions for the single-authority bus envelope.
 
 No bus send, file append, O_EXCL claim sidecar, write fence, or retry lives here.
 A caller must serialize send and every claim-bearing read under the wire→bus
