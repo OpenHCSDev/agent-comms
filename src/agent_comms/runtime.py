@@ -76,7 +76,13 @@ class RuntimeServer:
             if action == "subscribe":
                 self.clients.setdefault(session_id, set()).add(client)
                 await self.agent.emit_session_identity(session_id, name, client=client)
-                await self.agent._replay_transcript(session_id, name, client=client)
+                await self.agent._replay_transcript(
+                    session_id,
+                    name,
+                    client=client,
+                    snapshots=request.get("transcriptSnapshots") is True,
+                    diffs=request.get("transcriptDiffs") is True,
+                )
                 await self.agent.replay_turn_state(session_id, client=client)
                 await self.agent.replay_unknown_inputs(session_id, client=client)
                 writer.write(
@@ -156,7 +162,17 @@ class RuntimeProxy:
                     raise
                 await asyncio.sleep(0.05)
         self.writer.write(
-            (json.dumps({"action": "subscribe", "thread": self.session_id}) + "\n").encode()
+            (
+                json.dumps(
+                    {
+                        "action": "subscribe",
+                        "thread": self.session_id,
+                        "transcriptSnapshots": self.agent._transcript_snapshots,
+                        "transcriptDiffs": self.agent._transcript_diffs,
+                    }
+                )
+                + "\n"
+            ).encode()
         )
         await self.writer.drain()
         while line := await reader.readline():

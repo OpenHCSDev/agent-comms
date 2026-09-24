@@ -2082,6 +2082,8 @@ while True: time.sleep(0.1)
 import json, os, signal, sys, time
 state = json.loads(sys.stdin.readline())
 assert state["type"] == "get_state"
+with open({str(pid_file)!r}, "w") as pid_output:
+    pid_output.write(str(os.getpid()))
 if {phase!r} == "preflight":
     data = "invalid-state"
 else:
@@ -2092,7 +2094,6 @@ if {phase!r} == "no_user_start":
     prompt = json.loads(sys.stdin.readline())
     print(json.dumps({{"type": "response", "command": "prompt",
                       "id": prompt["id"], "success": True}}), flush=True)
-open({str(pid_file)!r}, "w").write(str(os.getpid()))
 signal.signal(signal.SIGTERM, lambda *_: None)
 while True: time.sleep(0.1)
 """,

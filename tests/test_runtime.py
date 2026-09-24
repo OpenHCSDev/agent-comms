@@ -1,6 +1,7 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
 
 import asyncio
+import json
 import os
 from contextlib import suppress
 
@@ -109,6 +110,49 @@ async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
         await asyncio.wait_for(task, 2)
     finally:
         release.set()
+        await proxy.close()
+        await owner.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
+async def test_attached_snapshot_client_can_page_earlier_transcript(tmp_path):
+    comms = wire(tmp_path / "wire")
+    owner = CommsAgent(comms, agent_bin="/bin/echo", runtime_enabled=True)
+    client = CommsAgent(comms)
+    updates = []
+
+    class Client:
+        async def session_update(self, session_id, update):
+            updates.append(update)
+
+    client.on_connect(Client())
+    await client.initialize(1, {"_meta": {"agentComms": {"transcriptSnapshots": True}}})
+    response = await owner.new_session(str(tmp_path / "project"))
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text(
+        "\n".join(
+            json.dumps({"type": "message", "message": {"role": "assistant", "content": str(i)}})
+            for i in range(50)
+        )
+        + "\n"
+    )
+    comms.attach_session(response.session_id, str(transcript))
+    proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
+    try:
+        await proxy.subscribe()
+        snapshots = [
+            update.get("_meta", {}).get("agentComms", {})
+            for update in updates
+            if "transcriptPage" in update.get("_meta", {}).get("agentComms", {})
+        ]
+        assert len(snapshots) == 1
+        assert snapshots[0]["transcriptPage"]["has_older"] is True
+        assert all(
+            "omitted from this bounded view" not in update.get("content", {}).get("text", "")
+            for update in updates
+        )
+    finally:
         await proxy.close()
         await owner.shutdown()
 

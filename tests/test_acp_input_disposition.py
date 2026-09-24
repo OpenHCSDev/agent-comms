@@ -30,6 +30,40 @@ def test_each_direct_sequence_gets_its_own_native_turn():
 
 
 @pytest.mark.asyncio
+async def test_preflight_failure_keeps_its_reason_visible(tmp_path, monkeypatch):
+    comms = wire(tmp_path / "wire")
+    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+    updates = []
+
+    class Client:
+        async def session_update(self, session_id, update):
+            updates.append(update)
+
+    async def events(*args, **kwargs):
+        yield {
+            "type": "done",
+            "ok": False,
+            "text": "Pi native input-ID capability preflight failed.",
+            "reason_code": "pi_input_id_unavailable",
+        }
+
+    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    agent.on_connect(Client())
+    await agent.new_session(str(tmp_path / "project"))
+    try:
+        await agent._run_owned_input("project", "project", "testing", display_text="testing")
+        texts = [
+            update.content.text
+            for update in updates
+            if getattr(update, "content", None) is not None and update.content.text
+        ]
+        assert "[agent error] Pi native input-ID capability preflight failed." in texts
+        assert InputDispositions(comms.root).unknown(frozenset({"project"}))
+    finally:
+        await agent.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_direct_cannot_launch_text_backend_without_native_start_proof(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="/bin/echo", runtime_enabled=True)

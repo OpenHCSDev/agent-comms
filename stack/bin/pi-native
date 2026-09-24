@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Launch the pinned, local Pi input-ID build without changing the installed Pi.
+set -euo pipefail
+
+stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+cli="$stack_root/.pi-native/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
+if [[ ! -f "$cli" ]]; then
+    printf 'Native Pi is unavailable; run %s/bin/prepare-pi-native first.\n' "$stack_root" >&2
+    exit 1
+fi
+exec node "$cli" "$@"

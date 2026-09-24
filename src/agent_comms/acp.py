@@ -1704,7 +1704,9 @@ class CommsAgent:
                         self._dispositions.status(key) != "started"
                         for key in self._turn_input_keys.get(session_id, set())
                     )
-                    if self._forwarded_inputs.get(session_id) or unknown_attempts:
+                    if event.get("ok") is True and (
+                        self._forwarded_inputs.get(session_id) or unknown_attempts
+                    ):
                         # A final assistant stop can prove the original turn,
                         # not an ACKed follow-up lacking its own user start.
                         event = {
