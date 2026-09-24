@@ -1517,14 +1517,17 @@ class ScheduledTurn:
 
     @staticmethod
     def take_batch(pending: list[ScheduledTurn]) -> tuple[list[ScheduledTurn], list[ScheduledTurn]]:
-        """Only combine adjacent requests whose answers have the same destination."""
+        """Combine compatible channel turns, keeping each direct input separate."""
         if not pending:
             return [], []
+        if pending[0].origin and pending[0].origin.response_policy is ResponsePolicy.DIRECT:
+            return pending[:1], pending[1:]
         boundary = next(
             (
                 index
                 for index, turn in enumerate(pending)
                 if turn.reply_target != pending[0].reply_target
+                or (turn.origin and turn.origin.response_policy is ResponsePolicy.DIRECT)
             ),
             len(pending),
         )

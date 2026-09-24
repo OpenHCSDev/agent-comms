@@ -9,11 +9,83 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Thread
+from agent_comms import Message, MessageType, Thread
 from agent_comms.acp import CommsAgent
+from agent_comms.declarations import ScheduledTurn
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import wire
 from agent_comms.runtime import RuntimeProxy, socket_path
+
+
+def test_each_direct_sequence_gets_its_own_native_turn():
+    first = ScheduledTurn.incoming(
+        Message(sender="peer", target="project", body="alpha", type=MessageType.INFO, seq=1)
+    )
+    second = ScheduledTurn.incoming(
+        Message(sender="peer", target="project", body="beta", type=MessageType.INFO, seq=2)
+    )
+    batch, remaining = ScheduledTurn.take_batch([first, second])
+    assert batch == [first]
+    assert remaining == [second]
+
+
+@pytest.mark.asyncio
+async def test_direct_cannot_launch_text_backend_without_native_start_proof(tmp_path, monkeypatch):
+    comms = wire(tmp_path / "wire")
+    agent = CommsAgent(comms, agent_bin="/bin/echo", runtime_enabled=True)
+    await agent.new_session(str(tmp_path / "project"))
+    agent._drain_tasks["project"].cancel()
+    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
+
+    async def unexpected_backend(*args, **kwargs):
+        raise AssertionError("Text backend launched for a direct without native proof")
+        yield {}
+
+    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", unexpected_backend)
+    try:
+        comms.send("peer", "project", "do not run unproved")
+        assert await agent._drain_inbox("project") == 1
+        assert not agent._pending_turns.get("project")
+        assert not agent._wake_tasks.get("project")
+        assert InputDispositions(comms.root).status("bus:1") == "unknown"
+    finally:
+        await agent.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_two_queued_directs_need_two_distinct_native_starts(tmp_path, monkeypatch):
+    comms = wire(tmp_path / "wire")
+    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+    await agent.new_session(str(tmp_path / "project"))
+    agent._drain_tasks["project"].cancel()
+    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
+    comms.send("peer", "project", "alpha")
+    comms.send("peer", "project", "beta")
+    assert await agent._drain_inbox("project") == 2
+    assert len(agent._pending_turns["project"]) == 2
+    receipts = []
+
+    async def events(*args, **kwargs):
+        native_id = f"{len(receipts) + 1:032x}"
+        with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
+            assert allowed
+        assert kwargs["native_start"](None, native_id, args[2])
+        receipts.append(native_id)
+        yield {"type": "input_started", "id": None}
+        yield {"type": "done", "ok": True, "text": "done"}
+
+    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    try:
+        CommsAgent._schedule_wake(agent, "project")
+        await asyncio.wait_for(agent._wake_tasks["project"], timeout=3)
+        assert receipts == [f"{1:032x}", f"{2:032x}"]
+        assert InputDispositions(comms.root).status("bus:1") == "started"
+        assert InputDispositions(comms.root).status("bus:2") == "started"
+    finally:
+        await agent.shutdown()
 
 
 @pytest.mark.asyncio
@@ -21,7 +93,7 @@ async def test_ui_ack_does_not_hide_unknown_or_authorize_goal_superseded_direct(
     tmp_path, monkeypatch
 ):
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="/bin/echo", runtime_enabled=True)
+    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
     agent._drain_tasks["project"].cancel()
     await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
@@ -58,7 +130,7 @@ async def test_ui_ack_does_not_hide_unknown_or_authorize_goal_superseded_direct(
 @pytest.mark.asyncio
 async def test_project_change_after_queue_denies_stale_project_send(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="/bin/echo", runtime_enabled=True)
+    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
     agent._drain_tasks["project"].cancel()
     await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
@@ -91,7 +163,7 @@ async def test_project_change_after_queue_denies_stale_project_send(tmp_path, mo
 @pytest.mark.asyncio
 async def test_late_subscriber_receives_persisted_unknown(tmp_path):
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="/bin/echo", runtime_enabled=True)
+    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
     agent._drain_tasks["project"].cancel()
     await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
@@ -126,7 +198,7 @@ async def test_late_subscriber_receives_persisted_unknown(tmp_path):
 @pytest.mark.asyncio
 async def test_stop_before_wake_leaves_direct_unknown_without_backend_send(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="/bin/echo", runtime_enabled=True)
+    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
     agent._drain_tasks["project"].cancel()
     await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)

@@ -1207,6 +1207,7 @@ class CommsAgent:
                         and message.seq > self._legacy_through.get(session_id, 0)
                         and status.running
                         and (current.goal is None or not current.goal.active)
+                        and backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
                     )
                 self._delivery_cursors.advance(aliases, message.seq)
                 self._inbox_cursors[session_id] = message.seq
@@ -1350,6 +1351,13 @@ class CommsAgent:
         """Stream a real coding agent's reply: events to the client, status to the wire."""
         thread = self._comms.registry.require(thread_name)
         thread_name = thread.name
+        direct_targets = self._comms.registry.aliases_for(thread_name)
+        if backend.rpc_args_for(self._agent_bin, self._agent_args) is None and any(
+            origin.seq > 0 and origin.target in direct_targets for origin in origins
+        ):
+            # A text backend has no native user-start receipt. Its process
+            # must not run for a direct whose UNKNOWN row needs that proof.
+            return
         goal = thread.goal
         self._sessions[session_id] = thread_name
         # Error-display deduplication belongs to one backend turn, not a session.
@@ -1412,6 +1420,7 @@ class CommsAgent:
                 )
                 allowed = (
                     current is not None
+                    and len(keys) <= 1
                     and snapshot.statuses[canonical].running
                     and snapshot.admission_generations.get(canonical) == turn_admission
                     and current.pid == thread.pid
@@ -1451,7 +1460,7 @@ class CommsAgent:
                     else ()
                 )
             )
-            return all(
+            return len(keys) <= 1 and all(
                 self._dispositions.started(
                     key, turn_id=turn_id, native_id=native_id, text=sent_text
                 )

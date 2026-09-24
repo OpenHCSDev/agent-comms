@@ -644,6 +644,7 @@ class TestAgentTurn:
         self, wired, tmp_path, monkeypatch
     ):
         agent = self._agent_with_stub(tmp_path, wired)
+        agent._agent_bin = "pi"  # Event source below is a mocked native Pi RPC stream.
         session_file = tmp_path / "pi-session.jsonl"
         calls: list[dict] = []
         steered: list[str] = []
