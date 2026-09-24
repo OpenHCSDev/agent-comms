@@ -27,7 +27,7 @@ import time
 import unicodedata
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
@@ -60,6 +60,7 @@ from acp.schema import (
 from . import backend
 from .declarations import (
     ActivityState,
+    Goal,
     Message,
     MessageRoute,
     MessageType,
@@ -1360,7 +1361,13 @@ class CommsAgent:
 
     def _schedule_goal(self, session_id: str) -> None:
         """Only the existing thread owner may schedule another goal turn."""
-        if self._closing or session_id in self._turn_tasks or self._pending_turns.get(session_id):
+        if (
+            self._closing
+            or session_id in self._turn_tasks
+            or session_id in self._backend_inboxes
+            or session_id in self._active_turns
+            or self._pending_turns.get(session_id)
+        ):
             return
         if (wake := self._wake_tasks.get(session_id)) is not None and not wake.done():
             return
@@ -1369,15 +1376,40 @@ class CommsAgent:
             return
         goal = thread.goal
         if goal is not None and goal.active:
-            store = self._goal_store
-            if store is None or self._pending_goal_origins.get(thread.name) == goal.id:
+            if self._pending_goal_origins.get(thread.name) == goal.id:
                 return
-            generation = store.snapshot(goal.id)
-            if generation is None or generation.state != "ready":
+            store = self._goal_store
+            if (
+                store is None
+                and (self._comms.root / "goal-private" / "goal_attempts.sqlite3").exists()
+            ):
+                store = self._open_goal_store()
+            if store is None:
+                self._comms.block_goal_after_failed_turn(
+                    thread.name,
+                    started_goal=goal,
+                    expected_worktree=thread.worktree,
+                    diagnostic="Goal launch grant unavailable; explicit Retry required.",
+                )
                 return
             try:
+                generation = store.snapshot(goal.id)
+                if generation is None or generation.state != "ready":
+                    self._comms.block_goal_after_failed_turn(
+                        thread.name,
+                        started_goal=goal,
+                        expected_worktree=thread.worktree,
+                        diagnostic="Goal attempt unresolved; inspect diagnostics before Retry.",
+                    )
+                    return
                 store.ready_grant(goal.id, generation.number)
             except GoalAttemptError:
+                self._comms.block_goal_after_failed_turn(
+                    thread.name,
+                    started_goal=goal,
+                    expected_worktree=thread.worktree,
+                    diagnostic="Goal launch grant unavailable; explicit Retry required.",
+                )
                 return
             self._pending_turns.setdefault(session_id, []).append(
                 ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
@@ -1390,6 +1422,53 @@ class CommsAgent:
             private.mkdir(mode=0o700, exist_ok=True)
             self._goal_store = GoalAttemptStore.initialize(private)
         return self._goal_store
+
+    async def retry_goal(self, session_id: str, goal_id: str, expected_revision: int) -> Goal:
+        """Record an explicit UI retry in the executing owner's private ledger."""
+        if session_id in self._backend_inboxes or session_id in self._active_turns:
+            raise ValueError("Wait for the current turn to finish before retrying the goal.")
+        name = self._require_session(session_id)
+        with _store_lock(self._comms._wire_lock_path):
+            thread = self._comms.registry.require(name)
+            if thread.pid != os.getpid() or not self._comms.registry.status(name).running:
+                raise ValueError("The goal owner changed; refresh its state.")
+            goal = thread.goal
+            if (
+                goal is None
+                or goal.id != goal_id
+                or goal.revision != expected_revision
+                or goal.status != "blocked"
+            ):
+                raise ValueError("The blocked goal changed; refresh its state.")
+            if self._pending_goal_origins.get(name) == goal_id:
+                raise ValueError("Wait for the goal origin turn to finish.")
+            resumed = replace(goal, status="active", revision=goal.revision + 1)
+            store = self._open_goal_store()
+            generation = store.snapshot(goal_id)
+            if generation is None:
+                raise ValueError("The goal attempt is unresolved; inspect it before retrying.")
+            if generation.state == "blocked" and generation.attempt_id:
+                store.authorize_retry(
+                    goal_id,
+                    expected_generation=generation.number,
+                    attempt_id=generation.attempt_id,
+                    user_decision_id=uuid4().hex,
+                )
+            elif generation.state == "ready" and generation.attempt_id is None:
+                # A previous explicit retry may have durably created READY
+                # before the registry update, then crashed with its grant.
+                store.authorize_ready_recovery(
+                    goal_id,
+                    expected_generation=generation.number,
+                    user_decision_id=uuid4().hex,
+                )
+            else:
+                raise ValueError("The goal attempt is unresolved; inspect it before retrying.")
+            self._comms.registry.register(
+                replace(thread, goal=resumed), self._comms.registry.status(name)
+            )
+        self._schedule_goal(session_id)
+        return resumed
 
     async def _drain_count(self, session_id: str) -> int:
         return await self._drain_inbox(session_id)
@@ -1483,7 +1562,9 @@ class CommsAgent:
         self._steering_input_keys[session_id] = {}
 
         @contextmanager
-        def send_boundary(public_id: str | None, native_id: str, sent_text: str) -> Iterator[bool]:
+        def send_boundary(
+            public_id: str | None, native_id: str, sent_text: str
+        ) -> Iterator[bool | None]:
             # This lock spans the final authority read and stdin.write only.
             # Pi's turn, ACK, and provider response happen after it is released.
             with _store_lock(self._comms._wire_lock_path):
@@ -1508,7 +1589,7 @@ class CommsAgent:
                         else ()
                     )
                 )
-                allowed = (
+                owner_ok = (
                     current is not None
                     and len(keys) <= 1
                     and snapshot.statuses[canonical].running
@@ -1518,6 +1599,18 @@ class CommsAgent:
                     and current.worktree == thread.worktree
                     and current.active_turn is not None
                     and current.active_turn.id == turn_id
+                )
+                # A newly activated goal may supersede a follow-up that has
+                # not yet been sent. Owner revocation still ends the turn.
+                defer_for_goal = (
+                    public_id is not None
+                    and owner_ok
+                    and (goal is None or not goal.active)
+                    and current_goal is not None
+                    and current_goal.active
+                )
+                allowed = (
+                    owner_ok
                     and goal_ok
                     and not (keys and current_goal is not None and current_goal.active)
                 )
@@ -1551,7 +1644,7 @@ class CommsAgent:
                         ):
                             allowed = False
                             break
-                yield allowed
+                yield True if allowed else None if defer_for_goal else False
 
         def native_start(public_id: str | None, native_id: str, sent_text: str) -> bool:
             keys = (
@@ -1666,6 +1759,18 @@ class CommsAgent:
                 native_start=native_start,
             ):
                 kind = event.get("type")
+                if kind == "input_refused":
+                    input_id = event.get("id")
+                    if isinstance(input_id, str):
+                        self._forwarded_inputs.get(session_id, set()).discard(input_id)
+                        refused_key = self._steering_input_keys.get(session_id, {}).get(input_id)
+                        if refused_key is not None:
+                            # This input was denied before stdin.write. Keep
+                            # its persisted UNKNOWN row visible, but do not
+                            # count it as an unstarted sent follow-up.
+                            self._turn_input_keys.get(session_id, set()).discard(refused_key)
+                        if self._queued_inputs.get(session_id, {}).pop(input_id, None):
+                            await self._emit_queue_state(session_id)
                 if kind == "provider_usage":
                     response_id = str(event["response_id"])
                     usage = event["usage"]

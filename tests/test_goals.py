@@ -62,6 +62,27 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
         resume.invoke(comms, {"goal_id": goal.id, "progress": "stale replaced goal"})
 
 
+def test_goal_control_distinguishes_resume_retry_and_completion():
+    from agent_comms import Goal
+
+    assert (
+        Goal("work", "id", status="active").toggle_action,
+        Goal("work", "id", status="active").toggle_label,
+    ) == ("paused", "Pause")
+    assert (
+        Goal("work", "id", status="paused").toggle_action,
+        Goal("work", "id", status="paused").toggle_label,
+    ) == ("active", "Resume")
+    assert (
+        Goal("work", "id", status="blocked").toggle_action,
+        Goal("work", "id", status="blocked").toggle_label,
+    ) == ("retry", "Retry")
+    assert (
+        Goal("work", "id", status="completed").toggle_action,
+        Goal("work", "id", status="completed").toggle_label,
+    ) == ("", "Completed")
+
+
 def test_agent_can_set_its_own_persistent_goal(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))

@@ -12,8 +12,8 @@ import pytest
 from agent_comms import Message, MessageType, Thread
 from agent_comms.acp import CommsAgent
 from agent_comms.declarations import ScheduledTurn
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import wire
 from agent_comms.runtime import RuntimeProxy, socket_path
 
@@ -87,6 +87,9 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
         goal = comms.update_goal("project", "set", text="Long-term architecture work")
         assert goal is not None
         yield {"type": "tool_end", "id": "set-goal", "name": "comms_set_goal", "ok": True}
+        command = kwargs["steering_queue"].get_nowait()
+        with kwargs["send_boundary"](command["_input_id"], "a" * 32, command["message"]) as allowed:
+            assert allowed is None
         yield {"type": "input_refused", "id": "bus-1"}
         yield {"type": "settled"}
         yield {"type": "done", "ok": True, "text": "Goal set"}
@@ -98,8 +101,11 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
         assert goal is not None and goal.status == "active"
         assert GoalAttemptStore(comms.root / "goal-private").snapshot(goal.id).state == "ready"
         assert InputDispositions(comms.root).status("bus:1") == "unknown"
-        assert not any("[agent error]" in getattr(update.content, "text", "")
-                       for update in updates if getattr(update, "content", None))
+        assert not any(
+            "[agent error]" in getattr(update.content, "text", "")
+            for update in updates
+            if getattr(update, "content", None)
+        )
     finally:
         await agent.shutdown()
 

@@ -167,7 +167,7 @@ class TestRpcParsing:
         )
         assert events[-1]["ok"] is False
         expected = (
-            "current_prompt_input_missing"
+            "unrecognized_followup_input"
             if subsequent_event.get("message", {}).get("role") == "user"
             else "assistant_final_stop_missing"
         )
@@ -238,7 +238,7 @@ class TestRpcParsing:
                     {"type": "message_start", "message": {"role": "user", "content": "t"}},
                     {"type": "message_start", "message": {"role": "user", "content": "other"}},
                 ],
-                "current_prompt_input_missing",
+                "unrecognized_followup_input",
             ),
         ],
     )
@@ -2138,8 +2138,8 @@ while True: time.sleep(0.1)
             ("accepted_then_started", None),
             ("rejected_without_start", "queued_input_start_missing"),
             ("unacknowledged", "queued_input_start_missing"),
-            ("accepted_then_duplicate", "current_prompt_input_missing"),
-            ("trimmed_start", "current_prompt_input_missing"),
+            ("accepted_then_duplicate", "unrecognized_followup_input"),
+            ("trimmed_start", "unrecognized_followup_input"),
         ],
     )
     async def test_queued_steer_needs_its_own_user_start_before_success(
@@ -2307,7 +2307,11 @@ send({{"type":"agent_settled"}})
         ]
         assert events[-1]["ok"] is expected_ok
         if not expected_ok:
-            assert events[-1]["reason_code"] == "current_prompt_input_missing"
+            assert events[-1]["reason_code"] == (
+                "unrecognized_followup_input"
+                if case == "wrong_steer_id"
+                else "current_prompt_input_missing"
+            )
 
     async def test_native_steer_start_before_prompt_ack_is_authoritative(self, tmp_path):
         stub = _stub(
@@ -2346,7 +2350,11 @@ for line in sys.stdin:
         events = [
             event
             async for event in backend.stream_agent_events(
-                stub, [], "goal request", str(tmp_path), steering_queue=queue,
+                stub,
+                [],
+                "goal request",
+                str(tmp_path),
+                steering_queue=queue,
                 native_start=native_start,
             )
         ]
@@ -2354,7 +2362,8 @@ for line in sys.stdin:
         assert [text for _, _, text in starts] == ["goal request", "channel mention"]
         assert len([e for e in events if e["type"] == "input_started"]) == 2
 
-    async def test_unsent_followup_revoked_by_goal_does_not_fail_started_turn(self, tmp_path):
+    @pytest.mark.parametrize(("decision", "expected_ok"), [(None, True), (False, False)])
+    async def test_unsent_followup_goal_defer_or_owner_stop(self, tmp_path, decision, expected_ok):
         checked = tmp_path / "send-boundary-checked"
         stub = _stub(
             tmp_path,
@@ -2391,18 +2400,25 @@ for line in sys.stdin:
                 yield True
             else:
                 assert (public_id, text) == ("bus-42", "late direct")
-                checked.write_text("goal activated")
-                yield False
+                checked.write_text("authority checked")
+                yield decision
 
         events = [
             event
             async for event in backend.stream_agent_events(
-                stub, [], "set a goal", str(tmp_path), steering_queue=queue,
+                stub,
+                [],
+                "set a goal",
+                str(tmp_path),
+                steering_queue=queue,
                 send_boundary=send_boundary,
             )
         ]
-        assert events[-1]["ok"] is True, events
-        assert {"type": "input_refused", "id": "bus-42"} in events
+        assert events[-1]["ok"] is expected_ok, events
+        if expected_ok:
+            assert {"type": "input_refused", "id": "bus-42"} in events
+        else:
+            assert events[-1]["reason_code"] == "input_authority_changed"
         assert queue.empty()
 
 
@@ -2647,8 +2663,8 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
             ([], ["stop"], "current_prompt_input_missing"),
             (["t"], ["stop"], None),
             (["foreign", "t"], ["stop"], "current_prompt_input_missing"),
-            (["t", "foreign"], ["stop"], "current_prompt_input_missing"),
-            (["t", "t"], ["stop"], "current_prompt_input_missing"),
+            (["t", "foreign"], ["stop"], "unrecognized_followup_input"),
+            (["t", "t"], ["stop"], "unrecognized_followup_input"),
             (["t"], [], "assistant_final_stop_missing"),
             (["t"], ["toolUse"], "assistant_final_stop_missing"),
             (["t"], ["error"], "assistant_final_stop_missing"),
@@ -2762,7 +2778,9 @@ send({{"type": "agent_settled"}})
         ]
         assert events[-1]["ok"] is expected_ok
         if not expected_ok:
-            assert events[-1]["reason_code"] == "current_prompt_input_missing"
+            assert events[-1]["reason_code"] == (
+                "current_prompt_input_missing" if foreign_first else "unrecognized_followup_input"
+            )
 
     async def test_identified_steer_ack_cannot_claim_unrelated_identical_user_start(self, tmp_path):
         """The two possible sources have identical stock Pi RPC event shapes."""
@@ -2794,7 +2812,7 @@ send({"type": "agent_settled"})
             )
         ]
         assert events[-1]["ok"] is False
-        assert events[-1]["reason_code"] == "current_prompt_input_missing"
+        assert events[-1]["reason_code"] == "unrecognized_followup_input"
 
     @pytest.mark.parametrize("managed_finish", [False, True])
     async def test_handled_ack_without_user_start_times_out_without_replay(

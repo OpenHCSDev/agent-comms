@@ -2194,6 +2194,10 @@ class Comms:
             elif action in {"active", "paused", "blocked", "completed"}:
                 if goal is None:
                     raise ValueError("No goal is set for this thread.")
+                if action == "active" and goal.status == "blocked":
+                    raise ValueError("Blocked goal requires an explicit retry through its owner.")
+                if action == "active" and goal.status == "completed":
+                    raise ValueError("A completed goal cannot be resumed; set a new goal.")
                 goal = replace(
                     goal,
                     status=action,

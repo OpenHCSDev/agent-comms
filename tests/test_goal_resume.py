@@ -121,6 +121,14 @@ def test_resume_refuses_completed_or_replaced_goal(comms, monkeypatch):
     assert comms.registry.require("owner").goal.id == replacement["id"]
 
 
+def test_completed_goal_cannot_be_reactivated_by_ui_registry_action(comms, monkeypatch):
+    started = _goal(comms, monkeypatch)
+    completed = comms.update_goal("owner", "completed", goal_id=started["id"])
+    with pytest.raises(ValueError, match="completed goal"):
+        comms.update_goal("owner", "active", goal_id=started["id"])
+    assert comms.registry.require("owner").goal == completed
+
+
 def test_resume_does_not_claim_success_after_concurrent_goal_change(comms, monkeypatch):
     started = _goal(comms, monkeypatch)
     comms.update_goal("owner", "paused", goal_id=started["id"], progress="before")
@@ -183,7 +191,14 @@ def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch
 
     def race(name, action, **kwargs):
         assert action == "active"
-        other.update_goal(name, "active", goal_id=saved.id, progress="first owner resumed")
+        # Blocked goals cannot become active through an ordinary registry
+        # transition; a second blocked report still exercises the ABA CAS.
+        other.update_goal(
+            name,
+            "blocked" if prior == "blocked" else "active",
+            goal_id=saved.id,
+            progress="newer report",
+        )
         other.update_goal(name, prior, goal_id=saved.id, progress="unchanged")
         now = Comms(comms.root).registry.require(name).goal
         assert now is not None

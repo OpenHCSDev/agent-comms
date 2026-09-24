@@ -503,7 +503,9 @@ async def stream_agent_events(
     model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
     rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
     require_input_id: bool = True,
-    send_boundary: Callable[[str | None, str, str], AbstractContextManager[bool]] | None = None,
+    send_boundary: (
+        Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
+    ) = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run the backend and yield events. Always ends with a ``done`` event.
@@ -580,7 +582,9 @@ async def _stream_agent_events(
     model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
     rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
     require_input_id: bool = True,
-    send_boundary: Callable[[str | None, str, str], AbstractContextManager[bool]] | None = None,
+    send_boundary: (
+        Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
+    ) = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     if shutil.which(agent_bin) is None and not Path(agent_bin).is_file():
@@ -716,12 +720,15 @@ async def _stream_agent_events(
     rejected_signal = asyncio.Event()
     session_identity_uncertain = False
     input_uncertain = False
+    authority_revoked = False
+    followup_start_unrecognized = False
     final_assistant_stop = False
     if steering_queue is not None and proc.stdin is not None:
         stdin = proc.stdin
 
         async def forward_steering() -> None:
-            nonlocal fail_reason, input_uncertain, final_assistant_stop, image_input_sent
+            nonlocal fail_reason, input_uncertain, authority_revoked
+            nonlocal final_assistant_stop, image_input_sent
             while True:
                 message = await steering_queue.get()
                 original = dict(message) if isinstance(message, dict) else message
@@ -774,11 +781,24 @@ async def _stream_agent_events(
                                 image_input_sent = True
                             stdin.write((json.dumps(command) + "\n").encode())
                     if not authorized:
-                        input_uncertain = True
-                        final_assistant_stop = False
-                        fail_reason = "Input authority changed before Pi prompt send."
-                        await _terminate_process(proc)
-                        return
+                        if authorized is False:
+                            # The owner stopped or its admission changed after
+                            # the original send. That attempt is uncertain.
+                            authority_revoked = True
+                            input_uncertain = True
+                            final_assistant_stop = False
+                            fail_reason = "Input authority changed before Pi prompt send."
+                            await _terminate_process(proc)
+                            return
+                        # This follow-up never crossed the send boundary.
+                        # Its owner keeps the durable UNKNOWN disposition,
+                        # but it cannot invalidate the original started turn.
+                        pending_inputs[:] = [
+                            item for item in pending_inputs if item[3] != native_input_id
+                        ]
+                        rejected_commands.append({"type": "input_refused", "id": public_input_id})
+                        rejected_signal.set()
+                        continue
                 else:
                     stdin.write((json.dumps(command) + "\n").encode())
                 await stdin.drain()
@@ -891,7 +911,9 @@ async def _stream_agent_events(
         native_id = message.get("inputId")
         for index, (input_id, queued_text, _, expected_native_id) in enumerate(pending_inputs):
             if (
-                input_id in accepted_forwarded
+                # Native ID plus exact text is Pi's authoritative start. An
+                # ACK may arrive later and is neither required nor sufficient.
+                (require_input_id or input_id in accepted_forwarded)
                 and text == queued_text
                 and (not require_input_id or native_id == expected_native_id)
             ):
@@ -1399,9 +1421,9 @@ async def _stream_agent_events(
                     # A second original, foreign, or unstarted queued input
                     # cannot make the assistant's final stop authoritative.
                     input_uncertain = True
-                    initial_input_started = False
+                    followup_start_unrecognized = True
                     final_assistant_stop = False
-                    fail_reason = "Pi RPC run ended without this prompt's user message start."
+                    fail_reason = "Pi RPC saw an unrecognized follow-up user message start."
                     await abort_stalled_rpc()
                     break
             else:
@@ -1650,16 +1672,24 @@ async def _stream_agent_events(
                 {"reason_code": "session_identity_uncertain"}
                 if session_identity_uncertain
                 else (
-                    {"reason_code": "current_prompt_input_missing"}
-                    if (transport_successful or input_uncertain or fail_reason)
-                    and not initial_input_started
+                    {"reason_code": "input_authority_changed"}
+                    if authority_revoked
                     else (
-                        {"reason_code": "assistant_final_stop_missing"}
-                        if transport_successful and not final_assistant_stop
+                        {"reason_code": "unrecognized_followup_input"}
+                        if followup_start_unrecognized
                         else (
-                            {"reason_code": "queued_input_start_missing"}
-                            if otherwise_successful and unresolved_inputs
-                            else {}
+                            {"reason_code": "current_prompt_input_missing"}
+                            if (transport_successful or input_uncertain or fail_reason)
+                            and not initial_input_started
+                            else (
+                                {"reason_code": "assistant_final_stop_missing"}
+                                if transport_successful and not final_assistant_stop
+                                else (
+                                    {"reason_code": "queued_input_start_missing"}
+                                    if otherwise_successful and unresolved_inputs
+                                    else {}
+                                )
+                            )
                         )
                     )
                 )
