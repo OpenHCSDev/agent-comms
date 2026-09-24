@@ -14,10 +14,9 @@ def _goal(comms, monkeypatch):
     return invoke_tool(comms, "comms_set_goal", {"text": "keep working"})["goal"]
 
 
-@pytest.mark.parametrize("prior", ["blocked", "paused"])
-def test_same_id_resume_from_paused_or_blocked(comms, monkeypatch, prior):
+def test_same_id_resume_from_paused(comms, monkeypatch):
     started = _goal(comms, monkeypatch)
-    comms.update_goal("owner", prior, goal_id=started["id"], progress="previous")
+    comms.update_goal("owner", "paused", goal_id=started["id"], progress="previous")
 
     result = invoke_tool(
         comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "user resumed"}
@@ -28,6 +27,14 @@ def test_same_id_resume_from_paused_or_blocked(comms, monkeypatch, prior):
     assert result["status"] == "active"
     assert result["progress"] == "user resumed"
     assert comms.registry.require("owner").goal.id == started["id"]
+
+
+def test_model_tool_cannot_resume_blocked_uncertain_goal(comms, monkeypatch):
+    started = _goal(comms, monkeypatch)
+    blocked = comms.update_goal("owner", "blocked", goal_id=started["id"], progress="uncertain")
+    with pytest.raises(ValueError, match="cannot be resumed"):
+        invoke_tool(comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "retry"})
+    assert comms.registry.require("owner").goal == blocked
 
 
 def test_resume_refuses_completed_or_replaced_goal(comms, monkeypatch):
@@ -43,11 +50,11 @@ def test_resume_refuses_completed_or_replaced_goal(comms, monkeypatch):
 
 def test_resume_does_not_claim_success_after_concurrent_goal_change(comms, monkeypatch):
     started = _goal(comms, monkeypatch)
-    comms.update_goal("owner", "blocked", goal_id=started["id"], progress="before")
+    comms.update_goal("owner", "paused", goal_id=started["id"], progress="before")
     real_update = comms.update_goal
 
     def race(name, action, **kwargs):
-        real_update(name, "blocked", goal_id=started["id"], progress="newer progress")
+        real_update(name, "paused", goal_id=started["id"], progress="newer progress")
         return real_update(name, action, **kwargs)
 
     monkeypatch.setattr(comms, "update_goal", race)
@@ -58,13 +65,13 @@ def test_resume_does_not_claim_success_after_concurrent_goal_change(comms, monke
             {"goal_id": started["id"], "progress": "stale progress"},
         )
     goal = comms.registry.require("owner").goal
-    assert goal.status == "blocked" and goal.progress == "newer progress"
+    assert goal.status == "paused" and goal.progress == "newer progress"
 
 
 @pytest.mark.parametrize("race_kind", ["replacement", "same_id_activation"])
 def test_resume_losing_cas_never_reports_another_activations_success(comms, monkeypatch, race_kind):
     started = _goal(comms, monkeypatch)
-    comms.update_goal("owner", "blocked", goal_id=started["id"], progress="before")
+    comms.update_goal("owner", "paused", goal_id=started["id"], progress="before")
     real_update = comms.update_goal
     requested_progress = "continue"
 
@@ -112,11 +119,23 @@ def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch
 
     monkeypatch.setattr(comms, "update_goal", race)
     with pytest.raises(ValueError, match="changed during resume"):
-        invoke_tool(
-            comms,
-            "comms_resume_goal",
-            {"goal_id": saved.id, "progress": "stale second resume"},
-        )
+        if prior == "paused":
+            invoke_tool(
+                comms,
+                "comms_resume_goal",
+                {"goal_id": saved.id, "progress": "stale second resume"},
+            )
+        else:
+            # The model tool cannot resume blocked work. Even a future
+            # authenticated human recovery caller must honor this CAS.
+            comms.update_goal(
+                "owner",
+                "active",
+                goal_id=saved.id,
+                expected_status=prior,
+                expected_goal=saved,
+                progress="stale second resume",
+            )
     final = Comms(comms.root).registry.require("owner").goal
     assert final is not None and final.status == prior and final.progress == "unchanged"
     assert final.revision == saved.revision + 2

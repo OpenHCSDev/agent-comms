@@ -110,6 +110,10 @@ class GoalAttemptStore:
     def initialize(cls, root: str | Path) -> GoalAttemptStore:
         """Explicit setup; creation or fsync uncertainty never returns a store."""
         directory = Path(root)
+        if os.name != "posix":
+            raise StorageUncertain(
+                "Goal attempts require POSIX owner-only directory fsync support."
+            )
         if not directory.is_dir() or stat.S_IMODE(directory.stat().st_mode) != 0o700:
             raise StorageUncertain("An existing owner-0700 directory is required.")
         path = directory / "goal_attempts.sqlite3"
@@ -166,6 +170,10 @@ class GoalAttemptStore:
         return cls(directory)
 
     def _require_root(self) -> None:
+        if os.name != "posix":
+            raise StorageUncertain(
+                "Goal attempts require POSIX owner-only directory fsync support."
+            )
         if not self.root.is_dir() or stat.S_IMODE(self.root.stat().st_mode) != 0o700:
             raise StorageUncertain("Goal attempt root must remain owner-0700.")
         if self.path.exists() and stat.S_IMODE(self.path.stat().st_mode) != 0o600:
@@ -313,7 +321,7 @@ class GoalAttemptStore:
                 "WHERE attempt_id=? AND goal_id=? AND generation=?",
                 (attempt.attempt_id, attempt.goal_id, attempt.generation),
             ).fetchone()
-        return row == (phase, attempt.token)
+        return bool(row == (phase, attempt.token))
 
     def create_goal(self, goal_id: str) -> Generation:
         """Register one externally created immutable goal ID, initially generation 1."""
@@ -517,7 +525,7 @@ class GoalAttemptStore:
             row = conn.execute(
                 "SELECT phase,resolution FROM attempts WHERE attempt_id=?", (attempt_id,)
             ).fetchone()
-        return row == (phase, resolution)
+        return bool(row == (phase, resolution))
 
     def resume(self, goal_id: str, expected_generation: int) -> Generation:
         """Ordinary same-ID resume never resolves a reserved or blocked attempt."""

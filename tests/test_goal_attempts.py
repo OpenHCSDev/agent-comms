@@ -18,6 +18,10 @@ from agent_comms.goal_attempts import (
     UnresolvedAttempt,
 )
 
+pytestmark = pytest.mark.skipif(
+    os.name != "posix", reason="Goal attempts require POSIX owner-only directory fsync."
+)
+
 
 def _competing_reserve(root: str, grant: str, start, results) -> None:
     store = GoalAttemptStore(root)

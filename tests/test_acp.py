@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.backend import NATIVE_INPUT_CAPABILITY
 from agent_comms.declarations import UnregisteredThreadError
 from agent_comms.operations import wire
 
@@ -625,11 +626,27 @@ class TestAgentTurnForwarding:
                 '"result":{"content":[{"type":"text","text":"/wt"}]},"isError":false}',
                 '{"type":"message_update",'
                 '"assistantMessageEvent":{"type":"text_delta","delta":" finished"}}',
+                '{"type":"message_end","message":{"role":"assistant","stopReason":"stop"}}',
                 '{"type":"agent_settled"}',
             ]
         )
         stub = tmp_path / "pi-stub"
-        stub.write_text(f"#!/bin/sh\ntrue\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
+        stub.write_text(
+            f"#!{sys.executable}\n"
+            + "import json, sys\n"
+            + f"capability = {NATIVE_INPUT_CAPABILITY!r}\n"
+            + "state = json.loads(sys.stdin.readline())  # get_state\n"
+            + "print(json.dumps({'type':'response','command':'get_state','id':state['id'],\n"
+            + "      'success':True,\n"
+            + "      'data':{'nativeInputProofCapability':capability}}), flush=True)\n"
+            + "prompt = json.loads(sys.stdin.readline())\n"
+            + 'print(json.dumps({"type": "response", "command": "prompt", '
+            '"id": prompt["id"], "success": True}), flush=True)\n'
+            + 'print(json.dumps({"type": "message_start", "message": '
+            '{"role": "user", "content": prompt["message"], '
+            '"inputId": prompt["inputId"]}}), flush=True)\n'
+            + f"for event in {rpc_lines.splitlines()!r}: print(event, flush=True)\n"
+        )
         stub.chmod(0o755)
         return str(stub)
 

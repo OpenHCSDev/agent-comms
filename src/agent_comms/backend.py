@@ -592,7 +592,7 @@ async def _stream_agent_events_impl(
             context_used = None
             result = payload.get("result")
             completed = payload.get("aborted") is False and isinstance(result, dict)
-            summary = result.get("summary") if completed else None
+            summary = result.get("summary") if completed and isinstance(result, dict) else None
             if payload.get("willRetry") is True:
                 final_assistant_stop = False
             reason = payload.get("reason")

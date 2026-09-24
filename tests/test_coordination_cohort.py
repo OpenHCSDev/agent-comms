@@ -390,13 +390,17 @@ def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path)
         open_parent.chmod(0o700)
 
     comms, _store, _root_id, _lookups = _root(tmp_path)
-    comms.registry.register(
-        Thread(
-            name="duplicate", tags=frozenset({"other"}), worktree=str(tmp_path), created_at=17002.0
-        )
-    )
+    # A distinct same-tick owner is rejected at registration, before it can
+    # acquire another participant's claim identity or appear in an audience.
     with pytest.raises(RelationViolationError, match="creation identities collide"):
-        comms.send_initial_cohort("sender", "#team", "collision even outside selected N")
+        comms.registry.register(
+            Thread(
+                name="duplicate",
+                tags=frozenset({"other"}),
+                worktree=str(tmp_path),
+                created_at=17002.0,
+            )
+        )
     assert comms.bus.latest_sequence() == 0
 
 

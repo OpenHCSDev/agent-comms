@@ -2244,7 +2244,7 @@ class Comms:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
-                **({"pass_fds": (read_fd,)} if read_fd >= 0 else {}),
+                pass_fds=(read_fd,) if read_fd >= 0 else (),
             )
         except BaseException:
             if write_fd >= 0:
