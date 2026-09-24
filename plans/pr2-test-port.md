@@ -11,7 +11,7 @@ Reviewed the 18 test paths unique to PR #2 at `79fe55a9068dd292c0443df52ee71fba3
 | `test_detached_owner.py` | Ported; the reservation fixture now consumes the inherited proof pipe used by current owner startup. |
 | `test_goals.py` | Ported persistent goal, explicit resume, and self-set tests. Dropped the two synthetic `/bin/echo` continuation tests: they bypass the current private grant and native Pi start requirements. Current ACP goal tests cover authorized continuation, completion, failure, and no replay. |
 | `test_project.py` | Ported; project switching and Pi bootstrap still apply. |
-| `test_prompt_queue.py` | Ported queued and steered followups. Dropped the cancellation-restores-queue test: an uncertain input must remain durable UNKNOWN and must never be queued for automatic replay. Current input-disposition tests cover this outcome. |
+| `test_prompt_queue.py` | Ported queued and steered followups and the cancellation UI restoration event. The event displays deferred text to the human; it does not retry an uncertain direct input. |
 | `test_registry_revision.py` | Ported; cached reads must notice external writes and reject malformed replacements. |
 | `test_reply_routing.py` | Ported; live and saved delivery routes remain distinct. |
 | `test_restart.py` | Ported and adapted the fixture to the current two-phase owner stop and admission checks. |

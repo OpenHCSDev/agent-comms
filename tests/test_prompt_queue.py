@@ -61,3 +61,38 @@ async def test_queued_and_steered_followups_both_reach_the_next_boundary(tmp_pat
         assert not agent._queued_inputs.get("project")
     finally:
         await agent.shutdown()
+
+
+async def test_cancellation_restores_unprocessed_user_queue(tmp_path, monkeypatch):
+    agent = await make_agent(tmp_path, monkeypatch)
+    active = asyncio.Event()
+    updates = []
+
+    class Client:
+        async def session_update(self, **kwargs):
+            updates.append(kwargs["update"].model_dump(by_alias=True, exclude_none=True))
+
+    agent.on_connect(Client())
+
+    async def events(*args, **kwargs):
+        active.set()
+        await asyncio.sleep(60)
+        yield {"type": "done", "ok": True}
+
+    monkeypatch.setattr(backend, "stream_agent_events", events)
+    turn = asyncio.create_task(agent.prompt("project", [{"type": "text", "text": "original"}]))
+    try:
+        await active.wait()
+        await agent.prompt(
+            "project",
+            [{"type": "text", "text": "keep this queued text"}],
+            field_meta={"agentComms": {"deferDisplay": True}},
+        )
+        await agent.cancel("project")
+        assert (await turn).stop_reason == "cancelled"
+        assert any(
+            u.get("_meta", {}).get("agentComms", {}).get("restored") == ["keep this queued text"]
+            for u in updates
+        )
+    finally:
+        await agent.shutdown()
