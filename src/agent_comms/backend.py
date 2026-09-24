@@ -671,6 +671,7 @@ async def _stream_agent_events(
     ok = True
     fail_reason = ""
     error_message: str | None = None
+    image_input_sent = bool(images)
     assert proc.stdout is not None
 
     if rpc_args is None:
@@ -712,7 +713,7 @@ async def _stream_agent_events(
         stdin = proc.stdin
 
         async def forward_steering() -> None:
-            nonlocal fail_reason, input_uncertain, final_assistant_stop
+            nonlocal fail_reason, input_uncertain, final_assistant_stop, image_input_sent
             while True:
                 message = await steering_queue.get()
                 original = dict(message) if isinstance(message, dict) else message
@@ -761,6 +762,8 @@ async def _stream_agent_events(
                     )
                     with boundary_context as authorized:
                         if authorized:
+                            if command.get("images"):
+                                image_input_sent = True
                             stdin.write((json.dumps(command) + "\n").encode())
                     if not authorized:
                         input_uncertain = True
@@ -1240,7 +1243,7 @@ async def _stream_agent_events(
             else:
                 error_message = (
                     "Image prompt failed; backend diagnostics withheld."
-                    if images
+                    if image_input_sent
                     else str(payload.get("error") or "Prompt was rejected")
                 )
                 yield turn_state("failed", "prompt_rejected", 0, event_phase="shutdown")
@@ -1535,7 +1538,7 @@ async def _stream_agent_events(
                         yield context_info()
                     error_message = (
                         "Image prompt failed; backend diagnostics withheld."
-                        if images
+                        if image_input_sent
                         else str(message.get("errorMessage") or "").strip()
                         or f"Model request {stop_reason}"
                     )
@@ -1614,7 +1617,7 @@ async def _stream_agent_events(
                 or fail_reason
                 or (
                     "Image prompt failed; backend diagnostics withheld."
-                    if images and error_text
+                    if image_input_sent and error_text
                     else error_text
                 )
                 or f"Backend exited with code {proc.returncode}"

@@ -233,6 +233,71 @@ for line in sys.stdin:
         await agent.shutdown()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable fixture")
+async def test_failed_queued_image_child_never_exposes_encoded_attachment(tmp_path, monkeypatch):
+    stub = tmp_path / "pi-image-stub"
+    stub.write_text(f"#!{sys.executable}\n" + """
+import json, sys
+for line in sys.stdin:
+    command = json.loads(line)
+    if command['type'] == 'get_state':
+        print(json.dumps({'type': 'response', 'id': command['id'],
+            'command': 'get_state', 'success': True,
+            'data': {'nativeInputProofCapability': 'pi-native-input-v1-live-only'}}),
+            flush=True)
+    elif command['type'] == 'prompt' and 'images' not in command:
+        print(json.dumps({'type': 'response', 'id': command['id'],
+            'command': 'prompt', 'success': True}), flush=True)
+        print(json.dumps({'type': 'message_start', 'message': {'role': 'user',
+            'content': command['message'], 'inputId': command['inputId']}}), flush=True)
+    elif command['type'] == 'prompt':
+        sys.stderr.write(json.dumps(command))
+        sys.exit(7)
+""")
+    stub.chmod(0o755)
+    queue = asyncio.Queue()
+    queue.put_nowait(
+        {"type": "prompt", "message": "User follow-up:\ninspect image", "images": [IMAGE]}
+    )
+    events = [
+        event
+        async for event in backend.stream_agent_events(
+            str(stub),
+            ["--model", "test/model"],
+            "first",
+            str(tmp_path),
+            steering_queue=queue,
+        )
+    ]
+    assert events[-1]["ok"] is False
+    assert PNG not in json.dumps(events)
+
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    agent = CommsAgent(
+        wire(tmp_path / "acp-wire"), agent_bin=str(stub), agent_args=["--model", "test/model"]
+    )
+    await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
+    started = asyncio.Event()
+    updates = []
+
+    class Client:
+        async def session_update(self, **kwargs):
+            update = kwargs["update"].model_dump(by_alias=True, exclude_none=True)
+            updates.append(update)
+            if update.get("_meta", {}).get("agentComms", {}).get("turnStarted"):
+                started.set()
+
+    agent.on_connect(Client())
+    try:
+        turn = asyncio.create_task(agent.prompt("project", [{"type": "text", "text": "first"}]))
+        await asyncio.wait_for(started.wait(), 3)
+        await agent.prompt("project", [{"type": "text", "text": "inspect image"}, IMAGE])
+        await asyncio.wait_for(turn, 3)
+        assert PNG not in json.dumps(updates)
+    finally:
+        await agent.shutdown()
+
+
 async def test_legacy_owner_and_relay_fail_explicitly(tmp_path, monkeypatch):
     agent = await make_agent(tmp_path, monkeypatch)
     try:
