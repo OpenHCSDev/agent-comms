@@ -72,6 +72,48 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
+async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
+    comms = wire(tmp_path / "wire")
+    owner = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    client = CommsAgent(comms)
+    updates = []
+
+    class Client:
+        async def session_update(self, session_id, update):
+            updates.append(update)
+
+    client.on_connect(Client())
+    response = await owner.new_session(str(tmp_path))
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def delayed_replay(*args, **kwargs):
+        entered.set()
+        await release.wait()
+
+    owner._replay_transcript = delayed_replay
+    proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
+    task = asyncio.create_task(proxy.subscribe())
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        await until(
+            lambda: any(
+                update.get("_meta", {}).get("agentComms", {}).get("wireRoot")
+                == str(comms.root.resolve())
+                for update in updates
+            ),
+            timeout=2,
+        )
+        assert not task.done()
+        release.set()
+        await asyncio.wait_for(task, 2)
+    finally:
+        release.set()
+        await proxy.close()
+        await owner.shutdown()
+
+
+@pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime and /bin/echo backend")
 async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate(tmp_path):
     comms = wire(tmp_path / "wire")
