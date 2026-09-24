@@ -174,28 +174,39 @@ async def test_late_subscriber_receives_persisted_unknown(tmp_path):
 
     class LateClient:
         async def session_update(self, session_id, update):
-            updates.append(update)
+            updates.append(
+                update.model_dump(by_alias=True, exclude_none=True)
+                if hasattr(update, "model_dump")
+                else update
+            )
 
     client = CommsAgent(comms, agent_bin="/bin/echo")
     client.on_connect(LateClient())
     proxy = None
+
+    def assert_unknown_replayed():
+        dispositions = [
+            update.get("_meta", {}).get("agentComms", {}).get("inputDisposition", {})
+            for update in updates
+        ]
+        assert any(
+            row.get("sequence") == 1
+            and row.get("target") == "project"
+            and row.get("status") == "unknown"
+            for row in dispositions
+        )
+
     try:
         await agent._drain_inbox("project")
-        if os.name == "nt":
-            # Windows has no Unix runtime socket. Exercise the same replay
-            # projection that the socket subscribe route calls on POSIX.
-            await agent.replay_unknown_inputs("project", client=LateClient())
-        else:
+        # The projection runs on every platform; POSIX also checks the real
+        # late socket subscribe route that invokes it.
+        await agent.replay_unknown_inputs("project", client=LateClient())
+        assert_unknown_replayed()
+        if os.name != "nt":
+            updates.clear()
             proxy = RuntimeProxy(client, "project", socket_path(comms.root, os.getpid()))
             await proxy.subscribe()
-        assert any(
-            update.get("_meta", {})
-            .get("agentComms", {})
-            .get("inputDisposition", {})
-            .get("sequence")
-            == 1
-            for update in updates
-        )
+            assert_unknown_replayed()
     finally:
         if proxy is not None:
             await proxy.close()
