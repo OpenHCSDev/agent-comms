@@ -246,6 +246,55 @@ async def test_real_pi_one_post_and_exact_saved_session(tmp_path, monkeypatch, s
         await server.wait_closed()
 
 
+@pytest.mark.parametrize("denied", ["session_file", "parent_directory"])
+async def test_success_requires_saved_session_file_and_parent_sync(tmp_path, monkeypatch, denied):
+    """One model response is not a success receipt if Pi's row cannot be synced."""
+    provider = LoopbackProvider(status=200)
+    server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
+    try:
+        provider.port = server.sockets[0].getsockname()[1]
+        session = tmp_path / "existing.jsonl"
+        before = saved_session(session)
+        exe = wrapper(tmp_path, monkeypatch, provider.port)
+        if denied == "session_file":
+            original = os.fsync
+            identity = (session.stat().st_dev, session.stat().st_ino)
+
+            def refuse_session_sync(fd):
+                opened = os.fstat(fd)
+                if (opened.st_dev, opened.st_ino) == identity:
+                    raise OSError("injected session sync denial")
+                return original(fd)
+
+            monkeypatch.setattr(compact.os, "fsync", refuse_session_sync)
+        else:
+            original_parent = compact._fsync
+
+            def refuse_parent_sync(path):
+                if Path(path) == session.parent:
+                    raise OSError("injected parent sync denial")
+                return original_parent(path)
+
+            monkeypatch.setattr(compact, "_fsync", refuse_parent_sync)
+        result = await compact.compact_session(
+            exe,
+            ["--provider", "openrouter", "--model", "fake-compact"],
+            str(session),
+            str(tmp_path),
+            timeout_seconds=15,
+        )
+        assert provider.posts == 1
+        assert result == {
+            "ok": False,
+            "error": "Saved compaction durability is uncertain; not retried.",
+        }
+        assert session.read_bytes().startswith(before)
+        assert json.loads(session.read_bytes().splitlines()[-1])["type"] == "compaction"
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
 async def test_split_turn_refused_before_any_provider_post(tmp_path, monkeypatch):
     provider = LoopbackProvider()
     server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)

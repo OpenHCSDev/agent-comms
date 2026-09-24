@@ -211,6 +211,36 @@ def _session_bytes(file: Path) -> bytes:
     return data
 
 
+def _durable_compaction_row(file: Path, before: bytes) -> None:
+    """Verify and sync Pi's appended row and its directory before reporting success."""
+    fd = os.open(file, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        opened = os.fstat(fd)
+        if not stat.S_ISREG(opened.st_mode) or not 0 < opened.st_size <= MAX_SESSION:
+            raise ValueError("Saved session is not a bounded regular file")
+        with os.fdopen(os.dup(fd), "rb") as stream:
+            after = stream.read(MAX_SESSION + 1)
+        if (
+            not after.endswith(b"\n")
+            or not after.startswith(before)
+            or after == before
+            or json.loads(after.splitlines()[-1]).get("type") != "compaction"
+        ):
+            raise ValueError("Missing saved compaction")
+        os.fsync(fd)
+        _fsync(file.parent)
+        # Do not attest to a stale inode replaced while Pi or another writer ran.
+        current = file.stat(follow_symlinks=False)
+        if not stat.S_ISREG(current.st_mode) or (
+            current.st_dev,
+            current.st_ino,
+            current.st_size,
+        ) != (opened.st_dev, opened.st_ino, opened.st_size):
+            raise ValueError("Saved session changed during durability check")
+    finally:
+        os.close(fd)
+
+
 def _supported_platform() -> bool:
     """Manual Pi compaction requires POSIX process-group teardown."""
     return os.name == "posix" and hasattr(os, "killpg")
@@ -539,13 +569,10 @@ async def compact_session(
         return {"ok": False, "error": "Compaction process did not exit cleanly."}
     if result.get("ok"):
         try:
-            after = _session_bytes(session)
-            if (
-                not after.startswith(before)
-                or after == before
-                or json.loads(after.splitlines()[-1]).get("type") != "compaction"
-            ):
-                raise ValueError("Missing saved compaction")
+            _durable_compaction_row(session, before)
         except (OSError, ValueError, UnicodeError, AttributeError):
-            return {"ok": False, "error": "Compaction did not persist to the saved session."}
+            return {
+                "ok": False,
+                "error": "Saved compaction durability is uncertain; not retried.",
+            }
     return result
