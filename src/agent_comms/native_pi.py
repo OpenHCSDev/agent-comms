@@ -178,6 +178,44 @@ def _fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
+def _durable_private_session_dir(directory: Path) -> None:
+    """Commit each new directory entry before a Pi launch can be returned.
+
+    Re-sync the private ancestor chain even on reuse: a visible directory may
+    have survived a failed parent fsync on the previous preparation. Stop at
+    the parent of the highest owner-only directory, not at the filesystem root.
+    """
+    missing: list[Path] = []
+    current = directory
+    while True:
+        try:
+            current.lstat()
+        except FileNotFoundError:
+            missing.append(current)
+            current = current.parent
+        else:
+            break
+    try:
+        for path in reversed(missing):
+            path.mkdir(mode=0o700, exist_ok=True)
+            _private_session_dir(path)
+            _fsync_directory(path.parent)
+        _private_session_dir(directory)
+        parent = directory.parent
+        while True:
+            _fsync_directory(parent)
+            info = parent.lstat()
+            if (
+                parent == parent.parent
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o700
+            ):
+                break
+            parent = parent.parent
+    except OSError as error:
+        raise NativePiUnavailable("Native Pi session directory could not be committed") from error
+
+
 def _private_agent_dir(session_dir: Path) -> Path:
     """Durably isolate Pi settings from user/global and project retry policy.
 
@@ -374,8 +412,7 @@ def prepare_native_pi_rpc_launch(
     cli = _trusted_package(package)
     worktree = Path(worktree).absolute()
     session_dir = Path(session_dir).absolute()
-    session_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-    _private_session_dir(session_dir)
+    _durable_private_session_dir(session_dir)
     if not worktree.is_dir():
         raise NativePiUnavailable("Native Pi worktree is unavailable")
     if session_file is not None:

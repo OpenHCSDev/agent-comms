@@ -246,7 +246,7 @@ print(json.dumps({"type": "response", "id": request["id"],
 
 
 @pytest.mark.parametrize("failed_fsync", [1, 2, 3])
-async def test_policy_fsync_failure_denies_subprocess(
+async def test_any_prelaunch_fsync_failure_denies_subprocess(
     tmp_path: Path, monkeypatch, failed_fsync: int
 ) -> None:
     import agent_comms.native_pi as native
@@ -268,7 +268,7 @@ async def test_policy_fsync_failure_denies_subprocess(
     monkeypatch.setattr(native.os, "fsync", fail_selected_fsync)
     monkeypatch.setattr(native.asyncio, "create_subprocess_exec", forbidden)
     sessions = tmp_path / "sessions"
-    with pytest.raises(NativePiUnavailable, match="retry policy could not be committed"):
+    with pytest.raises(NativePiUnavailable, match="could not be committed"):
         await run_native_pi_turn(
             tmp_path,
             input_id=INPUT_ID,
@@ -286,14 +286,21 @@ async def test_visible_policy_after_failed_parent_fsync_is_resynced_before_launc
     import agent_comms.native_pi as native
 
     original_fsync = native.os.fsync
-    fsync_calls = 0
+    settings_syncs = 0
     launches = 0
+    sessions = tmp_path / "sessions"
+    agent_dir = sessions / ".native-pi-agent"
 
     def fail_once(descriptor):
-        nonlocal fsync_calls
-        fsync_calls += 1
-        if fsync_calls == 3:
-            raise OSError(errno.EIO, "first settings directory fsync failed")
+        nonlocal settings_syncs
+        info = os.fstat(descriptor)
+        if agent_dir.exists() and (info.st_dev, info.st_ino) == (
+            agent_dir.stat().st_dev,
+            agent_dir.stat().st_ino,
+        ):
+            settings_syncs += 1
+            if settings_syncs == 1:
+                raise OSError(errno.EIO, "first settings directory fsync failed")
         return original_fsync(descriptor)
 
     async def record_launch(*_argv, **_kwargs):
@@ -304,7 +311,6 @@ async def test_visible_policy_after_failed_parent_fsync_is_resynced_before_launc
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(native.os, "fsync", fail_once)
     monkeypatch.setattr(native.asyncio, "create_subprocess_exec", record_launch)
-    sessions = tmp_path / "sessions"
     request = {
         "input_id": INPUT_ID,
         "prompt": "no provider",
@@ -317,8 +323,121 @@ async def test_visible_policy_after_failed_parent_fsync_is_resynced_before_launc
     assert (sessions / ".native-pi-agent" / "settings.json").is_file()
     with pytest.raises(RuntimeError, match="second complete policy sync"):
         await run_native_pi_turn(tmp_path, **request)
-    assert fsync_calls == 6
+    assert settings_syncs == 2
     assert launches == 1
+
+
+def test_nested_session_directory_entries_are_synced_from_leaf_to_private_root(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import agent_comms.native_pi as native
+
+    root = tmp_path / "private"
+    root.mkdir(mode=0o700)
+    nested = root / "nested"
+    sessions = nested / "sessions"
+    observed: list[Path] = []
+    original_fsync = native.os.fsync
+
+    def record_fsync(descriptor):
+        info = os.fstat(descriptor)
+        for path in (root, nested, sessions, sessions / ".native-pi-agent"):
+            if path.exists():
+                candidate = path.stat()
+                if (info.st_dev, info.st_ino) == (candidate.st_dev, candidate.st_ino):
+                    observed.append(path)
+                    break
+        return original_fsync(descriptor)
+
+    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+    monkeypatch.setattr(native.os, "fsync", record_fsync)
+    launch = prepare_native_pi_rpc_launch(tmp_path, worktree=tmp_path, session_dir=sessions)
+    assert launch.session_dir == sessions
+    assert stat.S_IMODE(nested.stat().st_mode) == 0o700
+    assert stat.S_IMODE(sessions.stat().st_mode) == 0o700
+    assert observed.index(root) < observed.index(nested) < observed.index(sessions)
+    assert observed.index(sessions) < observed.index(sessions / ".native-pi-agent")
+    first_count = len(observed)
+    prepare_native_pi_rpc_launch(tmp_path, worktree=tmp_path, session_dir=sessions)
+    assert root in observed[first_count:] and nested in observed[first_count:]
+    assert observed[first_count:].index(nested) < observed[first_count:].index(sessions)
+
+
+@pytest.mark.parametrize("failed_parent", ["root", "nested"])
+async def test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_entries(
+    tmp_path: Path, monkeypatch, failed_parent: str
+) -> None:
+    import agent_comms.native_pi as native
+
+    root = tmp_path / "private"
+    root.mkdir(mode=0o700)
+    nested = root / "nested"
+    sessions = nested / "sessions"
+    target = root if failed_parent == "root" else nested
+    original_fsync = native.os.fsync
+    rejected = False
+    successful_target_syncs = 0
+    launches = 0
+
+    def fail_once(descriptor):
+        nonlocal rejected, successful_target_syncs
+        info = os.fstat(descriptor)
+        if target.exists():
+            current = target.stat()
+            if (info.st_dev, info.st_ino) == (current.st_dev, current.st_ino):
+                if not rejected:
+                    rejected = True
+                    raise OSError(errno.EIO, "injected session parent fsync failure")
+                successful_target_syncs += 1
+        return original_fsync(descriptor)
+
+    async def launch(*_argv, **_kwargs):
+        nonlocal launches
+        launches += 1
+        raise RuntimeError("reached spawn only after re-synchronizing visible directories")
+
+    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+    monkeypatch.setattr(native.os, "fsync", fail_once)
+    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", launch)
+    request = dict(input_id=INPUT_ID, prompt="no provider", worktree=tmp_path, session_dir=sessions)
+    with pytest.raises(NativePiUnavailable, match="session directory could not be committed"):
+        await run_native_pi_turn(tmp_path, **request)
+    assert launches == 0
+    assert rejected and (nested if failed_parent == "root" else sessions).is_dir()
+    with pytest.raises(RuntimeError, match="re-synchronizing visible directories"):
+        await run_native_pi_turn(tmp_path, **request)
+    assert launches == 1
+    assert successful_target_syncs >= 1
+
+
+async def test_reused_session_parent_fsync_failure_denies_spawn(tmp_path: Path, monkeypatch):
+    import agent_comms.native_pi as native
+
+    sessions = tmp_path / "sessions"
+    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+    prepare_native_pi_rpc_launch(tmp_path, worktree=tmp_path, session_dir=sessions)
+    original_fsync = native.os.fsync
+
+    def fail_parent(descriptor):
+        info = os.fstat(descriptor)
+        current = tmp_path.stat()
+        if (info.st_dev, info.st_ino) == (current.st_dev, current.st_ino):
+            raise OSError(errno.EIO, "reused session directory parent sync failed")
+        return original_fsync(descriptor)
+
+    async def forbidden(*_argv, **_kwargs):
+        raise AssertionError("Failed reused directory sync must deny subprocess")
+
+    monkeypatch.setattr(native.os, "fsync", fail_parent)
+    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", forbidden)
+    with pytest.raises(NativePiUnavailable, match="session directory could not be committed"):
+        await run_native_pi_turn(
+            tmp_path,
+            input_id=INPUT_ID,
+            prompt="no provider",
+            worktree=tmp_path,
+            session_dir=sessions,
+        )
 
 
 async def test_redirected_private_policy_directory_denies_subprocess(tmp_path: Path, monkeypatch):
