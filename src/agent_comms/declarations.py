@@ -28,7 +28,7 @@ import uuid
 from bisect import bisect_left
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from enum import Enum, StrEnum
@@ -476,6 +476,7 @@ class ActivityLog:
 
     def __init__(self, store_path: Path, stale_after: float = 120.0):
         self._path = store_path
+        self._checkpoint_path = store_path.with_name("activity_latest.json")
         self._stale_after = stale_after
         self._revision: tuple | None = None
         self._latest: dict[str, Activity] = {}
@@ -522,8 +523,17 @@ class ActivityLog:
             )
             # Publish a new map: other threads may still be iterating the old
             # snapshot after the store lock has been released.
-            complete = self._complete_latest.copy() if append else {}
-            offset = self._offset if append else 0
+            checkpoint = (
+                self._read_checkpoint_unlocked(revision)
+                if self._revision is None and revision is not None
+                else None
+            )
+            if checkpoint is not None:
+                complete, offset = checkpoint
+            else:
+                complete = self._complete_latest.copy() if append else {}
+                offset = self._offset if append else 0
+            original_offset = offset
             latest = complete
             if revision is not None:
                 with self._path.open("rb") as stream:
@@ -550,7 +560,68 @@ class ActivityLog:
                             offset = stream.tell()
             self._complete_latest, self._offset = complete, offset
             self._latest, self._revision = latest, revision
+            if revision is not None and (checkpoint is None or offset != original_offset):
+                # The log remains authoritative if its disposable read
+                # projection cannot be persisted.
+                with suppress(OSError):
+                    self._write_checkpoint_unlocked(revision, complete, offset)
             return self._latest
+
+    def _read_checkpoint_unlocked(
+        self, revision: tuple[int, int, int, int]
+    ) -> tuple[dict[str, Activity], int] | None:
+        try:
+            stored = json.loads(self._checkpoint_path.read_text())
+            source = stored["source"]
+            offset = stored["offset"]
+            if (
+                stored.get("schema") != 1
+                or not isinstance(source, list)
+                or len(source) != 4
+                or type(offset) is not int
+                or offset < 0
+                or source[0] != revision[0]
+                or offset > revision[1]
+                or (source[1] == revision[1] and source[2:] != list(revision[2:]))
+            ):
+                return None
+            with self._path.open("rb") as stream:
+                start = max(0, offset - 4096)
+                stream.seek(start)
+                if hashlib.sha256(stream.read(offset - start)).hexdigest() != stored["tail"]:
+                    return None
+            rows = stored["latest"]
+            if not isinstance(rows, dict):
+                return None
+            latest = {name: Activity.from_wire(row) for name, row in rows.items()}
+            if any(name != activity.thread for name, activity in latest.items()):
+                return None
+            return latest, offset
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            return None
+
+    def _write_checkpoint_unlocked(
+        self,
+        revision: tuple[int, int, int, int],
+        complete: Mapping[str, Activity],
+        offset: int,
+    ) -> None:
+        with self._path.open("rb") as stream:
+            start = max(0, offset - 4096)
+            stream.seek(start)
+            tail = hashlib.sha256(stream.read(offset - start)).hexdigest()
+        _atomic_write_text(
+            self._checkpoint_path,
+            json.dumps(
+                {
+                    "schema": 1,
+                    "source": list(revision),
+                    "offset": offset,
+                    "tail": tail,
+                    "latest": {name: activity.to_wire() for name, activity in complete.items()},
+                }
+            ),
+        )
 
     def _load(self) -> list[Activity]:
         with _store_lock(self._path):

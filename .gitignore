@@ -35,3 +35,4 @@ coverage.xml
 /runtime/
 /transcript_reply_index.sqlite3*
 /bus_route_counts.sqlite3*
+/activity_latest.json
