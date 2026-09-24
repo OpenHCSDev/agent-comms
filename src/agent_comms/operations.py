@@ -45,6 +45,7 @@ from .declarations import (
     ChannelSort,
     ChannelView,
     CoordinationSnapshot,
+    DMDisplayBasis,
     Goal,
     MembershipChange,
     Message,
@@ -512,6 +513,110 @@ class Comms:
         return self.bus.dm_history_page(
             a, b, before=before, after=after, limit=limit, max_bytes=max_bytes
         )
+
+    def dm_display_page(
+        self,
+        peer: str,
+        *,
+        worktree: str,
+        before: int | None = None,
+        after: int | None = None,
+        limit: int = 100,
+        max_bytes: int = 256 * 1024,
+    ) -> MessagePage:
+        """Fetch a bounded human DM page and its immutable identity/read basis.
+
+        Fetching is not paint proof. A UI may use the basis only after proving
+        that the corresponding inbound tail was contiguous and visibly painted.
+        """
+        if not isinstance(peer, str) or is_channel_target(peer) or peer == "broadcast":
+            raise ValueError("A DM page requires a registered peer.")
+        viewer = self.user_identity(worktree).name
+        marker_path = self.bus._path.parent / "read_markers.json"
+        with _store_lock(self._wire_lock_path):
+            snapshot = self.registry.snapshot()
+            revision = file_revision(self.registry._path)
+            viewer_name = snapshot.aliases.get(viewer, viewer)
+            peer_name = snapshot.aliases.get(peer, peer)
+            viewer_thread = snapshot.threads.get(viewer_name)
+            peer_thread = snapshot.threads.get(peer_name)
+            if (
+                viewer_thread is None
+                or viewer_thread.role is not ThreadRole.USER
+                or peer_thread is None
+                or viewer_name == peer_name
+            ):
+                raise ValueError("DM display identity changed; refresh the page.")
+            viewer_names = frozenset(
+                {
+                    viewer_name,
+                    *(name for name, owner in snapshot.aliases.items() if owner == viewer_name),
+                }
+            )
+            peer_names = frozenset(
+                {
+                    peer_name,
+                    *(name for name, owner in snapshot.aliases.items() if owner == peer_name),
+                }
+            )
+            marker_revision = file_revision(marker_path)
+            page = self.bus.dm_history_page(
+                viewer_name,
+                peer_name,
+                before=before,
+                after=after,
+                limit=limit,
+                max_bytes=max_bytes,
+            )
+            older_unread = False
+            if page.has_older and page.oldest_seq is not None:
+                markers = self.bus._read_markers()
+                baseline = max(
+                    markers.get(viewer_name, 0),
+                    markers.get(self.bus._marker_key(viewer_name, peer_name), 0),
+                )
+                with self.bus._record_snapshot(need_sequence=False) as (_, records):
+                    older_unread = any(
+                        message.seq < page.oldest_seq
+                        and message.seq > baseline
+                        and message.sender in peer_names
+                        and message.target in viewer_names
+                        for message, _ in records
+                    )
+            if (
+                file_revision(self.registry._path) != revision
+                or file_revision(marker_path) != marker_revision
+            ):
+                raise ValueError("DM display changed while paging; refresh the page.")
+            root_info = self.root.stat()
+            try:
+                bus_info = self.bus._path.stat()
+            except FileNotFoundError:
+                bus_identity = None
+            else:
+                bus_identity = (bus_info.st_dev, bus_info.st_ino)
+            return replace(
+                page,
+                display_basis=DMDisplayBasis(
+                    root=str(self.root.resolve()),
+                    root_identity=(root_info.st_dev, root_info.st_ino),
+                    worktree=str(Path(worktree).resolve()),
+                    requested_peer=peer,
+                    viewer=viewer_name,
+                    viewer_epoch=snapshot.owner_epochs[viewer_name],
+                    viewer_created_at=viewer_thread.created_at,
+                    viewer_names=viewer_names,
+                    peer=peer_name,
+                    peer_epoch=snapshot.owner_epochs[peer_name],
+                    peer_created_at=peer_thread.created_at,
+                    peer_names=peer_names,
+                    registry_revision=revision,
+                    marker_revision=marker_revision,
+                    bus_identity=bus_identity,
+                    newest_seq=page.newest_seq,
+                    older_unread=older_unread,
+                ),
+            )
 
     def channel_history_page(
         self,
@@ -1094,6 +1199,85 @@ class Comms:
                 target,
                 self.bus.latest_sequence() if through is None else through,
                 captured_keys=captured_keys,
+            )
+
+    def mark_dm_view_read(
+        self,
+        peer: str,
+        *,
+        worktree: str,
+        through: int,
+        expected_display_basis: DMDisplayBasis,
+    ) -> None:
+        """CAS one painted human DM tail, never a global/executor ACK.
+
+        The page must have no omitted unread inbound messages. The caller must
+        additionally prove its through-bound was actually and contiguously
+        painted; a fetched page alone cannot establish visibility.
+        """
+        proof = expected_display_basis
+        if type(proof) is not DMDisplayBasis or type(through) is not int:
+            raise ValueError("Painted DM read requires a typed page basis and integer bound.")
+        if (
+            proof.root != str(self.root.resolve())
+            or proof.worktree != str(Path(worktree).resolve())
+            or proof.requested_peer != peer
+            or proof.newest_seq is None
+            or proof.older_unread
+            or not 0 <= through <= proof.newest_seq
+        ):
+            raise ValueError("Painted DM read does not match a contiguous displayed page.")
+        with _store_lock(self._wire_lock_path), _store_lock(self.registry._path):
+            root_info = self.root.stat()
+            if (root_info.st_dev, root_info.st_ino) != proof.root_identity:
+                raise ValueError("DM root was replaced; refresh the page.")
+            if file_revision(self.registry._path) != proof.registry_revision:
+                raise ValueError("DM registry changed; refresh the page.")
+            snapshot = self.registry._snapshot_unlocked()
+            viewer = snapshot.threads.get(proof.viewer)
+            target = snapshot.threads.get(proof.peer)
+            if (
+                viewer is None
+                or viewer.role is not ThreadRole.USER
+                or target is None
+                or snapshot.aliases.get(peer, peer) != proof.peer
+                or viewer.created_at != proof.viewer_created_at
+                or target.created_at != proof.peer_created_at
+                or snapshot.owner_epochs.get(proof.viewer) != proof.viewer_epoch
+                or snapshot.owner_epochs.get(proof.peer) != proof.peer_epoch
+                or frozenset(
+                    {
+                        proof.viewer,
+                        *(
+                            name
+                            for name, owner in snapshot.aliases.items()
+                            if owner == proof.viewer
+                        ),
+                    }
+                )
+                != proof.viewer_names
+                or frozenset(
+                    {
+                        proof.peer,
+                        *(name for name, owner in snapshot.aliases.items() if owner == proof.peer),
+                    }
+                )
+                != proof.peer_names
+            ):
+                raise ValueError("DM viewer/peer incarnation changed; refresh the page.")
+            try:
+                bus_info = self.bus._path.stat()
+            except FileNotFoundError:
+                bus_identity = None
+            else:
+                bus_identity = (bus_info.st_dev, bus_info.st_ino)
+            if bus_identity != proof.bus_identity:
+                raise ValueError("DM bus was replaced; refresh the page.")
+            self.bus._mark_dm_painted_bound(
+                proof.viewer,
+                proof.peer,
+                through,
+                expected_marker_revision=proof.marker_revision,
             )
 
     def mark_user_view_read(self, target: str, *, worktree: str) -> None:
