@@ -81,7 +81,7 @@ async def test_compaction_waits_for_session_writer_before_preflight(tmp_path, mo
 
 
 def test_concurrent_session_append_cannot_be_reported_as_compaction_success():
-    with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
+    with tempfile.TemporaryDirectory(dir="/var/tmp" if os.name == "posix" else None) as directory:
         session = Path(directory) / "session.jsonl"
         session.write_text(json.dumps({"type": "session", "version": 3, "id": "session"}) + "\n")
         before = compact._session_bytes(session)

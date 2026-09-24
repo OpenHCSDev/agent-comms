@@ -266,7 +266,8 @@ class GoalAttemptStore:
 
     @staticmethod
     def _sync_paths(path: Path, directory: Path) -> None:
-        file_fd = os.open(path, os.O_RDONLY)
+        # Windows' CRT _commit (used by os.fsync) needs a writable handle.
+        file_fd = os.open(path, os.O_RDWR if os.name == "nt" else os.O_RDONLY)
         try:
             os.fsync(file_fd)
         finally:

@@ -82,15 +82,16 @@ def test_owner_launch_reservation_is_shared_and_never_adopts_a_ui(tmp_path, monk
 
         def __init__(self, command, **kwargs):
             launches.append((command, kwargs))
-            inherited = os.dup(kwargs["pass_fds"][0])
+            if kwargs["pass_fds"]:
+                inherited = os.dup(kwargs["pass_fds"][0])
 
-            def accept_reservation():
-                try:
-                    os.read(inherited, 1024)
-                finally:
-                    os.close(inherited)
+                def accept_reservation():
+                    try:
+                        os.read(inherited, 1024)
+                    finally:
+                        os.close(inherited)
 
-            WorkerThread(target=accept_reservation, daemon=True).start()
+                WorkerThread(target=accept_reservation, daemon=True).start()
 
     monkeypatch.setattr("agent_comms.operations.subprocess.Popen", Process)
     monkeypatch.setattr(type(comms), "_process_alive", staticmethod(lambda pid: pid == Process.pid))
