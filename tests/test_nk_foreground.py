@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 import multiprocessing
 import os
+import sys
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -23,6 +25,18 @@ from agent_comms.declarations import RelationViolationError, Thread
 from agent_comms.nk_foreground import reserve_foreground_owner
 from agent_comms.operations import Comms
 from test_coordinated_runtime import _fake_model
+
+pytestmark = pytest.mark.skipif(
+    sys.platform != "linux", reason="private foreground N/K requires Linux /var/tmp and fork"
+)
+
+
+@pytest.fixture
+def tmp_path():
+    # Private N/K publication deliberately rejects /tmp, even when pytest's
+    # default basetemp is there. Keep the real durability fixture on /var/tmp.
+    with tempfile.TemporaryDirectory(prefix="ac-nk-foreground-", dir="/var/tmp") as directory:
+        yield Path(directory)
 
 
 def _private_root(tmp_path: Path):
