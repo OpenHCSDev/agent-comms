@@ -9,7 +9,11 @@ from multiprocessing.synchronize import Event
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from agent_comms import ActivityState, Thread, UnregisteredThreadError, wire
+from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.declarations import RelationViolationError
 
 
 def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
@@ -21,6 +25,14 @@ def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
 
 def _register_thread(root: str, name: str, start: Event) -> None:
     start.wait()
+    wire(root).register(Thread(name=name, tags=frozenset({"worker"}), worktree="/tmp"))
+
+
+def _register_thread_same_tick(root: str, name: str, start: Event) -> None:
+    start.wait()
+    from agent_comms import declarations
+
+    declarations.time.time = lambda: 1_700_000_000.0
     wire(root).register(Thread(name=name, tags=frozenset({"worker"}), worktree="/tmp"))
 
 
@@ -74,6 +86,49 @@ def _run_concurrently(
 
 
 class TestConcurrentWire:
+    def test_default_same_tick_owners_get_distinct_durable_claim_identities(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        # Windows 3.11 can return the same clock tick to separate spawned
+        # workers. Explicit caller-supplied duplicate identities still fail.
+        monkeypatch.setattr("agent_comms.declarations.time.time", lambda: 1_700_000_000.0)
+        root = tmp_path / "wire"
+        first = Thread(name="first", tags=frozenset(), worktree="/tmp")
+        second = Thread(name="second", tags=frozenset(), worktree="/tmp")
+        assert type(first.created_at) is float
+        assert first.created_at == second.created_at
+        wire(root).register(first)
+        wire(root).register(second)
+        stored = wire(root).registry
+        first_time = stored.require("first").created_at
+        second_time = stored.require("second").created_at
+        assert first_time == first.created_at
+        assert first_time != second_time
+        assert stable_thread_lookup(first_time) != stable_thread_lookup(second_time)
+        assert "_generated_created_at" not in stored.require("second").to_wire()
+        with pytest.raises(RelationViolationError, match="creation identities collide"):
+            wire(root).register(
+                Thread(
+                    name="explicit",
+                    tags=frozenset(),
+                    worktree="/tmp",
+                    created_at=first.created_at,
+                )
+            )
+        assert set(wire(root).registry.all_threads()) == {"first", "second"}
+
+    def test_six_spawned_same_tick_owners_register_distinct_incarnations(
+        self, tmp_path: Path
+    ) -> None:
+        root = tmp_path / "wire"
+        names = [f"worker-{index}" for index in range(6)]
+        ctx = multiprocessing.get_context("spawn")
+        _run_concurrently(ctx, _register_thread_same_tick, [(str(root), name) for name in names])
+        stored = wire(root).registry
+        times = [stored.require(name).created_at for name in names]
+        assert len(set(times)) == len(names)
+        assert len({stable_thread_lookup(created_at) for created_at in times}) == len(names)
+
     def test_concurrent_senders_preserve_every_message_and_sequence(self, tmp_path: Path) -> None:
         root = tmp_path / "wire"
         comms = wire(root)

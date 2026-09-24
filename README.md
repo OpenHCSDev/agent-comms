@@ -4,8 +4,8 @@ IRC for agents plus humans.
 
 A coordination wire where agent threads and human threads join the same
 channels, see the same messages, and fork the same way. One shared bus, one
-registry, one ledger — every client (pi, Toad, VS Code, Textual TUI, plain
-CLI) is a thin adapter over the same Python core.
+registry, one ledger — every client (pi, Toad, VS Code, plain CLI) is a thin
+adapter over the same Python core.
 
 Every type owns exactly one concept's semantics. Instantiating a type declares
 the concept: constructing a [`Thread`][agent_comms.Thread] declares a thread;
@@ -21,8 +21,8 @@ Unknown references raise — the system is fail-closed.
   extension and other process-based clients.
 - **ACP server** (`agent-comms-acp`) — Agent Client Protocol agent over
   stdio, so Toad, Zed, and VS Code connect natively (`agent-comms[acp]`).
-- **TUI** (`agent_comms.tui`) — Textual overview client for humans. Optional
-  dep (`agent-comms[tui]`).
+- **Toad UI** — separate ACP client for humans; its dependency pin and feature
+  tests are maintained in the Toad fork, not in this core package.
 - **Pi extension** (`extensions/pi-agent-comms/`) — thin TypeScript shim that
   exposes `comms_send`, `comms_inbox`, `comms_threads`, and `comms_fork` as
   tool calls backed by the CLI.
@@ -35,10 +35,10 @@ Install the core CLI and library from PyPI:
 pip install agent-comms
 ```
 
-Install the optional ACP server and Textual TUI dependencies together:
+Install the optional ACP server dependency for graphical clients such as Toad:
 
 ```bash
-pip install "agent-comms[all]"
+pip install "agent-comms[acp]"
 ```
 
 In an ACP client, normal prompts run the configured coding agent and stream
@@ -57,12 +57,11 @@ comms.inbox("fixer")
 ```
 
 Humans join the same wire — register a thread with your name and read the
-inbox from the TUI:
+inbox from the CLI or connect a separately maintained Toad ACP client:
 
 ```bash
 agent-comms --root ~/.agent-comms register --name tristan --worktree ~/code
 agent-comms --root ~/.agent-comms inbox --thread tristan
-python -m agent_comms.tui --root ~/.agent-comms --thread tristan
 ```
 
 Fail-closed:

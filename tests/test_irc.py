@@ -128,11 +128,11 @@ class TestHistory:
 
 class TestChannelsDerived:
     def test_channels_is_global_plus_tags(self, chat):
-        assert chat.channels() == ["#all", "#ci", "#docs"]
+        assert chat.channels() == ["#any", "#none", "#all", "#ci", "#docs"]
 
     def test_channels_empty_wire(self, tmp_path):
         comms = wire(tmp_path / "fresh")
-        assert comms.channels() == ["#all"]
+        assert comms.channels() == ["#any", "#none", "#all"]
 
 
 class TestPresence:

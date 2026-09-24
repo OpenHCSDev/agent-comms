@@ -50,6 +50,18 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path):
         )
         assert any("socket roundtrip" in u.get("content", {}).get("text", "") for u in updates)
         assert await proxy.request("cancel") == {}
+        compact_calls = []
+
+        async def compact_context(session_id, instructions):
+            compact_calls.append((session_id, instructions))
+            return {"ok": True, "status": "compacted"}
+
+        owner.compact_context = compact_context
+        assert await proxy.request("compact", instructions="focus") == {
+            "ok": True,
+            "status": "compacted",
+        }
+        assert compact_calls == [(response.session_id, "focus")]
         invalid = RuntimeProxy(client, "missing-thread", path)
         with pytest.raises(RuntimeError, match="not registered"):
             await invalid.request("cancel")
@@ -90,12 +102,10 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
     second.on_connect(Client(second_updates))
     try:
         await until(lambda: socket_path(comms.root, child.pid).exists())
-        await until(
-            lambda: any(
-                m.sender == "child" and "initial turn" in m.body
-                for m in comms.channel_history("#all")
-            )
-        )
+        await until(lambda: comms.activity_of("child").state.value == "idle")
+        # The owner need not broadcast an unsolicited initial answer: a
+        # completed local turn is not proof that any channel was addressed.
+        assert all(m.sender != "child" for m in comms.channel_history("#all"))
         assert comms.registry.require("child").pid == child.pid
         assert comms.registry.status("child").value == "running"
         assert comms.activity_of("child").state.value == "idle"
@@ -106,9 +116,9 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
         comms.send("parent", "child", "second round without polling or sleeping")
         comms.acknowledge("child")  # Reading in a UI must not eat the agent's delivery.
         await until(
-            lambda: any(
-                m.sender == "child" and "second round" in m.body
-                for m in comms.channel_history("#all")
+            lambda: all(
+                any("incoming" in u.get("_meta", {}).get("agentComms", {}) for u in updates)
+                for updates in (first_updates, second_updates)
             )
         )
         for updates in (first_updates, second_updates):
@@ -121,12 +131,12 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
             assert incoming[0]["sender"] == "parent"
             assert "second round" in incoming[0]["body"]
         responses = [
-            m
-            for m in comms.channel_history("#all")
-            if m.sender == "child" and "second round" in m.body
+            m for m in comms.full_history() if m.sender == "child" and "second round" in m.body
         ]
-        assert len(responses) == 1
-        assert "old broadcast must not be delivered" not in responses[0].body
+        assert len(responses) <= 1
+        assert all(m.target == "parent" for m in responses)
+        assert all("old broadcast must not be delivered" not in m.body for m in responses)
+        assert all(m.sender != "child" for m in comms.channel_history("#all"))
         # A UI prompt is forwarded to that same owner, not run by either client.
         response = await second.prompt("child", [{"type": "text", "text": "third round"}])
         assert response.stop_reason == "end_turn"

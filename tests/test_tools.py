@@ -10,13 +10,63 @@ from agent_comms.tools import (
 
 
 class TestToolCatalog:
+    def test_collaboration_tools_share_one_mutual_contact(self, comms, monkeypatch):
+        monkeypatch.delenv("PI_AGENT_ID", raising=False)
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
+        comms.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
+        comms.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+        before = comms.registry.snapshot()
+        result = invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b"})
+        assert result["collaboration"]["owner"] == "a"
+        assert result["collaboration"]["note"] == ""
+        assert invoke_tool(comms, "comms_collaborations", {})["collaborations"] == [
+            result["collaboration"]
+        ]
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
+        mirrored = invoke_tool(comms, "comms_collaborations", {})["collaborations"]
+        assert len(mirrored) == 1
+        assert (mirrored[0]["owner"], mirrored[0]["peer"]) == ("b", "a")
+        invoke_tool(
+            comms, "comms_collaboration", {"action": "update", "peer": "a", "note": "Shared work"}
+        )
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
+        collaborations = invoke_tool(comms, "comms_collaborations", {})["collaborations"]
+        assert collaborations[0]["note"] == "Shared work"
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
+        invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "a"})
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
+        assert invoke_tool(comms, "comms_collaborations", {}) == {"collaborations": []}
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
+        invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "a"})
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
+        assert invoke_tool(comms, "comms_collaborations", {})["collaborations"][0]["peer"] == "b"
+        invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "b"})
+        assert comms.registry.snapshot() == before
+        assert not comms.full_history()
+
+    def test_collaboration_tool_rejects_bad_arguments_before_writes(self, comms, monkeypatch):
+        monkeypatch.delenv("PI_AGENT_ID", raising=False)
+        monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
+        with pytest.raises(ValueError, match="identity"):
+            invoke_tool(comms, "comms_collaborations", {})
+        with pytest.raises(ValueError, match="must be one of"):
+            invoke_tool(comms, "comms_collaboration", {"action": "start", "peer": "b"})
+        with pytest.raises(ValueError, match="Unknown arguments"):
+            invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b", "owner": "c"})
+        assert not (comms.root / "relationships.json").exists()
+
     def test_catalog_has_unique_json_schema_declarations(self):
         catalog = tool_catalog()
         names = [tool["name"] for tool in catalog]
         assert len(names) == len(set(names))
-        assert {"comms_send", "comms_inbox", "comms_stop", "comms_archive", "comms_delete"} <= set(
-            names
-        )
+        assert {
+            "comms_send",
+            "comms_inbox",
+            "comms_set_goal",
+            "comms_stop",
+            "comms_archive",
+            "comms_delete",
+        } <= set(names)
         assert all(tool["parameters"]["additionalProperties"] is False for tool in catalog)
 
     def test_thread_context_actions_are_declared_in_display_order(self):
@@ -24,6 +74,7 @@ class TestToolCatalog:
         assert [action["name"] for action in actions] == [
             "comms_fork",
             "comms_stop",
+            "comms_start",
             "comms_archive",
             "comms_delete",
             "comms_ack",

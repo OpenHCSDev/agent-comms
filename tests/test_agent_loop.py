@@ -164,11 +164,28 @@ class TestParticipantActivity:
             [
                 '{"type":"tool_execution_start","toolCallId":"t1","toolName":"bash","args":{"command":"pwd"}}',
                 '{"type":"tool_execution_end","toolCallId":"t1","toolName":"bash","result":{"content":[]},"isError":false}',
-                '{"type":"agent_end"}',
+                '{"type":"message_end","message":{"role":"assistant","stopReason":"stop"}}',
+                '{"type":"agent_settled"}',
             ]
         )
         stub = tmp_path / "pi-bot"
-        stub.write_text(f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
+        stub.write_text(
+            f"#!{sys.executable}\nimport json, sys\n"
+            "state = json.loads(sys.stdin.readline())\n"
+            "print(json.dumps({'type': 'response', 'command': 'get_state', 'id': state['id'], "
+            "'success': True, 'data': {'nativeInputProofCapability': "
+            "'pi-native-input-v1-live-only'}}), flush=True)\n"
+            "prompt = json.loads(sys.stdin.readline())\n"
+            "print(json.dumps({'type': 'response', 'command': 'prompt', 'id': prompt['id'], "
+            "'success': True}), flush=True)\n"
+            "print(json.dumps({'type': 'message_start', 'message': {'role': 'user', "
+            "'content': prompt['message'], 'inputId': prompt['inputId']}}), flush=True)\n"
+            f"for event in {rpc_lines.splitlines()!r}: print(event, flush=True)\n"
+            "sys.stdin.readline()  # postturn get_state\n"
+            "sys.stdin.readline()  # get_session_stats\n"
+            "print(json.dumps({'type': 'response', 'command': 'get_session_stats', "
+            "'success': True, 'data': {'contextUsage': {}}}), flush=True)\n"
+        )
         stub.chmod(0o755)
         monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
         monkeypatch.chdir(tmp_path)

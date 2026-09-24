@@ -1,0 +1,1052 @@
+--- a/dist/core/agent-session.js
++++ b/dist/core/agent-session.js
+@@ -12,7 +12,8 @@
+  *
+  * Modes use this class and add their own I/O layer on top.
+  */
+-import { readFileSync } from "node:fs";
++import { appendFileSync, closeSync, existsSync, fsyncSync, openSync, readFileSync } from "node:fs";
++import { createHash } from "node:crypto";
+ import { basename, dirname } from "node:path";
+ import { contentText } from "@earendil-works/pi-ai";
+ import { clampThinkingLevel, cleanupSessionResources, getSupportedThinkingLevels, isContextOverflow, isRecoverableLength, isRetryableAssistantError, modelsAreEqual, resetApiProviders, streamSimple, } from "@earendil-works/pi-ai/compat";
+@@ -89,6 +90,11 @@
+     _steeringMessages = [];
+     /** Tracks pending follow-up messages for UI display. Removed when delivered. */
+     _followUpMessages = [];
++    /** Native identity is separate from the RPC acceptance-command id. */
++    _nativeInputClaims = new Map();
++    _awaitingNativeInputIds = new Set();
++    _nativeRunHadTrackedInput = false;
++    _nativeRequestGeneration = 0; // journal high-water reservation, NOT recovered context proof
+     /** Messages queued to be included with the next user prompt as context ("asides"). */
+     _pendingNextTurnMessages = [];
+     /** Context-only custom messages queued during a run, flushed once the current turn's tool results are in. */
+@@ -153,6 +159,8 @@
+         // Always subscribe to agent events for internal handling
+         // (session persistence, extensions, auto-compaction, retry logic)
+         this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
++        this._loadNativeInputState();
++        this.agent.onContextReady = async (context) => await this._commitNativeContext(context);
+         this._installAgentToolHooks();
+         this._installAgentNextTurnRefresh();
+         this._buildRuntime({
+@@ -160,6 +168,145 @@
+             includeAllExtensionTools: true,
+         });
+     }
++    _nativeProofPath() {
++        const file = this.sessionManager.getSessionFile();
++        if (!this.sessionManager.isPersisted() || !file) {
++            throw new Error("Native input proof requires a persistent Pi session");
++        }
++        this.sessionManager.assertNativeInputSafe();
++        return `${file}.input-proof`;
++    }
++    _loadNativeInputState() {
++        for (const entry of this.sessionManager.getEntries()) {
++            if (entry.type !== "message" || entry.message?.role !== "user" || entry.message.inputId === undefined) continue;
++            const { inputId, inputDigest } = entry.message;
++            if (!/^[a-f0-9]{32}$/.test(inputId) || !/^[a-f0-9]{64}$/.test(inputDigest) ||
++                this._nativeInputClaims.has(inputId)) {
++                throw new Error("Invalid or duplicate native input in persisted Pi session");
++            }
++            this._nativeInputClaims.set(inputId, inputDigest);
++        }
++        if (!this.sessionManager.isPersisted()) return;
++        if (this._nativeInputClaims.size > 0) this.sessionManager.assertNativeInputSafe();
++        const file = this._nativeProofPath();
++        if (!existsSync(file)) return;
++        const raw = readFileSync(file, "utf8");
++        if (raw.length > 16 * 1024 * 1024 || (raw && !raw.endsWith("\n"))) {
++            throw new Error("Truncated or oversized native input proof journal");
++        }
++        // A newline-terminated row can survive FAILED fsync. It may reserve the
++        // next generation, but it NEVER re-emits or proves context_committed.
++        // Only a live, post-successful-fsync event may become coordinator evidence.
++        let lastDigest;
++        let idsInGeneration = new Set();
++        for (const line of raw.split("\n")) {
++            if (!line) continue;
++            const row = JSON.parse(line);
++            const entry = this.sessionManager.getTrackedInput(row.inputId);
++            const newGeneration = row.requestGeneration > this._nativeRequestGeneration;
++            if (row.schema !== 1 || row.type !== "context_committed" ||
++                row.sessionId !== this.sessionId ||
++                !Number.isSafeInteger(row.requestGeneration) || row.requestGeneration < 1 ||
++                row.requestGeneration < this._nativeRequestGeneration ||
++                (!newGeneration && row.llmContextDigest !== lastDigest) ||
++                (!newGeneration && idsInGeneration.has(row.inputId)) ||
++                entry?.id !== row.sessionEntryId ||
++                !/^[a-f0-9]{64}$/.test(row.llmContextDigest)) {
++                throw new Error("Invalid native input proof journal row");
++            }
++            if (newGeneration) {
++                this._nativeRequestGeneration = row.requestGeneration;
++                lastDigest = row.llmContextDigest;
++                idsInGeneration = new Set();
++            }
++            idsInGeneration.add(row.inputId);
++        }
++    }
++    _claimNativeInput(inputId, request) {
++        if (inputId === undefined) return false;
++        if (typeof inputId !== "string" || !/^[a-f0-9]{32}$/.test(inputId)) {
++            throw new Error("Native input ID must be 128-bit lowercase hex");
++        }
++        this._nativeProofPath();
++        const digest = createHash("sha256").update(`pi-input-request-v1\n${JSON.stringify(request)}`).digest("hex");
++        const previous = this._nativeInputClaims.get(inputId);
++        if (previous !== undefined) {
++            if (previous !== digest) throw new Error("Conflicting replay of native input ID");
++            return true; // exact replay: never create a second queue or user entry
++        }
++        this._nativeInputClaims.set(inputId, digest);
++        return false;
++    }
++    _releaseUnqueuedNativeInput(inputId) {
++        if (!inputId || this.sessionManager.getTrackedInput(inputId) ||
++            this._awaitingNativeInputIds.has(inputId) ||
++            this._steeringMessages.some((item) => item.inputId === inputId) ||
++            this._followUpMessages.some((item) => item.inputId === inputId)) return;
++        // The pinned core queue is the delivery authority. If its state cannot
++        // be inspected, retain the claim rather than risk a duplicate input.
++        const steering = this.agent.steeringQueue?.messages;
++        const followUp = this.agent.followUpQueue?.messages;
++        if (!Array.isArray(steering) || !Array.isArray(followUp) ||
++            steering.some((message) => message.inputId === inputId) ||
++            followUp.some((message) => message.inputId === inputId)) return;
++        this._nativeInputClaims.delete(inputId);
++    }
++    async _commitNativeContext(llmContext) {
++        const tracked = [];
++        const seen = new Set();
++        for (const message of llmContext.messages) {
++            if (message.role !== "user" || message.inputId === undefined) continue;
++            const inputId = message.inputId;
++            if (typeof inputId !== "string" || !/^[a-f0-9]{32}$/.test(inputId) || seen.has(inputId)) {
++                throw new Error("Invalid or duplicate native input in assembled Pi context");
++            }
++            seen.add(inputId);
++            const entry = this.sessionManager.getTrackedInput(inputId);
++            const claimedDigest = this._nativeInputClaims.get(inputId);
++            if (typeof claimedDigest !== "string" || !/^[a-f0-9]{64}$/.test(claimedDigest) ||
++                !entry || entry.message.inputDigest !== claimedDigest ||
++                message.inputDigest !== claimedDigest) {
++                throw new Error("Model context contains an unbound native input ID");
++            }
++            if (this.sessionManager.flushInputDurably(inputId) !== entry.id) {
++                throw new Error("Native input durability check failed");
++            }
++            tracked.push({ inputId, sessionEntryId: entry.id });
++        }
++        for (const inputId of this._awaitingNativeInputIds) {
++            if (!seen.has(inputId)) throw new Error("Pending native input was removed from model context");
++        }
++        if (tracked.length === 0) return;
++        const generation = ++this._nativeRequestGeneration;
++        const digest = createHash("sha256")
++            .update(`pi-assembled-context-v1\n${JSON.stringify(llmContext)}`).digest("hex");
++        const file = this._nativeProofPath();
++        const created = !existsSync(file);
++        const fd = openSync(file, created ? "ax" : "a", 0o600);
++        try {
++            for (const { inputId, sessionEntryId } of tracked) {
++                const record = { schema: 1, type: "context_committed", sessionId: this.sessionId,
++                    inputId, sessionEntryId, requestGeneration: generation,
++                    llmContextDigest: digest };
++                appendFileSync(fd, `${JSON.stringify(record)}\n`);
++            }
++            fsyncSync(fd);
++        }
++        finally {
++            closeSync(fd);
++        }
++        // The proof filename must be durable for THIS emitted generation. A
++        // failed first directory fsync can leave a visible but unproven file;
++        // existence on the next turn (or after reopen) is not durability.
++        const parent = openSync(dirname(file), "r");
++        try { fsyncSync(parent); } finally { closeSync(parent); }
++        for (const { inputId, sessionEntryId } of tracked) {
++            this._awaitingNativeInputIds.delete(inputId);
++            this._emit({ type: "context_committed", sessionId: this.sessionId,
++                inputId, sessionEntryId, requestGeneration: generation,
++                llmContextDigest: digest });
++        }
++    }
+     get modelRuntime() {
+         return this._modelRuntime;
+     }
+@@ -274,7 +421,7 @@
+     async _compactBeforeNextAssistantResponse(context) {
+         const model = this.model;
+         const settings = this.settingsManager.getCompactionSettings();
+-        if (!model ||
++        if (this._nativeRunHadTrackedInput || !model ||
+             model.contextWindow <= 0 ||
+             !shouldCompact(estimateContextTokens(context.messages).tokens, model.contextWindow, settings)) {
+             return context;
+@@ -315,12 +462,22 @@
+             l(event);
+         }
+     }
+-    _emitQueueUpdate() {
+-        this._emit({
++    _emitQueueUpdate(bestEffort = false) {
++        const update = {
+             type: "queue_update",
+-            steering: [...this._steeringMessages],
+-            followUp: [...this._followUpMessages],
+-        });
++            steering: this._steeringMessages.map((item) => item.text),
++            followUp: this._followUpMessages.map((item) => item.text),
++        };
++        if (bestEffort) this._emitNativePresentation(update);
++        else this._emit(update);
++    }
++    _emitNativePresentation(event) {
++        // External SDK listeners are observers, not delivery or persistence
++        // authorities. Once core dequeues a tracked input, their exception
++        // cannot prevent its user message from reaching durable storage.
++        for (const listener of this._eventListeners) {
++            try { listener(event); } catch { /* No observer owns native input delivery. */ }
++        }
+     }
+     async _emitSessionCompactFailed(event) {
+         if (this._extensionRunner.hasHandlers("session_compact_failed")) {
+@@ -361,21 +518,28 @@
+         // When a user message starts, check if it's from either queue and remove it BEFORE emitting
+         // This ensures the UI sees the updated queue state
+         if (event.type === "message_start" && event.message.role === "user") {
++            // The newest user turn controls retry policy, even when it is
++            // queued behind a completed tracked turn in the same agent loop.
++            this._nativeRunHadTrackedInput = this._nativeInputClaims.has(event.message.inputId);
+             this._overflowRecoveryAttempted = false;
+             const messageText = contentText(event.message.content, "");
+             if (messageText) {
+                 // Check steering queue first
+-                const steeringIndex = this._steeringMessages.indexOf(messageText);
++                const steeringIndex = this._steeringMessages.findIndex((item) => event.message.inputId
++                    ? item.inputId === event.message.inputId
++                    : !item.inputId && item.text === messageText);
+                 if (steeringIndex !== -1) {
+                     this._steeringMessages.splice(steeringIndex, 1);
+-                    this._emitQueueUpdate();
++                    this._emitQueueUpdate(event.message.inputId && this._nativeInputClaims.has(event.message.inputId));
+                 }
+                 else {
+                     // Check follow-up queue
+-                    const followUpIndex = this._followUpMessages.indexOf(messageText);
++                    const followUpIndex = this._followUpMessages.findIndex((item) => event.message.inputId
++                        ? item.inputId === event.message.inputId
++                        : !item.inputId && item.text === messageText);
+                     if (followUpIndex !== -1) {
+                         this._followUpMessages.splice(followUpIndex, 1);
+-                        this._emitQueueUpdate();
++                        this._emitQueueUpdate(event.message.inputId && this._nativeInputClaims.has(event.message.inputId));
+                     }
+                 }
+             }
+@@ -383,7 +547,13 @@
+         // Emit to extensions first
+         await this._emitExtensionEvent(event);
+         // Notify all listeners
+-        this._emit(event.type === "agent_end" ? { ...event, willRetry: this._willRetryAfterAgentEnd(event) } : event);
++        if ((event.type === "message_start" || event.type === "message_end") &&
++            event.message?.role === "user" && this._nativeInputClaims.has(event.message.inputId)) {
++            this._emitNativePresentation(event);
++        }
++        else {
++            this._emit(event.type === "agent_end" ? { ...event, willRetry: this._willRetryAfterAgentEnd(event) } : event);
++        }
+         // Handle session persistence
+         if (event.type === "message_end") {
+             // Check if this is a custom message from extensions
+@@ -395,7 +565,23 @@
+                 event.message.role === "assistant" ||
+                 event.message.role === "toolResult") {
+                 // Regular LLM message - persist as SessionMessageEntry
+-                this.sessionManager.appendMessage(event.message);
++                if (event.message.role === "user" && event.message.inputId !== undefined) {
++                    const claimedDigest = this._nativeInputClaims.get(event.message.inputId);
++                    if (typeof claimedDigest !== "string" || !/^[a-f0-9]{64}$/.test(claimedDigest) ||
++                        event.message.inputDigest !== claimedDigest) {
++                        throw new Error("Unclaimed or modified native user input");
++                    }
++                }
++                const entryId = this.sessionManager.appendMessage(event.message);
++                if (event.message.role === "user" && event.message.inputId !== undefined) {
++                    const durableId = this.sessionManager.flushInputDurably(event.message.inputId);
++                    if (entryId !== durableId) {
++                        throw new Error("Native input entry changed during durable append");
++                    }
++                    this._awaitingNativeInputIds.add(event.message.inputId);
++                    this._emit({ type: "input_committed", sessionId: this.sessionId,
++                        inputId: event.message.inputId, sessionEntryId: entryId });
++                }
+             }
+             // Other message types (bashExecution, compactionSummary, branchSummary) are persisted elsewhere
+             // Track assistant message for auto-compaction (checked on agent_end)
+@@ -427,6 +613,7 @@
+         }
+     };
+     _willRetryAfterAgentEnd(event) {
++        if (this._nativeRunHadTrackedInput) return false;
+         const settings = this.settingsManager.getRetrySettings();
+         if (!settings.enabled || this._retryAttempt >= settings.maxRetries) {
+             return false;
+@@ -522,6 +709,10 @@
+                     replacement.content == null
+                     ? { ...replacement, content: [] }
+                     : replacement;
++                if (event.message.role === "user" && event.message.inputId &&
++                    normalized.inputId !== event.message.inputId) {
++                    throw new Error("An extension removed or changed a tracked user input ID");
++                }
+                 this._replaceMessageInPlace(event.message, normalized);
+             }
+         }
+@@ -770,6 +961,21 @@
+     // Prompting
+     // =========================================================================
+     async _runAgentPrompt(messages) {
++        this._nativeRunHadTrackedInput = messages.some((message) => message.role === "user" &&
++            this._nativeInputClaims.has(message.inputId));
++        // SDK provider retries happen INSIDE a single streamFunction call, before
++        // an assistant error is visible to Pi's ordinary retry logic. Force one
++        // transport attempt for tracked runs (including queued tracked messages).
++        const originalStream = this.agent.streamFunction;
++        const originalStopAfterTurn = this.agent.shouldStopAfterTurn;
++        const boundedStream = (model, context, options) => originalStream(model, context,
++            this._nativeRunHadTrackedInput ? { ...options, maxRetries: 0 } : options);
++        const stopAfterTurn = async (turn, signal) => {
++            if (this._nativeRunHadTrackedInput && turn.message?.stopReason === "length") return true;
++            return originalStopAfterTurn ? await originalStopAfterTurn(turn, signal) : false;
++        };
++        this.agent.streamFunction = boundedStream;
++        this.agent.shouldStopAfterTurn = stopAfterTurn;
+         this._isAgentRunActive = true;
+         try {
+             await this.agent.prompt(messages);
+@@ -778,6 +984,11 @@
+             }
+         }
+         finally {
++            // Reset before the await in agent_settled: another explicit prompt
++            // may start while extension observers are running.
++            if (this.agent.streamFunction === boundedStream) this.agent.streamFunction = originalStream;
++            if (this.agent.shouldStopAfterTurn === stopAfterTurn) this.agent.shouldStopAfterTurn = originalStopAfterTurn;
++            this._nativeRunHadTrackedInput = false;
+             this._systemPromptOverride = undefined;
+             this._flushPendingBashMessages();
+             this._flushPendingCustomMessages();
+@@ -790,6 +1001,15 @@
+         if (!msg) {
+             return false;
+         }
++        // A failed/uncertain native turn must not retry or drain a queued
++        // agent_end continuation. After an authoritative stop, do not run an
++        // implicit compaction, but allow explicitly queued subsequent inputs.
++        // The next message_start sets its own tracked/untracked transport budget.
++        if (this._nativeRunHadTrackedInput) {
++            if (msg.stopReason !== "stop") return false;
++            this._nativeRunHadTrackedInput = false;
++            return this.agent.hasQueuedMessages();
++        }
+         if (this._isRetryableError(msg) && (await this._prepareRetry(msg))) {
+             return true;
+         }
+@@ -822,13 +1042,37 @@
+         const expandPromptTemplates = options?.expandPromptTemplates ?? true;
+         const preflightResult = options?.preflightResult;
+         let messages;
++        // Only the invocation which inserted an unpersisted ID may release it.
++        // An exact replay can race that owner and must never erase its claim.
++        let freshNativeClaim = false;
++        let preflightAccepted = false;
++        const releaseUncommittedClaim = () => {
++            if (freshNativeClaim) this._releaseUnqueuedNativeInput(options.inputId);
++        };
+         try {
++            // A tracked input is never an extension command: those may be handled
++            // without entering a model context and their effects cannot be replayed.
++            if (options?.inputId && expandPromptTemplates && text.startsWith("/")) {
++                this._throwIfExtensionCommand(text);
++            }
++            const replay = this._claimNativeInput(options?.inputId, {
++                kind: "prompt", text, images: options?.images ?? null,
++                streamingBehavior: options?.streamingBehavior ?? null,
++                expandPromptTemplates, source: options?.source ?? "interactive",
++            });
++            freshNativeClaim = Boolean(options?.inputId) && !replay;
++            if (replay) {
++                preflightAccepted = true;
++                preflightResult?.(true);
++                return;
++            }
+             // Handle extension commands first (execute immediately, even during streaming)
+             // Extension commands manage their own LLM interaction via pi.sendMessage()
+             if (expandPromptTemplates && text.startsWith("/")) {
+                 const handled = await this._tryExecuteExtensionCommand(text);
+                 if (handled) {
+                     // Extension command executed, no prompt to send
++                    preflightAccepted = true;
+                     preflightResult?.(true);
+                     return;
+                 }
+@@ -842,6 +1086,10 @@
+             if (this._extensionRunner.hasHandlers("input")) {
+                 const inputResult = await this._extensionRunner.emitInput(currentText, currentImages, options?.source ?? "interactive", this.isStreaming ? options?.streamingBehavior : undefined);
+                 if (inputResult.action === "handled") {
++                    if (options?.inputId) {
++                        throw new Error("Tracked input handled without an LLM context");
++                    }
++                    preflightAccepted = true;
+                     preflightResult?.(true);
+                     return;
+                 }
+@@ -862,11 +1110,12 @@
+                     throw new Error("Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.");
+                 }
+                 if (options.streamingBehavior === "followUp") {
+-                    await this._queueFollowUp(expandedText, currentImages);
++                    await this._queueFollowUp(expandedText, currentImages, options?.inputId);
+                 }
+                 else {
+-                    await this._queueSteer(expandedText, currentImages);
++                    await this._queueSteer(expandedText, currentImages, options?.inputId);
+                 }
++                preflightAccepted = true;
+                 preflightResult?.(true);
+                 return;
+             }
+@@ -891,7 +1140,7 @@
+             // Check if we need to compact before sending (catches aborted responses).
+             // The user's new prompt is sent below, so do not call agent.continue() here.
+             const lastAssistant = this._findLastAssistantMessage();
+-            if (lastAssistant) {
++            if (lastAssistant && !options?.inputId) {
+                 await this._checkCompaction(lastAssistant, false);
+             }
+             // Build messages array (custom message if any, then user message)
+@@ -905,6 +1154,8 @@
+                 role: "user",
+                 content: userContent,
+                 timestamp: Date.now(),
++                inputId: options?.inputId,
++                ...(options?.inputId ? { inputDigest: this._nativeInputClaims.get(options.inputId) } : {}),
+             });
+             // Inject any pending "nextTurn" messages as context alongside the user message
+             for (const msg of this._pendingNextTurnMessages) {
+@@ -939,14 +1190,24 @@
+             }
+         }
+         catch (error) {
+-            preflightResult?.(false);
++            releaseUncommittedClaim();
++            // A callback that attempted a successful ACK must not also send failure.
++            if (!preflightAccepted) preflightResult?.(false);
+             throw error;
+         }
+         if (!messages) {
+             return;
+         }
+-        preflightResult?.(true);
+-        await this._runAgentPrompt(messages);
++        try {
++            preflightAccepted = true;
++            preflightResult?.(true);
++            await this._runAgentPrompt(messages);
++        }
++        catch (error) {
++            // A provisional ACK cannot keep an ID rejected before any user append.
++            releaseUncommittedClaim();
++            throw error;
++        }
+     }
+     /**
+      * Try to execute an extension command. Returns true if command was found and executed.
+@@ -1013,15 +1274,25 @@
+      * @param images Optional image attachments to include with the message
+      * @throws Error if text is an extension command
+      */
+-    async steer(text, images) {
+-        // Check for extension commands (cannot be queued)
++    async steer(text, images, inputId) {
++        // Check for extension commands before claiming an ID: rejected commands
++        // must not leave a false accepted replay claim.
+         if (text.startsWith("/")) {
+             this._throwIfExtensionCommand(text);
+         }
+-        // Expand skill commands and prompt templates
+-        let expandedText = this._expandSkillCommand(text);
+-        expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
+-        await this._queueSteer(expandedText, images);
++        if (this._claimNativeInput(inputId, { kind: "steer", text, images: images ?? null })) return;
++        try {
++            // Expand skill commands and prompt templates
++            let expandedText = this._expandSkillCommand(text);
++            expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
++            await this._queueSteer(expandedText, images, inputId);
++        }
++        catch (error) {
++            // Only this fresh invocation can release an ID, and only before
++            // either the core queue or the durable session owns the input.
++            this._releaseUnqueuedNativeInput(inputId);
++            throw error;
++        }
+     }
+     /**
+      * Queue a follow-up message to be processed after the agent finishes.
+@@ -1030,47 +1301,66 @@
+      * @param images Optional image attachments to include with the message
+      * @throws Error if text is an extension command
+      */
+-    async followUp(text, images) {
+-        // Check for extension commands (cannot be queued)
++    async followUp(text, images, inputId) {
+         if (text.startsWith("/")) {
+             this._throwIfExtensionCommand(text);
+         }
+-        // Expand skill commands and prompt templates
+-        let expandedText = this._expandSkillCommand(text);
+-        expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
+-        await this._queueFollowUp(expandedText, images);
++        if (this._claimNativeInput(inputId, { kind: "follow_up", text, images: images ?? null })) return;
++        try {
++            // Expand skill commands and prompt templates
++            let expandedText = this._expandSkillCommand(text);
++            expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
++            await this._queueFollowUp(expandedText, images, inputId);
++        }
++        catch (error) {
++            this._releaseUnqueuedNativeInput(inputId);
++            throw error;
++        }
+     }
+     /**
+      * Internal: Queue a steering message (already expanded, no extension command check).
+      */
+-    async _queueSteer(text, images) {
+-        this._steeringMessages.push(text);
+-        this._emitQueueUpdate();
++    async _queueSteer(text, images, inputId) {
+         const content = [{ type: "text", text }];
+         if (images) {
+             content.push(...images);
+         }
+-        this.agent.steer({
+-            role: "user",
+-            content,
+-            timestamp: Date.now(),
+-        });
++        // The core queue owns delivery; an observer exception must not leave a
++        // display-only phantom with an inert exact-ID replay. Preserve the
++        // display identity even if an overridden core enqueue throws afterwards.
++        const message = { role: "user", content, timestamp: Date.now(),
++            ...(inputId ? { inputId, inputDigest: this._nativeInputClaims.get(inputId) } : {}) };
++        let coreQueued = false;
++        try {
++            this.agent.steer(message);
++        }
++        finally {
++            coreQueued = this.agent.steeringQueue?.messages?.includes(message) === true;
++            if (coreQueued) this._steeringMessages.push({ text, inputId });
++        }
++        if (!coreQueued) throw new Error("Pi core did not queue steering input");
++        this._emitQueueUpdate();
+     }
+     /**
+      * Internal: Queue a follow-up message (already expanded, no extension command check).
+      */
+-    async _queueFollowUp(text, images) {
+-        this._followUpMessages.push(text);
+-        this._emitQueueUpdate();
++    async _queueFollowUp(text, images, inputId) {
+         const content = [{ type: "text", text }];
+         if (images) {
+             content.push(...images);
+         }
+-        this.agent.followUp({
+-            role: "user",
+-            content,
+-            timestamp: Date.now(),
+-        });
++        const message = { role: "user", content, timestamp: Date.now(),
++            ...(inputId ? { inputId, inputDigest: this._nativeInputClaims.get(inputId) } : {}) };
++        let coreQueued = false;
++        try {
++            this.agent.followUp(message);
++        }
++        finally {
++            coreQueued = this.agent.followUpQueue?.messages?.includes(message) === true;
++            if (coreQueued) this._followUpMessages.push({ text, inputId });
++        }
++        if (!coreQueued) throw new Error("Pi core did not queue follow-up input");
++        this._emitQueueUpdate();
+     }
+     /**
+      * Throw an error if the text is an extension command.
+@@ -1193,11 +1483,19 @@
+      * @returns Object with steering and followUp arrays
+      */
+     clearQueue() {
+-        const steering = [...this._steeringMessages];
+-        const followUp = [...this._followUpMessages];
++        const steering = this._steeringMessages.map((item) => item.text);
++        const followUp = this._followUpMessages.map((item) => item.text);
++        const removed = this.agent.clearAllQueues();
++        const removedIds = new Set([...removed.steering, ...removed.followUp]
++            .map((message) => message.inputId).filter(Boolean));
++        for (const item of [...this._steeringMessages, ...this._followUpMessages]) {
++            if (item.inputId && removedIds.has(item.inputId) &&
++                !this.sessionManager.getTrackedInput(item.inputId)) {
++                this._nativeInputClaims.delete(item.inputId);
++            }
++        }
+         this._steeringMessages = [];
+         this._followUpMessages = [];
+-        this.agent.clearAllQueues();
+         this._emitQueueUpdate();
+         return { steering, followUp };
+     }
+@@ -1207,11 +1505,11 @@
+     }
+     /** Get pending steering messages (read-only) */
+     getSteeringMessages() {
+-        return this._steeringMessages;
++        return this._steeringMessages.map((item) => item.text);
+     }
+     /** Get pending follow-up messages (read-only) */
+     getFollowUpMessages() {
+-        return this._followUpMessages;
++        return this._followUpMessages.map((item) => item.text);
+     }
+     get resourceLoader() {
+         return this._resourceLoader;
+--- a/dist/core/session-manager.js
++++ b/dist/core/session-manager.js
+@@ -1,8 +1,8 @@
+ import { uuidv7 } from "@earendil-works/pi-ai";
+ import { randomUUID } from "crypto";
+-import { appendFileSync, closeSync, createReadStream, existsSync, mkdirSync, openSync, readdirSync, readSync, statSync, writeFileSync, } from "fs";
++import { appendFileSync, closeSync, createReadStream, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, statSync, writeFileSync, } from "fs";
+ import { readdir, stat } from "fs/promises";
+-import { join, resolve } from "path";
++import { dirname, join, resolve } from "path";
+ import { createInterface } from "readline";
+ import { StringDecoder } from "string_decoder";
+ import { APP_NAME, getAgentDir as getDefaultAgentDir, getSessionsDir } from "../config.js";
+@@ -248,7 +248,7 @@
+ export function getDefaultSessionDir(cwd, agentDir = getDefaultAgentDir()) {
+     const sessionDir = getDefaultSessionDirPath(cwd, agentDir);
+     if (!existsSync(sessionDir)) {
+-        mkdirSync(sessionDir, { recursive: true });
++        mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
+     }
+     return sessionDir;
+ }
+@@ -600,7 +600,7 @@
+         this.sessionDir = normalizePath(sessionDir);
+         this.persist = persist;
+         if (persist && this.sessionDir && !existsSync(this.sessionDir)) {
+-            mkdirSync(this.sessionDir, { recursive: true });
++            mkdirSync(this.sessionDir, { recursive: true, mode: 0o700 });
+         }
+         if (sessionFile) {
+             this._setSessionFile(sessionFile, preloadedFileEntries);
+@@ -708,7 +708,7 @@
+     _rewriteFile() {
+         if (!this.persist || !this.sessionFile)
+             return;
+-        const fd = openSync(this.sessionFile, "w");
++        const fd = openSync(this.sessionFile, "w", 0o600);
+         try {
+             for (const entry of this.fileEntries) {
+                 writeFileSync(fd, `${JSON.stringify(entry)}\n`);
+@@ -751,7 +751,7 @@
+             return;
+         }
+         if (!this.flushed) {
+-            const fd = openSync(this.sessionFile, "wx");
++            const fd = openSync(this.sessionFile, "wx", 0o600);
+             try {
+                 for (const e of this.fileEntries) {
+                     writeFileSync(fd, `${JSON.stringify(e)}\n`);
+@@ -772,6 +772,103 @@
+         this.leafId = entry.id;
+         this._persist(entry);
+     }
++    /** Tracked metadata is private even if this Pi session began with an untracked turn. */
++    assertNativeInputSafe() {
++        if (!this.persist || !this.sessionFile || typeof process.getuid !== "function") {
++            throw new Error("Native input proof requires a persisted owner-controlled session");
++        }
++        const uid = process.getuid();
++        let directory = dirname(this.sessionFile);
++        let sessionDir = true;
++        while (true) {
++            const info = lstatSync(directory);
++            const stickyRoot = info.uid === 0 && (info.mode & 0o1000) !== 0;
++            if (!info.isDirectory() || info.uid !== uid && info.uid !== 0 ||
++                (info.mode & 0o022) !== 0 && !stickyRoot ||
++                sessionDir && (info.uid !== uid || (info.mode & 0o777) !== 0o700)) {
++                throw new Error("Native input session directory is not private");
++            }
++            const parent = dirname(directory);
++            if (parent === directory) break;
++            directory = parent;
++            sessionDir = false;
++        }
++        for (const file of [this.sessionFile, `${this.sessionFile}.input-proof`]) {
++            let info;
++            try { info = lstatSync(file); }
++            catch (error) {
++                if (error?.code === "ENOENT") continue;
++                throw error;
++            }
++            if (!info.isFile() || info.uid !== uid || (info.mode & 0o777) !== 0o600) {
++                throw new Error("Native input evidence file is not owner-only");
++            }
++        }
++        return true;
++    }
++    nativeInputProofAvailable() {
++        try { return this.assertNativeInputSafe(); }
++        catch { return false; }
++    }
++    /** Find exactly one durable or pending native tracked input, including old branches. */
++    getTrackedInput(inputId) {
++        const rows = this.fileEntries.filter((entry) => entry.type === "message" &&
++            entry.message?.role === "user" && entry.message.inputId === inputId);
++        if (rows.length > 1) {
++            throw new Error("Duplicate native input ID in session");
++        }
++        return rows[0];
++    }
++    /**
++     * Tracked input durability is explicit: ordinary session autosave behavior is unchanged.
++     * A caller must use the returned entry ID only after file+new-parent fsync succeed.
++     */
++    flushInputDurably(inputId) {
++        this.assertNativeInputSafe();
++        if (inputId === undefined) {
++            const tracked = this.fileEntries.filter((entry) => entry.type === "message" &&
++                entry.message?.role === "user" && entry.message.inputId);
++            if (tracked.length !== 1) throw new Error("Explicit native input ID required");
++            inputId = tracked[0].message.inputId;
++        }
++        if (!/^[a-f0-9]{32}$/.test(inputId)) {
++            throw new Error("Invalid native input ID");
++        }
++        const entry = this.getTrackedInput(inputId);
++        if (!entry) {
++            throw new Error("Tracked input has not entered this session");
++        }
++        if (!this.flushed) {
++            const fd = openSync(this.sessionFile, "wx", 0o600);
++            try {
++                for (const item of this.fileEntries) {
++                    writeFileSync(fd, `${JSON.stringify(item)}\n`);
++                }
++                fsyncSync(fd);
++            }
++            finally {
++                closeSync(fd);
++            }
++            const parentFd = openSync(dirname(this.sessionFile), "r");
++            try {
++                fsyncSync(parentFd);
++            }
++            finally {
++                closeSync(parentFd);
++            }
++            this.flushed = true;
++        }
++        else {
++            const fd = openSync(this.sessionFile, "r");
++            try {
++                fsyncSync(fd);
++            }
++            finally {
++                closeSync(fd);
++            }
++        }
++        return entry.id;
++    }
+     /** Append a message as child of current leaf, then advance leaf. Returns entry id.
+      * Does not allow writing CompactionSummaryMessage and BranchSummaryMessage directly.
+      * Reason: we want these to be top-level entries in the session, not message session entries,
+@@ -779,6 +876,9 @@
+      * These need to be appended via appendCompaction() and appendBranchSummary() methods.
+      */
+     appendMessage(message) {
++        if (message?.role === "user" && message.inputId && this.getTrackedInput(message.inputId)) {
++            throw new Error("Native input ID is already present in this session");
++        }
+         const entry = {
+             type: "message",
+             id: generateId(this.byId),
+@@ -1274,7 +1374,7 @@
+         }
+         const dir = sessionDir ? normalizePath(sessionDir) : getDefaultSessionDir(resolvedTargetCwd);
+         if (!existsSync(dir)) {
+-            mkdirSync(dir, { recursive: true });
++            mkdirSync(dir, { recursive: true, mode: 0o700 });
+         }
+         // Create new session file with new ID but forked content
+         if (options?.id !== undefined) {
+@@ -1293,7 +1393,7 @@
+             cwd: resolvedTargetCwd,
+             parentSession: resolvedSourcePath,
+         };
+-        writeFileSync(newSessionFile, `${JSON.stringify(newHeader)}\n`, { flag: "wx" });
++        writeFileSync(newSessionFile, `${JSON.stringify(newHeader)}\n`, { flag: "wx", mode: 0o600 });
+         // Copy all non-header entries from source
+         for (const entry of sourceEntries) {
+             if (entry.type !== "session") {
+--- a/dist/modes/rpc/rpc-mode.js
++++ b/dist/modes/rpc/rpc-mode.js
+@@ -304,6 +304,7 @@
+                     images: command.images,
+                     streamingBehavior: command.streamingBehavior,
+                     source: "rpc",
++                    inputId: command.inputId,
+                     preflightResult: (didSucceed) => {
+                         if (didSucceed) {
+                             preflightSucceeded = true;
+@@ -319,11 +320,11 @@
+                 return undefined;
+             }
+             case "steer": {
+-                await session.steer(command.message, command.images);
++                await session.steer(command.message, command.images, command.inputId);
+                 return success(id, "steer");
+             }
+             case "follow_up": {
+-                await session.followUp(command.message, command.images);
++                await session.followUp(command.message, command.images, command.inputId);
+                 return success(id, "follow_up");
+             }
+             case "abort": {
+@@ -358,6 +359,7 @@
+                     autoCompactionEnabled: session.autoCompactionEnabled,
+                     messageCount: session.messages.length,
+                     pendingMessageCount: session.pendingMessageCount,
++                    nativeInputProofCapability: session.sessionManager.nativeInputProofAvailable() ? "pi-native-input-v1-live-only" : null,
+                 };
+                 return success(id, "get_state", state);
+             }
+--- a/node_modules/@earendil-works/pi-agent-core/dist/agent.js
++++ b/node_modules/@earendil-works/pi-agent-core/dist/agent.js
+@@ -74,7 +74,9 @@
+         return [first];
+     }
+     clear() {
++        const removed = this.messages;
+         this.messages = [];
++        return removed;
+     }
+ }
+ /**
+@@ -94,6 +96,7 @@
+     getApiKey;
+     onPayload;
+     onResponse;
++    onContextReady;
+     beforeToolCall;
+     afterToolCall;
+     shouldStopAfterTurn;
+@@ -120,6 +123,7 @@
+         this.getApiKey = runtimeOptions.getApiKey;
+         this.onPayload = runtimeOptions.onPayload;
+         this.onResponse = runtimeOptions.onResponse;
++        this.onContextReady = runtimeOptions.onContextReady;
+         this.beforeToolCall = runtimeOptions.beforeToolCall;
+         this.afterToolCall = runtimeOptions.afterToolCall;
+         this.shouldStopAfterTurn = runtimeOptions.shouldStopAfterTurn;
+@@ -179,16 +183,15 @@
+     }
+     /** Remove all queued steering messages. */
+     clearSteeringQueue() {
+-        this.steeringQueue.clear();
++        return this.steeringQueue.clear();
+     }
+     /** Remove all queued follow-up messages. */
+     clearFollowUpQueue() {
+-        this.followUpQueue.clear();
++        return this.followUpQueue.clear();
+     }
+     /** Remove all queued steering and follow-up messages. */
+     clearAllQueues() {
+-        this.clearSteeringQueue();
+-        this.clearFollowUpQueue();
++        return { steering: this.clearSteeringQueue(), followUp: this.clearFollowUpQueue() };
+     }
+     /** Returns true when either queue still contains pending messages. */
+     hasQueuedMessages() {
+@@ -293,6 +296,7 @@
+             sessionId: this.sessionId,
+             onPayload: this.onPayload,
+             onResponse: this.onResponse,
++            onContextReady: this.onContextReady,
+             transport: this.transport,
+             thinkingBudgets: this.thinkingBudgets,
+             maxRetryDelayMs: this.maxRetryDelayMs,
+--- a/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
++++ b/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
+@@ -187,6 +187,9 @@
+         messages: llmMessages,
+         tools: context.tools,
+     };
++    // Trusted native boundary: the final transformed and converted Pi context is
++    // present. This callback MUST be awaited and allowed to fail before transport.
++    await config.onContextReady?.(llmContext);
+     // Resolve API key (important for expiring tokens)
+     const resolvedApiKey = (config.getApiKey ? await config.getApiKey(config.model.provider) : undefined) || config.apiKey;
+     const response = await streamFunction(config.model, llmContext, {
+--- a/dist/core/agent-session.d.ts
++++ b/dist/core/agent-session.d.ts
+@@ -46,6 +46,18 @@
+ } | {
+     type: "agent_settled";
+ } | {
++    type: "input_committed";
++    sessionId: string;
++    inputId: string;
++    sessionEntryId: string;
++} | {
++    type: "context_committed";
++    sessionId: string;
++    inputId: string;
++    sessionEntryId: string;
++    requestGeneration: number;
++    llmContextDigest: string;
++} | {
+     type: "queue_update";
+     steering: readonly string[];
+     followUp: readonly string[];
+@@ -155,6 +167,8 @@
+     streamingBehavior?: "steer" | "followUp";
+     /** Source of input for extension input event handlers. Defaults to "interactive". */
+     source?: InputSource;
++    /** Separate native 128-bit lowercase hex attempt identity; not the RPC command id. */
++    inputId?: string;
+     /** Internal hook used by RPC mode to observe prompt preflight acceptance or rejection. */
+     preflightResult?: (success: boolean) => void;
+ }
+@@ -372,7 +386,7 @@
+      * @param images Optional image attachments to include with the message
+      * @throws Error if text is an extension command
+      */
+-    steer(text: string, images?: ImageContent[]): Promise<void>;
++    steer(text: string, images?: ImageContent[], inputId?: string): Promise<void>;
+     /**
+      * Queue a follow-up message to be processed after the agent finishes.
+      * Delivered only when agent has no more tool calls or steering messages.
+@@ -380,7 +394,7 @@
+      * @param images Optional image attachments to include with the message
+      * @throws Error if text is an extension command
+      */
+-    followUp(text: string, images?: ImageContent[]): Promise<void>;
++    followUp(text: string, images?: ImageContent[], inputId?: string): Promise<void>;
+     private _queueSteer;
+     private _queueFollowUp;
+     /**
+--- a/dist/core/session-manager.d.ts
++++ b/dist/core/session-manager.d.ts
+@@ -215,6 +215,10 @@
+      * so it is easier to find them.
+      * These need to be appended via appendCompaction() and appendBranchSummary() methods.
+      */
++    assertNativeInputSafe(): boolean;
++    nativeInputProofAvailable(): boolean;
++    getTrackedInput(inputId: string): SessionMessageEntry | undefined;
++    flushInputDurably(inputId?: string): string;
+     appendMessage(message: Message | CustomMessage | BashExecutionMessage): string;
+     /** Append a thinking level change as child of current leaf, then advance leaf. Returns entry id. */
+     appendThinkingLevelChange(thinkingLevel: string): string;
+--- a/dist/modes/rpc/rpc-types.d.ts
++++ b/dist/modes/rpc/rpc-types.d.ts
+@@ -14,17 +14,20 @@
+ export type RpcCommand = {
+     id?: string;
+     type: "prompt";
++    inputId?: string;
+     message: string;
+     images?: ImageContent[];
+     streamingBehavior?: "steer" | "followUp";
+ } | {
+     id?: string;
+     type: "steer";
++    inputId?: string;
+     message: string;
+     images?: ImageContent[];
+ } | {
+     id?: string;
+     type: "follow_up";
++    inputId?: string;
+     message: string;
+     images?: ImageContent[];
+ } | {
+@@ -154,6 +157,7 @@
+     followUpMode: "all" | "one-at-a-time";
+     sessionFile?: string;
+     sessionId: string;
++    nativeInputProofCapability?: "pi-native-input-v1-live-only" | null;
+     sessionName?: string;
+     autoCompactionEnabled: boolean;
+     messageCount: number;
+--- a/node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts
++++ b/node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts
+@@ -10,6 +10,7 @@
+     getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
+     onPayload?: SimpleStreamOptions["onPayload"];
+     onResponse?: SimpleStreamOptions["onResponse"];
++    onContextReady?: (assembledContext: import("@earendil-works/pi-ai").Context) => Promise<void>;
+     beforeToolCall?: (context: BeforeToolCallContext, signal?: AbortSignal) => Promise<BeforeToolCallResult | undefined>;
+     afterToolCall?: (context: AfterToolCallContext, signal?: AbortSignal) => Promise<AfterToolCallResult | undefined>;
+     shouldStopAfterTurn?: (context: ShouldStopAfterTurnContext, signal?: AbortSignal) => boolean | Promise<boolean>;
+@@ -45,6 +46,7 @@
+     shouldStopAfterTurn?: (context: ShouldStopAfterTurnContext, signal?: AbortSignal) => boolean | Promise<boolean>;
+     prepareNextTurn?: (signal?: AbortSignal) => Promise<AgentLoopTurnUpdate | undefined> | AgentLoopTurnUpdate | undefined;
+     prepareNextTurnWithContext?: (context: PrepareNextTurnContext, signal?: AbortSignal) => Promise<AgentLoopTurnUpdate | undefined> | AgentLoopTurnUpdate | undefined;
++    onContextReady?: (assembledContext: import("@earendil-works/pi-ai").Context) => Promise<void>;
+     private activeRun?;
+     /** Session identifier forwarded to providers for cache-aware backends. */
+     sessionId?: string;
+--- a/node_modules/@earendil-works/pi-agent-core/dist/types.d.ts
++++ b/node_modules/@earendil-works/pi-agent-core/dist/types.d.ts
+@@ -148,6 +148,8 @@
+      * ```
+      */
+     convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
++    /** Awaited native post-transform context boundary; errors prevent provider invocation. */
++    onContextReady?: (assembledContext: import("@earendil-works/pi-ai").Context) => Promise<void>;
+     /**
+      * Optional transform applied to the context before `convertToLlm`.
+      *
+--- a/node_modules/@earendil-works/pi-ai/dist/types.d.ts
++++ b/node_modules/@earendil-works/pi-ai/dist/types.d.ts
+@@ -303,6 +303,10 @@
+     role: "user";
+     content: string | (TextContent | ImageContent)[];
+     timestamp: number;
++    /** Native input identity; never infer from prompt text or the RPC command id. */
++    inputId?: string;
++    /** SHA-256 of the raw request, used only for exact replay checks. */
++    inputDigest?: string;
+ }
+ export interface AssistantMessage {
+     role: "assistant";
+--- a/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
+@@ -46,6 +46,8 @@
+         const optionsProfile = options.profile || options.env?.AWS_PROFILE;
+         const config = {
+             profile: optionsProfile || getProviderEnvValue("AWS_PROFILE", options.env),
++            // AWS SDK otherwise retries internally before Pi sees an assistant error.
++            ...(options.maxRetries === 0 ? { maxAttempts: 1 } : {}),
+         };
+         const configuredRegion = getConfiguredBedrockRegion(options);
+         const hasAmbientConfiguredProfile = Boolean(getProviderEnvValue("AWS_PROFILE"));
