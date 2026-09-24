@@ -11,11 +11,21 @@ From the repository root:
 uv sync --project stack --locked --python 3.14
 uv run --project stack --locked agent-comms --help
 uv run --project stack --locked toad
+stack/bin/prepare-pi-native
 ```
 
 `stack/bin/toad-comms [THREAD]` opens the pinned Toad UI on an existing
 thread. Link that script into your `PATH` if you want the short command name.
 It attaches to the current owner and does not send a prompt.
+
+`prepare-pi-native` verifies the installed Pi 0.85.1 bytes, builds a pinned
+local copy with native input IDs, and checks the resulting files. The copy
+retains the stock Bedrock transport; the script does not change the installed
+Pi or make a provider call. Set `PI_STOCK_DIR` if Pi is installed elsewhere.
+The `toad-comms` launcher uses this copy so a direct prompt can produce the
+required native user-start receipt. Existing Pi session directories and files
+must be private (0700 directory, 0600 file) before a tracked prompt; the native
+preflight refuses unsafe sessions rather than changing their permissions.
 
 All three packages are installed from immutable Git commits. Toad also pins
 agent-comms in its own manifest, so both agent-comms pins must agree. Update
