@@ -80,6 +80,7 @@ from .input_disposition import AcpDeliveryCursors, InputDispositions
 from .operations import OBSERVATION_INTERVAL, Comms, wire
 from .runtime import RuntimeProxy, RuntimeServer, socket_path
 from .tool_results import tool_result_content
+from .wire_watch import open_wire_watcher
 
 GLOBAL_TARGET = "#all"
 AGENT_PREFIX = "!agent "
@@ -94,6 +95,7 @@ DEFAULT_AGENT_ARGS = [
     "z-ai/glm-5.3-flash",
 ]
 LIVE_DRAIN_INTERVAL = OBSERVATION_INTERVAL
+WATCH_FALLBACK_INTERVAL = 1.0
 NO_REPLY_WINDOW = 2.5  # silence: end the turn after this long with nothing
 REPLY_WINDOW = 8.0  # once replies flow, keep collecting at most this long
 REPLY_QUIET = 1.5  # after the last reply, wait this long then end the turn
@@ -1142,19 +1144,35 @@ class CommsAgent:
             return
 
         async def loop() -> None:
-            while True:
-                await asyncio.sleep(LIVE_DRAIN_INTERVAL)
-                try:
-                    await self._drain_inbox(session_id)
-                    await self._sync_thread_config(session_id)
-                    self._schedule_goal(session_id)
-                    await self._refresh_auth_models()
-                except asyncio.CancelledError:
-                    raise
-                except Exception as error:
-                    # Never let the drain task die silently: a dead drain
-                    # means replies stop reaching the client.
-                    self._debug_log(f"live-drain error: {error!r}")
+            watcher = open_wire_watcher(self._comms.root)
+            try:
+                while True:
+                    if watcher is None:
+                        await asyncio.sleep(LIVE_DRAIN_INTERVAL)
+                    else:
+                        watcher.changed.clear()
+                    try:
+                        await self._drain_inbox(session_id)
+                        await self._sync_thread_config(session_id)
+                        self._schedule_goal(session_id)
+                        await self._refresh_auth_models()
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as error:
+                        # Never let the drain task die silently: a dead drain
+                        # means replies stop reaching the client.
+                        self._debug_log(f"live-drain error: {error!r}")
+                    if watcher is not None:
+                        if watcher.invalid:
+                            watcher.close()
+                            watcher = None
+                        else:
+                            with suppress(TimeoutError):
+                                async with asyncio.timeout(WATCH_FALLBACK_INTERVAL):
+                                    await watcher.changed.wait()
+            finally:
+                if watcher is not None:
+                    watcher.close()
 
         task = asyncio.create_task(loop())
         self._drain_tasks[session_id] = task
