@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import json
+import os
 import sys
 
 import pytest
@@ -12,6 +13,7 @@ from acp.schema import ImageContentBlock
 from agent_comms import backend, wire
 from agent_comms.acp import CommsAgent
 from agent_comms.image_inputs import MAX_IMAGE_BYTES, ImageInput, prompt_images
+from agent_comms.runtime import RuntimeProxy, socket_path
 
 PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDqkAAAAASUVORK5CYII="
 IMAGE = {"type": "image", "data": PNG, "mimeType": "image/png"}
@@ -122,6 +124,176 @@ async def test_image_steering_and_queue_restoration_keep_attachment_reference(
             update.get("_meta", {}).get("agentComms", {}).get("restored") == [reference]
             for update in updates
         )
+    finally:
+        await agent.shutdown()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix socket owner attachment")
+async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    comms = wire(tmp_path / "wire")
+    owner = CommsAgent(
+        comms,
+        agent_bin="pi-image-stub",
+        agent_args=["--model", "test/model"],
+        runtime_enabled=True,
+    )
+    client = CommsAgent(comms)
+    await owner.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
+    started = asyncio.Event()
+
+    async def stream(*args, **kwargs):
+        started.set()
+        await asyncio.Event().wait()
+        yield {"type": "done", "ok": True}
+
+    monkeypatch.setattr(backend, "stream_agent_events", stream)
+    proxy = RuntimeProxy(client, "project", socket_path(comms.root, os.getpid()))
+    try:
+        await proxy.subscribe()
+        client._proxies["project"] = proxy
+        client._proxy_image_support["project"] = True
+        turn = asyncio.create_task(owner.prompt("project", [{"type": "text", "text": "first"}]))
+        await asyncio.wait_for(started.wait(), 3)
+        reference = "What is this? @/private/clipboard-image.png"
+        result = await client.prompt(
+            "project",
+            [{"type": "text", "text": "What is this?"}, IMAGE],
+            field_meta={
+                "agentComms": {
+                    "userText": reference,
+                    "deferDisplay": True,
+                    "delivery": "steer",
+                }
+            },
+        )
+        assert result.field_meta["agentComms"]["inputDisposition"]["delivery"] == "steer"
+        assert not owner._queued_inputs.get("project")
+        await client.prompt(
+            "project",
+            [{"type": "text", "text": "What is this?"}, IMAGE],
+            field_meta={"agentComms": {"userText": reference, "deferDisplay": True}},
+        )
+        assert any(
+            item.text == reference and item.echo
+            for item in owner._queued_inputs["project"].values()
+        )
+        await owner.cancel("project")
+        await turn
+    finally:
+        await proxy.close()
+        client._proxies.clear()
+        await client.shutdown()
+        await owner.shutdown()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable fixture")
+async def test_failed_image_child_never_exposes_encoded_attachment(tmp_path, monkeypatch):
+    stub = tmp_path / "pi-image-stub"
+    stub.write_text(f"#!{sys.executable}\n" + """
+import json, sys
+for line in sys.stdin:
+    command = json.loads(line)
+    if command['type'] == 'get_state':
+        print(json.dumps({'type': 'response', 'id': command['id'],
+            'command': 'get_state', 'success': True,
+            'data': {'nativeInputProofCapability': 'pi-native-input-v1-live-only'}}),
+            flush=True)
+    elif command['type'] == 'prompt':
+        sys.stderr.write(json.dumps(command))
+        sys.exit(7)
+""")
+    stub.chmod(0o755)
+    events = [
+        event
+        async for event in backend.stream_agent_events(
+            str(stub),
+            ["--model", "test/model"],
+            "inspect",
+            str(tmp_path),
+            images=(ImageInput(PNG, "image/png"),),
+        )
+    ]
+    assert events[-1]["ok"] is False
+    assert PNG not in json.dumps(events)
+
+    agent = await make_agent(tmp_path / "acp", monkeypatch)
+    agent._agent_bin = str(stub)
+    updates = []
+
+    class Client:
+        async def session_update(self, **kwargs):
+            updates.append(kwargs["update"].model_dump(by_alias=True, exclude_none=True))
+
+    agent.on_connect(Client())
+    try:
+        await agent.prompt("project", [{"type": "text", "text": "inspect"}, IMAGE])
+        assert PNG not in json.dumps(updates)
+    finally:
+        await agent.shutdown()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable fixture")
+async def test_failed_queued_image_child_never_exposes_encoded_attachment(tmp_path, monkeypatch):
+    stub = tmp_path / "pi-image-stub"
+    stub.write_text(f"#!{sys.executable}\n" + """
+import json, sys
+for line in sys.stdin:
+    command = json.loads(line)
+    if command['type'] == 'get_state':
+        print(json.dumps({'type': 'response', 'id': command['id'],
+            'command': 'get_state', 'success': True,
+            'data': {'nativeInputProofCapability': 'pi-native-input-v1-live-only'}}),
+            flush=True)
+    elif command['type'] == 'prompt' and 'images' not in command:
+        print(json.dumps({'type': 'response', 'id': command['id'],
+            'command': 'prompt', 'success': True}), flush=True)
+        print(json.dumps({'type': 'message_start', 'message': {'role': 'user',
+            'content': command['message'], 'inputId': command['inputId']}}), flush=True)
+    elif command['type'] == 'prompt':
+        sys.stderr.write(json.dumps(command))
+        sys.exit(7)
+""")
+    stub.chmod(0o755)
+    queue = asyncio.Queue()
+    queue.put_nowait(
+        {"type": "prompt", "message": "User follow-up:\ninspect image", "images": [IMAGE]}
+    )
+    events = [
+        event
+        async for event in backend.stream_agent_events(
+            str(stub),
+            ["--model", "test/model"],
+            "first",
+            str(tmp_path),
+            steering_queue=queue,
+        )
+    ]
+    assert events[-1]["ok"] is False
+    assert PNG not in json.dumps(events)
+
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    agent = CommsAgent(
+        wire(tmp_path / "acp-wire"), agent_bin=str(stub), agent_args=["--model", "test/model"]
+    )
+    await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
+    started = asyncio.Event()
+    updates = []
+
+    class Client:
+        async def session_update(self, **kwargs):
+            update = kwargs["update"].model_dump(by_alias=True, exclude_none=True)
+            updates.append(update)
+            if update.get("_meta", {}).get("agentComms", {}).get("turnStarted"):
+                started.set()
+
+    agent.on_connect(Client())
+    try:
+        turn = asyncio.create_task(agent.prompt("project", [{"type": "text", "text": "first"}]))
+        await asyncio.wait_for(started.wait(), 3)
+        await agent.prompt("project", [{"type": "text", "text": "inspect image"}, IMAGE])
+        await asyncio.wait_for(turn, 3)
+        assert PNG not in json.dumps(updates)
     finally:
         await agent.shutdown()
 
