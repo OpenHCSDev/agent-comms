@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "agent-comms"
 dynamic = ["version"]
-description = "Declaration-owned multi-agent coordination for OpenHCS: threads, JSONL message bus, shared ledger, Textual TUI, and ACP server"
+description = "Declaration-owned multi-agent coordination for OpenHCS: threads, JSONL message bus, shared ledger, and ACP server"
 authors = [{ name = "Tristan Simas", email = "tristan.simas@mail.mcgill.ca" }]
 license = "MIT"
 license-files = ["LICENSE"]
@@ -23,7 +23,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Communications",
 ]
-keywords = ["agents", "coordination", "message-bus", "acp", "textual", "multi-agent"]
+keywords = ["agents", "coordination", "message-bus", "acp", "multi-agent"]
 
 dependencies = []
 
@@ -31,12 +31,8 @@ dependencies = []
 acp = [
     "agent-client-protocol>=0.8",
 ]
-tui = [
-    "textual>=8.0",
-]
 all = [
     "agent-client-protocol>=0.8",
-    "textual>=8.0",
 ]
 dev = [
     "pytest>=7.0",
@@ -45,7 +41,6 @@ dev = [
     "black==26.5.1",
     "ruff==0.16.0",
     "mypy==2.3.0",
-    "textual>=8.0",
     "agent-client-protocol>=0.8",
 ]
 
