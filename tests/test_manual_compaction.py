@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 from uuid import uuid4
@@ -13,6 +14,71 @@ from agent_comms import manual_compaction as compact
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX process groups")
 PACKAGE = Path.home() / ".local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent"
+
+
+def test_large_saved_session_passes_local_preflight(tmp_path):
+    session = tmp_path / "long.jsonl"
+    saved_session(session)
+    row = json.dumps({"type": "message", "payload": "x" * 4096}).encode() + b"\n"
+    with session.open("ab") as stream:
+        for _ in range((33 * 1024 * 1024) // len(row) + 1):
+            stream.write(row)
+    assert compact._session_bytes(session)
+
+
+def test_codex_model_arguments_are_safe_for_explicit_compaction():
+    assert compact._safe_args(["--provider", "openai-codex", "--model", "gpt-5.5"])
+
+
+def test_private_compaction_profile_carries_codex_auth_without_exposing_it(tmp_path):
+    source = tmp_path / "auth.json"
+    source.write_text('{"openai-codex":{"type":"oauth","access":"local-fixture"}}')
+    source.chmod(0o600)
+    profile = compact._private_policy(credentials_source=source)
+    try:
+        auth = profile / "auth.json"
+        assert auth.read_bytes() == source.read_bytes()
+        assert auth.stat().st_mode & 0o777 == 0o600
+        assert profile.stat().st_mode & 0o777 == 0o700
+    finally:
+        shutil.rmtree(profile)
+
+
+async def test_openrouter_compaction_carries_private_auth_before_preflight(tmp_path, monkeypatch):
+    agent_dir = tmp_path / "agent"
+    agent_dir.mkdir()
+    source = agent_dir / "auth.json"
+    source.write_text('{"openrouter":{"type":"api_key","key":"local-fixture"}}')
+    source.chmod(0o600)
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(agent_dir))
+    session = tmp_path / "saved.jsonl"
+    saved_session(session)
+    backend = tmp_path / "pi-stub"
+    backend.write_text("")
+    monkeypatch.setattr(compact, "_pinned_package", lambda: tmp_path)
+
+    async def no_child(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(compact, "_preflight", no_child)
+    original = compact._private_policy
+    copied = []
+
+    def checked_profile(*, credentials_source=None):
+        assert credentials_source == source
+        profile = original(credentials_source=credentials_source)
+        copied.append((profile / "auth.json").read_bytes() == source.read_bytes())
+        return profile
+
+    monkeypatch.setattr(compact, "_private_policy", checked_profile)
+    result = await compact.compact_session(
+        str(backend),
+        ["--provider", "openrouter", "--model", "fake"],
+        str(session),
+        str(tmp_path),
+    )
+    assert result["ok"] is False
+    assert copied == [True]
 
 
 def saved_session(path: Path, *, split: bool = False) -> bytes:
@@ -27,7 +93,7 @@ def saved_session(path: Path, *, split: bool = False) -> bytes:
     ]
     parent = None
     # Small recent turn keeps the one-request branch; an oversized last assistant
-    # induces Pi's two-request split-turn branch, which must be refused pre-RPC.
+    # induces Pi's split-turn branch, which has its own summary request.
     content = [
         ("user", "OLD " * 34000),
         ("assistant", "old answer"),
@@ -198,10 +264,13 @@ async def test_real_pi_compacts_exact_saved_session(tmp_path, monkeypatch, statu
         (inherited / "settings.json").write_text(
             '{"retry":{"enabled":true,"maxRetries":9,"provider":{"maxRetries":9}}}'
         )
-        (inherited / "auth.json").write_text('{"sentinel":"not-a-real-credential"}')
+        fake_auth = '{"openrouter":{"type":"api_key","key":"local-fixture"}}'
+        (inherited / "auth.json").write_text(fake_auth)
+        (inherited / "auth.json").chmod(0o600)
         monkeypatch.setenv("PI_CODING_AGENT_DIR", str(inherited))
         exe = wrapper(tmp_path, monkeypatch, port)
-        # Explicit fake model and loopback URL; no auth.json or inherited creds.
+        # Explicit fake model and loopback URL; the inherited local fixture
+        # credential is copied into the private profile without changing it.
         result = await compact.compact_session(
             exe,
             ["--print", "--provider", "openrouter", "--model", "fake-compact"],
@@ -212,7 +281,7 @@ async def test_real_pi_compacts_exact_saved_session(tmp_path, monkeypatch, statu
         assert provider.posts >= 1, (result, provider.paths)
         assert all(path == "POST /v1/chat/completions HTTP/1.1" for path in provider.paths)
         assert not Path((tmp_path / "profile").read_text()).exists()
-        assert (inherited / "auth.json").read_text() == '{"sentinel":"not-a-real-credential"}'
+        assert (inherited / "auth.json").read_text() == fake_auth
         if status == 200:
             assert result["ok"] is True, result
             assert "local summary" in result["summary"]
@@ -343,7 +412,8 @@ with open(os.environ['COMPACT_TEST_CAPTURE'], 'a') as log: log.write('get_state\
 wrong = os.environ['COMPACT_TEST_WRONG_SESSION'] == '1'
 state = {'sessionFile': str(path) + ('-wrong' if wrong else ''),
          'sessionId': header['id'],
-         'model': {'provider': 'openrouter', 'api': 'openai-completions'}}
+         'model': {'provider': 'openrouter', 'id': 'fake-compact',
+                   'api': 'openai-completions'}}
 print(json.dumps({'id': first['id'], 'type': 'response', 'command': 'get_state',
                   'success': True, 'data': state}), flush=True)
 if os.environ['COMPACT_TEST_WRONG_SESSION'] == '0':

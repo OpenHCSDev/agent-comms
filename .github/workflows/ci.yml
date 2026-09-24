@@ -31,6 +31,17 @@ jobs:
           stack/.venv/bin/agent-comms --help
           stack/.venv/bin/toad --help
 
+      - name: Setup Node for pinned native Pi
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.19.0"
+
+      - name: Build and check native compaction without a provider
+        run: |
+          npm install -g --prefix "$HOME/.local/pi-npm" --ignore-scripts --no-audit --no-fund @earendil-works/pi-coding-agent@0.85.1
+          stack/bin/prepare-pi-native
+          node stack/test-native-compaction.mjs
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -59,7 +70,7 @@ jobs:
         if: matrix.os != 'windows-latest'
         uses: actions/setup-node@v4
         with:
-          node-version: "22.18.0"
+          node-version: "22.19.0"
 
       - name: Install pinned Pi loopback fixture
         if: matrix.os != 'windows-latest'

@@ -68,6 +68,23 @@ async def test_bridge_success_unknown_usage_and_one_explicit_request(tmp_path, m
         await owner.shutdown()
 
 
+async def test_bridge_uses_persisted_model_when_worker_has_no_base_args(tmp_path, monkeypatch):
+    owner, _updates = await _owner(tmp_path)
+    owner._comms.set_thread_model("project", "openai-codex/gpt-5.5")
+    calls = []
+
+    async def compact(*args, **_kwargs):
+        calls.append(args)
+        return {"ok": True, "summary": "local summary"}
+
+    monkeypatch.setattr("agent_comms.manual_compaction.compact_session", compact)
+    try:
+        assert (await compact_context(owner, "project"))["ok"] is True
+        assert calls[0][1] == ["--provider", "openai-codex", "--model", "gpt-5.5"]
+    finally:
+        await owner.shutdown()
+
+
 async def test_bridge_busy_then_cancel_never_replays(tmp_path, monkeypatch):
     owner, updates = await _owner(tmp_path)
     entered = asyncio.Event()
