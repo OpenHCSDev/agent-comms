@@ -1810,9 +1810,11 @@ class Comms:
         """Summarize threads with status and pending counts."""
         threads = self.registry.active_threads() if active_only else self.registry.all_threads()
         activities = self.activity.all_current()
+        pending = self.bus.pending_counts_all(tuple(threads))
         return [
             {
-                **self.thread_detail(name),
+                **self.thread_detail(name, include_pending=False),
+                "pending": pending[name],
                 "activity": activities[name].state.value if name in activities else "idle",
                 "activity_detail": activities[name].detail if name in activities else "",
             }

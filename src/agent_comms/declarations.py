@@ -24,6 +24,7 @@ import stat
 import tempfile
 import time
 import uuid
+from bisect import bisect_left
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -3215,6 +3216,159 @@ class MessageBus:
                 counts[scope] = counts.get(scope, 0) + 1
         self._pending_cache[name] = PendingCounts(revision, delivery, counts)
         return dict(counts)
+
+    @staticmethod
+    def _pending_route_fields(record: Mapping) -> tuple[int, str, str]:
+        """Validate ordinary wire routing fields without constructing a Message.
+
+        Rich records retain Message.from_wire's complete validation, including
+        mention offsets and claim-transition binding. An invalid plain row is
+        never silently skipped or treated as a zero pending count.
+        """
+        if any(key in record for key in ("membership", "mentions", "claim_transition")):
+            message = Message.from_wire(record)
+            return message.seq, message.sender, message.target
+        sender, target, body = record["from"], record["to"], record["text"]
+        seq = int(record.get("seq", 0))
+        MessageType(record["type"])
+        ThreadRole(record.get("sender_role", ThreadRole.AGENT.value))
+        if not isinstance(sender, str) or not sender:
+            raise RelationViolationError("Message sender cannot be empty.")
+        if not isinstance(target, str) or not target:
+            raise RelationViolationError("Message target cannot be empty.")
+        if not isinstance(body, str) or not body:
+            raise ValueError("Message body cannot be empty.")
+        if target != "broadcast" and not is_channel_target(target):
+            if sender == target:
+                raise RelationViolationError(f"Thread {sender!r} cannot message itself.")
+            allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+            if not set(target) <= allowed:
+                raise ValueError(f"Message target {target!r} is not a thread name or #channel.")
+        if target.startswith("#") and target != GLOBAL_CHANNEL:
+            tag = target[1:]
+            if not tag or not set(tag) <= _TAG_CHARS:
+                raise ValueError(f"Channel {target!r} has an invalid tag.")
+        return seq, sender, target
+
+    def _iter_pending_routes_unlocked(self) -> Iterator[tuple[int, str, str]]:
+        for record, _ in _iter_jsonl_records(self._path):
+            yield self._pending_route_fields(record)
+
+    def pending_counts_all(self, names: Sequence[str]) -> Mapping[str, int]:
+        """Count selected inboxes in one locked wire pass for a thread listing.
+
+        The CLI starts a new process for each call, so the per-viewer cache in
+        ``pending_counts`` cannot amortize one scan per registered thread.
+        Build a single registry/channel delivery snapshot, then decode each
+        wire row only once. This is a read projection, never a read ACK.
+        """
+        snapshot = self._registry.snapshot()
+        actors: dict[str, str] = {}
+        deliveries: dict[str, DeliveryScope] = {}
+        for name in names:
+            actor = snapshot.aliases.get(name, name)
+            if actor not in snapshot.threads:
+                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+            actors[name] = actor
+            if actor not in deliveries:
+                thread = snapshot.threads[actor]
+                deliveries[actor] = DeliveryScope(
+                    thread.name, snapshot.aliases, self._channels.targets_for(thread.tags)
+                )
+        if not deliveries:
+            return {}
+        markers = self._read_markers()
+        # A scoped marker key is JSON-encoded. Decoding it once matters as much
+        # as the one-pass wire scan: rebuilding it for every recipient of every
+        # broadcast would recreate a threads × messages serialization loop.
+        scoped_markers: dict[str, dict[str, int]] = {actor: {} for actor in deliveries}
+        for key, sequence in markers.items():
+            if not isinstance(key, str) or not key.startswith("["):
+                continue
+            try:
+                scope = json.loads(key)
+            except json.JSONDecodeError:
+                continue
+            if (
+                isinstance(scope, list)
+                and len(scope) == 2
+                and isinstance(scope[0], str)
+                and isinstance(scope[1], str)
+                and scope[0] in scoped_markers
+                and key == self._marker_key(scope[0], scope[1])
+            ):
+                scoped_markers[scope[0]][scope[1]] = sequence
+        # Every channel message has the same conversation scope for its
+        # recipients. Sort their read thresholds once and range-add each row's
+        # eligible recipients: O(messages log threads), not O(messages × threads).
+        channel_members: dict[str, list[str]] = {}
+        channel_cutoffs: dict[str, list[int]] = {}
+        channel_deltas: dict[str, list[int]] = {}
+        channel_self_cutoffs: dict[str, dict[str, int]] = {}
+        channel_direct_actor: dict[str, str] = {}
+        channels: dict[str, list[DeliveryScope]] = {}
+        for delivery in deliveries.values():
+            for target in delivery.channels:
+                channels.setdefault(target, []).append(delivery)
+        for target, recipients in channels.items():
+            # Legacy "broadcast" is a channel route, but if a real thread has
+            # that name its conversation scope is the sender, not "broadcast".
+            direct_actor = (
+                snapshot.aliases.get(target, target) if not target.startswith("#") else ""
+            )
+            if direct_actor in deliveries:
+                channel_direct_actor[target] = direct_actor
+            ordinary = [
+                (
+                    max(
+                        markers.get(delivery.actor, 0),
+                        scoped_markers[delivery.actor].get(target, 0),
+                    ),
+                    delivery.actor,
+                )
+                for delivery in recipients
+                if delivery.actor != direct_actor
+            ]
+            ordinary.sort()
+            channel_cutoffs[target] = [after for after, _ in ordinary]
+            channel_members[target] = [actor for _, actor in ordinary]
+            channel_self_cutoffs[target] = {actor: after for after, actor in ordinary}
+            channel_deltas[target] = [0] * (len(ordinary) + 1)
+        counts = dict.fromkeys(deliveries, 0)
+        with _store_lock(self._path):
+            for seq, raw_sender, target in self._iter_pending_routes_unlocked():
+                sender = snapshot.aliases.get(raw_sender, raw_sender)
+                if target in channel_cutoffs:
+                    eligible = bisect_left(channel_cutoffs[target], seq)
+                    if eligible:
+                        deltas = channel_deltas[target]
+                        deltas[0] += 1
+                        deltas[eligible] -= 1
+                        # Sending to one's own channel never creates unread.
+                        own_after = channel_self_cutoffs[target].get(sender)
+                        if own_after is not None and seq > own_after:
+                            counts[sender] -= 1
+                    direct = channel_direct_actor.get(target)
+                    if (
+                        direct is not None
+                        and direct != sender
+                        and seq > max(markers.get(direct, 0), scoped_markers[direct].get(sender, 0))
+                    ):
+                        counts[direct] += 1
+                else:
+                    actor = snapshot.aliases.get(target, target)
+                    if (
+                        actor in deliveries
+                        and actor != sender
+                        and seq > max(markers.get(actor, 0), scoped_markers[actor].get(sender, 0))
+                    ):
+                        counts[actor] += 1
+        for target, members in channel_members.items():
+            running = 0
+            for actor, delta in zip(members, channel_deltas[target], strict=False):
+                running += delta
+                counts[actor] += running
+        return {name: counts[actor] for name, actor in actors.items()}
 
     def mark_delivered(self, name: str, target: str | None = None) -> int:
         """Mark unread messages delivered and return the count without retaining them."""

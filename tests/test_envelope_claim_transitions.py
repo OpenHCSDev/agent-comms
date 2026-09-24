@@ -103,6 +103,8 @@ def test_exact_incarnation_and_generation_fence_releases(tmp_path):
     _, a, _ = resources(tmp_path)
     held = apply_transition(ClaimProjection(), transition(1, claims=(a,), generation=G1))
     for attempt in (
+        # A distinct creation incarnation is denied; an authenticated rename
+        # retains the same incarnation and is exercised separately below.
         transition(2, owner="peer", incarnation="epoch-2", releases=(ClaimRelease(a, G1),)),
         transition(2, incarnation="old-epoch", releases=(ClaimRelease(a, G1),)),
         transition(2, releases=(ClaimRelease(a, G2),)),

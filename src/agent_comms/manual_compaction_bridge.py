@@ -68,7 +68,18 @@ async def compact_context(
         terminal_attempted = False
         try:
             agent._comms.set_activity(thread_name, ActivityState.WORKING, "Compacting context")
-            await agent._emit_event(session_id, {"type": "started", "turn_id": turn_id})
+            active = agent._comms.registry.require(thread_name).active_turn
+            assert active is not None and active.id == turn_id
+            await agent._emit_event(
+                session_id,
+                {
+                    "type": "started",
+                    "turn_id": turn_id,
+                    "started_at": active.started_at,
+                    "activity": "working",
+                    "activity_detail": "Compacting context",
+                },
+            )
             info = agent._comms.agent_info_of(thread_name)
             # An old usage sample cannot describe the context after a manual
             # compaction attempt, including one with an uncertain outcome.

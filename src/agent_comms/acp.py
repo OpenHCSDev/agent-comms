@@ -21,8 +21,11 @@ import asyncio
 import json
 import os
 import re
+import shlex
+import sys
 import time
 import unicodedata
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
@@ -32,13 +35,19 @@ from acp.schema import (
     AgentCapabilities,
     AgentMessageChunk,
     AgentThoughtChunk,
+    ConfigOptionUpdate,
     ContentToolCallContent,
     Implementation,
     InitializeResponse,
     LoadSessionResponse,
     NewSessionResponse,
+    PromptCapabilities,
     PromptResponse,
+    SessionConfigOptionSelect,
+    SessionConfigSelectOption,
     SessionInfoUpdate,
+    SetSessionConfigOptionResponse,
+    TerminalAuthMethod,
     TextContentBlock,
     ToolCallProgress,
     ToolCallStart,
@@ -47,15 +56,24 @@ from acp.schema import (
 )
 
 from . import backend
-from .declarations import ActivityState, Thread, ThreadStatus
-from .operations import Comms, wire
+from .declarations import (
+    ActivityState,
+    Message,
+    MessageRoute,
+    MessageType,
+    ScheduledTurn,
+    Thread,
+    TurnRouting,
+    is_channel_target,
+)
+from .operations import OBSERVATION_INTERVAL, Comms, wire
 from .runtime import RuntimeProxy, RuntimeServer, socket_path
 from .tool_results import tool_result_content
 
 GLOBAL_TARGET = "#all"
-GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
+GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
 DEFAULT_AGENT_BIN = "pi"
 DEFAULT_AGENT_ARGS = [
     "--print",
@@ -64,13 +82,19 @@ DEFAULT_AGENT_ARGS = [
     "--model",
     "z-ai/glm-5.3-flash",
 ]
-LIVE_DRAIN_INTERVAL = 1.0
+LIVE_DRAIN_INTERVAL = OBSERVATION_INTERVAL
 NO_REPLY_WINDOW = 2.5  # silence: end the turn after this long with nothing
 REPLY_WINDOW = 8.0  # once replies flow, keep collecting at most this long
 REPLY_QUIET = 1.5  # after the last reply, wait this long then end the turn
 REPLY_POLL = 0.25
 ACTIVITY_WINDOW = 60.0  # keep the turn open while a peer is thinking/working
 IDLE_GRACE = 1.0  # peers idle for this long -> drain and end the turn
+
+
+@dataclass(frozen=True, slots=True)
+class QueuedInput:
+    text: str
+    echo: bool
 
 
 class CommsAgent:
@@ -95,27 +119,47 @@ class CommsAgent:
         self._sessions: dict[str, str] = {}
         self._client: Any = None
         self._agent_bin = agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", DEFAULT_AGENT_BIN)
-        arg_env = os.environ.get("AGENT_COMMS_AGENT_ARGS", "")
+        arg_env = os.environ.get("AGENT_COMMS_AGENT_ARGS")
         self._agent_args = (
             agent_args
             if agent_args is not None
-            else (arg_env.split() if arg_env else list(DEFAULT_AGENT_ARGS))
+            else (shlex.split(arg_env) if arg_env is not None else list(DEFAULT_AGENT_ARGS))
         )
         self._drain_tasks: dict[str, asyncio.Task[None]] = {}
         self._turn_tasks: dict[str, asyncio.Task[Any]] = {}
-        self._backend_inboxes: dict[str, asyncio.Queue[str]] = {}
+        self._backend_inboxes: dict[str, asyncio.Queue[str | dict[str, Any]]] = {}
+        self._queued_inputs: dict[str, dict[str, QueuedInput]] = {}
+        # ACK/queue insertion is not model-read. Every accepted follow-up,
+        # including non-displayed steers, needs its own identified user start.
+        self._forwarded_inputs: dict[str, set[str]] = {}
         self._session_titles: dict[str, str] = {}
+        self._display_titles: dict[str, str | None] = {}
+        self._session_worktrees: dict[str, str] = {}
         self._runtime_enabled = runtime_enabled
         self._runtime = RuntimeServer(self)
         self._proxies: dict[str, RuntimeProxy] = {}
+        self._proxy_image_support: dict[str, bool] = {}
         self._auto_wake = auto_wake
-        self._pending_turns: dict[str, list[str]] = {}
+        self._pending_turns: dict[str, list[ScheduledTurn]] = {}
         self._drain_locks: dict[str, asyncio.Lock] = {}
         self._turn_locks: dict[str, asyncio.Lock] = {}
         self._closing = False
         self._inbox_cursors: dict[str, int] = {}
         self._wake_tasks: dict[str, asyncio.Task[None]] = {}
         self._active_turns: dict[str, str] = {}
+        self._emitted_errors: dict[str, str] = {}
+        self._model_catalog: list[backend.Model] | None = None
+        self._model_catalog_auth: tuple[int, int] | None = None
+        self._model_catalog_lock = asyncio.Lock()
+        self._catalog_publish_lock = asyncio.Lock()
+        self._catalog_generation = 0
+        self._session_catalog_generation: dict[str, int] = {}
+        self._session_config_signature: dict[str, tuple[str | None, str | None]] = {}
+        self._transcript_snapshots = False
+        self._transcript_diffs = False
+        self._model_requests: dict[str, asyncio.Future[None]] = {}
+        self._thinking_requests: dict[str, asyncio.Future[None]] = {}
+        self._thinking_catalog: dict[tuple[str | None, tuple[int, int]], list[str]] = {}
         self._reply_window = (
             reply_window
             if reply_window is not None
@@ -144,35 +188,104 @@ class CommsAgent:
         client_capabilities: Any = None,
         client_info: Any = None,
     ) -> InitializeResponse:
+        meta = (
+            client_capabilities.get("_meta", {})
+            if isinstance(client_capabilities, dict)
+            else getattr(client_capabilities, "field_meta", None) or {}
+        )
+        self._transcript_snapshots = meta.get("agentComms", {}).get("transcriptSnapshots") is True
+        self._transcript_diffs = meta.get("agentComms", {}).get("transcriptDiffs") is True
+        capabilities = (
+            client_capabilities
+            if isinstance(client_capabilities, dict)
+            else (
+                client_capabilities.model_dump(by_alias=True, exclude_none=True)
+                if client_capabilities is not None
+                else {}
+            )
+        )
+        methods: list[Any] = []
+        if (capabilities.get("auth") or {}).get("terminal") and backend.rpc_args_for(
+            self._agent_bin, []
+        ) is not None:
+            methods = [
+                TerminalAuthMethod(
+                    type="terminal",
+                    id=f"pi-login-{provider or 'all'}",
+                    name=name,
+                    description="Sign in using Pi's native provider UI",
+                    args=["--login", provider] if provider else ["--login"],
+                )
+                for provider, name in (
+                    ("openai-codex", "ChatGPT subscription"),
+                    ("openrouter", "OpenRouter"),
+                    ("openai", "OpenAI API"),
+                    ("", "Other Pi provider"),
+                )
+            ]
         return InitializeResponse(
             protocol_version=protocol_version,
-            agent_capabilities=AgentCapabilities(load_session=True),
+            agent_capabilities=AgentCapabilities(
+                load_session=True,
+                prompt_capabilities=PromptCapabilities(
+                    image=backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
+                ),
+            ),
             agent_info=Implementation(name="agent-comms", title="Agent Comms", version="0.1.0"),
-            auth_methods=[],
+            auth_methods=methods,
+        )
+
+    def _declare_thread(self, cwd: str, owner_pid: int) -> Thread:
+        return self._comms.claim_thread(
+            self._thread_name_for(cwd),
+            tags=frozenset({"acp"}),
+            worktree=cwd,
+            pid=owner_pid,
+            start_at_latest=True,
+            model=backend.configured_model(self._agent_args),
+            thinking_level=backend.configured_thinking_level(self._agent_args),
+            auto_title_pending=backend.rpc_args_for(self._agent_bin, self._agent_args) is not None,
         )
 
     async def new_session(
         self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> NewSessionResponse:
-        thread = self._comms.claim_thread(
-            self._thread_name_for(cwd),
-            tags=frozenset({"acp"}),
-            worktree=cwd,
-            pid=os.getpid(),
-            start_at_latest=True,
-        )
+        thread = self._declare_thread(cwd, os.getpid())
         thread_name = thread.name
         session_id = thread_name
         self._sessions[session_id] = thread_name
         self._inbox_cursors[session_id] = self._comms.message_high_water()
         self._session_titles[session_id] = thread_name
+        self._session_worktrees[session_id] = thread.worktree
         if self._runtime_enabled:
             await self._runtime.start()
         self._ensure_live_drain(session_id)
+        config_options = await self._config_options(thread_name)
+        self._session_catalog_generation[session_id] = self._catalog_generation
+        # The session response already carries these options; only an external
+        # change should trigger a config update.
+        current = self._comms.registry.require(thread.name)
+        self._session_config_signature[session_id] = (
+            current.model,
+            current.thinking_level,
+        )
         return NewSessionResponse(
             session_id=session_id,
+            config_options=config_options,
             field_meta=self._session_metadata(thread_name),
         )
+
+    def _validated_thread(self, cwd: str, session_id: str) -> Thread:
+        thread = self._comms.registry.require(session_id)
+        known_paths = {
+            str(Path(path).expanduser().resolve())
+            for path in (thread.worktree, *thread.previous_worktrees)
+        }
+        if str(Path(cwd).expanduser().resolve()) not in known_paths:
+            raise RequestError.invalid_params(
+                {"reason": "The saved thread belongs to a different working directory."}
+            )
+        return thread
 
     async def load_session(
         self,
@@ -182,28 +295,10 @@ class CommsAgent:
         **kwargs: Any,
     ) -> LoadSessionResponse:
         """Reconnect an ACP client to its persistent wire thread."""
-        thread = self._comms.registry.require(session_id)
-        if Path(thread.worktree).resolve() != Path(cwd).resolve():
-            raise RequestError.invalid_params(
-                {"reason": "The saved thread belongs to a different working directory."}
-            )
+        thread = self._validated_thread(cwd, session_id)
         thread = self._comms.acquire_thread(thread.name, owner_pid=os.getpid())
         if thread.pid != os.getpid():
-            proxy = RuntimeProxy(self, session_id, socket_path(self._comms.root, thread.pid))
-            try:
-                metadata = await proxy.subscribe()
-            except (OSError, RuntimeError) as error:
-                await proxy.close()
-                raise RequestError.invalid_params(
-                    {
-                        "reason": (
-                            f"Thread {thread.name!r} is already owned by "
-                            f"process {thread.pid}: {error}"
-                        )
-                    }
-                ) from error
-            self._proxies[session_id] = proxy
-            return LoadSessionResponse(field_meta=metadata)
+            return await self._attach_owner(thread, session_id)
         self._comms.heartbeat(thread.name)
         self._sessions[session_id] = thread.name
         pending = self._comms.inbox(thread.name)
@@ -211,11 +306,40 @@ class CommsAgent:
             pending[0].seq - 1 if pending else self._comms.message_high_water()
         )
         self._session_titles[session_id] = thread.name
+        self._session_worktrees[session_id] = thread.worktree
         if self._runtime_enabled:
             await self._runtime.start()
         await self._replay_transcript(session_id, thread.name)
+        self._ensure_thread_model(thread.name)
+        config_options = await self._config_options(thread.name)
+        self._session_catalog_generation[session_id] = self._catalog_generation
+        current = self._comms.registry.require(thread.name)
+        self._session_config_signature[session_id] = (
+            current.model,
+            current.thinking_level,
+        )
         self._ensure_live_drain(session_id)
-        return LoadSessionResponse(field_meta=self._session_metadata(thread.name))
+        return LoadSessionResponse(
+            config_options=config_options,
+            field_meta=self._session_metadata(thread.name),
+        )
+
+    async def _attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
+        proxy = RuntimeProxy(self, session_id, socket_path(self._comms.root, thread.pid))
+        try:
+            metadata = await proxy.subscribe()
+        except (OSError, RuntimeError) as error:
+            await proxy.close()
+            raise RequestError.invalid_params(
+                {"reason": f"Unable to attach to {thread.name!r} owner {thread.pid}: {error}"}
+            ) from error
+        self._proxies[session_id] = proxy
+        self._proxy_image_support[session_id] = (
+            metadata.get("agentComms", {}).get("imagePrompts") is True
+        )
+        return LoadSessionResponse(
+            config_options=metadata.pop("configOptions", []), field_meta=metadata
+        )
 
     async def _replay_transcript(
         self,
@@ -223,11 +347,35 @@ class CommsAgent:
         name: str,
         client: Any = None,
         *,
-        snapshots: bool = False,
-        diffs: bool = False,
+        snapshots: bool | None = None,
+        diffs: bool | None = None,
     ) -> None:
-        if snapshots:
+        """Replay the negotiated client view or an explicitly selected internal view.
+
+        None uses this attachment's capabilities. Explicit keyword overrides
+        are trusted owner-side calls, not ACP request parameters; old clients
+        never receive expanded snapshot fields merely by connecting.
+        """
+        use_snapshots = (
+            (
+                self._transcript_snapshots
+                if client is None
+                else getattr(client, "transcript_snapshots", False)
+            )
+            if snapshots is None
+            else snapshots is True
+        )
+        if use_snapshots:
             page = await asyncio.to_thread(self._comms.thread_transcript_page, name)
+            include_diff = (
+                (
+                    self._transcript_diffs
+                    if client is None
+                    else getattr(client, "transcript_diffs", False)
+                )
+                if diffs is None
+                else diffs is True
+            )
             await (client or self._runtime).session_update(
                 session_id=session_id,
                 update=AgentMessageChunk(
@@ -236,7 +384,7 @@ class CommsAgent:
                     field_meta={
                         "agentComms": {
                             "transcript": [
-                                event.to_wire(include_diff=diffs) for event in page.events
+                                event.to_wire(include_diff=include_diff) for event in page.events
                             ],
                             "transcriptPage": page.metadata(),
                         }
@@ -244,7 +392,8 @@ class CommsAgent:
                 ),
             )
             return
-        for event in self._comms.thread_transcript(name):
+        events = await asyncio.to_thread(self._comms.thread_transcript, name)
+        for event in events:
             await self._emit_event(
                 session_id,
                 {
@@ -257,6 +406,7 @@ class CommsAgent:
                     "output": event.text,
                     "ok": event.ok,
                     "diff": event.diff,
+                    "route": event.routing.reply if event.routing else None,
                 },
                 client=client,
             )
@@ -264,16 +414,13 @@ class CommsAgent:
     async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
         instructions = self._manual_compaction_instructions(prompt, kwargs)
         if instructions is not None:
-            # The bridge owns the idle turn lock. Never enter _prompt_owned or
-            # pass this slash command to a tool-capable coding-agent prompt.
+            # Idle owner bridge alone owns the lock and the one-POST budget.
             if session_id in self._proxies:
                 result = await self._proxies[session_id].request(
                     "compact", instructions=instructions
                 )
             else:
-                from .manual_compaction_bridge import compact_context
-
-                result = await compact_context(self, session_id, instructions)
+                result = await self.compact_context(session_id, instructions)
             if not isinstance(result, dict) or result.get("ok") is not True:
                 reason = (
                     result.get("error") if isinstance(result, dict) else None
@@ -283,9 +430,47 @@ class CommsAgent:
                 stop_reason="end_turn",
                 field_meta={"agentComms": {"compaction": result}},
             )
+        meta = kwargs.get("_meta") or kwargs.get("field_meta") or {}
+        # The ACP SDK expands _meta entries into handler keyword arguments.
+        options = kwargs.get("agentComms") or meta.get("agentComms", {})
+        if not isinstance(options, dict):
+            raise RequestError.invalid_params({"reason": "agentComms metadata must be an object"})
+        meta = {**meta, "agentComms": options}
+        delivery = options.get("delivery", "queue")
+        if not isinstance(delivery, str) or delivery not in {"queue", "steer"}:
+            raise RequestError.invalid_params({"reason": "delivery must be queue or steer"})
+        display_text = options.get("userText") or self._prompt_text(prompt)
+        defer_display = options.get("deferDisplay") is True
+        if options.get("clearQueue") is True:
+            # Attachment-only clients clear the owner's queue through the
+            # existing prompt channel; no turn is launched.
+            if session_id in self._proxies:
+                await self._proxies[session_id].request("clear_queue")
+            else:
+                await self.clear_queued_inputs(session_id)
+            return PromptResponse(stop_reason="end_turn")
+        try:
+            images = self._prompt_images(prompt)
+        except ValueError as error:
+            raise RequestError.invalid_params({"reason": str(error)}) from error
+        if images:
+            supported = (
+                self._proxy_image_support.get(session_id, False)
+                if session_id in self._proxies
+                else backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
+            )
+            if not supported:
+                raise RequestError.invalid_params(
+                    {"reason": "This owner does not support image prompts; refresh it while idle."}
+                )
+            if self._prompt_text(prompt).lstrip().startswith(("@", "#", RELAY_PREFIX)):
+                raise RequestError.invalid_params(
+                    {"reason": "Send images to an agent thread, not as a coordination relay."}
+                )
         if session_id in self._proxies:
             result = await self._proxies[session_id].request(
                 "prompt",
+                meta=meta,
                 prompt=[
                     (
                         block
@@ -296,14 +481,81 @@ class CommsAgent:
                 ],
             )
             return PromptResponse.model_validate(result)
+        text = self._prompt_text(prompt)
+        if (
+            session_id in self._active_turns
+            and backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
+            and (inbox := self._backend_inboxes.get(session_id)) is not None
+            and not text.lstrip().startswith(("@", "#", RELAY_PREFIX))
+        ):
+            pending_ids = self._forwarded_inputs.setdefault(session_id, set())
+            if len(pending_ids) >= 32:
+                raise RequestError.invalid_params(
+                    {"reason": "Too many follow-up inputs awaiting their own user start."}
+                )
+            input_id = uuid4().hex
+            pending_ids.add(input_id)
+            try:
+                if delivery == "queue":
+                    self._queued_inputs.setdefault(session_id, {})[input_id] = QueuedInput(
+                        display_text, defer_display
+                    )
+                    await self._emit_queue_state(session_id)
+                inbox.put_nowait(
+                    {
+                        "type": "prompt",
+                        "message": "User follow-up:\n" + text.removeprefix(AGENT_PREFIX),
+                        # Both deliveries steer: Pi injects at the next safe
+                        # boundary, not after the whole run.
+                        "streamingBehavior": "steer",
+                        "_input_id": input_id,
+                        **({"images": [image.to_rpc() for image in images]} if images else {}),
+                    }
+                )
+            except BaseException:
+                self._forwarded_inputs.get(session_id, set()).discard(input_id)
+                self._queued_inputs.get(session_id, {}).pop(input_id, None)
+                raise
+            # ACP receipt is only local acceptance. The matching inputStarted
+            # update, not this end_turn, is the model-read boundary.
+            return PromptResponse(
+                stop_reason="end_turn",
+                field_meta={
+                    "agentComms": {
+                        "inputDisposition": {
+                            "inputId": input_id,
+                            "status": "accepted_not_started",
+                            "delivery": delivery,
+                        }
+                    }
+                },
+            )
         async with self._turn_locks.setdefault(session_id, asyncio.Lock()):
+            if defer_display:
+                await self._emit_input_started(session_id, display_text)
             return await self._prompt_owned(session_id, prompt)
 
     @staticmethod
+    def _prompt_images(prompt: list[Any]) -> tuple[Any, ...]:
+        """Defer optional image support; never flatten unsupported blocks to text."""
+        try:
+            from .image_inputs import prompt_images
+        except ImportError as error:
+            if all(
+                (block.get("type") if isinstance(block, dict) else getattr(block, "type", None))
+                == "text"
+                for block in prompt
+            ):
+                return ()
+            raise RequestError.invalid_params(
+                {"reason": "Image/resource prompts require reviewed image support."}
+            ) from error
+        return prompt_images(prompt)
+
+    @staticmethod
     def _manual_compaction_instructions(prompt: list[Any], kwargs: dict[str, Any]) -> str | None:
-        # Toad sends a blank text block with _meta.agentComms.compact; other
-        # ACP clients can send literal /compact. The ACP SDK expands _meta
-        # into kwargs, while direct callers may retain it as field_meta.
+        # Toad sends one blank text block with _meta.agentComms.compact;
+        # other ACP clients can send literal /compact. Never flatten images.
         metadata = kwargs.get("agentComms")
         if metadata is None:
             container = kwargs.get("field_meta") or kwargs.get("_meta") or {}
@@ -312,8 +564,6 @@ class CommsAgent:
         text = CommsAgent._prompt_text(prompt).strip()
         if not has_metadata_command and re.match(r"^/compact(?:\s|$)", text) is None:
             return None
-        # A flattened prompt loses image/embedded-context blocks. Refuse them
-        # rather than silently dropping content or accidentally prompting Pi.
         if len(prompt) != 1:
             raise RequestError.invalid_params({"reason": "/compact requires one text block."})
         block = prompt[0]
@@ -335,6 +585,60 @@ class CommsAgent:
             raise RequestError.invalid_params({"reason": "Compaction instructions are too long."})
         return instructions
 
+    async def clear_queued_inputs(self, session_id: str) -> None:
+        """Drop prompts queued against the backend for this session.
+
+        Pi's own queue is cleared, then the local deferred-display list is
+        reset. Callers may re-send the prompts they want to keep.
+        """
+        inbox = self._backend_inboxes.get(session_id)
+        if inbox is not None:
+            inbox.put_nowait({"type": "clear_queue"})
+        self._queued_inputs.pop(session_id, None)
+        await self._emit_queue_state(session_id)
+
+    async def compact_context(
+        self, session_id: str, instructions: str | None = None
+    ) -> dict[str, Any]:
+        """Use the idle owner bridge; never Pi's implicit retrying compaction."""
+        from .manual_compaction_bridge import compact_context
+
+        return await compact_context(self, session_id, instructions)
+
+    async def _emit_queue_state(
+        self, session_id: str, *, restored: list[str] | None = None, client: Any = None
+    ) -> None:
+        await (client or self._runtime).session_update(
+            session_id=session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=""),
+                field_meta={
+                    "agentComms": {
+                        "queue": [
+                            item.text for item in self._queued_inputs.get(session_id, {}).values()
+                        ],
+                        "restored": restored or [],
+                    }
+                },
+            ),
+        )
+
+    async def _emit_input_started(
+        self, session_id: str, text: str | None, input_id: str | None = None
+    ) -> None:
+        proof: dict[str, Any] = {"text": text}
+        if input_id is not None:
+            proof["inputId"] = input_id
+        await self._runtime.session_update(
+            session_id=session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=""),
+                field_meta={"agentComms": {"inputStarted": proof}},
+            ),
+        )
+
     async def _prompt_owned(self, session_id: str, prompt: list[Any]) -> PromptResponse:
         turn_task = asyncio.current_task()
         assert turn_task is not None
@@ -343,6 +647,7 @@ class CommsAgent:
             thread_name = await self._sync_session_identity(session_id)
             self._comms.registry.require(thread_name)
             text = self._prompt_text(prompt)
+            images = self._prompt_images(prompt)
             agent_task: str | None = None
             relay_text: str | None = None
             if text.startswith(AGENT_PREFIX):
@@ -362,17 +667,21 @@ class CommsAgent:
                 f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'} "
                 f"sent_seq={sent_seq}"
             )
-            if agent_task:
+            if images:
+                await self._run_agent_turn(session_id, thread_name, agent_task or "", images=images)
+            elif agent_task:
                 await self._run_agent_turn(session_id, thread_name, agent_task)
             else:
                 turn_id = uuid4().hex
+                self._comms.begin_turn(thread_name, turn_id, "Waiting for replies")
                 self._active_turns[session_id] = turn_id
                 try:
-                    await self._emit_event(session_id, {"type": "started", "turn_id": turn_id})
+                    await self._emit_event(session_id, self._started_event(thread_name, turn_id))
                     await self._drain_inbox(session_id)
                     await self._collect_replies(session_id, thread_name, sent_seq)
                 finally:
                     self._active_turns.pop(session_id, None)
+                    self._comms.finish_turn(thread_name, turn_id)
                     await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
             self._debug_log("prompt:returning")
             return PromptResponse(stop_reason="end_turn")
@@ -427,7 +736,7 @@ class CommsAgent:
     def _peer_progress(self, thread_name: str, sent_seq: int) -> bool:
         """True when a peer is active on, or has read, our message."""
         for name, activity in self._comms.all_activity().items():
-            if name != thread_name and activity.state is not ActivityState.IDLE:
+            if name != thread_name and activity.state.busy:
                 return True
         if sent_seq:
             markers = self._comms.bus._read_markers()
@@ -440,6 +749,9 @@ class CommsAgent:
         if session_id in self._proxies:
             await self._proxies[session_id].request("cancel")
             return
+        name = self._sessions.get(session_id)
+        if name and (goal := self._comms.registry.require(name).goal) and goal.active:
+            self._comms.update_goal(name, "paused", goal_id=goal.id)
         task = self._turn_tasks.get(session_id)
         if task is not None:
             task.cancel()
@@ -448,6 +760,84 @@ class CommsAgent:
         thread_name = self._sessions.get(session_id)
         if thread_name:
             self._comms.acknowledge(thread_name)
+
+    async def set_config_option(
+        self, config_id: str, session_id: str, value: str | bool, **kwargs: Any
+    ) -> SetSessionConfigOptionResponse:
+        if config_id not in {"model", "thinking_level"} or not isinstance(value, str):
+            raise RequestError.invalid_params(
+                {"reason": f"Unknown session configuration option: {config_id!r}"}
+            )
+        if session_id in self._proxies:
+            result = await self._proxies[session_id].request(
+                "set_config_option", config_id=config_id, value=value
+            )
+            return SetSessionConfigOptionResponse.model_validate(result)
+        thread_name = await self._sync_session_identity(session_id)
+        thread = self._comms.registry.require(thread_name)
+        if config_id == "model":
+            choices = {model.id for model in await self._models_for(thread_name)}
+            if value not in choices:
+                raise RequestError.invalid_params({"reason": f"Unknown model: {value!r}"})
+            await self._set_active_backend_option(
+                session_id,
+                {
+                    "type": "set_model",
+                    "provider": value.split("/", 1)[0],
+                    "modelId": value.split("/", 1)[1],
+                },
+                self._model_requests,
+                "Model change timed out",
+            )
+            self._comms.set_thread_model(thread_name, value)
+            levels = await self._thinking_levels_for(value)
+            if thread.thinking_level not in levels:
+                self._comms.set_thread_thinking_level(
+                    thread_name, "medium" if "medium" in levels else levels[0]
+                )
+        else:
+            levels = await self._thinking_levels_for(thread.model)
+            if value not in levels:
+                raise RequestError.invalid_params(
+                    {"reason": f"Thinking level {value!r} is unavailable for this model"}
+                )
+            await self._set_active_backend_option(
+                session_id,
+                {"type": "set_thinking_level", "level": value},
+                self._thinking_requests,
+                "Thinking level change timed out",
+            )
+            self._comms.set_thread_thinking_level(thread_name, value)
+        config_options = await self._config_options(thread_name)
+        await self._runtime.session_update(
+            session_id=session_id,
+            update=ConfigOptionUpdate(
+                session_update="config_option_update", config_options=config_options
+            ),
+        )
+        return SetSessionConfigOptionResponse(config_options=config_options)
+
+    async def _set_active_backend_option(
+        self,
+        session_id: str,
+        command: dict[str, Any],
+        requests: dict[str, asyncio.Future[None]],
+        timeout_message: str,
+    ) -> None:
+        if session_id not in self._active_turns or not (
+            inbox := self._backend_inboxes.get(session_id)
+        ):
+            return
+        request_id = uuid4().hex
+        future = asyncio.get_running_loop().create_future()
+        requests[request_id] = future
+        inbox.put_nowait({"id": request_id, **command})
+        try:
+            await asyncio.wait_for(future, timeout=10)
+        except (TimeoutError, RuntimeError) as error:
+            raise RequestError.invalid_params({"reason": str(error) or timeout_message}) from error
+        finally:
+            requests.pop(request_id, None)
 
     async def authenticate(self, method_id: str, **kwargs: Any) -> None:
         raise RequestError.auth_required({"reason": "agent-comms requires no authentication"})
@@ -466,6 +856,7 @@ class CommsAgent:
         return leaf or "session"
 
     def _session_metadata(self, thread_name: str) -> dict[str, Any]:
+        thread = self._comms.registry.require(thread_name)
         return {
             "agentComms": {
                 "thread": thread_name,
@@ -474,23 +865,139 @@ class CommsAgent:
                 "transport": "per-session stdio ACP",
                 "ownerPid": os.getpid(),
                 "turnLifecycle": True,
+                "model": thread.model,
+                "thinkingLevel": thread.thinking_level,
+                "worktree": thread.worktree,
+                "autoTitle": backend.rpc_args_for(self._agent_bin, self._agent_args) is not None,
+                "title": thread.title,
+                "promptQueue": backend.rpc_args_for(self._agent_bin, self._agent_args) is not None,
+                "imagePrompts": backend.rpc_args_for(self._agent_bin, self._agent_args) is not None,
             }
         }
+
+    def _ensure_thread_model(self, thread_name: str) -> str | None:
+        thread = self._comms.registry.require(thread_name)
+        selected = thread.model
+        if selected is None:
+            selected = self._comms.resolve_thread_model(
+                thread.name, backend.configured_model(self._agent_args)
+            )
+        if selected is not None and selected != thread.model:
+            self._comms.set_thread_model(thread.name, selected)
+        return selected
+
+    async def _models_for(self, thread_name: str) -> list[backend.Model]:
+        selected = self._ensure_thread_model(thread_name)
+        async with self._model_catalog_lock:
+            if self._model_catalog is None or self._model_catalog_auth != backend.auth_revision():
+                self._model_catalog = await backend.discover_models(
+                    self._agent_bin, self._agent_args, selected
+                )
+                self._model_catalog_auth = backend.auth_revision()
+                self._catalog_generation += 1
+        if selected and all(model.id != selected for model in self._model_catalog):
+            return [backend.Model(selected, selected), *self._model_catalog]
+        return self._model_catalog
+
+    async def _refresh_auth_models(self) -> None:
+        if self._model_catalog is None:
+            return
+        if self._model_catalog_auth == backend.auth_revision() and all(
+            self._session_catalog_generation.get(sid) == self._catalog_generation
+            for sid in self._sessions
+        ):
+            return
+        async with self._catalog_publish_lock:
+            for sid, name in tuple(self._sessions.items()):
+                options = await self._config_options(name)
+                if self._session_catalog_generation.get(sid) == self._catalog_generation:
+                    continue
+                await self._runtime.session_update(
+                    session_id=sid,
+                    update=ConfigOptionUpdate(
+                        session_update="config_option_update", config_options=options
+                    ),
+                )
+                self._session_catalog_generation[sid] = self._catalog_generation
+
+    async def _config_options(self, thread_name: str) -> list[Any]:
+        selected = self._ensure_thread_model(thread_name)
+        if selected is None:
+            return []
+        models = await self._models_for(thread_name)
+        levels = await self._thinking_levels_for(selected)
+        thread = self._comms.registry.require(thread_name)
+        thinking_level = thread.thinking_level
+        if thinking_level not in levels:
+            thinking_level = "medium" if "medium" in levels else levels[0]
+            self._comms.set_thread_thinking_level(thread_name, thinking_level)
+        return [
+            SessionConfigOptionSelect(
+                id="model",
+                name="Model",
+                description="Model used by this persistent agent thread",
+                category="model",
+                type="select",
+                current_value=selected,
+                options=[
+                    SessionConfigSelectOption(
+                        value=model.id,
+                        name=model.name,
+                        description=model.description,
+                    )
+                    for model in models
+                ],
+            ),
+            SessionConfigOptionSelect(
+                id="thinking_level",
+                name="Thinking level",
+                description="Reasoning effort used by this persistent agent thread",
+                category="thought_level",
+                type="select",
+                current_value=thinking_level,
+                options=[
+                    SessionConfigSelectOption(value=level, name=level.title()) for level in levels
+                ],
+            ),
+        ]
+
+    async def _thinking_levels_for(self, model: str | None) -> list[str]:
+        key = (model, backend.auth_revision())
+        if key not in self._thinking_catalog:
+            self._thinking_catalog[key] = await backend.discover_thinking_levels(
+                self._agent_bin, self._agent_args, model
+            )
+        return self._thinking_catalog[key]
 
     async def _sync_session_identity(self, session_id: str) -> str:
         """Follow permanent aliases and publish the canonical wire name."""
         cached_name = self._require_session(session_id)
-        thread_name = self._comms.registry.require(cached_name).name
+        thread = self._comms.registry.require(cached_name)
+        thread_name = thread.name
         self._sessions[session_id] = thread_name
-        if self._session_titles.get(session_id) != thread_name:
+        if (
+            self._session_titles.get(session_id) != thread_name
+            or self._display_titles.get(session_id) != thread.title
+        ):
             await self._runtime.session_update(
                 session_id=session_id,
                 update=SessionInfoUpdate(
                     session_update="session_info_update",
-                    title=thread_name,
+                    title=thread.title or thread_name,
+                    field_meta={"agentComms": {"thread": thread_name}},
                 ),
             )
             self._session_titles[session_id] = thread_name
+            self._display_titles[session_id] = thread.title
+        if self._session_worktrees.get(session_id) != thread.worktree:
+            await self._runtime.session_update(
+                session_id=session_id,
+                update=SessionInfoUpdate(
+                    session_update="session_info_update",
+                    field_meta={"agentComms": {"worktree": thread.worktree}},
+                ),
+            )
+            self._session_worktrees[session_id] = thread.worktree
         return thread_name
 
     def _ensure_live_drain(self, session_id: str) -> None:
@@ -505,6 +1012,9 @@ class CommsAgent:
                 await asyncio.sleep(LIVE_DRAIN_INTERVAL)
                 try:
                     await self._drain_inbox(session_id)
+                    await self._sync_thread_config(session_id)
+                    self._schedule_goal(session_id)
+                    await self._refresh_auth_models()
                 except asyncio.CancelledError:
                     raise
                 except Exception as error:
@@ -520,24 +1030,48 @@ class CommsAgent:
         async with self._drain_locks.setdefault(session_id, asyncio.Lock()):
             return await self._drain_owned_inbox(session_id)
 
+    async def _sync_thread_config(self, session_id: str) -> None:
+        """Publish a thread's model/thinking when another client changes it.
+
+        An agent can change another thread's model with ``comms_model``. The
+        owning process must then tell its connected clients, or their model
+        switcher keeps showing the previous selection.
+        """
+        thread_name = await self._sync_session_identity(session_id)
+        thread = self._comms.registry.require(thread_name)
+        signature = (thread.model, thread.thinking_level)
+        if self._session_config_signature.get(session_id) == signature:
+            return
+        self._session_config_signature[session_id] = signature
+        if self._client is None and not self._runtime_enabled:
+            return
+        options = await self._config_options(thread_name)
+        await self._runtime.session_update(
+            session_id=session_id,
+            update=ConfigOptionUpdate(
+                session_update="config_option_update", config_options=options
+            ),
+        )
+
     async def _drain_owned_inbox(self, session_id: str) -> int:
         thread_name = await self._sync_session_identity(session_id)
-        if self._comms.registry.status(thread_name) is ThreadStatus.STOPPED:
+        if self._comms.registry.status(thread_name).stopped:
             return 0
         backend_inbox = self._backend_inboxes.get(session_id)
         if self._client is None and backend_inbox is None and not self._runtime_enabled:
             return 0
         pushed = 0
         after = self._inbox_cursors.get(session_id, 0)
-        for message in self._comms.incoming_page(thread_name, after=after).messages:
-            incoming_task = (
-                f"[agent-comms from {message.sender} to {message.target}]\n{message.body}"
-            )
-            direct = self._comms.registry.canonical_name(message.target) == thread_name
-            if backend_inbox is not None and direct:
-                backend_inbox.put_nowait(incoming_task)
-            elif self._auto_wake and self._runtime_enabled and direct:
-                self._pending_turns.setdefault(session_id, []).append(incoming_task)
+        high_water = self._comms.message_high_water()
+        page = self._comms.incoming_page(thread_name, after=after) if after < high_water else None
+        incoming_messages = page.messages if page else ()
+        for message in incoming_messages:
+            incoming = ScheduledTurn.incoming(message)
+            starts_turn = message.starts_turn_for(thread_name)
+            if backend_inbox is not None and starts_turn and incoming.reply_target is None:
+                backend_inbox.put_nowait(incoming.prompt)
+            elif self._auto_wake and self._runtime_enabled and starts_turn:
+                self._pending_turns.setdefault(session_id, []).append(incoming)
             await self._runtime.session_update(
                 session_id=session_id,
                 update=AgentMessageChunk(
@@ -559,6 +1093,10 @@ class CommsAgent:
             )
             self._inbox_cursors[session_id] = message.seq
             pushed += 1
+        if page is not None and not page.has_newer:
+            self._inbox_cursors[session_id] = max(
+                self._inbox_cursors.get(session_id, 0), high_water
+            )
         if pushed:
             self._comms.acknowledge_through(thread_name, self._inbox_cursors[session_id])
         self._schedule_wake(session_id)
@@ -579,26 +1117,76 @@ class CommsAgent:
             while self._pending_turns.get(session_id) and not self._closing:
                 async with self._turn_locks.setdefault(session_id, asyncio.Lock()):
                     pending = self._pending_turns.pop(session_id, [])
+                    goal = self._comms.registry.require(self._require_session(session_id)).goal
+                    if goal is None or not goal.active:
+                        pending = [turn for turn in pending if turn.goal_id is None]
+                    if not pending:
+                        continue
+                    pending, remaining = ScheduledTurn.take_batch(pending)
+                    if remaining:
+                        self._pending_turns[session_id] = remaining
                     self._turn_tasks[session_id] = asyncio.current_task()  # type: ignore[assignment]
                     try:
                         await self._run_agent_turn(
-                            session_id, self._require_session(session_id), "\n\n".join(pending)
+                            session_id,
+                            self._require_session(session_id),
+                            "\n\n".join(turn.prompt for turn in pending),
+                            reply_targets=tuple(
+                                dict.fromkeys(
+                                    turn.reply_target for turn in pending if turn.reply_target
+                                )
+                            ),
+                            origins=tuple(
+                                turn.origin for turn in pending if turn.origin is not None
+                            ),
                         )
                     finally:
                         self._turn_tasks.pop(session_id, None)
 
         self._wake_tasks[session_id] = asyncio.create_task(wake())
 
+    def _schedule_goal(self, session_id: str) -> None:
+        """Only the existing thread owner may schedule another goal turn."""
+        if self._closing or session_id in self._turn_tasks or self._pending_turns.get(session_id):
+            return
+        if (wake := self._wake_tasks.get(session_id)) is not None and not wake.done():
+            return
+        thread = self._comms.registry.require(self._require_session(session_id))
+        if thread.pid != os.getpid() or not self._comms.registry.status(thread.name).running:
+            return
+        goal = thread.goal
+        if goal is not None and goal.active:
+            self._pending_turns.setdefault(session_id, []).append(
+                ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
+            )
+            self._schedule_wake(session_id)
+
     async def _drain_count(self, session_id: str) -> int:
         return await self._drain_inbox(session_id)
 
-    async def _run_agent_turn(self, session_id: str, thread_name: str, task: str) -> None:
+    async def _run_agent_turn(
+        self,
+        session_id: str,
+        thread_name: str,
+        task: str,
+        *,
+        reply_targets: tuple[str, ...] = (),
+        origins: tuple[Message, ...] = (),
+        images: tuple[Any, ...] = (),
+    ) -> None:
         """Stream a real coding agent's reply: events to the client, status to the wire."""
         thread = self._comms.registry.require(thread_name)
         thread_name = thread.name
-        started_goal = thread.goal
+        goal = thread.goal
         self._sessions[session_id] = thread_name
-        self._comms.set_activity(thread_name, ActivityState.THINKING, task[:80])
+        # Error-display deduplication belongs to one backend turn, not a session.
+        self._emitted_errors.pop(session_id, None)
+        turn_id = uuid4().hex
+        routing = TurnRouting(
+            origins, MessageRoute(thread_name, reply_targets) if reply_targets else None
+        )
+        checkpoint = self._comms.transcript_checkpoint(thread_name)
+        self._comms.begin_turn(thread_name, turn_id, task[:80], routing)
         worktree = thread.worktree if Path(thread.worktree).is_dir() else str(Path.cwd())
         env_extra = {
             "AGENT_COMMS_THREAD": thread_name,
@@ -606,6 +1194,7 @@ class CommsAgent:
             "AGENT_COMMS_ROOT": str(self._comms.root),
             "PI_PARENT_ID": thread.parent or "",
             "AGENT_COMMS_MANAGED": "1",
+            "PI_WORKTREE": worktree,
         }
         peers = [
             {key: person[key] for key in ("name", "status", "activity", "activity_detail")}
@@ -618,57 +1207,78 @@ class CommsAgent:
             "Use your own identity for comms tools. Incoming direct messages automatically "
             "start a new turn when you are idle, or are delivered into your current turn. "
             "End your turn when done; never sleep or poll waiting for messages. "
-            "Reply with comms_send when a reply is useful; do not echo acknowledgments. "
+            "Reply with comms_send when a reply is useful; otherwise call comms_dismiss "
+            "with the channel to end quietly. Do not echo acknowledgments. "
+            f"Your project directory is {thread.worktree!r}. Use comms_set_project(path) "
+            "to change it persistently without creating another thread. After changing "
+            "projects, end this turn; the runtime automatically resumes in the new project. "
+            "When the user asks you to set or start a persistent goal, call "
+            "comms_set_goal(text) so this same thread continues it autonomously. "
             f"Peer state: {json.dumps(peers)}\n\n{task}"
         )
-        if started_goal is not None and started_goal.active:
+        if goal is not None and goal.active:
             task = (
-                f"Persistent goal {started_goal.id}: {started_goal.text}\n"
-                f"Progress: {started_goal.progress}\n"
-                "Report progress with comms_goal before ending. Mark completed only after "
-                "verification; mark blocked if user input is needed. Never replay an "
-                "uncertain backend turn.\n\n" + task
+                f"Persistent goal {goal.id}: {goal.text}\nProgress: {goal.progress}\n"
+                "Work toward this goal while respecting follow-up instructions. Before ending, "
+                "use comms_goal with this goal_id and a progress summary. Set status completed "
+                "only after verifying success, blocked when you need user input, or active "
+                "to continue in another turn. Do not wait or poll; "
+                "the owner schedules continuation.\n\n" + task
+            )
+        if thread.auto_title_pending:
+            task = (
+                "Give this new thread a concise topic title before doing the task: call "
+                "comms_rename_self with a meaningful 2-5-word hyphenated name (at most 48 "
+                "characters). Summarize the user's intent; do not copy their first message, "
+                "greeting, or request phrasing. This is automatic naming for a new thread.\n\n"
+                + task
+            )
+        if reply_targets:
+            task = (
+                f"Your final answer is delivered automatically to {', '.join(reply_targets)}. "
+                "Do not use comms_send to duplicate that answer.\n\n" + task
             )
         reply_parts: list[str] = []
-        settled = False
-        terminal_ok = False
-        terminal_seen = False
+        terminal_ok: bool | None = None
         backend_work_observed = False
-        backend_inbox: asyncio.Queue[str] = asyncio.Queue()
+        settled = False
+        cancelled = False
+        backend_inbox: asyncio.Queue[str | dict[str, Any]] = asyncio.Queue()
         finish_event = asyncio.Event()
         self._backend_inboxes[session_id] = backend_inbox
-        turn_id = uuid4().hex
         self._active_turns[session_id] = turn_id
         try:
-            await self._emit_event(session_id, {"type": "started", "turn_id": turn_id})
+            await self._emit_event(session_id, self._started_event(thread_name, turn_id))
             await self._drain_inbox(session_id)
             session_file = thread.session_file
             fork_session = False
             if not session_file and thread.parent:
                 session_file = self._comms.registry.require(thread.parent).session_file
                 fork_session = bool(session_file)
+            image_options: dict[str, Any] = {"images": images} if images else {}
             async for event in backend.stream_agent_events(
                 self._agent_bin,
-                self._agent_args,
+                (
+                    backend.args_for_thinking_level(
+                        backend.args_for_model(self._agent_args, thread.model),
+                        thread.thinking_level,
+                    )
+                    if backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
+                    else self._agent_args
+                ),
                 task,
                 worktree,
                 env_extra,
+                **image_options,
                 session_file=session_file,
                 fork_session=fork_session,
                 steering_queue=backend_inbox,
                 finish_event=finish_event,
             ):
                 kind = event.get("type")
-                if kind == "chunk":
-                    reply_parts.append(event.get("text") or "")
-                if kind in {"tool_start", "tool_end"} or (
-                    kind in {"chunk", "thinking"} and bool(event.get("text"))
-                ):
-                    backend_work_observed = True
                 if kind in {"compaction_start", "compaction_end"}:
-                    # Neither the pre-compaction count nor the result summary
-                    # is authoritative current usage. A later fresh stats
-                    # response may repopulate it; do not show a stale meter.
+                    # A previous usage sample is not authoritative after Pi
+                    # starts compaction, even if the attempt later aborts.
                     info = self._comms.agent_info_of(thread_name)
                     self._comms.set_agent_info(
                         thread_name,
@@ -677,22 +1287,114 @@ class CommsAgent:
                         context_used=None,
                         context_size=info.context_size if info else None,
                     )
-                if kind == "agent_info":
+                if reply_targets and kind == "chunk":
+                    reply_parts.append(str(event.get("text") or ""))
+                if kind in {"chunk", "thinking", "tool_start", "tool_end"}:
+                    backend_work_observed = True
+                if kind == "done":
+                    if self._forwarded_inputs.get(session_id):
+                        # A final assistant stop can prove the original turn,
+                        # not an ACKed follow-up lacking its own user start.
+                        event = {
+                            **event,
+                            "ok": False,
+                            "text": (
+                                "An identified follow-up input was not started; "
+                                "inspect local diagnostics."
+                            ),
+                        }
+                    if terminal_ok is not None:
+                        terminal_ok = False
+                    elif event.get("ok") is True:
+                        terminal_ok = True
+                    else:
+                        terminal_ok = False
+                if kind == "input_started":
+                    input_id = event.get("id")
+                    if isinstance(input_id, str):
+                        self._forwarded_inputs.get(session_id, set()).discard(input_id)
+                    item = self._queued_inputs.get(session_id, {}).pop(input_id or "", None)
+                    await self._emit_input_started(
+                        session_id, item.text if item and item.echo else None, input_id
+                    )
+                    await self._emit_queue_state(session_id)
+                if (
+                    kind == "done"
+                    and goal is not None
+                    and goal.active
+                    and self._comms.registry.require(thread_name).worktree == thread.worktree
+                ):
+                    current_goal = self._comms.registry.require(thread_name).goal
+                    failed = not event.get("ok")
+                    # An RPC stream can settle and exit successfully after
+                    # accepting a user prompt without assistant output or tool
+                    # activity. This is not a productive goal turn.
+                    empty_success = (
+                        not failed
+                        and not backend_work_observed
+                        and not str(event.get("text") or "").strip()
+                    )
+                    if current_goal == goal or (
+                        current_goal
+                        and current_goal.id == goal.id
+                        and current_goal.active
+                        and (failed or empty_success)
+                    ):
+                        if failed or empty_success:
+                            # A stale value-CAS skip here would leave an active
+                            # goal for live drain to retry after an uncertain
+                            # backend result. Block the latest same-ID active
+                            # goal atomically, retaining newer progress.
+                            self._comms.block_goal_after_failed_turn(
+                                thread_name,
+                                started_goal=goal,
+                                expected_worktree=thread.worktree,
+                                diagnostic=(
+                                    "Backend turn failed; inspect local diagnostics "
+                                    "before resuming."
+                                    if failed
+                                    else "Backend reported success without assistant output "
+                                    "or tool activity; inspect the session before resuming."
+                                ),
+                            )
+                        else:
+                            try:
+                                self._comms.update_goal(
+                                    thread_name,
+                                    "paused",
+                                    goal_id=goal.id,
+                                    expected_goal=current_goal,
+                                    progress="Turn ended without a goal progress update; "
+                                    "paused to avoid a continuation loop. Resume to continue.",
+                                )
+                            except ValueError as error:
+                                # A concurrent goal edit won the revision CAS.
+                                # Do not overwrite verified progress or relabel
+                                # this successful provider turn as a failure.
+                                if str(error) != "Goal changed during resume; refresh its state.":
+                                    raise
+                if kind == "model_changed":
+                    future = self._model_requests.get(event.get("id", ""))
+                    if future is not None and not future.done():
+                        if event.get("ok"):
+                            future.set_result(None)
+                        else:
+                            future.set_exception(RuntimeError(str(event.get("error"))))
+                elif kind == "thinking_changed":
+                    future = self._thinking_requests.get(event.get("id", ""))
+                    if future is not None and not future.done():
+                        if event.get("ok"):
+                            future.set_result(None)
+                        else:
+                            future.set_exception(RuntimeError(str(event.get("error"))))
+                elif kind == "agent_info":
                     session_name = event.get("session_name")
                     session_file = event.get("session_file")
-                    if session_file:
-                        current = self._comms.registry.require(thread_name)
-                        self._comms.register(
-                            Thread(
-                                name=current.name,
-                                tags=current.tags,
-                                worktree=current.worktree,
-                                parent=current.parent,
-                                task=current.task,
-                                pid=current.pid,
-                                session_file=str(session_file),
-                            )
-                        )
+                    if (
+                        session_file
+                        and self._comms.registry.require(thread_name).session_file != session_file
+                    ):
+                        self._comms.attach_session(thread_name, str(session_file))
                     self._comms.set_agent_info(
                         thread_name,
                         model=event.get("model"),
@@ -700,6 +1402,23 @@ class CommsAgent:
                         context_used=event.get("context_used"),
                         context_size=event.get("context_size"),
                     )
+                    if (
+                        event.get("model")
+                        and self._comms.registry.require(thread_name).model is None
+                    ):
+                        self._comms.set_thread_model(thread_name, event["model"])
+                        await self._runtime.session_update(
+                            session_id=session_id,
+                            update=ConfigOptionUpdate(
+                                session_update="config_option_update",
+                                config_options=await self._config_options(thread_name),
+                            ),
+                        )
+                    if (
+                        event.get("thinking_level")
+                        and self._comms.registry.require(thread_name).thinking_level is None
+                    ):
+                        self._comms.set_thread_thinking_level(thread_name, event["thinking_level"])
                 elif kind == "tool_start":
                     self._comms.set_activity(
                         thread_name, ActivityState.WORKING, event.get("title", "")
@@ -708,74 +1427,158 @@ class CommsAgent:
                     thread_name = await self._sync_session_identity(session_id)
                     self._comms.set_activity(thread_name, ActivityState.THINKING, task[:80])
                 elif kind == "settled":
-                    self._comms.set_activity(thread_name, ActivityState.IDLE)
+                    self._comms.finish_turn(thread_name, turn_id)
                     settled = True
                     finish_event.set()
                     self._active_turns.pop(session_id, None)
-                elif kind == "done":
-                    terminal_ok = not terminal_seen and event.get("ok") is True
-                    terminal_seen = True
-                await self._emit_event(session_id, {**event, "turn_id": turn_id})
-        finally:
-            if started_goal is not None and started_goal.active:
-                # The durable goal row is the authority. In particular, an ACK,
-                # EOF, or successful-but-empty backend result must not launch
-                # another attempt. The guarded transition preserves newer
-                # same-ID progress and cannot revive a replaced goal.
+                await self._emit_event(
+                    session_id, {**event, "turn_id": turn_id, "route": routing.reply}
+                )
+                if kind == "tool_end":
+                    sent = await asyncio.to_thread(
+                        self._comms.sent_tool_message,
+                        event.get("name", ""),
+                        event.get("output", ""),
+                        bool(event.get("ok")),
+                    )
+                    if sent is not None:
+                        await self._emit_event(
+                            session_id,
+                            {
+                                "type": "sent",
+                                "text": sent.body,
+                                "route": MessageRoute(sent.sender, (sent.target,)),
+                            },
+                        )
+            if terminal_ok is None and goal is not None and goal.active:
+                # An EOF without a done event is a failed turn, not a signal to
+                # schedule the still-active goal again on the next live drain.
                 current_thread = self._comms.registry.require(thread_name)
                 current_goal = current_thread.goal
                 if (
                     current_thread.worktree == thread.worktree
                     and current_goal is not None
-                    and current_goal.id == started_goal.id
+                    and current_goal.id == goal.id
                     and current_goal.active
                 ):
-                    diagnostic = None
-                    if not terminal_seen or not terminal_ok:
-                        diagnostic = (
-                            "Backend turn failed or ended without a result; inspect local "
-                            "diagnostics before resuming."
+                    self._comms.block_goal_after_failed_turn(
+                        thread_name,
+                        started_goal=goal,
+                        expected_worktree=thread.worktree,
+                        diagnostic=(
+                            "Backend turn ended without a result; " "inspect local diagnostics."
+                        ),
+                    )
+            if origins and settled and terminal_ok is True:
+                await asyncio.to_thread(
+                    self._comms.record_turn_routing, thread_name, checkpoint, routing
+                )
+            if terminal_ok is True:
+                if reply_parts:
+                    for target in reply_targets:
+                        self._comms.send(thread_name, target, "".join(reply_parts))
+            else:
+                # Streamed chunks were provisional. A failed or missing terminal
+                # result cannot turn them into a completed wire reply. Keep the
+                # failure notice non-waking, including for human reply targets.
+                # Backend text may include stderr, secrets, or content from an
+                # unrelated session. Only the local client gets that diagnostic.
+                notice_targets = tuple(
+                    dict.fromkeys(
+                        (*reply_targets,)
+                        + tuple(
+                            origin.target if is_channel_target(origin.target) else origin.sender
+                            for origin in origins
+                            if origin.sender != thread_name
                         )
-                    elif not backend_work_observed:
-                        diagnostic = (
-                            "Backend reported success without assistant output or tool activity; "
-                            "inspect the session before resuming."
-                        )
-                    elif current_goal == started_goal:
-                        diagnostic = (
-                            "Turn ended without an explicit goal progress update; inspect the "
-                            "result before resuming."
-                        )
-                    if diagnostic is not None:
-                        self._comms.block_goal_after_failed_turn(
-                            thread_name,
-                            started_goal=started_goal,
-                            expected_worktree=thread.worktree,
-                            diagnostic=diagnostic,
-                        )
+                    )
+                )
+                for target in notice_targets:
+                    prefix = "Request failed" if target in reply_targets else "Delivery failed"
+                    self._comms.send(
+                        thread_name,
+                        target,
+                        f"{prefix}: backend turn did not complete; inspect local diagnostics.",
+                        MessageType.ALERT,
+                        notice=True,
+                    )
+            await self._runtime.session_update(
+                session_id=session_id,
+                update=AgentMessageChunk(
+                    session_update="agent_message_chunk",
+                    content=TextContentBlock(type="text", text=""),
+                    field_meta={
+                        "agentComms": {
+                            "transcriptChanged": True,
+                            "transcriptCursor": asdict(
+                                self._comms.transcript_checkpoint(thread_name)
+                            ),
+                        }
+                    },
+                ),
+            )
+        except asyncio.CancelledError:
+            cancelled = True
+            raise
+        finally:
+            self._emitted_errors.pop(session_id, None)
             if self._backend_inboxes.get(session_id) is backend_inbox:
                 self._backend_inboxes.pop(session_id, None)
             while not backend_inbox.empty():
-                self._pending_turns.setdefault(session_id, []).append(backend_inbox.get_nowait())
+                pending = backend_inbox.get_nowait()
+                if isinstance(pending, str):
+                    self._pending_turns.setdefault(session_id, []).append(ScheduledTurn(pending))
             thread_name = await self._sync_session_identity(session_id)
-            body = "".join(reply_parts).strip()
-            # Streamed chunks are provisional. An ACK, partial assistant text,
-            # or Pi's settled event cannot publish an automatic wire reply
-            # after the backend reports failure or exits without a done.
-            if body and terminal_ok:
-                self._comms.send(thread_name, GLOBAL_TARGET, body[:4000])
+            current_project = self._comms.registry.require(thread_name).worktree
+            # Discard unresolved per-turn IDs without replay. Durable ACP input
+            # disposition across owner crashes remains a separate integration.
+            self._forwarded_inputs.pop(session_id, None)
+            remaining = self._queued_inputs.pop(session_id, {})
+            if remaining:
+                await self._emit_queue_state(
+                    session_id,
+                    restored=[item.text for item in remaining.values() if item.echo],
+                )
+            if not cancelled and not self._closing and current_project != thread.worktree:
+                self._pending_turns.setdefault(session_id, []).append(
+                    ScheduledTurn(
+                        f"Project change completed: tools and context now use {current_project!r}. "
+                        "Continue the user's previous request from this directory. "
+                        "If the request was only to switch projects, report that you are ready; "
+                        "do not invent extra work."
+                    )
+                )
             if not settled:
-                self._comms.set_activity(thread_name, ActivityState.IDLE)
+                self._comms.finish_turn(thread_name, turn_id)
                 self._active_turns.pop(session_id, None)
                 await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
 
+    def _started_event(self, thread_name: str, turn_id: str) -> dict[str, Any]:
+        """Project one owner-authored turn without inventing presentation timestamps."""
+        thread = self._comms.registry.require(thread_name)
+        active = thread.active_turn
+        activity = self._comms.activity_of(thread.name)
+        return {
+            "type": "started",
+            "turn_id": turn_id,
+            **(
+                {"started_at": active.started_at}
+                if active is not None and active.id == turn_id
+                else {}
+            ),
+            "activity": activity.state.value,
+            "activity_detail": activity.detail,
+        }
+
     async def replay_turn_state(self, session_id: str, client: Any = None) -> None:
-        turn_id = self._active_turns.get(session_id)
-        await self._emit_event(
-            session_id,
-            {"type": "started" if turn_id else "settled", "turn_id": turn_id or ""},
-            client=client,
+        thread_name = self._require_session(session_id)
+        active = self._comms.registry.require(thread_name).active_turn
+        event = (
+            self._started_event(thread_name, active.id)
+            if active is not None
+            else {"type": "settled", "turn_id": ""}
         )
+        await self._emit_event(session_id, event, client=client)
 
     async def shutdown(self) -> None:
         """Stop drains and mark threads owned by this ACP connection offline."""
@@ -806,14 +1609,16 @@ class CommsAgent:
                 canonical = self._comms.registry.require(name).name
                 if (
                     self._comms.registry.require(canonical).pid == os.getpid()
-                    and self._comms.registry.status(canonical) is ThreadStatus.RUNNING
+                    and self._comms.registry.status(canonical).running
                 ):
                     self._comms.stop(canonical)
             except Exception as error:
                 self._debug_log(f"shutdown error: {error!r}")
         await self._runtime.close()
 
-    async def _emit_text(self, session_id: str, text: str, client: Any = None) -> None:
+    async def _emit_text(
+        self, session_id: str, text: str, client: Any = None, route: MessageRoute | None = None
+    ) -> None:
         if not text:
             return
         await (client or self._runtime).session_update(
@@ -821,6 +1626,7 @@ class CommsAgent:
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=text),
+                field_meta={"agentComms": {"route": asdict(route) if route else None}},
             ),
         )
 
@@ -843,10 +1649,10 @@ class CommsAgent:
                         content=TextContentBlock(type="text", text=text),
                     ),
                 )
-        elif kind in {"chunk", "assistant", "notice"}:
+        elif kind in {"chunk", "assistant", "notice", "sent"}:
             text = event.get("text") or ""
             if text:
-                await self._emit_text(session_id, text, client)
+                await self._emit_text(session_id, text, client, event.get("route"))
         elif kind == "tool_start":
             start_update = ToolCallStart(
                 session_update="tool_call",
@@ -881,13 +1687,13 @@ class CommsAgent:
                 session_update="tool_call_update",
                 tool_call_id=event["id"],
                 status="completed" if event.get("ok") else "failed",
+                content=[
+                    ContentToolCallContent.model_validate(item)
+                    for item in tool_result_content(
+                        event["id"], event.get("output") or "", event.get("diff")
+                    )
+                ],
             )
-            end_update.content = [
-                ContentToolCallContent.model_validate(item)
-                for item in tool_result_content(
-                    event["id"], event.get("output") or "", event.get("diff")
-                )
-            ]
             await client.session_update(session_id=session_id, update=end_update)
         elif kind == "thinking":
             await client.session_update(
@@ -910,8 +1716,6 @@ class CommsAgent:
                     ),
                 )
         elif kind in {"compaction_start", "compaction_end"}:
-            # Only an explicit successful end from the backend is completed;
-            # absent/malformed abort information is uncertainty, not success.
             phase = (
                 "start"
                 if kind == "compaction_start"
@@ -950,22 +1754,49 @@ class CommsAgent:
                 ),
             )
         elif kind in {"started", "settled"}:
+            lifecycle = {
+                "turnStarted" if kind == "started" else "turnSettled": True,
+                "turnId": event.get("turn_id"),
+            }
+            if kind == "started":
+                lifecycle.update(
+                    {
+                        **(
+                            {"startedAt": event["started_at"]}
+                            if event.get("started_at") is not None
+                            else {}
+                        ),
+                        **(
+                            {"activity": event["activity"]}
+                            if event.get("activity") is not None
+                            else {}
+                        ),
+                        **(
+                            {"activityDetail": event["activity_detail"]}
+                            if event.get("activity_detail") is not None
+                            else {}
+                        ),
+                    }
+                )
             await client.session_update(
                 session_id=session_id,
                 update=AgentMessageChunk(
                     session_update="agent_message_chunk",
                     content=TextContentBlock(type="text", text=""),
-                    field_meta={
-                        "agentComms": {
-                            "turnStarted" if kind == "started" else "turnSettled": True,
-                            "turnId": event.get("turn_id"),
-                        }
-                    },
+                    field_meta={"agentComms": lifecycle},
                 ),
             )
+        elif kind == "error":
+            text = str(event.get("text") or "Backend failed")
+            self._emitted_errors[session_id] = text
+            await self._emit_text(session_id, f"[agent error] {text}", client)
         elif kind == "done":
+            prior_error = self._emitted_errors.pop(session_id, None)
             if not event.get("ok") and event.get("text"):
-                await self._emit_text(session_id, f"[agent error] {event['text']}", client)
+                text = str(event["text"])
+                # An explicit error event in this turn already showed the failure.
+                if prior_error != text:
+                    await self._emit_text(session_id, f"[agent error] {text}", client)
 
     @staticmethod
     def _sanitized_compaction_summary(value: Any) -> str:
@@ -986,6 +1817,33 @@ class CommsAgent:
             else:
                 chunks.append(str(getattr(block, "text", "") or ""))
         return "\n".join(chunk for chunk in chunks if chunk)
+
+
+class CommsClient(CommsAgent):
+    """A stdio connection is an attachment, never a thread's executor."""
+
+    async def new_session(
+        self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
+    ) -> NewSessionResponse:
+        thread = self._declare_thread(cwd, 0)
+        loaded = await self.load_session(cwd, thread.name, mcp_servers, **kwargs)
+        return NewSessionResponse(
+            session_id=thread.name,
+            config_options=loaded.config_options,
+            field_meta=loaded.field_meta,
+        )
+
+    async def load_session(
+        self, cwd: str, session_id: str, mcp_servers: list[Any] | None = None, **kwargs: Any
+    ) -> LoadSessionResponse:
+        thread = self._validated_thread(cwd, session_id)
+        owner = await asyncio.to_thread(
+            self._comms.ensure_owner,
+            thread.name,
+            agent_bin=self._agent_bin,
+            agent_args=self._agent_args,
+        )
+        return await self._attach_owner(owner, session_id)
 
 
 def parse_target(text: str) -> tuple[str, str]:
@@ -1010,6 +1868,11 @@ def parse_target(text: str) -> tuple[str, str]:
 
 
 def main() -> int:
+    if "--login" in sys.argv[1:]:
+        from .login import run_login
+
+        index = sys.argv.index("--login")
+        return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "")
     debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
     if debug_path:
         import logging
@@ -1040,7 +1903,7 @@ def main() -> int:
                             debug_log.write(f"  {task.get_name()}: {' <- '.join(innermost)}\n")
 
             asyncio.create_task(watchdog())
-        agent = CommsAgent(comms, runtime_enabled=True)
+        agent = CommsClient(comms, runtime_enabled=True)
 
         def observe(event: Any) -> None:
             agent._debug_log(

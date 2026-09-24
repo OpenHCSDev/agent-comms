@@ -60,12 +60,27 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path):
             "result": native,
             "isError": False,
         },
+        {"type": "message_start", "message": {"role": "assistant"}},
+        {"type": "message_end", "message": {"role": "assistant", "stopReason": "stop"}},
         {"type": "agent_settled"},
     ]
     stub = tmp_path / "pi-stub"
     stub.write_text(
-        f"#!{sys.executable}\nimport json\n"
-        f"for payload in {payloads!r}: print(json.dumps(payload), flush=True)\n"
+        f"#!{sys.executable}\nimport json, sys\n"
+        "send = lambda payload: print(json.dumps(payload), flush=True)\n"
+        "state = json.loads(sys.stdin.readline())\n"
+        "send({'type': 'response', 'command': 'get_state', 'id': state['id'], "
+        "'success': True, 'data': {'nativeInputProofCapability': "
+        "'pi-native-input-v1-live-only'}})\n"
+        "prompt = json.loads(sys.stdin.readline())\n"
+        "send({'type': 'response', 'command': 'prompt', 'id': prompt['id'], 'success': True})\n"
+        "send({'type': 'message_start', 'message': {'role': 'user', "
+        "'content': prompt['message'], 'inputId': prompt['inputId']}})\n"
+        f"for payload in {payloads!r}: send(payload)\n"
+        "sys.stdin.readline()  # postturn get_state\n"
+        "sys.stdin.readline()  # get_session_stats\n"
+        "send({'type': 'response', 'command': 'get_session_stats', 'success': True, "
+        "'data': {'contextUsage': {'tokens': 33}}})\n"
     )
     stub.chmod(0o755)
     events = [
@@ -98,6 +113,9 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path):
     assert saved.diff == live["diff"]
 
     class Client:
+        transcript_snapshots = False
+        transcript_diffs = False
+
         def __init__(self):
             self.updates = []
 
@@ -115,6 +133,16 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path):
     await agent._replay_transcript("worker", "worker", client)
     assert client.updates[-1]["content"] == live_content
     # A newer owner must not send extra TranscriptEvent fields to an old UI.
+    client.transcript_snapshots = True
+    await agent._replay_transcript("worker", "worker", client)
+    snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
+    assert "diff" not in snapshot[0]
+    client.transcript_diffs = True
+    await agent._replay_transcript("worker", "worker", client)
+    snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
+    assert TranscriptEvent.from_wire(snapshot[0]).diff == live["diff"]
+    client.transcript_snapshots = False
+    client.transcript_diffs = False
     await agent._replay_transcript("worker", "worker", client, snapshots=True)
     snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
     assert "diff" not in snapshot[0]
