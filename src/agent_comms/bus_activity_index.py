@@ -30,15 +30,23 @@ class BusActivityIndex:
         stream.seek(start)
         return hashlib.sha256(stream.read(offset - start)).hexdigest()
 
+    @staticmethod
+    def _digest(record: Mapping[str, Any]) -> str:
+        payload = {key: value for key, value in record.items() if key != "integrity"}
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
     def _checkpoint(
         self, revision: tuple[int, int, int, int], stream: Any
     ) -> tuple[ActivitySnapshot, int] | None:
         try:
             saved = json.loads(self.path.read_text())
+            if saved.get("integrity") != self._digest(saved):
+                return None
             source = saved["source"]
             offset = saved["offset"]
             if (
-                saved.get("schema") != 1
+                saved.get("schema") != 2
                 or not isinstance(source, list)
                 or len(source) != 4
                 or type(offset) is not int
@@ -72,13 +80,14 @@ class BusActivityIndex:
     ) -> None:
         channels, sent = snapshot
         record = {
-            "schema": 1,
+            "schema": 2,
             "source": list(revision),
             "offset": offset,
             "tail": self._tail(stream, offset),
             "channels": channels,
             "sent": sent,
         }
+        record["integrity"] = self._digest(record)
         fd, temporary = tempfile.mkstemp(prefix=".bus-activity-", dir=self.path.parent)
         try:
             with os.fdopen(fd, "w") as output:

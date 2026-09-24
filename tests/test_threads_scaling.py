@@ -120,6 +120,16 @@ def test_mounted_activity_rebuilds_after_bus_replacement_or_damaged_checkpoint(w
     checkpoint.write_text("{damaged")
     assert set(wire(wired.root).coordination_snapshot().last_sent) == {"fixer"}
 
+    # A valid JSON file can also lose projection values after local damage.
+    # The bus is still authoritative when the checkpoint shape survives.
+    cached = json.loads(checkpoint.read_text())
+    cached["channels"]["#base"] = [0.0, 0.0]
+    cached["sent"]["fixer"] = 0.0
+    checkpoint.write_text(json.dumps(cached))
+    reopened = wire(wired.root)
+    assert reopened.coordination_snapshot().last_sent["fixer"] > 0.0
+    assert reopened.bus.channel_activity()["#base"].last_message > 0.0
+
 
 def test_route_projection_rebuilds_after_atomic_bus_replacement(wired):
     wired.send("PR111", "fixer", "first")
