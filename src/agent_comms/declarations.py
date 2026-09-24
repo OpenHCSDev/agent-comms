@@ -20,6 +20,7 @@ import hashlib
 import json
 import math
 import os
+import sqlite3
 import stat
 import tempfile
 import time
@@ -27,7 +28,7 @@ import uuid
 from bisect import bisect_left
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from enum import Enum, StrEnum
@@ -35,6 +36,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Self
 
+from .bus_activity_index import BusActivityIndex
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     CommittedInitial,
@@ -45,6 +47,7 @@ from .bus_publication import (
     unique_wire_object,
     validate_initial_record,
 )
+from .bus_route_counts import BusRouteCounts
 
 if TYPE_CHECKING:
     from .coordination import PublicationIntent
@@ -474,6 +477,7 @@ class ActivityLog:
 
     def __init__(self, store_path: Path, stale_after: float = 120.0):
         self._path = store_path
+        self._checkpoint_path = store_path.with_name("activity_latest.json")
         self._stale_after = stale_after
         self._revision: tuple | None = None
         self._latest: dict[str, Activity] = {}
@@ -520,8 +524,17 @@ class ActivityLog:
             )
             # Publish a new map: other threads may still be iterating the old
             # snapshot after the store lock has been released.
-            complete = self._complete_latest.copy() if append else {}
-            offset = self._offset if append else 0
+            checkpoint = (
+                self._read_checkpoint_unlocked(revision)
+                if self._revision is None and revision is not None
+                else None
+            )
+            if checkpoint is not None:
+                complete, offset = checkpoint
+            else:
+                complete = self._complete_latest.copy() if append else {}
+                offset = self._offset if append else 0
+            original_offset = offset
             latest = complete
             if revision is not None:
                 with self._path.open("rb") as stream:
@@ -548,7 +561,68 @@ class ActivityLog:
                             offset = stream.tell()
             self._complete_latest, self._offset = complete, offset
             self._latest, self._revision = latest, revision
+            if revision is not None and (checkpoint is None or offset != original_offset):
+                # The log remains authoritative if its disposable read
+                # projection cannot be persisted.
+                with suppress(OSError):
+                    self._write_checkpoint_unlocked(revision, complete, offset)
             return self._latest
+
+    def _read_checkpoint_unlocked(
+        self, revision: tuple[int, int, int, int]
+    ) -> tuple[dict[str, Activity], int] | None:
+        try:
+            stored = json.loads(self._checkpoint_path.read_text())
+            source = stored["source"]
+            offset = stored["offset"]
+            if (
+                stored.get("schema") != 1
+                or not isinstance(source, list)
+                or len(source) != 4
+                or type(offset) is not int
+                or offset < 0
+                or source[0] != revision[0]
+                or offset > revision[1]
+                or (source[1] == revision[1] and source[2:] != list(revision[2:]))
+            ):
+                return None
+            with self._path.open("rb") as stream:
+                start = max(0, offset - 4096)
+                stream.seek(start)
+                if hashlib.sha256(stream.read(offset - start)).hexdigest() != stored["tail"]:
+                    return None
+            rows = stored["latest"]
+            if not isinstance(rows, dict):
+                return None
+            latest = {name: Activity.from_wire(row) for name, row in rows.items()}
+            if any(name != activity.thread for name, activity in latest.items()):
+                return None
+            return latest, offset
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            return None
+
+    def _write_checkpoint_unlocked(
+        self,
+        revision: tuple[int, int, int, int],
+        complete: Mapping[str, Activity],
+        offset: int,
+    ) -> None:
+        with self._path.open("rb") as stream:
+            start = max(0, offset - 4096)
+            stream.seek(start)
+            tail = hashlib.sha256(stream.read(offset - start)).hexdigest()
+        _atomic_write_text(
+            self._checkpoint_path,
+            json.dumps(
+                {
+                    "schema": 1,
+                    "source": list(revision),
+                    "offset": offset,
+                    "tail": tail,
+                    "latest": {name: activity.to_wire() for name, activity in complete.items()},
+                }
+            ),
+        )
 
     def _load(self) -> list[Activity]:
         with _store_lock(self._path):
@@ -2561,14 +2635,35 @@ class MessageBus:
         with _store_lock(self._path):
             revision = file_revision(self._path)
             if revision != self._channel_activity_revision:
-                activity: dict[str, ChannelActivity] = {}
-                for message in self._iter_log_unlocked():
-                    activity[message.target] = activity.get(
-                        message.target, ChannelActivity()
-                    ).observe(message)
+                projection = BusActivityIndex(self._path).snapshot(
+                    revision, self._bus_activity_fields
+                )
+                if projection is None:
+                    activity: dict[str, ChannelActivity] = {}
+                    for message in self._iter_log_unlocked():
+                        activity[message.target] = activity.get(
+                            message.target, ChannelActivity()
+                        ).observe(message)
+                else:
+                    channels, _ = projection
+                    activity = {
+                        target: ChannelActivity(last_message, last_user)
+                        for target, (last_message, last_user) in channels.items()
+                    }
                 self._channel_activity = activity
                 self._channel_activity_revision = revision
             return dict(self._channel_activity)
+
+    @staticmethod
+    def _bus_activity_fields(record: Mapping[str, object]) -> tuple[str, str, float, bool, bool]:
+        message = Message.from_wire(record)
+        return (
+            message.sender,
+            message.target,
+            message.timestamp,
+            message.sender_role is ThreadRole.USER,
+            message.membership is None and not message.notice,
+        )
 
     def _delivery_scope(self, name: str) -> DeliveryScope:
         snapshot = self._registry.snapshot()
@@ -3517,6 +3612,39 @@ class MessageBus:
             channel_deltas[target] = [0] * (len(ordinary) + 1)
         counts = dict.fromkeys(deliveries, 0)
         with _store_lock(self._path):
+            try:
+                with BusRouteCounts(self._path) as route_counts:
+                    if route_counts.sync(self._pending_route_fields):
+                        senders: dict[str, list[str]] = {}
+                        for target, raw_sender in route_counts.routes():
+                            senders.setdefault(target, []).append(raw_sender)
+                            sender = snapshot.aliases.get(raw_sender, raw_sender)
+                            route_actor: str | None
+                            if target in channel_cutoffs:
+                                route_actor = channel_direct_actor.get(target)
+                            else:
+                                route_actor = snapshot.aliases.get(target, target)
+                            if route_actor in counts and route_actor != sender:
+                                cutoff = max(
+                                    markers.get(route_actor, 0),
+                                    scoped_markers[route_actor].get(sender, 0),
+                                )
+                                counts[route_actor] += route_counts.pair_after(
+                                    target, raw_sender, cutoff
+                                )
+                        for target, members in channel_members.items():
+                            for actor in members:
+                                cutoff = channel_self_cutoffs[target][actor]
+                                total = route_counts.target_after(target, cutoff)
+                                for raw_sender in senders.get(target, ()):
+                                    if snapshot.aliases.get(raw_sender, raw_sender) == actor:
+                                        total -= route_counts.pair_after(target, raw_sender, cutoff)
+                                counts[actor] += total
+                        return {name: counts[actor] for name, actor in actors.items()}
+            except (OSError, sqlite3.DatabaseError):
+                # The bus remains authoritative if its disposable index is
+                # unavailable. Route validation errors still fail closed.
+                pass
             for seq, raw_sender, target in self._iter_pending_routes_unlocked():
                 sender = snapshot.aliases.get(raw_sender, raw_sender)
                 if target in channel_cutoffs:
@@ -3838,8 +3966,13 @@ class MessageBus:
 
     def last_sent_timestamps(self) -> Mapping[str, float]:
         """Aggregate sent times without retaining message bodies."""
-        latest: dict[str, float] = {}
         with _store_lock(self._path):
+            projection = BusActivityIndex(self._path).snapshot(
+                file_revision(self._path), self._bus_activity_fields
+            )
+            if projection is not None:
+                return projection[1]
+            latest: dict[str, float] = {}
             for message in self._iter_log_unlocked():
                 if message.membership is None and not message.notice:
                     latest[message.sender] = max(latest.get(message.sender, 0.0), message.timestamp)

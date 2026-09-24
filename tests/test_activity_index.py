@@ -28,6 +28,29 @@ def test_appends_parse_only_new_records_and_do_not_mutate_published_snapshots(tm
     assert "new-worker" not in previous
 
 
+def test_fresh_reader_loads_latest_threads_without_replaying_activity_history(tmp_path):
+    path = tmp_path / "activity.jsonl"
+    path.write_text("".join(encoded(f"worker-{index % 10}") + "\n" for index in range(3000)))
+    assert len(ActivityLog(path).all_current()) == 10
+    with patch.object(Activity, "from_wire", wraps=Activity.from_wire) as parse:
+        assert len(ActivityLog(path).all_current()) == 10
+        assert parse.call_count == 10
+    ActivityLog(path).emit(Activity("new-worker", ActivityState.THINKING, "latest"))
+    with patch.object(Activity, "from_wire", wraps=Activity.from_wire) as parse:
+        current = ActivityLog(path).all_current()
+        assert current["new-worker"].detail == "latest"
+        assert parse.call_count == 11
+
+
+def test_fresh_reader_rebuilds_after_activity_rewrite_before_append(tmp_path):
+    path = tmp_path / "activity.jsonl"
+    path.write_text(encoded("a") + "\n")
+    assert set(ActivityLog(path).all_current()) == {"a"}
+    path.write_text(encoded("b") + "\n")
+    ActivityLog(path).emit(Activity("c", ActivityState.THINKING, "new"))
+    assert set(ActivityLog(path).all_current()) == {"b", "c"}
+
+
 def test_partial_and_valid_unterminated_tails_are_retried(tmp_path):
     path = tmp_path / "activity.jsonl"
     path.write_text(encoded(detail="before") + "\n")

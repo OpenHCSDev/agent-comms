@@ -2085,12 +2085,19 @@ class Comms:
 
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
         """Summarize threads with status and pending counts."""
-        threads = self.registry.active_threads() if active_only else self.registry.all_threads()
+        snapshot = self.registry.snapshot()
+        threads = {
+            name: thread
+            for name, thread in snapshot.threads.items()
+            if not active_only or snapshot.statuses[name].active
+        }
         activities = self.activity.all_current()
         pending = self.bus.pending_counts_all(tuple(threads))
         return [
             {
-                **self.thread_detail(name, include_pending=False),
+                **t.to_wire(),
+                "status": snapshot.statuses[name].value,
+                "is_fork": t.is_fork,
                 "pending": pending[name],
                 "activity": activities[name].state.value if name in activities else "idle",
                 "activity_detail": activities[name].detail if name in activities else "",

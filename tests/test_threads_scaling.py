@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 
 import pytest
@@ -34,19 +35,126 @@ def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
     wired.stop("third")
     assert _listed(wired, active_only=True) == _expected(wired, active_only=True)
 
-    # In a fresh CLI process there is no per-viewer cache. Still only one
-    # wire parser pass, including when stopped threads remain in the registry.
+    # A fresh CLI process uses the durable projection without parsing history.
     fresh = wire(wired.root)
     calls = []
-    original = fresh.bus._iter_pending_routes_unlocked
+    original = fresh.bus._pending_route_fields
 
-    def measured():
+    def measured(record):
         calls.append("scan")
-        yield from original()
+        return original(record)
 
-    monkeypatch.setattr(fresh.bus, "_iter_pending_routes_unlocked", measured)
+    monkeypatch.setattr(fresh.bus, "_pending_route_fields", measured)
     assert _listed(fresh) == _expected(wired)
-    assert calls == ["scan"]
+    assert calls == []
+
+
+def test_reopened_listing_does_not_parse_unchanged_bus_history(wired, monkeypatch):
+    for index in range(100):
+        wired.send("PR111", "fixer", f"message {index}")
+    assert _listed(wired)["fixer"] == 100
+
+    fresh = wire(wired.root)
+    parsed = []
+    original = fresh.bus._pending_route_fields
+
+    def measured(record):
+        parsed.append(record["seq"])
+        return original(record)
+
+    monkeypatch.setattr(fresh.bus, "_pending_route_fields", measured)
+    assert _listed(fresh)["fixer"] == 100
+    assert parsed == []
+
+    wired.send("PR111", "fixer", "new message")
+    assert _listed(fresh)["fixer"] == 101
+    assert parsed == [101]
+
+
+def test_thread_listing_validates_registry_per_snapshot_not_per_row(wired, monkeypatch):
+    for index in range(30):
+        wired.register(Thread(f"peer-{index}", frozenset(), f"/peer-{index}"))
+    checks = 0
+    verify = wired.registry._private_guard_unlocked
+
+    def counted_verify():
+        nonlocal checks
+        checks += 1
+        return verify()
+
+    monkeypatch.setattr(wired.registry, "_private_guard_unlocked", counted_verify)
+    rows = wired.list_threads()
+    assert len(rows) == 32
+    assert checks <= 3
+
+
+def test_mounted_coordination_snapshot_reopens_without_scanning_bus(wired, monkeypatch):
+    wired.send("PR111", "#base", "channel activity")
+    wired.send("PR111", "fixer", "direct activity")
+    expected = wired.coordination_snapshot()
+    fresh = wire(wired.root)
+
+    def forbidden_scan():
+        raise AssertionError("mounted snapshot reparsed historical bus rows")
+
+    monkeypatch.setattr(fresh.bus, "_iter_log_unlocked", forbidden_scan)
+    assert fresh.coordination_snapshot() == expected
+
+    wired.send("PR111", "#base", "new channel activity")
+    updated = fresh.coordination_snapshot()
+    assert updated.last_sent["PR111"] >= expected.last_sent["PR111"]
+    assert updated == wire(wired.root).coordination_snapshot()
+
+
+def test_mounted_activity_rebuilds_after_bus_replacement_or_damaged_checkpoint(wired):
+    wired.send("PR111", "#base", "first")
+    wired.send("fixer", "#base", "second")
+    assert set(wired.coordination_snapshot().last_sent) == {"PR111", "fixer"}
+    bus_path = wired.bus._path
+    replacement = bus_path.with_name("replacement.jsonl")
+    replacement.write_bytes(bus_path.read_bytes().splitlines(keepends=True)[-1])
+    os.replace(replacement, bus_path)
+    assert set(wire(wired.root).coordination_snapshot().last_sent) == {"fixer"}
+
+    checkpoint = wired.root / "bus_activity_latest.json"
+    checkpoint.write_text("{damaged")
+    assert set(wire(wired.root).coordination_snapshot().last_sent) == {"fixer"}
+
+    # A valid JSON file can also lose projection values after local damage.
+    # The bus is still authoritative when the checkpoint shape survives.
+    cached = json.loads(checkpoint.read_text())
+    cached["channels"]["#base"] = [0.0, 0.0]
+    cached["sent"]["fixer"] = 0.0
+    checkpoint.write_text(json.dumps(cached))
+    reopened = wire(wired.root)
+    assert reopened.coordination_snapshot().last_sent["fixer"] > 0.0
+    assert reopened.bus.channel_activity()["#base"].last_message > 0.0
+
+
+def test_route_projection_rebuilds_after_atomic_bus_replacement(wired):
+    wired.send("PR111", "fixer", "first")
+    wired.send("PR111", "fixer", "second")
+    assert _listed(wired)["fixer"] == 2
+    bus_path = wired.bus._path
+    rows = bus_path.read_bytes().splitlines(keepends=True)
+    replacement = bus_path.with_name("replacement.jsonl")
+    replacement.write_bytes(rows[1])
+    os.replace(replacement, bus_path)
+    assert _listed(wire(wired.root))["fixer"] == 1
+
+
+def test_route_projection_detects_rewrite_before_append(wired):
+    wired.register(Thread(name="third", tags=frozenset(), worktree="/tmp/third"))
+    wired.send("PR111", "fixer", "first")
+    assert _listed(wired)["fixer"] == 1
+    bus_path = wired.bus._path
+    row = json.loads(bus_path.read_text())
+    row["to"] = "third"
+    bus_path.write_text(json.dumps(row) + "\n")
+    wired.send("PR111", "fixer", "second")
+    counts = _listed(wire(wired.root))
+    assert counts["fixer"] == 1
+    assert counts["third"] == 1
 
 
 def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired):
@@ -72,6 +180,7 @@ def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired
     ],
 )
 def test_invalid_wire_rows_fail_closed_like_existing_pending_count(wired, change):
+    assert _listed(wired) == _expected(wired)
     row = {
         "seq": 1,
         "from": "PR111",
@@ -89,19 +198,18 @@ def test_invalid_wire_rows_fail_closed_like_existing_pending_count(wired, change
         wired.list_threads()
 
 
-def test_single_scan_holds_bus_lock_against_concurrent_append(wired, monkeypatch):
+def test_projection_sync_holds_bus_lock_against_concurrent_append(wired, monkeypatch):
     wired.send("PR111", "fixer", "before")
     entered = threading.Event()
     release = threading.Event()
-    original = wired.bus._iter_pending_routes_unlocked
+    original = wired.bus._pending_route_fields
 
-    def gated():
-        for message in original():
-            entered.set()
-            assert release.wait(5)
-            yield message
+    def gated(record):
+        entered.set()
+        assert release.wait(5)
+        return original(record)
 
-    monkeypatch.setattr(wired.bus, "_iter_pending_routes_unlocked", gated)
+    monkeypatch.setattr(wired.bus, "_pending_route_fields", gated)
     results: list[dict[str, int]] = []
     writer_done = threading.Event()
     reader = threading.Thread(target=lambda: results.append(_listed(wired)), daemon=True)
@@ -124,19 +232,18 @@ def test_single_scan_holds_bus_lock_against_concurrent_append(wired, monkeypatch
     assert [message.body for message in wired.inbox("fixer")] == ["before", "after"]
 
 
-def test_owner_tag_mutation_during_scan_cannot_ack_or_change_captured_audience(wired, monkeypatch):
+def test_owner_tag_mutation_during_sync_cannot_ack_or_change_captured_audience(wired, monkeypatch):
     wired.send("PR111", "#auth", "eligible when listing began")
     entered = threading.Event()
     release = threading.Event()
-    original = wired.bus._iter_pending_routes_unlocked
+    original = wired.bus._pending_route_fields
 
-    def gated():
-        for route in original():
-            entered.set()
-            assert release.wait(5)
-            yield route
+    def gated(record):
+        entered.set()
+        assert release.wait(5)
+        return original(record)
 
-    monkeypatch.setattr(wired.bus, "_iter_pending_routes_unlocked", gated)
+    monkeypatch.setattr(wired.bus, "_pending_route_fields", gated)
     results: list[dict[str, int]] = []
     reader = threading.Thread(target=lambda: results.append(_listed(wired)), daemon=True)
     writer = threading.Thread(
