@@ -44,6 +44,41 @@ def test_private_compaction_profile_carries_codex_auth_without_exposing_it(tmp_p
         shutil.rmtree(profile)
 
 
+async def test_openrouter_compaction_carries_private_auth_before_preflight(tmp_path, monkeypatch):
+    agent_dir = tmp_path / "agent"
+    agent_dir.mkdir()
+    source = agent_dir / "auth.json"
+    source.write_text('{"openrouter":{"type":"api_key","key":"local-fixture"}}')
+    source.chmod(0o600)
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(agent_dir))
+    session = tmp_path / "saved.jsonl"
+    saved_session(session)
+    backend = tmp_path / "pi-stub"
+    backend.write_text("")
+    monkeypatch.setattr(compact, "_pinned_package", lambda: tmp_path)
+
+    async def no_child(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(compact, "_preflight", no_child)
+    original = compact._private_policy
+    copied = []
+
+    def checked_profile(*, credentials_source=None):
+        assert credentials_source == source
+        profile = original(credentials_source=credentials_source)
+        copied.append((profile / "auth.json").read_bytes() == source.read_bytes())
+        return profile
+
+    monkeypatch.setattr(compact, "_private_policy", checked_profile)
+    result = await compact.compact_session(
+        str(backend), ["--provider", "openrouter", "--model", "fake"],
+        str(session), str(tmp_path),
+    )
+    assert result["ok"] is False
+    assert copied == [True]
+
+
 def saved_session(path: Path, *, split: bool = False) -> bytes:
     rows = [
         {
@@ -56,7 +91,7 @@ def saved_session(path: Path, *, split: bool = False) -> bytes:
     ]
     parent = None
     # Small recent turn keeps the one-request branch; an oversized last assistant
-    # induces Pi's two-request split-turn branch, which must be refused pre-RPC.
+    # induces Pi's split-turn branch, which has its own summary request.
     content = [
         ("user", "OLD " * 34000),
         ("assistant", "old answer"),

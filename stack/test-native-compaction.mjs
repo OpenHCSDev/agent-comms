@@ -8,7 +8,7 @@ import { resolve } from 'node:path';
 const manifest = readFileSync(resolve(import.meta.dirname, 'pi-native.sha256'));
 const buildId = createHash('sha256').update(manifest).digest('hex').slice(0, 16);
 const path = resolve(import.meta.dirname, `.pi-native-${buildId}/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js`);
-const { generateSummaryWithUsage } = await import(pathToFileURL(path).href);
+const { generateSummaryWithUsage, prepareCompaction, compact } = await import(pathToFileURL(path).href);
 const usage = {
   input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
@@ -56,4 +56,28 @@ try {
   assert.match(error.message, /context budget/);
 }
 assert.equal(attempted, false);
-console.log(`bounded native compaction: ${ascii.length + unicode.length} local chunk requests`);
+
+const entries = [
+  { type: 'message', id: 'u', parentId: null, timestamp: '2026-01-01T00:00:00.000Z',
+    message: { role: 'user', content: `PREFIX ${'🙂漢字'.repeat(60000)}`, timestamp: 1 } },
+  { type: 'message', id: 'a', parentId: 'u', timestamp: '2026-01-01T00:00:01.000Z',
+    message: { role: 'assistant', content: [{ type: 'text', text: `kept ${'x'.repeat(120000)}` }],
+      provider: 'openrouter', model: 'fake', stopReason: 'stop', timestamp: 2, usage } },
+];
+const preparation = prepareCompaction(entries, { reserveTokens: 16384, keepRecentTokens: 20000 });
+assert.equal(preparation.isSplitTurn, true);
+const splitRequests = [];
+const splitStream = async (_model, context) => ({ result: async () => {
+  const prompt = context.messages[0].content[0].text;
+  splitRequests.push(prompt);
+  assert.ok(Buffer.byteLength(prompt, 'utf8') < 64000,
+    `oversized split-turn request: ${Buffer.byteLength(prompt, 'utf8')} bytes`);
+  return { stopReason: 'stop', content: [{ type: 'text', text: 'split summary' }], usage };
+} });
+const split = await compact(preparation,
+  { provider: 'openrouter', id: 'fake', contextWindow: 128000, maxTokens: 8192, reasoning: false },
+  'local-fixture', {}, undefined, undefined, undefined, splitStream, {},
+  { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } }, {}, undefined);
+assert.ok(splitRequests.length > 1);
+assert.equal(split.usage.totalTokens, splitRequests.length * 2);
+console.log(`bounded native compaction: ${ascii.length + unicode.length + splitRequests.length} local chunk requests`);
