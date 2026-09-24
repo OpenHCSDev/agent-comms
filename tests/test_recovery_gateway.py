@@ -10,6 +10,7 @@ import shutil
 import socket
 import sqlite3
 import stat
+import sys
 import tempfile
 import time
 from contextlib import suppress
@@ -20,6 +21,10 @@ import pytest
 
 from agent_comms.coordination import CoordinationStore
 from agent_comms.recovery_gateway import GatewayUnavailableError, RecoveryGateway
+
+pytestmark = pytest.mark.skipif(
+    sys.platform != "linux", reason="local gateway needs Linux SO_PEERCRED and /var/tmp"
+)
 
 
 @pytest.fixture

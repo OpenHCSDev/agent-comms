@@ -1,5 +1,6 @@
 import json
 import os
+import signal
 import subprocess
 import sys
 
@@ -15,6 +16,8 @@ from agent_comms import (
     wire,
 )
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
+from agent_comms.declarations import _store_lock
+from agent_comms.operations import _owner_launch_proof
 
 
 class TestMessaging:
@@ -251,10 +254,77 @@ class TestThreadOps:
         wired.release("fixer")
         assert wired.registry.status("fixer").value == "stopped"
 
+    @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
+    def test_reserved_worker_acquire_requires_launch_reservation(self, wired, monkeypatch):
+        wired.register(Thread(name="reserved", tags=frozenset(), worktree="/tmp", pid=987654))
+        before = wired.registry.snapshot().owner_epochs["reserved"]
+        read_fd, write_fd = os.pipe()
+        os.write(write_fd, _owner_launch_proof("reserved", 987654, before))
+        os.close(write_fd)
+        monkeypatch.setenv("AGENT_COMMS_RESERVATION_FD", str(read_fd))
+        attached = wired.acquire_thread("reserved", owner_pid=987654)
+        assert attached.pid == 987654
+        assert wired.registry.snapshot().owner_epochs["reserved"] == before
+        assert "AGENT_COMMS_RESERVATION_FD" not in os.environ
+        # A new process that reuses a dead PID has no inherited launch pipe;
+        # it must acquire a NEW epoch, never inherit the old reservation.
+        wired.acquire_thread("reserved", owner_pid=987654)
+        assert wired.registry.snapshot().owner_epochs["reserved"] > before
+
+    @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
+    def test_reserved_worker_rejects_stale_launch_epoch(self, wired, monkeypatch):
+        wired.register(Thread(name="reserved", tags=frozenset(), worktree="/tmp", pid=987654))
+        before = wired.registry.snapshot().owner_epochs["reserved"]
+        read_fd, write_fd = os.pipe()
+        os.write(write_fd, _owner_launch_proof("reserved", 987654, before))
+        os.close(write_fd)
+        wired.registry.register(wired.registry.require("reserved"))
+        monkeypatch.setenv("AGENT_COMMS_RESERVATION_FD", str(read_fd))
+        with pytest.raises(RelationViolationError, match="reservation no longer matches"):
+            wired.acquire_thread("reserved", owner_pid=987654)
+        assert wired.registry.snapshot().owner_epochs["reserved"] > before
+
+    @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
+    def test_long_valid_name_reservation_is_not_truncated(self, wired, monkeypatch):
+        name = "n" * 257  # The old plaintext proof exceeded the 256-byte child read.
+        wired.register(Thread(name=name, tags=frozenset(), worktree="/tmp", pid=987654))
+        epoch = wired.registry.snapshot().owner_epochs[name]
+        read_fd, write_fd = os.pipe()
+        proof = _owner_launch_proof(name, 987654, epoch)
+        assert len(proof) == 32
+        os.write(write_fd, proof)
+        os.close(write_fd)
+        monkeypatch.setenv("AGENT_COMMS_RESERVATION_FD", str(read_fd))
+        assert wired.acquire_thread(name, owner_pid=987654).pid == 987654
+        assert wired.registry.snapshot().owner_epochs[name] == epoch
+
+    @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
+    def test_name_exceeding_pipe_capacity_has_fixed_size_launch_proof(self, wired, monkeypatch):
+        name = "n" * 70000  # Larger than the usual Linux pipe capacity.
+        inherited = []
+
+        class FakePopen:
+            def __init__(self, args, **kwargs):
+                self.pid = 987654
+                assert kwargs["env"]["AGENT_COMMS_THREAD"] == name
+                inherited.append(os.dup(kwargs["pass_fds"][0]))
+
+        monkeypatch.setattr("agent_comms.operations.subprocess.Popen", FakePopen)
+        try:
+            with _store_lock(wired._wire_lock_path):
+                owned = wired._launch_owner_unlocked(
+                    Thread(name=name, tags=frozenset(), worktree="/tmp"), "/bin/echo"
+                )
+            epoch = wired.registry.snapshot().owner_epochs[name]
+            assert owned.pid == 987654
+            assert os.read(inherited[0], 33) == _owner_launch_proof(name, 987654, epoch)
+        finally:
+            for fd in inherited:
+                os.close(fd)
+
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX process-group signaling")
     def test_stop_terminates_registered_process(self, wired, monkeypatch):
         signals = []
-        alive = [True]
         wired.register(
             Thread(
                 name="signal-test",
@@ -265,11 +335,11 @@ class TestThreadOps:
         )
         monkeypatch.setattr(
             "agent_comms.operations.Comms._is_local_participant",
-            lambda *args: True,
+            lambda *args, **kwargs: True,
         )
         monkeypatch.setattr(
             "agent_comms.operations.Comms._process_alive",
-            lambda *args: alive.pop() if alive else False,
+            lambda *args: not signals,
         )
         monkeypatch.setattr("agent_comms.operations.os.getpgid", lambda pid: pid)
         monkeypatch.setattr(
@@ -281,6 +351,424 @@ class TestThreadOps:
 
         assert signals == [(200, __import__("signal").SIGTERM)]
         assert wired.registry.status("signal-test").value == "stopped"
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_waits_for_owner_socket_without_holding_wire_lock(self, wired, monkeypatch):
+        import threading
+
+        from agent_comms.operations import _store_lock
+
+        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        signals = []
+        obtained = threading.Event()
+
+        def prove_owner(self, thread, *, wait=True):
+            if wait:
+                # Use an ordinary worker lock acquisition, not a forged socket.
+                def start_worker():
+                    with _store_lock(wired._wire_lock_path):
+                        obtained.set()
+
+                worker = threading.Thread(target=start_worker, daemon=True)
+                worker.start()
+                assert obtained.wait(1), "stop held the wire lock through socket readiness"
+                worker.join(1)
+            return True
+
+        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", prove_owner)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._process_alive", lambda *args: not signals
+        )
+        monkeypatch.setattr("agent_comms.operations.os.getpgid", lambda pid: pid)
+        monkeypatch.setattr(
+            "agent_comms.operations.os.killpg", lambda pid, sig: signals.append((pid, sig))
+        )
+
+        wired.stop("starting")
+        assert signals == [(987654, __import__("signal").SIGTERM)]
+        assert wired.registry.status("starting").value == "stopped"
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_rejects_same_pid_new_epoch_before_signal(self, wired, monkeypatch):
+        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        before = wired.registry.snapshot().owner_epochs["starting"]
+        signals = []
+
+        def epoch_changed(self, thread, *, wait=True):
+            if wait:
+                self.registry.register(thread)  # Same name/PID/created_at, NEW incarnation.
+            return True
+
+        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", epoch_changed)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._signal_local_owner",
+            staticmethod(lambda pid, sig: signals.append((pid, sig))),
+        )
+        with pytest.raises(RelationViolationError, match="epoch changed"):
+            wired.stop("starting")
+        assert signals == []
+        assert wired.registry.snapshot().owner_epochs["starting"] > before
+        assert wired.registry.status("starting").active
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_rejects_post_signal_same_pid_lifecycle_aba(self, wired, monkeypatch):
+        wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._is_local_participant", lambda *args, **kw: True
+        )
+        monkeypatch.setattr("agent_comms.operations.Comms._signal_local_owner", lambda *args: None)
+
+        def later_incarnation(self, pid, seconds):
+            self.registry.unregister("owner")
+            self.registry.register(self.registry.require("owner"))
+            self.registry.unregister("owner")
+            return True
+
+        monkeypatch.setattr("agent_comms.operations.Comms._wait_for_owner_exit", later_incarnation)
+        with pytest.raises(RelationViolationError, match="Owner changed"):
+            wired.stop("owner")
+        assert wired.registry.status("owner") is not None
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_rejects_post_kill_same_pid_lifecycle_aba(self, wired, monkeypatch):
+        wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        before = wired.registry.snapshot().owner_epochs["owner"]
+        original = wired.registry.require("owner")
+        signals = []
+        waits = []
+        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._is_local_participant", lambda *args, **kw: True
+        )
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._signal_local_owner",
+            staticmethod(lambda pid, sig: signals.append((pid, sig))),
+        )
+
+        def exit_wait(self, pid, seconds):
+            waits.append((pid, seconds))
+            if len(waits) == 1:
+                return False  # A has not exited after TERM; KILL is still authorized.
+            with monkeypatch.context() as owner:
+                owner.setenv("PI_AGENT_ID", "owner")
+                owner.setattr("agent_comms.operations.os.getpid", lambda: 987654)
+                self.release("owner")  # A's valid self-release after KILL.
+                self.registry.register(self.registry.require("owner"))  # B reuses the PID.
+                self.release("owner")  # B stops with identical declaration.
+            return True
+
+        monkeypatch.setattr("agent_comms.operations.Comms._wait_for_owner_exit", exit_wait)
+        with pytest.raises(RelationViolationError, match="Owner changed"):
+            wired.stop("owner")
+        assert signals == [(987654, signal.SIGTERM), (987654, signal.SIGKILL)]
+        assert len(waits) == 2
+        assert wired.registry.require("owner") == original
+        assert wired.registry.snapshot().owner_epochs["owner"] > before
+        assert wired.registry.status("owner").value == "stopped"
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_accepts_attested_release_after_unrelated_epoch_change(self, wired, monkeypatch):
+        wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._is_local_participant", lambda *args, **kw: True
+        )
+        monkeypatch.setattr("agent_comms.operations.Comms._signal_local_owner", lambda *args: None)
+
+        def self_release(self, pid, seconds):
+            # An unrelated owner changes the GLOBAL epoch before our worker
+            # releases; E+1 arithmetic cannot attest its own release.
+            self.registry.register(Thread(name="other", tags=frozenset(), worktree="/tmp"))
+            with monkeypatch.context() as owner:
+                owner.setenv("PI_AGENT_ID", "owner")
+                owner.setattr("agent_comms.operations.os.getpid", lambda: 987654)
+                self.release("owner")
+            return True
+
+        monkeypatch.setattr("agent_comms.operations.Comms._wait_for_owner_exit", self_release)
+        wired.stop("owner")
+        assert wired.registry.status("owner").value == "stopped"
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_does_not_signal_replaced_pid_after_socket_wait(self, wired, monkeypatch):
+        from dataclasses import replace
+
+        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        signals = []
+
+        def replaced_during_proof(self, thread, *, wait=True):
+            if wait:
+                self.registry.register(replace(thread, pid=987655))
+            return True
+
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._is_local_participant", replaced_during_proof
+        )
+        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.operations.os.getpgid", lambda pid: pid)
+        monkeypatch.setattr(
+            "agent_comms.operations.os.killpg", lambda pid, sig: signals.append((pid, sig))
+        )
+
+        with pytest.raises(RelationViolationError, match="Owner changed"):
+            wired.stop("starting")
+        assert signals == []
+        assert wired.registry.require("starting").pid == 987655
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner socket proof")
+    def test_start_waits_outside_wire_lock_and_revalidates_owner(self, wired, monkeypatch):
+        import threading
+
+        from agent_comms.operations import _store_lock
+
+        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.registry.unregister("starting")
+        obtained = threading.Event()
+
+        def prove_owner(self, thread, *, wait=True):
+            if wait:
+
+                def startup():
+                    with _store_lock(wired._wire_lock_path):
+                        obtained.set()
+
+                worker = threading.Thread(target=startup, daemon=True)
+                worker.start()
+                assert obtained.wait(1), "start held wire lock through socket readiness"
+                worker.join(1)
+            return True
+
+        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", prove_owner)
+        result = wired.start("starting")
+        assert result.pid == 987654 and not result.launched
+        assert wired.registry.status("starting").active
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner socket proof")
+    def test_start_rejects_same_pid_new_epoch(self, wired, monkeypatch):
+        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.registry.unregister("starting")
+        before = wired.registry.snapshot().owner_epochs["starting"]
+
+        def epoch_changed(self, thread, *, wait=True):
+            if wait:
+                self.registry.register(thread)  # Same PID, later owner incarnation.
+            return True
+
+        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", epoch_changed)
+        with pytest.raises(RelationViolationError, match="epoch changed"):
+            wired.start("starting")
+        assert wired.registry.snapshot().owner_epochs["starting"] > before
+        assert wired.registry.require("starting").pid == 987654
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner socket proof")
+    def test_start_refuses_replaced_pid_after_socket_wait(self, wired, monkeypatch):
+        from dataclasses import replace
+
+        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.registry.unregister("starting")
+
+        def replace_owner(self, thread, *, wait=True):
+            if wait:
+                self.registry.register(replace(thread, pid=987655))
+            return True
+
+        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", replace_owner)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._launch_owner_unlocked",
+            lambda *args, **kwargs: pytest.fail("replacement must not be launched"),
+        )
+        with pytest.raises(RelationViolationError, match="Owner changed"):
+            wired.start("starting")
+        assert wired.registry.require("starting").pid == 987655
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_restart_preflights_whole_set_and_refuses_replaced_pid(self, wired, monkeypatch):
+        from dataclasses import replace
+
+        wired.register(Thread(name="restart-a", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.register(Thread(name="restart-b", tags=frozenset(), worktree="/tmp", pid=987655))
+        signaled = []
+
+        def replace_owner(self, thread, *, wait=True):
+            if wait and thread.name == "restart-a":
+                self.registry.register(replace(thread, pid=987656))
+            return True
+
+        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", replace_owner)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._signal_local_owner",
+            lambda *args: signaled.append(args),
+        )
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._launch_owner_unlocked",
+            lambda *args, **kwargs: pytest.fail("replacement must not be launched"),
+        )
+        with pytest.raises(RelationViolationError, match="Owner selection changed"):
+            wired.restart_owners(["restart-a", "restart-b"])
+        assert signaled == []
+        assert wired.registry.require("restart-a").pid == 987656
+        assert wired.registry.require("restart-b").pid == 987655
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_restart_rejects_same_pid_new_epoch_without_partial_signal(self, wired, monkeypatch):
+        wired.register(Thread(name="restart-a", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.register(Thread(name="restart-b", tags=frozenset(), worktree="/tmp", pid=987655))
+        before = wired.registry.snapshot().owner_epochs["restart-a"]
+        signals = []
+
+        def epoch_changed(self, thread, *, wait=True):
+            if wait and thread.name == "restart-a":
+                self.registry.register(thread)
+            return True
+
+        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", epoch_changed)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._signal_local_owner",
+            staticmethod(lambda pid, sig: signals.append((pid, sig))),
+        )
+        with pytest.raises(RelationViolationError, match="epochs changed"):
+            wired.restart_owners(["restart-a", "restart-b"])
+        assert signals == []
+        assert wired.registry.snapshot().owner_epochs["restart-a"] > before
+        assert wired.registry.status("restart-b").active
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_restart_rejects_post_signal_same_pid_lifecycle_aba(self, wired, monkeypatch):
+        wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        launches = []
+        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._is_local_participant", lambda *args, **kw: True
+        )
+        monkeypatch.setattr("agent_comms.operations.Comms._signal_local_owner", lambda *args: None)
+
+        def later_incarnation(self, pid, seconds):
+            with monkeypatch.context() as owner:
+                owner.setenv("PI_AGENT_ID", "owner")
+                owner.setattr("agent_comms.operations.os.getpid", lambda: 987654)
+                self.release("owner")  # A's valid receipt is superseded by B.
+                self.registry.register(self.registry.require("owner"))
+                self.release("owner")  # B reused PID and released normally.
+            return True
+
+        monkeypatch.setattr("agent_comms.operations.Comms._wait_for_owner_exit", later_incarnation)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._launch_owner_unlocked",
+            lambda *args, **kw: launches.append(args),
+        )
+        with pytest.raises(RelationViolationError, match="Owner changed"):
+            wired.restart_owners(["owner"])
+        assert launches == []
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_restart_accepts_attested_self_release(self, wired, monkeypatch):
+        wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        launches = []
+        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._is_local_participant", lambda *args, **kw: True
+        )
+        monkeypatch.setattr("agent_comms.operations.Comms._signal_local_owner", lambda *args: None)
+
+        def self_release(self, pid, seconds):
+            with monkeypatch.context() as owner:
+                owner.setenv("PI_AGENT_ID", "owner")
+                owner.setattr("agent_comms.operations.os.getpid", lambda: 987654)
+                self.release("owner")
+            return True
+
+        def launch(self, thread, agent_bin, agent_args):
+            launches.append(thread.name)
+            return thread
+
+        monkeypatch.setattr("agent_comms.operations.Comms._wait_for_owner_exit", self_release)
+        monkeypatch.setattr("agent_comms.operations.Comms._launch_owner_unlocked", launch)
+        result = wired.restart_owners(["owner"])
+        assert launches == ["owner"]
+        assert result[0].thread == "owner"
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_restart_releases_wire_lock_for_socket_and_graceful_exit(self, wired, monkeypatch):
+        import threading
+        from dataclasses import replace
+
+        from agent_comms.operations import _store_lock
+
+        wired.register(Thread(name="restart-a", tags=frozenset(), worktree="/tmp", pid=987654))
+        signals = []
+
+        def acquire_lock():
+            complete = threading.Event()
+
+            def worker():
+                with _store_lock(wired._wire_lock_path):
+                    complete.set()
+
+            launched = threading.Thread(target=worker, daemon=True)
+            launched.start()
+            assert complete.wait(1), "restart held wire lock during worker startup/shutdown"
+            launched.join(1)
+
+        def prove_owner(self, thread, *, wait=True):
+            if wait:
+                acquire_lock()
+            return True
+
+        def await_exit(self, pid, seconds):
+            assert signals == [(987654, __import__("signal").SIGTERM)]
+            acquire_lock()
+            return True
+
+        def launch(self, thread, agent_bin, agent_args):
+            owner = replace(thread, pid=987655)
+            self.registry.register(owner)
+            return owner
+
+        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", prove_owner)
+        monkeypatch.setattr("agent_comms.operations.Comms._wait_for_owner_exit", await_exit)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._signal_local_owner",
+            staticmethod(lambda pid, sig: signals.append((pid, sig))),
+        )
+        monkeypatch.setattr("agent_comms.operations.Comms._launch_owner_unlocked", launch)
+        results = wired.restart_owners(["restart-a"])
+        assert [(item.previous_pid, item.pid) for item in results] == [(987654, 987655)]
+        assert wired.registry.require("restart-a").pid == 987655
+
+    @pytest.mark.skipif(
+        os.name != "posix" or not hasattr(os, "waitid") or not hasattr(os, "WNOWAIT"),
+        reason="non-reaping waitid direct-child proof",
+    )
+    def test_stop_direct_child_exit_does_not_reap_popens_status(self, wired, monkeypatch):
+        import signal
+
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(10)"], start_new_session=True
+        )
+        wired.register(Thread(name="child", tags=frozenset(), worktree="/tmp", pid=process.pid))
+        try:
+            monkeypatch.setattr(
+                "agent_comms.operations.Comms._is_local_participant",
+                lambda *args, **kwargs: True,
+            )
+            # Simulate an inconclusive ps result even after the child exits;
+            # waitid supplies the direct parent's authoritative exit witness.
+            monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+            wired.stop("child")
+            assert wired.registry.status("child").value == "stopped"
+            assert process.wait(timeout=5) == -signal.SIGTERM
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
 
     def test_stop_marks_dead_process_stopped_without_signaling(self, wired, monkeypatch):
         wired.register(
@@ -310,8 +798,32 @@ class TestThreadOps:
 
         with monkeypatch.context() as patch:
             patch.setattr("agent_comms.operations.sys.platform", "darwin")
+            patch.setenv("PATH", "")  # The E2E CLI uses this exact environment.
             assert wired._process_alive(os.getpid())
             assert not wired._process_alive(2**30)
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX ps process lookup")
+    def test_process_liveness_unknown_ps_result_never_marks_live_pid_dead(self, wired, monkeypatch):
+        import os
+        import subprocess
+
+        with monkeypatch.context() as patch:
+            patch.setattr("agent_comms.operations.sys.platform", "darwin")
+            patch.setattr(
+                "agent_comms.operations.subprocess.run",
+                lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError("ps")),
+            )
+            assert wired._process_alive(os.getpid())
+            patch.setattr(
+                "agent_comms.operations.subprocess.run",
+                lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 1, "", ""),
+            )
+            assert wired._process_alive(os.getpid())
+            patch.setattr(
+                "agent_comms.operations.subprocess.run",
+                lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, "Z", ""),
+            )
+            assert not wired._process_alive(os.getpid())
 
     def test_process_liveness_checks_pid_before_spawning_ps(self, wired, monkeypatch):
         def missing_process(pid, signal):
@@ -650,11 +1162,18 @@ class TestFork:
                 launched["args"] = args
                 launched["env"] = dict(env)
                 launched["cwd"] = cwd
+                launched["inherited_fd"] = (
+                    os.dup(kwargs["pass_fds"][0]) if os.name == "posix" else -1
+                )
                 self.pid = 4242
 
         monkeypatch.setattr("agent_comms.operations.subprocess.Popen", FakePopen)
         monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/opt/pi-coding-agent/bin/pi")
-        child = wired.fork(ForkSpec(name="kid", parent="PR111", task="do it"))
+        try:
+            child = wired.fork(ForkSpec(name="kid", parent="PR111", task="do it"))
+        finally:
+            if launched.get("inherited_fd", -1) >= 0:
+                os.close(launched["inherited_fd"])
 
         assert child.pid == 4242
         assert launched["args"][1:] == ["-m", "agent_comms.worker"]
@@ -681,10 +1200,17 @@ class TestFork:
             def __init__(self, args, **kwargs):
                 captured["args"] = args
                 captured["env"] = kwargs["env"]
+                captured["inherited_fd"] = (
+                    os.dup(kwargs["pass_fds"][0]) if os.name == "posix" else -1
+                )
                 self.pid = 1
 
         monkeypatch.setattr("agent_comms.operations.subprocess.Popen", FakePopen)
-        wired.fork(ForkSpec(name="kid", parent="PR111", task="the task"))
+        try:
+            wired.fork(ForkSpec(name="kid", parent="PR111", task="the task"))
+        finally:
+            if captured.get("inherited_fd", -1) >= 0:
+                os.close(captured["inherited_fd"])
         assert captured["env"]["PI_PROMPT"] == "the task"
 
     def test_fork_rolls_back_when_launch_raises(self, wired, monkeypatch, tmp_path):
@@ -849,10 +1375,17 @@ class TestReDeclarationPreservesProvenance:
         class FakePopen:
             def __init__(self, args, env=None, **kwargs):
                 captured["env"] = dict(env)
+                captured["inherited_fd"] = (
+                    os.dup(kwargs["pass_fds"][0]) if os.name == "posix" else -1
+                )
                 self.pid = 1
 
         monkeypatch.setattr("agent_comms.operations.subprocess.Popen", FakePopen)
-        wired.fork(ForkSpec(name="kid", parent="PR111", task="t", tags=frozenset({"ci"})))
+        try:
+            wired.fork(ForkSpec(name="kid", parent="PR111", task="t", tags=frozenset({"ci"})))
+        finally:
+            if captured.get("inherited_fd", -1) >= 0:
+                os.close(captured["inherited_fd"])
         assert captured["env"]["AGENT_COMMS_TAGS"] == "ci"
         assert captured["env"]["AGENT_COMMS_THREAD"] == "kid"
         assert captured["env"]["PI_AGENT_TAGS"] == "ci"

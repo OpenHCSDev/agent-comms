@@ -18,6 +18,7 @@ from __future__ import annotations
 import errno
 import hashlib
 import json
+import math
 import os
 import stat
 import tempfile
@@ -249,7 +250,9 @@ def _atomic_write_text(path: Path, text: str, *, fsync_parent: bool = False) -> 
             output.flush()
             os.fsync(output.fileno())
         os.replace(temporary_path, path)
-        if fsync_parent:
+        # Windows does not expose directory fsync; Linux-only private claim
+        # opt-in still requires the full parent-durability boundary below.
+        if fsync_parent and os.name == "posix":
             directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
             try:
                 os.fsync(directory_fd)
@@ -708,12 +711,18 @@ class Goal:
     id: str
     status: str = "active"
     progress: str = ""
+    # Older registry rows omit this field and start at revision zero. Every
+    # later goal transition advances it, even when status/progress return to
+    # identical values, so a captured Goal cannot pass a stale CAS after ABA.
+    revision: int = 0
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:
             raise ValueError("A goal requires text and an identity.")
         if self.status not in {"active", "paused", "blocked", "completed"}:
             raise ValueError("Unknown goal status.")
+        if type(self.revision) is not int or not 0 <= self.revision < 1 << 63:
+            raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
 
     @property
     def active(self) -> bool:
@@ -951,6 +960,14 @@ class ActiveTurn:
         return {**asdict(self), "routing": self.routing.to_wire() if self.routing else None}
 
 
+class _GeneratedCreationTime(float):
+    """Transient marker for default timestamps; never persisted as claim authority."""
+
+
+def _thread_creation_time() -> float:
+    return _GeneratedCreationTime(time.time())
+
+
 @dataclass(frozen=True, slots=True)
 class Thread:
     """Declares one agent thread's identity and provenance."""
@@ -965,7 +982,8 @@ class Thread:
     model: str | None = None
     thinking_level: str | None = None
     goal: Goal | None = None
-    created_at: float = field(default_factory=time.time)
+    created_at: float = field(default_factory=_thread_creation_time)
+    _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
     previous_worktrees: tuple[str, ...] = ()
     auto_title_pending: bool = False
     title: str | None = None
@@ -973,6 +991,10 @@ class Thread:
     active_turn: ActiveTurn | None = None
 
     def __post_init__(self) -> None:
+        generated = isinstance(self.created_at, _GeneratedCreationTime)
+        object.__setattr__(self, "_generated_created_at", generated)
+        if generated:
+            object.__setattr__(self, "created_at", float(self.created_at))
         object.__setattr__(self, "role", ThreadRole(self.role))
         if self.active_turn is not None and self.active_turn.owner_pid != self.pid:
             raise RelationViolationError("A turn must belong to the registered executor.")
@@ -1010,8 +1032,10 @@ class Thread:
 
     def to_wire(self) -> dict[str, object]:
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""
+        values = asdict(self)
+        values.pop("_generated_created_at")  # construction provenance is not durable authority
         return {
-            **asdict(self),
+            **values,
             "tags": sorted(self.tags),
             "active_turn": self.active_turn.to_wire() if self.active_turn else None,
         }
@@ -1674,14 +1698,17 @@ class ThreadRegistry:
                 raise RelationViolationError("Private registry guard marker is absent")
             return None
         if (
-            set(marker) not in (
+            set(marker)
+            not in (
                 {"last_seq", "writer_protocol_version", "wire_root_id"},
                 {"last_seq", "writer_protocol_version", "wire_root_id", "claim_envelopes_version"},
             )
             or (
                 "claim_envelopes_version" in marker
-                and (type(marker["claim_envelopes_version"]) is not int
-                     or marker["claim_envelopes_version"] != 1)
+                and (
+                    type(marker["claim_envelopes_version"]) is not int
+                    or marker["claim_envelopes_version"] != 1
+                )
             )
             or type(marker["writer_protocol_version"]) is not int
             or marker["writer_protocol_version"] != 1
@@ -1891,6 +1918,22 @@ class ThreadRegistry:
                 )
             if previous := self._threads.get(thread.name):
                 thread = replace(thread, created_at=previous.created_at)
+            elif any(
+                existing.created_at == thread.created_at for existing in self._threads.values()
+            ):
+                # The Windows wall clock can return the same value for six
+                # independent default-constructed threads. Allocate a distinct
+                # identity under this store lock, but never rewrite an explicit
+                # caller-supplied creation identity or alias someone else's claim.
+                if not thread._generated_created_at:
+                    raise RelationViolationError("Registry creation identities collide.")
+                used = {existing.created_at for existing in self._threads.values()}
+                candidate = float(thread.created_at)
+                while candidate in used:
+                    candidate = math.nextafter(candidate, math.inf)
+                if not math.isfinite(candidate):
+                    raise RelationViolationError("Registry creation identities collide.")
+                thread = replace(thread, created_at=candidate)
             self._threads[thread.name] = thread
             self._statuses[thread.name] = status
             self._last_seen[thread.name] = time.time()
@@ -2449,6 +2492,8 @@ class MessageBus:
 
     def _assert_private_directory(self) -> None:
         """Require a nonredirectable, owned ancestry (root sticky /tmp permitted)."""
+        if os.name != "posix":
+            raise RelationViolationError("Private bus requires POSIX ownership and modes.")
         # Walk the lexical absolute spelling, not only a relative root up to
         # Path('.'); resolve() would hide symlink ancestors instead of rejecting them.
         if ".." in self._path.parts:
@@ -2658,14 +2703,17 @@ class MessageBus:
             raise RelationViolationError("Private bus protocol marker is invalid.") from error
         if (
             not isinstance(metadata, dict)
-            or set(metadata) not in (
+            or set(metadata)
+            not in (
                 {"last_seq", "writer_protocol_version", "wire_root_id"},
                 {"last_seq", "writer_protocol_version", "wire_root_id", "claim_envelopes_version"},
             )
             or (
                 "claim_envelopes_version" in metadata
-                and (type(metadata["claim_envelopes_version"]) is not int
-                     or metadata["claim_envelopes_version"] != 1)
+                and (
+                    type(metadata["claim_envelopes_version"]) is not int
+                    or metadata["claim_envelopes_version"] != 1
+                )
             )
             or type(metadata.get("last_seq")) is not int
             or not 0 <= metadata["last_seq"] <= MAX_WIRE_SEQ

@@ -144,7 +144,14 @@ class CommsApp(App[None]):
     # ─── Views ────────────────────────────────────────────────────────────────
 
     def _views(self) -> list[str]:
-        channels = list(self._comms.channels())
+        # Aggregate and saved projection views can be read but cannot receive a send.
+        # Keep the keyboard's send-oriented cycle on authoritative conversations.
+        projections = self._comms.saved_views()
+        channels = [
+            name
+            for name in self._comms.channels()
+            if name not in ("#any", "#none") and name not in projections
+        ]
         dms = sorted(self._comms.registry.active_threads())
         if self._me and self._me in dms:
             dms.remove(self._me)
@@ -152,7 +159,7 @@ class CommsApp(App[None]):
 
     def _current_target(self) -> str:
         """Resolve the current view to a send target."""
-        if self._current in {EVERYTHING_VIEW, "#any"}:
+        if self._current == EVERYTHING_VIEW:
             return GLOBAL_CHANNEL
         if self._current.startswith("@"):
             return self._current[1:]

@@ -180,8 +180,9 @@ def apply_transition(previous: ClaimProjection, transition: ClaimTransition) -> 
     """All-or-nothing immutable projection from caller-verified durable envelopes.
 
     The caller MUST hold the wire→bus locks and verify bus fsync/newline and
-    outer sender/sequence/message identity. Neither this method nor a parser
-    can determine whether an observed row was actually durable.
+    outer sender/sequence/message identity and unique registered creation
+    incarnations. Neither this method nor a parser can determine whether an
+    observed row was actually durable or whether two names are distinct owners.
     """
     if type(previous) is not ClaimProjection or type(transition) is not ClaimTransition:
         raise ClaimTransitionError("Only typed claim projections/transitions are accepted.")
@@ -192,8 +193,11 @@ def apply_transition(previous: ClaimProjection, transition: ClaimTransition) -> 
         current = next_state.get(release.resource)
         if current is None:
             raise ClaimTransitionError("Cannot release a resource without a live claim.")
-        if (current.owner, current.incarnation, current.generation) != (
-            transition.owner,
+        # The envelope owner is the sender's name at publication time. Renaming
+        # preserves the owner's incarnation, but must not strand an older claim
+        # whose envelope recorded a previous name. The generation still fences
+        # release after another owner has acquired the same resource.
+        if (current.incarnation, current.generation) != (
             transition.incarnation,
             release.generation,
         ):

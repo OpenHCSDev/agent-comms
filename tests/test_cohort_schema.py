@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -150,7 +151,9 @@ def test_schema_is_opt_in_versioned_and_idempotent_on_reopen(tmp_path: Path) -> 
         install_private_cohort_schema(store)
         assert _tables(store) == before
         assert store.schema_version == 2
-    assert path.stat().st_mode & 0o077 == 0
+    if os.name == "posix":
+        assert path.stat().st_mode & 0o077 == 0
+    # Windows' st_mode does not attest NTFS ACL protection.
     with MutationStore(str(path)) as reopened:
         install_private_cohort_schema(reopened)
         assert _tables(reopened) == before

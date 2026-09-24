@@ -268,14 +268,25 @@ def _goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 
 
 def _resume_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
+    name = _executing_thread()
+    goal_id = str(arguments["goal_id"])
+    current = comms.registry.require(name).goal
+    if current is None or current.id != goal_id or current.status != "paused":
+        # A blocked goal may have an unresolved paid attempt. Only the
+        # authenticated human-recovery path can decide that disposition.
+        raise ValueError("This goal cannot be resumed; refresh its state.")
+    progress = str(arguments["progress"])
     goal = comms.update_goal(
-        _executing_thread(),
+        name,
         "active",
-        goal_id=str(arguments["goal_id"]),
-        expected_status="paused",
-        progress=str(arguments["progress"]),
+        goal_id=goal_id,
+        expected_status=current.status,
+        expected_goal=current,
+        progress=progress,
     )
-    return {"goal": asdict(goal) if goal else None}
+    if goal is None or not goal.active or goal.progress != progress:
+        raise ValueError("Goal changed during resume; refresh its state.")
+    return {"goal": asdict(goal)}
 
 
 def _collaboration(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
@@ -634,10 +645,10 @@ TOOLS = (
     ),
     ToolDeclaration(
         "comms_collaboration",
-        "Declare collaboration",
-        "Add, update or remove your own explicit ongoing collaboration with another agent. "
-        "This is persistent cooperative metadata only: it does not message, wake, fork "
-        "or modify the peer's collaboration list. Remove the declaration when work ends.",
+        "Manage mutual collaboration",
+        "Create, update or end one mutual contact with another agent. Either participant "
+        "can add, change its shared note, or remove it from both collaboration lists. "
+        "This persistent metadata does not message, wake or fork either agent.",
         (
             ToolParameter(
                 "action", "string", "Relationship change", choices=("add", "update", "remove")
@@ -652,7 +663,7 @@ TOOLS = (
     ToolDeclaration(
         "comms_collaborations",
         "List collaborations",
-        "Read your own explicitly declared ongoing collaborations "
+        "Read your mutual contacts, including links created by either participant, "
         "without changing delivery or owners.",
         (),
         _collaborations,

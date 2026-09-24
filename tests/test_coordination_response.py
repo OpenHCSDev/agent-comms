@@ -41,6 +41,10 @@ from agent_comms.declarations import MessageBus, Thread, ThreadRegistry, _store_
 from agent_comms.operations import Comms
 from agent_comms.wake import derive_exact_reply_target
 
+# Private bus publication requires POSIX owner/mode ancestry; Windows stat
+# emulation cannot attest this boundary or exercise its durability contract.
+pytestmark = pytest.mark.skipif(os.name != "posix", reason="private bus needs POSIX ownership")
+
 
 @dataclass
 class Fixture:

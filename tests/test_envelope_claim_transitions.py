@@ -103,7 +103,7 @@ def test_exact_incarnation_and_generation_fence_releases(tmp_path):
     _, a, _ = resources(tmp_path)
     held = apply_transition(ClaimProjection(), transition(1, claims=(a,), generation=G1))
     for attempt in (
-        transition(2, owner="peer", releases=(ClaimRelease(a, G1),)),
+        transition(2, owner="peer", incarnation="epoch-2", releases=(ClaimRelease(a, G1),)),
         transition(2, incarnation="old-epoch", releases=(ClaimRelease(a, G1),)),
         transition(2, releases=(ClaimRelease(a, G2),)),
     ):
@@ -122,6 +122,42 @@ def test_exact_incarnation_and_generation_fence_releases(tmp_path):
         ClaimProjection(1, [])
     with pytest.raises(ClaimTransitionError, match="exact owner"):
         apply_transition(new, transition(4, releases=(ClaimRelease(a, G1),)))
+
+
+def test_renamed_owner_releases_by_incarnation_without_reusing_stale_generation(tmp_path):
+    _, a, _ = resources(tmp_path)
+    held = apply_transition(
+        ClaimProjection(),
+        transition(1, owner="alice", incarnation="birth-1", claims=(a,), generation=G1),
+    )
+    renamed_release = transition(
+        2, owner="alice-new", incarnation="birth-1", releases=(ClaimRelease(a, G1),)
+    )
+    released = apply_transition(held, renamed_release)
+    assert dict(released) == {}
+    assert released.last_seq == 2
+    assert held[a].owner == "alice"  # provenance of the original claim, not current name
+    assert (
+        project_verified_transitions(
+            (
+                transition(1, owner="alice", incarnation="birth-1", claims=(a,), generation=G1),
+                renamed_release,
+            )
+        )
+        == released
+    )
+    reacquired = apply_transition(
+        released,
+        transition(3, owner="bob", incarnation="birth-2", claims=(a,), generation=G2),
+    )
+    for stale in (
+        transition(4, owner="alice-new", incarnation="birth-1", releases=(ClaimRelease(a, G1),)),
+        transition(4, owner="alice", incarnation="birth-3", releases=(ClaimRelease(a, G2),)),
+        transition(4, owner="bob", incarnation="birth-2", releases=(ClaimRelease(a, G1),)),
+    ):
+        with pytest.raises(ClaimTransitionError, match="exact owner"):
+            apply_transition(reacquired, stale)
+    assert reacquired[a].owner == "bob" and reacquired[a].generation == G2
 
 
 def test_verified_row_replay_is_deterministic_and_requires_order(tmp_path):

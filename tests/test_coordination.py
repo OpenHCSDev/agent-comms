@@ -496,7 +496,8 @@ def test_database_version_privacy_and_reopen(db):
     assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert connection.execute("PRAGMA user_version").fetchone()[0] == COORDINATION_SCHEMA_VERSION
     assert COORDINATION_SNAPSHOT_VERSION == 2
-    assert os.stat(path).st_mode & 0o777 == 0o600
+    if os.name != "nt":  # NTFS access is governed by ACLs, not POSIX mode bits.
+        assert os.stat(path).st_mode & 0o777 == 0o600
     with CoordinationStore(path) as reopened:
         reopened._connection.row_factory = None
         assert reopened.schema_version == COORDINATION_SCHEMA_VERSION
