@@ -19,35 +19,39 @@ TOKEN_LIMIT = (
     "const maxTokens = Math.min(Math.floor(0.8 * reserveTokens), "
     "model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);"
 )
+PROMPT_END = "    promptText += basePrompt;\n"
 BOUNDED = """    // Bound every summary request. A context-overflow recovery cannot summarize
     // the same oversized branch in one provider prompt. Chunk the serialized
     // history and carry a rolling summary; each chunk is a distinct attempt.
     const transcript = serializeConversation(convertToLlm(currentMessages));
     const window = model.contextWindow > 0 ? model.contextWindow : 128000;
-    const charLimit = Math.max(4096, Math.min(64000, Math.floor((window - reserveTokens) * 0.5)));
-    if (!boundedChunk && transcript.length + (previousSummary?.length ?? 0) > charLimit) {
+    const byteLimit = Math.min(64000, Math.floor((window - reserveTokens) * 0.5));
+    if (byteLimit < 4096) throw new Error('Compaction model context is too small');
+    if (!boundedChunk && Buffer.byteLength(transcript, 'utf8') + Buffer.byteLength(previousSummary ?? '', 'utf8') > byteLimit * 0.75) {
         const source = previousSummary
             ? `<previous-summary>\\n${previousSummary}\\n</previous-summary>\\n\\n${transcript}`
             : transcript;
-        const chunkLength = Math.max(1024, Math.floor(charLimit * 0.55));
-        const priorLimit = Math.floor(charLimit * 0.35);
+        const chunkBytes = Math.floor(byteLimit * 0.5);
+        const priorLimit = Math.floor(byteLimit * 0.3);
         let rolling;
         let combinedUsage;
         for (let start = 0; start < source.length;) {
-            let end = Math.min(source.length, start + chunkLength);
+            let end = Math.min(source.length, start + chunkBytes);
+            while (Buffer.byteLength(source.slice(start, end), 'utf8') > chunkBytes)
+                end = start + Math.max(1, Math.floor((end - start) * 0.75));
             if (end < source.length && /[\\uD800-\\uDBFF]/.test(source[end - 1])) end--;
             const newline = source.lastIndexOf('\\n', end);
-            if (newline > start + chunkLength / 2) end = newline + 1;
+            if (newline > start + (end - start) / 2) end = newline + 1;
             const part = source.slice(start, end);
             start = end;
-            if (rolling && rolling.length > priorLimit) {
+            if (rolling && Buffer.byteLength(rolling, 'utf8') > priorLimit) {
                 const compressed = await generateSummaryWithUsage(
                     [{ role: 'user', content: [{ type: 'text', text: rolling }], timestamp: Date.now() }],
                     model, reserveTokens, apiKey, headers, signal, customInstructions,
                     undefined, thinkingLevel, streamFn, env, retry, callbacks, sessionId, true);
                 rolling = compressed.text;
                 combinedUsage = combinedUsage ? combineUsage(combinedUsage, compressed.usage) : compressed.usage;
-                if (rolling.length > priorLimit) throw new Error('Compaction summary exceeds its context budget');
+                if (Buffer.byteLength(rolling, 'utf8') > priorLimit) throw new Error('Compaction summary exceeds its context budget');
             }
             const step = await generateSummaryWithUsage(
                 [{ role: 'user', content: [{ type: 'text', text: part }], timestamp: Date.now() }],
@@ -66,7 +70,7 @@ def main(path: Path) -> None:
     if hashlib.sha256(raw).hexdigest() != STOCK_SHA:
         raise SystemExit("Native compaction source does not match the pinned Pi release")
     source = raw.decode()
-    if source.count(HEADER) != 1 or source.count(TOKEN_LIMIT) != 1:
+    if source.count(HEADER) != 1 or source.count(TOKEN_LIMIT) != 1 or source.count(PROMPT_END) != 1:
         raise SystemExit("Native compaction anchors changed")
     source = source.replace(
         HEADER, HEADER.replace("sessionId) {", "sessionId, boundedChunk = false) {") + BOUNDED
@@ -74,9 +78,14 @@ def main(path: Path) -> None:
     source = source.replace(
         TOKEN_LIMIT,
         "const maxTokens = boundedChunk "
-        "? Math.min(4096, Math.max(256, Math.floor(charLimit / 12)), "
+        "? Math.min(4096, Math.max(256, Math.floor(byteLimit / 12)), "
         "model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY) "
         ": Math.min(Math.floor(0.8 * reserveTokens), model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);",
+    )
+    source = source.replace(
+        PROMPT_END,
+        PROMPT_END + "    if (Buffer.byteLength(promptText, 'utf8') > byteLimit) "
+        "throw new Error('Compaction prompt exceeds its context budget');\n",
     )
     path.write_text(source)
 

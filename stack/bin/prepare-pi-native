@@ -6,8 +6,9 @@ umask 077
 stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 repo_root=$(cd -- "$stack_root/.." && pwd)
 stock=${PI_STOCK_DIR:-/home/ts/.local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent}
-target="$stack_root/.pi-native"
 manifest="$stack_root/pi-native.sha256"
+build_id=$(sha256sum "$manifest" | cut -c1-16)
+target="$stack_root/.pi-native-$build_id"
 bedrock=node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
 
 verify() (

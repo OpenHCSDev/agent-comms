@@ -481,9 +481,13 @@ async def _compact_session_under_fence(
         if selected_provider == "openai-codex":
             agent_dir = Path(os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi/agent")
             credentials_source = agent_dir / "auth.json"
-        profile = _private_policy(
-            credentials_source=credentials_source
-        )  # no child until both retry layers are fsynced
+        # No child until both retry layers are fsynced. OpenRouter needs no
+        # private credential copy; Codex keeps its subscription auth isolated.
+        profile = (
+            _private_policy(credentials_source=credentials_source)
+            if credentials_source is not None
+            else _private_policy()
+        )
     except OSError:
         return {"ok": False, "error": "Private no-retry policy could not be committed."}
     env = os.environ.copy()
