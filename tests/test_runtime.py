@@ -102,7 +102,12 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
     second.on_connect(Client(second_updates))
     try:
         await until(lambda: socket_path(comms.root, child.pid).exists())
-        await until(lambda: comms.activity_of("child").state.value == "idle")
+        # activity_of returns a synthetic idle state before the child starts.
+        # Wait for the idle event emitted after its initial turn instead.
+        await until(
+            lambda: (activity := comms.activity.all_current().get("child")) is not None
+            and activity.state.value == "idle"
+        )
         # The owner need not broadcast an unsolicited initial answer: a
         # completed local turn is not proof that any channel was addressed.
         assert all(m.sender != "child" for m in comms.channel_history("#all"))
