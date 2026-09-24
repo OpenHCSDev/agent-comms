@@ -18,6 +18,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.backend import NATIVE_INPUT_CAPABILITY
 from agent_comms.declarations import ActivityState, UnregisteredThreadError
 from agent_comms.operations import wire
+from agent_comms.runtime import RuntimeProxy, socket_path
 
 
 @pytest.fixture(autouse=True)
@@ -1245,6 +1246,50 @@ class TestAgentTurn:
         agent._schedule_goal("proj")
         assert not agent._pending_turns.get("proj")
         await agent.shutdown()
+
+    async def test_blocked_goal_retry_is_explicit_and_restores_owner_grant(
+        self, wired, tmp_path, monkeypatch
+    ):
+        from agent_comms.goal_attempts import GoalAttemptStore
+
+        agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+        monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+
+        class FakeClient:
+            async def session_update(self, **kwargs):
+                pass
+
+        agent.on_connect(FakeClient())
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        goal = wired.update_goal("proj", "set", text="Keep working")
+        store = agent._open_goal_store()
+        store.create_goal(goal.id)
+        reservation = store.reserve(goal.id, 1)
+        store.claim_launch(reservation)
+        store.record_failed(reservation, "The previous turn failed")
+        blocked = wired.update_goal("proj", "blocked", goal_id=goal.id)
+
+        try:
+            with pytest.raises(ValueError, match="explicit retry"):
+                wired.update_goal("proj", "active", goal_id=goal.id)
+            proxy = RuntimeProxy(agent, "proj", socket_path(wired.root, os.getpid()))
+            result = await proxy.request(
+                "retry_goal", goal_id=goal.id, expected_revision=blocked.revision
+            )
+            resumed = wired.registry.require("proj").goal
+            assert result["goal"]["id"] == resumed.id == goal.id
+            assert resumed.status == "active"
+            generation = GoalAttemptStore(wired.root / "goal-private").snapshot(goal.id)
+            assert (generation.number, generation.state) == (2, "ready")
+            assert store.ready_grant(goal.id, 2)
+            assert agent._pending_turns["proj"][0].goal_id == goal.id
+            with pytest.raises(RuntimeError, match="changed"):
+                await proxy.request(
+                    "retry_goal", goal_id=goal.id, expected_revision=blocked.revision
+                )
+        finally:
+            await agent.shutdown()
 
     async def test_reopened_claimed_goal_attempt_has_no_wake_or_replay(self, monkeypatch):
         from agent_comms.goal_attempts import GoalAttemptStore
