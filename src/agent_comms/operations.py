@@ -1969,7 +1969,7 @@ class Comms:
                 # registry reservation. A coincidentally reused PID cannot.
                 return thread
             owned = replace(thread, pid=owner_pid, active_turn=None)
-            self.registry.register(owned)
+            self.registry.register(owned, new_owner=True)
             return owned
 
     def ensure_owner(
@@ -2010,7 +2010,7 @@ class Comms:
                 if original_owner is not None and identity != original_owner:
                     raise RelationViolationError(f"Owner changed while starting {name!r}.")
                 original_owner = identity
-                epoch = snapshot.owner_epochs.get(canonical)
+                epoch = snapshot.admission_generations.get(canonical)
                 if original_epoch is not None and epoch != original_epoch:
                     raise RelationViolationError(f"Owner epoch changed while starting {name!r}.")
                 if thread.pid <= 0 or not self._process_alive(thread.pid):
@@ -2038,7 +2038,7 @@ class Comms:
                     or not current.statuses.get(canonical, ThreadStatus.STOPPED).visible
                 ):
                     raise RelationViolationError(f"Owner changed while starting {name!r}.")
-                if fresh != thread or current.owner_epochs.get(canonical) != original_epoch:
+                if current.admission_generations.get(canonical) != original_epoch:
                     raise RelationViolationError(f"Owner epoch changed while starting {name!r}.")
                 if not self._process_alive(fresh.pid) or not self._is_local_participant(
                     fresh, wait=False
@@ -2106,7 +2106,7 @@ class Comms:
                         raise ValueError(
                             f"Thread {thread.name!r} has an active turn; wait until idle."
                         )
-                    epoch = snapshot.owner_epochs.get(thread.name)
+                    epoch = snapshot.admission_generations.get(thread.name)
                     if epoch is None:
                         raise RelationViolationError(
                             "Cannot restart an owner without an incarnation."
@@ -2141,8 +2141,7 @@ class Comms:
                 ):
                     raise RelationViolationError("Owner selection changed before restart.")
                 if any(
-                    fresh.threads[thread.name] != thread
-                    or fresh.owner_epochs.get(thread.name) != epoch
+                    fresh.admission_generations.get(thread.name) != epoch
                     for thread, epoch in captured
                 ):
                     raise RelationViolationError("Owner epochs changed before restart.")
@@ -2257,7 +2256,7 @@ class Comms:
                 os.close(read_fd)
         owned = replace(thread, pid=process.pid, active_turn=None)
         try:
-            self.registry.register(owned)
+            self.registry.register(owned, new_owner=True)
             if write_fd >= 0:
                 epoch = self.registry.snapshot().owner_epochs[thread.name]
                 proof = _owner_launch_proof(thread.name, process.pid, epoch)
@@ -2307,7 +2306,7 @@ class Comms:
                         f"Owner changed while stopping {name!r}; refusing a stale signal."
                     )
                 original_owner = identity
-                epoch = snapshot.owner_epochs.get(canonical)
+                epoch = snapshot.admission_generations.get(canonical)
                 if original_epoch is not None and epoch != original_epoch:
                     raise RelationViolationError(f"Owner epoch changed while stopping {name!r}.")
                 if not snapshot.statuses[canonical].active:
@@ -2346,10 +2345,7 @@ class Comms:
                     raise RelationViolationError(
                         f"Owner changed while stopping {name!r}; refusing a stale signal."
                     )
-                if (
-                    current_thread != thread
-                    or current.owner_epochs.get(canonical) != original_epoch
-                ):
+                if current.admission_generations.get(canonical) != original_epoch:
                     raise RelationViolationError(f"Owner epoch changed while stopping {name!r}.")
                 if not self._process_alive(thread.pid):
                     self.registry.unregister(canonical)
@@ -2417,9 +2413,12 @@ class Comms:
 
     def _require_same_stop_owner(self, thread: Thread, epoch: int) -> None:
         snapshot = self.registry.snapshot()
+        current = snapshot.threads.get(thread.name)
         if (
-            snapshot.threads.get(thread.name) != thread
-            or snapshot.owner_epochs.get(thread.name) != epoch
+            current is None
+            or (current.name, current.pid, current.created_at)
+            != (thread.name, thread.pid, thread.created_at)
+            or snapshot.admission_generations.get(thread.name) != epoch
             or not snapshot.statuses.get(thread.name, ThreadStatus.STOPPED).active
         ):
             raise RelationViolationError(
@@ -2458,14 +2457,18 @@ class Comms:
 
     def _released_same_owner(self, snapshot: RegistrySnapshot, thread: Thread, epoch: int) -> bool:
         current = snapshot.threads.get(thread.name)
-        if snapshot.statuses.get(thread.name) is not ThreadStatus.STOPPED or current != replace(
-            thread, active_turn=None
+        if (
+            snapshot.statuses.get(thread.name) is not ThreadStatus.STOPPED
+            or current is None
+            or current.active_turn is not None
+            or (current.name, current.pid, current.created_at)
+            != (thread.name, thread.pid, thread.created_at)
         ):
             return False
         return self._read_owner_release_receipts().get(thread.name) == {
             "pid": thread.pid,
             "before": epoch,
-            "after": snapshot.owner_epochs.get(thread.name),
+            "after": snapshot.admission_generations.get(thread.name),
             "thread": json.dumps(current.to_wire(), sort_keys=True),
         }
 
@@ -2498,9 +2501,9 @@ class Comms:
         owner = snapshot.threads[canonical]
         if owner.pid > 0 and owner.pid != os.getpid():
             raise RelationViolationError("Only the registered owner may release itself.")
-        before = snapshot.owner_epochs[canonical]
+        before = snapshot.admission_generations[canonical]
         self.registry.unregister(canonical)
-        after = self.registry.snapshot().owner_epochs[canonical]
+        after = self.registry.snapshot().admission_generations[canonical]
         receipts = self._read_owner_release_receipts()
         receipts[canonical] = {
             "pid": owner.pid,

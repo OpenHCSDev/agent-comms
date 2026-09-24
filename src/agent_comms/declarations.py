@@ -1647,6 +1647,7 @@ class RegistrySnapshot:
     aliases: Mapping[str, str]
     owner_epochs: Mapping[str, int]
     turn_epochs: Mapping[str, int]
+    admission_generations: Mapping[str, int]
 
 
 class ThreadRegistry:
@@ -1661,10 +1662,12 @@ class ThreadRegistry:
         self._revision: tuple[int, int, int, int] | None = None
         # Private registry metadata, never a Thread wire field or public bus field.
         self._owner_epochs: dict[str, int] = {}
+        self._admission_generations: dict[str, int] = {}
         # Only an atomic turn claim may create this private attestation. A
         # registration cannot restore a saved ActiveTurn after it was revoked.
         self._turn_epochs: dict[str, int] = {}
         self._owner_epoch_counter = 0
+        self._admission_generation_counter = 0
         self._epoch_metadata_present = False
         self._load()
 
@@ -1799,6 +1802,29 @@ class ThreadRegistry:
             self._owner_epochs = {name: index for index, name in enumerate(sorted(legacy), start=1)}
             self._turn_epochs = {}
             self._owner_epoch_counter = len(self._owner_epochs)
+        has_admissions = "admission_generations" in raw or "admission_generation_counter" in raw
+        if has_admissions:
+            admissions = raw.get("admission_generations")
+            admission_counter = raw.get("admission_generation_counter")
+            if (
+                type(admissions) is not dict
+                or type(admission_counter) is not int
+                or admission_counter < 0
+                or any(
+                    type(name) is not str
+                    or type(generation) is not int
+                    or not 0 < generation <= admission_counter
+                    for name, generation in admissions.items()
+                )
+            ):
+                raise RelationViolationError("invalid owner admission generations")
+            self._admission_generations = dict(admissions)
+            self._admission_generation_counter = admission_counter
+        else:
+            # Existing roots acquire a durable admission witness on their next
+            # registry write. Metadata revisions no longer rotate it.
+            self._admission_generations = dict(self._owner_epochs)
+            self._admission_generation_counter = self._owner_epoch_counter
         self._epoch_metadata_present = has_epochs
         self._threads.clear()
         self._statuses.clear()
@@ -1830,6 +1856,8 @@ class ThreadRegistry:
             self._last_seen[name] = data.get("last_seen", 0.0)
             if has_epochs and name not in self._owner_epochs:
                 raise RelationViolationError("missing private registry owner epoch")
+            if has_admissions and name not in self._admission_generations:
+                raise RelationViolationError("missing private registry admission generation")
         if any(
             name not in self._threads or self._threads[name].active_turn is None
             for name in self._turn_epochs
@@ -1877,6 +1905,10 @@ class ThreadRegistry:
         self._owner_epoch_counter += 1
         self._owner_epochs[name] = self._owner_epoch_counter
 
+    def _bump_admission_unlocked(self, name: str) -> None:
+        self._admission_generation_counter += 1
+        self._admission_generations[name] = self._admission_generation_counter
+
     def _save_unlocked(self) -> None:
         # A failed write must never make speculative in-memory mutations authoritative.
         self._revision = None
@@ -1895,18 +1927,26 @@ class ThreadRegistry:
                 "owner_epoch_counter": self._owner_epoch_counter,
                 "owner_epochs": dict(sorted(self._owner_epochs.items())),
                 "turn_epochs": dict(sorted(self._turn_epochs.items())),
+                "admission_generation_counter": self._admission_generation_counter,
+                "admission_generations": dict(sorted(self._admission_generations.items())),
             },
             indent=2,
         )
         if guard is None:
-            _atomic_write_text(self._path, serialized)
+            _atomic_write_text(self._path, serialized, fsync_parent=True)
         else:
             digest = hashlib.sha256(b"present\0" + serialized.encode("utf-8")).digest()
             sequence, slot = guard.prepare(digest)
             _atomic_write_text(self._path, serialized, fsync_parent=True)
             guard.commit(sequence, slot, digest)
 
-    def register(self, thread: Thread, status: ThreadStatus = ThreadStatus.RUNNING) -> None:
+    def register(
+        self,
+        thread: Thread,
+        status: ThreadStatus = ThreadStatus.RUNNING,
+        *,
+        new_owner: bool = False,
+    ) -> None:
         with _store_lock(self._path):
             self._load_unlocked()
             if thread.name in self._aliases:
@@ -1917,7 +1957,9 @@ class ThreadRegistry:
                 raise RelationViolationError(
                     f"Thread {thread.name!r} is being permanently deleted."
                 )
-            if previous := self._threads.get(thread.name):
+            previous = self._threads.get(thread.name)
+            previous_status = self._statuses.get(thread.name)
+            if previous:
                 thread = replace(thread, created_at=previous.created_at)
             elif any(
                 existing.created_at == thread.created_at for existing in self._threads.values()
@@ -1938,6 +1980,15 @@ class ThreadRegistry:
             self._threads[thread.name] = thread
             self._statuses[thread.name] = status
             self._last_seen[thread.name] = time.time()
+            if (
+                previous is None
+                or new_owner
+                or previous.pid != thread.pid
+                or previous.role != thread.role
+                or previous.worktree != thread.worktree
+                or (previous_status is not None and previous_status.active != status.active)
+            ):
+                self._bump_admission_unlocked(thread.name)
             self._bump_owner_epoch_unlocked(thread.name)
             self._save_unlocked()
 
@@ -2119,6 +2170,7 @@ class ThreadRegistry:
                     self._aliases[alias] = new_name
             self._aliases[canonical] = new_name
             self._turn_epochs.pop(canonical, None)
+            self._bump_admission_unlocked(new_name)
             self._bump_owner_epoch_unlocked(new_name)
             self._save_unlocked()
             return canonical, new_name
@@ -2131,6 +2183,7 @@ class ThreadRegistry:
                 raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
             self._statuses[name] = ThreadStatus.STOPPED
             self._threads[name] = replace(self._threads[name], active_turn=None)
+            self._bump_admission_unlocked(name)
             self._bump_owner_epoch_unlocked(name)
             self._save_unlocked()
 
@@ -2141,6 +2194,7 @@ class ThreadRegistry:
             if name not in self._threads:
                 raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
             self._statuses[name] = ThreadStatus.ARCHIVED
+            self._bump_admission_unlocked(name)
             self._bump_owner_epoch_unlocked(name)
             self._save_unlocked()
 
@@ -2156,6 +2210,7 @@ class ThreadRegistry:
                     "Stop a running thread before permanently deleting it."
                 )
             self._statuses[name] = ThreadStatus.DELETING
+            self._bump_admission_unlocked(name)
             self._bump_owner_epoch_unlocked(name)
             self._save_unlocked()
 
@@ -2176,6 +2231,7 @@ class ThreadRegistry:
             self._last_seen.pop(name, None)
             # Retain the private tombstone epoch: reusing a name cannot recycle
             # an earlier owner's incarnation after deletion.
+            self._bump_admission_unlocked(name)
             self._bump_owner_epoch_unlocked(name)
             self._aliases = {
                 alias: target for alias, target in self._aliases.items() if target != name
@@ -2192,6 +2248,7 @@ class ThreadRegistry:
             if not self._statuses.get(name, ThreadStatus.RUNNING).mutable:
                 raise RelationViolationError(f"Thread {name!r} is being permanently deleted.")
             if self._statuses[name] is not ThreadStatus.RUNNING:
+                self._bump_admission_unlocked(name)
                 self._bump_owner_epoch_unlocked(name)
             self._statuses[name] = ThreadStatus.RUNNING
             self._last_seen[name] = time.time()
@@ -2232,6 +2289,7 @@ class ThreadRegistry:
             dict(self._aliases),
             dict(self._owner_epochs),
             dict(self._turn_epochs),
+            dict(self._admission_generations),
         )
 
     def snapshot(self) -> RegistrySnapshot:

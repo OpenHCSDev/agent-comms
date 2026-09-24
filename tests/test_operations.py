@@ -389,14 +389,39 @@ class TestThreadOps:
         assert wired.registry.status("starting").value == "stopped"
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_accepts_session_metadata_from_same_owner(self, wired, monkeypatch, tmp_path):
+        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        signals = []
+        session = tmp_path / "session.jsonl"
+        session.touch()
+
+        def prove_owner(self, thread, *, wait=True):
+            if wait:
+                self.attach_session(thread.name, str(session))
+            return True
+
+        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", prove_owner)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._process_alive", lambda *args: not signals
+        )
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._signal_local_owner",
+            staticmethod(lambda pid, sig: signals.append((pid, sig))),
+        )
+
+        wired.stop("starting")
+        assert signals == [(987654, signal.SIGTERM)]
+        assert wired.registry.status("starting").value == "stopped"
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_rejects_same_pid_new_epoch_before_signal(self, wired, monkeypatch):
         wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
-        before = wired.registry.snapshot().owner_epochs["starting"]
+        before = wired.registry.snapshot().admission_generations["starting"]
         signals = []
 
         def epoch_changed(self, thread, *, wait=True):
             if wait:
-                self.registry.register(thread)  # Same name/PID/created_at, NEW incarnation.
+                self.registry.register(thread, new_owner=True)  # Same PID, new process.
             return True
 
         monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
@@ -408,7 +433,7 @@ class TestThreadOps:
         with pytest.raises(RelationViolationError, match="epoch changed"):
             wired.stop("starting")
         assert signals == []
-        assert wired.registry.snapshot().owner_epochs["starting"] > before
+        assert wired.registry.snapshot().admission_generations["starting"] > before
         assert wired.registry.status("starting").active
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
@@ -619,12 +644,12 @@ class TestThreadOps:
     def test_restart_rejects_same_pid_new_epoch_without_partial_signal(self, wired, monkeypatch):
         wired.register(Thread(name="restart-a", tags=frozenset(), worktree="/tmp", pid=987654))
         wired.register(Thread(name="restart-b", tags=frozenset(), worktree="/tmp", pid=987655))
-        before = wired.registry.snapshot().owner_epochs["restart-a"]
+        before = wired.registry.snapshot().admission_generations["restart-a"]
         signals = []
 
         def epoch_changed(self, thread, *, wait=True):
             if wait and thread.name == "restart-a":
-                self.registry.register(thread)
+                self.registry.register(thread, new_owner=True)
             return True
 
         monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
@@ -636,7 +661,7 @@ class TestThreadOps:
         with pytest.raises(RelationViolationError, match="epochs changed"):
             wired.restart_owners(["restart-a", "restart-b"])
         assert signals == []
-        assert wired.registry.snapshot().owner_epochs["restart-a"] > before
+        assert wired.registry.snapshot().admission_generations["restart-a"] > before
         assert wired.registry.status("restart-b").active
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")

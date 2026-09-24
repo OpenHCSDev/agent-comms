@@ -230,6 +230,20 @@ class TestThreadRegistry:
             registry.claim_live_turn(expected, "new-turn", expected_epoch=epoch)
         assert registry.require("a").active_turn is None
 
+    def test_owner_admission_survives_session_metadata_and_rotates_on_restart(
+        self, tmp_path: Path
+    ) -> None:
+        registry = ThreadRegistry(tmp_path / "registry.json")
+        owner = Thread(name="a", tags=frozenset(), worktree="/wt", pid=1234)
+        registry.register(owner)
+        before = registry.snapshot().admission_generations["a"]
+        registry.register(replace(owner, session_file=str(tmp_path / "session.jsonl")))
+        assert registry.snapshot().admission_generations["a"] == before
+        assert ThreadRegistry(registry._path).snapshot().admission_generations["a"] == before
+
+        registry.register(replace(registry.require("a"), pid=5678))
+        assert registry.snapshot().admission_generations["a"] > before
+
     def test_other_owner_writes_do_not_invalidate_private_epoch(self, tmp_path: Path):
         registry = ThreadRegistry(tmp_path / "registry.json")
         for name in ("a", "b"):
