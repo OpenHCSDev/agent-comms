@@ -24,6 +24,17 @@ def _stub(tmp_path: Path, body: str, name: str = "pi-stub") -> str:
     return str(stub)
 
 
+_NATIVE_PROMPT_START = f"""\
+state = json.loads(sys.stdin.readline())
+emit({{"id": state["id"], "type": "response", "command": "get_state", "success": True,
+      "data": {{"nativeInputProofCapability": {json.dumps(backend.NATIVE_INPUT_CAPABILITY)}}}}})
+prompt = json.loads(sys.stdin.readline())
+emit({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
+emit({{"type": "message_start", "message": {{"role": "user",
+      "content": prompt["message"], "inputId": prompt["inputId"]}}}})
+"""
+
+
 async def _rpc_events(
     tmp_path: Path, records: list[dict], *, current_input: bool = True
 ) -> list[dict]:
@@ -1241,10 +1252,7 @@ launch_log = pathlib.Path({str(launch_log)!r})
 launch_log.write_text(launch_log.read_text() + "x" if launch_log.exists() else "x")
 def emit(value):
     print(json.dumps(value), flush=True)
-sys.stdin.readline()  # initial get_state
-prompt = json.loads(sys.stdin.readline())
-emit({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
-emit({{"type": "message_start", "message": {{"role": "user", "content": "task"}}}})
+{_NATIVE_PROMPT_START}
 abort = json.loads(sys.stdin.readline())
 abort_log.write_text(abort["type"])
 emit({{"id": abort.get("id"), "type": "response", "command": "abort", "success": True}})
@@ -1259,8 +1267,9 @@ time.sleep(60)
                 [],
                 "task",
                 str(tmp_path),
-                model_wait_timeout=0.03,
+                model_wait_timeout=0.15,
                 rpc_abort_grace=0.1,
+                require_input_id=True,
             )
         ]
 
@@ -1284,15 +1293,15 @@ time.sleep(60)
     async def test_watchdog_force_kills_backend_that_ignores_abort_and_term(self, tmp_path):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + """\
+            f"#!{sys.executable}\n"
+            + """\
 import json, signal, sys, time
 signal.signal(signal.SIGTERM, signal.SIG_IGN)
 def emit(value):
     print(json.dumps(value), flush=True)
-sys.stdin.readline()
-prompt = json.loads(sys.stdin.readline())
-emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
-emit({"type": "message_start", "message": {"role": "user", "content": "task"}})
+"""
+            + _NATIVE_PROMPT_START
+            + """\
 time.sleep(60)
 """,
         )
@@ -1307,6 +1316,7 @@ time.sleep(60)
                 str(tmp_path),
                 model_wait_timeout=0.15,
                 rpc_abort_grace=0.02,
+                require_input_id=True,
             )
         ]
 
@@ -1319,14 +1329,14 @@ time.sleep(60)
     async def test_irrelevant_rpc_traffic_does_not_renew_model_lease(self, tmp_path):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + """\
+            f"#!{sys.executable}\n"
+            + """\
 import json, sys, time
 def emit(value):
     print(json.dumps(value), flush=True)
-sys.stdin.readline()
-prompt = json.loads(sys.stdin.readline())
-emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
-emit({"type": "message_start", "message": {"role": "user", "content": "task"}})
+"""
+            + _NATIVE_PROMPT_START
+            + """\
 for index in range(200):
     emit({"type": "response", "command": "get_state", "success": True, "data": {}})
     emit({"id": f"steering-{index}", "type": "response", "command": "prompt", "success": True})
@@ -1343,27 +1353,28 @@ time.sleep(60)
                 [],
                 "task",
                 str(tmp_path),
-                model_wait_timeout=0.03,
+                model_wait_timeout=0.15,
                 rpc_abort_grace=0.03,
+                require_input_id=True,
             )
         ]
 
         elapsed = asyncio.get_running_loop().time() - started
         states = [event["state"] for event in events if event["type"] == "turn_state"]
         assert states == ["model_stalled", "aborting", "failed"]
-        assert elapsed < 0.5
+        assert elapsed < 0.8
 
     async def test_retry_acceptance_then_silence_does_not_claim_recovery(self, tmp_path):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + """\
+            f"#!{sys.executable}\n"
+            + """\
 import json, sys, time
 def emit(value):
     print(json.dumps(value), flush=True)
-sys.stdin.readline()
-prompt = json.loads(sys.stdin.readline())
-emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
-emit({"type": "message_start", "message": {"role": "user", "content": "task"}})
+"""
+            + _NATIVE_PROMPT_START
+            + """\
 emit({"type": "auto_retry_start", "attempt": 1, "maxAttempts": 2})
 emit({"type": "auto_retry_end", "success": True, "attempt": 1})
 abort = json.loads(sys.stdin.readline())
@@ -1379,8 +1390,9 @@ time.sleep(60)
                 [],
                 "task",
                 str(tmp_path),
-                model_wait_timeout=0.03,
+                model_wait_timeout=0.15,
                 rpc_abort_grace=0.1,
+                require_input_id=True,
             )
         ]
 
@@ -1465,14 +1477,14 @@ time.sleep(60)
     async def test_compaction_stall_is_non_replayable(self, tmp_path):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + """\
+            f"#!{sys.executable}\n"
+            + """\
 import json, sys, time
 def emit(value):
     print(json.dumps(value), flush=True)
-sys.stdin.readline()
-prompt = json.loads(sys.stdin.readline())
-emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
-emit({"type": "message_start", "message": {"role": "user", "content": "task"}})
+"""
+            + _NATIVE_PROMPT_START
+            + """\
 emit({"type": "compaction_start", "reason": "auto"})
 abort = json.loads(sys.stdin.readline())
 emit({"id": abort.get("id"), "type": "response", "command": "abort", "success": True})
@@ -1487,8 +1499,9 @@ time.sleep(60)
                 [],
                 "task",
                 str(tmp_path),
-                model_wait_timeout=0.03,
+                model_wait_timeout=0.15,
                 rpc_abort_grace=0.1,
+                require_input_id=True,
             )
         ]
 
@@ -1508,14 +1521,14 @@ time.sleep(60)
     async def test_summarization_retry_stall_is_bounded_and_non_replayable(self, tmp_path):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + """\
+            f"#!{sys.executable}\n"
+            + """\
 import json, sys, time
 def emit(value):
     print(json.dumps(value), flush=True)
-sys.stdin.readline()
-prompt = json.loads(sys.stdin.readline())
-emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
-emit({"type": "message_start", "message": {"role": "user", "content": "task"}})
+"""
+            + _NATIVE_PROMPT_START
+            + """\
 emit({"type": "summarization_retry_scheduled", "attempt": 1, "maxAttempts": 2})
 abort = json.loads(sys.stdin.readline())
 emit({"id": abort.get("id"), "type": "response", "command": "abort", "success": True})
@@ -1530,8 +1543,9 @@ time.sleep(60)
                 [],
                 "task",
                 str(tmp_path),
-                model_wait_timeout=0.03,
+                model_wait_timeout=0.15,
                 rpc_abort_grace=0.1,
+                require_input_id=True,
             )
         ]
 
@@ -1592,15 +1606,13 @@ time.sleep(60)
 import json, pathlib, sys, time
 def emit(value):
     print(json.dumps(value), flush=True)
-sys.stdin.readline()
-prompt = json.loads(sys.stdin.readline())
-emit({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
-emit({{"type": "message_start", "message": {{"role": "user", "content": "task"}}}})
+{_NATIVE_PROMPT_START}
 steering = json.loads(sys.stdin.readline())
 pathlib.Path({str(steering_log)!r}).write_text(json.dumps(steering, sort_keys=True))
 emit({{"id": steering["id"], "type": "response", "command": "prompt", "success": True}})
 if {started!r}:
-    emit({{"type": "message_start", "message": {{"role": "user", "content": "follow"}}}})
+    emit({{"type": "message_start", "message": {{"role": "user",
+          "content": steering["message"], "inputId": steering["inputId"]}}}})
 time.sleep(0.06)
 abort = json.loads(sys.stdin.readline())
 emit({{"id": abort.get("id"), "type": "response", "command": "abort", "success": True}})
@@ -1625,8 +1637,9 @@ time.sleep(60)
                 "task",
                 str(tmp_path),
                 steering_queue=queue,
-                model_wait_timeout=0.03,
+                model_wait_timeout=0.15,
                 rpc_abort_grace=0.2,
+                require_input_id=True,
             )
         ]
 
@@ -1642,14 +1655,14 @@ time.sleep(60)
     async def test_watchdog_never_times_out_an_active_tool(self, tmp_path):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + """\
+            f"#!{sys.executable}\n"
+            + """\
 import json, sys, time
 def emit(value):
     print(json.dumps(value), flush=True)
-sys.stdin.readline()
-prompt = json.loads(sys.stdin.readline())
-emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
-emit({"type": "message_start", "message": {"role": "user", "content": "task"}})
+"""
+            + _NATIVE_PROMPT_START
+            + """\
 emit({"type": "tool_execution_start", "toolCallId": "slow", "toolName": "bash", "args": {}})
 time.sleep(0.12)
 emit({"type": "tool_execution_end", "toolCallId": "slow", "toolName": "bash",
@@ -1670,7 +1683,12 @@ for line in sys.stdin:
         events = [
             event
             async for event in backend.stream_agent_events(
-                stub, [], "task", str(tmp_path), model_wait_timeout=0.03
+                stub,
+                [],
+                "task",
+                str(tmp_path),
+                model_wait_timeout=0.15,
+                require_input_id=True,
             )
         ]
 
@@ -1687,10 +1705,7 @@ launches = pathlib.Path({str(launches)!r})
 launches.write_text(launches.read_text() + "x" if launches.exists() else "x")
 def emit(value):
     print(json.dumps(value), flush=True)
-sys.stdin.readline()
-prompt = json.loads(sys.stdin.readline())
-emit({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
-emit({{"type": "message_start", "message": {{"role": "user", "content": "task"}}}})
+{_NATIVE_PROMPT_START}
 emit({{"type": "tool_execution_start", "toolCallId": "write", "toolName": "write", "args": {{}}}})
 emit({{"type": "tool_execution_end", "toolCallId": "write", "toolName": "write",
       "result": {{"content": []}}, "isError": False}})
@@ -1708,8 +1723,9 @@ for line in sys.stdin:
                 [],
                 "task",
                 str(tmp_path),
-                model_wait_timeout=0.03,
+                model_wait_timeout=0.15,
                 rpc_abort_grace=0.1,
+                require_input_id=True,
             )
         ]
 

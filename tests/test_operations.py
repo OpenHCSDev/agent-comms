@@ -439,6 +439,44 @@ class TestThreadOps:
         assert wired.registry.status("starting").active
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_accepts_same_process_startup_registration(self, wired, monkeypatch):
+        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        before = wired.registry.snapshot().admission_generations["starting"]
+        signals = []
+
+        def startup_registration(self, thread, *, wait=True):
+            if wait:
+                # The child confirms its own declaration while stop waits for
+                # its owner socket. This is normal startup, not a new owner.
+                with monkeypatch.context() as local_patch:
+                    local_patch.setattr(os, "getpid", lambda: thread.pid)
+                    self.register(
+                        Thread(
+                            name=thread.name,
+                            tags=thread.tags,
+                            worktree=thread.worktree,
+                            pid=thread.pid,
+                        )
+                    )
+                assert self.registry.snapshot().admission_generations[thread.name] == before
+            return True
+
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._is_local_participant", startup_registration
+        )
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._process_alive", lambda *args: not signals
+        )
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._signal_local_owner",
+            staticmethod(lambda pid, sig: signals.append((pid, sig))),
+        )
+
+        wired.stop("starting")
+        assert signals == [(987654, signal.SIGTERM)]
+        assert wired.registry.status("starting").stopped
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_accepts_project_change_from_same_owner(self, wired, monkeypatch, tmp_path):
         wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
         before = wired.registry.snapshot().admission_generations["starting"]
