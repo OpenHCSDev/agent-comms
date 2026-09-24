@@ -2309,6 +2309,51 @@ send({{"type":"agent_settled"}})
         if not expected_ok:
             assert events[-1]["reason_code"] == "current_prompt_input_missing"
 
+    async def test_native_steer_start_before_prompt_ack_is_authoritative(self, tmp_path):
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + """
+import json, sys
+send = lambda event: print(json.dumps(event), flush=True)
+state = json.loads(sys.stdin.readline())
+send({"type":"response","command":"get_state","id":state["id"],
+      "success":True,"data":{"nativeInputProofCapability":"pi-native-input-v1-live-only"}})
+prompt = json.loads(sys.stdin.readline())
+send({"type":"response","command":"prompt","id":prompt["id"],"success":True})
+send({"type":"message_start","message":{"role":"user","content":prompt["message"],
+      "inputId":prompt["inputId"]}})
+steer = json.loads(sys.stdin.readline())
+send({"type":"message_start","message":{"role":"user","content":steer["message"],
+      "inputId":steer["inputId"]}})
+send({"type":"response","command":"prompt","id":steer["id"],"success":True})
+send({"type":"message_end","message":{"role":"assistant","stopReason":"stop"}})
+send({"type":"agent_settled"})
+for line in sys.stdin:
+    if json.loads(line)["type"] == "get_session_stats":
+        send({"type":"response","command":"get_session_stats","success":True,
+              "data":{"contextUsage":{}}})
+        break
+""",
+        )
+        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue.put_nowait("channel mention")
+        starts = []
+
+        def native_start(public_id, native_id, text):
+            starts.append((public_id, native_id, text))
+            return True
+
+        events = [
+            event
+            async for event in backend.stream_agent_events(
+                stub, [], "goal request", str(tmp_path), steering_queue=queue,
+                native_start=native_start,
+            )
+        ]
+        assert events[-1]["ok"] is True, events
+        assert [text for _, _, text in starts] == ["goal request", "channel mention"]
+        assert len([e for e in events if e["type"] == "input_started"]) == 2
+
 
 # PR#1 parser assertions retained alongside V3 projection/watchdog coverage.
 class TestPrRpcParsing:
