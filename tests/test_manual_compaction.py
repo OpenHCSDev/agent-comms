@@ -72,8 +72,10 @@ async def test_openrouter_compaction_carries_private_auth_before_preflight(tmp_p
 
     monkeypatch.setattr(compact, "_private_policy", checked_profile)
     result = await compact.compact_session(
-        str(backend), ["--provider", "openrouter", "--model", "fake"],
-        str(session), str(tmp_path),
+        str(backend),
+        ["--provider", "openrouter", "--model", "fake"],
+        str(session),
+        str(tmp_path),
     )
     assert result["ok"] is False
     assert copied == [True]
@@ -262,10 +264,13 @@ async def test_real_pi_compacts_exact_saved_session(tmp_path, monkeypatch, statu
         (inherited / "settings.json").write_text(
             '{"retry":{"enabled":true,"maxRetries":9,"provider":{"maxRetries":9}}}'
         )
-        (inherited / "auth.json").write_text('{"sentinel":"not-a-real-credential"}')
+        fake_auth = '{"openrouter":{"type":"api_key","key":"local-fixture"}}'
+        (inherited / "auth.json").write_text(fake_auth)
+        (inherited / "auth.json").chmod(0o600)
         monkeypatch.setenv("PI_CODING_AGENT_DIR", str(inherited))
         exe = wrapper(tmp_path, monkeypatch, port)
-        # Explicit fake model and loopback URL; no auth.json or inherited creds.
+        # Explicit fake model and loopback URL; the inherited local fixture
+        # credential is copied into the private profile without changing it.
         result = await compact.compact_session(
             exe,
             ["--print", "--provider", "openrouter", "--model", "fake-compact"],
@@ -276,7 +281,7 @@ async def test_real_pi_compacts_exact_saved_session(tmp_path, monkeypatch, statu
         assert provider.posts >= 1, (result, provider.paths)
         assert all(path == "POST /v1/chat/completions HTTP/1.1" for path in provider.paths)
         assert not Path((tmp_path / "profile").read_text()).exists()
-        assert (inherited / "auth.json").read_text() == '{"sentinel":"not-a-real-credential"}'
+        assert (inherited / "auth.json").read_text() == fake_auth
         if status == 200:
             assert result["ok"] is True, result
             assert "local summary" in result["summary"]

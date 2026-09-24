@@ -477,12 +477,16 @@ async def _compact_session_under_fence(
     except (OSError, ValueError, TypeError):
         return {"ok": False, "error": "Saved session or pinned Pi backend is unavailable."}
     try:
-        credentials_source = None
-        if selected_provider == "openai-codex":
-            agent_dir = Path(os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi/agent")
-            credentials_source = agent_dir / "auth.json"
-        # No child until both retry layers are fsynced. OpenRouter needs no
-        # private credential copy; Codex keeps its subscription auth isolated.
+        agent_dir = Path(os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi/agent")
+        auth_file = agent_dir / "auth.json"
+        # The private Pi profile otherwise hides an OpenRouter key saved in
+        # auth.json. Codex requires this file; OpenRouter can also use an
+        # explicit API key when no saved credential exists.
+        credentials_source = (
+            auth_file if auth_file.exists() or selected_provider == "openai-codex" else None
+        )
+        # No child until both retry layers are fsynced. Pi resolves saved
+        # credentials from this private copy when the selected model needs it.
         profile = (
             _private_policy(credentials_source=credentials_source)
             if credentials_source is not None

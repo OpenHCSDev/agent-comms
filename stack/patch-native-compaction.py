@@ -20,13 +20,29 @@ TOKEN_LIMIT = (
     "model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);"
 )
 PROMPT_END = "    promptText += basePrompt;\n"
+TURN_PREFIX_PROMPT = (
+    "    const promptText = `<conversation>\\n${conversationText}\\n</conversation>\\n\\n"
+    "${TURN_PREFIX_SUMMARIZATION_PROMPT}`;\n"
+)
+LIMIT_HELPER = """function summaryByteLimit(model, reserveTokens) {
+    const window = model.contextWindow > 0 ? model.contextWindow : 128000;
+    const byteLimit = Math.min(64000, Math.floor((window - reserveTokens) * 0.5));
+    if (byteLimit < 4096) throw new Error('Compaction model context is too small');
+    return byteLimit;
+}
+"""
+TURN_PREFIX_BOUNDED = """    const byteLimit = summaryByteLimit(model, reserveTokens);
+    if (Buffer.byteLength(conversationText, 'utf8') > byteLimit * 0.75) {
+        return generateSummaryWithUsage(messages, model, reserveTokens, apiKey, headers,
+            signal, TURN_PREFIX_SUMMARIZATION_PROMPT, undefined, thinkingLevel,
+            streamFn, env, retry, callbacks, sessionId);
+    }
+"""
 BOUNDED = """    // Bound every summary request. A context-overflow recovery cannot summarize
     // the same oversized branch in one provider prompt. Chunk the serialized
     // history and carry a rolling summary; each chunk is a distinct attempt.
     const transcript = serializeConversation(convertToLlm(currentMessages));
-    const window = model.contextWindow > 0 ? model.contextWindow : 128000;
-    const byteLimit = Math.min(64000, Math.floor((window - reserveTokens) * 0.5));
-    if (byteLimit < 4096) throw new Error('Compaction model context is too small');
+    const byteLimit = summaryByteLimit(model, reserveTokens);
     if (!boundedChunk && Buffer.byteLength(transcript, 'utf8') + Buffer.byteLength(previousSummary ?? '', 'utf8') > byteLimit * 0.75) {
         const source = previousSummary
             ? `<previous-summary>\\n${previousSummary}\\n</previous-summary>\\n\\n${transcript}`
@@ -70,10 +86,18 @@ def main(path: Path) -> None:
     if hashlib.sha256(raw).hexdigest() != STOCK_SHA:
         raise SystemExit("Native compaction source does not match the pinned Pi release")
     source = raw.decode()
-    if source.count(HEADER) != 1 or source.count(TOKEN_LIMIT) != 1 or source.count(PROMPT_END) != 1:
+    if (
+        source.count(HEADER) != 1
+        or source.count(TOKEN_LIMIT) != 1
+        or source.count(PROMPT_END) != 1
+        or source.count(TURN_PREFIX_PROMPT) != 1
+    ):
         raise SystemExit("Native compaction anchors changed")
     source = source.replace(
-        HEADER, HEADER.replace("sessionId) {", "sessionId, boundedChunk = false) {") + BOUNDED
+        HEADER,
+        LIMIT_HELPER
+        + HEADER.replace("sessionId) {", "sessionId, boundedChunk = false) {")
+        + BOUNDED,
     )
     source = source.replace(
         TOKEN_LIMIT,
@@ -86,6 +110,13 @@ def main(path: Path) -> None:
         PROMPT_END,
         PROMPT_END + "    if (Buffer.byteLength(promptText, 'utf8') > byteLimit) "
         "throw new Error('Compaction prompt exceeds its context budget');\n",
+    )
+    source = source.replace(
+        TURN_PREFIX_PROMPT,
+        TURN_PREFIX_BOUNDED
+        + TURN_PREFIX_PROMPT
+        + "    if (Buffer.byteLength(promptText, 'utf8') > byteLimit) "
+        "throw new Error('Turn prefix prompt exceeds its context budget');\n",
     )
     path.write_text(source)
 
