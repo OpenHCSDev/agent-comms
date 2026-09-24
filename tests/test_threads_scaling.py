@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 
 import pytest
@@ -34,19 +35,18 @@ def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
     wired.stop("third")
     assert _listed(wired, active_only=True) == _expected(wired, active_only=True)
 
-    # In a fresh CLI process there is no per-viewer cache. Still only one
-    # wire parser pass, including when stopped threads remain in the registry.
+    # A fresh CLI process uses the durable projection without parsing history.
     fresh = wire(wired.root)
     calls = []
-    original = fresh.bus._iter_pending_routes_unlocked
+    original = fresh.bus._pending_route_fields
 
-    def measured():
+    def measured(record):
         calls.append("scan")
-        yield from original()
+        return original(record)
 
-    monkeypatch.setattr(fresh.bus, "_iter_pending_routes_unlocked", measured)
+    monkeypatch.setattr(fresh.bus, "_pending_route_fields", measured)
     assert _listed(fresh) == _expected(wired)
-    assert calls == ["scan"]
+    assert calls == []
 
 
 def test_reopened_listing_does_not_parse_unchanged_bus_history(wired, monkeypatch):
@@ -69,6 +69,32 @@ def test_reopened_listing_does_not_parse_unchanged_bus_history(wired, monkeypatc
     wired.send("PR111", "fixer", "new message")
     assert _listed(fresh)["fixer"] == 101
     assert parsed == [101]
+
+
+def test_route_projection_rebuilds_after_atomic_bus_replacement(wired):
+    wired.send("PR111", "fixer", "first")
+    wired.send("PR111", "fixer", "second")
+    assert _listed(wired)["fixer"] == 2
+    bus_path = wired.bus._path
+    rows = bus_path.read_bytes().splitlines(keepends=True)
+    replacement = bus_path.with_name("replacement.jsonl")
+    replacement.write_bytes(rows[1])
+    os.replace(replacement, bus_path)
+    assert _listed(wire(wired.root))["fixer"] == 1
+
+
+def test_route_projection_detects_rewrite_before_append(wired):
+    wired.register(Thread(name="third", tags=frozenset(), worktree="/tmp/third"))
+    wired.send("PR111", "fixer", "first")
+    assert _listed(wired)["fixer"] == 1
+    bus_path = wired.bus._path
+    row = json.loads(bus_path.read_text())
+    row["to"] = "third"
+    bus_path.write_text(json.dumps(row) + "\n")
+    wired.send("PR111", "fixer", "second")
+    counts = _listed(wire(wired.root))
+    assert counts["fixer"] == 1
+    assert counts["third"] == 1
 
 
 def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired):
@@ -94,6 +120,7 @@ def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired
     ],
 )
 def test_invalid_wire_rows_fail_closed_like_existing_pending_count(wired, change):
+    assert _listed(wired) == _expected(wired)
     row = {
         "seq": 1,
         "from": "PR111",
@@ -111,19 +138,18 @@ def test_invalid_wire_rows_fail_closed_like_existing_pending_count(wired, change
         wired.list_threads()
 
 
-def test_single_scan_holds_bus_lock_against_concurrent_append(wired, monkeypatch):
+def test_projection_sync_holds_bus_lock_against_concurrent_append(wired, monkeypatch):
     wired.send("PR111", "fixer", "before")
     entered = threading.Event()
     release = threading.Event()
-    original = wired.bus._iter_pending_routes_unlocked
+    original = wired.bus._pending_route_fields
 
-    def gated():
-        for message in original():
-            entered.set()
-            assert release.wait(5)
-            yield message
+    def gated(record):
+        entered.set()
+        assert release.wait(5)
+        return original(record)
 
-    monkeypatch.setattr(wired.bus, "_iter_pending_routes_unlocked", gated)
+    monkeypatch.setattr(wired.bus, "_pending_route_fields", gated)
     results: list[dict[str, int]] = []
     writer_done = threading.Event()
     reader = threading.Thread(target=lambda: results.append(_listed(wired)), daemon=True)
@@ -146,19 +172,18 @@ def test_single_scan_holds_bus_lock_against_concurrent_append(wired, monkeypatch
     assert [message.body for message in wired.inbox("fixer")] == ["before", "after"]
 
 
-def test_owner_tag_mutation_during_scan_cannot_ack_or_change_captured_audience(wired, monkeypatch):
+def test_owner_tag_mutation_during_sync_cannot_ack_or_change_captured_audience(wired, monkeypatch):
     wired.send("PR111", "#auth", "eligible when listing began")
     entered = threading.Event()
     release = threading.Event()
-    original = wired.bus._iter_pending_routes_unlocked
+    original = wired.bus._pending_route_fields
 
-    def gated():
-        for route in original():
-            entered.set()
-            assert release.wait(5)
-            yield route
+    def gated(record):
+        entered.set()
+        assert release.wait(5)
+        return original(record)
 
-    monkeypatch.setattr(wired.bus, "_iter_pending_routes_unlocked", gated)
+    monkeypatch.setattr(wired.bus, "_pending_route_fields", gated)
     results: list[dict[str, int]] = []
     reader = threading.Thread(target=lambda: results.append(_listed(wired)), daemon=True)
     writer = threading.Thread(

@@ -20,6 +20,7 @@ import hashlib
 import json
 import math
 import os
+import sqlite3
 import stat
 import tempfile
 import time
@@ -45,6 +46,7 @@ from .bus_publication import (
     unique_wire_object,
     validate_initial_record,
 )
+from .bus_route_counts import BusRouteCounts
 
 if TYPE_CHECKING:
     from .coordination import PublicationIntent
@@ -3517,6 +3519,36 @@ class MessageBus:
             channel_deltas[target] = [0] * (len(ordinary) + 1)
         counts = dict.fromkeys(deliveries, 0)
         with _store_lock(self._path):
+            try:
+                with BusRouteCounts(self._path) as route_counts:
+                    if route_counts.sync(self._pending_route_fields):
+                        senders: dict[str, list[str]] = {}
+                        for target, raw_sender in route_counts.routes():
+                            senders.setdefault(target, []).append(raw_sender)
+                            sender = snapshot.aliases.get(raw_sender, raw_sender)
+                            if target in channel_cutoffs:
+                                actor = channel_direct_actor.get(target)
+                            else:
+                                actor = snapshot.aliases.get(target, target)
+                            if actor in counts and actor != sender:
+                                cutoff = max(
+                                    markers.get(actor, 0),
+                                    scoped_markers[actor].get(sender, 0),
+                                )
+                                counts[actor] += route_counts.pair_after(target, raw_sender, cutoff)
+                        for target, members in channel_members.items():
+                            for actor in members:
+                                cutoff = channel_self_cutoffs[target][actor]
+                                total = route_counts.target_after(target, cutoff)
+                                for raw_sender in senders.get(target, ()):
+                                    if snapshot.aliases.get(raw_sender, raw_sender) == actor:
+                                        total -= route_counts.pair_after(target, raw_sender, cutoff)
+                                counts[actor] += total
+                        return {name: counts[actor] for name, actor in actors.items()}
+            except (OSError, sqlite3.DatabaseError):
+                # The bus remains authoritative if its disposable index is
+                # unavailable. Route validation errors still fail closed.
+                pass
             for seq, raw_sender, target in self._iter_pending_routes_unlocked():
                 sender = snapshot.aliases.get(raw_sender, raw_sender)
                 if target in channel_cutoffs:
