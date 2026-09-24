@@ -15,6 +15,20 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX process groups
 PACKAGE = Path.home() / ".local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent"
 
 
+def test_large_saved_session_passes_local_preflight(tmp_path):
+    session = tmp_path / "long.jsonl"
+    saved_session(session)
+    row = json.dumps({"type": "message", "payload": "x" * 4096}).encode() + b"\n"
+    with session.open("ab") as stream:
+        for _ in range((33 * 1024 * 1024) // len(row) + 1):
+            stream.write(row)
+    assert compact._session_bytes(session)
+
+
+def test_codex_model_arguments_are_safe_for_explicit_compaction():
+    assert compact._safe_args(["--provider", "openai-codex", "--model", "gpt-5.5"])
+
+
 def saved_session(path: Path, *, split: bool = False) -> bytes:
     rows = [
         {
