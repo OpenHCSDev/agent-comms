@@ -1005,7 +1005,7 @@ class CommsAgent:
                 "thinkingLevel": thread.thinking_level,
                 "worktree": thread.worktree,
                 "autoTitle": backend.rpc_args_for(self._agent_bin, self._agent_args) is not None,
-                "title": thread.title,
+                "title": thread.title or thread.name,
                 "promptQueue": backend.rpc_args_for(self._agent_bin, self._agent_args) is not None,
                 "imagePrompts": backend.rpc_args_for(self._agent_bin, self._agent_args) is not None,
             }

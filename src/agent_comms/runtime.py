@@ -85,8 +85,23 @@ class RuntimeServer:
                 )
                 await self.agent.replay_turn_state(session_id, client=client)
                 await self.agent.replay_unknown_inputs(session_id, client=client)
+                config_options = await self.agent._config_options(name)
+                metadata = self.agent._session_metadata(name)
                 writer.write(
-                    (json.dumps({"ready": self.agent._session_metadata(name)}) + "\n").encode()
+                    (
+                        json.dumps(
+                            {
+                                "ready": {
+                                    **metadata,
+                                    "configOptions": [
+                                        option.model_dump(by_alias=True, exclude_none=True)
+                                        for option in config_options
+                                    ],
+                                }
+                            }
+                        )
+                        + "\n"
+                    ).encode()
                 )
                 await writer.drain()
                 await reader.read()
@@ -104,6 +119,17 @@ class RuntimeServer:
             elif action == "cancel":
                 await self.agent.cancel(session_id)
                 writer.write(b'{"result": {}}\n')
+                await writer.drain()
+            elif action == "set_config_option":
+                result = await self.agent.set_config_option(
+                    request["config_id"], session_id, request["value"]
+                )
+                writer.write(
+                    (
+                        json.dumps({"result": result.model_dump(by_alias=True, exclude_none=True)})
+                        + "\n"
+                    ).encode()
+                )
                 await writer.drain()
             elif action == "compact":
                 handler = getattr(self.agent, "compact_context", None)

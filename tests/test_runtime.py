@@ -116,6 +116,49 @@ async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
+async def test_attached_client_receives_owner_model_options(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/one,test/two")
+    comms = wire(tmp_path / "wire")
+    owner = CommsAgent(
+        comms,
+        agent_bin="/bin/echo",
+        agent_args=["--provider", "test", "--model", "one"],
+        runtime_enabled=True,
+    )
+    client = CommsAgent(comms)
+    response = await owner.new_session(str(tmp_path / "project"))
+    try:
+        attached = await client._attach_owner(
+            comms.registry.require(response.session_id), response.session_id
+        )
+        assert attached.config_options[0].current_value == "test/one"
+        assert [option.value for option in attached.config_options[0].options] == [
+            "test/one",
+            "test/two",
+        ]
+        assert attached.config_options[1].current_value == "medium"
+        assert attached.field_meta["agentComms"]["title"] == "project"
+        changed = await client.set_config_option("model", response.session_id, "test/two")
+        assert changed.config_options[0].current_value == "test/two"
+        assert comms.registry.require("project").model == "test/two"
+    finally:
+        await client.shutdown()
+        await owner.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_new_session_metadata_has_a_display_title_before_first_switch(tmp_path):
+    comms = wire(tmp_path / "wire")
+    agent = CommsAgent(comms, agent_bin="/bin/echo")
+    try:
+        response = await agent.new_session(str(tmp_path / "project"))
+        assert response.field_meta["agentComms"]["title"] == "project"
+    finally:
+        await agent.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
 async def test_attached_snapshot_client_can_page_earlier_transcript(tmp_path):
     comms = wire(tmp_path / "wire")
     owner = CommsAgent(comms, agent_bin="/bin/echo", runtime_enabled=True)
