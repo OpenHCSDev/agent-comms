@@ -22,6 +22,7 @@ import json
 import os
 import re
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
@@ -260,6 +261,27 @@ class CommsAgent:
             )
 
     async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
+        instructions = self._manual_compaction_instructions(prompt, kwargs)
+        if instructions is not None:
+            # The bridge owns the idle turn lock. Never enter _prompt_owned or
+            # pass this slash command to a tool-capable coding-agent prompt.
+            if session_id in self._proxies:
+                result = await self._proxies[session_id].request(
+                    "compact", instructions=instructions
+                )
+            else:
+                from .manual_compaction_bridge import compact_context
+
+                result = await compact_context(self, session_id, instructions)
+            if not isinstance(result, dict) or result.get("ok") is not True:
+                reason = (
+                    result.get("error") if isinstance(result, dict) else None
+                ) or "Compaction failed or is uncertain; not retried."
+                raise RequestError.internal_error({"reason": str(reason)})
+            return PromptResponse(
+                stop_reason="end_turn",
+                field_meta={"agentComms": {"compaction": result}},
+            )
         if session_id in self._proxies:
             result = await self._proxies[session_id].request(
                 "prompt",
@@ -275,6 +297,42 @@ class CommsAgent:
             return PromptResponse.model_validate(result)
         async with self._turn_locks.setdefault(session_id, asyncio.Lock()):
             return await self._prompt_owned(session_id, prompt)
+
+    @staticmethod
+    def _manual_compaction_instructions(prompt: list[Any], kwargs: dict[str, Any]) -> str | None:
+        # Toad sends a blank text block with _meta.agentComms.compact; other
+        # ACP clients can send literal /compact. The ACP SDK expands _meta
+        # into kwargs, while direct callers may retain it as field_meta.
+        metadata = kwargs.get("agentComms")
+        if metadata is None:
+            container = kwargs.get("field_meta") or kwargs.get("_meta") or {}
+            metadata = container.get("agentComms") if isinstance(container, dict) else None
+        has_metadata_command = isinstance(metadata, dict) and "compact" in metadata
+        text = CommsAgent._prompt_text(prompt).strip()
+        if not has_metadata_command and re.match(r"^/compact(?:\s|$)", text) is None:
+            return None
+        # A flattened prompt loses image/embedded-context blocks. Refuse them
+        # rather than silently dropping content or accidentally prompting Pi.
+        if len(prompt) != 1:
+            raise RequestError.invalid_params({"reason": "/compact requires one text block."})
+        block = prompt[0]
+        kind = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+        if kind != "text":
+            raise RequestError.invalid_params({"reason": "/compact requires text only."})
+        if has_metadata_command:
+            if text:
+                raise RequestError.invalid_params(
+                    {"reason": "Compaction metadata requires a blank text block."}
+                )
+            value = cast(dict[str, Any], metadata)["compact"]
+            if value is not None and not isinstance(value, str):
+                raise RequestError.invalid_params({"reason": "Invalid compaction instructions."})
+            instructions = (value or "").strip()
+        else:
+            instructions = text[len("/compact") :].strip()
+        if len(instructions) > 2000:
+            raise RequestError.invalid_params({"reason": "Compaction instructions are too long."})
+        return instructions
 
     async def _prompt_owned(self, session_id: str, prompt: list[Any]) -> PromptResponse:
         turn_task = asyncio.current_task()
@@ -590,6 +648,17 @@ class CommsAgent:
                 kind = event.get("type")
                 if kind == "chunk":
                     reply_parts.append(event.get("text") or "")
+                elif kind in {"compaction_start", "compaction_end"}:
+                    # Compaction invalidates any previous context usage count;
+                    # only a later authoritative agent_info can repopulate it.
+                    info = self._comms.agent_info_of(thread_name)
+                    self._comms.set_agent_info(
+                        thread_name,
+                        model=info.model if info else None,
+                        session_name=info.session_name if info else None,
+                        context_used=None,
+                        context_size=info.context_size if info else None,
+                    )
                 elif kind == "agent_info":
                     session_name = event.get("session_name")
                     session_file = event.get("session_file")
@@ -780,6 +849,46 @@ class CommsAgent:
                         size=size,
                     ),
                 )
+        elif kind in {"compaction_start", "compaction_end"}:
+            # Only an explicit successful end from the backend is completed;
+            # absent/malformed abort information is uncertainty, not success.
+            phase = (
+                "start"
+                if kind == "compaction_start"
+                else "end" if event.get("aborted") is False else "abort"
+            )
+            reason = event.get("reason")
+            if reason not in {"manual", "threshold", "overflow", "unknown"}:
+                reason = "unknown"
+            summary = ""
+            if phase == "end":
+                summary = self._sanitized_compaction_summary(event.get("summary"))
+            status = {"start": "running", "end": "completed", "abort": "aborted"}[phase]
+            status_text = {
+                "start": "",
+                "end": "Context compacted; usage is recalculating.",
+                "abort": "Context compaction aborted; usage is unknown.",
+            }[phase]
+            if summary:
+                status_text += f" Summary: {summary}"
+            detail: dict[str, Any] = {
+                "phase": phase,
+                "status": status,
+                "reason": reason,
+                "contextUsed": None,
+                "contextState": "unknown",
+                "willRetry": event.get("will_retry") is True,
+            }
+            if summary:
+                detail["summary"] = summary
+            await client.session_update(
+                session_id=session_id,
+                update=AgentMessageChunk(
+                    session_update="agent_message_chunk",
+                    content=TextContentBlock(type="text", text=status_text),
+                    field_meta={"agentComms": {"compaction": detail}},
+                ),
+            )
         elif kind in {"started", "settled"}:
             await client.session_update(
                 session_id=session_id,
@@ -797,6 +906,16 @@ class CommsAgent:
         elif kind == "done":
             if not event.get("ok") and event.get("text"):
                 await self._emit_text(session_id, f"[agent error] {event['text']}", client)
+
+    @staticmethod
+    def _sanitized_compaction_summary(value: Any) -> str:
+        """Keep one bounded display line; never forward raw Pi details or stderr."""
+        if not isinstance(value, str):
+            return ""
+        safe = "".join(
+            " " if unicodedata.category(char).startswith("C") else char for char in value
+        )
+        return " ".join(safe.split())[:400]
 
     @staticmethod
     def _prompt_text(prompt: list[Any]) -> str:

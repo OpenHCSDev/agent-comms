@@ -50,6 +50,18 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path):
         )
         assert any("socket roundtrip" in u.get("content", {}).get("text", "") for u in updates)
         assert await proxy.request("cancel") == {}
+        compact_calls = []
+
+        async def compact_context(session_id, instructions):
+            compact_calls.append((session_id, instructions))
+            return {"ok": True, "status": "compacted"}
+
+        owner.compact_context = compact_context
+        assert await proxy.request("compact", instructions="focus") == {
+            "ok": True,
+            "status": "compacted",
+        }
+        assert compact_calls == [(response.session_id, "focus")]
         invalid = RuntimeProxy(client, "missing-thread", path)
         with pytest.raises(RuntimeError, match="not registered"):
             await invalid.request("cancel")

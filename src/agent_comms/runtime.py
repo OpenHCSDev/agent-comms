@@ -95,6 +95,18 @@ class RuntimeServer:
                 await self.agent.cancel(session_id)
                 writer.write(b'{"result": {}}\n')
                 await writer.drain()
+            elif action == "compact":
+                handler = getattr(self.agent, "compact_context", None)
+                if handler is None:
+                    from .manual_compaction_bridge import compact_context
+
+                    result = await compact_context(
+                        self.agent, session_id, request.get("instructions")
+                    )
+                else:
+                    result = await handler(session_id, request.get("instructions"))
+                writer.write((json.dumps({"result": result}) + "\n").encode())
+                await writer.drain()
         except (Exception, asyncio.CancelledError) as error:
             if not isinstance(error, asyncio.CancelledError):
                 try:
