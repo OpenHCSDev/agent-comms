@@ -77,13 +77,16 @@ class RuntimeServer:
                 self.clients.setdefault(session_id, set()).add(client)
                 await self.agent._replay_transcript(session_id, name, client=client)
                 await self.agent.replay_turn_state(session_id, client=client)
+                await self.agent.replay_unknown_inputs(session_id, client=client)
                 writer.write(
                     (json.dumps({"ready": self.agent._session_metadata(name)}) + "\n").encode()
                 )
                 await writer.drain()
                 await reader.read()
             elif action == "prompt":
-                result = await self.agent.prompt(session_id, request["prompt"])
+                result = await self.agent.prompt(
+                    session_id, request["prompt"], field_meta=request.get("meta") or {}
+                )
                 writer.write(
                     (
                         json.dumps({"result": result.model_dump(by_alias=True, exclude_none=True)})
@@ -94,6 +97,18 @@ class RuntimeServer:
             elif action == "cancel":
                 await self.agent.cancel(session_id)
                 writer.write(b'{"result": {}}\n')
+                await writer.drain()
+            elif action == "compact":
+                handler = getattr(self.agent, "compact_context", None)
+                if handler is None:
+                    from .manual_compaction_bridge import compact_context
+
+                    result = await compact_context(
+                        self.agent, session_id, request.get("instructions")
+                    )
+                else:
+                    result = await handler(session_id, request.get("instructions"))
+                writer.write((json.dumps({"result": result}) + "\n").encode())
                 await writer.drain()
         except (Exception, asyncio.CancelledError) as error:
             if not isinstance(error, asyncio.CancelledError):

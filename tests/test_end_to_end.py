@@ -63,7 +63,7 @@ class TestEndToEndLifecycle:
 
         # 1. Parent thread starts and registers itself (pi records its session).
         stub = tmp_path / "fake-pi"
-        stub.write_text("#!/bin/sh\nexit 0\n")
+        stub.write_text(f"#!{sys.executable}\nimport time\ntime.sleep(60)\n")
         stub.chmod(0o755)
         session = tmp_path / "session.json"
         session.write_text("{}")
@@ -96,7 +96,7 @@ class TestEndToEndLifecycle:
             )
         )
 
-        # 2. Parent forks a child (pi binary faked with a stub script).
+        # 2. Parent forks a child (pi binary faked with a live stub script).
         out = cli(
             root,
             "fork",
