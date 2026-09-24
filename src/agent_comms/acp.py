@@ -1168,9 +1168,8 @@ class CommsAgent:
                             watcher = None
                         else:
                             with suppress(TimeoutError):
-                                await asyncio.wait_for(
-                                    watcher.changed.wait(), WATCH_FALLBACK_INTERVAL
-                                )
+                                async with asyncio.timeout(WATCH_FALLBACK_INTERVAL):
+                                    await watcher.changed.wait()
             finally:
                 if watcher is not None:
                     watcher.close()
