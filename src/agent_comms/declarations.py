@@ -18,6 +18,7 @@ from __future__ import annotations
 import errno
 import hashlib
 import json
+import math
 import os
 import stat
 import tempfile
@@ -959,6 +960,14 @@ class ActiveTurn:
         return {**asdict(self), "routing": self.routing.to_wire() if self.routing else None}
 
 
+class _GeneratedCreationTime(float):
+    """Transient marker for default timestamps; never persisted as claim authority."""
+
+
+def _thread_creation_time() -> float:
+    return _GeneratedCreationTime(time.time())
+
+
 @dataclass(frozen=True, slots=True)
 class Thread:
     """Declares one agent thread's identity and provenance."""
@@ -973,7 +982,8 @@ class Thread:
     model: str | None = None
     thinking_level: str | None = None
     goal: Goal | None = None
-    created_at: float = field(default_factory=time.time)
+    created_at: float = field(default_factory=_thread_creation_time)
+    _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
     previous_worktrees: tuple[str, ...] = ()
     auto_title_pending: bool = False
     title: str | None = None
@@ -981,6 +991,10 @@ class Thread:
     active_turn: ActiveTurn | None = None
 
     def __post_init__(self) -> None:
+        generated = isinstance(self.created_at, _GeneratedCreationTime)
+        object.__setattr__(self, "_generated_created_at", generated)
+        if generated:
+            object.__setattr__(self, "created_at", float(self.created_at))
         object.__setattr__(self, "role", ThreadRole(self.role))
         if self.active_turn is not None and self.active_turn.owner_pid != self.pid:
             raise RelationViolationError("A turn must belong to the registered executor.")
@@ -1018,8 +1032,10 @@ class Thread:
 
     def to_wire(self) -> dict[str, object]:
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""
+        values = asdict(self)
+        values.pop("_generated_created_at")  # construction provenance is not durable authority
         return {
-            **asdict(self),
+            **values,
             "tags": sorted(self.tags),
             "active_turn": self.active_turn.to_wire() if self.active_turn else None,
         }
@@ -1905,10 +1921,19 @@ class ThreadRegistry:
             elif any(
                 existing.created_at == thread.created_at for existing in self._threads.values()
             ):
-                # Claim envelopes use this creation identity across a rename.
-                # Reject a same-tick new owner rather than letting it share an
-                # incumbent's release authority (or strand a live claim).
-                raise RelationViolationError("Registry creation identities collide.")
+                # The Windows wall clock can return the same value for six
+                # independent default-constructed threads. Allocate a distinct
+                # identity under this store lock, but never rewrite an explicit
+                # caller-supplied creation identity or alias someone else's claim.
+                if not thread._generated_created_at:
+                    raise RelationViolationError("Registry creation identities collide.")
+                used = {existing.created_at for existing in self._threads.values()}
+                candidate = float(thread.created_at)
+                while candidate in used:
+                    candidate = math.nextafter(candidate, math.inf)
+                if not math.isfinite(candidate):
+                    raise RelationViolationError("Registry creation identities collide.")
+                thread = replace(thread, created_at=candidate)
             self._threads[thread.name] = thread
             self._statuses[thread.name] = status
             self._last_seen[thread.name] = time.time()
