@@ -283,9 +283,14 @@ def test_public_rename_preserves_claim_release_then_new_owner_wins(
     monkeypatch.setenv("PI_AGENT_ID", "alice")
     result = comms.rename_self("alice-new")
     assert (result.previous, result.current, result.changed) == ("alice", "alice-new", True)
-    assert comms.registry.require("alice-new").created_at == original.created_at
-    assert comms.registry.require("alice").name == "alice-new"
-    assert comms.registry.name_reserved("alice")
+    for previous, current in (("alice-new", "alice-next"), ("alice-next", "alice-final")):
+        monkeypatch.setenv("PI_AGENT_ID", previous)
+        renamed = comms.rename_self(current)
+        assert (renamed.previous, renamed.current, renamed.changed) == (previous, current, True)
+    assert comms.registry.require("alice-final").created_at == original.created_at
+    for alias in ("alice", "alice-new", "alice-next"):
+        assert comms.registry.require(alias).name == "alice-final"
+        assert comms.registry.name_reserved(alias)
     next_thread = comms.claim_thread("alice", tags=frozenset({"team"}), worktree=str(worktree))
     assert next_thread.name != "alice" and next_thread.created_at != original.created_at
 
@@ -293,22 +298,24 @@ def test_public_rename_preserves_claim_release_then_new_owner_wins(
     assert reopened.claim_projection()[path].owner == "alice"
     with pytest.raises(ClaimTransitionError, match="exact owner"):
         reopened.send_message(
-            "bob", "alice-new", "Cannot take renamed owner claim", releases=["a.py"]
+            "bob", "alice-final", "Cannot take renamed owner claim", releases=["a.py"]
         )
     with pytest.raises(ClaimTransitionError, match="exact owner"):
         reopened.send_message(
             next_thread.name, "bob", "New incarnation cannot release", releases=["a.py"]
         )
     assert len(reopened.full_history()) == 1
-    released = reopened.send_message("alice-new", "bob", "Release after rename", releases=["a.py"])
+    released = reopened.send_message(
+        "alice-final", "bob", "Release after rename", releases=["a.py"]
+    )
     assert released.claim_transition is not None
     assert claimed.claim_transition is not None
-    assert released.claim_transition.owner == "alice-new"
+    assert released.claim_transition.owner == "alice-final"
     assert released.claim_transition.incarnation == claimed.claim_transition.incarnation
     assert released.claim_transition.releases[0].generation == claimed.claim_transition.generation
     assert path not in reopened.claim_projection()
 
-    taken = reopened.send_message("bob", "alice-new", "New owner", claims=["a.py"])
+    taken = reopened.send_message("bob", "alice-final", "New owner", claims=["a.py"])
     assert reopened.claim_projection()[path].owner == "bob"
     assert taken.claim_transition is not None
     assert taken.claim_transition.generation != claimed.claim_transition.generation
