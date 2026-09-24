@@ -2354,6 +2354,57 @@ for line in sys.stdin:
         assert [text for _, _, text in starts] == ["goal request", "channel mention"]
         assert len([e for e in events if e["type"] == "input_started"]) == 2
 
+    async def test_unsent_followup_revoked_by_goal_does_not_fail_started_turn(self, tmp_path):
+        checked = tmp_path / "send-boundary-checked"
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + f"""
+import json, pathlib, sys, time
+send = lambda event: print(json.dumps(event), flush=True)
+state = json.loads(sys.stdin.readline())
+send({{"type":"response","command":"get_state","id":state["id"],
+      "success":True,"data":{{"nativeInputProofCapability":"pi-native-input-v1-live-only"}}}})
+prompt = json.loads(sys.stdin.readline())
+send({{"type":"response","command":"prompt","id":prompt["id"],"success":True}})
+send({{"type":"message_start","message":{{"role":"user","content":prompt["message"],
+      "inputId":prompt["inputId"]}}}})
+marker = pathlib.Path({str(checked)!r})
+for _ in range(200):
+    if marker.exists(): break
+    time.sleep(0.01)
+assert marker.exists()
+send({{"type":"message_end","message":{{"role":"assistant","stopReason":"stop"}}}})
+send({{"type":"agent_settled"}})
+for line in sys.stdin:
+    if json.loads(line)["type"] == "get_session_stats":
+        send({{"type":"response","command":"get_session_stats","success":True,
+              "data":{{"contextUsage":{{}}}}}})
+        break
+""",
+        )
+        queue: asyncio.Queue[str | dict] = asyncio.Queue()
+        queue.put_nowait({"type": "prompt", "message": "late direct", "_input_id": "bus-42"})
+
+        @contextmanager
+        def send_boundary(public_id, native_id, text):
+            if public_id is None:
+                yield True
+            else:
+                assert (public_id, text) == ("bus-42", "late direct")
+                checked.write_text("goal activated")
+                yield False
+
+        events = [
+            event
+            async for event in backend.stream_agent_events(
+                stub, [], "set a goal", str(tmp_path), steering_queue=queue,
+                send_boundary=send_boundary,
+            )
+        ]
+        assert events[-1]["ok"] is True, events
+        assert {"type": "input_refused", "id": "bus-42"} in events
+        assert queue.empty()
+
 
 # PR#1 parser assertions retained alongside V3 projection/watchdog coverage.
 class TestPrRpcParsing:
