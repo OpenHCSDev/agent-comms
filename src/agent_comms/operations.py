@@ -564,6 +564,7 @@ class Comms:
             else frozenset()
         )
         scopes: list[ChannelDisplayScope] = []
+        reset_channels: list[str] = []
         for channel in channels.values():
             members = frozenset(
                 name
@@ -578,20 +579,60 @@ class Comms:
                 if channel.builtin is not None
                 else frozenset({channel.name})
             )
-            after = (
-                max(
-                    markers.get(canonical_viewer, 0),
-                    markers.get(self.bus._marker_key(canonical_viewer, channel.name), 0),
+            expanded_after = 0
+            if canonical_viewer is not None and channel.exact and channel.builtin is None:
+                exact_key = self.bus._view_marker_key(canonical_viewer, channel.name, "exact")
+                after = markers.get(exact_key, 0)
+                if channel.any_mode:
+                    participant_basis = self.bus.any_participant_basis(channel, registry)
+                    expanded_after = markers.get(
+                        self.bus._view_marker_key(
+                            canonical_viewer, channel.name, "any", participant_basis
+                        ),
+                        0,
+                    )
+                if (
+                    self.bus._marker_key(canonical_viewer, channel.name) in markers
+                    and exact_key not in markers
+                ):
+                    reset_channels.append(channel.name)
+            else:
+                after = (
+                    max(
+                        markers.get(canonical_viewer, 0),
+                        markers.get(self.bus._marker_key(canonical_viewer, channel.name), 0),
+                    )
+                    if canonical_viewer is not None
+                    else 0
                 )
-                if canonical_viewer is not None
-                else 0
-            )
             scopes.append(
                 ChannelDisplayScope(
-                    channel.name, targets, channel.any_mode, participant_names, after, revision
+                    channel.name,
+                    targets,
+                    channel.any_mode,
+                    participant_names,
+                    after,
+                    revision,
+                    expanded_after,
                 )
             )
-        return registry, channels, tuple(scopes), order, canonical_viewer, viewer_names, pins
+        notice = (
+            "Read positions were reset for "
+            + ", ".join(sorted(reset_channels))
+            + "; reopen the channel to review its messages."
+            if reset_channels
+            else None
+        )
+        return (
+            registry,
+            channels,
+            tuple(scopes),
+            order,
+            canonical_viewer,
+            viewer_names,
+            pins,
+            notice,
+        )
 
     @contextmanager
     def _display_snapshot(
@@ -956,7 +997,9 @@ class Comms:
         """Local presentation scope, independent of agent delivery cursors."""
         viewer = self.user_identity(worktree).name
         with self._display_snapshot(viewer=viewer) as (basis, records, bus_revision):
-            registry, declarations, scopes, order, captured_viewer, viewer_names, pins = basis
+            registry, declarations, scopes, order, captured_viewer, viewer_names, pins, notice = (
+                basis
+            )
             assert captured_viewer is not None
             activity_scopes = tuple(
                 replace(scope, after=0, basis_revision=scope.basis_revision[:-1])
@@ -991,6 +1034,7 @@ class Comms:
                 ),
                 show_stopped=show_stopped,
                 show_archived=show_archived,
+                read_marker_notice=notice,
             )
 
     def _is_unread_reply(self, record: Mapping) -> bool:
