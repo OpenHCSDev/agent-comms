@@ -3607,7 +3607,9 @@ class MessageBus:
                                     markers.get(route_actor, 0),
                                     scoped_markers[route_actor].get(sender, 0),
                                 )
-                                counts[route_actor] += route_counts.pair_after(target, raw_sender, cutoff)
+                                counts[route_actor] += route_counts.pair_after(
+                                    target, raw_sender, cutoff
+                                )
                         for target, members in channel_members.items():
                             for actor in members:
                                 cutoff = channel_self_cutoffs[target][actor]
