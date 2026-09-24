@@ -54,6 +54,39 @@ def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path
     assert comms.registry.require("owner").goal.progress == "one step"
 
 
+def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkeypatch, tmp_path):
+    monkeypatch.delenv("PI_AGENT_ID", raising=False)
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
+    comms.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    first = invoke_tool(comms, "comms_set_goal", {"text": "first"})["goal"]
+    comms.begin_turn("owner", "same-assistant-turn")
+    invoke_tool(
+        comms,
+        "comms_goal",
+        {"goal_id": first["id"], "status": "active", "progress": "reported"},
+    )
+
+    replacement = invoke_tool(comms, "comms_set_goal", {"text": "replacement"})["goal"]
+    with pytest.raises(ValueError, match="already reported"):
+        invoke_tool(
+            comms,
+            "comms_goal",
+            {"goal_id": replacement["id"], "status": "active", "progress": "second"},
+        )
+
+    comms.update_goal("owner", "clear", goal_id=replacement["id"])
+    after_clear = invoke_tool(comms, "comms_set_goal", {"text": "after clear"})["goal"]
+    reopened = Comms(comms.root)
+    assert reopened.registry.require("owner").last_goal_report_turn == "same-assistant-turn"
+    with pytest.raises(ValueError, match="already reported"):
+        invoke_tool(
+            reopened,
+            "comms_goal",
+            {"goal_id": after_clear["id"], "status": "active", "progress": "third"},
+        )
+    assert comms.registry.require("owner").goal.progress == ""
+
+
 def test_clearing_goal_releases_its_reserved_attempt(comms, monkeypatch):
     goal = _goal(comms, monkeypatch)
     private = comms.root / "goal-private"

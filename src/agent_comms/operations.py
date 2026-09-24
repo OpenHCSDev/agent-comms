@@ -1896,7 +1896,7 @@ class Comms:
             if expected_status is not None and (goal is None or goal.status != expected_status):
                 raise ValueError("This goal is no longer active; refresh its state.")
             report_turn = thread.active_turn.id if thread.active_turn is not None else ""
-            if model_report and goal is not None and goal.reported_turn == report_turn:
+            if model_report and thread.last_goal_report_turn == report_turn:
                 raise ValueError("This goal was already reported in this turn.")
             if action in {"clear", "set"} and goal is not None:
                 # Revoke a protected goal before removing or replacing its
@@ -1935,7 +1935,16 @@ class Comms:
                 )
             else:
                 raise ValueError(f"Unknown goal action: {action}")
-            self.registry.register(replace(thread, goal=goal), self.registry.status(thread.name))
+            self.registry.register(
+                replace(
+                    thread,
+                    goal=goal,
+                    last_goal_report_turn=(
+                        report_turn if model_report else thread.last_goal_report_turn
+                    ),
+                ),
+                self.registry.status(thread.name),
+            )
             return goal
 
     def block_goal_after_failed_turn(

@@ -993,6 +993,7 @@ class Thread:
     title: str | None = None
     role: ThreadRole = ThreadRole.AGENT
     active_turn: ActiveTurn | None = None
+    last_goal_report_turn: str | None = None
 
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)
@@ -1002,6 +1003,10 @@ class Thread:
         object.__setattr__(self, "role", ThreadRole(self.role))
         if self.active_turn is not None and self.active_turn.owner_pid != self.pid:
             raise RelationViolationError("A turn must belong to the registered executor.")
+        if self.last_goal_report_turn is not None and not isinstance(
+            self.last_goal_report_turn, str
+        ):
+            raise ValueError("Last goal report turn must be a string or null.")
         for tag in self.tags:
             Tag(tag)
         allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
@@ -1857,6 +1862,7 @@ class ThreadRegistry:
                 active_turn=(
                     ActiveTurn.from_wire(data["active_turn"]) if data.get("active_turn") else None
                 ),
+                last_goal_report_turn=data.get("last_goal_report_turn"),
             )
             self._statuses[name] = ThreadStatus(data.get("status", "running"))
             self._last_seen[name] = data.get("last_seen", 0.0)
