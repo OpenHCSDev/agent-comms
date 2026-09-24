@@ -710,12 +710,18 @@ class Goal:
     id: str
     status: str = "active"
     progress: str = ""
+    # Older registry rows omit this field and start at revision zero. Every
+    # later goal transition advances it, even when status/progress return to
+    # identical values, so a captured Goal cannot pass a stale CAS after ABA.
+    revision: int = 0
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:
             raise ValueError("A goal requires text and an identity.")
         if self.status not in {"active", "paused", "blocked", "completed"}:
             raise ValueError("Unknown goal status.")
+        if type(self.revision) is not int or not 0 <= self.revision < 1 << 63:
+            raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
 
     @property
     def active(self) -> bool:

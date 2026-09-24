@@ -6,6 +6,7 @@ import pytest
 
 from agent_comms import (
     AgentRuntimeInfo,
+    Goal,
     Message,
     MessageBus,
     MessageType,
@@ -44,6 +45,25 @@ class TestAgentRuntimeInfo:
     def test_negative_context_is_rejected(self):
         with pytest.raises(ValueError, match="negative"):
             AgentRuntimeInfo(thread="a", context_used=-1)
+
+
+class TestGoalRevision:
+    @pytest.mark.parametrize("revision", [True, 1.0, "1", -1, 1 << 63])
+    def test_rejects_noncanonical_or_exhausted_revision(self, revision):
+        with pytest.raises(ValueError, match="revision"):
+            Goal(text="work", id="goal-id", revision=revision)
+
+    def test_old_registry_goal_without_revision_reopens_at_zero(self, tmp_path: Path):
+        path = tmp_path / "registry.json"
+        registry = ThreadRegistry(path)
+        registry.register(
+            Thread(name="owner", tags=frozenset(), worktree="/wt", goal=Goal("work", "old-id"))
+        )
+        raw = json.loads(path.read_text())
+        del raw["threads"]["owner"]["goal"]["revision"]
+        path.write_text(json.dumps(raw))
+        restored = ThreadRegistry(path).require("owner").goal
+        assert restored == Goal("work", "old-id", revision=0)
 
 
 class TestThreadDeclaration:

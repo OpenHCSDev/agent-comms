@@ -10,16 +10,18 @@ acting, and raises on unregistered references.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import select
 import shlex
 import signal
 import subprocess
 import sys
 import time
 from collections.abc import Callable, Generator, Iterator, Mapping, Sequence
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import asdict, dataclass, fields, replace
 from enum import Enum
 from functools import cached_property
@@ -86,6 +88,16 @@ from .tool_results import ToolDiff
 from .transcript_routes import TranscriptRoutes
 
 OBSERVATION_INTERVAL = 0.05
+
+
+def _owner_launch_proof(name: str, pid: int, epoch: int) -> bytes:
+    """Fixed-size pipe proof bound to the complete name and owner incarnation.
+
+    A valid thread name has no protocol length limit. Passing its plaintext
+    under the wire lock could fill the pipe before the child can acquire it.
+    """
+    identity = json.dumps((name, pid, epoch), ensure_ascii=True, separators=(",", ":"))
+    return hashlib.sha256(identity.encode("utf-8")).digest()
 
 
 def _session_model(session_file: Path) -> tuple[str, str] | None:
@@ -1858,20 +1870,25 @@ class Comms:
             # written by a separate tool process after ACP's precheck. Check
             # the entire immutable snapshot under the same lock as the write.
             if expected_goal is not None and goal != expected_goal:
-                return goal
+                raise ValueError("Goal changed during resume; refresh its state.")
             if goal_id is not None and (goal is None or goal.id != goal_id):
                 raise ValueError("This goal was replaced or cleared; refresh its state.")
             if expected_status is not None and (goal is None or goal.status != expected_status):
                 raise ValueError("This goal is no longer active; refresh its state.")
             if action == "set":
-                goal = Goal(text=text.strip(), id=uuid4().hex)
+                # A replacement has a fresh unpredictable ID; revisions are
+                # monotone within that goal's identity, not across goals.
+                goal = Goal(text=text.strip(), id=uuid4().hex, revision=1)
             elif action == "clear":
                 goal = None
             elif action in {"active", "paused", "blocked", "completed"}:
                 if goal is None:
                     raise ValueError("No goal is set for this thread.")
                 goal = replace(
-                    goal, status=action, progress=goal.progress if progress is None else progress
+                    goal,
+                    status=action,
+                    progress=goal.progress if progress is None else progress,
+                    revision=goal.revision + 1,
                 )
             else:
                 raise ValueError(f"Unknown goal action: {action}")
@@ -1900,7 +1917,9 @@ class Comms:
             progress = (
                 f"{current.progress}\n\n" if current != started_goal and current.progress else ""
             ) + diagnostic
-            blocked = replace(current, status="blocked", progress=progress)
+            blocked = replace(
+                current, status="blocked", progress=progress, revision=current.revision + 1
+            )
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
             return blocked
 
@@ -1913,6 +1932,31 @@ class Comms:
             if not thread.role.executable:
                 raise RelationViolationError("A human participant cannot become an agent executor.")
             if thread.pid > 0 and thread.pid != owner_pid and self._process_alive(thread.pid):
+                return thread
+            reservation = os.environ.pop("AGENT_COMMS_RESERVATION_FD", None)
+            if reservation is not None:
+                try:
+                    fd = int(reservation)
+                    ready, _, _ = select.select([fd], [], [], 5.0)
+                    evidence = os.read(fd, hashlib.sha256().digest_size) if ready else b""
+                except (OSError, ValueError) as error:
+                    raise RelationViolationError("Invalid owner startup reservation.") from error
+                finally:
+                    with suppress(OSError, ValueError):
+                        os.close(int(reservation))
+                epoch = self.registry.snapshot().owner_epochs.get(thread.name)
+                if epoch is None:
+                    raise RelationViolationError("Owner startup reservation has no incarnation.")
+                expected = _owner_launch_proof(thread.name, owner_pid, epoch)
+                if (
+                    evidence != expected
+                    or thread.pid != owner_pid
+                    or thread.active_turn is not None
+                    or not self.registry.status(thread.name).active
+                ):
+                    raise RelationViolationError("Owner startup reservation no longer matches.")
+                # An inherited pipe from our own launcher proves this exact
+                # registry reservation. A coincidentally reused PID cannot.
                 return thread
             owned = replace(thread, pid=owner_pid, active_turn=None)
             self.registry.register(owned)
@@ -1943,22 +1987,59 @@ class Comms:
         prompt or interrupt a turn; the detached owner resumes its saved state.
         The PID receipt is a reservation, not a completed startup handshake.
         """
-        with _store_lock(self._wire_lock_path):
-            thread = self.registry.require(name)
-            if not thread.role.executable or not self.registry.status(thread.name).visible:
-                raise RelationViolationError("Only visible agent threads can be started.")
-            if thread.pid > 0 and self._process_alive(thread.pid):
-                if not self._is_local_participant(thread):
-                    raise RelationViolationError(
-                        f"Cannot reuse unverifiable process {thread.pid} for {thread.name!r}."
+        original_owner: tuple[str, int, float] | None = None
+        original_epoch: int | None = None
+        for _ in range(3):
+            with _store_lock(self._wire_lock_path):
+                snapshot = self.registry.snapshot()
+                canonical = snapshot.aliases.get(name, name)
+                thread = self.registry.require(name)
+                if not thread.role.executable or not snapshot.statuses[canonical].visible:
+                    raise RelationViolationError("Only visible agent threads can be started.")
+                identity = (canonical, thread.pid, thread.created_at)
+                if original_owner is not None and identity != original_owner:
+                    raise RelationViolationError(f"Owner changed while starting {name!r}.")
+                original_owner = identity
+                epoch = snapshot.owner_epochs.get(canonical)
+                if original_epoch is not None and epoch != original_epoch:
+                    raise RelationViolationError(f"Owner epoch changed while starting {name!r}.")
+                if thread.pid <= 0 or not self._process_alive(thread.pid):
+                    owner = self._launch_owner_unlocked(
+                        thread,
+                        agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", "pi"),
+                        agent_args,
                     )
-                if not self.registry.status(thread.name).active:
-                    self.registry.register(thread)
-                return OwnerStartResult(thread.name, thread.pid, False)
-            owner = self._launch_owner_unlocked(
-                thread, agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", "pi"), agent_args
-            )
-            return OwnerStartResult(owner.name, owner.pid, True)
+                    return OwnerStartResult(owner.name, owner.pid, True)
+                if epoch is None:
+                    raise RelationViolationError("Cannot start an owner without an incarnation.")
+                original_epoch = epoch
+
+            # A just-forked worker needs the wire lock to create its socket.
+            if not self._is_local_participant(thread):
+                raise RelationViolationError(
+                    f"Cannot reuse unverifiable process {thread.pid} for {thread.name!r}."
+                )
+            with _store_lock(self._wire_lock_path):
+                current = self.registry.snapshot()
+                fresh = current.threads.get(canonical)
+                if (
+                    fresh is None
+                    or (canonical, fresh.pid, fresh.created_at) != original_owner
+                    or not current.statuses.get(canonical, ThreadStatus.STOPPED).visible
+                ):
+                    raise RelationViolationError(f"Owner changed while starting {name!r}.")
+                if fresh != thread or current.owner_epochs.get(canonical) != original_epoch:
+                    raise RelationViolationError(f"Owner epoch changed while starting {name!r}.")
+                if not self._process_alive(fresh.pid) or not self._is_local_participant(
+                    fresh, wait=False
+                ):
+                    continue
+                if not current.statuses[canonical].active:
+                    self.registry.register(fresh)
+                return OwnerStartResult(canonical, fresh.pid, False)
+        raise RelationViolationError(
+            f"Owner changed or became unverifiable while starting {name!r}."
+        )
 
     def restart_owners(
         self,
@@ -1967,50 +2048,144 @@ class Comms:
         agent_bin: str = "pi",
         agent_args: Sequence[str] | None = None,
     ) -> tuple[OwnerRestartResult, ...]:
-        """Replace idle running owners; None selects all currently running owners.
+        """Preflight all owners together; release the wire lock for proof and exit.
 
-        Preflight the complete selection under the same lock used by begin_turn.
-        Stopped/archived threads are not implicitly revived by a bulk refresh.
-        Native session files and all persisted thread configuration are retained.
-        The receipt reports new reserved PIDs, not a completed model turn.
+        No owner is signaled until every selected owner has been verified again
+        under the wire lock. The OS may still fail partway through signaling;
+        that uncertainty is reported rather than claiming an atomic restart.
         """
-        with _store_lock(self._wire_lock_path):
-            if names is None:
-                threads = [
-                    thread
-                    for thread in self.registry.all_threads().values()
-                    if thread.role.executable
-                    and self.registry.status(thread.name).active
-                    and thread.pid > 0
-                    and self._process_alive(thread.pid)
-                ]
-            else:
-                threads = list(
-                    {
-                        self.registry.require(name).name: self.registry.require(name)
-                        for name in names
-                    }.values()
+        selection: tuple[tuple[str, int, float], ...] | None = None
+        original_epochs: tuple[int, ...] | None = None
+        for _ in range(3):
+            with _store_lock(self._wire_lock_path):
+                snapshot = self.registry.snapshot()
+                if names is None:
+                    threads = [
+                        thread
+                        for thread in snapshot.threads.values()
+                        if thread.role.executable
+                        and snapshot.statuses[thread.name].active
+                        and thread.pid > 0
+                        and self._process_alive(thread.pid)
+                    ]
+                else:
+                    threads = list(
+                        {
+                            snapshot.aliases.get(name, name): self.registry.require(name)
+                            for name in names
+                        }.values()
+                    )
+                identities = tuple(
+                    (thread.name, thread.pid, thread.created_at) for thread in threads
                 )
-            for thread in threads:
-                if (
-                    not thread.role.executable
-                    or not self.registry.status(thread.name).active
-                    or thread.pid <= 0
-                    or not self._process_alive(thread.pid)
-                ):
-                    raise ValueError(f"Thread {thread.name!r} has no running owner to restart.")
-                if thread.pid == os.getpid():
-                    raise ValueError("An owner cannot restart itself; use the external CLI.")
-                if thread.active_turn is not None:
-                    raise ValueError(f"Thread {thread.name!r} has an active turn; wait until idle.")
+                if selection is not None and identities != selection:
+                    raise RelationViolationError("Owner selection changed before restart.")
+                selection = identities
+                captured = []
+                for thread in threads:
+                    if (
+                        not thread.role.executable
+                        or not snapshot.statuses[thread.name].active
+                        or thread.pid <= 0
+                        or not self._process_alive(thread.pid)
+                    ):
+                        raise ValueError(f"Thread {thread.name!r} has no running owner to restart.")
+                    if thread.pid == os.getpid():
+                        raise ValueError("An owner cannot restart itself; use the external CLI.")
+                    if thread.active_turn is not None:
+                        raise ValueError(
+                            f"Thread {thread.name!r} has an active turn; wait until idle."
+                        )
+                    epoch = snapshot.owner_epochs.get(thread.name)
+                    if epoch is None:
+                        raise RelationViolationError(
+                            "Cannot restart an owner without an incarnation."
+                        )
+                    captured.append((thread, epoch))
+                epochs = tuple(epoch for _thread, epoch in captured)
+                if original_epochs is not None and epochs != original_epochs:
+                    raise RelationViolationError("Owner epochs changed before restart.")
+                original_epochs = epochs
+
+            # A newly forked owner's socket may depend on this same wire lock.
+            for thread, _epoch in captured:
                 if not self._is_local_participant(thread):
                     raise RelationViolationError(
                         f"Refusing to restart unverifiable process {thread.pid} "
                         f"for {thread.name!r}."
                     )
+            with _store_lock(self._wire_lock_path):
+                fresh = self.registry.snapshot()
+                if any(
+                    (
+                        fresh.threads.get(thread.name) is None
+                        or (
+                            thread.name,
+                            fresh.threads[thread.name].pid,
+                            fresh.threads[thread.name].created_at,
+                        )
+                        != (thread.name, thread.pid, thread.created_at)
+                        or not fresh.statuses.get(thread.name, ThreadStatus.STOPPED).active
+                    )
+                    for thread, _epoch in captured
+                ):
+                    raise RelationViolationError("Owner selection changed before restart.")
+                if any(
+                    fresh.threads[thread.name] != thread
+                    or fresh.owner_epochs.get(thread.name) != epoch
+                    for thread, epoch in captured
+                ):
+                    raise RelationViolationError("Owner epochs changed before restart.")
+                if any(
+                    not self._process_alive(thread.pid)
+                    or not self._is_local_participant(thread, wait=False)
+                    for thread, _epoch in captured
+                ):
+                    continue
+                for thread, _epoch in captured:
+                    with suppress(ProcessLookupError):
+                        self._signal_local_owner(thread.pid, signal.SIGTERM)
+                break
+        else:
+            raise RelationViolationError("Owner selection changed or became unverifiable.")
+
+        alive = [
+            (thread, epoch)
+            for thread, epoch in captured
+            if not self._wait_for_owner_exit(thread.pid, 3.0)
+        ]
+        if alive:
+            with _store_lock(self._wire_lock_path):
+                for thread, epoch in alive:
+                    self._require_same_stop_owner(thread, epoch)
+                    if not self._is_local_participant(thread, wait=False):
+                        raise RelationViolationError(
+                            f"Refusing to signal unverifiable process {thread.pid}."
+                        )
+                for thread, _epoch in alive:
+                    with suppress(ProcessLookupError):
+                        self._signal_local_owner(thread.pid, signal.SIGKILL)
+            remaining = [
+                thread.pid
+                for thread, _epoch in alive
+                if not self._wait_for_owner_exit(thread.pid, 1.0)
+            ]
+            if remaining:
+                diagnostics = "; ".join(self._stop_failure_probe(pid) for pid in remaining)
+                raise RuntimeError(f"Owner processes did not stop: {diagnostics}")
+
+        with _store_lock(self._wire_lock_path):
+            final = self.registry.snapshot()
+            for thread, epoch in captured:
+                current = final.threads.get(thread.name)
+                if self._released_same_owner(final, thread, epoch):
+                    continue
+                self._require_same_stop_owner(thread, epoch)
+            for thread, _epoch in captured:
+                if self.registry.status(thread.name).active:
+                    self.registry.unregister(thread.name)
             results = []
-            for thread in threads:
-                self._stop_unlocked(thread.name)
+            for thread, _epoch in captured:
                 current = self.registry.require(thread.name)
                 owner = self._launch_owner_unlocked(current, agent_bin, agent_args)
                 results.append(OwnerRestartResult(thread.name, thread.pid, owner.pid))
@@ -2025,7 +2200,7 @@ class Comms:
         prompt: str | None = None,
     ) -> Thread:
         env = os.environ.copy()
-        for key in ("PI_PROMPT", "PI_PARENT_ID", "PI_TASK"):
+        for key in ("PI_PROMPT", "PI_PARENT_ID", "PI_TASK", "AGENT_COMMS_RESERVATION_FD"):
             env.pop(key, None)
         env.update(
             {
@@ -2046,22 +2221,45 @@ class Comms:
             env["PI_PROMPT"] = prompt
         if agent_args is not None:
             env["AGENT_COMMS_AGENT_ARGS"] = shlex.join(agent_args)
-        process = subprocess.Popen(
-            [sys.executable, "-m", "agent_comms.worker"],
-            env=env,
-            cwd=thread.worktree,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+        # The read end is inherited only by this worker. Send its committed
+        # epoch AFTER registration: a crash before that point fails startup
+        # closed instead of making a stale same-PID record authoritative.
+        read_fd, write_fd = os.pipe() if os.name == "posix" else (-1, -1)
+        if read_fd >= 0:
+            env["AGENT_COMMS_RESERVATION_FD"] = str(read_fd)
+        try:
+            process = subprocess.Popen(
+                [sys.executable, "-m", "agent_comms.worker"],
+                env=env,
+                cwd=thread.worktree,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+                **({"pass_fds": (read_fd,)} if read_fd >= 0 else {}),
+            )
+        except BaseException:
+            if write_fd >= 0:
+                os.close(write_fd)
+            raise
+        finally:
+            if read_fd >= 0:
+                os.close(read_fd)
         owned = replace(thread, pid=process.pid, active_turn=None)
         try:
             self.registry.register(owned)
+            if write_fd >= 0:
+                epoch = self.registry.snapshot().owner_epochs[thread.name]
+                proof = _owner_launch_proof(thread.name, process.pid, epoch)
+                if os.write(write_fd, proof) != len(proof):
+                    raise RelationViolationError("Owner startup reservation was not fully sent.")
         except BaseException:
             process.terminate()
             process.wait()
             raise
+        finally:
+            if write_fd >= 0:
+                os.close(write_fd)
         return owned
 
     def attach_session(self, name: str, session_file: str, *, pid: int | None = None) -> Thread:
@@ -2077,9 +2275,200 @@ class Comms:
             return attached
 
     def stop(self, name: str) -> None:
-        """Stop a registered participant and retain it in history."""
+        """Stop one verified owner without holding the wire lock through startup or exit.
+
+        On Darwin the worker must acquire this lock before it can create the
+        kernel-authenticated owner socket. Waiting for that socket under the
+        lock would prevent a newly forked worker from ever proving its PID.
+        """
+        original_owner: tuple[str, int, float] | None = None
+        original_epoch: int | None = None
+        for attempt in range(3):
+            with _store_lock(self._wire_lock_path):
+                snapshot = self.registry.snapshot()
+                canonical = snapshot.aliases.get(name, name)
+                thread = snapshot.threads.get(canonical)
+                if thread is None:
+                    self.registry.require(name)  # Preserve the ordinary unknown-name error.
+                    raise AssertionError("Registered thread disappeared from its snapshot")
+                identity = (canonical, thread.pid, thread.created_at)
+                if original_owner is not None and identity != original_owner:
+                    raise RelationViolationError(
+                        f"Owner changed while stopping {name!r}; refusing a stale signal."
+                    )
+                original_owner = identity
+                epoch = snapshot.owner_epochs.get(canonical)
+                if original_epoch is not None and epoch != original_epoch:
+                    raise RelationViolationError(f"Owner epoch changed while stopping {name!r}.")
+                if not snapshot.statuses[canonical].active:
+                    if attempt == 0:
+                        return
+                    raise RelationViolationError(f"Owner changed while stopping {name!r}.")
+                if thread.pid == os.getpid():
+                    caller = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")
+                    if caller and self.registry.require(caller).name == canonical:
+                        self._release_current_owner_unlocked(canonical)
+                    else:
+                        self.registry.unregister(canonical)
+                    return
+                if thread.pid <= 0 or not self._process_alive(thread.pid):
+                    self.registry.unregister(canonical)
+                    return
+                if epoch is None:
+                    raise RelationViolationError("Cannot stop an owner without an incarnation.")
+                original_epoch = epoch
+
+            # Do not wait while holding the wire lock: startup and graceful
+            # shutdown both need it. Recheck the exact incarnation before any
+            # signal, so a replaced owner cannot inherit an old stop request.
+            if not self._is_local_participant(thread):
+                raise RelationViolationError(
+                    f"Refusing to signal unverifiable process {thread.pid} for {name!r}."
+                )
+            with _store_lock(self._wire_lock_path):
+                current = self.registry.snapshot()
+                current_thread = current.threads.get(canonical)
+                if (
+                    current_thread is None
+                    or (canonical, current_thread.pid, current_thread.created_at) != original_owner
+                    or not current.statuses.get(canonical, ThreadStatus.STOPPED).active
+                ):
+                    raise RelationViolationError(
+                        f"Owner changed while stopping {name!r}; refusing a stale signal."
+                    )
+                if (
+                    current_thread != thread
+                    or current.owner_epochs.get(canonical) != original_epoch
+                ):
+                    raise RelationViolationError(f"Owner epoch changed while stopping {name!r}.")
+                if not self._process_alive(thread.pid):
+                    self.registry.unregister(canonical)
+                    return
+                # Nonblocking fresh kernel proof immediately before signaling.
+                if not self._is_local_participant(thread, wait=False):
+                    continue
+                try:
+                    self._signal_local_owner(thread.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    self.registry.unregister(canonical)
+                    return
+                break
+        else:
+            raise RelationViolationError(
+                f"Owner changed or became unverifiable while stopping {name!r}."
+            )
+
+        if self._wait_for_owner_exit(thread.pid, 3.0):
+            self._finish_stopped_owner(thread, epoch)
+            return
         with _store_lock(self._wire_lock_path):
-            self._stop_unlocked(name)
+            self._require_same_stop_owner(thread, epoch)
+            if not self._is_local_participant(thread, wait=False):
+                raise RelationViolationError(
+                    f"Refusing to signal unverifiable process {thread.pid} for {name!r}."
+                )
+            with suppress(ProcessLookupError):
+                self._signal_local_owner(thread.pid, signal.SIGKILL)
+        if not self._wait_for_owner_exit(thread.pid, 1.0):
+            raise RuntimeError(f"Process did not stop: {self._stop_failure_probe(thread.pid)}")
+        self._finish_stopped_owner(thread, epoch)
+
+    @staticmethod
+    def _stop_failure_probe(pid: int) -> str:
+        """Bounded state-only Mac CI diagnostic, never a death or ownership proof."""
+        if sys.platform != "darwin":
+            return f"pid={pid}"
+        try:
+            probe = subprocess.run(
+                ["/bin/ps", "-p", str(pid), "-o", "stat="],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=1,
+            )
+            state = f"ps_rc={probe.returncode}, ps_stat={probe.stdout.strip()[:24]!r}"
+        except (OSError, subprocess.TimeoutExpired) as error:
+            state = f"ps_error={type(error).__name__}"
+        # In a failing stop only, find whether this PID is our exited child.
+        # waitpid may reap it; the result is diagnostic, not false success.
+        try:
+            reaped, _status = os.waitpid(pid, os.WNOHANG)
+            child = f"waitpid={reaped}"
+        except (ChildProcessError, OSError) as error:
+            child = f"waitpid_error={type(error).__name__}"
+        return f"pid={pid}, {state}, {child}"
+
+    @staticmethod
+    def _signal_local_owner(pid: int, signum: signal.Signals) -> None:
+        if os.name == "posix" and os.getpgid(pid) == pid:
+            os.killpg(pid, signum)
+        else:
+            os.kill(pid, signum)
+
+    def _require_same_stop_owner(self, thread: Thread, epoch: int) -> None:
+        snapshot = self.registry.snapshot()
+        if (
+            snapshot.threads.get(thread.name) != thread
+            or snapshot.owner_epochs.get(thread.name) != epoch
+            or not snapshot.statuses.get(thread.name, ThreadStatus.STOPPED).active
+        ):
+            raise RelationViolationError(
+                f"Owner changed while stopping {thread.name!r}; refusing a stale signal."
+            )
+
+    def _wait_for_owner_exit(self, pid: int, seconds: float) -> bool:
+        deadline = time.monotonic() + seconds
+        while True:
+            # Observe a direct child's exit WITHOUT reaping it behind its
+            # Popen/parent's back. An unrelated CLI process has no waitid
+            # authority and falls back to ps/proc.
+            if os.name == "posix" and hasattr(os, "waitid") and hasattr(os, "WNOWAIT"):
+                try:
+                    result = os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+                    if result is not None and result.si_pid == pid:
+                        return True
+                except (ChildProcessError, OSError):
+                    pass
+            if not self._process_alive(pid):
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.05)
+
+    def _read_owner_release_receipts(self) -> dict[str, dict[str, object]]:
+        try:
+            raw = json.loads((self.root / "owner_release_receipts.json").read_text())
+        except FileNotFoundError:
+            return {}
+        except (OSError, ValueError) as error:
+            raise RelationViolationError("Owner release receipt is unreadable.") from error
+        if not isinstance(raw, dict) or any(not isinstance(value, dict) for value in raw.values()):
+            raise RelationViolationError("Owner release receipt is invalid.")
+        return raw
+
+    def _released_same_owner(self, snapshot: RegistrySnapshot, thread: Thread, epoch: int) -> bool:
+        current = snapshot.threads.get(thread.name)
+        if snapshot.statuses.get(thread.name) is not ThreadStatus.STOPPED or current != replace(
+            thread, active_turn=None
+        ):
+            return False
+        return self._read_owner_release_receipts().get(thread.name) == {
+            "pid": thread.pid,
+            "before": epoch,
+            "after": snapshot.owner_epochs.get(thread.name),
+            "thread": json.dumps(current.to_wire(), sort_keys=True),
+        }
+
+    def _finish_stopped_owner(self, thread: Thread, epoch: int) -> None:
+        with _store_lock(self._wire_lock_path):
+            snapshot = self.registry.snapshot()
+            status = snapshot.statuses.get(thread.name)
+            if status is ThreadStatus.STOPPED and self._released_same_owner(
+                snapshot, thread, epoch
+            ):
+                return  # An exact, durably attested release of the signaled owner.
+            self._require_same_stop_owner(thread, epoch)
+            self.registry.unregister(thread.name)
 
     def release(self, name: str) -> None:
         """Let the calling participant mark itself stopped without signalling."""
@@ -2092,43 +2481,28 @@ class Comms:
             canonical = self.registry.require(name).name
             if self.registry.require(caller).name != canonical:
                 raise RelationViolationError(f"Thread {caller!r} cannot release {canonical!r}.")
-            self.registry.unregister(canonical)
+            self._release_current_owner_unlocked(canonical)
 
-    def _stop_unlocked(self, name: str) -> None:
-        thread = self.registry.require(name)
-        if not self.registry.status(name).active:
-            return
-        if thread.pid <= 0 or thread.pid == os.getpid() or not self._process_alive(thread.pid):
-            self.registry.unregister(name)
-            return
-
-        if not self._is_local_participant(thread):
-            raise RelationViolationError(
-                f"Refusing to signal unverifiable process {thread.pid} for {name!r}."
-            )
-        try:
-            if os.getpgid(thread.pid) == thread.pid:
-                os.killpg(thread.pid, signal.SIGTERM)
-            else:
-                os.kill(thread.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            self.registry.unregister(name)
-            return
-
-        deadline = time.monotonic() + 3.0
-        while self._process_alive(thread.pid) and time.monotonic() < deadline:
-            time.sleep(0.05)
-        if self._process_alive(thread.pid):
-            if os.getpgid(thread.pid) == thread.pid:
-                os.killpg(thread.pid, signal.SIGKILL)
-            else:
-                os.kill(thread.pid, signal.SIGKILL)
-            deadline = time.monotonic() + 1.0
-            while self._process_alive(thread.pid) and time.monotonic() < deadline:
-                time.sleep(0.05)
-        if self._process_alive(thread.pid):
-            raise RuntimeError(f"Process {thread.pid} did not stop.")
-        self.registry.unregister(name)
+    def _release_current_owner_unlocked(self, canonical: str) -> None:
+        snapshot = self.registry.snapshot()
+        owner = snapshot.threads[canonical]
+        if owner.pid > 0 and owner.pid != os.getpid():
+            raise RelationViolationError("Only the registered owner may release itself.")
+        before = snapshot.owner_epochs[canonical]
+        self.registry.unregister(canonical)
+        after = self.registry.snapshot().owner_epochs[canonical]
+        receipts = self._read_owner_release_receipts()
+        receipts[canonical] = {
+            "pid": owner.pid,
+            "before": before,
+            "after": after,
+            "thread": json.dumps(replace(owner, active_turn=None).to_wire(), sort_keys=True),
+        }
+        _atomic_write_text(
+            self.root / "owner_release_receipts.json",
+            json.dumps(receipts, sort_keys=True),
+            fsync_parent=True,
+        )
 
     @staticmethod
     def _process_alive(pid: int) -> bool:
@@ -2182,14 +2556,14 @@ class Comms:
             return True  # Unknown, not an authoritative dead-process receipt.
         return not probe.stdout.strip().startswith("Z")
 
-    def _is_local_participant(self, thread: Thread) -> bool:
+    def _is_local_participant(self, thread: Thread, *, wait: bool = True) -> bool:
         """Prove a PID belongs to the named participant before signaling it."""
         if sys.platform == "darwin":
             import socket
 
             from .runtime import socket_path
 
-            deadline = time.monotonic() + 2
+            deadline = time.monotonic() + (2 if wait else 0)
             while True:
                 try:
                     with socket.socket(socket.AF_UNIX) as connection:
