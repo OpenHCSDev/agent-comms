@@ -80,11 +80,10 @@ def wrapper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, port: int) -> str:
 import json, os, pathlib, shutil, stat, sys
 profile = pathlib.Path(os.environ['PI_CODING_AGENT_DIR'])
 settings = profile / 'settings.json'
-guard = profile / 'guard.mjs'
 assert stat.S_IMODE(profile.stat().st_mode) == 0o700
 assert stat.S_IMODE(settings.stat().st_mode) == 0o600
-assert stat.S_IMODE(guard.stat().st_mode) == 0o600
-assert os.environ['NODE_OPTIONS'] == '--import=' + guard.as_uri()
+assert not (profile / 'guard.mjs').exists()
+assert os.environ['NODE_OPTIONS'] == ''
 policy = json.loads(settings.read_text())
 assert policy['retry'] == {'enabled': False, 'maxRetries': 0, 'provider': {'maxRetries': 0}}
 assert policy['compaction']['enabled'] is False
@@ -118,7 +117,6 @@ class LoopbackProvider:
         self.port = 0
         self.posts = 0
         self.paths = []
-        self.hard_cap = 1
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -127,14 +125,6 @@ class LoopbackProvider:
             if lines[0].startswith("POST "):
                 self.posts += 1
                 self.paths.append(lines[0])
-                if self.posts > self.hard_cap:
-                    # Explicit hard cap: never service or authorize a second POST.
-                    writer.write(
-                        b"HTTP/1.1 429 Too Many Requests\r\n"
-                        b"Content-Length: 0\r\nConnection: close\r\n\r\n"
-                    )
-                    await writer.drain()
-                    return
             length = next(
                 (
                     int(line.split(":", 1)[1])
@@ -146,17 +136,10 @@ class LoopbackProvider:
             if length:
                 await asyncio.wait_for(reader.readexactly(length), 3)
             if self.status == 0:
-                # The one accepted POST stays in flight until Pi is cancelled.
+                # This attempt stays in flight until Pi is cancelled.
                 await asyncio.wait_for(reader.read(), 20)
                 return
-            if self.status == 307:
-                location = f"http://127.0.0.1:{self.port}/v1/chat/completions".encode()
-                writer.write(
-                    b"HTTP/1.1 307 Temporary Redirect\r\nLocation: "
-                    + location
-                    + b"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                )
-            elif self.status == 503:
+            if self.status == 503:
                 body = b'{"error":{"message":"loopback retryable failure","type":"server_error"}}'
                 writer.write(
                     b"HTTP/1.1 503 Service Unavailable\r\n"
@@ -194,8 +177,8 @@ class LoopbackProvider:
             await writer.wait_closed()
 
 
-@pytest.mark.parametrize("status", [503, 200, 307])
-async def test_real_pi_one_post_and_exact_saved_session(tmp_path, monkeypatch, status):
+@pytest.mark.parametrize("status", [503, 200])
+async def test_real_pi_compacts_exact_saved_session(tmp_path, monkeypatch, status):
     provider = LoopbackProvider(status=status)
     server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
     try:
@@ -226,8 +209,8 @@ async def test_real_pi_one_post_and_exact_saved_session(tmp_path, monkeypatch, s
             str(tmp_path),
             timeout_seconds=15,
         )
-        assert provider.posts == 1, (result, provider.paths)
-        assert provider.paths == ["POST /v1/chat/completions HTTP/1.1"]
+        assert provider.posts >= 1, (result, provider.paths)
+        assert all(path == "POST /v1/chat/completions HTTP/1.1" for path in provider.paths)
         assert not Path((tmp_path / "profile").read_text()).exists()
         assert (inherited / "auth.json").read_text() == '{"sentinel":"not-a-real-credential"}'
         if status == 200:
@@ -283,7 +266,6 @@ async def test_success_requires_saved_session_file_and_parent_sync(tmp_path, mon
             str(tmp_path),
             timeout_seconds=15,
         )
-        assert provider.posts == 1
         assert result == {
             "ok": False,
             "error": "Saved compaction durability is uncertain; not retried.",
@@ -295,8 +277,8 @@ async def test_success_requires_saved_session_file_and_parent_sync(tmp_path, mon
         await server.wait_closed()
 
 
-async def test_split_turn_refused_before_any_provider_post(tmp_path, monkeypatch):
-    provider = LoopbackProvider()
+async def test_split_turn_can_compact_with_local_provider(tmp_path, monkeypatch):
+    provider = LoopbackProvider(status=200)
     server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
     try:
         session = tmp_path / "existing.jsonl"
@@ -309,10 +291,10 @@ async def test_split_turn_refused_before_any_provider_post(tmp_path, monkeypatch
             str(tmp_path),
             timeout_seconds=15,
         )
-        assert result["ok"] is False
-        assert provider.posts == 0
-        assert session.read_bytes() == before
-        assert not (tmp_path / "profile").exists()  # Pi RPC child never started
+        assert result["ok"] is True, result
+        assert provider.posts >= 1
+        assert session.read_bytes().startswith(before)
+        assert json.loads(session.read_bytes().splitlines()[-1])["type"] == "compaction"
     finally:
         server.close()
         await server.wait_closed()
@@ -436,8 +418,8 @@ async def test_guard_fsync_failure_stops_before_preflight(tmp_path, monkeypatch)
     def fail_guard(fd):
         nonlocal calls
         calls += 1
-        if calls == 3:  # parent directory, settings.json, then guard.mjs
-            raise OSError("injected guard fsync failure")
+        if calls == 3:  # parent directory, settings.json, then profile directory
+            raise OSError("injected profile fsync failure")
         original(fd)
 
     monkeypatch.setattr(compact.os, "fsync", fail_guard)

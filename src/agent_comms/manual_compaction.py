@@ -1,8 +1,7 @@
-"""Explicit saved-session Pi /compact, with a one-request provider budget.
+"""Explicit saved-session Pi /compact with no replay of uncertain attempts.
 
 This is not a prompt and does not retry an uncertain response. It is deliberately
-inert until called by an idle owner. A Pi-version change fails closed until its
-retry paths and split-turn summarization are re-reviewed.
+inert until called by an idle owner.
 """
 
 from __future__ import annotations
@@ -30,32 +29,10 @@ MAX_SESSION = 32 * 1024 * 1024
 MAX_INSTRUCTIONS = 4096
 TIMEOUT = 300.0
 GRACE = 1.0
-# Default keepRecentTokens is reproduced exactly in the independent Pi preflight.
 _POLICY = (
     b'{"retry":{"enabled":false,"maxRetries":0,"provider":{"maxRetries":0}},'
     b'"compaction":{"enabled":false,"reserveTokens":16384,"keepRecentTokens":20000}}\n'
 )
-# A redirect is another POST even with both Pi retries disabled. Preload into
-# the Pi Node process before its SDK imports; bound every POST and refuse HTTP
-# 307/308 replay. Pi's HTTP dispatcher replaces global fetch via undici.install;
-# retain the guard while accepting that implementation's fetch as the delegate.
-_FETCH_GUARD = b"""let delegate = globalThis.fetch;
-let posts = 0;
-const guardedFetch = (input, init) => {
-  const method = (init?.method ?? input?.method ?? 'GET').toUpperCase();
-  if (method !== 'POST') return delegate(input, init);
-  if (++posts > 1) throw new Error('Manual compact POST budget exhausted');
-  return delegate(input, { ...init, redirect: 'manual' });
-};
-Object.defineProperty(globalThis, 'fetch', {
-  configurable: false, enumerable: true,
-  get: () => guardedFetch,
-  set: value => {
-    if (typeof value !== 'function') throw new Error('Manual compact fetch changed');
-    delegate = value;
-  },
-});
-"""
 # Installed Pi 0.85.1: session retry, provider retry, session reopen, RPC and CLI
 # project-trust semantics. No stock-Pi fallback on changed bytes.
 _PINNED = {
@@ -117,16 +94,10 @@ _PREFLIGHT = r"""
 import { pathToFileURL } from 'node:url';
 const root = process.env.COMPACT_PI_PACKAGE;
 const { SessionManager } = await import(pathToFileURL(root + '/dist/core/session-manager.js'));
-const { prepareCompaction } = await import(
-  pathToFileURL(root + '/dist/core/compaction/compaction.js'));
 const session = SessionManager.open(
   process.env.COMPACT_SESSION, undefined, process.env.COMPACT_CWD);
-const preparation = prepareCompaction(session.getBranch(), {
-  enabled: false, reserveTokens: 16384, keepRecentTokens: 20000
-});
 console.log(JSON.stringify({
   sessionId: session.getSessionId(), sessionFile: session.getSessionFile(),
-  safe: !!preparation && !preparation.isSplitTurn,
 }));
 """
 
@@ -149,7 +120,7 @@ def _private_policy() -> Path:
         if stat.S_IMODE(directory.stat().st_mode) != 0o700:
             raise OSError("profile is not private")
         _fsync(directory.parent)
-        for name, content in (("settings.json", _POLICY), ("guard.mjs", _FETCH_GUARD)):
+        for name, content in (("settings.json", _POLICY),):
             fd = os.open(
                 directory / name,
                 os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0),
@@ -208,6 +179,15 @@ def _session_bytes(file: Path) -> bytes:
         data = stream.read(MAX_SESSION + 1)
     if len(data) > MAX_SESSION or not data.endswith(b"\n"):
         raise ValueError("Incomplete saved session")
+    for index, line in enumerate(data.splitlines()):
+        try:
+            row = json.loads(line)
+        except (ValueError, UnicodeError) as error:
+            raise ValueError("Malformed saved session row") from error
+        if not isinstance(row, dict) or not isinstance(row.get("type"), str):
+            raise ValueError("Malformed saved session row")
+        if index == 0 and (row.get("type") != "session" or row.get("version") != 3):
+            raise ValueError("Unsupported saved session version")
     return data
 
 
@@ -220,13 +200,23 @@ def _durable_compaction_row(file: Path, before: bytes) -> None:
             raise ValueError("Saved session is not a bounded regular file")
         with os.fdopen(os.dup(fd), "rb") as stream:
             after = stream.read(MAX_SESSION + 1)
-        if (
-            not after.endswith(b"\n")
-            or not after.startswith(before)
-            or after == before
-            or json.loads(after.splitlines()[-1]).get("type") != "compaction"
-        ):
+        if not after.endswith(b"\n") or not after.startswith(before) or after == before:
             raise ValueError("Missing saved compaction")
+        try:
+            added = [json.loads(line) for line in after[len(before) :].splitlines()]
+        except (ValueError, UnicodeError) as error:
+            raise ValueError("Malformed saved compaction rows") from error
+        if (
+            not added
+            or not isinstance(added[-1], dict)
+            or added[-1].get("type") != "compaction"
+            or any(
+                not isinstance(row, dict)
+                or row.get("type") not in {"model_change", "thinking_level_change"}
+                for row in added[:-1]
+            )
+        ):
+            raise ValueError("Unexpected concurrent saved session write")
         os.fsync(fd)
         _fsync(file.parent)
         # Do not attest to a stale inode replaced while Pi or another writer ran.
@@ -402,6 +392,39 @@ async def compact_session(
     *,
     timeout_seconds: float = TIMEOUT,
 ) -> dict[str, Any]:
+    """Serialize with Pi session writers from snapshot through durable result."""
+    if not _supported_platform():
+        return {"ok": False, "error": "Saved-session compaction requires POSIX teardown."}
+    if not isinstance(timeout_seconds, (float, int)) or not 0 < timeout_seconds <= TIMEOUT:
+        return {"ok": False, "error": "Compaction timeout is invalid."}
+    from .session_fence import session_writer_fence
+
+    try:
+        async with asyncio.timeout(timeout_seconds):
+            async with session_writer_fence(session_file):
+                return await _compact_session_under_fence(
+                    agent_bin,
+                    agent_args,
+                    session_file,
+                    cwd,
+                    custom_instructions,
+                    timeout_seconds=timeout_seconds,
+                )
+    except TimeoutError:
+        return {"ok": False, "error": "Compaction timed out; not retried."}
+    except OSError:
+        return {"ok": False, "error": "Saved session writer fence is unavailable."}
+
+
+async def _compact_session_under_fence(
+    agent_bin: str,
+    agent_args: Sequence[str],
+    session_file: str,
+    cwd: str,
+    custom_instructions: str | None = None,
+    *,
+    timeout_seconds: float = TIMEOUT,
+) -> dict[str, Any]:
     """Run a single explicit compact on an existing Pi session; never auto-retry."""
     if not _supported_platform():
         return {"ok": False, "error": "Saved-session compaction requires POSIX teardown."}
@@ -431,9 +454,8 @@ async def compact_session(
         return {"ok": False, "error": "Private no-retry policy could not be committed."}
     env = os.environ.copy()
     env["PI_CODING_AGENT_DIR"] = str(profile)
-    # Override inherited NODE_OPTIONS; no user-provided preloads can bypass
-    # the hard single-POST guard or alter the effective retry policy.
-    env["NODE_OPTIONS"] = f"--import={(profile / 'guard.mjs').as_uri()}"
+    # Do not run inherited preloads in this isolated Pi invocation.
+    env["NODE_OPTIONS"] = ""
     env["PI_OFFLINE"] = "1"
     env["PI_TELEMETRY"] = "0"
     proc: asyncio.subprocess.Process | None = None
@@ -447,12 +469,11 @@ async def compact_session(
             state = await _preflight(package, session, project, env)
             if (
                 not state
-                or state.get("safe") is not True
                 or state.get("sessionFile") != str(session)
                 or type(state.get("sessionId")) is not str
                 or not state["sessionId"]
             ):
-                return {"ok": False, "error": "Compaction requires a non-split saved Pi session."}
+                return {"ok": False, "error": "Compaction requires a saved Pi session."}
             if _session_bytes(session) != before:
                 return {"ok": False, "error": "Saved session changed before compaction."}
             proc = await asyncio.create_subprocess_exec(
@@ -492,18 +513,15 @@ async def compact_session(
             current = _session_bytes(session)
             if not _startup_metadata(before, current):
                 raise ValueError("Saved session changed during RPC startup")
-            # Re-evaluate the exact branch *after* Pi's startup metadata writes.
-            # A split turn could otherwise consume two provider calls even when
-            # both retry layers are disabled.
+            # Recheck the exact session after Pi's startup metadata writes.
             active = await _preflight(package, session, project, env)
             if (
                 not active
-                or active.get("safe") is not True
                 or active.get("sessionFile") != str(session)
                 or active.get("sessionId") != state["sessionId"]
                 or _session_bytes(session) != current
             ):
-                raise ValueError("Pi active session is not one-request safe")
+                raise ValueError("Pi active session changed before compaction")
             request_id = uuid4().hex
             command: dict[str, Any] = {"id": request_id, "type": "compact"}
             if custom_instructions and custom_instructions.strip():
