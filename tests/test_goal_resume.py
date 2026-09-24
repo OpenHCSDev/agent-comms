@@ -1,5 +1,7 @@
 """Same-ID, explicitly requested goal resume through the public tool boundary."""
 
+import os
+
 import pytest
 
 from agent_comms import Goal, Thread
@@ -27,6 +29,28 @@ def test_same_id_resume_from_paused(comms, monkeypatch):
     assert result["status"] == "active"
     assert result["progress"] == "user resumed"
     assert comms.registry.require("owner").goal.id == started["id"]
+
+
+def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path):
+    monkeypatch.delenv("PI_AGENT_ID", raising=False)
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
+    comms.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    goal = invoke_tool(comms, "comms_set_goal", {"text": "finish this"})["goal"]
+    comms.begin_turn("owner", "same-assistant-turn")
+
+    first = invoke_tool(
+        comms,
+        "comms_goal",
+        {"goal_id": goal["id"], "status": "active", "progress": "one step"},
+    )
+    with pytest.raises(ValueError, match="already reported"):
+        invoke_tool(
+            comms,
+            "comms_goal",
+            {"goal_id": goal["id"], "status": "active", "progress": "another step"},
+        )
+    assert first["goal"]["progress"] == "one step"
+    assert comms.registry.require("owner").goal.progress == "one step"
 
 
 def test_model_tool_cannot_resume_blocked_uncertain_goal(comms, monkeypatch):

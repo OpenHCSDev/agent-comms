@@ -716,6 +716,7 @@ class Goal:
     # later goal transition advances it, even when status/progress return to
     # identical values, so a captured Goal cannot pass a stale CAS after ABA.
     revision: int = 0
+    reported_turn: str | None = None
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:
@@ -724,6 +725,8 @@ class Goal:
             raise ValueError("Unknown goal status.")
         if type(self.revision) is not int or not 0 <= self.revision < 1 << 63:
             raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
+        if self.reported_turn is not None and not isinstance(self.reported_turn, str):
+            raise ValueError("Goal reported turn must be a string or null.")
 
     @property
     def active(self) -> bool:

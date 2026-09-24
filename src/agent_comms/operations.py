@@ -1880,6 +1880,7 @@ class Comms:
         goal_id: str | None = None,
         expected_status: str | None = None,
         expected_goal: Goal | None = None,
+        model_report: bool = False,
     ) -> Goal | None:
         """Apply a goal transition; automated callers may compare a captured goal atomically."""
         with _store_lock(self._wire_lock_path):
@@ -1894,6 +1895,9 @@ class Comms:
                 raise ValueError("This goal was replaced or cleared; refresh its state.")
             if expected_status is not None and (goal is None or goal.status != expected_status):
                 raise ValueError("This goal is no longer active; refresh its state.")
+            report_turn = thread.active_turn.id if thread.active_turn is not None else ""
+            if model_report and goal is not None and goal.reported_turn == report_turn:
+                raise ValueError("This goal was already reported in this turn.")
             if action == "set":
                 # A replacement has a fresh unpredictable ID; revisions are
                 # monotone within that goal's identity, not across goals.
@@ -1908,6 +1912,7 @@ class Comms:
                     status=action,
                     progress=goal.progress if progress is None else progress,
                     revision=goal.revision + 1,
+                    reported_turn=report_turn if model_report else goal.reported_turn,
                 )
             else:
                 raise ValueError(f"Unknown goal action: {action}")

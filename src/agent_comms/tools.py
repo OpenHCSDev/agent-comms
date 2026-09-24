@@ -263,6 +263,7 @@ def _goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
         goal_id=str(arguments["goal_id"]),
         expected_status="active",
         progress=str(arguments["progress"]),
+        model_report=True,
     )
     return {"goal": asdict(goal) if goal else None}
 
