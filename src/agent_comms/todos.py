@@ -7,6 +7,7 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+import json
 import math
 import sqlite3
 from collections.abc import Iterator
@@ -53,6 +54,20 @@ class Assignment:
         _identity(self.owner, self.owner_created)
         _identity(self.parent, self.parent_created)
         _text(self.generation, "Assignment generation", 128)
+
+
+def _assignment_token(assignment: Assignment) -> str:
+    """Stable persisted identity of the predecessor used by one transition."""
+    return json.dumps(
+        (
+            assignment.owner,
+            float(assignment.owner_created),
+            assignment.parent,
+            float(assignment.parent_created),
+            assignment.generation,
+        ),
+        separators=(",", ":"),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,6 +143,7 @@ class TodoStore:
                 goal_owner TEXT, goal_created REAL, goal_id TEXT,
                 assignee TEXT, assignee_created REAL, parent TEXT,
                 parent_created REAL, generation TEXT,
+                last_transition TEXT, last_previous TEXT,
                 CHECK ((goal_owner IS NULL AND goal_created IS NULL AND goal_id IS NULL)
                     OR (goal_owner IS NOT NULL AND goal_created IS NOT NULL
                         AND goal_id IS NOT NULL)),
@@ -195,6 +211,15 @@ class TodoStore:
         if row is None:
             raise TodoError(f"Unknown todo: {todo_id}.")
         return cls._todo(row)
+
+    @staticmethod
+    def _last_transition_matches(
+        db: sqlite3.Connection, todo_id: str, kind: str, previous: Assignment
+    ) -> bool:
+        row = db.execute(
+            "SELECT last_transition, last_previous FROM todos WHERE id=?", (todo_id,)
+        ).fetchone()
+        return row is not None and tuple(row) == (kind, _assignment_token(previous))
 
     def get(self, todo_id: str) -> Todo:
         _text(todo_id, "Todo ID", 128)
@@ -310,6 +335,7 @@ class TodoStore:
                 and current.assignment == proposed
                 and current.state == "open"
                 and generation != previous.generation
+                and self._last_transition_matches(db, todo_id, "transfer", previous)
             ):
                 return current  # Exact retry after a committed, uncertain response.
             if (
@@ -321,8 +347,17 @@ class TodoStore:
                 raise TodoConflict(current)
             db.execute(
                 """UPDATE todos SET assignee=?,assignee_created=?,parent=?,
-                parent_created=?,generation=?,revision=revision+1 WHERE id=?""",
-                (name, created, parent_name, parent_created, generation, todo_id),
+                parent_created=?,generation=?,revision=revision+1,
+                last_transition='transfer',last_previous=? WHERE id=?""",
+                (
+                    name,
+                    created,
+                    parent_name,
+                    parent_created,
+                    generation,
+                    _assignment_token(previous),
+                    todo_id,
+                ),
             )
             return self._current(db, todo_id)
 
@@ -335,6 +370,7 @@ class TodoStore:
                 current.revision == expected_revision + 1
                 and current.assignment is None
                 and current.state != "done"
+                and self._last_transition_matches(db, todo_id, "release", previous)
             ):
                 return current  # Exact retry after a committed, uncertain response.
             if (
@@ -346,8 +382,9 @@ class TodoStore:
             db.execute(
                 """UPDATE todos SET assignee=NULL,assignee_created=NULL,
                 parent=NULL,parent_created=NULL,generation=NULL,revision=revision+1
+                ,last_transition='release',last_previous=?
                 WHERE id=?""",
-                (todo_id,),
+                (_assignment_token(previous), todo_id),
             )
             return self._current(db, todo_id)
 

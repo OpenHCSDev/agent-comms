@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import Thread
-from agent_comms.todos import GoalRef, TodoConflict, TodoError, TodoStore
+from agent_comms.todos import Assignment, GoalRef, TodoConflict, TodoError, TodoStore
 
 
 def thread(name: str, root: Path, created: float) -> Thread:
@@ -105,6 +105,7 @@ def test_idempotent_retry_transfer_and_old_generation_cannot_clear_owner(tmp_pat
         generation="gen-b",
     )
     assert moved.revision == 3 and moved.assignment.owner == "worker-b"
+    store = TodoStore(tmp_path)  # Retry after the writer process has exited.
     assert (
         store.transfer(
             "todo-1",
@@ -116,6 +117,15 @@ def test_idempotent_retry_transfer_and_old_generation_cannot_clear_owner(tmp_pat
         )
         == moved
     )
+    with pytest.raises(TodoConflict):
+        store.transfer(
+            "todo-1",
+            expected_revision=2,
+            previous=Assignment("other", 4.0, "lead", 1.0, "gen-other"),
+            owner=second,
+            parent=lead,
+            generation="gen-b",
+        )
     with pytest.raises(TodoConflict):
         store.release("todo-1", expected_revision=3, previous=reserved.assignment)
     with pytest.raises(TodoConflict):
@@ -140,7 +150,14 @@ def test_release_exact_retry_after_uncertain_reply(tmp_path: Path) -> None:
     )
     released = store.release("todo-1", expected_revision=2, previous=reserved.assignment)
     assert released.revision == 3 and released.assignment is None
+    store = TodoStore(tmp_path)
     assert store.release("todo-1", expected_revision=2, previous=reserved.assignment) == released
+    with pytest.raises(TodoConflict):
+        store.release(
+            "todo-1",
+            expected_revision=2,
+            previous=Assignment("other", 4.0, "lead", 1.0, "gen-other"),
+        )
     with pytest.raises(TodoConflict):
         store.release("todo-1", expected_revision=1, previous=reserved.assignment)
 
