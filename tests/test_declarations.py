@@ -680,7 +680,11 @@ class TestMessageBus:
             assert sequences == [1, 2, 4]
 
     @pytest.mark.skipif(os.name != "posix", reason="real /var/tmp durability fixture")
-    def test_reopen_never_reuses_sequence_after_metadata_rollback(self) -> None:
+    @pytest.mark.parametrize("metadata_state", ["stale", "missing"])
+    @pytest.mark.parametrize("unterminated", [False, True])
+    def test_reopen_never_reuses_sequence_after_metadata_rollback(
+        self, metadata_state: str, unterminated: bool
+    ) -> None:
         """A retained bus row still owns its sequence if metadata rolled back."""
         with TemporaryDirectory(prefix="ac-bus-seq-", dir="/var/tmp") as dirname:
             root = Path(dirname)
@@ -690,12 +694,17 @@ class TestMessageBus:
             sequence_path = root / "bus_meta.json"
             old_metadata = sequence_path.read_bytes()
             bus.send(Message(sender="a", target="b", body="third", type=MessageType.INFO))
+            if unterminated:
+                bus._path.write_bytes(bus._path.read_bytes()[:-1])
 
             # Deterministic crash cut: the last fsynced row survives while an
             # older metadata directory entry is recovered on reboot.
-            stale = root / "bus_meta.stale"
-            stale.write_bytes(old_metadata)
-            os.replace(stale, sequence_path)
+            if metadata_state == "stale":
+                stale = root / "bus_meta.stale"
+                stale.write_bytes(old_metadata)
+                os.replace(stale, sequence_path)
+            else:
+                sequence_path.unlink()
 
             reopened = MessageBus(bus._path, bus._registry)
             reopened.send(Message(sender="a", target="b", body="new", type=MessageType.INFO))

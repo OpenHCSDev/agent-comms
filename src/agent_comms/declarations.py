@@ -2481,6 +2481,9 @@ class MessageBus:
             metadata = json.loads(sequence_path.read_text()) if sequence_path.exists() else {}
             if not isinstance(metadata, dict) or "writer_protocol_version" in metadata:
                 raise RelationViolationError("Legacy append is unavailable after private cutover.")
+            # A crash may leave a valid final row without its newline. Complete
+            # it before choosing a sequence, as the append path would do later.
+            _repair_trailing_jsonl(self._path)
             last_sequence = max(
                 self._read_last_sequence(sequence_path), self._last_row_sequence_unlocked()
             )
