@@ -1643,11 +1643,20 @@ time.sleep(60)
         stub = _stub(
             tmp_path,
             f"#!{sys.executable}\n" + f"""\
-import json, pathlib, sys, time
+import json, pathlib, sys, threading, time
+emit_lock = threading.Lock()
 def emit(value):
-    print(json.dumps(value), flush=True)
+    with emit_lock:
+        print(json.dumps(value), flush=True)
 {_NATIVE_PROMPT_START}
+steering_received = threading.Event()
+def keep_model_live_until_steering():
+    while not steering_received.wait(0.025):
+        emit({{"type": "message_update", "assistantMessageEvent":
+              {{"type": "thinking_delta", "delta": "."}}}})
+threading.Thread(target=keep_model_live_until_steering, daemon=True).start()
 steering = json.loads(sys.stdin.readline())
+steering_received.set()
 pathlib.Path({str(steering_log)!r}).write_text(json.dumps(steering, sort_keys=True))
 emit({{"id": steering["id"], "type": "response", "command": "prompt", "success": True}})
 if {started!r}:
