@@ -785,6 +785,7 @@ async def _stream_agent_events(
     context_size: int | None = None
     confirmed_context_used: int | None = None
     provisional_usage = False
+    provider_response_index = 0
     # A prompt ACK can mean handled/queued, and a final from an unrelated run
     # cannot complete this prompt. Observe this prompt's user message first.
     initial_prompt_acknowledged = False
@@ -1516,6 +1517,14 @@ async def _stream_agent_events(
             # A later successful assistant message means a retry recovered.
             message = payload.get("message") or {}
             if message.get("role") == "assistant":
+                usage = message.get("usage")
+                if isinstance(usage, dict) and not session_identity_uncertain:
+                    provider_response_index += 1
+                    yield {
+                        "type": "provider_usage",
+                        "response_id": str(provider_response_index),
+                        "usage": usage,
+                    }
                 stop_reason = message.get("stopReason")
                 final_assistant_stop = (
                     stop_reason == "stop" and initial_input_started and not input_uncertain

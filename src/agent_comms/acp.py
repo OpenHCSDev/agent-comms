@@ -26,7 +26,7 @@ import sys
 import time
 import unicodedata
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -68,6 +68,13 @@ from .declarations import (
     TurnRouting,
     _store_lock,
     is_channel_target,
+)
+from .goal_attempts import (
+    Generation,
+    GoalAttemptError,
+    GoalAttemptStore,
+    LaunchPermit,
+    StaleAttempt,
 )
 from .input_disposition import AcpDeliveryCursors, InputDispositions
 from .operations import OBSERVATION_INTERVAL, Comms, wire
@@ -139,6 +146,8 @@ class CommsAgent:
         self._steering_input_keys: dict[str, dict[str, str]] = {}
         self._turn_input_keys: dict[str, set[str]] = {}
         self._dispositions = InputDispositions(comms.root)
+        self._goal_store: GoalAttemptStore | None = None
+        self._pending_goal_origins: dict[str, str] = {}
         self._delivery_cursors = AcpDeliveryCursors(comms.root)
         self._legacy_through: dict[str, int] = {}
         self._session_titles: dict[str, str] = {}
@@ -1311,6 +1320,9 @@ class CommsAgent:
                             origins=tuple(
                                 turn.origin for turn in pending if turn.origin is not None
                             ),
+                            autonomous_goal=bool(
+                                len(pending) == 1 and pending[0].goal_id is not None
+                            ),
                         )
                     finally:
                         self._turn_tasks.pop(session_id, None)
@@ -1328,10 +1340,27 @@ class CommsAgent:
             return
         goal = thread.goal
         if goal is not None and goal.active:
+            store = self._goal_store
+            if store is None or self._pending_goal_origins.get(thread.name) == goal.id:
+                return
+            generation = store.snapshot(goal.id)
+            if generation is None or generation.state != "ready":
+                return
+            try:
+                store.ready_grant(goal.id, generation.number)
+            except GoalAttemptError:
+                return
             self._pending_turns.setdefault(session_id, []).append(
                 ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
             )
             self._schedule_wake(session_id)
+
+    def _open_goal_store(self) -> GoalAttemptStore:
+        if self._goal_store is None:
+            private = self._comms.root / "goal-private"
+            private.mkdir(mode=0o700, exist_ok=True)
+            self._goal_store = GoalAttemptStore.initialize(private)
+        return self._goal_store
 
     async def _drain_count(self, session_id: str) -> int:
         return await self._drain_inbox(session_id)
@@ -1347,6 +1376,7 @@ class CommsAgent:
         images: tuple[Any, ...] = (),
         original_keys: tuple[str, ...] = (),
         initial_display_text: str | None = None,
+        autonomous_goal: bool = False,
     ) -> None:
         """Stream a real coding agent's reply: events to the client, status to the wire."""
         thread = self._comms.registry.require(thread_name)
@@ -1359,6 +1389,27 @@ class CommsAgent:
             # must not run for a direct whose UNKNOWN row needs that proof.
             return
         goal = thread.goal
+        goal_permit: LaunchPermit | None = None
+        if autonomous_goal:
+            if (
+                goal is None
+                or not goal.active
+                or backend.rpc_args_for(self._agent_bin, self._agent_args) is None
+            ):
+                return
+            store = self._goal_store
+            if store is None:
+                return
+            with _store_lock(self._comms._wire_lock_path):
+                generation = store.snapshot(goal.id)
+                if generation is None or generation.state != "ready":
+                    return
+                try:
+                    grant = store.ready_grant(goal.id, generation.number)
+                    reservation = store.reserve(goal.id, generation.number, ready_grant=grant)
+                    goal_permit = store.claim_launch(reservation)
+                except GoalAttemptError:
+                    return
         self._sessions[session_id] = thread_name
         # Error-display deduplication belongs to one backend turn, not a session.
         self._emitted_errors.pop(session_id, None)
@@ -1431,6 +1482,19 @@ class CommsAgent:
                     and goal_ok
                     and not (keys and current_goal is not None and current_goal.active)
                 )
+                if allowed and goal_permit is not None:
+                    attempt = goal_permit.reservation
+                    assert self._goal_store is not None
+                    allowed = self._goal_store._is_attempt(
+                        attempt,
+                        "claimed",
+                        Generation(
+                            attempt.goal_id,
+                            attempt.generation,
+                            "reserved",
+                            attempt.attempt_id,
+                        ),
+                    )
                 if allowed:
                     for key in keys:
                         row = self._dispositions.get(key)
@@ -1521,6 +1585,9 @@ class CommsAgent:
         reply_parts: list[str] = []
         terminal_ok: bool | None = None
         backend_work_observed = False
+        goal_tool_ok = False
+        goal_attempt_resolved = False
+        originated_goal_ids: set[str] = set()
         settled = False
         cancelled = False
         backend_inbox: asyncio.Queue[str | dict[str, Any]] = asyncio.Queue()
@@ -1558,6 +1625,15 @@ class CommsAgent:
                 native_start=native_start,
             ):
                 kind = event.get("type")
+                if kind == "provider_usage":
+                    if goal_permit is not None:
+                        assert self._goal_store is not None
+                        self._goal_store.record_provider_usage(
+                            goal_permit,
+                            str(event["response_id"]),
+                            event["usage"],
+                        )
+                    continue
                 if kind in {"compaction_start", "compaction_end"}:
                     # A previous usage sample is not authoritative after Pi
                     # starts compaction, even if the attempt later aborts.
@@ -1734,7 +1810,17 @@ class CommsAgent:
                         thread_name, ActivityState.WORKING, event.get("title", "")
                     )
                 elif kind == "tool_end":
+                    if event.get("name") == "comms_goal" and event.get("ok") is True:
+                        goal_tool_ok = True
                     thread_name = await self._sync_session_identity(session_id)
+                    if event.get("name") == "comms_set_goal" and event.get("ok") is True:
+                        current_goal = self._comms.registry.require(thread_name).goal
+                        if current_goal is not None:
+                            store = self._open_goal_store()
+                            if store.snapshot(current_goal.id) is None:
+                                store.create_goal(current_goal.id)
+                                originated_goal_ids.add(current_goal.id)
+                                self._pending_goal_origins[thread_name] = current_goal.id
                     self._comms.set_activity(thread_name, ActivityState.THINKING, task[:80])
                 elif kind == "settled":
                     self._comms.finish_turn(thread_name, turn_id)
@@ -1779,6 +1865,42 @@ class CommsAgent:
                             "Backend turn ended without a result; " "inspect local diagnostics."
                         ),
                     )
+            if goal_permit is not None:
+                assert goal is not None
+                assert self._goal_store is not None
+                current_goal = self._comms.registry.require(thread_name).goal
+                verified_report = (
+                    goal_tool_ok
+                    and current_goal is not None
+                    and current_goal.id == goal.id
+                    and current_goal.reported_turn == turn_id
+                )
+                if terminal_ok is True and verified_report and current_goal is not None:
+                    witness = f"registry-revision:{current_goal.revision}"
+                    if current_goal.status == "completed":
+                        self._goal_store.record_verified_completion(goal_permit, witness)
+                        goal_attempt_resolved = True
+                    elif current_goal.active:
+                        self._goal_store.record_verified_progress(goal_permit, witness)
+                        goal_attempt_resolved = True
+                if not goal_attempt_resolved:
+                    with suppress(StaleAttempt):
+                        self._goal_store.record_failed(
+                            goal_permit.reservation,
+                            "Goal turn ended without verified terminal progress.",
+                        )
+                    goal_attempt_resolved = True
+                    if (
+                        current_goal is not None
+                        and current_goal.id == goal.id
+                        and current_goal.active
+                    ):
+                        self._comms.block_goal_after_failed_turn(
+                            thread_name,
+                            started_goal=goal,
+                            expected_worktree=thread.worktree,
+                            diagnostic="Goal turn ended without verified terminal progress.",
+                        )
             if origins and settled and terminal_ok is True:
                 await asyncio.to_thread(
                     self._comms.record_turn_routing, thread_name, checkpoint, routing
@@ -1831,6 +1953,48 @@ class CommsAgent:
             cancelled = True
             raise
         finally:
+            for originated_id in originated_goal_ids:
+                current = self._comms.registry.require(thread_name).goal
+                valid_origin = (
+                    terminal_ok is True
+                    and current is not None
+                    and current.id == originated_id
+                    and current.active
+                )
+                if not valid_origin:
+                    assert self._goal_store is not None
+                    generation = self._goal_store.snapshot(originated_id)
+                    if generation is not None and generation.state == "ready":
+                        self._goal_store.retire_goal(
+                            originated_id,
+                            expected_generation=generation.number,
+                            attempt_id=None,
+                        )
+                    if (
+                        current is not None
+                        and current.id == originated_id
+                        and current.status
+                        in {
+                            "active",
+                            "completed",
+                        }
+                    ):
+                        self._comms.update_goal(
+                            thread_name,
+                            "blocked",
+                            goal_id=originated_id,
+                            expected_goal=current,
+                            progress="Goal origin turn did not finish successfully.",
+                        )
+                if self._pending_goal_origins.get(thread_name) == originated_id:
+                    self._pending_goal_origins.pop(thread_name, None)
+            if goal_permit is not None and not goal_attempt_resolved:
+                assert self._goal_store is not None
+                with suppress(StaleAttempt):
+                    self._goal_store.record_failed(
+                        goal_permit.reservation,
+                        "Goal attempt ended without a verified terminal result.",
+                    )
             self._emitted_errors.pop(session_id, None)
             if self._backend_inboxes.get(session_id) is backend_inbox:
                 self._backend_inboxes.pop(session_id, None)

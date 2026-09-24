@@ -5,6 +5,7 @@ import os
 import pytest
 
 from agent_comms import Goal, Thread
+from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.operations import Comms
 from agent_comms.tools import invoke_tool
 
@@ -51,6 +52,21 @@ def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path
         )
     assert first["goal"]["progress"] == "one step"
     assert comms.registry.require("owner").goal.progress == "one step"
+
+
+def test_clearing_goal_releases_its_reserved_attempt(comms, monkeypatch):
+    goal = _goal(comms, monkeypatch)
+    private = comms.root / "goal-private"
+    private.mkdir(mode=0o700)
+    store = GoalAttemptStore.initialize(private)
+    store.create_goal(goal["id"])
+    reservation = store.reserve(goal["id"], 1)
+
+    comms.update_goal("owner", "clear", goal_id=goal["id"])
+
+    assert comms.registry.require("owner").goal is None
+    assert GoalAttemptStore(private).snapshot(goal["id"]).state == "cancelled"
+    assert store.snapshot(goal["id"]).attempt_id == reservation.attempt_id
 
 
 def test_model_tool_cannot_resume_blocked_uncertain_goal(comms, monkeypatch):

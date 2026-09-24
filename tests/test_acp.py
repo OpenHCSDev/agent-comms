@@ -1052,6 +1052,113 @@ class TestAgentTurn:
         assert goal is not None and goal.id == initial.id
         assert goal.status == "active" and goal.progress == "Completed a verified step"
 
+    async def test_goal_completion_and_provider_usage_settle_one_attempt(
+        self, wired, tmp_path, monkeypatch
+    ):
+        from agent_comms.goal_attempts import GoalAttemptStore
+
+        agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+
+        class FakeClient:
+            async def session_update(self, **kwargs):
+                pass
+
+        agent._client = FakeClient()
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        goal = wired.update_goal("proj", "set", text="Ship the release")
+        private = wired.root / "goal-private"
+        private.mkdir(mode=0o700)
+        store = GoalAttemptStore.initialize(private)
+        store.create_goal(goal.id)
+        agent._goal_store = store
+
+        async def events(*args, **kwargs):
+            wired.update_goal(
+                "proj", "completed", goal_id=goal.id, progress="Verified done", model_report=True
+            )
+            yield {"type": "tool_end", "id": "goal", "name": "comms_goal", "ok": True}
+            yield {
+                "type": "provider_usage",
+                "response_id": "1",
+                "usage": {"input": 5, "output": 2, "totalTokens": 7, "cost": {"total": 0.01}},
+            }
+            yield {"type": "settled"}
+            yield {"type": "done", "ok": True, "text": "done"}
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        agent._schedule_goal("proj")
+        await asyncio.wait_for(agent._wake_tasks["proj"], timeout=2)
+
+        assert wired.registry.require("proj").goal.status == "completed"
+        assert GoalAttemptStore(private).snapshot(goal.id).state == "completed"
+        assert GoalAttemptStore(private).provider_usage_total(goal.id).responses == 1
+        await agent.shutdown()
+
+    async def test_goal_tool_hands_private_ready_grant_to_owner_after_final_stop(
+        self, wired, tmp_path, monkeypatch
+    ):
+        from agent_comms.goal_attempts import GoalAttemptStore
+
+        agent = CommsAgent(wired, agent_bin="pi")
+        updates = []
+
+        class FakeClient:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+
+        agent._client = FakeClient()
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+
+        async def events(*args, **kwargs):
+            wired.update_goal("proj", "set", text="Finish the release")
+            yield {"type": "tool_end", "id": "set-goal", "name": "comms_set_goal", "ok": True}
+            yield {"type": "settled"}
+            yield {"type": "done", "ok": True, "text": "Goal set"}
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        await agent._run_agent_turn("proj", "proj", "Set a goal")
+
+        goal = wired.registry.require("proj").goal
+        store = GoalAttemptStore(wired.root / "goal-private")
+        assert store.snapshot(goal.id).state == "ready"
+        grant = agent._goal_store.ready_grant(goal.id, 1)
+        assert grant not in repr(updates)
+        assert grant not in repr(goal)
+        await agent.shutdown()
+
+    async def test_failed_goal_origin_never_launches_continuation(
+        self, wired, tmp_path, monkeypatch
+    ):
+        from agent_comms.goal_attempts import GoalAttemptStore, UnresolvedAttempt
+
+        agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+
+        class FakeClient:
+            async def session_update(self, **kwargs):
+                pass
+
+        agent._client = FakeClient()
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+
+        async def events(*args, **kwargs):
+            wired.update_goal("proj", "set", text="Do not replay")
+            yield {"type": "tool_end", "id": "set-goal", "name": "comms_set_goal", "ok": True}
+            yield {"type": "settled"}
+            yield {"type": "done", "ok": False, "text": "provider failed"}
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        await agent._run_agent_turn("proj", "proj", "Set a goal")
+
+        goal = wired.registry.require("proj").goal
+        store = GoalAttemptStore(wired.root / "goal-private")
+        assert goal.status == "blocked"
+        assert store.snapshot(goal.id).state == "cancelled"
+        with pytest.raises(UnresolvedAttempt):
+            store.ready_grant(goal.id, 1)
+        agent._schedule_goal("proj")
+        assert not agent._pending_turns.get("proj")
+        await agent.shutdown()
+
 
 class TestWireProtocol:
     @pytest.mark.skipif(

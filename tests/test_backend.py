@@ -631,6 +631,10 @@ for line in sys.stdin:
             150,
             150,
         ]
+        assert [e["usage"]["totalTokens"] for e in events if e["type"] == "provider_usage"] == [
+            150,
+            500,
+        ]
         assert events[-1]["ok"] is False
 
     @pytest.mark.parametrize("tokens", [0, -1, 12.5, True, "120", None])

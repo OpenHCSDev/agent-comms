@@ -1898,6 +1898,25 @@ class Comms:
             report_turn = thread.active_turn.id if thread.active_turn is not None else ""
             if model_report and goal is not None and goal.reported_turn == report_turn:
                 raise ValueError("This goal was already reported in this turn.")
+            if action in {"clear", "set"} and goal is not None:
+                # Revoke a protected goal before removing or replacing its
+                # registry identity. If the registry write then fails, the
+                # remaining visible goal is safely unlaunchable.
+                from .goal_attempts import GoalAttemptStore
+
+                private = self.root / "goal-private"
+                if (private / "goal_attempts.sqlite3").exists():
+                    attempts = GoalAttemptStore(private)
+                    generation = attempts.snapshot(goal.id)
+                    if generation is not None and generation.state not in {
+                        "completed",
+                        "cancelled",
+                    }:
+                        attempts.retire_goal(
+                            goal.id,
+                            expected_generation=generation.number,
+                            attempt_id=generation.attempt_id,
+                        )
             if action == "set":
                 # A replacement has a fresh unpredictable ID; revisions are
                 # monotone within that goal's identity, not across goals.
