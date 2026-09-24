@@ -513,29 +513,41 @@ async def stream_agent_events(
     owner = asyncio.current_task()
     terminal_seen = False
     try:
-        async with aclosing(
-            _stream_agent_events(
-                agent_bin,
-                agent_args,
-                task,
-                cwd,
-                env_extra,
-                session_file=session_file,
-                steering_queue=steering_queue,
-                finish_event=finish_event,
-                fork_session=fork_session,
-                images=images,
-                model_wait_timeout=model_wait_timeout,
-                rpc_abort_grace=rpc_abort_grace,
-                require_input_id=require_input_id,
-                send_boundary=send_boundary,
-                native_start=native_start,
-            )
-        ) as events:
-            async for event in events:
-                if event.get("type") == "done":
-                    terminal_seen = True
-                yield event
+        from .session_fence import session_writer_fence
+
+        async with session_writer_fence(session_file):
+            try:
+                async with aclosing(
+                    _stream_agent_events(
+                        agent_bin,
+                        agent_args,
+                        task,
+                        cwd,
+                        env_extra,
+                        session_file=session_file,
+                        steering_queue=steering_queue,
+                        finish_event=finish_event,
+                        fork_session=fork_session,
+                        images=images,
+                        model_wait_timeout=model_wait_timeout,
+                        rpc_abort_grace=rpc_abort_grace,
+                        require_input_id=require_input_id,
+                        send_boundary=send_boundary,
+                        native_start=native_start,
+                    )
+                ) as events:
+                    async for event in events:
+                        if event.get("type") == "done":
+                            terminal_seen = True
+                        yield event
+            finally:
+                if owner is not None:
+                    await terminate_task_process(owner)
+                    stderr_task = _ACTIVE_STDERR_TASKS.pop(owner, None)
+                    if stderr_task is not None:
+                        if not stderr_task.done():
+                            stderr_task.cancel()
+                        await asyncio.gather(stderr_task, return_exceptions=True)
     except Exception:
         # A malformed RPC row cannot certify a completed turn. Preserve no
         # raw payload/stderr in the wire response and always reap the child.
@@ -548,14 +560,6 @@ async def stream_agent_events(
                 "reason_code": "pi_invalid_rpc_event",
                 "text": "Pi RPC returned an invalid event; this turn was not completed.",
             }
-    finally:
-        if owner is not None:
-            await terminate_task_process(owner)
-            stderr_task = _ACTIVE_STDERR_TASKS.pop(owner, None)
-            if stderr_task is not None:
-                if not stderr_task.done():
-                    stderr_task.cancel()
-                await asyncio.gather(stderr_task, return_exceptions=True)
 
 
 async def _stream_agent_events(
