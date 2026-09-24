@@ -101,6 +101,30 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
     assert comms.pending_count(viewer, "peer") == before
 
 
+def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: Path):
+    comms = wire(tmp_path)
+    comms.register(_peer(tmp_path, "peer"))
+    old_viewer = comms.user_identity(str(tmp_path)).name
+    comms.send("peer", old_viewer, "old viewer painted")
+    page = comms.dm_display_page("peer", worktree=str(tmp_path))
+    assert page.display_basis is not None and page.display_basis.viewer == old_viewer
+    comms.register(Thread("new_user", frozenset(), str(tmp_path), role=ThreadRole.USER))
+    # Normal registry rename retains the old human declaration but moves its
+    # insertion position behind new_user. user_identity now selects new_user.
+    comms.registry.rename(old_viewer, "old_user")
+    assert "old_user" in comms.registry
+    assert comms.user_identity(str(tmp_path)).name == "new_user"
+    comms.send("peer", "new_user", "new viewer unseen")
+    before = comms.pending_count("new_user", "peer")
+    assert before == 1
+    marker_path = tmp_path / "read_markers.json"
+    marker_before = marker_path.read_bytes() if marker_path.exists() else None
+    with pytest.raises(ValueError, match="registry changed|viewer/peer incarnation changed"):
+        _mark(comms, "peer", tmp_path, page)
+    assert (marker_path.read_bytes() if marker_path.exists() else None) == marker_before
+    assert comms.pending_count("new_user", "peer") == before
+
+
 def test_marker_changed_during_page_fails_before_basis_issued(tmp_path: Path, monkeypatch):
     comms = wire(tmp_path)
     comms.register(_peer(tmp_path, "peer"))

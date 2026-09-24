@@ -1234,10 +1234,18 @@ class Comms:
             if file_revision(self.registry._path) != proof.registry_revision:
                 raise ValueError("DM registry changed; refresh the page.")
             snapshot = self.registry._snapshot_unlocked()
+            # Match user_identity(worktree)'s current first-human selection
+            # without reentering the registry lock or creating a new user.
+            selected_viewer = next(
+                (thread for thread in snapshot.threads.values() if not thread.role.executable),
+                None,
+            )
             viewer = snapshot.threads.get(proof.viewer)
             target = snapshot.threads.get(proof.peer)
             if (
-                viewer is None
+                selected_viewer is None
+                or selected_viewer.name != proof.viewer
+                or viewer is None
                 or viewer.role is not ThreadRole.USER
                 or target is None
                 or snapshot.aliases.get(peer, peer) != proof.peer
