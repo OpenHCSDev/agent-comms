@@ -41,6 +41,10 @@ Install the optional ACP server dependency for graphical clients such as Toad:
 pip install "agent-comms[acp]"
 ```
 
+For a reproducible local installation with the merged Toad and Textual forks,
+use the [pinned stack](stack/README.md). The stack fixes the core and both
+external forks to reviewed commits.
+
 In an ACP client, normal prompts run the configured coding agent and stream
 thinking and tool progress. Use `@name message`, `#channel message`, or
 `!relay message` for coordination-only messages that should not launch a
