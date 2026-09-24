@@ -75,6 +75,7 @@ class RuntimeServer:
             action = request["action"]
             if action == "subscribe":
                 self.clients.setdefault(session_id, set()).add(client)
+                await self.agent.emit_session_identity(session_id, name, client=client)
                 await self.agent._replay_transcript(session_id, name, client=client)
                 await self.agent.replay_turn_state(session_id, client=client)
                 await self.agent.replay_unknown_inputs(session_id, client=client)

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Attach the pinned Toad stack to an existing agent-comms thread.
+set -euo pipefail
+
+usage() {
+    printf 'Usage: toad-comms [THREAD]\n\nLaunch Agent Comms in Toad. Default thread: agent-comms-ux.\n'
+}
+
+if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then
+    usage
+    exit 0
+fi
+if (( $# > 1 )); then
+    usage >&2
+    exit 2
+fi
+
+export AGENT_COMMS_ROOT="${AGENT_COMMS_ROOT:-$HOME/.agent-comms}"
+stack_root="${AGENT_COMMS_STACK_ROOT:-$AGENT_COMMS_ROOT/stack}"
+python="$stack_root/.venv/bin/python"
+toad="$stack_root/.venv/bin/toad"
+if [[ ! -x "$python" || ! -x "$toad" ]]; then
+    printf 'Toad environment is unavailable: %s/.venv\n' "$stack_root" >&2
+    exit 1
+fi
+
+export AGENT_COMMS_AGENT_BIN="${AGENT_COMMS_AGENT_BIN:-$HOME/.local/bin/pi}"
+# This terminal attaches to an owner; it must not inherit a child's identity.
+unset AGENT_COMMS_THREAD AGENT_COMMS_MANAGED PI_AGENT_ID PI_PARENT_ID PI_TASK PI_WORKTREE PI_PROMPT
+
+thread="${1:-agent-comms-ux}"
+project="$("$python" -c 'import sys; from agent_comms import wire; print(wire().registry.require(sys.argv[1]).worktree)' "$thread")"
+if [[ ! -d "$project" ]]; then
+    printf 'Thread project directory is unavailable: %s\n' "$project" >&2
+    exit 1
+fi
+
+exec "$toad" acp "$python -m agent_comms.acp" "$project" \
+    --title 'Agent Comms' --session "$thread"
