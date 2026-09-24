@@ -1586,7 +1586,6 @@ time.sleep(60)
     async def test_provider_retry_failure_is_distinct_from_model_silence(self, tmp_path):
         rpc_lines = "\n".join(
             [
-                '{"id":"agent-comms-prompt","type":"response","command":"prompt","success":true}',
                 '{"type":"auto_retry_start","attempt":1,"maxAttempts":3,'
                 '"errorMessage":"secret raw payload"}',
                 '{"type":"auto_retry_end","success":false,"attempt":3,'
@@ -1598,17 +1597,37 @@ time.sleep(60)
                 '{"contextUsage":{}}}',
             ]
         )
-        stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n"
+            + "import json, sys\n"
+            + "def emit(value):\n    print(json.dumps(value), flush=True)\n"
+            + _NATIVE_PROMPT_START
+            + f"for line in {rpc_lines!r}.splitlines():\n    emit(json.loads(line))\n",
+        )
+        starts = []
+
+        def native_start(public_id, native_id, text):
+            starts.append((public_id, native_id, text))
+            return True
 
         events = [
             event
             async for event in backend.stream_agent_events(
-                stub, [], "task", str(tmp_path), model_wait_timeout=0.03
+                stub,
+                [],
+                "task",
+                str(tmp_path),
+                model_wait_timeout=0.5,
+                require_input_id=True,
+                native_start=native_start,
             )
         ]
 
+        assert len(starts) == 1 and starts[0][0] is None and starts[0][2] == "task", events
+        assert len(starts[0][1]) == 32
         recovery = [event for event in events if event["type"] == "turn_state"]
-        assert [event["state"] for event in recovery] == ["retrying", "failed"]
+        assert [event["state"] for event in recovery] == ["retrying", "failed"], events
         assert recovery[0]["attempt"] == {"current": 1, "max": 3}
         assert recovery[-1]["reason_code"] == "provider_retry_exhausted"
         assert all("secret" not in str(event) for event in recovery)
