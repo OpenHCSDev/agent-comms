@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Build the pinned input-ID Pi copy on persistent disk. Never alter stock Pi.
+set -euo pipefail
+umask 077
+
+stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+repo_root=$(cd -- "$stack_root/.." && pwd)
+stock=${PI_STOCK_DIR:-/home/ts/.local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent}
+target="$stack_root/.pi-native"
+manifest="$stack_root/pi-native.sha256"
+bedrock=node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
+
+verify() (
+    cd -- "$1/node_modules/@earendil-works/pi-coding-agent"
+    sha256sum --check --status "$manifest"
+)
+
+if [[ -e "$target" ]]; then
+    if verify "$target"; then
+        printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
+        exit 0
+    fi
+    printf 'Existing native Pi copy differs from the pinned build: %s\n' "$target" >&2
+    exit 1
+fi
+
+# The experiment validates stock bytes, applies the pinned native ID patch with
+# zero fuzz, and checks JS syntax. Its Bedrock transport edit is intentionally
+# restored below: the running stack must not fork Pi's network layer.
+prepared=$(
+    PI_STOCK_DIR="$stock" "$repo_root/experiments/pi-context-proof/prepare-copied-pi.sh" \
+        | sed -n 's/^PI_PACKAGE_DIR=//p'
+)
+scratch_root=${prepared%/node_modules/@earendil-works/pi-coding-agent}
+if [[ "$prepared" != /var/tmp/agent-comms-pi-native-*/node_modules/@earendil-works/pi-coding-agent \
+      || ! -d "$prepared" ]]; then
+    printf 'Native Pi preparation did not return a validated package.\n' >&2
+    exit 1
+fi
+
+stage=$(mktemp -d "$stack_root/.pi-native.stage.XXXXXXXX")
+trap 'rm -rf -- "$stage" "$scratch_root"' EXIT
+mv -- "$scratch_root/node_modules" "$stage/node_modules"
+cp -- "$stock/$bedrock" "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
+verify "$stage"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
+mv -- "$stage" "$target"
+printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
