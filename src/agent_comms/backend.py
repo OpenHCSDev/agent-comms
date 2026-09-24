@@ -690,7 +690,11 @@ async def _stream_agent_events(
             "text": (
                 "".join(text_parts).strip()
                 if code == 0
-                else error_text or f"Backend exited with code {code}"
+                else (
+                    "Image prompt failed; backend diagnostics withheld."
+                    if images and error_text
+                    else error_text or f"Backend exited with code {code}"
+                )
             ),
             "ok": code == 0,
         }
@@ -1234,7 +1238,11 @@ async def _stream_agent_events(
                 prompt_accepted = True
                 phase = "model_wait"
             else:
-                error_message = str(payload.get("error") or "Prompt was rejected")
+                error_message = (
+                    "Image prompt failed; backend diagnostics withheld."
+                    if images
+                    else str(payload.get("error") or "Prompt was rejected")
+                )
                 yield turn_state("failed", "prompt_rejected", 0, event_phase="shutdown")
                 yield {"type": "error", "text": error_message}
                 break
@@ -1526,7 +1534,9 @@ async def _stream_agent_events(
                         provisional_usage = False
                         yield context_info()
                     error_message = (
-                        str(message.get("errorMessage") or "").strip()
+                        "Image prompt failed; backend diagnostics withheld."
+                        if images
+                        else str(message.get("errorMessage") or "").strip()
                         or f"Model request {stop_reason}"
                     )
                     yield {"type": "error", "text": error_message}
@@ -1602,7 +1612,11 @@ async def _stream_agent_events(
                 if success
                 else error_message
                 or fail_reason
-                or error_text
+                or (
+                    "Image prompt failed; backend diagnostics withheld."
+                    if images and error_text
+                    else error_text
+                )
                 or f"Backend exited with code {proc.returncode}"
             )
         ),

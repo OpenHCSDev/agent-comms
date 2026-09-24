@@ -84,7 +84,9 @@ class RuntimeServer:
                 await writer.drain()
                 await reader.read()
             elif action == "prompt":
-                result = await self.agent.prompt(session_id, request["prompt"])
+                result = await self.agent.prompt(
+                    session_id, request["prompt"], field_meta=request.get("meta") or {}
+                )
                 writer.write(
                     (
                         json.dumps({"result": result.model_dump(by_alias=True, exclude_none=True)})
