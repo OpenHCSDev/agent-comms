@@ -300,10 +300,18 @@ class TodoStore:
         _text(generation, "Assignment generation", 128)
         name, created = _thread(owner)
         parent_name, parent_created = _thread(parent)
+        proposed = Assignment(name, created, parent_name, parent_created, generation)
         if type(previous) is not Assignment:
             raise TodoError("Transfer requires the exact previous assignment.")
         with self._write() as db:
             current = self._current(db, todo_id)
+            if (
+                current.revision == expected_revision + 1
+                and current.assignment == proposed
+                and current.state == "open"
+                and generation != previous.generation
+            ):
+                return current  # Exact retry after a committed, uncertain response.
             if (
                 current.revision != expected_revision
                 or current.assignment != previous
@@ -323,6 +331,12 @@ class TodoStore:
             raise TodoError("Release requires the exact previous assignment.")
         with self._write() as db:
             current = self._current(db, todo_id)
+            if (
+                current.revision == expected_revision + 1
+                and current.assignment is None
+                and current.state != "done"
+            ):
+                return current  # Exact retry after a committed, uncertain response.
             if (
                 current.revision != expected_revision
                 or current.assignment != previous

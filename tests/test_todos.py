@@ -105,6 +105,17 @@ def test_idempotent_retry_transfer_and_old_generation_cannot_clear_owner(tmp_pat
         generation="gen-b",
     )
     assert moved.revision == 3 and moved.assignment.owner == "worker-b"
+    assert (
+        store.transfer(
+            "todo-1",
+            expected_revision=2,
+            previous=reserved.assignment,
+            owner=second,
+            parent=lead,
+            generation="gen-b",
+        )
+        == moved
+    )
     with pytest.raises(TodoConflict):
         store.release("todo-1", expected_revision=3, previous=reserved.assignment)
     with pytest.raises(TodoConflict):
@@ -117,6 +128,21 @@ def test_idempotent_retry_transfer_and_old_generation_cannot_clear_owner(tmp_pat
             generation="gen-c",
         )
     assert TodoStore(tmp_path).get("todo-1") == moved
+
+
+def test_release_exact_retry_after_uncertain_reply(tmp_path: Path) -> None:
+    store = TodoStore(tmp_path)
+    lead = thread("lead", tmp_path, 1.0)
+    worker = thread("worker", tmp_path, 2.0)
+    store.create("todo-1", "org/repo", "One task", creator=lead)
+    reserved = store.assign(
+        "todo-1", expected_revision=1, owner=worker, parent=lead, generation="gen-a"
+    )
+    released = store.release("todo-1", expected_revision=2, previous=reserved.assignment)
+    assert released.revision == 3 and released.assignment is None
+    assert store.release("todo-1", expected_revision=2, previous=reserved.assignment) == released
+    with pytest.raises(TodoConflict):
+        store.release("todo-1", expected_revision=1, previous=reserved.assignment)
 
 
 def test_blocked_todo_retains_assignment_goal_does_not_follow_status(
