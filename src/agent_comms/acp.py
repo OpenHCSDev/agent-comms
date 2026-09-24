@@ -53,6 +53,7 @@ from .runtime import RuntimeProxy, RuntimeServer, socket_path
 from .tool_results import tool_result_content
 
 GLOBAL_TARGET = "#all"
+GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
 DEFAULT_AGENT_BIN = "pi"
@@ -595,6 +596,7 @@ class CommsAgent:
         """Stream a real coding agent's reply: events to the client, status to the wire."""
         thread = self._comms.registry.require(thread_name)
         thread_name = thread.name
+        started_goal = thread.goal
         self._sessions[session_id] = thread_name
         self._comms.set_activity(thread_name, ActivityState.THINKING, task[:80])
         worktree = thread.worktree if Path(thread.worktree).is_dir() else str(Path.cwd())
@@ -619,8 +621,19 @@ class CommsAgent:
             "Reply with comms_send when a reply is useful; do not echo acknowledgments. "
             f"Peer state: {json.dumps(peers)}\n\n{task}"
         )
+        if started_goal is not None and started_goal.active:
+            task = (
+                f"Persistent goal {started_goal.id}: {started_goal.text}\n"
+                f"Progress: {started_goal.progress}\n"
+                "Report progress with comms_goal before ending. Mark completed only after "
+                "verification; mark blocked if user input is needed. Never replay an "
+                "uncertain backend turn.\n\n" + task
+            )
         reply_parts: list[str] = []
         settled = False
+        terminal_ok = False
+        terminal_seen = False
+        backend_work_observed = False
         backend_inbox: asyncio.Queue[str] = asyncio.Queue()
         finish_event = asyncio.Event()
         self._backend_inboxes[session_id] = backend_inbox
@@ -648,9 +661,14 @@ class CommsAgent:
                 kind = event.get("type")
                 if kind == "chunk":
                     reply_parts.append(event.get("text") or "")
-                elif kind in {"compaction_start", "compaction_end"}:
-                    # Compaction invalidates any previous context usage count;
-                    # only a later authoritative agent_info can repopulate it.
+                if kind in {"tool_start", "tool_end"} or (
+                    kind in {"chunk", "thinking"} and bool(event.get("text"))
+                ):
+                    backend_work_observed = True
+                if kind in {"compaction_start", "compaction_end"}:
+                    # Neither the pre-compaction count nor the result summary
+                    # is authoritative current usage. A later fresh stats
+                    # response may repopulate it; do not show a stale meter.
                     info = self._comms.agent_info_of(thread_name)
                     self._comms.set_agent_info(
                         thread_name,
@@ -659,7 +677,7 @@ class CommsAgent:
                         context_used=None,
                         context_size=info.context_size if info else None,
                     )
-                elif kind == "agent_info":
+                if kind == "agent_info":
                     session_name = event.get("session_name")
                     session_file = event.get("session_file")
                     if session_file:
@@ -694,15 +712,57 @@ class CommsAgent:
                     settled = True
                     finish_event.set()
                     self._active_turns.pop(session_id, None)
+                elif kind == "done":
+                    terminal_ok = not terminal_seen and event.get("ok") is True
+                    terminal_seen = True
                 await self._emit_event(session_id, {**event, "turn_id": turn_id})
         finally:
+            if started_goal is not None and started_goal.active:
+                # The durable goal row is the authority. In particular, an ACK,
+                # EOF, or successful-but-empty backend result must not launch
+                # another attempt. The guarded transition preserves newer
+                # same-ID progress and cannot revive a replaced goal.
+                current_thread = self._comms.registry.require(thread_name)
+                current_goal = current_thread.goal
+                if (
+                    current_thread.worktree == thread.worktree
+                    and current_goal is not None
+                    and current_goal.id == started_goal.id
+                    and current_goal.active
+                ):
+                    diagnostic = None
+                    if not terminal_seen or not terminal_ok:
+                        diagnostic = (
+                            "Backend turn failed or ended without a result; inspect local "
+                            "diagnostics before resuming."
+                        )
+                    elif not backend_work_observed:
+                        diagnostic = (
+                            "Backend reported success without assistant output or tool activity; "
+                            "inspect the session before resuming."
+                        )
+                    elif current_goal == started_goal:
+                        diagnostic = (
+                            "Turn ended without an explicit goal progress update; inspect the "
+                            "result before resuming."
+                        )
+                    if diagnostic is not None:
+                        self._comms.block_goal_after_failed_turn(
+                            thread_name,
+                            started_goal=started_goal,
+                            expected_worktree=thread.worktree,
+                            diagnostic=diagnostic,
+                        )
             if self._backend_inboxes.get(session_id) is backend_inbox:
                 self._backend_inboxes.pop(session_id, None)
             while not backend_inbox.empty():
                 self._pending_turns.setdefault(session_id, []).append(backend_inbox.get_nowait())
             thread_name = await self._sync_session_identity(session_id)
             body = "".join(reply_parts).strip()
-            if body:
+            # Streamed chunks are provisional. An ACK, partial assistant text,
+            # or Pi's settled event cannot publish an automatic wire reply
+            # after the backend reports failure or exits without a done.
+            if body and terminal_ok:
                 self._comms.send(thread_name, GLOBAL_TARGET, body[:4000])
             if not settled:
                 self._comms.set_activity(thread_name, ActivityState.IDLE)

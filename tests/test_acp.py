@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.acp import CommsAgent
-from agent_comms.backend import NATIVE_INPUT_CAPABILITY
+from agent_comms.acp import GOAL_CONTINUE_PROMPT, CommsAgent
 from agent_comms.declarations import UnregisteredThreadError
+from agent_comms.native_pi import CAPABILITY as NATIVE_INPUT_CAPABILITY
 from agent_comms.operations import wire
 
 
@@ -232,6 +232,282 @@ class TestAgentTurn:
         history = [m.body for m in agent._comms.channel_history("#all")]
         assert len(history) == 1 and history[0].endswith("fix the flake")
         assert "you are thread 'proj'" in history[0]
+
+    @pytest.mark.parametrize(("terminal_ok", "expected_count"), [(False, 0), (None, 0), (True, 1)])
+    async def test_failed_or_missing_backend_terminal_never_publishes_provisional_reply(
+        self, wired, tmp_path, monkeypatch, terminal_ok, expected_count
+    ):
+        agent = self._agent_with_stub(tmp_path, wired)
+
+        class FakeClient:
+            async def session_update(self, **kwargs):
+                pass
+
+        async def events(*args, **kwargs):
+            yield {"type": "chunk", "text": "provisional reply"}
+            yield {"type": "settled"}
+            if terminal_ok is not None:
+                yield {
+                    "type": "done",
+                    "ok": terminal_ok,
+                    "text": "failed" if not terminal_ok else "",
+                }
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        agent._client = FakeClient()
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        await agent._run_agent_turn("proj", "proj", "task")
+
+        history = [message.body for message in wired.channel_history("#all")]
+        assert len(history) == expected_count
+        if expected_count:
+            assert history == ["provisional reply"]
+
+    @pytest.mark.parametrize(
+        ("events", "reason"),
+        [
+            ([{"type": "done", "ok": False, "text": "no matching user start"}], "failed"),
+            ([], "without a result"),
+            ([{"type": "done", "ok": True, "text": ""}], "without assistant output"),
+            (
+                [{"type": "chunk", "text": "work"}, {"type": "done", "ok": True}],
+                "without an explicit goal progress update",
+            ),
+        ],
+    )
+    async def test_uncertain_goal_turn_blocks_without_auto_retry(
+        self, wired, tmp_path, monkeypatch, events, reason
+    ):
+        agent = self._agent_with_stub(tmp_path, wired)
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        original = wired.update_goal("proj", "set", text="Ship the release")
+
+        async def stream(*args, **kwargs):
+            assert f"Persistent goal {original.id}: Ship the release" in args[2]
+            for event in events:
+                yield event
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", stream)
+        await agent._run_agent_turn("proj", "proj", GOAL_CONTINUE_PROMPT)
+        goal = wired.registry.require("proj").goal
+        assert goal is not None and goal.id == original.id
+        assert goal.status == "blocked" and reason in goal.progress
+        published = [message.body for message in wired.channel_history("#all")]
+        assert published == (
+            ["work"] if any(event.get("text") == "work" for event in events) else []
+        )
+        await agent.shutdown()
+
+    async def test_failed_goal_turn_preserves_newer_same_id_progress(
+        self, wired, tmp_path, monkeypatch
+    ):
+        agent = self._agent_with_stub(tmp_path, wired)
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        original = wired.update_goal("proj", "set", text="Ship the release")
+
+        async def stream(*args, **kwargs):
+            wire(wired.root).update_goal(
+                "proj", "active", goal_id=original.id, progress="Verified newer step"
+            )
+            yield {"type": "done", "ok": False, "text": "no matching user start"}
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", stream)
+        await agent._run_agent_turn("proj", "proj", GOAL_CONTINUE_PROMPT)
+        goal = wired.registry.require("proj").goal
+        assert goal is not None and goal.status == "blocked"
+        assert goal.progress.startswith("Verified newer step\n\n")
+        await agent.shutdown()
+
+    async def test_successful_goal_progress_update_is_not_auto_blocked(
+        self, wired, tmp_path, monkeypatch
+    ):
+        agent = self._agent_with_stub(tmp_path, wired)
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        original = wired.update_goal("proj", "set", text="Ship the release")
+
+        async def stream(*args, **kwargs):
+            yield {"type": "tool_start", "id": "progress", "name": "comms_goal"}
+            wire(wired.root).update_goal(
+                "proj", "active", goal_id=original.id, progress="Verified a step"
+            )
+            yield {"type": "tool_end", "id": "progress", "name": "comms_goal", "ok": True}
+            yield {"type": "done", "ok": True}
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", stream)
+        await agent._run_agent_turn("proj", "proj", GOAL_CONTINUE_PROMPT)
+        goal = wired.registry.require("proj").goal
+        assert goal is not None and goal.status == "active"
+        assert goal.progress == "Verified a step"
+        await agent.shutdown()
+
+    @pytest.mark.parametrize(("phase", "terminal_ok"), [("end", True), ("abort", False)])
+    async def test_midturn_compaction_projects_typed_status_and_unknown_context(
+        self, wired, tmp_path, monkeypatch, phase, terminal_ok
+    ):
+        agent = self._agent_with_stub(tmp_path, wired)
+        updates = []
+
+        class FakeClient:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+
+        agent._client = FakeClient()
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        wired.set_agent_info(
+            "proj",
+            model="provider/model",
+            session_name="saved",
+            context_used=880,
+            context_size=1000,
+        )
+
+        async def stream(*args, **kwargs):
+            yield {"type": "compaction_start", "reason": "threshold"}
+            yield {
+                "type": "compaction_end",
+                "reason": "threshold" if phase == "end" else "unknown",
+                "aborted": phase == "abort",
+                "will_retry": phase == "end",
+                "summary": "kept\n\x1b[31mcontext\u202e" + "z" * 600,
+                "error": "secret stderr must not be forwarded",
+            }
+            yield {"type": "done", "ok": terminal_ok, "text": ""}
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", stream)
+        await agent._run_agent_turn("proj", "proj", "task")
+        feedback = [
+            update
+            for update in updates
+            if (update.field_meta or {}).get("agentComms", {}).get("compaction")
+        ]
+        assert len(feedback) == 2
+        start, finish = [update.field_meta["agentComms"]["compaction"] for update in feedback]
+        assert start["phase"] == "start" and start["contextState"] == "unknown"
+        assert finish["phase"] == phase and finish["contextUsed"] is None
+        assert finish["status"] == ("completed" if phase == "end" else "aborted")
+        assert finish["reason"] == ("threshold" if phase == "end" else "unknown")
+        assert finish["willRetry"] is (phase == "end")
+        assert len(finish.get("summary", "")) <= 400
+        assert "\x1b" not in feedback[-1].content.text
+        assert "\u202e" not in feedback[-1].content.text
+        assert "secret stderr" not in feedback[-1].content.text
+        if phase == "end":
+            assert feedback[-1].content.text.count("Summary:") == 1
+        else:
+            assert "summary" not in finish
+        info = wired.agent_info_of("proj")
+        assert info is not None and info.context_used is None
+        assert info.context_size == 1000 and info.model == "provider/model"
+        assert not any(type(update).__name__ == "UsageUpdate" for update in updates)
+        await agent.shutdown()
+
+    async def test_fresh_usage_after_compaction_replaces_unknown(
+        self, wired, tmp_path, monkeypatch
+    ):
+        agent = self._agent_with_stub(tmp_path, wired)
+        updates = []
+
+        class FakeClient:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+
+        agent._client = FakeClient()
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        wired.set_agent_info("proj", context_used=500, context_size=1000)
+
+        async def stream(*args, **kwargs):
+            yield {"type": "compaction_start", "reason": "overflow"}
+            yield {"type": "compaction_end", "aborted": False, "reason": "overflow"}
+            yield {"type": "agent_info", "context_used": 42, "context_size": 1000}
+            yield {"type": "done", "ok": True}
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", stream)
+        await agent._run_agent_turn("proj", "proj", "task")
+        assert [update.used for update in updates if type(update).__name__ == "UsageUpdate"] == [42]
+        info = wired.agent_info_of("proj")
+        assert info is not None and info.context_used == 42
+        await agent.shutdown()
+
+    @pytest.mark.parametrize("outcome", ["success", "abort", "no_start"])
+    async def test_pi_rpc_compaction_lifecycle_and_goal_no_start_are_projected(
+        self, wired, tmp_path, outcome
+    ):
+        """A real subprocess emits Pi-shaped JSONL; no provider is contacted."""
+        stub = tmp_path / "pi-compaction-stub"
+        stub.write_text(
+            f"#!{sys.executable}\n"
+            + "import json, sys\n"
+            + f"outcome = {outcome!r}\n"
+            + f"capability = {NATIVE_INPUT_CAPABILITY!r}\n"
+            + "send = lambda payload: print(json.dumps(payload), flush=True)\n"
+            + "state = json.loads(sys.stdin.readline())\n"
+            + "assert state['type'] == 'get_state'\n"
+            + "send({'type':'response','command':'get_state','id':state['id'],'success':True,\n"
+            + "      'data':{'nativeInputProofCapability':capability}})\n"
+            + "prompt = json.loads(sys.stdin.readline())\n"
+            + "assert len(prompt['inputId']) == 32\n"
+            + "assert all(c in '0123456789abcdef' for c in prompt['inputId'])\n"
+            + "send({'type':'response','command':'prompt','id':prompt['id'],'success':True})\n"
+            + "if outcome != 'no_start':\n"
+            + "    send({'type':'message_start','message':{'role':'user',\n"
+            + "          'content':prompt['message'],'inputId':prompt['inputId']}})\n"
+            + "send({'type':'compaction_start','reason':'overflow'})\n"
+            + "summary = {'summary':'retained\\ncontext\\x1b[31m'}\n"
+            + "if outcome != 'success': summary = None\n"
+            + "send({'type':'compaction_end','reason':'overflow',\n"
+            + "      'aborted':outcome != 'success',\n"
+            + "      'result':summary,\n"
+            + "      'willRetry':False})\n"
+            + "send({'type':'message_end','message':{'role':'assistant','stopReason':'stop'}})\n"
+            + "send({'type':'agent_settled'})\n"
+            + "for line in sys.stdin:\n"
+            + "    request = json.loads(line)\n"
+            + "    if request['type'] == 'get_session_stats':\n"
+            + "        usage = {'tokens':42,'contextWindow':1000} if outcome == 'success' else {}\n"
+            + "        send({'type':'response','command':'get_session_stats','success':True,\n"
+            + "              'data':{'contextUsage':usage}})\n"
+            + "        break\n"
+        )
+        stub.chmod(0o755)
+        agent = CommsAgent(wired, agent_bin=str(stub), agent_args=[])
+        updates = []
+
+        class FakeClient:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+
+        agent._client = FakeClient()
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        wired.set_agent_info("proj", context_used=880, context_size=1000)
+        if outcome == "no_start":
+            goal = wired.update_goal("proj", "set", text="Ship the release")
+        await agent.prompt("proj", [{"type": "text", "text": "!agent start"}])
+        feedback = [
+            update.field_meta["agentComms"]["compaction"]
+            for update in updates
+            if (update.field_meta or {}).get("agentComms", {}).get("compaction")
+        ]
+        assert [item["phase"] for item in feedback] == [
+            "start",
+            "end" if outcome == "success" else "abort",
+        ]
+        assert all(item["contextState"] == "unknown" for item in feedback)
+        assert all(item["willRetry"] is False for item in feedback)
+        assert [update.used for update in updates if type(update).__name__ == "UsageUpdate"] == (
+            [42] if outcome == "success" else []
+        )
+        info = wired.agent_info_of("proj")
+        assert info is not None and info.context_used == (42 if outcome == "success" else None)
+        assert wired.channel_history("#all") == []  # Summary is local status, not an auto reply.
+        if outcome == "no_start":
+            current = wired.registry.require("proj").goal
+            assert current is not None and current.id == goal.id and current.status == "blocked"
+            assert any(
+                "user message start" in (u.content.text or "")
+                for u in updates
+                if type(u).__name__ == "AgentMessageChunk"
+            )
+        await agent.shutdown()
 
     async def test_agent_turn_runs_in_thread_worktree(self, wired, tmp_path):
         worktree = tmp_path / "somewhere"
