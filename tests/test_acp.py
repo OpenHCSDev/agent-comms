@@ -901,8 +901,11 @@ class TestAgentTurn:
             # A separate tool process advances progress after ACP's precheck,
             # before the automated transition acquires the shared wire lock.
             wire(wired.root).update_goal(
-                name, "active", goal_id=initial.id,
-                expected_status="active", progress="independently verified newer progress",
+                name,
+                "active",
+                goal_id=initial.id,
+                expected_status="active",
+                progress="independently verified newer progress",
             )
 
         def interpose_pause(name, action, **kwargs):
@@ -956,7 +959,8 @@ class TestAgentTurn:
         def interpose(name, **kwargs):
             nonlocal superseding
             superseding = wire(wired.root).update_goal(
-                name, transition,
+                name,
+                transition,
                 **(
                     {"text": "New objective"}
                     if transition == "set"
@@ -988,8 +992,11 @@ class TestAgentTurn:
 
         async def events(*args, **kwargs):
             wire(wired.root).update_goal(
-                "proj", "active", goal_id=initial.id,
-                expected_status="active", progress="independently verified newer progress",
+                "proj",
+                "active",
+                goal_id=initial.id,
+                expected_status="active",
+                progress="independently verified newer progress",
             )
             yield {"type": "settled"}
             if outcome == "failed":
@@ -1020,12 +1027,17 @@ class TestAgentTurn:
 
         async def events(*args, **kwargs):
             yield {
-                "type": "tool_start", "id": "goal-progress",
-                "name": "comms_goal", "title": "Report progress",
+                "type": "tool_start",
+                "id": "goal-progress",
+                "name": "comms_goal",
+                "title": "Report progress",
             }
             wired.update_goal(
-                "proj", "active", goal_id=initial.id,
-                expected_status="active", progress="Completed a verified step",
+                "proj",
+                "active",
+                goal_id=initial.id,
+                expected_status="active",
+                progress="Completed a verified step",
             )
             yield {"type": "tool_end", "id": "goal-progress", "name": "comms_goal", "ok": True}
             yield {"type": "settled"}
