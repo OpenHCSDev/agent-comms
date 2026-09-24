@@ -74,6 +74,17 @@ class NativeTurnResult:
     context: NativeContextProof
 
 
+@dataclass(frozen=True, slots=True)
+class NativePiRpcLaunch:
+    """Verified native Pi subprocess launch, not an authorization to send input."""
+
+    argv: tuple[str, ...]
+    cwd: Path
+    env: dict[str, str]
+    session_dir: Path
+    session_file: Path | None
+
+
 def _unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -342,27 +353,24 @@ def _verify_context(
     return proof
 
 
-async def run_native_pi_turn(
+def prepare_native_pi_rpc_launch(
     package: Path,
     *,
-    input_id: str,
-    prompt: str,
     worktree: Path,
     session_dir: Path,
     session_file: Path | None = None,
     provider: str = "openrouter",
     model: str = "z-ai/glm-5.3-flash",
-    timeout: float = 90.0,
-) -> NativeTurnResult:
-    """One tracked real Pi RPC prompt in an isolated, persisted session.
+) -> NativePiRpcLaunch:
+    """Verify compiled Pi bytes and commit private no-retry policy before spawning.
 
-    The caller owns disposition/publication and must never infer either from an
-    input ACK. No automatic replay, fallback, tool launch, or coordinator writes.
+    A backend must explicitly consume this launch, not guess Pi from a basename
+    or trust an RPC capability response from an arbitrary executable. This
+    only establishes the executable and its settings; native input, context,
+    and model-delivery proofs remain separate per-attempt observations.
     """
-    if type(input_id) is not str or _INPUT_ID.fullmatch(input_id) is None:
-        raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
-    if not prompt or not isinstance(prompt, str) or not 0 < timeout <= 300:
-        raise ValueError("A native turn requires bounded prompt and deadline")
+    if provider != "openrouter" or model != "z-ai/glm-5.3-flash":
+        raise NativePiUnavailable("Only the reviewed native OpenRouter model may be launched")
     cli = _trusted_package(package)
     worktree = Path(worktree).absolute()
     session_dir = Path(session_dir).absolute()
@@ -404,10 +412,43 @@ async def run_native_pi_turn(
         env.pop(name, None)
     env["PI_OFFLINE"] = "1"
     env["PI_CODING_AGENT_DIR"] = str(agent_dir)
+    return NativePiRpcLaunch(tuple(argv), worktree, env, session_dir, session_file)
+
+
+async def run_native_pi_turn(
+    package: Path,
+    *,
+    input_id: str,
+    prompt: str,
+    worktree: Path,
+    session_dir: Path,
+    session_file: Path | None = None,
+    provider: str = "openrouter",
+    model: str = "z-ai/glm-5.3-flash",
+    timeout: float = 90.0,
+) -> NativeTurnResult:
+    """One tracked real Pi RPC prompt in an isolated, persisted session.
+
+    The caller owns disposition/publication and must never infer either from an
+    input ACK. No automatic replay, fallback, tool launch, or coordinator writes.
+    """
+    if type(input_id) is not str or _INPUT_ID.fullmatch(input_id) is None:
+        raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
+    if not prompt or not isinstance(prompt, str) or not 0 < timeout <= 300:
+        raise ValueError("A native turn requires bounded prompt and deadline")
+    launch = prepare_native_pi_rpc_launch(
+        package,
+        worktree=worktree,
+        session_dir=session_dir,
+        session_file=session_file,
+        provider=provider,
+        model=model,
+    )
+    session_dir, session_file = launch.session_dir, launch.session_file
     process = await asyncio.create_subprocess_exec(
-        *argv,
-        cwd=str(worktree),
-        env=env,
+        *launch.argv,
+        cwd=str(launch.cwd),
+        env=launch.env,
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,

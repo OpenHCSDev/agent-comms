@@ -16,10 +16,12 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms.native_pi import (
+    CAPABILITY,
     NativePiUnavailable,
     _read_native_context_evidence,
     _trusted_package,
     load_native_context_proof,
+    prepare_native_pi_rpc_launch,
     run_native_pi_turn,
 )
 
@@ -558,7 +560,47 @@ async def test_old_live_capability_is_rejected_before_prompt(tmp_path: Path, mon
     assert sent == [{"type": "get_state", "id": "native-capability"}]
 
 
-@pytest.mark.parametrize("outcome", ["429", "length"])
+def test_prepared_rpc_launch_requires_exact_package_and_private_policy(
+    tmp_path: Path, monkeypatch
+) -> None:
+    selected = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
+    if not selected:
+        pytest.skip("Set AC_NATIVE_COPIED_PACKAGE to the reviewed private copied fork")
+    worktree = tmp_path / "project"
+    worktree.mkdir()
+    sessions = tmp_path / "sessions"
+    monkeypatch.setenv("PI_AGENT_ID", "must-not-leak")
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "wrong-global"))
+    launch = prepare_native_pi_rpc_launch(Path(selected), worktree=worktree, session_dir=sessions)
+    assert launch.argv[:4] == ("node", str(_trusted_package(Path(selected))), "--mode", "rpc")
+    assert "--no-approve" in launch.argv
+    assert launch.cwd == worktree
+    assert launch.session_dir == sessions
+    assert launch.session_file is None
+    assert "PI_AGENT_ID" not in launch.env
+    assert launch.env["PI_OFFLINE"] == "1"
+    assert launch.env["PI_CODING_AGENT_DIR"] == str(sessions / ".native-pi-agent")
+    settings = json.loads((sessions / ".native-pi-agent" / "settings.json").read_text())
+    assert settings["retry"] == {
+        "enabled": False,
+        "maxRetries": 0,
+        "provider": {"maxRetries": 0},
+    }
+    assert settings["compaction"]["enabled"] is False
+
+
+def test_unreviewed_native_transport_fails_before_any_session_side_effect(tmp_path: Path) -> None:
+    with pytest.raises(NativePiUnavailable, match="Only the reviewed native OpenRouter model"):
+        prepare_native_pi_rpc_launch(
+            tmp_path,
+            worktree=tmp_path,
+            session_dir=tmp_path / "sessions",
+            provider="anthropic",
+        )
+    assert not (tmp_path / "sessions").exists()
+
+
+@pytest.mark.parametrize("outcome", ["429", "length", "stop"])
 async def test_copied_cli_private_policy_allows_one_local_http_attempt(
     tmp_path: Path, monkeypatch, outcome: str
 ) -> None:
@@ -580,10 +622,12 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
     }
     terminal = {
         **chunk,
-        "choices": [{"index": 0, "delta": {}, "finish_reason": "length"}],
+        "choices": [
+            {"index": 0, "delta": {}, "finish_reason": outcome if outcome != "429" else "stop"}
+        ],
         "usage": {"prompt_tokens": 10, "completion_tokens": 1, "total_tokens": 11},
     }
-    length_body = (
+    stream_body = (
         "".join(f"data: {json.dumps(value)}\n\n" for value in (chunk, terminal))
         + "data: [DONE]\n\n"
     ).encode()
@@ -595,7 +639,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             body = (
                 b'{"error":{"message":"429 rate limit","type":"rate_limit_error"}}'
                 if outcome == "429"
-                else length_body
+                else stream_body
             )
             self.send_response(429 if outcome == "429" else 200)
             self.send_header(
@@ -655,6 +699,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         import agent_comms.native_pi as native
 
         observed: list[str] = []
+        rpc_events: list[dict] = []
         real_launch = asyncio.create_subprocess_exec
 
         class Reader:
@@ -664,7 +709,9 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             async def readline(self):
                 raw = await self.stream.readline()
                 if raw:
-                    observed.append(json.loads(raw)["type"])
+                    event = json.loads(raw)
+                    rpc_events.append(event)
+                    observed.append(event["type"])
                 return raw
 
         class Process:
@@ -689,16 +736,45 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             return Process(await real_launch(*argv, **kwargs))
 
         monkeypatch.setattr(native.asyncio, "create_subprocess_exec", launch)
-        with pytest.raises(NativePiUnavailable, match="did not finish successfully"):
-            await run_native_pi_turn(
-                package,
-                input_id=INPUT_ID,
-                prompt="Respond with X, fixture only",
-                worktree=worktree,
-                session_dir=sessions,
-                timeout=15,
-            )
+        request = dict(
+            input_id=INPUT_ID,
+            prompt="Respond with X, fixture only",
+            worktree=worktree,
+            session_dir=sessions,
+            timeout=15,
+        )
+        if outcome == "stop":
+            result = await run_native_pi_turn(package, **request)
+            assert result.text == "X"
+            assert result.context.input_id == INPUT_ID
+            assert result.context.request_generation == 1
+            assert result.context.session_file.parent == sessions
+            assert "agent_settled" in observed
+        else:
+            with pytest.raises(NativePiUnavailable, match="did not finish successfully"):
+                await run_native_pi_turn(package, **request)
         assert calls == ["/v1/chat/completions"]
+        preflight_index, preflight = next(
+            (index, event)
+            for index, event in enumerate(rpc_events)
+            if event.get("command") == "get_state"
+        )
+        assert preflight["success"] is True
+        assert preflight["data"]["nativeInputProofCapability"] == CAPABILITY
+        prompt_index, prompt_ack = next(
+            (index, event)
+            for index, event in enumerate(rpc_events)
+            if event.get("command") == "prompt"
+        )
+        assert preflight_index < prompt_index
+        assert prompt_ack["success"] is True
+        committed_input = next(event for event in rpc_events if event["type"] == "input_committed")
+        committed_context = next(
+            event for event in rpc_events if event["type"] == "context_committed"
+        )
+        assert committed_input["inputId"] == INPUT_ID
+        assert committed_context["inputId"] == INPUT_ID
+        assert preflight_index < prompt_index < rpc_events.index(committed_input)
         assert observed.count("context_committed") == 1
         assert "auto_retry_start" not in observed
         assert "compaction_start" not in observed
