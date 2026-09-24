@@ -1,6 +1,6 @@
 # Core PR #1 merge tracker — 2026-09-24
 
-**Published draft head:** `ceb87f52850875f27fd0b3d2ec6c3bfb57bbaa0c`. **CI:** [run 35958812645](https://github.com/OpenHCSDev/agent-comms/actions/runs/35958812645) queued at this update. The preceding `9d2e828` run passed 10/11 jobs; macOS Python 3.13 failed two backend input-provenance assertions. This is a status ledger, **not** an independent review verdict. Draft publication and merge never authorize production, automatic retries, `SILENT`, or paid/tool-capable work. Do not replay an uncertain input/provider attempt.
+**Last source/test change recorded here:** `ceb87f52850875f27fd0b3d2ec6c3bfb57bbaa0c`; later tracker-only commits advance the PR head, so consult [PR #1](https://github.com/OpenHCSDev/agent-comms/pull/1) for its live SHA. **Code CI:** [run 35958812645](https://github.com/OpenHCSDev/agent-comms/actions/runs/35958812645) queued at this update. The preceding `9d2e828` run passed 10/11 jobs; macOS Python 3.13 failed two backend input-provenance assertions. This is a status ledger, **not** an independent review verdict. Draft publication and merge never authorize production, automatic retries, `SILENT`, or paid/tool-capable work. Do not replay an uncertain input/provider attempt.
 
 The obsolete local tracker is preserved as `/var/tmp/ac-pr1-merge-tracker-legacy-20260924.md` (SHA-256 `523dbd8c7117d1bafe042875bfd4a0d76d02295596b6ad5594d88152f315b589`); its `ed9b4a1` owner map and verdicts are not current-head evidence.
 
