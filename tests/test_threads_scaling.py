@@ -71,6 +71,24 @@ def test_reopened_listing_does_not_parse_unchanged_bus_history(wired, monkeypatc
     assert parsed == [101]
 
 
+def test_mounted_coordination_snapshot_reopens_without_scanning_bus(wired, monkeypatch):
+    wired.send("PR111", "#base", "channel activity")
+    wired.send("PR111", "fixer", "direct activity")
+    expected = wired.coordination_snapshot()
+    fresh = wire(wired.root)
+
+    def forbidden_scan():
+        raise AssertionError("mounted snapshot reparsed historical bus rows")
+
+    monkeypatch.setattr(fresh.bus, "_iter_log_unlocked", forbidden_scan)
+    assert fresh.coordination_snapshot() == expected
+
+    wired.send("PR111", "#base", "new channel activity")
+    updated = fresh.coordination_snapshot()
+    assert updated.last_sent["PR111"] >= expected.last_sent["PR111"]
+    assert updated == wire(wired.root).coordination_snapshot()
+
+
 def test_route_projection_rebuilds_after_atomic_bus_replacement(wired):
     wired.send("PR111", "fixer", "first")
     wired.send("PR111", "fixer", "second")
