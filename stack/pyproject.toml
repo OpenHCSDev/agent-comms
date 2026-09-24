@@ -1,0 +1,18 @@
+[project]
+name = "agent-comms-stack"
+version = "0.1.0"
+description = "Pinned local agent-comms, Toad, and Textual runtime"
+requires-python = ">=3.14"
+dependencies = [
+    "agent-comms[acp]",
+    "batrachian-toad==0.6.20",
+    "textual[syntax]==8.2.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+agent-comms = { git = "https://github.com/OpenHCSDev/agent-comms.git", rev = "d370ba9000614c082e115a8dc54b07a1d3f15ac2" }
+batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", rev = "d819c6bfaea4aaa812373c2d18885b59be517427" }
+textual = { git = "https://github.com/OpenHCSDev/textual.git", rev = "1552bfdba6aa79d80e53cd88c01884148125dba6" }
