@@ -49,6 +49,28 @@ def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
     assert calls == ["scan"]
 
 
+def test_reopened_listing_does_not_parse_unchanged_bus_history(wired, monkeypatch):
+    for index in range(100):
+        wired.send("PR111", "fixer", f"message {index}")
+    assert _listed(wired)["fixer"] == 100
+
+    fresh = wire(wired.root)
+    parsed = []
+    original = fresh.bus._pending_route_fields
+
+    def measured(record):
+        parsed.append(record["seq"])
+        return original(record)
+
+    monkeypatch.setattr(fresh.bus, "_pending_route_fields", measured)
+    assert _listed(fresh)["fixer"] == 100
+    assert parsed == []
+
+    wired.send("PR111", "fixer", "new message")
+    assert _listed(fresh)["fixer"] == 101
+    assert parsed == [101]
+
+
 def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired):
     wired.register(Thread(name="broadcast", tags=frozenset(), worktree="/tmp/broadcast"))
     wired.send("PR111", "broadcast", "channel alias also names a real thread")
