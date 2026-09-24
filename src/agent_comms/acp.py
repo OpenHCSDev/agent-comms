@@ -2067,12 +2067,11 @@ class CommsAgent:
                             current_goal.status == "completed"
                             and current_goal.reported_turn == turn_id
                         ):
-                            self._comms.update_goal(
+                            self._comms.block_unverified_goal_completion(
                                 thread_name,
-                                "blocked",
-                                goal_id=goal.id,
                                 expected_goal=current_goal,
-                                progress=diagnostic,
+                                expected_worktree=thread.worktree,
+                                diagnostic=diagnostic,
                             )
             if origins and settled and terminal_ok is True:
                 await asyncio.to_thread(

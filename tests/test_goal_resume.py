@@ -129,6 +129,27 @@ def test_completed_goal_cannot_be_reactivated_by_ui_registry_action(comms, monke
     assert comms.registry.require("owner").goal == completed
 
 
+@pytest.mark.parametrize("terminal", ["blocked", "completed"])
+def test_terminal_goal_cannot_reactivate_through_pause(comms, monkeypatch, terminal):
+    started = _goal(comms, monkeypatch)
+    private = comms.root / "goal-private"
+    private.mkdir(mode=0o700)
+    store = GoalAttemptStore.initialize(private)
+    store.create_goal(started["id"])
+    reservation = store.reserve(started["id"], 1)
+    if terminal == "blocked":
+        store.record_failed(reservation, "uncertain turn")
+    else:
+        store.record_verified_completion(store.claim_launch(reservation), "finished")
+    terminal_goal = comms.update_goal("owner", terminal, goal_id=started["id"])
+
+    with pytest.raises(ValueError, match="goal"):
+        comms.update_goal("owner", "paused", goal_id=started["id"])
+
+    assert comms.registry.require("owner").goal == terminal_goal
+    assert store.snapshot(started["id"]).state == terminal
+
+
 def test_resume_does_not_claim_success_after_concurrent_goal_change(comms, monkeypatch):
     started = _goal(comms, monkeypatch)
     comms.update_goal("owner", "paused", goal_id=started["id"], progress="before")
