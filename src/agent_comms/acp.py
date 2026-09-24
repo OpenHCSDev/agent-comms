@@ -713,6 +713,17 @@ class CommsAgent:
         for row in self._dispositions.unknown(aliases):
             await self._emit_input_disposition(session_id, row, client=client)
 
+    async def emit_session_identity(self, session_id: str, name: str, client: Any = None) -> None:
+        """Let a subscriber identify its owner before potentially long replay."""
+        await (client or self._runtime).session_update(
+            session_id=session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=""),
+                field_meta=self._session_metadata(name),
+            ),
+        )
+
     async def _prompt_owned(
         self, session_id: str, prompt: list[Any], *, display_text: str | None = None
     ) -> PromptResponse:
