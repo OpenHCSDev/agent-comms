@@ -380,6 +380,14 @@ class Comms:
                 )
             message = Message(sender=owner.name, target=target, body=body, type=type, notice=notice)
             if claims or releases:
+                # Legacy registries may predate the new-thread uniqueness check.
+                # A shared creation identity must never become claim release
+                # authority for two otherwise unrelated registered owners.
+                incarnations = [
+                    thread.created_at for thread in self.registry.all_threads().values()
+                ]
+                if len(set(incarnations)) != len(incarnations):
+                    raise RelationViolationError("Registry creation identities collide.")
                 return self.bus.publish_claim_envelope(
                     message,
                     worktree=Path(owner.worktree),

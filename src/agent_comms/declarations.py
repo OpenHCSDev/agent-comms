@@ -1902,6 +1902,13 @@ class ThreadRegistry:
                 )
             if previous := self._threads.get(thread.name):
                 thread = replace(thread, created_at=previous.created_at)
+            elif any(
+                existing.created_at == thread.created_at for existing in self._threads.values()
+            ):
+                # Claim envelopes use this creation identity across a rename.
+                # Reject a same-tick new owner rather than letting it share an
+                # incumbent's release authority (or strand a live claim).
+                raise RelationViolationError("Registry creation identities collide.")
             self._threads[thread.name] = thread
             self._statuses[thread.name] = status
             self._last_seen[thread.name] = time.time()

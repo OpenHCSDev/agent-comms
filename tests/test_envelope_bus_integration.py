@@ -8,6 +8,7 @@ import signal
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from threading import Barrier
 
@@ -270,6 +271,89 @@ def test_release_requires_exact_owner_and_preserves_generation(
     assert taken.claim_transition is not None
     assert taken.claim_transition.owner == "bob"
     assert taken.claim_transition.generation != claimed.claim_transition.generation
+
+
+def test_public_rename_preserves_claim_release_then_new_owner_wins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    comms, worktree = _participants(tmp_path)
+    path = str(worktree / "a.py")
+    claimed = comms.send_message("alice", "bob", "Claim before rename", claims=["a.py"])
+    original = comms.registry.require("alice")
+    monkeypatch.setenv("PI_AGENT_ID", "alice")
+    result = comms.rename_self("alice-new")
+    assert (result.previous, result.current, result.changed) == ("alice", "alice-new", True)
+    assert comms.registry.require("alice-new").created_at == original.created_at
+    assert comms.registry.require("alice").name == "alice-new"
+    assert comms.registry.name_reserved("alice")
+    next_thread = comms.claim_thread("alice", tags=frozenset({"team"}), worktree=str(worktree))
+    assert next_thread.name != "alice" and next_thread.created_at != original.created_at
+
+    reopened = Comms(comms.root, private_claim_writes=True)
+    assert reopened.claim_projection()[path].owner == "alice"
+    with pytest.raises(ClaimTransitionError, match="exact owner"):
+        reopened.send_message(
+            "bob", "alice-new", "Cannot take renamed owner claim", releases=["a.py"]
+        )
+    with pytest.raises(ClaimTransitionError, match="exact owner"):
+        reopened.send_message(
+            next_thread.name, "bob", "New incarnation cannot release", releases=["a.py"]
+        )
+    assert len(reopened.full_history()) == 1
+    released = reopened.send_message("alice-new", "bob", "Release after rename", releases=["a.py"])
+    assert released.claim_transition is not None
+    assert claimed.claim_transition is not None
+    assert released.claim_transition.owner == "alice-new"
+    assert released.claim_transition.incarnation == claimed.claim_transition.incarnation
+    assert released.claim_transition.releases[0].generation == claimed.claim_transition.generation
+    assert path not in reopened.claim_projection()
+
+    taken = reopened.send_message("bob", "alice-new", "New owner", claims=["a.py"])
+    assert reopened.claim_projection()[path].owner == "bob"
+    assert taken.claim_transition is not None
+    assert taken.claim_transition.generation != claimed.claim_transition.generation
+    with pytest.raises(ClaimTransitionError, match="exact owner"):
+        reopened.send_message("alice", "bob", "Old alias cannot release Bob", releases=["a.py"])
+    assert len(reopened.full_history()) == 3
+    assert Comms(comms.root).claim_projection()[path].owner == "bob"
+
+
+def test_same_tick_new_owner_cannot_share_live_claim_release_authority(tmp_path: Path) -> None:
+    comms, worktree = _participants(tmp_path)
+    claimed = comms.send_message("alice", "bob", "Claim a", claims=["a.py"])
+    alice = comms.registry.require("alice")
+    with pytest.raises(RelationViolationError, match="creation identities collide"):
+        comms.register(
+            Thread(
+                "same-tick-peer",
+                frozenset({"team"}),
+                str(worktree),
+                created_at=alice.created_at,
+            )
+        )
+    assert "same-tick-peer" not in comms.registry
+    assert comms.full_history() == [claimed]
+    assert comms.claim_projection()[str(worktree / "a.py")].owner == "alice"
+    comms.send_message("alice", "bob", "Legitimate release", releases=["a.py"])
+    assert str(worktree / "a.py") not in comms.claim_projection()
+
+
+def test_legacy_colliding_creation_id_blocks_claim_write_before_append(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    comms, worktree = _participants(tmp_path)
+    claimed = comms.send_message("alice", "bob", "Claim a", claims=["a.py"])
+    actual_threads = comms.registry.all_threads
+
+    def old_registry_snapshot() -> dict[str, Thread]:
+        threads = dict(actual_threads())
+        threads["bob"] = replace(threads["bob"], created_at=threads["alice"].created_at)
+        return threads
+
+    monkeypatch.setattr(comms.registry, "all_threads", old_registry_snapshot)
+    with pytest.raises(RelationViolationError, match="creation identities collide"):
+        comms.send_message("bob", "alice", "Cannot release under duplicate ID", releases=["a.py"])
+    assert comms.full_history() == [claimed]
 
 
 @pytest.mark.parametrize("suffix", ["//a.py", "/./a.py"])
