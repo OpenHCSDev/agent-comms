@@ -672,6 +672,7 @@ class Comms:
         self,
         target: str,
         *,
+        worktree: str | None = None,
         before: int | None = None,
         after: int | None = None,
         limit: int = 100,
@@ -680,9 +681,10 @@ class Comms:
         """Local display projection; underlying channel history remains target-owned."""
         if not is_channel_target(target):
             raise ValueError(f"{target!r} is not a channel target.")
-        with self._display_snapshot(target=target) as (basis, records, _):
+        viewer = self.user_identity(worktree).name if worktree is not None else None
+        with self._display_snapshot(viewer=viewer, target=target) as (basis, records, _):
             scope = next(item for item in basis[2] if item.channel == target)
-            return self.bus._collect_history_page(
+            page = self.bus._collect_history_page(
                 records,
                 scope.includes,
                 before=before,
@@ -690,6 +692,7 @@ class Comms:
                 limit=limit,
                 max_bytes=max_bytes,
             )
+            return replace(page, display_scope=scope)
 
     def message_high_water(self) -> int:
         """Global message cursor used by polling clients to avoid idle scans."""
@@ -1057,10 +1060,23 @@ class Comms:
         self.transcript_reads.mark_read(viewer, through.session_file, through.offset)
 
     def mark_channel_view_read(
-        self, target: str, *, worktree: str, through: int | None = None
+        self,
+        target: str,
+        *,
+        worktree: str,
+        through: int | None = None,
+        expected_scope: ChannelDisplayScope | None = None,
     ) -> None:
         viewer = self.user_identity(worktree).name
         with _store_lock(self._wire_lock_path):
+            if through is not None:
+                if expected_scope is None or expected_scope.channel != target:
+                    raise ValueError("Channel display scope missing; refresh the displayed page.")
+                revision = self._display_basis_revision()
+                basis = self._capture_display_basis(viewer, revision)
+                current = next((scope for scope in basis[2] if scope.channel == target), None)
+                if current != expected_scope or self._display_basis_revision() != revision:
+                    raise ValueError("Channel display changed; refresh the displayed page.")
             self.bus.mark_view_read(
                 viewer, target, self.bus.latest_sequence() if through is None else through
             )

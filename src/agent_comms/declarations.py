@@ -1547,6 +1547,7 @@ class MessagePage:
     messages: tuple[Message, ...]
     has_older: bool
     has_newer: bool
+    display_scope: ChannelDisplayScope | None = None
 
     def __post_init__(self) -> None:
         sequences = [message.seq for message in self.messages]

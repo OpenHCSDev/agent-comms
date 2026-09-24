@@ -69,6 +69,32 @@ def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
     assert wire(tmp_path).viewer_snapshot(str(tmp_path)).channel_unread["#team"] >= 1
 
 
+def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
+    comms = wire(tmp_path)
+    comms.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
+    comms.register(Thread("bob", frozenset({"team"}), str(tmp_path)))
+    comms.register(Thread("carol", frozenset(), str(tmp_path)))
+    comms.register(Thread("dave", frozenset(), str(tmp_path)))
+    comms.set_channel_any_mode("#team", True)
+    comms.send_message("carol", "dave", "hidden old DM")
+    comms.send_message("alice", "bob", "painted DM")
+    painted = comms.channel_display_page("#team", worktree=str(tmp_path))
+    assert [message.seq for message in painted.messages] == [2]
+
+    comms.update_tags("carol", add=frozenset({"team"}))
+    unread_after_join = wire(tmp_path).viewer_snapshot(str(tmp_path)).channel_unread["#team"]
+    with pytest.raises(ValueError, match="display.*changed"):
+        comms.mark_channel_view_read(
+            "#team",
+            worktree=str(tmp_path),
+            through=painted.newest_seq,
+            expected_scope=painted.display_scope,
+        )
+    assert (
+        wire(tmp_path).viewer_snapshot(str(tmp_path)).channel_unread["#team"] == unread_after_join
+    )
+
+
 def test_v1_exact_channel_marker_resets_with_notice(tmp_path):
     comms = wire(tmp_path)
     comms.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
