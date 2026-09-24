@@ -83,13 +83,14 @@ class BusRouteCounts:
             if not isinstance(recorded, dict):
                 recorded = {}
             recorded_identity = recorded.get("identity")
-            recorded_offset = recorded.get("offset")
+            raw_offset = recorded.get("offset")
+            recorded_offset: int = raw_offset if type(raw_offset) is int and raw_offset >= 0 else 0
             valid_record = (
                 recorded.get("version") == 1
                 and isinstance(recorded_identity, (list, type(None)))
                 and (recorded_identity is None or len(recorded_identity) == 4)
-                and type(recorded_offset) is int
-                and recorded_offset >= 0
+                and type(raw_offset) is int
+                and raw_offset >= 0
             )
             rebuild = (
                 not valid_record
@@ -99,6 +100,7 @@ class BusRouteCounts:
                 or (
                     size == recorded_offset
                     and identity is not None
+                    and recorded_identity is not None
                     and identity[2:] != recorded_identity[2:]
                 )
             )

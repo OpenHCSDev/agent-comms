@@ -3597,16 +3597,17 @@ class MessageBus:
                         for target, raw_sender in route_counts.routes():
                             senders.setdefault(target, []).append(raw_sender)
                             sender = snapshot.aliases.get(raw_sender, raw_sender)
+                            route_actor: str | None
                             if target in channel_cutoffs:
-                                actor = channel_direct_actor.get(target)
+                                route_actor = channel_direct_actor.get(target)
                             else:
-                                actor = snapshot.aliases.get(target, target)
-                            if actor in counts and actor != sender:
+                                route_actor = snapshot.aliases.get(target, target)
+                            if route_actor in counts and route_actor != sender:
                                 cutoff = max(
-                                    markers.get(actor, 0),
-                                    scoped_markers[actor].get(sender, 0),
+                                    markers.get(route_actor, 0),
+                                    scoped_markers[route_actor].get(sender, 0),
                                 )
-                                counts[actor] += route_counts.pair_after(target, raw_sender, cutoff)
+                                counts[route_actor] += route_counts.pair_after(target, raw_sender, cutoff)
                         for target, members in channel_members.items():
                             for actor in members:
                                 cutoff = channel_self_cutoffs[target][actor]
