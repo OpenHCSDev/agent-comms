@@ -24,6 +24,25 @@ def _stub(tmp_path: Path, body: str, name: str = "pi-stub") -> str:
     return str(stub)
 
 
+def _capture_unexpected_rpc_exception(monkeypatch):
+    """Temporarily expose an early-exit CI race without changing runtime diagnostics."""
+    import traceback
+
+    failures = []
+    implementation = backend._stream_agent_events_impl
+
+    async def traced(*args, **kwargs):
+        try:
+            async for event in implementation(*args, **kwargs):
+                yield event
+        except Exception:
+            failures.append(traceback.format_exc())
+            raise
+
+    monkeypatch.setattr(backend, "_stream_agent_events_impl", traced)
+    return failures
+
+
 class TestRpcParsing:
     @pytest.fixture(autouse=True)
     def legacy_stock_pi_fixture(self, monkeypatch):
@@ -322,7 +341,10 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
             [{"type": "message_start", "message": {"role": "user", "content": "t"}}],
         ],
     )
-    async def test_no_matching_preflight_before_user_start_fails_closed(self, tmp_path, records):
+    async def test_no_matching_preflight_before_user_start_fails_closed(
+        self, tmp_path, records, monkeypatch
+    ):
+        exceptions = _capture_unexpected_rpc_exception(monkeypatch)
         lines = "\n".join(
             json.dumps(record)
             for record in [
@@ -336,7 +358,7 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
             event async for event in backend.stream_agent_events(stub, [], "t", str(tmp_path))
         ]
         assert events[-1]["ok"] is False
-        assert events[-1]["reason_code"] == "current_prompt_input_missing"
+        assert events[-1]["reason_code"] == "current_prompt_input_missing", "\n".join(exceptions)
 
     @pytest.mark.parametrize(
         ("steer_accepted", "foreign_first", "expected_ok"),
@@ -573,8 +595,9 @@ while True: time.sleep(0.1)
 
     @pytest.mark.parametrize("preflight", ["eof", "invalid_data", "wrong_id"])
     async def test_inconclusive_capability_preflight_always_returns_typed_failure(
-        self, tmp_path, preflight
+        self, tmp_path, preflight, monkeypatch
     ):
+        exceptions = _capture_unexpected_rpc_exception(monkeypatch)
         stub = _stub(
             tmp_path,
             f"#!{sys.executable}\n" + f"""
@@ -596,7 +619,7 @@ if case != "eof":
         ]
         assert [event for event in events if event["type"] == "done"] == [events[-1]]
         assert events[-1]["ok"] is False
-        assert events[-1]["reason_code"] == "pi_input_id_unavailable"
+        assert events[-1]["reason_code"] == "pi_input_id_unavailable", "\n".join(exceptions)
         assert "preflight" in events[-1]["text"]
 
     @pytest.mark.parametrize(
