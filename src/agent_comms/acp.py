@@ -1890,17 +1890,23 @@ class CommsAgent:
                             "Goal turn ended without verified terminal progress.",
                         )
                     goal_attempt_resolved = True
-                    if (
-                        current_goal is not None
-                        and current_goal.id == goal.id
-                        and current_goal.active
-                    ):
-                        self._comms.block_goal_after_failed_turn(
-                            thread_name,
-                            started_goal=goal,
-                            expected_worktree=thread.worktree,
-                            diagnostic="Goal turn ended without verified terminal progress.",
-                        )
+                    if current_goal is not None and current_goal.id == goal.id:
+                        diagnostic = "Goal turn ended without verified terminal progress."
+                        if current_goal.active:
+                            self._comms.block_goal_after_failed_turn(
+                                thread_name,
+                                started_goal=goal,
+                                expected_worktree=thread.worktree,
+                                diagnostic=diagnostic,
+                            )
+                        elif current_goal.status == "completed":
+                            self._comms.update_goal(
+                                thread_name,
+                                "blocked",
+                                goal_id=goal.id,
+                                expected_goal=current_goal,
+                                progress=diagnostic,
+                            )
             if origins and settled and terminal_ok is True:
                 await asyncio.to_thread(
                     self._comms.record_turn_routing, thread_name, checkpoint, routing

@@ -1058,6 +1058,7 @@ class TestAgentTurn:
         from agent_comms.goal_attempts import GoalAttemptStore
 
         agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
 
         class FakeClient:
             async def session_update(self, **kwargs):
@@ -1100,6 +1101,7 @@ class TestAgentTurn:
         from agent_comms.goal_attempts import GoalAttemptStore
 
         agent = CommsAgent(wired, agent_bin="pi")
+        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
         updates = []
 
         class FakeClient:
@@ -1126,12 +1128,52 @@ class TestAgentTurn:
         assert grant not in repr(goal)
         await agent.shutdown()
 
+    async def test_failed_final_after_goal_completion_does_not_leave_false_completed_status(
+        self, wired, tmp_path, monkeypatch
+    ):
+        from agent_comms.goal_attempts import GoalAttemptStore
+
+        agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+
+        class FakeClient:
+            async def session_update(self, **kwargs):
+                pass
+
+        agent._client = FakeClient()
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        goal = wired.update_goal("proj", "set", text="Finish safely")
+        private = wired.root / "goal-private"
+        private.mkdir(mode=0o700)
+        store = GoalAttemptStore.initialize(private)
+        store.create_goal(goal.id)
+        agent._goal_store = store
+
+        async def events(*args, **kwargs):
+            wired.update_goal(
+                "proj", "completed", goal_id=goal.id, progress="Premature", model_report=True
+            )
+            yield {"type": "tool_end", "id": "goal", "name": "comms_goal", "ok": True}
+            yield {"type": "settled"}
+            yield {"type": "done", "ok": False, "text": "failed"}
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        agent._schedule_goal("proj")
+        await asyncio.wait_for(agent._wake_tasks["proj"], timeout=2)
+
+        try:
+            assert wired.registry.require("proj").goal.status == "blocked"
+            assert GoalAttemptStore(private).snapshot(goal.id).state == "blocked"
+        finally:
+            await agent.shutdown()
+
     async def test_failed_goal_origin_never_launches_continuation(
         self, wired, tmp_path, monkeypatch
     ):
         from agent_comms.goal_attempts import GoalAttemptStore, UnresolvedAttempt
 
         agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
 
         class FakeClient:
             async def session_update(self, **kwargs):
