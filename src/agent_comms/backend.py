@@ -29,6 +29,7 @@ import secrets
 import shutil
 import signal
 from collections.abc import AsyncIterator, Sequence
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -53,6 +54,15 @@ _ACTIVE_STDERR_TASKS: dict[asyncio.Task[Any], asyncio.Task[str]] = {}
 _ACTIVE_STEERING_TASKS: dict[asyncio.Task[Any], asyncio.Task[None]] = {}
 
 
+def _close_child_stdin(proc: asyncio.subprocess.Process) -> None:
+    """A broken closing pipe must not prevent terminating an uncertain turn."""
+    if proc.stdin is not None:
+        # A child that exited mid-preflight can close its read end first.
+        # Continue the process-group teardown and wait for its exit.
+        with suppress(OSError, RuntimeError, ValueError):
+            proc.stdin.close()
+
+
 async def _stop_task_steering(task: asyncio.Task[Any]) -> None:
     """Reap a queue-forwarder even if the RPC parser or its consumer exits early."""
     forwarder = _ACTIVE_STEERING_TASKS.pop(task, None)
@@ -66,8 +76,7 @@ async def terminate_task_process(task: asyncio.Task[Any]) -> None:
     proc = _ACTIVE_PROCESSES.pop(task, None)
     if proc is None:
         return
-    if proc.stdin is not None:
-        proc.stdin.close()
+    _close_child_stdin(proc)
     if proc.returncode is not None:
         return
     try:
@@ -680,8 +689,7 @@ async def _stream_agent_events_impl(
         # without starting a model run. Stop its whole process group; never
         # issue the uncertain prompt again.
         await terminate_task_process(owner)
-    if proc.stdin is not None:
-        proc.stdin.close()
+    _close_child_stdin(proc)
     try:
         await asyncio.wait_for(proc.wait(), timeout=5.0)
     except TimeoutError:

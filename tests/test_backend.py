@@ -599,6 +599,65 @@ if case != "eof":
         assert events[-1]["reason_code"] == "pi_input_id_unavailable"
         assert "preflight" in events[-1]["text"]
 
+    @pytest.mark.parametrize("phase", ["preflight", "no_user_start"])
+    async def test_broken_child_stdin_close_still_reaps_and_reports_typed_failure(
+        self, tmp_path, monkeypatch, phase
+    ):
+        pid_file = tmp_path / "child.pid"
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + f"""
+import json, os, signal, sys, time
+state = json.loads(sys.stdin.readline())
+assert state["type"] == "get_state"
+if {phase!r} == "preflight":
+    data = "invalid-state"
+else:
+    data = {{"nativeInputProofCapability": "pi-native-input-v1-live-only"}}
+print(json.dumps({{"type": "response", "command": "get_state",
+                  "id": state["id"], "success": True, "data": data}}), flush=True)
+if {phase!r} == "no_user_start":
+    prompt = json.loads(sys.stdin.readline())
+    print(json.dumps({{"type": "response", "command": "prompt",
+                      "id": prompt["id"], "success": True}}), flush=True)
+open({str(pid_file)!r}, "w").write(str(os.getpid()))
+signal.signal(signal.SIGTERM, lambda *_: None)
+while True: time.sleep(0.1)
+""",
+        )
+        create = backend.asyncio.create_subprocess_exec
+        close_calls = []
+
+        async def spawn(*args, **kwargs):
+            proc = await create(*args, **kwargs)
+            assert proc.stdin is not None
+            original_close = proc.stdin.close
+
+            def fail_after_close():
+                original_close()
+                close_calls.append(True)
+                raise BrokenPipeError("child closed its stdin read end")
+
+            monkeypatch.setattr(proc.stdin, "close", fail_after_close)
+            return proc
+
+        monkeypatch.setattr(backend.asyncio, "create_subprocess_exec", spawn)
+        monkeypatch.setattr(backend, "PROMPT_START_TIMEOUT_SECONDS", 0.1)
+        async with asyncio.timeout(4):
+            events = [
+                event
+                async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path))
+            ]
+        assert events[-1]["type"] == "done" and events[-1]["ok"] is False
+        assert events[-1]["reason_code"] == (
+            "pi_input_id_unavailable" if phase == "preflight" else "current_prompt_input_missing"
+        )
+        assert pid_file.exists() and close_calls
+        with pytest.raises(ProcessLookupError):
+            os.kill(int(pid_file.read_text()), 0)
+        assert not backend._ACTIVE_PROCESSES
+        assert not backend._ACTIVE_STDERR_TASKS
+
     @pytest.mark.parametrize(
         ("case", "expected_reason"),
         [
