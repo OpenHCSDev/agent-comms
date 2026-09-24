@@ -1586,7 +1586,6 @@ time.sleep(60)
     async def test_provider_retry_failure_is_distinct_from_model_silence(self, tmp_path):
         rpc_lines = "\n".join(
             [
-                '{"id":"agent-comms-prompt","type":"response","command":"prompt","success":true}',
                 '{"type":"auto_retry_start","attempt":1,"maxAttempts":3,'
                 '"errorMessage":"secret raw payload"}',
                 '{"type":"auto_retry_end","success":false,"attempt":3,'
@@ -1598,12 +1597,19 @@ time.sleep(60)
                 '{"contextUsage":{}}}',
             ]
         )
-        stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n"
+            + "import json, sys\n"
+            + "def emit(value):\n    print(json.dumps(value), flush=True)\n"
+            + _NATIVE_PROMPT_START
+            + f"for line in {rpc_lines!r}.splitlines():\n    emit(json.loads(line))\n",
+        )
 
         events = [
             event
             async for event in backend.stream_agent_events(
-                stub, [], "task", str(tmp_path), model_wait_timeout=0.03
+                stub, [], "task", str(tmp_path), model_wait_timeout=0.03, require_input_id=True
             )
         ]
 
