@@ -13,13 +13,15 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
 import secrets
 import sqlite3
 import stat
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import closing, suppress
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import TypeVar
 from uuid import uuid4
@@ -72,6 +74,15 @@ class LaunchPermit:
     reservation: Reservation
 
 
+@dataclass(frozen=True, slots=True)
+class ProviderUsageTotal:
+    responses: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    cost_total: Decimal = Decimal(0)
+
+
 _T = TypeVar("_T")
 
 
@@ -103,9 +114,9 @@ class GoalAttemptStore:
                 ).fetchone()
             except sqlite3.Error as error:
                 raise StorageUncertain("Incomplete goal attempt schema.") from error
-        if version == ("2",):
-            self._migrate_v2()
-        elif version != ("3",):
+        if version in {("2",), ("3",)}:
+            self._migrate_schema(version[0])
+        elif version != ("4",):
             raise StorageUncertain("Unsupported goal attempt schema.")
 
     @staticmethod
@@ -122,28 +133,40 @@ class GoalAttemptStore:
             "OR (state!='ready' AND ready_digest='')))"
         )
 
-    def _migrate_v2(self) -> None:
-        """Atomically replace the v2 state constraint with one terminal v3 schema."""
+    @staticmethod
+    def _create_usage_table(conn: sqlite3.Connection) -> None:
+        conn.execute(
+            "CREATE TABLE provider_usage ("
+            "attempt_id TEXT NOT NULL, response_id TEXT NOT NULL, usage_json TEXT NOT NULL, "
+            "PRIMARY KEY(attempt_id,response_id), "
+            "FOREIGN KEY(attempt_id) REFERENCES attempts(attempt_id))"
+        )
+
+    def _migrate_schema(self, source_version: str) -> None:
+        """Atomically migrate older ledgers to the sole v4 schema."""
         with closing(self._connect()) as conn:
             try:
-                conn.execute("PRAGMA foreign_keys=OFF")
+                if source_version == "2":
+                    conn.execute("PRAGMA foreign_keys=OFF")
                 conn.execute("BEGIN IMMEDIATE")
                 version = conn.execute(
                     "SELECT value FROM metadata WHERE key='schema_version'"
                 ).fetchone()
-                if version == ("3",):
+                if version == ("4",):
                     conn.rollback()
                     return
-                if version != ("2",):
+                if version != (source_version,):
                     raise StorageUncertain("Unsupported goal attempt schema.")
-                self._create_goals_table(conn, "goals_v3")
-                conn.execute(
-                    "INSERT INTO goals_v3(goal_id,generation,state,attempt_id,ready_digest) "
-                    "SELECT goal_id,generation,state,attempt_id,ready_digest FROM goals"
-                )
-                conn.execute("DROP TABLE goals")
-                conn.execute("ALTER TABLE goals_v3 RENAME TO goals")
-                conn.execute("UPDATE metadata SET value='3' WHERE key='schema_version'")
+                if source_version == "2":
+                    self._create_goals_table(conn, "goals_v3")
+                    conn.execute(
+                        "INSERT INTO goals_v3(goal_id,generation,state,attempt_id,ready_digest) "
+                        "SELECT goal_id,generation,state,attempt_id,ready_digest FROM goals"
+                    )
+                    conn.execute("DROP TABLE goals")
+                    conn.execute("ALTER TABLE goals_v3 RENAME TO goals")
+                self._create_usage_table(conn)
+                conn.execute("UPDATE metadata SET value='4' WHERE key='schema_version'")
                 conn.commit()
                 self._sync()
             except StorageUncertain:
@@ -208,7 +231,8 @@ class GoalAttemptStore:
                     "PRIMARY KEY(goal_id, decision_id), "
                     "FOREIGN KEY(goal_id) REFERENCES goals(goal_id))"
                 )
-                conn.execute("INSERT INTO metadata(key,value) VALUES('schema_version','3')")
+                cls._create_usage_table(conn)
+                conn.execute("INSERT INTO metadata(key,value) VALUES('schema_version','4')")
                 conn.commit()
             cls._sync_paths(path, directory)
         except (sqlite3.Error, OSError) as error:
@@ -466,6 +490,82 @@ class GoalAttemptStore:
         finally:
             # Even an uncertain claim cannot be used twice in this process.
             self._owned.discard(reservation.attempt_id)
+
+    def record_provider_usage(
+        self, permit: LaunchPermit, response_id: str, usage: Mapping[str, object]
+    ) -> None:
+        """Attribute one provider response to its claimed goal attempt exactly once."""
+        if not response_id:
+            raise ValueError("Provider response ID is required.")
+        for field in ("input", "output", "totalTokens"):
+            value = usage.get(field, 0)
+            if type(value) is not int or value < 0:
+                raise ValueError(f"Provider usage {field} must be a nonnegative integer.")
+        cost = usage.get("cost", {})
+        if not isinstance(cost, Mapping):
+            raise ValueError("Provider cost must be an object.")
+        cost_total = cost.get("total", 0)
+        if (
+            type(cost_total) not in {int, float}
+            or not Decimal(str(cost_total)).is_finite()
+            or cost_total < 0
+        ):
+            raise ValueError("Provider cost total must be a nonnegative number.")
+        try:
+            raw = json.dumps(usage, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Provider usage must be JSON serializable.") from error
+        reservation = permit.reservation
+
+        def write(conn: sqlite3.Connection) -> str:
+            self._require_current(conn, reservation, "claimed")
+            row = conn.execute(
+                "SELECT usage_json FROM provider_usage WHERE attempt_id=? AND response_id=?",
+                (reservation.attempt_id, response_id),
+            ).fetchone()
+            if row is not None:
+                if row[0] != raw:
+                    raise ValueError("Provider response ID has different usage.")
+            else:
+                conn.execute(
+                    "INSERT INTO provider_usage(attempt_id,response_id,usage_json) VALUES(?,?,?)",
+                    (reservation.attempt_id, response_id, raw),
+                )
+            return raw
+
+        self._change(
+            write,
+            lambda expected: self._read_provider_usage(reservation.attempt_id, response_id)
+            == expected,
+        )
+
+    def _read_provider_usage(self, attempt_id: str, response_id: str) -> str | None:
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT usage_json FROM provider_usage WHERE attempt_id=? AND response_id=?",
+                (attempt_id, response_id),
+            ).fetchone()
+        return row[0] if row else None
+
+    def provider_usage_total(self, goal_id: str) -> ProviderUsageTotal:
+        """Sum only usage reported in provider responses attributed to this goal."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT u.usage_json FROM provider_usage u "
+                "JOIN attempts a ON a.attempt_id=u.attempt_id WHERE a.goal_id=?",
+                (goal_id,),
+            ).fetchall()
+        totals = ProviderUsageTotal()
+        for (raw,) in rows:
+            usage = json.loads(raw)
+            totals = ProviderUsageTotal(
+                responses=totals.responses + 1,
+                input_tokens=totals.input_tokens + usage.get("input", 0),
+                output_tokens=totals.output_tokens + usage.get("output", 0),
+                total_tokens=totals.total_tokens + usage.get("totalTokens", 0),
+                cost_total=totals.cost_total + Decimal(str(usage.get("cost", {}).get("total", 0))),
+            )
+        return totals
 
     @staticmethod
     def _require_current(conn: sqlite3.Connection, reservation: Reservation, phase: str) -> None:

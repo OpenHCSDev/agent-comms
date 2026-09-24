@@ -324,6 +324,28 @@ def test_verified_completion_is_terminal_without_a_new_ready_grant(store):
         store.ready_grant("goal", completed.number + 1)
 
 
+def test_provider_reported_responses_are_attributed_once_and_survive_reopen(store):
+    store.create_goal("goal")
+    reservation = store.reserve("goal", 1)
+    permit = store.claim_launch(reservation)
+    first = {"input": 100, "output": 20, "totalTokens": 120, "cost": {"total": 0.1}}
+    second = {"input": 40, "output": 10, "totalTokens": 50, "cost": {"total": 0.2}}
+
+    store.record_provider_usage(permit, "response-1", first)
+    store.record_provider_usage(permit, "response-1", first)
+    store.record_provider_usage(permit, "response-2", second)
+    with pytest.raises(ValueError, match="different usage"):
+        store.record_provider_usage(permit, "response-1", second)
+
+    reopened = GoalAttemptStore(store.root)
+    totals = reopened.provider_usage_total("goal")
+    assert totals.responses == 2
+    assert totals.input_tokens == 140
+    assert totals.output_tokens == 30
+    assert totals.total_tokens == 170
+    assert str(totals.cost_total) == "0.3"
+
+
 @pytest.mark.parametrize("phase", ["reserved", "claimed"])
 def test_clearing_goal_retires_reserved_attempt_without_replay(store, phase):
     store.create_goal("goal")
@@ -533,7 +555,7 @@ def test_v2_claimed_attempt_migrates_without_regranting(tmp_path):
     assert migrated.snapshot("goal").state == "reserved"
     with sqlite3.connect(path) as conn:
         assert conn.execute("SELECT value FROM metadata WHERE key='schema_version'").fetchone() == (
-            "3",
+            "4",
         )
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
     with pytest.raises(ReservationConflict):
