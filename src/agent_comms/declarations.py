@@ -1544,6 +1544,33 @@ class ScheduledTurn:
 
 
 @dataclass(frozen=True, slots=True)
+class DMDisplayBasis:
+    """Immutable identity/scope witness for one fetched human DM page.
+
+    A page fetch is not proof that a UI painted it. The client must supply
+    separate contiguous painted-tail evidence before requesting a read mark.
+    """
+
+    root: str
+    root_identity: tuple[int, int]
+    worktree: str
+    requested_peer: str
+    viewer: str
+    viewer_epoch: int
+    viewer_created_at: float
+    viewer_names: frozenset[str]
+    peer: str
+    peer_epoch: int
+    peer_created_at: float
+    peer_names: frozenset[str]
+    registry_revision: tuple[int, int, int, int] | None
+    marker_revision: tuple[int, int, int, int] | None
+    bus_identity: tuple[int, int] | None
+    newest_seq: int | None
+    older_unread: bool
+
+
+@dataclass(frozen=True, slots=True)
 class MessagePage:
     """A bounded, ascending page from the durable message log.
 
@@ -1556,6 +1583,7 @@ class MessagePage:
     has_older: bool
     has_newer: bool
     display_scope: ChannelDisplayScope | None = None
+    display_basis: DMDisplayBasis | None = None
 
     def __post_init__(self) -> None:
         sequences = [message.seq for message in self.messages]
@@ -3877,6 +3905,39 @@ class MessageBus:
             for name, sequence in markers.items():
                 current[name] = max(sequence, current.get(name, 0))
             _atomic_write_text(marker_path, json.dumps(current, indent=2))
+
+    def _mark_dm_painted_bound(
+        self,
+        viewer: str,
+        peer: str,
+        through: int,
+        *,
+        expected_marker_revision: tuple[int, int, int, int] | None,
+    ) -> None:
+        """Write one human DM marker, never the global/executor cursor.
+
+        Caller holds the registry identity lock while this marker lock is
+        acquired. A concurrent deliberate Mark Read changes the marker basis
+        and must cause this painted-page CAS to fail, not silently retarget.
+        """
+        marker_path = self._path.parent / "read_markers.json"
+        with _store_lock(marker_path):
+            if file_revision(marker_path) != expected_marker_revision:
+                raise ValueError("DM read marker changed; refresh the displayed page.")
+            current = self._read_markers_unlocked(marker_path)
+            key = self._marker_key(viewer, peer)
+            if current.get(key, 0) >= through:
+                return
+            # On POSIX, prove the directory can sync before changing the
+            # marker. The final post-replace sync is still required there.
+            if os.name == "posix":
+                parent_fd = os.open(marker_path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                try:
+                    os.fsync(parent_fd)
+                finally:
+                    os.close(parent_fd)
+            current[key] = through
+            _atomic_write_text(marker_path, json.dumps(current, indent=2), fsync_parent=True)
 
     def _load_log(self) -> list[Message]:
         with _store_lock(self._path):
