@@ -1682,7 +1682,16 @@ class Comms:
                     title=title,
                 )
             self._require_available_new_tags(thread.tags)
-            self.registry.register(thread)
+            # A fresh public registration is a new owner admission even when
+            # the OS has reused its PID and the project path is unchanged.
+            # Metadata setters re-register the saved declaration internally.
+            new_owner = (
+                existing is not None
+                and existing.pid > 0
+                and thread.pid > 0
+                and thread.created_at != existing.created_at
+            )
+            self.registry.register(thread, new_owner=new_owner)
 
             self.channel_catalog.remember_tags(thread.tags, thread.created_at)
 

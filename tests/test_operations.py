@@ -414,6 +414,59 @@ class TestThreadOps:
         assert wired.registry.status("starting").value == "stopped"
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_rejects_fresh_registration_with_reused_pid(self, wired, monkeypatch):
+        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        before = wired.registry.snapshot().admission_generations["starting"]
+        signals = []
+
+        def replace_owner(self, thread, *, wait=True):
+            if wait:
+                self.register(
+                    Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654)
+                )
+            return True
+
+        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", replace_owner)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._signal_local_owner",
+            staticmethod(lambda pid, sig: signals.append((pid, sig))),
+        )
+        with pytest.raises(RelationViolationError, match="epoch changed"):
+            wired.stop("starting")
+        assert signals == []
+        assert wired.registry.snapshot().admission_generations["starting"] > before
+        assert wired.registry.status("starting").active
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_accepts_project_change_from_same_owner(self, wired, monkeypatch, tmp_path):
+        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        before = wired.registry.snapshot().admission_generations["starting"]
+        signals = []
+        project_generations = []
+
+        def prove_owner(self, thread, *, wait=True):
+            if wait:
+                self.set_project(thread.name, str(tmp_path))
+                project_generations.append(
+                    self.registry.snapshot().admission_generations["starting"]
+                )
+            return True
+
+        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", prove_owner)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._process_alive", lambda *args: not signals
+        )
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._signal_local_owner",
+            staticmethod(lambda pid, sig: signals.append((pid, sig))),
+        )
+        wired.stop("starting")
+        assert signals == [(987654, signal.SIGTERM)]
+        assert project_generations == [before]
+        assert wired.registry.status("starting").stopped
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_rejects_same_pid_new_epoch_before_signal(self, wired, monkeypatch):
         wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
         before = wired.registry.snapshot().admission_generations["starting"]
