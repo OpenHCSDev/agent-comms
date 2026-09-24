@@ -178,10 +178,16 @@ async def test_late_subscriber_receives_persisted_unknown(tmp_path):
 
     client = CommsAgent(comms, agent_bin="/bin/echo")
     client.on_connect(LateClient())
-    proxy = RuntimeProxy(client, "project", socket_path(comms.root, os.getpid()))
+    proxy = None
     try:
         await agent._drain_inbox("project")
-        await proxy.subscribe()
+        if os.name == "nt":
+            # Windows has no Unix runtime socket. Exercise the same replay
+            # projection that the socket subscribe route calls on POSIX.
+            await agent.replay_unknown_inputs("project", client=LateClient())
+        else:
+            proxy = RuntimeProxy(client, "project", socket_path(comms.root, os.getpid()))
+            await proxy.subscribe()
         assert any(
             update.get("_meta", {})
             .get("agentComms", {})
@@ -191,7 +197,8 @@ async def test_late_subscriber_receives_persisted_unknown(tmp_path):
             for update in updates
         )
     finally:
-        await proxy.close()
+        if proxy is not None:
+            await proxy.close()
         await agent.shutdown()
 
 
