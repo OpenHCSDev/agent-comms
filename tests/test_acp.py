@@ -1051,6 +1051,9 @@ class TestAgentTurn:
 
 
 class TestWireProtocol:
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="selectors cannot poll Windows pipe handles"
+    )
     def test_real_stdio_roundtrip(self, tmp_path):
         """initialize -> session/new -> prompt over real stdio pipes."""
         import selectors

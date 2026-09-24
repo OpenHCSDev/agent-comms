@@ -41,6 +41,7 @@ def _test_only_guard_for_handcrafted_marker(registry: ThreadRegistry) -> None:
     guard.commit_initial()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
 def test_private_marker_checks_relative_and_absolute_ancestor_permissions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -290,6 +291,7 @@ class TestThreadRegistry:
         assert comms.registry.live_owner_with_epoch("a")[1] > 0
         comms.finish_turn("a", "migrated-turn")
 
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     def test_private_marker_can_precede_first_registry_snapshot(self, tmp_path: Path) -> None:
         root = tmp_path / "private-fresh"
         root.mkdir(mode=0o700)
@@ -299,6 +301,7 @@ class TestThreadRegistry:
         reopened.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
         assert reopened.registry.live_owner_with_epoch("a")[1] > 0
 
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     def test_private_marker_does_not_bootstrap_stripped_owner_epoch(self, tmp_path: Path) -> None:
         root = tmp_path / "private-wire"
         root.mkdir(mode=0o700)
@@ -316,6 +319,7 @@ class TestThreadRegistry:
             comms.registry.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
         assert json.loads(registry_path.read_text())["threads"]["a"].get("active_turn") is None
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="fault injection uses Linux /proc/self/fd")
     @pytest.mark.parametrize("fail_at", ["pending", "replacement", "directory", "commit"])
     def test_private_guard_faults_never_promote_an_unfsynced_owner(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fail_at: str
@@ -386,6 +390,7 @@ class TestThreadRegistry:
             )
             assert child.returncode != 0 and "Private registry guard" in child.stderr
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="fault injection uses Linux /proc/self/fd")
     def test_private_marker_directory_fsync_failure_leaves_guard_pending(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -414,6 +419,7 @@ class TestThreadRegistry:
         with pytest.raises(RelationViolationError, match="fresh bus root"):
             comms.initialize_private_initial_protocol()  # never auto-repair
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="fault injection uses Linux /proc/self/fd")
     @pytest.mark.parametrize("stage", ["pending", "commit"])
     def test_torn_guard_slot_never_falls_back_to_older_commit(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage: str
@@ -442,6 +448,7 @@ class TestThreadRegistry:
         with pytest.raises(RelationViolationError, match="slot checksum"):
             ThreadRegistry(root / "registry.json")
 
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     @pytest.mark.parametrize("damage", ["missing", "corrupt", "truncated", "strip_epochs"])
     def test_private_guard_rejects_disk_downgrade_even_with_cached_revision(
         self, tmp_path: Path, damage: str
@@ -692,6 +699,7 @@ class TestMessageBus:
         assert charged_bytes == len(json.dumps(first.to_wire()).encode()) + 1
         assert charged_bytes < len(lines[0])
 
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     def test_keyed_response_receipt_is_same_row_and_reopens_without_reappend(self, tmp_path: Path):
         legacy = self._bus(tmp_path)
         legacy.send(Message(sender="a", target="#all", body="legacy", type=MessageType.INFO))
@@ -754,6 +762,7 @@ class TestMessageBus:
         assert legacy._path.read_bytes() == original_bus
         assert sequence_path.read_bytes() == original_meta
 
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     @pytest.mark.parametrize("bad_seq", [-1, True, "1", 1 << 63])
     def test_private_marker_rejects_invalid_sequence_type_or_range_without_append(
         self, tmp_path: Path, bad_seq: object
@@ -774,6 +783,7 @@ class TestMessageBus:
         assert not legacy._path.exists()
         assert sequence_path.read_bytes() == before
 
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     def test_private_marker_duplicate_keys_and_exhausted_sequence_fail_closed(self, tmp_path: Path):
         legacy = self._bus(tmp_path)
         sequence_path = tmp_path / "bus_meta.json"
@@ -800,6 +810,7 @@ class TestMessageBus:
         assert not legacy._path.exists()
         assert sequence_path.read_bytes() == before
 
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     def test_keyed_response_replay_survives_direct_target_rename(self, tmp_path: Path):
         legacy = self._bus(tmp_path)
         sequence_path = tmp_path / "bus_meta.json"
@@ -817,6 +828,7 @@ class TestMessageBus:
         assert reopened.publish_keyed_response(response_intent(intended)) == stored
         assert (legacy._path.read_bytes(), sequence_path.read_bytes()) == before
 
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     def test_keyed_writer_is_disabled_and_rejects_unsafe_or_corrupt_roots(self, tmp_path: Path):
         legacy = self._bus(tmp_path)
         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
@@ -856,6 +868,7 @@ class TestMessageBus:
         with pytest.raises(RelationViolationError, match="malformed private bus receipt"):
             keyed.publish_keyed_response(intent)
 
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     @pytest.mark.parametrize(
         "broken", ["missing", "duplicate", "out_of_order", "notice_bool", "mention_bool"]
     )
@@ -889,6 +902,7 @@ class TestMessageBus:
             keyed.publish_keyed_response(response_intent(intended))
         assert (legacy._path.read_bytes(), sequence_path.read_bytes()) == (before_log, before_meta)
 
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     def test_keyed_append_checks_actual_custom_basename_repair_file(self, tmp_path: Path):
         legacy = self._bus(tmp_path)
         custom = tmp_path / "custom"
