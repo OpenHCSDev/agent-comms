@@ -103,8 +103,61 @@ class GoalAttemptStore:
                 ).fetchone()
             except sqlite3.Error as error:
                 raise StorageUncertain("Incomplete goal attempt schema.") from error
-            if version != ("2",):
-                raise StorageUncertain("Unsupported goal attempt schema.")
+        if version == ("2",):
+            self._migrate_v2()
+        elif version != ("3",):
+            raise StorageUncertain("Unsupported goal attempt schema.")
+
+    @staticmethod
+    def _create_goals_table(conn: sqlite3.Connection, name: str) -> None:
+        if name not in {"goals", "goals_v3"}:
+            raise ValueError("Invalid goal table name")
+        conn.execute(
+            f"CREATE TABLE {name} ("
+            "goal_id TEXT PRIMARY KEY, generation INTEGER NOT NULL CHECK(generation > 0), "
+            "state TEXT NOT NULL CHECK(state IN "
+            "('ready','reserved','blocked','completed','cancelled')), "
+            "attempt_id TEXT, ready_digest TEXT NOT NULL, "
+            "CHECK ((state='ready' AND attempt_id IS NULL AND length(ready_digest)=64) "
+            "OR (state!='ready' AND ready_digest='')))"
+        )
+
+    def _migrate_v2(self) -> None:
+        """Atomically replace the v2 state constraint with one terminal v3 schema."""
+        with closing(self._connect()) as conn:
+            try:
+                conn.execute("PRAGMA foreign_keys=OFF")
+                conn.execute("BEGIN IMMEDIATE")
+                version = conn.execute(
+                    "SELECT value FROM metadata WHERE key='schema_version'"
+                ).fetchone()
+                if version == ("3",):
+                    conn.rollback()
+                    return
+                if version != ("2",):
+                    raise StorageUncertain("Unsupported goal attempt schema.")
+                self._create_goals_table(conn, "goals_v3")
+                conn.execute(
+                    "INSERT INTO goals_v3(goal_id,generation,state,attempt_id,ready_digest) "
+                    "SELECT goal_id,generation,state,attempt_id,ready_digest FROM goals"
+                )
+                conn.execute("DROP TABLE goals")
+                conn.execute("ALTER TABLE goals_v3 RENAME TO goals")
+                conn.execute("UPDATE metadata SET value='3' WHERE key='schema_version'")
+                conn.commit()
+                self._sync()
+            except StorageUncertain:
+                if conn.in_transaction:
+                    conn.rollback()
+                raise
+            except (sqlite3.Error, OSError) as error:
+                if conn.in_transaction:
+                    with suppress(sqlite3.Error):
+                        conn.rollback()
+                raise StorageUncertain("Goal attempt schema migration is uncertain.") from error
+        with closing(self._connect()) as conn:
+            if conn.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                raise StorageUncertain("Goal attempt migration broke a foreign key.")
 
     @classmethod
     def initialize(cls, root: str | Path) -> GoalAttemptStore:
@@ -137,14 +190,7 @@ class GoalAttemptStore:
                     "CREATE TABLE IF NOT EXISTS metadata "
                     "(key TEXT PRIMARY KEY, value TEXT NOT NULL)"
                 )
-                conn.execute(
-                    "CREATE TABLE IF NOT EXISTS goals ("
-                    "goal_id TEXT PRIMARY KEY, generation INTEGER NOT NULL CHECK(generation > 0), "
-                    "state TEXT NOT NULL CHECK(state IN ('ready','reserved','blocked')), "
-                    "attempt_id TEXT, ready_digest TEXT NOT NULL, "
-                    "CHECK ((state='ready' AND attempt_id IS NULL AND length(ready_digest)=64) "
-                    "OR (state!='ready' AND ready_digest='')))"
-                )
+                cls._create_goals_table(conn, "goals")
                 conn.execute(
                     "CREATE TABLE IF NOT EXISTS attempts ("
                     "attempt_id TEXT PRIMARY KEY, goal_id TEXT NOT NULL, "
@@ -162,7 +208,7 @@ class GoalAttemptStore:
                     "PRIMARY KEY(goal_id, decision_id), "
                     "FOREIGN KEY(goal_id) REFERENCES goals(goal_id))"
                 )
-                conn.execute("INSERT INTO metadata(key,value) VALUES('schema_version','2')")
+                conn.execute("INSERT INTO metadata(key,value) VALUES('schema_version','3')")
                 conn.commit()
             cls._sync_paths(path, directory)
         except (sqlite3.Error, OSError) as error:
@@ -634,3 +680,76 @@ class GoalAttemptStore:
             return Generation(reservation.goal_id, reservation.generation + 1, "ready", None)
 
         return self._ready_change(reservation.goal_id, reservation.generation + 1, write)
+
+    def record_verified_completion(self, permit: LaunchPermit, witness: str) -> Generation:
+        """Finish a claimed attempt with no successor generation or launch grant."""
+        if not witness.strip():
+            raise ValueError("A nonempty verified completion witness is required.")
+        reservation = permit.reservation
+
+        def write(conn: sqlite3.Connection) -> Generation:
+            self._require_current(conn, reservation, "claimed")
+            conn.execute(
+                "UPDATE attempts SET phase='succeeded',progress_witness=? WHERE attempt_id=?",
+                (witness, reservation.attempt_id),
+            )
+            conn.execute(
+                "UPDATE goals SET state='completed',ready_digest='' WHERE goal_id=?",
+                (reservation.goal_id,),
+            )
+            return Generation(
+                reservation.goal_id, reservation.generation, "completed", reservation.attempt_id
+            )
+
+        return self._change(write, lambda value: self._is_attempt(reservation, "succeeded", value))
+
+    def retire_goal(
+        self, goal_id: str, *, expected_generation: int, attempt_id: str | None
+    ) -> Generation:
+        """Revoke READY or an unresolved attempt before clearing the registry goal."""
+
+        def write(conn: sqlite3.Connection) -> Generation:
+            row = conn.execute(
+                "SELECT generation,state,attempt_id FROM goals WHERE goal_id=?", (goal_id,)
+            ).fetchone()
+            if row is None or row[0] != expected_generation or row[2] != attempt_id:
+                raise StaleAttempt("Goal generation or attempt changed before retirement.")
+            state = row[1]
+            if state in {"completed", "cancelled"}:
+                raise StaleAttempt("Goal is already terminal.")
+            if state == "ready" and attempt_id is not None:
+                raise StaleAttempt("READY goal cannot carry an attempt.")
+            if state in {"reserved", "blocked"}:
+                if attempt_id is None:
+                    raise StaleAttempt("Unresolved goal has no attempt to retire.")
+                phase = conn.execute(
+                    "SELECT phase FROM attempts WHERE attempt_id=? AND goal_id=? AND generation=?",
+                    (attempt_id, goal_id, expected_generation),
+                ).fetchone()
+                expected_phases = (
+                    {("reserved",), ("claimed",)} if state == "reserved" else {("failed",)}
+                )
+                if phase not in expected_phases:
+                    raise StaleAttempt("Attempt phase changed before retirement.")
+                conn.execute(
+                    "UPDATE attempts SET phase='resolved',resolution='goal cleared' "
+                    "WHERE attempt_id=?",
+                    (attempt_id,),
+                )
+            conn.execute(
+                "UPDATE goals SET state='cancelled',ready_digest='' WHERE goal_id=?",
+                (goal_id,),
+            )
+            return Generation(goal_id, expected_generation, "cancelled", attempt_id)
+
+        result = self._change(
+            write,
+            lambda value: self._is_generation(value)
+            and (
+                attempt_id is None or self._is_attempt_phase(attempt_id, "resolved", "goal cleared")
+            ),
+        )
+        self._ready_grants.pop((goal_id, expected_generation), None)
+        if attempt_id is not None:
+            self._owned.discard(attempt_id)
+        return result

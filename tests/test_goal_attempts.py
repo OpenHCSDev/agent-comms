@@ -310,6 +310,35 @@ def test_stale_old_done_cannot_block_or_overwrite_new_generation(store):
         store.reserve("goal", 2)
 
 
+def test_verified_completion_is_terminal_without_a_new_ready_grant(store):
+    store.create_goal("goal")
+    reservation = store.reserve("goal", 1)
+    permit = store.claim_launch(reservation)
+    completed = store.record_verified_completion(permit, "registry-completed-revision-2")
+    assert completed.state == "completed"
+    assert completed.attempt_id == reservation.attempt_id
+    assert store.snapshot("goal") == completed
+    with pytest.raises((ReservationConflict, UnresolvedAttempt)):
+        store.reserve("goal", completed.number)
+    with pytest.raises(UnresolvedAttempt):
+        store.ready_grant("goal", completed.number + 1)
+
+
+@pytest.mark.parametrize("phase", ["reserved", "claimed"])
+def test_clearing_goal_retires_reserved_attempt_without_replay(store, phase):
+    store.create_goal("goal")
+    reservation = store.reserve("goal", 1)
+    if phase == "claimed":
+        store.claim_launch(reservation)
+    retired = store.retire_goal("goal", expected_generation=1, attempt_id=reservation.attempt_id)
+    assert retired.state == "cancelled"
+    assert store.snapshot("goal") == retired
+    with pytest.raises((StaleAttempt, UnresolvedAttempt)):
+        store.claim_launch(reservation)
+    with pytest.raises((ReservationConflict, UnresolvedAttempt)):
+        store.reserve("goal", 1)
+
+
 @pytest.mark.parametrize("transition", ["create", "progress", "retry"])
 @pytest.mark.parametrize("failed_ack", ["fsync", "commit"])
 def test_ready_writes_uncertain_after_commit_cannot_launch_after_reopen(
@@ -473,6 +502,44 @@ def test_legacy_v1_ready_row_is_not_upgraded_or_launched(tmp_path):
         GoalAttemptStore.initialize(root)
     with sqlite3.connect(path) as conn:
         assert conn.execute("SELECT * FROM goals").fetchall() == [("goal", 1, "ready", None)]
+
+
+def test_v2_claimed_attempt_migrates_without_regranting(tmp_path):
+    root = tmp_path / "old-owner"
+    root.mkdir(mode=0o700)
+    path = root / "goal_attempts.sqlite3"
+    with sqlite3.connect(path) as conn:
+        conn.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY,value TEXT NOT NULL)")
+        conn.execute("INSERT INTO metadata VALUES('schema_version','2')")
+        conn.execute(
+            "CREATE TABLE goals (goal_id TEXT PRIMARY KEY,generation INTEGER NOT NULL,"
+            "state TEXT NOT NULL CHECK(state IN ('ready','reserved','blocked')) ,"
+            "attempt_id TEXT,ready_digest TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE attempts (attempt_id TEXT PRIMARY KEY,goal_id TEXT NOT NULL,"
+            "generation INTEGER NOT NULL,token TEXT NOT NULL,phase TEXT NOT NULL,"
+            "progress_witness TEXT,resolution TEXT,FOREIGN KEY(goal_id) REFERENCES goals(goal_id))"
+        )
+        conn.execute(
+            "CREATE TABLE human_decisions (goal_id TEXT,decision_id TEXT,generation INTEGER,"
+            "FOREIGN KEY(goal_id) REFERENCES goals(goal_id))"
+        )
+        conn.execute("INSERT INTO goals VALUES('goal',1,'reserved','attempt','')")
+        conn.execute("INSERT INTO attempts VALUES('attempt','goal',1,'token','claimed',NULL,NULL)")
+    path.chmod(0o600)
+
+    migrated = GoalAttemptStore(root)
+    assert migrated.snapshot("goal").state == "reserved"
+    with sqlite3.connect(path) as conn:
+        assert conn.execute("SELECT value FROM metadata WHERE key='schema_version'").fetchone() == (
+            "3",
+        )
+        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    with pytest.raises(ReservationConflict):
+        migrated.reserve("goal", 1)
+    retired = migrated.retire_goal("goal", expected_generation=1, attempt_id="attempt")
+    assert retired.state == "cancelled"
 
 
 @pytest.mark.parametrize("transition", ["claimed", "reserved"])
