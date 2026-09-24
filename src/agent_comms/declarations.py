@@ -746,11 +746,21 @@ class Goal:
 
     @property
     def toggle_action(self) -> str:
-        return "paused" if self.active else "active"
+        return {
+            "active": "paused",
+            "paused": "active",
+            "blocked": "retry",
+            "completed": "",
+        }[self.status]
 
     @property
     def toggle_label(self) -> str:
-        return "Pause" if self.active else "Resume"
+        return {
+            "active": "Pause",
+            "paused": "Resume",
+            "blocked": "Retry",
+            "completed": "Completed",
+        }[self.status]
 
     @property
     def summary(self) -> str:

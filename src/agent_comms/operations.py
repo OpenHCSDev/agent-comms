@@ -2194,6 +2194,10 @@ class Comms:
             elif action in {"active", "paused", "blocked", "completed"}:
                 if goal is None:
                     raise ValueError("No goal is set for this thread.")
+                if goal.status == "blocked" and action != "blocked":
+                    raise ValueError("Blocked goal requires an explicit retry through its owner.")
+                if goal.status == "completed" and action != "completed":
+                    raise ValueError("A completed goal cannot be resumed; set a new goal.")
                 goal = replace(
                     goal,
                     status=action,
@@ -2239,6 +2243,31 @@ class Comms:
             ) + diagnostic
             blocked = replace(
                 current, status="blocked", progress=progress, revision=current.revision + 1
+            )
+            self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
+            return blocked
+
+    def block_unverified_goal_completion(
+        self,
+        name: str,
+        *,
+        expected_goal: Goal,
+        expected_worktree: str,
+        diagnostic: str,
+    ) -> Goal | None:
+        """Revoke a provisional completion after the provider turn failed."""
+        with _store_lock(self._wire_lock_path):
+            thread = self.registry.require(name)
+            current = thread.goal
+            if (
+                thread.worktree != expected_worktree
+                or current is None
+                or current != expected_goal
+                or current.status != "completed"
+            ):
+                return current
+            blocked = replace(
+                current, status="blocked", progress=diagnostic, revision=current.revision + 1
             )
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
             return blocked

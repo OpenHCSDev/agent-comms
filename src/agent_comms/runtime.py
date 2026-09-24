@@ -143,6 +143,16 @@ class RuntimeServer:
                     result = await handler(session_id, request.get("instructions"))
                 writer.write((json.dumps({"result": result}) + "\n").encode())
                 await writer.drain()
+            elif action == "retry_goal":
+                goal_id = request.get("goal_id")
+                revision = request.get("expected_revision")
+                if type(goal_id) is not str or type(revision) is not int:
+                    raise ValueError("A goal identity and revision are required for retry.")
+                from dataclasses import asdict
+
+                goal = await self.agent.retry_goal(session_id, goal_id, revision)
+                writer.write((json.dumps({"result": {"goal": asdict(goal)}}) + "\n").encode())
+                await writer.drain()
         except (Exception, asyncio.CancelledError) as error:
             if not isinstance(error, asyncio.CancelledError):
                 try:

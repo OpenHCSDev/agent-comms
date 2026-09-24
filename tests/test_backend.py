@@ -167,7 +167,7 @@ class TestRpcParsing:
         )
         assert events[-1]["ok"] is False
         expected = (
-            "current_prompt_input_missing"
+            "unrecognized_followup_input"
             if subsequent_event.get("message", {}).get("role") == "user"
             else "assistant_final_stop_missing"
         )
@@ -238,7 +238,7 @@ class TestRpcParsing:
                     {"type": "message_start", "message": {"role": "user", "content": "t"}},
                     {"type": "message_start", "message": {"role": "user", "content": "other"}},
                 ],
-                "current_prompt_input_missing",
+                "unrecognized_followup_input",
             ),
         ],
     )
@@ -2138,8 +2138,8 @@ while True: time.sleep(0.1)
             ("accepted_then_started", None),
             ("rejected_without_start", "queued_input_start_missing"),
             ("unacknowledged", "queued_input_start_missing"),
-            ("accepted_then_duplicate", "current_prompt_input_missing"),
-            ("trimmed_start", "current_prompt_input_missing"),
+            ("accepted_then_duplicate", "unrecognized_followup_input"),
+            ("trimmed_start", "unrecognized_followup_input"),
         ],
     )
     async def test_queued_steer_needs_its_own_user_start_before_success(
@@ -2307,7 +2307,119 @@ send({{"type":"agent_settled"}})
         ]
         assert events[-1]["ok"] is expected_ok
         if not expected_ok:
-            assert events[-1]["reason_code"] == "current_prompt_input_missing"
+            assert events[-1]["reason_code"] == (
+                "unrecognized_followup_input"
+                if case == "wrong_steer_id"
+                else "current_prompt_input_missing"
+            )
+
+    async def test_native_steer_start_before_prompt_ack_is_authoritative(self, tmp_path):
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + """
+import json, sys
+send = lambda event: print(json.dumps(event), flush=True)
+state = json.loads(sys.stdin.readline())
+send({"type":"response","command":"get_state","id":state["id"],
+      "success":True,"data":{"nativeInputProofCapability":"pi-native-input-v1-live-only"}})
+prompt = json.loads(sys.stdin.readline())
+send({"type":"response","command":"prompt","id":prompt["id"],"success":True})
+send({"type":"message_start","message":{"role":"user","content":prompt["message"],
+      "inputId":prompt["inputId"]}})
+steer = json.loads(sys.stdin.readline())
+send({"type":"message_start","message":{"role":"user","content":steer["message"],
+      "inputId":steer["inputId"]}})
+send({"type":"response","command":"prompt","id":steer["id"],"success":True})
+send({"type":"message_end","message":{"role":"assistant","stopReason":"stop"}})
+send({"type":"agent_settled"})
+for line in sys.stdin:
+    if json.loads(line)["type"] == "get_session_stats":
+        send({"type":"response","command":"get_session_stats","success":True,
+              "data":{"contextUsage":{}}})
+        break
+""",
+        )
+        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue.put_nowait("channel mention")
+        starts = []
+
+        def native_start(public_id, native_id, text):
+            starts.append((public_id, native_id, text))
+            return True
+
+        events = [
+            event
+            async for event in backend.stream_agent_events(
+                stub,
+                [],
+                "goal request",
+                str(tmp_path),
+                steering_queue=queue,
+                native_start=native_start,
+            )
+        ]
+        assert events[-1]["ok"] is True, events
+        assert [text for _, _, text in starts] == ["goal request", "channel mention"]
+        assert len([e for e in events if e["type"] == "input_started"]) == 2
+
+    @pytest.mark.parametrize(("decision", "expected_ok"), [(None, True), (False, False)])
+    async def test_unsent_followup_goal_defer_or_owner_stop(self, tmp_path, decision, expected_ok):
+        checked = tmp_path / "send-boundary-checked"
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + f"""
+import json, pathlib, sys, time
+send = lambda event: print(json.dumps(event), flush=True)
+state = json.loads(sys.stdin.readline())
+send({{"type":"response","command":"get_state","id":state["id"],
+      "success":True,"data":{{"nativeInputProofCapability":"pi-native-input-v1-live-only"}}}})
+prompt = json.loads(sys.stdin.readline())
+send({{"type":"response","command":"prompt","id":prompt["id"],"success":True}})
+send({{"type":"message_start","message":{{"role":"user","content":prompt["message"],
+      "inputId":prompt["inputId"]}}}})
+marker = pathlib.Path({str(checked)!r})
+for _ in range(200):
+    if marker.exists(): break
+    time.sleep(0.01)
+assert marker.exists()
+send({{"type":"message_end","message":{{"role":"assistant","stopReason":"stop"}}}})
+send({{"type":"agent_settled"}})
+for line in sys.stdin:
+    if json.loads(line)["type"] == "get_session_stats":
+        send({{"type":"response","command":"get_session_stats","success":True,
+              "data":{{"contextUsage":{{}}}}}})
+        break
+""",
+        )
+        queue: asyncio.Queue[str | dict] = asyncio.Queue()
+        queue.put_nowait({"type": "prompt", "message": "late direct", "_input_id": "bus-42"})
+
+        @contextmanager
+        def send_boundary(public_id, native_id, text):
+            if public_id is None:
+                yield True
+            else:
+                assert (public_id, text) == ("bus-42", "late direct")
+                checked.write_text("authority checked")
+                yield decision
+
+        events = [
+            event
+            async for event in backend.stream_agent_events(
+                stub,
+                [],
+                "set a goal",
+                str(tmp_path),
+                steering_queue=queue,
+                send_boundary=send_boundary,
+            )
+        ]
+        assert events[-1]["ok"] is expected_ok, events
+        if expected_ok:
+            assert {"type": "input_refused", "id": "bus-42"} in events
+        else:
+            assert events[-1]["reason_code"] == "input_authority_changed"
+        assert queue.empty()
 
 
 # PR#1 parser assertions retained alongside V3 projection/watchdog coverage.
@@ -2551,8 +2663,8 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
             ([], ["stop"], "current_prompt_input_missing"),
             (["t"], ["stop"], None),
             (["foreign", "t"], ["stop"], "current_prompt_input_missing"),
-            (["t", "foreign"], ["stop"], "current_prompt_input_missing"),
-            (["t", "t"], ["stop"], "current_prompt_input_missing"),
+            (["t", "foreign"], ["stop"], "unrecognized_followup_input"),
+            (["t", "t"], ["stop"], "unrecognized_followup_input"),
             (["t"], [], "assistant_final_stop_missing"),
             (["t"], ["toolUse"], "assistant_final_stop_missing"),
             (["t"], ["error"], "assistant_final_stop_missing"),
@@ -2666,7 +2778,9 @@ send({{"type": "agent_settled"}})
         ]
         assert events[-1]["ok"] is expected_ok
         if not expected_ok:
-            assert events[-1]["reason_code"] == "current_prompt_input_missing"
+            assert events[-1]["reason_code"] == (
+                "current_prompt_input_missing" if foreign_first else "unrecognized_followup_input"
+            )
 
     async def test_identified_steer_ack_cannot_claim_unrelated_identical_user_start(self, tmp_path):
         """The two possible sources have identical stock Pi RPC event shapes."""
@@ -2698,7 +2812,7 @@ send({"type": "agent_settled"})
             )
         ]
         assert events[-1]["ok"] is False
-        assert events[-1]["reason_code"] == "current_prompt_input_missing"
+        assert events[-1]["reason_code"] == "unrecognized_followup_input"
 
     @pytest.mark.parametrize("managed_finish", [False, True])
     async def test_handled_ack_without_user_start_times_out_without_replay(
