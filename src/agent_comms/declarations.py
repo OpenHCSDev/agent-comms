@@ -2169,7 +2169,9 @@ class ThreadRegistry:
                     self._aliases[alias] = new_name
             self._aliases[canonical] = new_name
             self._turn_epochs.pop(canonical, None)
-            self._bump_admission_unlocked(new_name)
+            # Renaming changes the declaration key, not the process that was
+            # admitted. Preserve the durable incarnation across its alias.
+            self._admission_generations[new_name] = self._admission_generations.pop(canonical)
             self._bump_owner_epoch_unlocked(new_name)
             self._save_unlocked()
             return canonical, new_name

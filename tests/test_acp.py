@@ -673,7 +673,9 @@ class TestAgentTurn:
         await agent._run_agent_turn("proj", "proj", "coordinate with the child")
         await agent._run_agent_turn("proj", "proj", "continue")
 
-        assert "ping parent" in steered[0]
+        assert "ping parent" in (
+            steered[0]["message"] if isinstance(steered[0], dict) else steered[0]
+        )
         assert wired.registry.require("proj").session_file == str(session_file)
         assert calls[0]["session_file"] is None
         assert calls[1]["session_file"] == str(session_file)
@@ -1342,6 +1344,26 @@ class TestAgentTurnForwarding:
         await agent.prompt(
             session_id="proj", prompt=[{"type": "text", "text": "!agent do a thing"}]
         )
+        assert any(
+            (getattr(update, "field_meta", None) or {})
+            .get("agentComms", {})
+            .get("inputDisposition", {})
+            .get("status")
+            == "unknown"
+            for update in sent
+        )
+        assert any(
+            "inputStarted" in (getattr(update, "field_meta", None) or {}).get("agentComms", {})
+            for update in sent
+        )
+        sent = [
+            update
+            for update in sent
+            if not any(
+                key in (getattr(update, "field_meta", None) or {}).get("agentComms", {})
+                for key in ("inputDisposition", "inputStarted", "queue")
+            )
+        ]
         kinds = [type(u).__name__ for u in sent]
         assert kinds == [
             "AgentMessageChunk",  # turn-started metadata before any model output

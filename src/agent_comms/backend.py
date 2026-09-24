@@ -33,7 +33,7 @@ import secrets
 import shutil
 import signal
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Sequence
-from contextlib import aclosing, suppress
+from contextlib import AbstractContextManager, aclosing, nullcontext, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -499,6 +499,8 @@ async def stream_agent_events(
     model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
     rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
     require_input_id: bool = True,
+    send_boundary: Callable[[str | None, str, str], AbstractContextManager[bool]] | None = None,
+    native_start: Callable[[str | None, str, str], bool] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run the backend and yield events. Always ends with a ``done`` event.
 
@@ -526,6 +528,8 @@ async def stream_agent_events(
                 model_wait_timeout=model_wait_timeout,
                 rpc_abort_grace=rpc_abort_grace,
                 require_input_id=require_input_id,
+                send_boundary=send_boundary,
+                native_start=native_start,
             )
         ) as events:
             async for event in events:
@@ -568,6 +572,8 @@ async def _stream_agent_events(
     model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
     rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
     require_input_id: bool = True,
+    send_boundary: Callable[[str | None, str, str], AbstractContextManager[bool]] | None = None,
+    native_start: Callable[[str | None, str, str], bool] | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     if shutil.which(agent_bin) is None and not Path(agent_bin).is_file():
         yield {"type": "done", "text": f"agent backend {agent_bin!r} not found", "ok": False}
@@ -696,10 +702,13 @@ async def _stream_agent_events(
     rejected_commands: list[dict[str, Any]] = []
     rejected_signal = asyncio.Event()
     session_identity_uncertain = False
+    input_uncertain = False
+    final_assistant_stop = False
     if steering_queue is not None and proc.stdin is not None:
         stdin = proc.stdin
 
         async def forward_steering() -> None:
+            nonlocal fail_reason, input_uncertain, final_assistant_stop
             while True:
                 message = await steering_queue.get()
                 original = dict(message) if isinstance(message, dict) else message
@@ -740,7 +749,23 @@ async def _stream_agent_events(
                     )
                     rejected_signal.set()
                     continue
-                stdin.write((json.dumps(command) + "\n").encode())
+                if command.get("type") == "prompt":
+                    boundary_context = (
+                        send_boundary(public_input_id, native_input_id, command["message"])
+                        if send_boundary is not None
+                        else nullcontext(True)
+                    )
+                    with boundary_context as authorized:
+                        if authorized:
+                            stdin.write((json.dumps(command) + "\n").encode())
+                    if not authorized:
+                        input_uncertain = True
+                        final_assistant_stop = False
+                        fail_reason = "Input authority changed before Pi prompt send."
+                        await _terminate_process(proc)
+                        return
+                else:
+                    stdin.write((json.dumps(command) + "\n").encode())
                 await stdin.drain()
 
         if not require_input_id:
@@ -764,11 +789,9 @@ async def _stream_agent_events(
     # cannot complete this prompt. Observe this prompt's user message first.
     initial_prompt_acknowledged = False
     native_capability_confirmed = not require_input_id
-    input_uncertain = False
     capability_failed = False
     prompt_start_deadline: float | None = None
     initial_input_started = False
-    final_assistant_stop = False
     stats_requested = False
     reader = _JsonLineReader(proc.stdout)
     loop = asyncio.get_running_loop()
@@ -853,9 +876,13 @@ async def _stream_agent_events(
         for index, (input_id, queued_text, _, expected_native_id) in enumerate(pending_inputs):
             if (
                 input_id in accepted_forwarded
-                and text.strip() == queued_text.strip()
+                and text == queued_text
                 and (not require_input_id or native_id == expected_native_id)
             ):
+                if native_start is not None and not native_start(
+                    input_id, expected_native_id, queued_text
+                ):
+                    return False, None
                 accepted_forwarded.discard(input_id)
                 pending_inputs.pop(index)
                 forwarded_input_started = True
@@ -1100,8 +1127,19 @@ async def _stream_agent_events(
             prompt_start_deadline = loop.time() + PROMPT_START_TIMEOUT_SECONDS
             assert proc.stdin is not None
             try:
-                prompt_dispatched = True
-                proc.stdin.write(prompt_payload)
+                boundary_context = (
+                    send_boundary(None, original_input_id, task)
+                    if send_boundary is not None
+                    else nullcontext(True)
+                )
+                with boundary_context as authorized:
+                    if authorized:
+                        prompt_dispatched = True
+                        proc.stdin.write(prompt_payload)
+                if not authorized:
+                    fail_reason = "Input authority changed before Pi prompt send."
+                    await _terminate_process(proc)
+                    break
                 await proc.stdin.drain()
             except (BrokenPipeError, ConnectionResetError):
                 fail_reason = "Pi RPC prompt could not be sent after capability preflight."
@@ -1319,7 +1357,14 @@ async def _stream_agent_events(
                 and user_text == task
                 and (not require_input_id or native_id == original_input_id)
             ):
+                if native_start is not None and not native_start(None, original_input_id, task):
+                    input_uncertain = True
+                    fail_reason = "Pi input start did not match the durable attempt."
+                    await abort_stalled_rpc()
+                    break
                 initial_input_started = True
+                if native_start is not None:
+                    yield {"type": "input_started", "id": None}
                 if steering_queue is not None and proc.stdin is not None and steering_task is None:
                     steering_task = asyncio.create_task(forward_steering())
                     if owner is not None:

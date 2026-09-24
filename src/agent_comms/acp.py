@@ -25,6 +25,8 @@ import shlex
 import sys
 import time
 import unicodedata
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -64,8 +66,10 @@ from .declarations import (
     ScheduledTurn,
     Thread,
     TurnRouting,
+    _store_lock,
     is_channel_target,
 )
+from .input_disposition import AcpDeliveryCursors, InputDispositions
 from .operations import OBSERVATION_INTERVAL, Comms, wire
 from .runtime import RuntimeProxy, RuntimeServer, socket_path
 from .tool_results import tool_result_content
@@ -132,6 +136,11 @@ class CommsAgent:
         # ACK/queue insertion is not model-read. Every accepted follow-up,
         # including non-displayed steers, needs its own identified user start.
         self._forwarded_inputs: dict[str, set[str]] = {}
+        self._steering_input_keys: dict[str, dict[str, str]] = {}
+        self._turn_input_keys: dict[str, set[str]] = {}
+        self._dispositions = InputDispositions(comms.root)
+        self._delivery_cursors = AcpDeliveryCursors(comms.root)
+        self._legacy_through: dict[str, int] = {}
         self._session_titles: dict[str, str] = {}
         self._display_titles: dict[str, str | None] = {}
         self._session_worktrees: dict[str, str] = {}
@@ -254,7 +263,14 @@ class CommsAgent:
         thread_name = thread.name
         session_id = thread_name
         self._sessions[session_id] = thread_name
-        self._inbox_cursors[session_id] = self._comms.message_high_water()
+        cursor, legacy = self._delivery_cursors.initialize(
+            self._comms.registry.aliases_for(thread_name),
+            thread_name,
+            high_water=self._comms.message_high_water(),
+            fresh=True,
+        )
+        self._inbox_cursors[session_id] = cursor
+        self._legacy_through[session_id] = legacy
         self._session_titles[session_id] = thread_name
         self._session_worktrees[session_id] = thread.worktree
         if self._runtime_enabled:
@@ -301,15 +317,20 @@ class CommsAgent:
             return await self._attach_owner(thread, session_id)
         self._comms.heartbeat(thread.name)
         self._sessions[session_id] = thread.name
-        pending = self._comms.inbox(thread.name)
-        self._inbox_cursors[session_id] = (
-            pending[0].seq - 1 if pending else self._comms.message_high_water()
+        cursor, legacy = self._delivery_cursors.initialize(
+            self._comms.registry.aliases_for(thread.name),
+            thread.name,
+            high_water=self._comms.message_high_water(),
+            fresh=False,
         )
+        self._inbox_cursors[session_id] = cursor
+        self._legacy_through[session_id] = legacy
         self._session_titles[session_id] = thread.name
         self._session_worktrees[session_id] = thread.worktree
         if self._runtime_enabled:
             await self._runtime.start()
         await self._replay_transcript(session_id, thread.name)
+        await self.replay_unknown_inputs(session_id)
         self._ensure_thread_model(thread.name)
         config_options = await self._config_options(thread.name)
         self._session_catalog_generation[session_id] = self._catalog_generation
@@ -495,6 +516,23 @@ class CommsAgent:
                 )
             input_id = uuid4().hex
             pending_ids.add(input_id)
+            key = f"acp:{input_id}"
+            with _store_lock(self._comms._wire_lock_path):
+                snapshot = self._comms.registry.snapshot()
+                owner = snapshot.aliases.get(
+                    self._require_session(session_id), self._require_session(session_id)
+                )
+                admission = snapshot.admission_generations[owner]
+                self._dispositions.record(
+                    key,
+                    seq=None,
+                    owner=owner,
+                    admission=admission,
+                    target=owner,
+                    text=display_text or text or "[image prompt]",
+                )
+            self._steering_input_keys.setdefault(session_id, {})[input_id] = key
+            self._turn_input_keys.setdefault(session_id, set()).add(key)
             try:
                 if delivery == "queue":
                     self._queued_inputs.setdefault(session_id, {})[input_id] = QueuedInput(
@@ -513,7 +551,6 @@ class CommsAgent:
                     }
                 )
             except BaseException:
-                self._forwarded_inputs.get(session_id, set()).discard(input_id)
                 self._queued_inputs.get(session_id, {}).pop(input_id, None)
                 raise
             # ACP receipt is only local acceptance. The matching inputStarted
@@ -531,9 +568,9 @@ class CommsAgent:
                 },
             )
         async with self._turn_locks.setdefault(session_id, asyncio.Lock()):
-            if defer_display:
-                await self._emit_input_started(session_id, display_text)
-            return await self._prompt_owned(session_id, prompt)
+            return await self._prompt_owned(
+                session_id, prompt, display_text=display_text if defer_display else None
+            )
 
     @staticmethod
     def _prompt_images(prompt: list[Any]) -> tuple[Any, ...]:
@@ -639,7 +676,37 @@ class CommsAgent:
             ),
         )
 
-    async def _prompt_owned(self, session_id: str, prompt: list[Any]) -> PromptResponse:
+    async def _emit_input_disposition(
+        self, session_id: str, row: dict[str, Any], client: Any = None
+    ) -> None:
+        await (client or self._runtime).session_update(
+            session_id=session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=""),
+                field_meta={
+                    "agentComms": {
+                        "inputDisposition": {
+                            "inputId": row["key"].removeprefix("acp:"),
+                            "sequence": row["sequence"],
+                            "target": row["target"],
+                            "text": row["source_text"],
+                            "status": row["status"],
+                        }
+                    }
+                },
+            ),
+        )
+
+    async def replay_unknown_inputs(self, session_id: str, client: Any = None) -> None:
+        owner = self._require_session(session_id)
+        aliases = self._comms.registry.aliases_for(owner)
+        for row in self._dispositions.unknown(aliases):
+            await self._emit_input_disposition(session_id, row, client=client)
+
+    async def _prompt_owned(
+        self, session_id: str, prompt: list[Any], *, display_text: str | None = None
+    ) -> PromptResponse:
         turn_task = asyncio.current_task()
         assert turn_task is not None
         self._turn_tasks[session_id] = turn_task
@@ -668,9 +735,17 @@ class CommsAgent:
                 f"sent_seq={sent_seq}"
             )
             if images:
-                await self._run_agent_turn(session_id, thread_name, agent_task or "", images=images)
+                await self._run_owned_input(
+                    session_id,
+                    thread_name,
+                    agent_task or "",
+                    images=images,
+                    display_text=display_text,
+                )
             elif agent_task:
-                await self._run_agent_turn(session_id, thread_name, agent_task)
+                await self._run_owned_input(
+                    session_id, thread_name, agent_task, display_text=display_text
+                )
             else:
                 turn_id = uuid4().hex
                 self._comms.begin_turn(thread_name, turn_id, "Waiting for replies")
@@ -693,6 +768,45 @@ class CommsAgent:
             if self._turn_tasks.get(session_id) is turn_task:
                 self._turn_tasks.pop(session_id, None)
             self._ensure_live_drain(session_id)
+
+    async def _run_owned_input(
+        self,
+        session_id: str,
+        thread_name: str,
+        task: str,
+        *,
+        images: tuple[Any, ...] = (),
+        display_text: str | None = None,
+    ) -> None:
+        if backend.rpc_args_for(self._agent_bin, self._agent_args) is None:
+            # The plain text fallback has no Pi native input-ID protocol.
+            # Preserve its existing local command behavior without attaching
+            # a false Pi start claim to it.
+            await self._run_agent_turn(session_id, thread_name, task, images=images)
+            return
+        key = f"acp:{uuid4().hex}"
+        with _store_lock(self._comms._wire_lock_path):
+            snapshot = self._comms.registry.snapshot()
+            canonical = snapshot.aliases.get(thread_name, thread_name)
+            self._dispositions.record(
+                key,
+                seq=None,
+                owner=canonical,
+                admission=snapshot.admission_generations[canonical],
+                target=canonical,
+                text=display_text or task or "[image prompt]",
+            )
+        row = self._dispositions.get(key)
+        assert row is not None
+        await self._emit_input_disposition(session_id, row)
+        await self._run_agent_turn(
+            session_id,
+            thread_name,
+            task,
+            images=images,
+            original_keys=(key,),
+            initial_display_text=display_text,
+        )
 
     def _debug_log(self, message: str) -> None:
         debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
@@ -1068,9 +1182,58 @@ class CommsAgent:
         for message in incoming_messages:
             incoming = ScheduledTurn.incoming(message)
             starts_turn = message.starts_turn_for(thread_name)
-            if backend_inbox is not None and starts_turn and incoming.reply_target is None:
-                backend_inbox.put_nowait(incoming.prompt)
-            elif self._auto_wake and self._runtime_enabled and starts_turn:
+            aliases = self._comms.registry.aliases_for(thread_name)
+            direct = starts_turn and message.target in aliases
+            admitted = True
+            row: dict[str, Any] | None = None
+            with _store_lock(self._comms._wire_lock_path):
+                snapshot = self._comms.registry.snapshot()
+                current_name = snapshot.aliases.get(thread_name, thread_name)
+                current = snapshot.threads[current_name]
+                status = snapshot.statuses[current_name]
+                if direct:
+                    key = f"bus:{message.seq}"
+                    admitted = self._dispositions.record(
+                        key,
+                        seq=message.seq,
+                        owner=current_name,
+                        admission=snapshot.admission_generations[current_name],
+                        target=message.target,
+                        text=incoming.prompt,
+                    )
+                    row = self._dispositions.get(key)
+                    admitted = (
+                        admitted
+                        and message.seq > self._legacy_through.get(session_id, 0)
+                        and status.running
+                        and (current.goal is None or not current.goal.active)
+                    )
+                self._delivery_cursors.advance(aliases, message.seq)
+                self._inbox_cursors[session_id] = message.seq
+            if row is not None and row["status"] == "unknown":
+                await self._emit_input_disposition(session_id, row)
+            if (
+                admitted
+                and backend_inbox is not None
+                and starts_turn
+                and incoming.reply_target is None
+            ):
+                if direct:
+                    input_id = f"bus-{message.seq}"
+                    self._steering_input_keys.setdefault(session_id, {})[input_id] = key
+                    self._turn_input_keys.setdefault(session_id, set()).add(key)
+                    self._forwarded_inputs.setdefault(session_id, set()).add(input_id)
+                    backend_inbox.put_nowait(
+                        {
+                            "type": "prompt",
+                            "message": incoming.prompt,
+                            "streamingBehavior": "steer",
+                            "_input_id": input_id,
+                        }
+                    )
+                else:
+                    backend_inbox.put_nowait(incoming.prompt)
+            elif admitted and self._auto_wake and self._runtime_enabled and starts_turn:
                 self._pending_turns.setdefault(session_id, []).append(incoming)
             await self._runtime.session_update(
                 session_id=session_id,
@@ -1091,9 +1254,10 @@ class CommsAgent:
                     },
                 ),
             )
-            self._inbox_cursors[session_id] = message.seq
             pushed += 1
         if page is not None and not page.has_newer:
+            aliases = self._comms.registry.aliases_for(thread_name)
+            self._delivery_cursors.advance(aliases, high_water)
             self._inbox_cursors[session_id] = max(
                 self._inbox_cursors.get(session_id, 0), high_water
             )
@@ -1117,8 +1281,15 @@ class CommsAgent:
             while self._pending_turns.get(session_id) and not self._closing:
                 async with self._turn_locks.setdefault(session_id, asyncio.Lock()):
                     pending = self._pending_turns.pop(session_id, [])
-                    goal = self._comms.registry.require(self._require_session(session_id)).goal
-                    if goal is None or not goal.active:
+                    owner = self._comms.registry.require(self._require_session(session_id))
+                    if not self._comms.registry.status(owner.name).running:
+                        # The durable UNKNOWN rows remain visible. A stopped
+                        # owner cannot launch a turn from this old wake queue.
+                        continue
+                    goal = owner.goal
+                    if goal is not None and goal.active:
+                        pending = [turn for turn in pending if turn.goal_id == goal.id]
+                    else:
                         pending = [turn for turn in pending if turn.goal_id is None]
                     if not pending:
                         continue
@@ -1173,6 +1344,8 @@ class CommsAgent:
         reply_targets: tuple[str, ...] = (),
         origins: tuple[Message, ...] = (),
         images: tuple[Any, ...] = (),
+        original_keys: tuple[str, ...] = (),
+        initial_display_text: str | None = None,
     ) -> None:
         """Stream a real coding agent's reply: events to the client, status to the wire."""
         thread = self._comms.registry.require(thread_name)
@@ -1187,6 +1360,104 @@ class CommsAgent:
         )
         checkpoint = self._comms.transcript_checkpoint(thread_name)
         self._comms.begin_turn(thread_name, turn_id, task[:80], routing)
+        turn_admission = self._comms.registry.snapshot().admission_generations[thread_name]
+        direct_origins = tuple(
+            origin
+            for origin in origins
+            if origin.seq > 0 and origin.target in self._comms.registry.aliases_for(thread_name)
+        )
+        if direct_origins:
+            with _store_lock(self._comms._wire_lock_path):
+                snapshot = self._comms.registry.snapshot()
+                for origin in direct_origins:
+                    key = f"bus:{origin.seq}"
+                    if self._dispositions.get(key) is None:
+                        self._dispositions.record(
+                            key,
+                            seq=origin.seq,
+                            owner=thread_name,
+                            admission=snapshot.admission_generations[thread_name],
+                            target=origin.target,
+                            text=ScheduledTurn.incoming(origin).prompt,
+                        )
+                    original_keys = (*original_keys, key)
+        self._turn_input_keys[session_id] = set(original_keys)
+        self._steering_input_keys[session_id] = {}
+
+        @contextmanager
+        def send_boundary(public_id: str | None, native_id: str, sent_text: str) -> Iterator[bool]:
+            # This lock spans the final authority read and stdin.write only.
+            # Pi's turn, ACK, and provider response happen after it is released.
+            with _store_lock(self._comms._wire_lock_path):
+                snapshot = self._comms.registry.snapshot()
+                canonical = snapshot.aliases.get(thread_name, thread_name)
+                current = snapshot.threads.get(canonical)
+                current_goal = current.goal if current is not None else None
+                if goal is not None and goal.active:
+                    goal_ok = (
+                        current_goal is not None
+                        and current_goal.id == goal.id
+                        and current_goal.active
+                    )
+                else:
+                    goal_ok = current_goal is None or not current_goal.active
+                keys = (
+                    original_keys
+                    if public_id is None
+                    else (
+                        (key,)
+                        if (key := self._steering_input_keys.get(session_id, {}).get(public_id))
+                        else ()
+                    )
+                )
+                allowed = (
+                    current is not None
+                    and snapshot.statuses[canonical].running
+                    and snapshot.admission_generations.get(canonical) == turn_admission
+                    and current.pid == thread.pid
+                    and current.created_at == thread.created_at
+                    and current.worktree == thread.worktree
+                    and current.active_turn is not None
+                    and current.active_turn.id == turn_id
+                    and goal_ok
+                    and not (keys and current_goal is not None and current_goal.active)
+                )
+                if allowed:
+                    for key in keys:
+                        row = self._dispositions.get(key)
+                        if (
+                            row is None
+                            or row["status"] != "unknown"
+                            or row["admission"] != snapshot.admission_generations[canonical]
+                            or not self._dispositions.bind(
+                                key,
+                                admission=row["admission"],
+                                turn_id=turn_id,
+                                native_id=native_id,
+                                text=sent_text,
+                            )
+                        ):
+                            allowed = False
+                            break
+                yield allowed
+
+        def native_start(public_id: str | None, native_id: str, sent_text: str) -> bool:
+            keys = (
+                original_keys
+                if public_id is None
+                else (
+                    (key,)
+                    if (key := self._steering_input_keys.get(session_id, {}).get(public_id))
+                    else ()
+                )
+            )
+            return all(
+                self._dispositions.started(
+                    key, turn_id=turn_id, native_id=native_id, text=sent_text
+                )
+                for key in keys
+            )
+
         worktree = thread.worktree if Path(thread.worktree).is_dir() else str(Path.cwd())
         env_extra = {
             "AGENT_COMMS_THREAD": thread_name,
@@ -1274,6 +1545,8 @@ class CommsAgent:
                 fork_session=fork_session,
                 steering_queue=backend_inbox,
                 finish_event=finish_event,
+                send_boundary=send_boundary,
+                native_start=native_start,
             ):
                 kind = event.get("type")
                 if kind in {"compaction_start", "compaction_end"}:
@@ -1292,7 +1565,11 @@ class CommsAgent:
                 if kind in {"chunk", "thinking", "tool_start", "tool_end"}:
                     backend_work_observed = True
                 if kind == "done":
-                    if self._forwarded_inputs.get(session_id):
+                    unknown_attempts = any(
+                        self._dispositions.status(key) != "started"
+                        for key in self._turn_input_keys.get(session_id, set())
+                    )
+                    if self._forwarded_inputs.get(session_id) or unknown_attempts:
                         # A final assistant stop can prove the original turn,
                         # not an ACKed follow-up lacking its own user start.
                         event = {
@@ -1311,11 +1588,35 @@ class CommsAgent:
                         terminal_ok = False
                 if kind == "input_started":
                     input_id = event.get("id")
+                    started_keys = (
+                        original_keys
+                        if input_id is None
+                        else (
+                            (steering_key,)
+                            if isinstance(input_id, str)
+                            and (
+                                steering_key := self._steering_input_keys.get(session_id, {}).get(
+                                    input_id
+                                )
+                            )
+                            else ()
+                        )
+                    )
+                    for key in started_keys:
+                        row = self._dispositions.get(key)
+                        if row is not None and row["status"] == "started":
+                            await self._emit_input_disposition(session_id, row)
                     if isinstance(input_id, str):
                         self._forwarded_inputs.get(session_id, set()).discard(input_id)
                     item = self._queued_inputs.get(session_id, {}).pop(input_id or "", None)
                     await self._emit_input_started(
-                        session_id, item.text if item and item.echo else None, input_id
+                        session_id,
+                        (
+                            item.text
+                            if item and item.echo
+                            else initial_display_text if input_id is None else None
+                        ),
+                        input_id,
                     )
                     await self._emit_queue_state(session_id)
                 if (
@@ -1533,6 +1834,8 @@ class CommsAgent:
             # Discard unresolved per-turn IDs without replay. Durable ACP input
             # disposition across owner crashes remains a separate integration.
             self._forwarded_inputs.pop(session_id, None)
+            self._steering_input_keys.pop(session_id, None)
+            self._turn_input_keys.pop(session_id, None)
             remaining = self._queued_inputs.pop(session_id, {})
             if remaining:
                 await self._emit_queue_state(

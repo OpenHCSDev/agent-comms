@@ -5,7 +5,7 @@ import json
 import os
 import signal
 import sys
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 import pytest
@@ -1813,6 +1813,40 @@ EOF
 
 # Native per-input proof tests retained from the PR#1 parent.
 class TestNativeInputBinding:
+    async def test_owner_revoked_after_preflight_never_writes_prompt(self, tmp_path):
+        received = tmp_path / "received-prompt"
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + f"""
+import json, select, sys
+state = json.loads(sys.stdin.readline())
+print(json.dumps({{"type":"response", "command":"get_state", "id":state["id"],
+                  "success":True, "data":{{
+                      "nativeInputProofCapability":"pi-native-input-v1-live-only"
+                  }}}}), flush=True)
+if select.select([sys.stdin], [], [], 0.3)[0]:
+    line = sys.stdin.readline()
+    if line: open({str(received)!r}, "w").write(line)
+""",
+        )
+        checks = []
+
+        @contextmanager
+        def send_boundary(public_id, native_id, text):
+            checks.append((public_id, native_id, text))
+            yield False
+
+        events = [
+            event
+            async for event in backend.stream_agent_events(
+                stub, [], "work", str(tmp_path), send_boundary=send_boundary
+            )
+        ]
+        assert len(checks) == 1 and checks[0][0] is None
+        assert len(checks[0][1]) == 32 and checks[0][2] == "work"
+        assert not received.exists()
+        assert events[-1]["ok"] is False
+
     async def test_malformed_native_user_content_fails_typed_and_reaps_live_child(self, tmp_path):
         pid_file = tmp_path / "pi.pid"
         stub = _stub(
@@ -2002,6 +2036,7 @@ while True: time.sleep(0.1)
             ("rejected_without_start", "queued_input_start_missing"),
             ("unacknowledged", "queued_input_start_missing"),
             ("accepted_then_duplicate", "current_prompt_input_missing"),
+            ("trimmed_start", "current_prompt_input_missing"),
         ],
     )
     async def test_queued_steer_needs_its_own_user_start_before_success(
@@ -2026,9 +2061,10 @@ case = {case!r}
 if case != "unacknowledged":
     send({{"type":"response", "command":"prompt", "id":steer["id"],
            "success":case != "rejected_without_start"}})
-if case in ("accepted_then_started", "accepted_then_duplicate"):
+if case in ("accepted_then_started", "accepted_then_duplicate", "trimmed_start"):
     event = {{"type":"message_start", "message":{{"role":"user",
-             "content":steer["message"], "inputId":steer["inputId"]}}}}
+             "content":steer["message"] + (" " if case == "trimmed_start" else ""),
+             "inputId":steer["inputId"]}}}}
     send(event)
     if case == "accepted_then_duplicate": send(event)
 send({{"type":"message_update", "assistantMessageEvent":

@@ -244,6 +244,15 @@ class TestThreadRegistry:
         registry.register(replace(registry.require("a"), pid=5678))
         assert registry.snapshot().admission_generations["a"] > before
 
+    def test_owner_admission_follows_same_owner_rename(self, tmp_path: Path) -> None:
+        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=1234))
+        before = registry.snapshot().admission_generations["a"]
+        registry.rename("a", "renamed-a")
+        snapshot = ThreadRegistry(registry._path).snapshot()
+        assert snapshot.admission_generations["renamed-a"] == before
+        assert "a" not in snapshot.admission_generations
+
     def test_other_owner_writes_do_not_invalidate_private_epoch(self, tmp_path: Path):
         registry = ThreadRegistry(tmp_path / "registry.json")
         for name in ("a", "b"):

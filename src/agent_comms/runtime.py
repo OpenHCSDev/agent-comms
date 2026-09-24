@@ -77,6 +77,7 @@ class RuntimeServer:
                 self.clients.setdefault(session_id, set()).add(client)
                 await self.agent._replay_transcript(session_id, name, client=client)
                 await self.agent.replay_turn_state(session_id, client=client)
+                await self.agent.replay_unknown_inputs(session_id, client=client)
                 writer.write(
                     (json.dumps({"ready": self.agent._session_metadata(name)}) + "\n").encode()
                 )
