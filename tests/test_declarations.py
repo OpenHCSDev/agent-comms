@@ -34,6 +34,58 @@ from agent_comms.operations import Comms
 from agent_comms.private_registry_guard import PrivateRegistryGuard
 
 
+def test_windows_snapshot_replace_retries_transient_sharing_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import agent_comms.declarations as declarations
+
+    source = tmp_path / "pending"
+    target = tmp_path / "snapshot"
+    source.write_text("new")
+    target.write_text("old")
+    real_replace = os.replace
+    calls = 0
+
+    def contested_replace(src: Path, dst: Path) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            error = PermissionError(13, "sharing violation")
+            error.winerror = 5
+            raise error
+        real_replace(src, dst)
+
+    monkeypatch.setattr(declarations.os, "replace", contested_replace)
+    declarations._replace_snapshot(source, target, windows=True)
+    assert calls == 2
+    assert target.read_text() == "new"
+
+
+def test_windows_snapshot_replace_does_not_retry_real_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import agent_comms.declarations as declarations
+
+    source = tmp_path / "pending"
+    target = tmp_path / "snapshot"
+    source.write_text("new")
+    target.write_text("old")
+    calls = 0
+
+    def refused_replace(src: Path, dst: Path) -> None:
+        nonlocal calls
+        calls += 1
+        error = PermissionError(13, "access denied")
+        error.winerror = 3
+        raise error
+
+    monkeypatch.setattr(declarations.os, "replace", refused_replace)
+    with pytest.raises(PermissionError):
+        declarations._replace_snapshot(source, target, windows=True)
+    assert calls == 1
+    assert target.read_text() == "old"
+
+
 def _test_only_guard_for_handcrafted_marker(registry: ThreadRegistry) -> None:
     """Legacy-log bus tests forge a marker; this is NOT a safe cutover issuer."""
     marker = json.loads((registry._path.parent / "bus_meta.json").read_text())
