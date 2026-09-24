@@ -2,13 +2,15 @@
 
 from dataclasses import asdict
 
-from acp.schema import AgentMessageChunk, NewSessionResponse, TextContentBlock
+import pytest
+from acp.schema import NewSessionResponse
 
 from agent_comms import Comms, Goal, MessageRoute, Thread, TranscriptCursor, TranscriptPage, wire
 from agent_comms.acp import CommsAgent
 
 
-def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path) -> None:
+@pytest.mark.asyncio
+async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path) -> None:
     assert all(
         isinstance(public_type, type)
         for public_type in (Comms, Goal, TranscriptCursor, TranscriptPage, MessageRoute)
@@ -24,11 +26,17 @@ def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path) -> None:
     assert session["_meta"]["agentComms"]["thread"] == "worker"
     assert session["_meta"]["agentComms"]["wireRoot"] == str(comms.root.resolve())
 
+    updates = []
+
+    class Client:
+        async def session_update(self, session_id, update):
+            assert session_id == "worker"
+            updates.append(update.model_dump(by_alias=True, exclude_none=True))
+
     route = MessageRoute("worker", ("#team",))
-    update = AgentMessageChunk(
-        session_update="agent_message_chunk",
-        content=TextContentBlock(type="text", text="routed reply"),
-        field_meta={"agentComms": {"route": asdict(route)}},
-    ).model_dump(by_alias=True, exclude_none=True)
+    await agent._emit_text("worker", "routed reply", Client(), route)
+    assert len(updates) == 1
+    update = updates[0]
+    assert update["content"]["text"] == "routed reply"
     assert update["_meta"]["agentComms"]["route"] == asdict(route)
     assert MessageRoute.from_wire(update["_meta"]["agentComms"]["route"]) == route
