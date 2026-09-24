@@ -1605,16 +1605,29 @@ time.sleep(60)
             + _NATIVE_PROMPT_START
             + f"for line in {rpc_lines!r}.splitlines():\n    emit(json.loads(line))\n",
         )
+        starts = []
+
+        def native_start(public_id, native_id, text):
+            starts.append((public_id, native_id, text))
+            return True
 
         events = [
             event
             async for event in backend.stream_agent_events(
-                stub, [], "task", str(tmp_path), model_wait_timeout=0.03, require_input_id=True
+                stub,
+                [],
+                "task",
+                str(tmp_path),
+                model_wait_timeout=0.5,
+                require_input_id=True,
+                native_start=native_start,
             )
         ]
 
+        assert len(starts) == 1 and starts[0][0] is None and starts[0][2] == "task", events
+        assert len(starts[0][1]) == 32
         recovery = [event for event in events if event["type"] == "turn_state"]
-        assert [event["state"] for event in recovery] == ["retrying", "failed"]
+        assert [event["state"] for event in recovery] == ["retrying", "failed"], events
         assert recovery[0]["attempt"] == {"current": 1, "max": 3}
         assert recovery[-1]["reason_code"] == "provider_retry_exhausted"
         assert all("secret" not in str(event) for event in recovery)
