@@ -27,7 +27,7 @@ async def test_malformed_middle_session_row_refused_before_pi_preflight(tmp_path
     monkeypatch.setattr(compact, "_pinned_package", lambda: tmp_path)
     profile = tmp_path / "profile"
     profile.mkdir()
-    monkeypatch.setattr(compact, "_private_policy", lambda: profile)
+    monkeypatch.setattr(compact, "_private_policy", lambda **_kwargs: profile)
 
     async def forbidden_preflight(*args, **kwargs):
         raise AssertionError("Malformed JSONL reached Pi preflight")
@@ -53,7 +53,7 @@ async def test_compaction_waits_for_session_writer_before_preflight(tmp_path, mo
     monkeypatch.setattr(compact, "_pinned_package", lambda: tmp_path)
     profile = tmp_path / "profile"
     profile.mkdir()
-    monkeypatch.setattr(compact, "_private_policy", lambda: profile)
+    monkeypatch.setattr(compact, "_private_policy", lambda **_kwargs: profile)
     preflight_started = asyncio.Event()
 
     async def preflight(*args, **kwargs):

@@ -19,7 +19,9 @@ thread. Link that script into your `PATH` if you want the short command name.
 It attaches to the current owner and does not send a prompt.
 
 `prepare-pi-native` verifies the installed Pi 0.85.1 bytes, builds a pinned
-local copy with native input IDs, and checks the resulting files. The copy
+local copy with native input IDs and bounded compaction, and checks the resulting files. Each
+manifest gets its own copy, so preparing an update leaves running workers on
+their previous package until they restart. The copy
 retains the stock Bedrock transport; the script does not change the installed
 Pi or make a provider call. Set `PI_STOCK_DIR` if Pi is installed elsewhere.
 The `toad-comms` launcher uses this copy so a direct prompt can produce the
