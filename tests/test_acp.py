@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -498,6 +499,17 @@ class TestAgentTurn:
         stub.chmod(0o755)
         return CommsAgent(wired, agent_bin=str(stub), agent_args=[])
 
+    def _authorize_test_goal(self, agent: CommsAgent, wired, goal) -> None:
+        """Provide the private owner grant used by goal-turn tests with fake Pi events."""
+        from agent_comms.goal_attempts import GoalAttemptStore
+
+        agent._agent_bin = "pi"
+        private = wired.root / "goal-private"
+        private.mkdir(mode=0o700, exist_ok=True)
+        store = GoalAttemptStore.initialize(private)
+        store.create_goal(goal.id)
+        agent._goal_store = store
+
     async def test_agent_turn_streams_reply_without_broadcasting(self, wired, tmp_path):
         agent = self._agent_with_stub(tmp_path, wired)
         wired.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
@@ -729,7 +741,8 @@ class TestAgentTurn:
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         agent._client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        wired.update_goal("proj", "set", text="Ship the release")
+        goal = wired.update_goal("proj", "set", text="Ship the release")
+        self._authorize_test_goal(agent, wired, goal)
         await agent._run_agent_turn("proj", "proj", "work")
 
         texts = [
@@ -751,13 +764,18 @@ class TestAgentTurn:
         agent = self._agent_with_stub(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.update_goal("proj", "set", text="Ship the release")
+        self._authorize_test_goal(agent, wired, goal)
         secret = "provider stderr SECRET_PRIVATE_937"
 
         async def events(*args, **kwargs):
             yield {"type": "error", "text": secret}
             if completed_in_turn:
                 wired.update_goal(
-                    "proj", "completed", goal_id=goal.id, progress="Verified complete"
+                    "proj",
+                    "completed",
+                    goal_id=goal.id,
+                    progress="Verified complete",
+                    model_report=True,
                 )
             yield {"type": "settled"}
             # EOF without done: never let the live drain retry an active goal.
@@ -766,9 +784,9 @@ class TestAgentTurn:
         await agent._run_agent_turn("proj", "proj", "work")
         result = wired.registry.require("proj").goal
         assert result is not None
-        assert result.status == ("completed" if completed_in_turn else "blocked")
+        assert result.status == "blocked"
         assert result.progress == (
-            "Verified complete"
+            "Goal turn ended without verified terminal progress."
             if completed_in_turn
             else "Backend turn ended without a result; inspect local diagnostics."
         )
@@ -837,7 +855,8 @@ class TestAgentTurn:
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         agent._client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        wired.update_goal("proj", "set", text="Ship the release")
+        goal = wired.update_goal("proj", "set", text="Ship the release")
+        self._authorize_test_goal(agent, wired, goal)
         await agent._run_agent_turn("proj", "proj", "work")
 
         goal = wired.registry.require("proj").goal
@@ -864,6 +883,7 @@ class TestAgentTurn:
         agent._client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         original = wired.update_goal("proj", "set", text="Ship the release")
+        self._authorize_test_goal(agent, wired, original)
         await agent._run_agent_turn("proj", "proj", "Continue working toward the active goal.")
 
         goal = wired.registry.require("proj").goal
@@ -887,6 +907,7 @@ class TestAgentTurn:
         agent._client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         initial = wired.update_goal("proj", "set", text="Ship the release")
+        self._authorize_test_goal(agent, wired, initial)
 
         async def events(*args, **kwargs):
             yield {"type": "settled"}
@@ -928,8 +949,8 @@ class TestAgentTurn:
         assert raced
         assert goal is not None and goal.id == initial.id
         if outcome == "success":
-            assert goal.status == "active"
-            assert goal.progress == "independently verified newer progress"
+            assert goal.status == "blocked"
+            assert "independently verified newer progress" in goal.progress
         else:
             assert goal.status == "blocked"
             assert goal.progress.startswith("independently verified newer progress\n\n")
@@ -949,6 +970,7 @@ class TestAgentTurn:
         agent._client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         original = wired.update_goal("proj", "set", text="Ship the release")
+        self._authorize_test_goal(agent, wired, original)
         assert original is not None
 
         async def events(*args, **kwargs):
@@ -992,6 +1014,7 @@ class TestAgentTurn:
         agent._client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         initial = wired.update_goal("proj", "set", text="Ship the release")
+        self._authorize_test_goal(agent, wired, initial)
 
         async def events(*args, **kwargs):
             wire(wired.root).update_goal(
@@ -1027,6 +1050,7 @@ class TestAgentTurn:
         agent._client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         initial = wired.update_goal("proj", "set", text="Ship the release")
+        self._authorize_test_goal(agent, wired, initial)
 
         async def events(*args, **kwargs):
             yield {
@@ -1041,6 +1065,7 @@ class TestAgentTurn:
                 goal_id=initial.id,
                 expected_status="active",
                 progress="Completed a verified step",
+                model_report=True,
             )
             yield {"type": "tool_end", "id": "goal-progress", "name": "comms_goal", "ok": True}
             yield {"type": "settled"}
@@ -1112,8 +1137,18 @@ class TestAgentTurn:
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
 
         async def events(*args, **kwargs):
+            yield {
+                "type": "provider_usage",
+                "response_id": "1",
+                "usage": {"input": 3, "output": 1, "totalTokens": 4, "cost": {"total": 0.01}},
+            }
             wired.update_goal("proj", "set", text="Finish the release")
             yield {"type": "tool_end", "id": "set-goal", "name": "comms_set_goal", "ok": True}
+            yield {
+                "type": "provider_usage",
+                "response_id": "2",
+                "usage": {"input": 2, "output": 2, "totalTokens": 4, "cost": {"total": 0.02}},
+            }
             yield {"type": "settled"}
             yield {"type": "done", "ok": True, "text": "Goal set"}
 
@@ -1123,7 +1158,10 @@ class TestAgentTurn:
         goal = wired.registry.require("proj").goal
         store = GoalAttemptStore(wired.root / "goal-private")
         assert store.snapshot(goal.id).state == "ready"
-        grant = agent._goal_store.ready_grant(goal.id, 1)
+        assert store.snapshot(goal.id).number == 2
+        assert store.provider_usage_total(goal.id).responses == 2
+        assert str(store.provider_usage_total(goal.id).cost_total) == "0.03"
+        grant = agent._goal_store.ready_grant(goal.id, 2)
         assert grant not in repr(updates)
         assert grant not in repr(goal)
         await agent.shutdown()
@@ -1194,11 +1232,127 @@ class TestAgentTurn:
         goal = wired.registry.require("proj").goal
         store = GoalAttemptStore(wired.root / "goal-private")
         assert goal.status == "blocked"
-        assert store.snapshot(goal.id).state == "cancelled"
+        assert store.snapshot(goal.id).state == "blocked"
         with pytest.raises(UnresolvedAttempt):
             store.ready_grant(goal.id, 1)
         agent._schedule_goal("proj")
         assert not agent._pending_turns.get("proj")
+        await agent.shutdown()
+
+    async def test_reopened_claimed_goal_attempt_has_no_wake_or_replay(self, monkeypatch):
+        from agent_comms.goal_attempts import GoalAttemptStore
+
+        with tempfile.TemporaryDirectory(prefix="ac-goal-reopen-", dir="/var/tmp") as base:
+            root = Path(base) / "wire"
+            wired = wire(root)
+            agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+            monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+
+            class FakeClient:
+                async def session_update(self, **kwargs):
+                    pass
+
+            agent._client = FakeClient()
+            await agent.new_session(cwd=base, mcp_servers=[])
+            name = next(iter(agent._sessions))
+            goal = wired.update_goal(name, "set", text="No replay after crash")
+            private = root / "goal-private"
+            private.mkdir(mode=0o700)
+            store = GoalAttemptStore.initialize(private)
+            store.create_goal(goal.id)
+            reservation = store.reserve(goal.id, 1)
+            store.claim_launch(reservation)
+            agent._goal_store = GoalAttemptStore(private)
+
+            async def forbidden_backend(*args, **kwargs):
+                raise AssertionError("A claimed attempt must never launch again")
+                yield  # pragma: no cover
+
+            monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", forbidden_backend)
+            agent._schedule_goal(name)
+            assert not agent._pending_turns.get(name)
+            await agent._run_agent_turn(name, name, "continue", autonomous_goal=True)
+            assert GoalAttemptStore(private).snapshot(goal.id).attempt_id == reservation.attempt_id
+            await agent.shutdown()
+
+    async def test_active_goal_without_private_grant_refuses_direct_prompt(
+        self, wired, tmp_path, monkeypatch
+    ):
+        from acp import RequestError
+
+        agent = CommsAgent(wired, agent_bin="pi")
+        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        wired.update_goal("proj", "set", text="No orphan spend")
+
+        async def forbidden_backend(*args, **kwargs):
+            raise AssertionError("An ungranted goal must not start Pi")
+            yield  # pragma: no cover
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", forbidden_backend)
+        with pytest.raises(RequestError):
+            await agent._run_agent_turn("proj", "proj", "continue")
+        await agent.shutdown()
+
+    async def test_goal_has_only_one_in_flight_attempt(self, wired, tmp_path, monkeypatch):
+        from acp import RequestError
+
+        agent = CommsAgent(wired, agent_bin="pi")
+        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        goal = wired.update_goal("proj", "set", text="One attempt")
+        self._authorize_test_goal(agent, wired, goal)
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        calls = 0
+
+        async def events(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            entered.set()
+            await release.wait()
+            yield {"type": "settled"}
+            yield {"type": "done", "ok": False, "text": "failed"}
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        first = asyncio.create_task(agent._run_agent_turn("proj", "proj", "first"))
+        await asyncio.wait_for(entered.wait(), timeout=2)
+        with pytest.raises(RequestError):
+            await agent._run_agent_turn("proj", "proj", "second")
+        assert calls == 1
+        release.set()
+        await asyncio.wait_for(first, timeout=2)
+        await agent.shutdown()
+
+    async def test_uncertain_usage_write_terminates_goal_child_without_replay(
+        self, wired, tmp_path, monkeypatch
+    ):
+        from agent_comms.goal_attempts import GoalAttemptStore, StorageUncertain
+
+        agent = CommsAgent(wired, agent_bin="pi")
+        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        goal = wired.update_goal("proj", "set", text="Count responses")
+        self._authorize_test_goal(agent, wired, goal)
+        terminated = []
+
+        async def events(*args, **kwargs):
+            yield {"type": "provider_usage", "response_id": "1", "usage": {"totalTokens": 5}}
+            await asyncio.Event().wait()
+
+        async def terminate(task):
+            terminated.append(task)
+
+        def fail_usage(*args, **kwargs):
+            raise StorageUncertain("fsync failed")
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.acp.backend.terminate_task_process", terminate)
+        monkeypatch.setattr(agent._goal_store, "record_provider_usage", fail_usage)
+        with pytest.raises(StorageUncertain):
+            await agent._run_agent_turn("proj", "proj", "continue")
+        assert terminated
+        assert GoalAttemptStore(wired.root / "goal-private").snapshot(goal.id).state == "blocked"
         await agent.shutdown()
 
 

@@ -1,10 +1,12 @@
-"""Disposable durability and concurrency tests for the default-off goal-attempt fence."""
+"""Disposable POSIX crash and concurrency tests for the goal-attempt ledger."""
 
 from __future__ import annotations
 
 import multiprocessing
 import os
 import sqlite3
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from queue import Empty
 
@@ -19,7 +21,7 @@ from agent_comms.goal_attempts import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.name != "posix", reason="Goal attempts require POSIX owner-only directory fsync."
+    os.name != "posix", reason="POSIX fork and directory fsync crash instrumentation."
 )
 
 
@@ -53,10 +55,11 @@ def _die_before_ready_ack(root: str) -> None:
 
 
 @pytest.fixture
-def store(tmp_path: Path) -> GoalAttemptStore:
-    root = tmp_path / "owner"
-    root.mkdir(mode=0o700)
-    return GoalAttemptStore.initialize(root)
+def store() -> Iterator[GoalAttemptStore]:
+    with tempfile.TemporaryDirectory(prefix="ac-goal-ledger-", dir="/var/tmp") as base:
+        root = Path(base) / "owner"
+        root.mkdir(mode=0o700)
+        yield GoalAttemptStore.initialize(root)
 
 
 def test_setup_requires_explicit_owner_private_root_and_0600_db(tmp_path):
@@ -562,6 +565,21 @@ def test_v2_claimed_attempt_migrates_without_regranting(tmp_path):
         migrated.reserve("goal", 1)
     retired = migrated.retire_goal("goal", expected_generation=1, attempt_id="attempt")
     assert retired.state == "cancelled"
+
+
+def test_v3_claimed_attempt_migrates_to_usage_schema_without_regranting(store):
+    store.create_goal("goal")
+    reservation = store.reserve("goal", 1)
+    store.claim_launch(reservation)
+    with sqlite3.connect(store.path) as conn:
+        conn.execute("DROP TABLE provider_usage")
+        conn.execute("UPDATE metadata SET value='3' WHERE key='schema_version'")
+
+    migrated = GoalAttemptStore(store.root)
+    assert migrated.snapshot("goal").state == "reserved"
+    assert migrated.provider_usage_total("goal").responses == 0
+    with pytest.raises(ReservationConflict):
+        migrated.reserve("goal", 1)
 
 
 @pytest.mark.parametrize("transition", ["claimed", "reserved"])

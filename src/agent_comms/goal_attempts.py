@@ -1,12 +1,12 @@
-"""Default-off, durable reservation fence for autonomous goal attempts.
+"""Durable reservation fence for autonomous goal attempts.
 
-No scheduler uses this module yet. A caller must reserve and claim a launch before
-starting Pi, and bind verified goal progress to the claimed attempt before it
-can advance a generation. A crash leaves reserved/claimed work unresolved;
-ordinary resume cannot turn that state into another model call.
+The ACP owner reserves and claims each autonomous launch before starting Pi,
+then binds verified goal progress to the claimed attempt before advancing a
+generation. A crash leaves reserved/claimed work unresolved; ordinary resume
+cannot turn that state into another model call.
 
-This ledger does not certify a provider response or a registry goal update.
-Those witnesses and the ACP/operations integration must be supplied separately.
+The ledger stores provider-reported usage and requires ACP to verify native
+response and registry outcomes before recording success.
 """
 
 from __future__ import annotations
@@ -89,10 +89,11 @@ _T = TypeVar("_T")
 class GoalAttemptStore:
     """Owner-private SQLite authority; no synthetic model or context claims.
 
-    The caller creates the 0700 directory and explicitly initializes it in a
+    The caller creates a private directory and explicitly initializes it in a
     non-launching setup step. Each change uses BEGIN IMMEDIATE, SQLite's
-    synchronous=EXTRA rollback journal, an explicit file/directory fsync, and
-    a fresh-connection readback. Failure at any stage returns no permit.
+    synchronous=EXTRA rollback journal, an explicit file fsync (plus directory
+    fsync where supported), and a fresh-connection readback. Failure at any
+    stage returns no permit.
     READY is only launchable with a secret issued after that readback; a visible
     post-COMMIT row whose fsync failed is never authority on its own.
     """
@@ -186,11 +187,9 @@ class GoalAttemptStore:
     def initialize(cls, root: str | Path) -> GoalAttemptStore:
         """Explicit setup; creation or fsync uncertainty never returns a store."""
         directory = Path(root)
-        if os.name != "posix":
-            raise StorageUncertain(
-                "Goal attempts require POSIX owner-only directory fsync support."
-            )
-        if not directory.is_dir() or stat.S_IMODE(directory.stat().st_mode) != 0o700:
+        if not directory.is_dir() or (
+            os.name == "posix" and stat.S_IMODE(directory.stat().st_mode) != 0o700
+        ):
             raise StorageUncertain("An existing owner-0700 directory is required.")
         path = directory / "goal_attempts.sqlite3"
         try:
@@ -240,13 +239,15 @@ class GoalAttemptStore:
         return cls(directory)
 
     def _require_root(self) -> None:
-        if os.name != "posix":
-            raise StorageUncertain(
-                "Goal attempts require POSIX owner-only directory fsync support."
-            )
-        if not self.root.is_dir() or stat.S_IMODE(self.root.stat().st_mode) != 0o700:
+        if not self.root.is_dir() or (
+            os.name == "posix" and stat.S_IMODE(self.root.stat().st_mode) != 0o700
+        ):
             raise StorageUncertain("Goal attempt root must remain owner-0700.")
-        if self.path.exists() and stat.S_IMODE(self.path.stat().st_mode) != 0o600:
+        if (
+            self.path.exists()
+            and os.name == "posix"
+            and stat.S_IMODE(self.path.stat().st_mode) != 0o600
+        ):
             raise StorageUncertain("Goal attempt database must remain owner-0600.")
 
     def _connect(self) -> sqlite3.Connection:
@@ -270,11 +271,12 @@ class GoalAttemptStore:
             os.fsync(file_fd)
         finally:
             os.close(file_fd)
-        dir_fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-        try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
+        if os.name == "posix":
+            dir_fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
 
     def _sync(self) -> None:
         self._sync_paths(self.path, self.root)

@@ -92,6 +92,8 @@ async def test_two_queued_directs_need_two_distinct_native_starts(tmp_path, monk
 async def test_ui_ack_does_not_hide_unknown_or_authorize_goal_superseded_direct(
     tmp_path, monkeypatch
 ):
+    from acp import RequestError
+
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
@@ -109,19 +111,19 @@ async def test_ui_ack_does_not_hide_unknown_or_authorize_goal_superseded_direct(
         assert len(agent._pending_turns["project"]) == 1
         comms.update_goal("project", "set", text="new goal")
 
-        authorized = []
+        backend_calls = []
 
         async def events(*args, **kwargs):
-            with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
-                authorized.append(allowed)
+            backend_calls.append(args)
             yield {"type": "done", "ok": False, "text": "not sent"}
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         pending = agent._pending_turns.pop("project")
-        await agent._run_agent_turn(
-            "project", "project", pending[0].prompt, origins=(pending[0].origin,)
-        )
-        assert authorized == [False]
+        with pytest.raises(RequestError):
+            await agent._run_agent_turn(
+                "project", "project", pending[0].prompt, origins=(pending[0].origin,)
+            )
+        assert backend_calls == []
         assert InputDispositions(comms.root).unknown(frozenset({"project"}))[0]["sequence"] == 1
     finally:
         await agent.shutdown()
