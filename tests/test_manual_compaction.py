@@ -77,7 +77,7 @@ def wrapper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, port: int) -> str:
     monkeypatch.setenv("COMPACT_TEST_PID_CAPTURE", str(tmp_path / "pi-pid"))
     exe = tmp_path / "pi-local-only"
     exe.write_text(f"#!{sys.executable}\n" + """
-import json, os, pathlib, stat, sys
+import json, os, pathlib, shutil, stat, sys
 profile = pathlib.Path(os.environ['PI_CODING_AGENT_DIR'])
 settings = profile / 'settings.json'
 guard = profile / 'guard.mjs'
@@ -104,7 +104,9 @@ pathlib.Path(os.environ['COMPACT_TEST_PROFILE_CAPTURE']).write_text(str(profile)
 pathlib.Path(os.environ['COMPACT_TEST_PID_CAPTURE']).write_text(str(os.getpid()))
 cli = pathlib.Path(os.environ['COMPACT_TEST_PACKAGE']) / 'dist/cli.js'
 # Never use the user's credential-bearing pi wrapper.
-os.execv('/usr/bin/node', ['node', str(cli), *sys.argv[1:]])
+node = shutil.which('node')
+assert node is not None
+os.execv(node, ['node', str(cli), *sys.argv[1:]])
 """)
     exe.chmod(0o700)
     return str(exe)
