@@ -21,11 +21,11 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from .backend import rpc_args_for
+from .backend import configured_model, rpc_args_for
 
 MAX_LINE = 64 * 1024
 MAX_OUTPUT = 256 * 1024
-MAX_SESSION = 32 * 1024 * 1024
+MAX_SESSION = 256 * 1024 * 1024
 MAX_INSTRUCTIONS = 4096
 TIMEOUT = 300.0
 GRACE = 1.0
@@ -114,7 +114,7 @@ def _pinned_package() -> Path:
     return root
 
 
-def _private_policy() -> Path:
+def _private_policy(*, credentials_source: Path | None = None) -> Path:
     directory = Path(tempfile.mkdtemp(prefix="agent-comms-compact-"))
     try:
         if stat.S_IMODE(directory.stat().st_mode) != 0o700:
@@ -130,6 +130,31 @@ def _private_policy() -> Path:
                 output.write(content)
                 output.flush()
                 os.fsync(output.fileno())
+        if credentials_source is not None:
+            source_fd = os.open(credentials_source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            try:
+                source_stat = os.fstat(source_fd)
+                if (
+                    not stat.S_ISREG(source_stat.st_mode)
+                    or source_stat.st_uid != os.getuid()
+                    or stat.S_IMODE(source_stat.st_mode) & 0o077
+                    or not 0 < source_stat.st_size <= 1024 * 1024
+                ):
+                    raise OSError("Subscription credentials are not a private regular file")
+                auth_fd = os.open(
+                    directory / "auth.json",
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0),
+                    0o600,
+                )
+                with (
+                    os.fdopen(source_fd, "rb", closefd=False) as source,
+                    os.fdopen(auth_fd, "wb") as auth,
+                ):
+                    shutil.copyfileobj(source, auth)
+                    auth.flush()
+                    os.fsync(auth.fileno())
+            finally:
+                os.close(source_fd)
         _fsync(directory)
         return directory
     except BaseException:
@@ -159,7 +184,7 @@ def _safe_args(args: Sequence[str]) -> bool:
             if not isinstance(value, str) or not value or value.startswith("-") or "\x00" in value:
                 return False
             if arg == "--provider":
-                if seen_provider or value != "openrouter":
+                if seen_provider or value not in {"openrouter", "openai-codex"}:
                     return False
                 seen_provider = True
             if arg == "--model":
@@ -433,6 +458,9 @@ async def _compact_session_under_fence(
         return {"ok": False, "error": "Compaction requires a Pi RPC backend."}
     if not _safe_args(agent_args):
         return {"ok": False, "error": "Compaction arguments could override the saved session."}
+    selected_model = configured_model(agent_args)
+    assert selected_model is not None and "/" in selected_model
+    selected_provider, selected_id = selected_model.split("/", 1)
     if not isinstance(custom_instructions, (str, type(None))) or (
         custom_instructions is not None and len(custom_instructions) > MAX_INSTRUCTIONS
     ):
@@ -449,7 +477,13 @@ async def _compact_session_under_fence(
     except (OSError, ValueError, TypeError):
         return {"ok": False, "error": "Saved session or pinned Pi backend is unavailable."}
     try:
-        profile = _private_policy()  # no child until both retry layers are fsynced
+        credentials_source = None
+        if selected_provider == "openai-codex":
+            agent_dir = Path(os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi/agent")
+            credentials_source = agent_dir / "auth.json"
+        profile = _private_policy(
+            credentials_source=credentials_source
+        )  # no child until both retry layers are fsynced
     except OSError:
         return {"ok": False, "error": "Private no-retry policy could not be committed."}
     env = os.environ.copy()
@@ -506,8 +540,8 @@ async def _compact_session_under_fence(
                 or data.get("sessionFile") != str(session)
                 or data.get("sessionId") != state["sessionId"]
                 or not isinstance(data.get("model"), dict)
-                or data["model"].get("provider") != "openrouter"
-                or data["model"].get("api") != "openai-completions"
+                or data["model"].get("provider") != selected_provider
+                or data["model"].get("id") != selected_id
             ):
                 raise ValueError("Pi reopened another session")
             current = _session_bytes(session)

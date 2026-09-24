@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 from uuid import uuid4
@@ -27,6 +28,20 @@ def test_large_saved_session_passes_local_preflight(tmp_path):
 
 def test_codex_model_arguments_are_safe_for_explicit_compaction():
     assert compact._safe_args(["--provider", "openai-codex", "--model", "gpt-5.5"])
+
+
+def test_private_compaction_profile_carries_codex_auth_without_exposing_it(tmp_path):
+    source = tmp_path / "auth.json"
+    source.write_text('{"openai-codex":{"type":"oauth","access":"local-fixture"}}')
+    source.chmod(0o600)
+    profile = compact._private_policy(credentials_source=source)
+    try:
+        auth = profile / "auth.json"
+        assert auth.read_bytes() == source.read_bytes()
+        assert auth.stat().st_mode & 0o777 == 0o600
+        assert profile.stat().st_mode & 0o777 == 0o700
+    finally:
+        shutil.rmtree(profile)
 
 
 def saved_session(path: Path, *, split: bool = False) -> bytes:
@@ -357,7 +372,8 @@ with open(os.environ['COMPACT_TEST_CAPTURE'], 'a') as log: log.write('get_state\
 wrong = os.environ['COMPACT_TEST_WRONG_SESSION'] == '1'
 state = {'sessionFile': str(path) + ('-wrong' if wrong else ''),
          'sessionId': header['id'],
-         'model': {'provider': 'openrouter', 'api': 'openai-completions'}}
+         'model': {'provider': 'openrouter', 'id': 'fake-compact',
+                   'api': 'openai-completions'}}
 print(json.dumps({'id': first['id'], 'type': 'response', 'command': 'get_state',
                   'success': True, 'data': state}), flush=True)
 if os.environ['COMPACT_TEST_WRONG_SESSION'] == '0':

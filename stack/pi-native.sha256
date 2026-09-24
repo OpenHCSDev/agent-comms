@@ -1,5 +1,6 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
 424066056076cbe2861c12277cb745428b13bf3308a8b9873d3064b62dc740d7  dist/core/agent-session.js
+f6c97b0c770d5e19b21403d45b8dcc44628632c319ddd30d9f139953c5c167df  dist/core/compaction/compaction.js
 dd75fef58eaa5458a91cff9fe1cf70556ebc720afd98720eae3dcb6572cb63ca  dist/core/session-manager.js
 6f5438c028032f3bc212b6270a1acf9d3e5d22ce5837b85ff5a6fea6c240c76a  dist/modes/rpc/rpc-mode.js
 fced5349c36bc329acf9ed5fe1d8ba63fe29e455e23ac3926a96bd025a9d999c  dist/core/agent-session.d.ts

@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from acp.schema import AgentMessageChunk, TextContentBlock
 
-from . import manual_compaction
+from . import backend, manual_compaction
 from .declarations import ActivityState
 
 
@@ -94,7 +94,10 @@ async def compact_context(
             await _emit_compaction(agent, session_id, "start")
             result = await manual_compaction.compact_session(
                 agent._agent_bin,
-                agent._agent_args,
+                backend.args_for_thinking_level(
+                    backend.args_for_model(agent._agent_args, thread.model),
+                    thread.thinking_level,
+                ),
                 thread.session_file,
                 thread.worktree,
                 instructions.strip() if instructions else None,

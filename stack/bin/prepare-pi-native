@@ -42,7 +42,11 @@ stage=$(mktemp -d "$stack_root/.pi-native.stage.XXXXXXXX")
 trap 'rm -rf -- "$stage" "$scratch_root"' EXIT
 mv -- "$scratch_root/node_modules" "$stage/node_modules"
 cp -- "$stock/$bedrock" "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
+compaction=dist/core/compaction/compaction.js
+python3 "$stack_root/patch-native-compaction.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent/$compaction"
 verify "$stage"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$compaction"
 mv -- "$stage" "$target"
 printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
