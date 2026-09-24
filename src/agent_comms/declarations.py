@@ -1206,6 +1206,7 @@ class CoordinationSnapshot:
     thread_unread: Mapping[str, int] = field(default_factory=dict)
     show_stopped: bool = True
     show_archived: bool = False
+    read_marker_notice: str | None = None
 
     def participants(self, channel: str) -> tuple[ThreadView, ...]:
         view = next((view for view in self.channels if view.channel.name == channel), None)
@@ -1554,6 +1555,7 @@ class MessagePage:
     messages: tuple[Message, ...]
     has_older: bool
     has_newer: bool
+    display_scope: ChannelDisplayScope | None = None
 
     def __post_init__(self) -> None:
         sequences = [message.seq for message in self.messages]
@@ -1617,6 +1619,7 @@ class ChannelDisplayScope:
     participant_names: frozenset[str] = frozenset()
     after: int = 0
     basis_revision: tuple = ()
+    expanded_after: int = 0
 
     def includes(self, message: Message) -> bool:
         if self.targets is None or message.target in self.targets:
@@ -1634,7 +1637,10 @@ class ChannelDisplayScope:
         )
 
     def unread(self, message: Message) -> bool:
-        return message.seq > self.after and self.includes(message)
+        if not self.includes(message):
+            return False
+        exact_route = self.targets is None or message.target in self.targets
+        return message.seq > (self.after if exact_route else self.expanded_after)
 
 
 @dataclass(frozen=True, slots=True)
@@ -2372,11 +2378,18 @@ class MessageBus:
             markers = self._read_markers()
             scopes: tuple[ChannelReadScope | ChannelDisplayScope, ...] = tuple(
                 ChannelReadScope(
-                    channel,
-                    self._channels.history_targets(channel),
-                    max(markers.get(viewer, 0), markers.get(self._marker_key(viewer, channel), 0)),
+                    channel.name,
+                    self._channels.history_targets(channel.name),
+                    (
+                        markers.get(self._view_marker_key(viewer, channel.name, "exact"), 0)
+                        if channel.exact and channel.builtin is None
+                        else max(
+                            markers.get(viewer, 0),
+                            markers.get(self._marker_key(viewer, channel.name), 0),
+                        )
+                    ),
                 )
-                for channel in self._channels.views()
+                for channel in self._channels.views().values()
             )
         else:
             scopes = display_scopes
@@ -2444,11 +2457,54 @@ class MessageBus:
             )
         return activity, counts
 
-    def mark_view_read(self, viewer: str, target: str, through: int) -> None:
-        viewer = self._registry.require(viewer).name
-        key = self._marker_key(viewer, self._channels.resolve(target).name)
-        if self._read_markers().get(key, 0) < through:
-            self._write_markers({key: through})
+    def mark_view_read(
+        self,
+        viewer: str,
+        target: str,
+        through: int,
+        *,
+        captured_keys: tuple[str, ...] | None = None,
+    ) -> None:
+        if captured_keys is not None:
+            # A painted page's keys were derived from its validated display
+            # basis. Re-reading registry membership here could acknowledge a
+            # DM that became visible after the page was painted.
+            markers = {key: through for key in captured_keys}
+        else:
+            viewer = self._registry.require(viewer).name
+            channel = self._channels.resolve(target)
+            if channel.exact and channel.builtin is None:
+                markers = {self._view_marker_key(viewer, channel.name, "exact"): through}
+                if channel.any_mode:
+                    basis = self.any_participant_basis(channel, self._registry.snapshot())
+                    markers[self._view_marker_key(viewer, channel.name, "any", basis)] = through
+            else:
+                markers = {self._marker_key(viewer, channel.name): through}
+        current = self._read_markers()
+        if any(current.get(key, 0) < sequence for key, sequence in markers.items()):
+            self._write_markers(markers)
+
+    @staticmethod
+    def _view_marker_key(
+        viewer: str,
+        channel: str,
+        mode: str,
+        participants: tuple[tuple[str, float], ...] = (),
+    ) -> str:
+        return json.dumps(["view2", viewer, channel, mode, participants])
+
+    @staticmethod
+    def any_participant_basis(
+        channel: Channel, snapshot: RegistrySnapshot
+    ) -> tuple[tuple[str, float], ...]:
+        members = {name for name, thread in snapshot.threads.items() if channel.tags <= thread.tags}
+        names = members | {alias for alias, owner in snapshot.aliases.items() if owner in members}
+        return tuple(
+            sorted(
+                (name, snapshot.threads[snapshot.aliases.get(name, name)].created_at)
+                for name in names
+            )
+        )
 
     def channel_activity(self) -> Mapping[str, ChannelActivity]:
         """Aggregate channel history clocks once per wire revision, not per viewer."""

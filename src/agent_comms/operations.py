@@ -564,6 +564,7 @@ class Comms:
             else frozenset()
         )
         scopes: list[ChannelDisplayScope] = []
+        reset_channels: list[str] = []
         for channel in channels.values():
             members = frozenset(
                 name
@@ -578,20 +579,60 @@ class Comms:
                 if channel.builtin is not None
                 else frozenset({channel.name})
             )
-            after = (
-                max(
-                    markers.get(canonical_viewer, 0),
-                    markers.get(self.bus._marker_key(canonical_viewer, channel.name), 0),
+            expanded_after = 0
+            if canonical_viewer is not None and channel.exact and channel.builtin is None:
+                exact_key = self.bus._view_marker_key(canonical_viewer, channel.name, "exact")
+                after = markers.get(exact_key, 0)
+                if channel.any_mode:
+                    participant_basis = self.bus.any_participant_basis(channel, registry)
+                    expanded_after = markers.get(
+                        self.bus._view_marker_key(
+                            canonical_viewer, channel.name, "any", participant_basis
+                        ),
+                        0,
+                    )
+                if (
+                    self.bus._marker_key(canonical_viewer, channel.name) in markers
+                    and exact_key not in markers
+                ):
+                    reset_channels.append(channel.name)
+            else:
+                after = (
+                    max(
+                        markers.get(canonical_viewer, 0),
+                        markers.get(self.bus._marker_key(canonical_viewer, channel.name), 0),
+                    )
+                    if canonical_viewer is not None
+                    else 0
                 )
-                if canonical_viewer is not None
-                else 0
-            )
             scopes.append(
                 ChannelDisplayScope(
-                    channel.name, targets, channel.any_mode, participant_names, after, revision
+                    channel.name,
+                    targets,
+                    channel.any_mode,
+                    participant_names,
+                    after,
+                    revision,
+                    expanded_after,
                 )
             )
-        return registry, channels, tuple(scopes), order, canonical_viewer, viewer_names, pins
+        notice = (
+            "Read positions were reset for "
+            + ", ".join(sorted(reset_channels))
+            + "; reopen the channel to review its messages."
+            if reset_channels
+            else None
+        )
+        return (
+            registry,
+            channels,
+            tuple(scopes),
+            order,
+            canonical_viewer,
+            viewer_names,
+            pins,
+            notice,
+        )
 
     @contextmanager
     def _display_snapshot(
@@ -631,6 +672,7 @@ class Comms:
         self,
         target: str,
         *,
+        worktree: str | None = None,
         before: int | None = None,
         after: int | None = None,
         limit: int = 100,
@@ -639,9 +681,10 @@ class Comms:
         """Local display projection; underlying channel history remains target-owned."""
         if not is_channel_target(target):
             raise ValueError(f"{target!r} is not a channel target.")
-        with self._display_snapshot(target=target) as (basis, records, _):
+        viewer = self.user_identity(worktree).name if worktree is not None else None
+        with self._display_snapshot(viewer=viewer, target=target) as (basis, records, _):
             scope = next(item for item in basis[2] if item.channel == target)
-            return self.bus._collect_history_page(
+            page = self.bus._collect_history_page(
                 records,
                 scope.includes,
                 before=before,
@@ -649,6 +692,7 @@ class Comms:
                 limit=limit,
                 max_bytes=max_bytes,
             )
+            return replace(page, display_scope=scope)
 
     def message_high_water(self) -> int:
         """Global message cursor used by polling clients to avoid idle scans."""
@@ -956,7 +1000,9 @@ class Comms:
         """Local presentation scope, independent of agent delivery cursors."""
         viewer = self.user_identity(worktree).name
         with self._display_snapshot(viewer=viewer) as (basis, records, bus_revision):
-            registry, declarations, scopes, order, captured_viewer, viewer_names, pins = basis
+            registry, declarations, scopes, order, captured_viewer, viewer_names, pins, notice = (
+                basis
+            )
             assert captured_viewer is not None
             activity_scopes = tuple(
                 replace(scope, after=0, basis_revision=scope.basis_revision[:-1])
@@ -991,6 +1037,7 @@ class Comms:
                 ),
                 show_stopped=show_stopped,
                 show_archived=show_archived,
+                read_marker_notice=notice,
             )
 
     def _is_unread_reply(self, record: Mapping) -> bool:
@@ -1013,12 +1060,40 @@ class Comms:
         self.transcript_reads.mark_read(viewer, through.session_file, through.offset)
 
     def mark_channel_view_read(
-        self, target: str, *, worktree: str, through: int | None = None
+        self,
+        target: str,
+        *,
+        worktree: str,
+        through: int | None = None,
+        expected_scope: ChannelDisplayScope | None = None,
     ) -> None:
         viewer = self.user_identity(worktree).name
         with _store_lock(self._wire_lock_path):
+            captured_keys = None
+            if through is not None:
+                if expected_scope is None or expected_scope.channel != target:
+                    raise ValueError("Channel display scope missing; refresh the displayed page.")
+                revision = self._display_basis_revision()
+                basis = self._capture_display_basis(viewer, revision)
+                current = next((scope for scope in basis[2] if scope.channel == target), None)
+                if current != expected_scope or self._display_basis_revision() != revision:
+                    raise ValueError("Channel display changed; refresh the displayed page.")
+                channel = basis[1][target]
+                if channel.exact and channel.builtin is None:
+                    keys = [self.bus._view_marker_key(viewer, target, "exact")]
+                    if channel.any_mode:
+                        participant_basis = self.bus.any_participant_basis(channel, basis[0])
+                        keys.append(
+                            self.bus._view_marker_key(viewer, target, "any", participant_basis)
+                        )
+                    captured_keys = tuple(keys)
+                else:
+                    captured_keys = (self.bus._marker_key(viewer, target),)
             self.bus.mark_view_read(
-                viewer, target, self.bus.latest_sequence() if through is None else through
+                viewer,
+                target,
+                self.bus.latest_sequence() if through is None else through,
+                captured_keys=captured_keys,
             )
 
     def mark_user_view_read(self, target: str, *, worktree: str) -> None:
