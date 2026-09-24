@@ -1538,18 +1538,18 @@ class Comms:
         except OSError:
             size = 0
 
-        routes = self.transcript_routes.for_session(session_file)
         records: list[list[TranscriptEvent]] = []
-        for raw_line in _reverse_lines(path, max_bytes=max_bytes) if session_file else ():
-            try:
-                payload = json.loads(raw_line)
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                continue
-            events = self._transcript_record_events(payload, routes.get(payload.get("id", "")))
-            if events:
-                records.append(events)
-                if len(records) > max_messages:
-                    break
+        with self.transcript_routes.for_session(session_file) as routes:
+            for raw_line in _reverse_lines(path, max_bytes=max_bytes) if session_file else ():
+                try:
+                    payload = json.loads(raw_line)
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    continue
+                events = self._transcript_record_events(payload, routes.get(payload.get("id", "")))
+                if events:
+                    records.append(events)
+                    if len(records) > max_messages:
+                        break
 
         truncated = size > max_bytes or len(records) > max_messages
         records = list(reversed(records[:max_messages]))
@@ -1648,43 +1648,44 @@ class Comms:
                         return
                     yield offset, stream.tell(), raw
 
-        if size:
-            iterator = forward() if after else _reverse_records(path, start)
-            try:
-                for record_start, record_end, raw in iterator:
-                    try:
-                        value = json.loads(raw)
-                    except (ValueError, UnicodeDecodeError):
-                        # A writer may have left an incomplete last line. Retry it
-                        # after the next append rather than losing its cursor.
-                        if after and record_end == size and not raw.endswith(b"\n"):
-                            break
-                        events: tuple[TranscriptEvent, ...] = ()
-                    else:
-                        events = (
-                            tuple(
-                                self._transcript_record_events(
-                                    value, routes.get(value.get("id", ""))
+        with routes:
+            if size:
+                iterator = forward() if after else _reverse_records(path, start)
+                try:
+                    for record_start, record_end, raw in iterator:
+                        try:
+                            value = json.loads(raw)
+                        except (ValueError, UnicodeDecodeError):
+                            # A writer may have left an incomplete last line. Retry it
+                            # after the next append rather than losing its cursor.
+                            if after and record_end == size and not raw.endswith(b"\n"):
+                                break
+                            events: tuple[TranscriptEvent, ...] = ()
+                        else:
+                            events = (
+                                tuple(
+                                    self._transcript_record_events(
+                                        value, routes.get(value.get("id", ""))
+                                    )
                                 )
+                                if isinstance(value, dict)
+                                else ()
                             )
-                            if isinstance(value, dict)
-                            else ()
-                        )
-                    if (
-                        events
-                        and records
-                        and (len(records) >= max_messages or used + len(raw) > max_bytes)
-                    ):
-                        break
-                    if after:
-                        end = record_end
-                    else:
-                        start = record_start
-                    if events:
-                        records.append(events)
-                        used += len(raw)
-            finally:
-                iterator.close()
+                        if (
+                            events
+                            and records
+                            and (len(records) >= max_messages or used + len(raw) > max_bytes)
+                        ):
+                            break
+                        if after:
+                            end = record_end
+                        else:
+                            start = record_start
+                        if events:
+                            records.append(events)
+                            used += len(raw)
+                finally:
+                    iterator.close()
         if not after:
             records.reverse()
         events = tuple(event for record in records for event in record)
