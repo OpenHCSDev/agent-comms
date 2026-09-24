@@ -133,8 +133,11 @@ async def _terminate_process(proc: asyncio.subprocess.Process) -> None:
             os.killpg(proc.pid, signal.SIGTERM)
         else:
             proc.terminate()
-    except ProcessLookupError:
-        return
+    except OSError:
+        # A process-group signal may race child exit or fail independently of
+        # the child handle. Try that handle before waiting for reaping.
+        with suppress(ProcessLookupError):
+            proc.terminate()
     try:
         await asyncio.wait_for(proc.wait(), timeout=1.0)
     except TimeoutError:
@@ -143,8 +146,9 @@ async def _terminate_process(proc: asyncio.subprocess.Process) -> None:
                 os.killpg(proc.pid, signal.SIGKILL)
             else:
                 proc.kill()
-        except ProcessLookupError:
-            return
+        except OSError:
+            with suppress(ProcessLookupError):
+                proc.kill()
         await proc.wait()
 
 
@@ -966,7 +970,9 @@ async def _stream_agent_events(
                         compaction_started = True
                     if abort_kind == "response" and abort_payload.get("command") == "abort":
                         break
-            except (TimeoutError, BrokenPipeError, ConnectionResetError):
+            except (TimeoutError, OSError):
+                # Pi may close its pipe after we observed a session rebind.
+                # Abort is best effort; the child is terminated below.
                 pass
         if proc.returncode is None:
             await _terminate_process(proc)

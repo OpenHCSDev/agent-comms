@@ -1004,7 +1004,10 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
     @pytest.mark.parametrize(
         "evidence", ["get_state", "get_session_stats", "fork_failed", "clone_cancelled"]
     )
-    async def test_unsolicited_rebind_quarantines_subsequent_b_events(self, tmp_path, evidence):
+    @pytest.mark.parametrize("abort_pipe_closed", [False, True])
+    async def test_unsolicited_rebind_quarantines_subsequent_b_events(
+        self, tmp_path, evidence, abort_pipe_closed, monkeypatch
+    ):
         stub = _stub(
             tmp_path,
             f"#!{sys.executable}\n" + """\
@@ -1052,6 +1055,18 @@ for line in sys.stdin:
         break
 """.replace("__EVIDENCE__", repr(evidence)),
         )
+        abort_write_failed = False
+        if abort_pipe_closed:
+            original_write = asyncio.StreamWriter.write
+
+            def fail_abort_write(writer, data):
+                nonlocal abort_write_failed
+                if b'"type": "abort"' in data:
+                    abort_write_failed = True
+                    raise OSError(9, "Pi closed stdin before abort")
+                return original_write(writer, data)
+
+            monkeypatch.setattr(asyncio.StreamWriter, "write", fail_abort_write)
         owner = asyncio.current_task()
         process = None
         events = []
@@ -1083,6 +1098,8 @@ for line in sys.stdin:
         assert process is not None and process.returncode is not None
         assert owner not in backend._ACTIVE_PROCESSES
         assert [e["type"] for e in events].count("input_started") == 0
+        if abort_pipe_closed:
+            assert abort_write_failed
         # A sent input on the old owner cannot be replayed after rebind.
         assert queue.empty()
 
@@ -1988,6 +2005,43 @@ if case != "eof":
         assert events[-1]["ok"] is False
         assert events[-1]["reason_code"] == "pi_input_id_unavailable"
         assert "preflight" in events[-1]["text"]
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX process-group signal")
+    async def test_preflight_refusal_survives_process_group_signal_error(
+        self, tmp_path, monkeypatch
+    ):
+        pid_file = tmp_path / "child.pid"
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + f"""
+import json, os, sys, time
+state = json.loads(sys.stdin.readline())
+print(json.dumps({{"type": "response", "command": "get_state", "id": "foreign",
+                  "success": True, "data": {{"nativeInputProofCapability":
+                  "pi-native-input-v1-live-only"}}}}), flush=True)
+open({str(pid_file)!r}, "w").write(str(os.getpid()))
+while True: time.sleep(0.1)
+""",
+        )
+        original_killpg = backend.os.killpg
+        injected = False
+
+        def fail_first_group_signal(pid, sig):
+            nonlocal injected
+            if not injected:
+                injected = True
+                raise OSError(9, "process group signal failed")
+            return original_killpg(pid, sig)
+
+        monkeypatch.setattr(backend.os, "killpg", fail_first_group_signal)
+        events = [
+            event async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path))
+        ]
+        assert injected and pid_file.exists()
+        assert events[-1]["reason_code"] == "pi_input_id_unavailable"
+        with pytest.raises(ProcessLookupError):
+            os.kill(int(pid_file.read_text()), 0)
+        assert not backend._ACTIVE_PROCESSES and not backend._ACTIVE_STDERR_TASKS
 
     @pytest.mark.parametrize("phase", ["preflight", "no_user_start"])
     async def test_broken_child_stdin_close_still_reaps_and_reports_typed_failure(
