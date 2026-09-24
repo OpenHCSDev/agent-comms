@@ -5,7 +5,7 @@ umask 077
 
 stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 repo_root=$(cd -- "$stack_root/.." && pwd)
-stock=${PI_STOCK_DIR:-/home/ts/.local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent}
+stock=${PI_STOCK_DIR:-$HOME/.local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent}
 manifest="$stack_root/pi-native.sha256"
 build_id=$(sha256sum "$manifest" | cut -c1-16)
 target="$stack_root/.pi-native-$build_id"
