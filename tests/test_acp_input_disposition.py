@@ -12,6 +12,7 @@ import pytest
 from agent_comms import Message, MessageType, Thread
 from agent_comms.acp import CommsAgent
 from agent_comms.declarations import ScheduledTurn
+from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import wire
 from agent_comms.runtime import RuntimeProxy, socket_path
@@ -59,6 +60,52 @@ async def test_preflight_failure_keeps_its_reason_visible(tmp_path, monkeypatch)
         ]
         assert "[agent error] Pi native input-ID capability preflight failed." in texts
         assert InputDispositions(comms.root).unknown(frozenset({"project"}))
+    finally:
+        await agent.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeypatch):
+    comms = wire(tmp_path / "wire")
+    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    updates = []
+
+    class Client:
+        async def session_update(self, session_id, update):
+            updates.append(update)
+
+    agent.on_connect(Client())
+    await agent.new_session(str(tmp_path / "project"))
+    comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
+
+    async def events(*args, **kwargs):
+        yield {"type": "input_started", "id": None}
+        comms.send("peer", "project", "late direct")
+        assert await agent._drain_inbox("project") == 1
+        assert agent._forwarded_inputs["project"] == {"bus-1"}
+        goal = comms.update_goal("project", "set", text="Long-term architecture work")
+        assert goal is not None
+        yield {"type": "tool_end", "id": "set-goal", "name": "comms_set_goal", "ok": True}
+        command = kwargs["steering_queue"].get_nowait()
+        with kwargs["send_boundary"](command["_input_id"], "a" * 32, command["message"]) as allowed:
+            assert allowed is None
+        yield {"type": "input_refused", "id": "bus-1"}
+        yield {"type": "settled"}
+        yield {"type": "done", "ok": True, "text": "Goal set"}
+
+    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    try:
+        await agent._run_agent_turn("project", "project", "Set a goal")
+        goal = comms.registry.require("project").goal
+        assert goal is not None and goal.status == "active"
+        assert GoalAttemptStore(comms.root / "goal-private").snapshot(goal.id).state == "ready"
+        assert InputDispositions(comms.root).status("bus:1") == "unknown"
+        assert not any(
+            "[agent error]" in getattr(update.content, "text", "")
+            for update in updates
+            if getattr(update, "content", None)
+        )
     finally:
         await agent.shutdown()
 
