@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -163,10 +164,15 @@ def test_changed_marker_basis_rejects_implicit_page_ack(tmp_path: Path):
     assert (tmp_path / "read_markers.json").read_bytes() == marker_before
 
 
-@pytest.mark.skipif(
-    os.name != "posix", reason="durable painted marker requires POSIX directory fsync"
-)
-def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(tmp_path: Path, monkeypatch):
+@pytest.fixture
+def durable_root():
+    with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
+        yield Path(directory)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX directory fsync")
+def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root, monkeypatch):
+    tmp_path = durable_root
     comms = wire(tmp_path)
     comms.register(_thread(tmp_path, "peer"))
     viewer = comms.user_identity(str(tmp_path)).name
@@ -216,12 +222,8 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(tmp_path: Pa
     # separate durable marker commit witness, the row may already be visible.
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="ordinary bus_meta nonzero rollback can reuse a painted marker sequence",
-)
 def test_ordinary_metadata_rollback_must_not_hide_new_dm(tmp_path: Path):
-    """Known upstream crash gate; fixing only the DM CAS cannot repair it."""
+    """A stale metadata sequence cannot hide a later DM behind a painted marker."""
     comms = wire(tmp_path)
     comms.register(_thread(tmp_path, "peer"))
     viewer = comms.user_identity(str(tmp_path)).name

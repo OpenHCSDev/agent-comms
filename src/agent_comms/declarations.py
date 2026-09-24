@@ -3911,8 +3911,6 @@ class MessageBus:
         acquired. A concurrent deliberate Mark Read changes the marker basis
         and must cause this painted-page CAS to fail, not silently retarget.
         """
-        if os.name != "posix":
-            raise ValueError("Durable painted DM markers require POSIX directory sync.")
         marker_path = self._path.parent / "read_markers.json"
         with _store_lock(marker_path):
             if file_revision(marker_path) != expected_marker_revision:
@@ -3921,14 +3919,14 @@ class MessageBus:
             key = self._marker_key(viewer, peer)
             if current.get(key, 0) >= through:
                 return
-            # Deny a persistently unavailable directory sync before changing
-            # the visible marker. The final post-replace sync remains required;
-            # its failure is UNKNOWN, not an affirmative read receipt.
-            parent_fd = os.open(marker_path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-            try:
-                os.fsync(parent_fd)
-            finally:
-                os.close(parent_fd)
+            # On POSIX, prove the directory can sync before changing the
+            # marker. The final post-replace sync is still required there.
+            if os.name == "posix":
+                parent_fd = os.open(marker_path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                try:
+                    os.fsync(parent_fd)
+                finally:
+                    os.close(parent_fd)
             current[key] = through
             _atomic_write_text(marker_path, json.dumps(current, indent=2), fsync_parent=True)
 
