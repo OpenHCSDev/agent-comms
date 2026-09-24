@@ -71,6 +71,23 @@ def test_reopened_listing_does_not_parse_unchanged_bus_history(wired, monkeypatc
     assert parsed == [101]
 
 
+def test_thread_listing_validates_registry_per_snapshot_not_per_row(wired, monkeypatch):
+    for index in range(30):
+        wired.register(Thread(f"peer-{index}", frozenset(), f"/peer-{index}"))
+    checks = 0
+    verify = wired.registry._private_guard_unlocked
+
+    def counted_verify():
+        nonlocal checks
+        checks += 1
+        return verify()
+
+    monkeypatch.setattr(wired.registry, "_private_guard_unlocked", counted_verify)
+    rows = wired.list_threads()
+    assert len(rows) == 32
+    assert checks <= 3
+
+
 def test_mounted_coordination_snapshot_reopens_without_scanning_bus(wired, monkeypatch):
     wired.send("PR111", "#base", "channel activity")
     wired.send("PR111", "fixer", "direct activity")
@@ -87,6 +104,21 @@ def test_mounted_coordination_snapshot_reopens_without_scanning_bus(wired, monke
     updated = fresh.coordination_snapshot()
     assert updated.last_sent["PR111"] >= expected.last_sent["PR111"]
     assert updated == wire(wired.root).coordination_snapshot()
+
+
+def test_mounted_activity_rebuilds_after_bus_replacement_or_damaged_checkpoint(wired):
+    wired.send("PR111", "#base", "first")
+    wired.send("fixer", "#base", "second")
+    assert set(wired.coordination_snapshot().last_sent) == {"PR111", "fixer"}
+    bus_path = wired.bus._path
+    replacement = bus_path.with_name("replacement.jsonl")
+    replacement.write_bytes(bus_path.read_bytes().splitlines(keepends=True)[-1])
+    os.replace(replacement, bus_path)
+    assert set(wire(wired.root).coordination_snapshot().last_sent) == {"fixer"}
+
+    checkpoint = wired.root / "bus_activity_latest.json"
+    checkpoint.write_text("{damaged")
+    assert set(wire(wired.root).coordination_snapshot().last_sent) == {"fixer"}
 
 
 def test_route_projection_rebuilds_after_atomic_bus_replacement(wired):

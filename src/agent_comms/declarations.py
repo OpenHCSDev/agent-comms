@@ -36,6 +36,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Self
 
+from .bus_activity_index import BusActivityIndex
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     CommittedInitial,
@@ -2634,14 +2635,35 @@ class MessageBus:
         with _store_lock(self._path):
             revision = file_revision(self._path)
             if revision != self._channel_activity_revision:
-                activity: dict[str, ChannelActivity] = {}
-                for message in self._iter_log_unlocked():
-                    activity[message.target] = activity.get(
-                        message.target, ChannelActivity()
-                    ).observe(message)
+                projection = BusActivityIndex(self._path).snapshot(
+                    revision, self._bus_activity_fields
+                )
+                if projection is None:
+                    activity: dict[str, ChannelActivity] = {}
+                    for message in self._iter_log_unlocked():
+                        activity[message.target] = activity.get(
+                            message.target, ChannelActivity()
+                        ).observe(message)
+                else:
+                    channels, _ = projection
+                    activity = {
+                        target: ChannelActivity(last_message, last_user)
+                        for target, (last_message, last_user) in channels.items()
+                    }
                 self._channel_activity = activity
                 self._channel_activity_revision = revision
             return dict(self._channel_activity)
+
+    @staticmethod
+    def _bus_activity_fields(record: Mapping[str, object]) -> tuple[str, str, float, bool, bool]:
+        message = Message.from_wire(record)
+        return (
+            message.sender,
+            message.target,
+            message.timestamp,
+            message.sender_role is ThreadRole.USER,
+            message.membership is None and not message.notice,
+        )
 
     def _delivery_scope(self, name: str) -> DeliveryScope:
         snapshot = self._registry.snapshot()
@@ -3944,8 +3966,13 @@ class MessageBus:
 
     def last_sent_timestamps(self) -> Mapping[str, float]:
         """Aggregate sent times without retaining message bodies."""
-        latest: dict[str, float] = {}
         with _store_lock(self._path):
+            projection = BusActivityIndex(self._path).snapshot(
+                file_revision(self._path), self._bus_activity_fields
+            )
+            if projection is not None:
+                return projection[1]
+            latest: dict[str, float] = {}
             for message in self._iter_log_unlocked():
                 if message.membership is None and not message.notice:
                     latest[message.sender] = max(latest.get(message.sender, 0.0), message.timestamp)
