@@ -45,8 +45,8 @@ export class CompactionPolicy {
         if (bytes < 4096) throw new Error('Compaction model context is too small');
         return bytes;
     }
-    summaryTokens(model, byteLimit) {
-        return Math.min(this.summaryMaxTokens, Math.max(CompactionPolicy.declarations.summaryMaxTokens.min, Math.floor(byteLimit * this.summaryOutputRatio)),
+    summaryTokens(model, byteLimit, reserveTokens) {
+        return Math.min(reserveTokens, this.summaryMaxTokens, Math.max(CompactionPolicy.declarations.summaryMaxTokens.min, Math.floor(byteLimit * this.summaryOutputRatio)),
             model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);
     }
 }

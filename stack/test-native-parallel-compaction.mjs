@@ -145,3 +145,20 @@ try {
   assert.ok(JSON.stringify(manager.buildSessionContext()).includes('PRIOR_GOAL_984'));
   console.log('saved repeated split-turn prior-summary/custom-instruction PASS');
 } finally {rmSync(repeatedRoot,{recursive:true,force:true});}
+// Valid individually configurable maxima must still fit Pi's output reserve.
+const configuredModel={...model,maxTokens:65536};
+const configuredPolicy={summaryMaxTokens:32768,summaryOutputRatio:0.5,inputBudgetRatio:0.9};
+let configuredRequests=0;
+await generateSummaryWithUsage([{role:'user',content:[{type:'text',text:body}],timestamp:1}],
+  configuredModel,16384,'local-only',{},undefined,undefined,undefined,undefined,
+  async(_model,context,options)=>({result:async()=>{
+    configuredRequests++;
+    assert.ok(options.maxTokens<=16384,`summary output ${options.maxTokens} exceeds Pi reserve`);
+    assert.ok(Buffer.byteLength(context.messages[0].content[0].text,'utf8')+options.maxTokens<configuredModel.contextWindow);
+    return {stopReason:'stop',content:[{type:'text',text:'bounded configured summary'}],usage};
+  }}),{AGENT_COMMS_COMPACTION_POLICY:JSON.stringify(configuredPolicy)},
+  {enabled:false,maxRetries:0},{},undefined);
+assert.ok(configuredRequests>1);
+const defaultPolicy=new CompactionPolicy();
+assert.equal(defaultPolicy.summaryTokens(configuredModel,defaultPolicy.inputBytes(configuredModel,16384),16384),4096);
+console.log(`configured output-reserve PASS requests=${configuredRequests}`);

@@ -217,7 +217,7 @@ def main(path: Path) -> None:
     source = source.replace(
         TOKEN_LIMIT,
         "const maxTokens = boundedChunk "
-        "? policy.summaryTokens(model, byteLimit) "
+        "? policy.summaryTokens(model, byteLimit, reserveTokens) "
         ": Math.min(Math.floor(0.8 * reserveTokens), model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);",
     )
     source = source.replace(
