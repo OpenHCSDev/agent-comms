@@ -34,7 +34,7 @@ def test_codex_model_arguments_are_safe_for_explicit_compaction():
     ("raw", "expected"),
     [
         (
-            "Summarization failed: 503 Service Unavailable; private prompt",
+            'Summarization failed: 503: {"message":"private prompt"}',
             "Compaction provider returned HTTP 503.",
         ),
         (
@@ -48,6 +48,26 @@ def test_codex_model_arguments_are_safe_for_explicit_compaction():
         (
             "Summarization failed: unexpected private prompt",
             "Pi compaction failed; inspect local diagnostics.",
+        ),
+        (
+            "Summarization failed: provider rejected request after 500 input tokens",
+            "Pi compaction failed; inspect local diagnostics.",
+        ),
+        (
+            "Summarization failed: private prompt contained 503 but provider timed out",
+            "Pi compaction failed; inspect local diagnostics.",
+        ),
+        (
+            "Summarization failed: prompt is too long",
+            "Compaction summary exceeded the model context limit.",
+        ),
+        (
+            "Summarization failed: input exceeds the context window",
+            "Compaction summary exceeded the model context limit.",
+        ),
+        (
+            "Summarization failed: context_length_exceeded",
+            "Compaction summary exceeded the model context limit.",
         ),
     ],
 )

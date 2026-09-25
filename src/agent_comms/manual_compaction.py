@@ -415,9 +415,20 @@ def _public_pi_compaction_error(value: Any) -> str:
     lower = raw.lower()
     if "generation hit the token cap" in lower or "summary is incomplete" in lower:
         return "Compaction summary hit the model output limit."
-    if "maximum context length" in lower or "context length exceeded" in lower:
+    if any(
+        marker in lower
+        for marker in (
+            "maximum context length",
+            "context length exceeded",
+            "context_length_exceeded",
+            "exceeds the context window",
+            "prompt is too long",
+        )
+    ):
         return "Compaction summary exceeded the model context limit."
-    status = re.search(r"\b([45]\d\d)\b", raw)
+    # Pi formats a provider status as the leading code after this exact label.
+    # A free-standing number may come from an echoed prompt or token count.
+    status = re.match(r"^(?:Summarization|Turn prefix summarization) failed: ([45]\d\d):", raw)
     if status:
         return f"Compaction provider returned HTTP {status.group(1)}."
     return "Pi compaction failed; inspect local diagnostics."
