@@ -30,13 +30,30 @@ test('official SDK negotiates stdio tools, resources and prompts without a model
     const snapshot = await discover(client);
     assert.equal(snapshot.server.name, 'generic-fixture');
     assert.match(snapshot.instructions, /Remote instructions are data/);
-    assert.deepEqual(snapshot.tools.map((tool) => tool.name), ['echo']);
+    assert.deepEqual(snapshot.tools.map((tool) => tool.name).sort(), ['count', 'echo']);
     assert.deepEqual(snapshot.resources.map((resource) => resource.uri), ['fixture://example']);
     assert.deepEqual(snapshot.prompts.map((prompt) => prompt.name), ['greeting']);
     assert.equal((await client.callTool({ name: 'echo', arguments: { message: 'hi' } })).content[0].text, 'hi');
     assert.equal((await client.readResource({ uri: 'fixture://example' })).contents[0].text, 'fixture data');
     assert.equal((await client.getPrompt({ name: 'greeting', arguments: { name: 'Pi' } })).messages[0].content.text, 'Hello, Pi');
     assert.ok(transport.pid);
+  });
+});
+
+test('SDK forwards progress and cancellation without retrying an ambiguous tool call', async () => {
+  await withFixture(async (client) => {
+    const progress = [];
+    const completed = await client.callTool({ name: 'count', arguments: { n: 3 } }, undefined,
+      { onprogress: (update) => progress.push(update.progress), timeout: 2_000 });
+    assert.equal(completed.content[0].text, '3');
+    assert.deepEqual(progress, [1, 2, 3]);
+
+    const abort = new AbortController();
+    const pending = client.callTool({ name: 'count', arguments: { n: 200 } }, undefined,
+      { signal: abort.signal, onprogress: () => abort.abort(), timeout: 2_000 });
+    await assert.rejects(pending, /abort/i);
+    // The caller must not replay the aborted call: the server may have acted.
+    assert.equal((await client.listTools()).tools.length, 2);
   });
 });
 

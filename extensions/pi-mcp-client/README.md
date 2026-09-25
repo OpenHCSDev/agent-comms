@@ -2,7 +2,7 @@
 
 This draft's first slice verifies the official MCP SDK's local stdio handshake,
 capability-gated tools/resources/prompts discovery, cursor pagination, calls,
-and child cleanup against a generic fixture server. `discover()` rejects a
+progress, cancellation, and child cleanup against a generic fixture server. `discover()` rejects a
 truncated/repeated/invalid catalog instead of presenting it as complete.
 
 ```sh
