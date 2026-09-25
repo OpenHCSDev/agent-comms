@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Type } from 'typebox';
 import { Compile } from 'typebox/compile';
+import { confirmedClient } from './operation.mjs';
 import { toPiResult } from './tool-result.mjs';
 
 function toolName(serverId, remoteName) {
@@ -9,13 +10,6 @@ function toolName(serverId, remoteName) {
   const slug = remoteName.toLowerCase().replace(/[^a-z0-9_]/g, '_')
     .slice(0, 64 - prefix.length - suffix.length - 1);
   return `${prefix}${slug}_${suffix}`;
-}
-
-function displayCall(serverId, remoteName, params) {
-  const body = JSON.stringify({ serverId, tool: remoteName, arguments: params }, null, 2);
-  if (!body || body.length > 8_192) throw new Error('MCP tool call too large for human review');
-  return body.replace(/[^\x20-\x7e\n]/g,
-    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`);
 }
 
 /** Register the complete bounded discovered catalog, not a silently truncated subset. */
@@ -33,7 +27,7 @@ export function registerReadyTools(pi, runtime) {
       }
       const parameters = Type.Unsafe(remote.inputSchema);
       Compile(parameters); // Fail the whole catalog before registering any partial tool subset.
-      definitions.push({ serverId: entry.id, scope: entry.scope, remote, parameters,
+      definitions.push({ serverId: entry.id, remote, parameters,
         name: toolName(entry.id, remote.name) });
     }
   }
@@ -42,27 +36,16 @@ export function registerReadyTools(pi, runtime) {
   }
   const existing = new Set(pi.getAllTools().map((tool) => tool.name));
   if (definitions.some(({ name }) => existing.has(name))) throw new Error('MCP tool name collision');
-  for (const { serverId, scope, remote, name, parameters } of definitions) {
+  for (const { serverId, remote, name, parameters } of definitions) {
     const label = `MCP ${serverId}/${remote.name}`.replace(/[^\x20-\x7e]/g, '?');
     pi.registerTool({
       name, label,
       description: `${label}: ${String(remote.description ?? '').replace(/[\r\n\t]/g, ' ').slice(0, 512)}`,
       parameters,
       async execute(_toolCallId, params, signal, onUpdate, ctx) {
-        if (ctx.mode !== 'tui' || (scope === 'project' && !ctx.isProjectTrusted())) {
-          throw new Error('MCP tool call requires a local human controller');
-        }
-        if (signal.aborted) throw new Error('MCP tool call cancelled');
-        const display = displayCall(serverId, remote.name, params);
-        if (!await ctx.ui.confirm(`Run MCP ${serverId}/${remote.name}?`, display)) {
-          throw new Error('MCP tool call denied by user');
-        }
-        const ready = runtime.ready(serverId);
-        if (signal.aborted || !ready || !await runtime.authorized(serverId, ctx)) {
-          throw new Error('MCP tool call no longer authorized');
-        }
+        const client = await confirmedClient(runtime, serverId, remote.name, params, ctx, signal);
         // One SDK request. Cancellation/timeout never triggers an automatic replay.
-        const result = await ready.client.callTool({ name: remote.name, arguments: params }, undefined, {
+        const result = await client.callTool({ name: remote.name, arguments: params }, undefined, {
           signal, timeout: 60_000, resetTimeoutOnProgress: true, maxTotalTimeout: 900_000,
           onprogress(update) {
             if (!signal.aborted && Number.isFinite(update.progress)) {

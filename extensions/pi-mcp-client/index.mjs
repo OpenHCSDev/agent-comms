@@ -3,6 +3,7 @@ import { decideProjectServer } from './src/commands.mjs';
 import { loadEffectiveDeclarations } from './src/sources.mjs';
 import { McpRuntime } from './src/runtime.mjs';
 import { registerReadyTools } from './src/tools.mjs';
+import { registerResourceTools } from './src/resources.mjs';
 
 /** Package-owned Pi session; approved stdio connections start by default. */
 export default function (pi) {
@@ -12,6 +13,7 @@ export default function (pi) {
     runtime = new McpRuntime(options(ctx));
     await runtime.start();
     registerReadyTools(pi, runtime);
+    registerResourceTools(pi, runtime);
   });
   pi.on('session_shutdown', async () => {
     await runtime?.stop();

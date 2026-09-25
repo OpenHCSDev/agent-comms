@@ -2,8 +2,9 @@
 
 The Pi package manifest loads `index.mjs` **by default when the package is installed**.
 It connects approved stdio servers when a Pi session starts, discovers tools,
-resources and prompts, registers bounded discovered Pi tools, and closes children
-on session shutdown. It provides `/mcp-status`, `/mcp-approve <id>`, and
+resources and prompts, registers bounded discovered Pi tools (including a
+resource/prompt catalog and read/get operations), and closes children on session
+shutdown. It provides `/mcp-status`, `/mcp-approve <id>`, and
 `/mcp-deny <id>`. Tool calls require a local Pi TUI confirmation; detached/RPC
 tool calls fail until a correlated controller or out-of-band tool policy is added.
 
@@ -43,6 +44,5 @@ cancellation and cleanup against a generic fixture. It also runs an isolated
 real Pi RPC process with `--no-approve` and `--approve`: untrusted files are not
 read, absent/stale digests cause zero spawns, and an approved generic fixture
 initializes/discovers and exits on shutdown. No provider call is made. PR #77
-remains draft; resources/prompts in the model, headless tool-call approval,
-agent-comms/ACP projection, Toad controls and independent review are still
-outstanding.
+remains draft; headless tool-call approval, agent-comms/ACP projection, Toad
+controls and independent review are still outstanding.
