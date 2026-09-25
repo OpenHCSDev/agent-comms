@@ -325,6 +325,28 @@ def test_public_rename_preserves_claim_release_then_new_owner_wins(
     assert Comms(comms.root).claim_projection()[path].owner == "bob"
 
 
+def test_rename_back_to_own_alias_preserves_claim_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    comms, worktree = _participants(tmp_path)
+    path = str(worktree / "a.py")
+    claimed = comms.send_message("alice", "bob", "Claim before rename", claims=["a.py"])
+    assert claimed.claim_transition is not None
+    monkeypatch.setenv("PI_AGENT_ID", "alice")
+    assert comms.rename_self("alice-new").changed
+    monkeypatch.setenv("PI_AGENT_ID", "alice-new")
+
+    assert comms.rename_self("alice").current == "alice"
+
+    reopened = Comms(comms.root)
+    assert reopened.registry.snapshot().aliases == {"alice-new": "alice"}
+    assert reopened.claim_projection()[path].owner == "alice"
+    released = reopened.send_message("alice", "bob", "Release after rename back", releases=["a.py"])
+    assert released.claim_transition is not None
+    assert released.claim_transition.incarnation == claimed.claim_transition.incarnation
+    assert path not in reopened.claim_projection()
+
+
 def test_same_tick_new_owner_cannot_share_live_claim_release_authority(tmp_path: Path) -> None:
     comms, worktree = _participants(tmp_path)
     claimed = comms.send_message("alice", "bob", "Claim a", claims=["a.py"])

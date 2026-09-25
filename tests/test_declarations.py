@@ -305,6 +305,39 @@ class TestThreadRegistry:
         assert snapshot.admission_generations["renamed-a"] == before
         assert "a" not in snapshot.admission_generations
 
+    def test_rename_reclaims_own_alias_without_losing_owner_or_turn(self, tmp_path: Path) -> None:
+        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry.register(
+            Thread(
+                name="agent-comms-ux",
+                tags=frozenset(),
+                worktree="/wt",
+                pid=os.getpid(),
+                goal=Goal("Finish the goal", "goal-1"),
+            )
+        )
+        registry.register(
+            Thread(name="child", tags=frozenset(), worktree="/wt", parent="agent-comms-ux")
+        )
+        original = registry.require("agent-comms-ux")
+        registry.rename("agent-comms-ux", "pr17")
+        admission = registry.snapshot().admission_generations["pr17"]
+        registry.claim_local_turn("pr17", "goal-turn")
+
+        assert registry.rename("pr17", "agent-comms-ux") == ("pr17", "agent-comms-ux")
+
+        reopened = ThreadRegistry(registry._path)
+        snapshot = reopened.snapshot()
+        assert snapshot.aliases == {"pr17": "agent-comms-ux"}
+        assert reopened.require("pr17").name == "agent-comms-ux"
+        assert reopened.require("agent-comms-ux").created_at == original.created_at
+        assert reopened.require("agent-comms-ux").goal == original.goal
+        assert reopened.require("agent-comms-ux").active_turn is not None
+        assert reopened.require("agent-comms-ux").active_turn.id == "goal-turn"
+        assert reopened.require("child").parent == "agent-comms-ux"
+        assert snapshot.admission_generations["agent-comms-ux"] == admission
+        assert reopened.finish_claimed_turn("pr17", "goal-turn")
+
     def test_other_owner_writes_do_not_invalidate_private_epoch(self, tmp_path: Path):
         registry = ThreadRegistry(tmp_path / "registry.json")
         for name in ("a", "b"):
