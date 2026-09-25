@@ -151,8 +151,16 @@ class RuntimeServer:
                 writer.write((json.dumps({"result": result}) + "\n").encode())
                 await writer.drain()
             elif action == "input_dispositions":
-                rows = self.agent._comms.unresolved_inputs(name)
-                writer.write((json.dumps({"result": {"inputs": rows}}) + "\n").encode())
+                include_history = request.get("include_history", False)
+                if type(include_history) is not bool:
+                    raise ValueError("include_history must be a boolean.")
+                result = self.agent._comms.input_delivery(name, include_history=include_history)
+                writer.write((json.dumps({"result": result}) + "\n").encode())
+                await writer.drain()
+            elif action == "dismiss_historical_inputs":
+                result = self.agent._comms.dismiss_historical_inputs(name)
+                await self.agent.emit_input_delivery_changed(session_id)
+                writer.write((json.dumps({"result": result}) + "\n").encode())
                 await writer.drain()
             elif action == "goal_history":
                 from dataclasses import asdict

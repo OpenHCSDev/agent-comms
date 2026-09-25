@@ -707,20 +707,36 @@ class CommsAgent:
     async def _emit_input_disposition(
         self, session_id: str, row: dict[str, Any], client: Any = None
     ) -> None:
+        await self._emit_public_input_disposition(session_id, InputDispositions.public(row), client)
+
+    async def _emit_public_input_disposition(
+        self, session_id: str, disposition: dict[str, Any], client: Any = None
+    ) -> None:
         await (client or self._runtime).session_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta={"agentComms": {"inputDisposition": InputDispositions.public(row)}},
+                field_meta={"agentComms": {"inputDisposition": disposition}},
+            ),
+        )
+
+    async def emit_input_delivery_changed(self, session_id: str) -> None:
+        """Invalidate attached views after a notice-only owner action."""
+        await self._runtime.session_update(
+            session_id=session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=""),
+                field_meta={"agentComms": {"inputDeliveryChanged": True}},
             ),
         )
 
     async def replay_unknown_inputs(self, session_id: str, client: Any = None) -> None:
         owner = self._require_session(session_id)
-        aliases = self._comms.registry.aliases_for(owner)
-        for row in self._dispositions.unknown(aliases):
-            await self._emit_input_disposition(session_id, row, client=client)
+        overview = self._comms.input_delivery(owner)
+        for disposition in overview["inputs"]:
+            await self._emit_public_input_disposition(session_id, disposition, client=client)
 
     async def emit_session_identity(self, session_id: str, name: str, client: Any = None) -> None:
         """Let a subscriber identify its owner before potentially long replay."""
