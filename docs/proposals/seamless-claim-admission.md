@@ -1,6 +1,6 @@
 # Seamless channel notification, N/K wake, and resource ownership
 
-Status: **draft contract, not an implementation or authorization to launch models**. Rebased onto `OpenHCSDev/agent-comms` `main` at `b96ab961fd951f989364cda247cb01cb7c99db0c` after the packaged stack and goal fixes. This proposal remains separate from the merged sidebar route-count projection. The first implementation must be a focused follow-up commit on a freshly checked head.
+Status: **draft contract, not an implementation or authorization to launch models**. Rebased onto `OpenHCSDev/agent-comms` `main` at `c48d2dd2f2d90870cf0c754c12026c06cf3f5f77` after the packaged stack and goal fixes. This proposal remains separate from the merged sidebar route-count projection. The first implementation must be a focused follow-up commit on a freshly checked head.
 
 ## User-facing behavior
 
@@ -57,4 +57,4 @@ Only after this first slice is reviewed should it be wired into ordinary channel
 
 ## Review and coordination
 
-Keep the initial implementation in a dedicated worktree commit, not a copied `/dev/shm` patch. Run the focused matrix and the existing N/K and resource-claim suites; independently review the **combined exact bytes** for the named admission/uncertainty findings. PR #15 changes `declarations.py` route indexing: rebase against it if it merges, but do not import its sidebar projection as claim authority. No live provider is needed for this work. A passing proposal document, existing 77 N/K test passes, or green general CI must not be called an implemented admission bridge.
+Keep the initial implementation in a dedicated worktree commit, not a copied `/dev/shm` patch. Run the focused matrix and the existing N/K and resource-claim suites; independently review the **combined exact bytes** for the named admission/uncertainty findings. Merged PR #15 changed `declarations.py` route indexing; its sidebar projection is not claim authority. No live provider is needed for this work. A passing proposal document, existing 77 N/K test passes, or green general CI must not be called an implemented admission bridge.
