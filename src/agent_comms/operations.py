@@ -17,6 +17,7 @@ import re
 import select
 import shlex
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -2035,7 +2036,15 @@ class Comms:
             if self.registry.name_reserved(name):
                 raise ValueError(f"Thread name {name!r} is already reserved.")
             self._require_available_new_tags(thread.tags)
-            session_path.parent.mkdir(parents=True, exist_ok=True)
+            session_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            if os.name == "posix":
+                # Do not follow a redirected legacy directory when repairing it.
+                info = session_path.parent.lstat()
+                if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid():
+                    raise ValueError("Imported session directory is not owner-controlled.")
+                # Native Pi requires a private session directory before it will
+                # attest input IDs. Also repair directories made by older imports.
+                session_path.parent.chmod(0o700)
             _atomic_write_text(session_path, snapshot.pi_session(project))
             try:
                 self.registry.register(thread, ThreadStatus.STOPPED)
