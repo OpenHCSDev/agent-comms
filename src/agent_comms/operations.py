@@ -32,6 +32,7 @@ from uuid import uuid4
 from .channels import ChannelCatalog
 
 if TYPE_CHECKING:
+    from .goal_attempts import GoalAttemptStore
     from .relationships import ThreadRelationships
 from .declarations import (
     Activity,
@@ -2156,11 +2157,19 @@ class Comms:
         expected_status: str | None = None,
         expected_goal: Goal | None = None,
         model_report: bool = False,
+        owner_store: GoalAttemptStore | None = None,
+        expected_owner_pid: int | None = None,
     ) -> Goal | None:
         """Apply a goal transition; automated callers may compare a captured goal atomically."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             goal = thread.goal
+            if expected_owner_pid is not None and (
+                thread.pid != expected_owner_pid or not self.registry.status(thread.name).running
+            ):
+                raise ValueError("The goal owner changed; refresh its state.")
+            if owner_store is not None and action != "set":
+                raise ValueError("Owner goal authority applies only to goal creation.")
             # The automatic turn-end pause/block must not overwrite progress
             # written by a separate tool process after ACP's precheck. Check
             # the entire immutable snapshot under the same lock as the write.
@@ -2173,6 +2182,13 @@ class Comms:
             report_turn = thread.active_turn.id if thread.active_turn is not None else ""
             if model_report and thread.last_goal_report_turn == report_turn:
                 raise ValueError("This goal was already reported in this turn.")
+            new_goal = (
+                Goal(text=text.strip(), id=uuid4().hex, revision=1) if action == "set" else None
+            )
+            if owner_store is not None and new_goal is not None:
+                # The private grant exists before the visible active goal. A
+                # crash in between leaves only an unreachable ledger row.
+                owner_store.create_goal(new_goal.id)
             if action in {"clear", "set"} and goal is not None:
                 # Revoke a protected goal before removing or replacing its
                 # registry identity. If the registry write then fails, the
@@ -2195,7 +2211,7 @@ class Comms:
             if action == "set":
                 # A replacement has a fresh unpredictable ID; revisions are
                 # monotone within that goal's identity, not across goals.
-                goal = Goal(text=text.strip(), id=uuid4().hex, revision=1)
+                goal = new_goal
             elif action == "clear":
                 goal = None
             elif action in {"active", "paused", "blocked", "completed"}:
