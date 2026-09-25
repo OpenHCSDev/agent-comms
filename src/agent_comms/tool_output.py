@@ -11,6 +11,11 @@ from .declarations import _atomic_write_text
 MAX_INLINE_OUTPUT_BYTES = 32 * 1024
 
 
+def serialize_tool_output(response: dict[str, object]) -> str:
+    """Serialize conservatively for the Pi adapter's pretty JSON text transport."""
+    return json.dumps(response, indent=2, ensure_ascii=True)
+
+
 def materialize_oversized_output(
     root: Path, response: dict[str, object], *, inline_limit: int = MAX_INLINE_OUTPUT_BYTES
 ) -> Path | None:
@@ -19,7 +24,7 @@ def materialize_oversized_output(
     Pretty ASCII JSON conservatively bounds the Pi adapter's JSON.stringify text,
     which can emit literal Unicode. Files are read-only snapshots, never authority.
     """
-    text = json.dumps(response, indent=2, ensure_ascii=True)
+    text = serialize_tool_output(response)
     encoded = text.encode("utf-8")
     if len(encoded) <= inline_limit:
         return None
