@@ -1737,7 +1737,7 @@ class CommsAgent:
                             owner=thread_name,
                             admission=snapshot.admission_generations[thread_name],
                             target=origin.target,
-                            text=ScheduledTurn.incoming(origin).prompt,
+                            text=ScheduledTurn.incoming(origin, aliases=snapshot.aliases).prompt,
                         )
                     original_keys = (*original_keys, key)
         self._turn_input_keys[session_id] = set(original_keys)
@@ -1749,7 +1749,11 @@ class CommsAgent:
             and all(origin.seq > 0 and is_channel_target(origin.target) for origin in origins)
             and original_keys
             == tuple(self._dispositions.bus_key(origin, thread) for origin in origins)
-            and task == "\n\n".join(ScheduledTurn.incoming(origin).prompt for origin in origins)
+            # The durable admission owns the exact prompt, including the
+            # names resolved at admission. Re-deriving it here can drift if
+            # a recipient was renamed before or after inbox draining.
+            and task
+            == "\n\n".join(self._dispositions.get(key)["source_text"] for key in original_keys)
         )
 
         def input_keys_valid(public_id: str | None, keys: tuple[str, ...], text: str) -> bool:
