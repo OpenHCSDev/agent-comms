@@ -19,7 +19,7 @@ async function run(stream, callbacks = {}, signal) {
     {enabled:false,maxRetries:0,provider:{maxRetries:0}}, callbacks, undefined);
 }
 let active=0, peak=0, requestCount=0;
-const mapped=[], completed=[], progress=[];
+const mapped=[], completed=[], progress=[], phaseStarts=[];
 const stream=async (_model, context) => ({result: async()=>{
   const prompt=context.messages[0].content[0].text;
   const index=requestCount++;
@@ -27,6 +27,7 @@ const stream=async (_model, context) => ({result: async()=>{
   assert.ok(prompt.includes('PRESERVE_CUSTOM_INSTRUCTION'));
   if(prompt.includes('Combine these chronological segment summaries')){
     assert.equal(active,0,'synthesis waits for all map responses');
+    assert.equal(phaseStarts.at(-1)?.summaryPhase,'synthesis','phase starts before provider work');
     for(let i=0;i<mapped.length;i++) assert.ok(prompt.includes(`MAP_${i}`));
     assert.deepEqual([...prompt.matchAll(/MAP_(\d+)/g)].map(m=>Number(m[1])),mapped.map((_,i)=>i),'synthesis preserves chronological source order');
     return {stopReason:'stop',content:[{type:'text',text:'FINAL_SUMMARY'}],usage};
@@ -36,7 +37,7 @@ const stream=async (_model, context) => ({result: async()=>{
   active--;completed.push(index);
   return {stopReason:'stop',content:[{type:'text',text:`MAP_${index}`}],usage};
 }});
-const result=await run(stream,{onSummaryResponse:(_usage,item)=>progress.push(item)});
+const result=await run(stream,{onSummaryStart:item=>phaseStarts.push(item),onSummaryResponse:(_usage,item)=>progress.push(item)});
 assert.equal(peak,4,'large history must use four bounded concurrent maps');
 assert.notDeepEqual(completed,[...completed].sort((a,b)=>a-b),'fixture completes out of source order');
 assert.equal(result.text,'FINAL_SUMMARY');
@@ -61,9 +62,9 @@ assert.equal(failedCalls,4,'failure must not schedule more maps or synthesis');
 assert.equal(aborted,3,'all remaining in-flight summaries must be aborted');
 console.log(`parallel compaction PASS maps=${mapped.length} requests=${requestCount} concurrency=${peak}`);
 const { CompactionPolicy } = await import(pathToFileURL(resolve(path, '../agent-comms-policy.js')).href);
-assert.equal(new CompactionPolicy().workers,4);
-assert.equal(new CompactionPolicy({strategy:'serial',concurrency:4}).workers,1);
-assert.equal(new CompactionPolicy({strategy:'parallel',concurrency:2}).workers,2);
+assert.equal(new CompactionPolicy().plan([]).workers,4);
+assert.equal(new CompactionPolicy({strategy:'serial',concurrency:4}).plan([]).workers,1);
+assert.equal(new CompactionPolicy({strategy:'parallel',concurrency:2}).plan([]).workers,2);
 assert.throws(()=>new CompactionPolicy({strategy:'provider-native'}),/Invalid/);
 assert.throws(()=>new CompactionPolicy({concurrency:0}),/Invalid/);
 assert.throws(()=>new CompactionPolicy({concurrency:1.5}),/Invalid/);
@@ -112,3 +113,35 @@ for(let round=1;round<=3;round++){
   prior=saved.text;
 }
 console.log('three-round source/summary plumbing PASS');
+// Reproduce a saved compaction whose entire retained context is one split
+// turn: history messages are empty, but its prior summary is still required.
+const { SessionManager } = await import(pathToFileURL(resolve(path,'../../session-manager.js')).href);
+const { prepareCompaction, compact } = await import(pathToFileURL(path).href);
+const { mkdtempSync, rmSync } = await import('node:fs');
+const repeatedRoot=mkdtempSync('/var/tmp/ac-parallel-repeat-');
+try {
+  const manager=SessionManager.create(repeatedRoot,resolve(repeatedRoot,'sessions'));
+  manager.appendMessage({role:'user',content:'earlier request',timestamp:1});
+  manager.appendMessage({role:'assistant',content:[{type:'text',text:'earlier work'}],timestamp:2,provider:'openrouter',model:'fake',api:'openai-completions',stopReason:'stop',usage});
+  const kept=manager.appendMessage({role:'user',content:`CURRENT_TURN_START ${'long prefix '.repeat(45000)}`,timestamp:3});
+  manager.appendMessage({role:'assistant',content:[{type:'text',text:'prefix progress'}],timestamp:4,provider:'openrouter',model:'fake',api:'openai-completions',stopReason:'stop',usage});
+  const previous='PRIOR_GOAL_984 EXACT_PATH_src/domain.py UNRESOLVED_FAILURE_431';
+  manager.appendCompaction(previous,kept,200000);
+  manager.appendMessage({role:'assistant',content:[{type:'text',text:`retained ${'r'.repeat(120000)}`}],timestamp:5,provider:'openrouter',model:'fake',api:'openai-completions',stopReason:'stop',usage});
+  const preparation=prepareCompaction(manager.getBranch(),{reserveTokens:16384,keepRecentTokens:20000});
+  assert.equal(preparation.isSplitTurn,true);
+  assert.equal(preparation.messagesToSummarize.length,0);
+  assert.equal(preparation.previousSummary,previous);
+  const seen=[];
+  const repeated=await compact(preparation,model,'local-only',{},'CUSTOM_KEEP_REQUEST_727',undefined,undefined,
+    async(_model,context)=>({result:async()=>{
+      const prompt=context.messages[0].content[0].text;seen.push(prompt);
+      assert.ok(prompt.includes('CUSTOM_KEEP_REQUEST_727'),'every split-turn map/synthesis must receive the user focus');
+      return {stopReason:'stop',content:[{type:'text',text:'current turn summary'}],usage};
+    }}),{},{enabled:false,maxRetries:0},{},undefined);
+  assert.ok(seen.length>1);
+  assert.ok(repeated.summary.includes(previous),'prior summary must survive byte-for-byte when there is no new history to summarize');
+  manager.appendCompaction(repeated.summary,repeated.firstKeptEntryId,repeated.tokensBefore,repeated.details,false,repeated.usage);
+  assert.ok(JSON.stringify(manager.buildSessionContext()).includes('PRIOR_GOAL_984'));
+  console.log('saved repeated split-turn prior-summary/custom-instruction PASS');
+} finally {rmSync(repeatedRoot,{recursive:true,force:true});}

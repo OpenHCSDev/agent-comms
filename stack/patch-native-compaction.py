@@ -71,7 +71,7 @@ TURN_PREFIX_BOUNDED = """    const policy = CompactionPolicy.fromEnvironment(env
     const byteLimit = policy.inputBytes(model, reserveTokens);
     if (Buffer.byteLength(conversationText, 'utf8') > byteLimit * policy.sourceBudgetRatio) {
         return generateSummaryWithUsage(messages, model, reserveTokens, apiKey, headers,
-            signal, TURN_PREFIX_SUMMARIZATION_PROMPT, undefined, thinkingLevel,
+            signal, [TURN_PREFIX_SUMMARIZATION_PROMPT, customInstructions].filter(Boolean).join('\\n\\n'), undefined, thinkingLevel,
             streamFn, env, retry, callbacks, sessionId);
     }
     callbacks = sourceCallbacks(callbacks, Buffer.byteLength(conversationText, 'utf8'), Buffer.byteLength(conversationText, 'utf8'));
@@ -103,9 +103,13 @@ BOUNDED = """    // Keep provider prompts byte-bounded without pretending the ch
             return parts;
         };
         const summarizeParts = async (parts, phase) => {
+            if (phase === "synthesis") callbacks?.onSummaryStart?.(
+                sourceCallbacks(callbacks, processedBytes, sourceBytes, "synthesis").sourceProgress);
+            const plan = policy.plan(parts);
+            parts = plan.segments;
             const results = new Array(parts.length);
             let next = 0;
-            const workers = Array.from({ length: Math.min(policy.workers, parts.length) }, async () => {
+            const workers = Array.from({ length: Math.min(plan.workers, parts.length) }, async () => {
                 while (next < parts.length && !failure && !controller.signal.aborted) {
                     const index = next++;
                     const part = parts[index];
@@ -178,6 +182,10 @@ SOURCE_TOTAL = """    const historyBytes = messagesToSummarize.length || !isSpli
 """
 PREFIX_CALL = "        const turnPrefixResult = await generateTurnPrefixSummary("
 PREFIX_OFFSET = '        callbacks = { ...callbacks, sourceOffset: historyBytes, sourcePhase: "current-turn" };\n'
+PREFIX_SIGNATURE = "async function generateTurnPrefixSummary(messages, model, reserveTokens, apiKey, headers, env, signal, thinkingLevel, streamFn, retry, callbacks, sessionId) {"
+PREFIX_INVOCATION = "generateTurnPrefixSummary(turnPrefixMessages, model, settings.reserveTokens, apiKey, headers, env, signal, thinkingLevel, streamFn, retry, callbacks, sessionId)"
+EMPTY_HISTORY = '        let historyText = "No prior history.";'
+
 
 
 def main(path: Path) -> None:
@@ -194,6 +202,9 @@ def main(path: Path) -> None:
         or source.count(CUT_SEARCH) != 1
         or source.count(COMPACT_PREPARATION) != 1
         or source.count(PREFIX_CALL) != 1
+        or source.count(PREFIX_SIGNATURE) != 1
+        or source.count(PREFIX_INVOCATION) != 1
+        or source.count(EMPTY_HISTORY) != 1
     ):
         raise SystemExit("Native compaction anchors changed")
     source = source.replace(
@@ -217,10 +228,18 @@ def main(path: Path) -> None:
     source = source.replace(
         TURN_PREFIX_PROMPT,
         TURN_PREFIX_BOUNDED
-        + TURN_PREFIX_PROMPT
+        + TURN_PREFIX_PROMPT.replace(
+            "${TURN_PREFIX_SUMMARIZATION_PROMPT}",
+            "${[TURN_PREFIX_SUMMARIZATION_PROMPT, customInstructions].filter(Boolean).join('\\n\\n')}",
+        )
         + "    if (Buffer.byteLength(promptText, 'utf8') > byteLimit) "
         "throw new Error('Turn prefix prompt exceeds its context budget');\n",
     )
+    source = source.replace(PREFIX_SIGNATURE, PREFIX_SIGNATURE.replace("sessionId)", "sessionId, customInstructions)"), 1)
+    source = source.replace(PREFIX_INVOCATION, PREFIX_INVOCATION[:-1] + ", customInstructions)", 1)
+    # A repeated split can have no new history messages. Its old summary is
+    # still authoritative context and must survive rather than become empty.
+    source = source.replace(EMPTY_HISTORY, '        let historyText = previousSummary || "No prior history.";', 1)
     source = source.replace(CUT_SEARCH, CUT_FALLBACK + CUT_SEARCH, 1)
     source = source.replace(COMPACT_PREPARATION, COMPACT_PREPARATION + SOURCE_TOTAL, 1)
     source = source.replace(PREFIX_CALL, PREFIX_OFFSET + PREFIX_CALL, 1)

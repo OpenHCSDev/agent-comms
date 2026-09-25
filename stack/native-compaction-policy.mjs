@@ -3,8 +3,8 @@
  * Provider/model selection, context window, and no-replay are not policy knobs.
  */
 const strategies = Object.freeze({
-    serial: Object.freeze({ workers: () => 1 }),
-    parallel: Object.freeze({ workers: policy => policy.concurrency }),
+    serial: Object.freeze({ plan: segments => ({ segments, workers: 1 }) }),
+    parallel: Object.freeze({ plan: (segments, policy) => ({ segments, workers: policy.concurrency }) }),
 });
 export class CompactionPolicy {
     static declarations = Object.freeze({
@@ -36,7 +36,9 @@ export class CompactionPolicy {
         const value = env?.AGENT_COMMS_COMPACTION_POLICY ?? process.env.AGENT_COMMS_COMPACTION_POLICY;
         return new CompactionPolicy(value === undefined ? {} : JSON.parse(value));
     }
-    get workers() { return strategies[this.strategy].workers(this); }
+    plan(segments) {
+        return Object.freeze(strategies[this.strategy].plan(segments, this));
+    }
     inputBytes(model, reserveTokens) {
         if (!(model.contextWindow > 0)) throw new Error('Compaction model context is unavailable');
         const bytes = Math.floor((model.contextWindow - reserveTokens) * this.inputBudgetRatio);
@@ -44,7 +46,7 @@ export class CompactionPolicy {
         return bytes;
     }
     summaryTokens(model, byteLimit) {
-        return Math.min(this.summaryMaxTokens, Math.max(256, Math.floor(byteLimit * this.summaryOutputRatio)),
+        return Math.min(this.summaryMaxTokens, Math.max(CompactionPolicy.declarations.summaryMaxTokens.min, Math.floor(byteLimit * this.summaryOutputRatio)),
             model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);
     }
 }

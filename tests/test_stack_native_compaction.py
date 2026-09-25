@@ -357,7 +357,8 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                 .get("phase")
                 == "progress"
             ]
-            assert progress == list(range(len(calls)))
+            assert progress == sorted(progress)
+            assert set(progress) == set(range(len(calls)))
             source_progress = [
                 update.field_meta["agentComms"]["compaction"]
                 for update in updates

@@ -63,7 +63,10 @@ strategies, or invalid values fail before a summary request. `serial` runs the
 same bounded algorithm with one worker. `parallel` runs independent source
 segments concurrently and synthesizes their results in chronological order.
 Large intermediate summaries are reduced through additional bounded levels;
-no segment is silently truncated. A provider-native strategy is not implemented.
+no segment is silently truncated. The declaration-owned strategy `plan(segments, policy)` supplies the ordered
+segments and worker limit to one executor. This is a scheduling seam, not an
+adaptive trigger or general plugin engine. Provider-native summarization is
+not implemented.
 
 This adapter has no authoritative local tokenizer. It conservatively bounds
 serialized UTF-8 input against the selected model's token budget, including
