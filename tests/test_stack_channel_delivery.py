@@ -185,6 +185,16 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                     assert row["status"] == "started"
                     assert row["native_id"] == matched[0]["inputId"]
                     assert origin.body in json.dumps(matched[0])
+                replayed = wire(comms.root).thread_transcript_page("worker").events
+                incoming = [
+                    event
+                    for event in replayed
+                    if event.kind == "user" and event.routing and event.routing.requests
+                ]
+                assert [event.routing.requests[0].message_id for event in incoming] == [
+                    origin.message_id for origin in messages
+                ]
+                assert [event.text for event in incoming] == [origin.body for origin in messages]
             if case in {"deliver", "rename", "batch_rename"}:
                 assert comms.channel_history("#team")[-1].body == "RECEIVED"
             if not success:

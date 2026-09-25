@@ -149,6 +149,7 @@ class CommsAgent:
         # including non-displayed steers, needs its own identified user start.
         self._forwarded_inputs: dict[str, set[str]] = {}
         self._steering_input_keys: dict[str, dict[str, str]] = {}
+        self._steering_origins: dict[str, dict[str, Message]] = {}
         self._steering_goal_ids: dict[str, dict[str, str | None]] = {}
         self._turn_input_keys: dict[str, set[str]] = {}
         self._dispositions = InputDispositions(comms.root)
@@ -1353,6 +1354,7 @@ class CommsAgent:
                 and incoming.reply_target is None
             ):
                 input_id = f"bus-{message.seq}"
+                self._steering_origins.setdefault(session_id, {})[input_id] = message
                 self._steering_input_keys.setdefault(session_id, {})[input_id] = key
                 self._turn_input_keys.setdefault(session_id, set()).add(key)
                 self._forwarded_inputs.setdefault(session_id, set()).add(input_id)
@@ -1786,7 +1788,9 @@ class CommsAgent:
                     original_keys = (*original_keys, key)
         self._turn_input_keys[session_id] = set(original_keys)
         self._steering_input_keys[session_id] = {}
+        self._steering_origins[session_id] = {}
         self._steering_goal_ids[session_id] = {}
+
         channel_batch = (
             len(origins) > 1
             and len({origin.seq for origin in origins}) == len(origins)
@@ -1949,10 +1953,18 @@ class CommsAgent:
                 if allowed:
                     if public_id is None:
                         display = original_display
+                        input_origins = origins
                     else:
                         row = self._dispositions.get(keys[0]) if keys else None
                         display = row["source_text"] if row is not None else sent_text
-                    self._comms.record_input_display(native_id, display)
+                        origin = self._steering_origins.get(session_id, {}).get(public_id)
+                        input_origins = (origin,) if origin is not None else ()
+                    self._comms.record_input_display(
+                        native_id,
+                        display,
+                        sent_text=sent_text,
+                        routing=TurnRouting(input_origins, None) if input_origins else None,
+                    )
                 yield True if allowed else None if defer_for_goal else False
 
         def native_start(public_id: str | None, native_id: str, sent_text: str) -> bool:
@@ -2534,6 +2546,7 @@ class CommsAgent:
             # disposition across owner crashes remains a separate integration.
             self._forwarded_inputs.pop(session_id, None)
             self._steering_input_keys.pop(session_id, None)
+            self._steering_origins.pop(session_id, None)
             self._steering_goal_ids.pop(session_id, None)
             self._turn_input_keys.pop(session_id, None)
             remaining = self._queued_inputs.pop(session_id, {})

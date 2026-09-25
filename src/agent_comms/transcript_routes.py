@@ -1,5 +1,6 @@
 """Routing annotations keyed by durable Pi entry IDs, never reply text."""
 
+import hashlib
 import json
 import sqlite3
 from contextlib import closing
@@ -7,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .declarations import TurnRouting, _store_lock, file_revision
+from .declarations import RelationViolationError, TurnRouting, _store_lock, file_revision
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,6 +16,14 @@ class InputDisplay:
     """Owner-authored presentation for one native input; None means internal."""
 
     text: str | None
+    routing: TurnRouting | None = None
+    sent_text_digest: str | None = None
+
+    def matches(self, text: str) -> bool:
+        return (
+            self.sent_text_digest is None
+            or self.sent_text_digest == hashlib.sha256(text.encode("utf-8")).hexdigest()
+        )
 
 
 class _SessionRoutes:
@@ -45,9 +54,17 @@ class _SessionRoutes:
             return None
         if native_id not in self._input_cache:
             row = self._connection.execute(
-                "SELECT display_text FROM input_display WHERE native_id = ?", (native_id,)
+                "SELECT display_text, routing, sent_text_digest FROM input_display "
+                "LEFT JOIN input_routing USING(native_id) WHERE native_id = ?",
+                (native_id,),
             ).fetchone()
-            self._input_cache[native_id] = InputDisplay(row[0]) if row else None
+            self._input_cache[native_id] = (
+                InputDisplay(
+                    row[0], TurnRouting.from_wire(json.loads(row[1])) if row[1] else None, row[2]
+                )
+                if row
+                else None
+            )
         return self._input_cache[native_id]
 
     def close(self) -> None:
@@ -94,6 +111,13 @@ class TranscriptRoutes:
                 "CREATE TABLE IF NOT EXISTS input_display "
                 "(native_id TEXT PRIMARY KEY, display_text TEXT) WITHOUT ROWID"
             )
+            # Keep the two-column display table compatible with running older
+            # writers that use INSERT ... VALUES without a column list.
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS input_routing "
+                "(native_id TEXT PRIMARY KEY, sent_text_digest TEXT NOT NULL, routing TEXT) "
+                "WITHOUT ROWID"
+            )
             # An older process can keep writing the JSON map during a rolling
             # upgrade. Import only when its authoritative file revision moves.
             revision = file_revision(self.path)
@@ -130,6 +154,27 @@ class TranscriptRoutes:
         path = self.database_path if self._ensure_database() else None
         return _SessionRoutes(path, session_file)
 
+    def input_bindings(self) -> dict[str, tuple[str, str | None]]:
+        """Read existing bindings without creating a database or upgrading its schema."""
+        if not self.database_path.exists():
+            return {}
+        with closing(
+            sqlite3.connect(self.database_path.resolve().as_uri() + "?mode=ro", uri=True)
+        ) as connection:
+            if (
+                connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'input_routing'"
+                ).fetchone()
+                is None
+            ):
+                return {}
+            return {
+                native_id: (digest, routing)
+                for native_id, digest, routing in connection.execute(
+                    "SELECT native_id, sent_text_digest, routing FROM input_routing"
+                )
+            }
+
     def record(self, session_file: str, entry_ids: tuple[str, ...], routing: TurnRouting) -> None:
         if not entry_ids:
             return
@@ -146,8 +191,21 @@ class TranscriptRoutes:
                     ((session_file, entry_id, encoded) for entry_id in entry_ids),
                 )
 
-    def record_input_display(self, native_id: str, display_text: str | None) -> None:
+    def record_input_display(
+        self,
+        native_id: str,
+        display_text: str | None,
+        *,
+        sent_text: str | None = None,
+        routing: TurnRouting | None = None,
+    ) -> None:
         """Persist before prompt write, including before Pi creates its session file."""
+        if routing is not None and (sent_text is None or routing.reply is not None):
+            raise ValueError("Input routing requires exact sent text and no outgoing reply claim.")
+        digest = (
+            hashlib.sha256(sent_text.encode("utf-8")).hexdigest() if sent_text is not None else None
+        )
+        encoded = json.dumps(routing.to_wire(), sort_keys=True) if routing is not None else None
         self._ensure_database(create=True)
         with (
             _store_lock(self.path),
@@ -155,7 +213,18 @@ class TranscriptRoutes:
         ):
             connection.execute("PRAGMA synchronous=FULL")
             with connection:
+                if digest is not None:
+                    previous = connection.execute(
+                        "SELECT sent_text_digest, routing FROM input_routing WHERE native_id = ?",
+                        (native_id,),
+                    ).fetchone()
+                    if previous is not None and previous != (digest, encoded):
+                        raise RelationViolationError("Native input routing cannot be rebound.")
+                    connection.execute(
+                        "INSERT OR IGNORE INTO input_routing VALUES (?, ?, ?)",
+                        (native_id, digest, encoded),
+                    )
                 connection.execute(
-                    "INSERT OR IGNORE INTO input_display VALUES (?, ?)",
+                    "INSERT OR IGNORE INTO input_display (native_id, display_text) VALUES (?, ?)",
                     (native_id, display_text),
                 )

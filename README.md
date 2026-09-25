@@ -85,6 +85,10 @@ ruff check src tests
 mypy src
 ```
 
+Pytest uses separate `pytest-xdist` worker processes (automatic CPU detection,
+capped at eight) with work stealing and combined coverage. Use `pytest -n 0`
+for serial debugging or `pytest -n 4` to choose a worker count.
+
 ## Releasing
 
 Distribution artifacts are built and validated automatically when a GitHub
