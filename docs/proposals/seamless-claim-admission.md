@@ -1,6 +1,6 @@
 # Seamless channel notification, N/K wake, and resource ownership
 
-Status: **draft contract, not an implementation or authorization to launch models**. Rebased onto `OpenHCSDev/agent-comms` `main` at `0cf28939ca820f34639e1b62f8a2ea4b62666bab` after the packaged stack and goal fixes. This proposal remains separate from the merged sidebar route-count projection. The first implementation must be a focused follow-up commit on a freshly checked head.
+Status: **draft integration, not file-write authority**. The branch now has a versioned wake-admission field on claim rows and a read-only verifier that checks the committed N/K source, sealed selected receipt, current execution, owner admission generation, and exact turn. It does not publish a bound file claim or gate any write. The reviewed N/K session-metadata race fix is being landed separately in PR #38, then this branch will rebase onto it. This proposal remains separate from the merged sidebar route-count projection.
 
 ## User-facing behavior
 
@@ -38,7 +38,7 @@ Subsequent focused implementation commits on this **draft PR** should add a type
 * Add an internal `pre_write_admission` adapter for a disposable fake-Pi edit tool. Return a typed denial before writing if ownership cannot be proved. **Do not attach a cosmetic tool-only hook and call arbitrary shell writes protected.**
 * Add a read-only projection used by CLI/Pi/ACP/Toad to show the same owner, generation, selected claim and passive observer state; UI reading the projection must never grant work.
 
-Only after this first slice is reviewed should it be wired into ordinary channel sends and every supported write path. **The initial draft commit is a design and runnable baseline only; it implements none of these behaviors.** `tests/test_claim_admission_baseline.py` shows an unselected N/K observer can still make an independent explicit file claim on the same marked private root, without a wake-claim binding. That is a current-gap characterization, not permission to edit another worker's file or a test of the future write gate.
+Only after publication and write-gate slices are implemented and reviewed should this be wired into ordinary channel sends and every supported write path. The current branch has **syntax and read-only verification only**. `tests/test_claim_admission_baseline.py` shows an unselected N/K observer can still make an independent explicit file claim on the same marked private root, without a wake-claim binding. That is a current-gap characterization, not permission to edit another worker's file or a test of the future write gate.
 
 ## No-provider acceptance matrix
 
