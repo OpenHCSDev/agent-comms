@@ -9,15 +9,23 @@ const provenance = { goalId: baseline.goalId, goalRevision: baseline.goalRevisio
     correctionRevision: baseline.correctionRevision };
 const trigger = new TriggerRule();
 const observed = { source: baseline, boundary: 'completed-subtask',
-    boundaryEvidenceRef: 'transcript:314', newHistoryBytes: 22000, hardBackstopDue: false };
+    boundaryEvidenceRef: { store: 'native-transcript', entryId: 'entry-314', source: baseline },
+    newHistoryBytes: 22000, hardBackstopDue: false };
+const observedFor = source => ({ ...observed, source,
+    boundaryEvidenceRef: { ...observed.boundaryEvidenceRef, source } });
 const savedInput = structuredClone(observed);
 const candidate = trigger.evaluate(observed, baseline);
 assert.equal(candidate.kind, 'candidate');
 assert.equal(candidate.authority, 'none');
-assert.equal(candidate.evidenceRef, 'transcript:314');
-assert.notEqual(candidate.source, baseline);
+assert.deepEqual(candidate.evidenceRef, observed.boundaryEvidenceRef);
+assert.notEqual(candidate.evidenceRef, observed.boundaryEvidenceRef);
 assert.ok(Object.isFrozen(candidate.source) && Object.isFrozen(candidate));
+assert.ok(Object.isFrozen(candidate.evidenceRef) && Object.isFrozen(candidate.evidenceRef.source));
 assert.equal(trigger.stillCurrent(candidate, baseline), true);
+assert.equal(trigger.stillCurrent({ ...candidate, evidenceRef: null }, baseline), false);
+assert.equal(trigger.stillCurrent({ ...candidate, evidenceRef: {
+    ...candidate.evidenceRef, source: { ...baseline, turnId: 'old-turn' },
+} }, baseline), false);
 for (const changed of [
     { cursor: 'seq-315' }, { sessionRevision: 's-22' }, { ownerEpoch: 'owner-4' },
     { turnId: 'turn-6' }, { goalId: 'goal-10' }, { goalRevision: 'revision-10' },
@@ -31,9 +39,28 @@ assert.equal(trigger.evaluate({ ...observed, boundary: 'none', boundaryEvidenceR
 assert.equal(trigger.evaluate({ ...observed, newHistoryBytes: 16383 }, baseline).reason, 'cadence');
 assert.equal(trigger.evaluate({ ...observed, hardBackstopDue: true }, baseline).kind, 'independent-hard-path');
 assert.equal(trigger.evaluate({ ...observed, hardBackstopDue: true }, { ...baseline, ownerEpoch: 'stale' }).kind, 'independent-hard-path');
+assert.equal(trigger.evaluate({ ...observed, boundaryEvidenceRef: null }, baseline).reason, 'missing-boundary-evidence');
+assert.equal(trigger.evaluate({ ...observed, boundaryEvidenceRef: {
+    ...observed.boundaryEvidenceRef, source: { ...baseline, correctionRevision: 'correction-0' },
+} }, baseline).reason, 'stale-boundary-evidence');
+assert.throws(() => trigger.evaluate({ ...observed, boundaryEvidenceRef: {
+    ...observed.boundaryEvidenceRef, grant: 'secret',
+} }, baseline), /Invalid boundary evidence/);
+assert.throws(() => trigger.evaluate({ ...observed, boundaryEvidenceRef: {
+    ...observed.boundaryEvidenceRef, store: 'registry',
+} }, baseline), /Invalid boundary evidence/);
+assert.throws(() => trigger.evaluate({ ...observed, boundaryEvidenceRef: '\ud800' }, baseline), /Invalid boundary evidence/);
+assert.equal(trigger.evaluate({ ...observed, boundaryEvidenceRef: '\ud800', hardBackstopDue: true },
+    { ...baseline, ownerEpoch: 'stale' }).kind, 'independent-hard-path',
+'independent hard owner must not depend on validity of adaptive evidence');
+assert.equal(trigger.evaluate({ ...observed, hiddenGrant: 'secret', hardBackstopDue: true },
+    baseline).kind, 'independent-hard-path');
 assert.throws(() => trigger.evaluate({ ...observed, hiddenGrant: 'secret' }, baseline), /Invalid trigger snapshot/);
 assert.throws(() => trigger.evaluate(observed, { ...baseline, goalId: null }), /Invalid goal source fence/);
-assert.throws(() => trigger.evaluate({ ...observed, boundaryEvidenceRef: '\ud800' }, baseline), /Invalid boundary evidence/);
+const mutableObservation = structuredClone(observed);
+const preservedCandidate = trigger.evaluate(mutableObservation, baseline);
+mutableObservation.boundaryEvidenceRef.source.correctionRevision = 'correction-0';
+assert.equal(preservedCandidate.evidenceRef.source.correctionRevision, baseline.correctionRevision);
 assert.throws(() => new TriggerRule({ minNewHistoryBytes: 1 }), /Invalid trigger cadence/);
 assert.deepEqual(observed, savedInput, 'evaluation must not mutate owner state');
 
@@ -83,7 +110,7 @@ for (let round = 1; round <= 3; round++) {
 // A repeated split turn can change session revision/cursor but not goal or
 // correction. No new history rows: stamped prior summary and focus survive.
 const splitSource = { ...baseline, cursor: 'seq-320', sessionRevision: 's-22', turnId: 'turn-6' };
-const splitCandidate = trigger.evaluate({ ...observed, source: splitSource }, splitSource);
+const splitCandidate = trigger.evaluate(observedFor(splitSource), splitSource);
 const emptyHistory = retention.select({ source: splitSource, facts: [], tombstones: [], rows: [],
     previousSummary: { text: summaryText, ...provenance }, customFocus: focus }, splitCandidate, budget);
 assert.equal(emptyHistory.kind, 'selection');
@@ -92,6 +119,10 @@ assert.equal(emptyHistory.customFocus, focus.text);
 assert.deepEqual(emptyHistory.recent, []);
 const request = { source: baseline, facts, tombstones: [], rows,
     previousSummary: { text: summaryText, ...provenance }, customFocus: focus };
+assert.equal(retention.select(request, { ...candidate, evidenceRef: null }, budget).reason, 'missing-boundary-evidence');
+assert.equal(retention.select(request, { ...candidate, evidenceRef: {
+    ...candidate.evidenceRef, source: { ...baseline, cursor: 'old-cursor' },
+} }, budget).reason, 'stale-boundary-evidence');
 assert.equal(retention.select({ ...request, facts: [{ ...facts[0], sourceRevision: 's-20' }] }, candidate, budget).reason, 'stale-fact');
 assert.equal(retention.select(request, { ...candidate, source: { ...baseline, goalId: 'goal-10', goalRevision: 'revision-10' } }, budget).reason, 'stale-source');
 assert.throws(() => retention.select({ ...request, facts: [{ ...facts[0], grant: 'private' }] }, candidate, budget), /Invalid retained fact/);
@@ -105,7 +136,7 @@ assert.throws(() => retention.select({ ...request, facts: [], rows: Array(257).f
 // Repro from independent review: same session revision, but a new canonical
 // goal. Neither the old registry reference nor old narrative may be selected.
 const replacedGoal = { ...baseline, goalId: 'goal-10', goalRevision: 'revision-10' };
-const replacedCandidate = trigger.evaluate({ ...observed, source: replacedGoal }, replacedGoal);
+const replacedCandidate = trigger.evaluate(observedFor(replacedGoal), replacedGoal);
 const newGoalFact = { ...facts[0], goalId: 'goal-10', goalRevision: 'revision-10',
     evidenceRef: { store: 'registry', goalId: 'goal-10', revision: 'revision-10' } };
 assert.equal(retention.select({ ...request, source: replacedGoal }, replacedCandidate, budget).reason, 'stale-fact');
@@ -124,7 +155,7 @@ assert.equal(retention.select({ ...request, source: replacedGoal, facts: [newGoa
 // A later correction under the SAME goal invalidates the old summary/focus
 // without looking for words such as "old" or "goal" inside the narrative.
 const corrected = { ...baseline, correctionRevision: 'correction-2' };
-const correctionCandidate = trigger.evaluate({ ...observed, source: corrected }, corrected);
+const correctionCandidate = trigger.evaluate(observedFor(corrected), corrected);
 const revisedFacts = facts.map(fact => ({ ...fact, correctionRevision: 'correction-2' }));
 assert.equal(retention.select({ ...request, source: corrected }, correctionCandidate, budget).reason, 'stale-fact');
 assert.equal(retention.select({ ...request, source: corrected, facts: revisedFacts, rows: [] }, correctionCandidate, budget).reason, 'stale-previousSummary');
@@ -135,7 +166,7 @@ assert.equal(retention.select({ ...request, source: corrected, facts: revisedFac
 // Deleting a fact advances the owner correction/deletion revision: an old
 // summary cannot re-introduce that fact. A current tombstone then filters it.
 const deleted = { ...baseline, correctionRevision: 'correction-3' };
-const deleteCandidate = trigger.evaluate({ ...observed, source: deleted }, deleted);
+const deleteCandidate = trigger.evaluate(observedFor(deleted), deleted);
 const projected = facts.map(fact => ({ ...fact, correctionRevision: 'correction-3' }));
 assert.equal(retention.select({ ...request, source: deleted, facts: projected, rows: [] }, deleteCandidate, budget).reason, 'stale-previousSummary');
 const deletion = retention.select({ ...request, source: deleted, facts: projected,
@@ -144,7 +175,7 @@ assert.equal(deletion.kind, 'selection');
 assert.ok(!deletion.facts.some(fact => fact.id === 'old-decision'));
 assert.equal(deletion.previousSummary, '');
 const withoutGoal = { ...baseline, goalId: null, goalRevision: null };
-const withoutGoalCandidate = trigger.evaluate({ ...observed, source: withoutGoal }, withoutGoal);
+const withoutGoalCandidate = trigger.evaluate(observedFor(withoutGoal), withoutGoal);
 assert.equal(retention.select({ ...request, source: withoutGoal,
     facts: [{ ...facts[0], goalId: null, goalRevision: null }], rows: [], previousSummary: null,
     customFocus: null }, withoutGoalCandidate, budget).reason, 'goal-unavailable');
