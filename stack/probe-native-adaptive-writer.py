@@ -261,6 +261,27 @@ def run_case(case: str, package: Path, *, prototype: bool) -> None:
             result = json.loads(stdout.strip())
             assert result["phase"] == "committed"
             saved = saved_entries(result["sessionFile"])
+            if case == "crash-lock":
+                # Blocker-4 policy: the stale lock is permanent for writers;
+                # only an explicit operator action on the lock file restores
+                # service, and the recovered append must succeed and commit.
+                recovered = subprocess.run(
+                    ["node", str(SCRIPT), "operator-recover", captured["sessionFile"]],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                    timeout=20,
+                )
+                outcome = json.loads(recovered.stdout)
+                assert outcome["phase"] == "recovered" and outcome["appendedId"]
+                recovered_entries = saved_entries(captured["sessionFile"])
+                assert recovered_entries[-1]["id"] == outcome["appendedId"]
+                assert not Path(captured["sessionFile"] + ".pr48-writer.lock").exists()
+                invalidation = {
+                    **invalidation,
+                    "operatorRecovery": outcome["appendedId"],
+                }
             print(
                 json.dumps(
                     {
