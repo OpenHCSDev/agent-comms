@@ -102,7 +102,7 @@ def test_ambiguous_native_id_or_mismatched_receipt_is_not_repaired(tmp_path):
     )
     dispositions.bind(key, admission=1, turn_id="turn", native_id="a" * 32, text=sent)
     result = comms.repair_input_routing(dry_run=False)
-    assert result["eligible"] == result["repaired"] == 0 and result["conflicts"] == 2
+    assert result["eligible"] == result["repaired"] == 0 and result["conflicts"] == 1
     assert not comms.transcript_routes.database_path.exists()
 
 
@@ -145,3 +145,44 @@ def test_cli_previews_by_default(tmp_path, capsys):
     assert not comms.transcript_routes.database_path.exists()
     assert main([*args, "--apply"]) == 0
     assert json.loads(capsys.readouterr().out)["repaired"] == 1
+
+
+def test_channel_batch_recovers_one_binding_for_all_admitted_sequences(tmp_path):
+    comms = wire(tmp_path / "wire")
+    owner = Thread("worker", frozenset({"team"}), str(tmp_path))
+    comms.register(owner)
+    comms.register(Thread("peer", frozenset({"team"}), str(tmp_path)))
+    messages = tuple(comms.send_message("peer", "#team", body) for body in ("First", "Second"))
+    sources = [ScheduledTurn.incoming(message).prompt for message in messages]
+    sent = "Coordination context: owner instructions\n\n" + "\n\n".join(sources)
+    dispositions = InputDispositions(comms.root)
+    for message, source in zip(messages, sources, strict=True):
+        key = dispositions.bus_key(message, owner)
+        dispositions.record(
+            key, seq=message.seq, owner=owner.name, admission=1, target=message.target, text=source
+        )
+        dispositions.bind(key, admission=1, turn_id="batch", native_id="a" * 32, text=sent)
+    assert comms.repair_input_routing(dry_run=False)["repaired"] == 1
+    assert comms.repair_input_routing()["already_bound"] == 1
+    with comms.transcript_routes.for_session("not-created-yet") as routes:
+        assert routes.input_display("a" * 32).routing.requests == messages
+
+
+def test_bound_wrong_sent_text_does_not_become_an_incoming_route(tmp_path):
+    comms, _, dispositions, _, _ = fixture(tmp_path)
+    # A different bus receipt bound to unrelated bytes must not get attribution
+    # just because its source prompt and sequence otherwise match the envelope.
+    incoming = comms.send_message("peer", "worker", "Another request")
+    key = f"bus:{incoming.seq}"
+    dispositions.record(
+        key,
+        seq=incoming.seq,
+        owner="worker",
+        admission=1,
+        target="worker",
+        text=ScheduledTurn.incoming(incoming).prompt,
+    )
+    dispositions.bind(key, admission=1, turn_id="turn", native_id="b" * 32, text="unrelated")
+    result = comms.repair_input_routing(dry_run=False)
+    assert result["repaired"] == 1 and result["skipped"] == 1
+    assert "b" * 32 not in comms.transcript_routes.input_bindings()

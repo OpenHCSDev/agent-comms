@@ -1272,10 +1272,6 @@ class CommsAgent:
         page = self._comms.incoming_page(thread_name, after=after) if after < high_water else None
         incoming_messages = page.messages if page else ()
         for message in incoming_messages:
-            incoming = ScheduledTurn.incoming(message)
-            starts_turn = message.starts_turn_for(thread_name)
-            aliases = self._comms.registry.aliases_for(thread_name)
-            direct = starts_turn and message.target in aliases
             admitted = True
             dependency_wait = None
             row: dict[str, Any] | None = None
@@ -1284,14 +1280,27 @@ class CommsAgent:
                 current_name = snapshot.aliases.get(thread_name, thread_name)
                 current = snapshot.threads[current_name]
                 status = snapshot.statuses[current_name]
-                if direct:
-                    wait = self._comms.goal_wait(current_name)
+                aliases = frozenset(
+                    {
+                        current_name,
+                        *(
+                            alias
+                            for alias, target in snapshot.aliases.items()
+                            if target == current_name
+                        ),
+                    }
+                )
+                incoming = ScheduledTurn.incoming(message, aliases=snapshot.aliases)
+                starts_turn = message.starts_turn_for(current_name, aliases=snapshot.aliases)
+                direct = starts_turn and message.target in aliases
+                if starts_turn:
+                    wait = self._comms.goal_wait(current_name) if direct else None
                     if wait is not None and wait.matches(message, snapshot):
                         dependency_wait = wait
                         incoming = replace(
                             incoming, goal_id=wait.goal_id, goal_wait_id=wait.wait_id
                         )
-                    key = f"bus:{message.seq}"
+                    key = self._dispositions.bus_key(message, current)
                     admitted = self._dispositions.record(
                         key,
                         seq=message.seq,
@@ -1325,10 +1334,9 @@ class CommsAgent:
             ):
                 input_id = f"bus-{message.seq}"
                 self._steering_origins.setdefault(session_id, {})[input_id] = message
-                if direct:
-                    self._steering_input_keys.setdefault(session_id, {})[input_id] = key
-                    self._turn_input_keys.setdefault(session_id, set()).add(key)
-                    self._forwarded_inputs.setdefault(session_id, set()).add(input_id)
+                self._steering_input_keys.setdefault(session_id, {})[input_id] = key
+                self._turn_input_keys.setdefault(session_id, set()).add(key)
+                self._forwarded_inputs.setdefault(session_id, set()).add(input_id)
                 backend_inbox.put_nowait(
                     {
                         "type": "prompt",
@@ -1652,12 +1660,11 @@ class CommsAgent:
         assert owner_task is not None
         thread = self._comms.registry.require(thread_name)
         thread_name = thread.name
-        direct_targets = self._comms.registry.aliases_for(thread_name)
         if backend.rpc_args_for(self._agent_bin, self._agent_args) is None and any(
-            origin.seq > 0 and origin.target in direct_targets for origin in origins
+            origin.seq > 0 for origin in origins
         ):
             # A text backend has no native user-start receipt. Its process
-            # must not run for a direct whose UNKNOWN row needs that proof.
+            # must not run for a bus input whose UNKNOWN row needs that proof.
             return
         goal = thread.goal
         wait = self._comms.goal_wait(thread_name)
@@ -1719,11 +1726,12 @@ class CommsAgent:
             for origin in origins
             if origin.seq > 0 and origin.target in self._comms.registry.aliases_for(thread_name)
         )
-        if direct_origins:
+        bus_origins = tuple(origin for origin in origins if origin.seq > 0)
+        if bus_origins:
             with _store_lock(self._comms._wire_lock_path):
                 snapshot = self._comms.registry.snapshot()
-                for origin in direct_origins:
-                    key = f"bus:{origin.seq}"
+                for origin in bus_origins:
+                    key = self._dispositions.bus_key(origin, thread)
                     if self._dispositions.get(key) is None:
                         self._dispositions.record(
                             key,
@@ -1731,13 +1739,33 @@ class CommsAgent:
                             owner=thread_name,
                             admission=snapshot.admission_generations[thread_name],
                             target=origin.target,
-                            text=ScheduledTurn.incoming(origin).prompt,
+                            text=ScheduledTurn.incoming(origin, aliases=snapshot.aliases).prompt,
                         )
                     original_keys = (*original_keys, key)
         self._turn_input_keys[session_id] = set(original_keys)
         self._steering_input_keys[session_id] = {}
         self._steering_origins[session_id] = {}
         self._steering_goal_ids[session_id] = {}
+        channel_batch = (
+            len(origins) > 1
+            and len({origin.seq for origin in origins}) == len(origins)
+            and all(origin.seq > 0 and is_channel_target(origin.target) for origin in origins)
+            and original_keys
+            == tuple(self._dispositions.bus_key(origin, thread) for origin in origins)
+            # The durable admission owns the exact prompt, including the
+            # names resolved at admission. Re-deriving it here can drift if
+            # a recipient was renamed before or after inbox draining.
+            and task
+            == "\n\n".join(self._dispositions.get(key)["source_text"] for key in original_keys)
+        )
+
+        def input_keys_valid(public_id: str | None, keys: tuple[str, ...], text: str) -> bool:
+            # One authoritative user start proves every sequence in an exact
+            # channel batch. Never credit an omitted/reordered original input,
+            # a mixed direct batch, or a differently transformed native prompt.
+            return len(keys) <= 1 or (
+                public_id is None and channel_batch and keys == original_keys and text == task
+            )
 
         @contextmanager
         def send_boundary(
@@ -1790,7 +1818,7 @@ class CommsAgent:
                 )
                 owner_ok = (
                     current is not None
-                    and len(keys) <= 1
+                    and input_keys_valid(public_id, keys, sent_text)
                     and snapshot.statuses[canonical].running
                     and snapshot.admission_generations.get(canonical) == turn_admission
                     and current.pid == thread.pid
@@ -1904,7 +1932,7 @@ class CommsAgent:
                     else ()
                 )
             )
-            return len(keys) <= 1 and all(
+            return input_keys_valid(public_id, keys, sent_text) and all(
                 self._dispositions.started(
                     key, turn_id=turn_id, native_id=native_id, text=sent_text
                 )
@@ -2458,23 +2486,6 @@ class CommsAgent:
                 pending = backend_inbox.get_nowait()
                 if isinstance(pending, str):
                     self._pending_turns.setdefault(session_id, []).append(ScheduledTurn(pending))
-                elif isinstance(pending, dict) and pending.get("type") == "prompt":
-                    input_id = pending.get("_input_id")
-                    pending_origin = (
-                        self._steering_origins.get(session_id, {}).get(input_id)
-                        if isinstance(input_id, str)
-                        else None
-                    )
-                    if (
-                        pending_origin is not None
-                        and input_id not in self._steering_input_keys.get(session_id, {})
-                    ):
-                        # The backend never requeues written/uncertain prompts.
-                        # Preserve the existing unsent channel requeue with its
-                        # envelope, instead of losing attribution to a string.
-                        self._pending_turns.setdefault(session_id, []).append(
-                            ScheduledTurn.incoming(pending_origin)
-                        )
             thread_name = await self._sync_session_identity(session_id)
             current_project = self._comms.registry.require(thread_name).worktree
             # Discard unresolved per-turn IDs without replay. Durable ACP input

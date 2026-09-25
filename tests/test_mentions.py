@@ -220,3 +220,33 @@ def test_dismiss_requires_a_target(tmp_path, monkeypatch):
     monkeypatch.setenv("PI_AGENT_ID", "beta")
     with pytest.raises(ValueError, match="channel target"):
         invoke_tool(comms, "comms_dismiss", {"target": ""})
+
+
+def test_committed_channel_mention_follows_recipient_renames_without_expanding_audience(tmp_path):
+    comms = wire(tmp_path)
+    for name, tags in [("alpha", {"team"}), ("observer", {"team"}), ("outsider", set())]:
+        comms.register(Thread(name, frozenset(tags), str(tmp_path)))
+    message = comms.send_user_message("#team", "@alpha please review", worktree=str(tmp_path))
+    comms.registry.rename("alpha", "renamed")
+    comms.registry.rename("renamed", "final")
+    aliases = comms.registry.snapshot().aliases
+    assert message in comms.incoming_page("final", after=0).messages
+    assert message.starts_turn_for("final", aliases=aliases)
+    assert not message.starts_turn_for("observer", aliases=aliases)
+    assert message.response_eligibility(("final", "observer"), aliases=aliases).recipients == (
+        "final",
+    )
+    assert (
+        "only resolved mentioned identities may respond: @final"
+        in ScheduledTurn.incoming(message, aliases=aliases).prompt
+    )
+    assert message.mentions[0].thread == "alpha"  # Original wire record is unchanged.
+    outside = comms.send_user_message("#team", "@outsider review", worktree=str(tmp_path))
+    comms.registry.rename("outsider", "outside-renamed")
+    assert not comms.incoming_page("outside-renamed", after=0).messages
+    assert (
+        outside.response_eligibility(
+            ("final", "observer"), aliases=comms.registry.snapshot().aliases
+        ).recipients
+        == ()
+    )

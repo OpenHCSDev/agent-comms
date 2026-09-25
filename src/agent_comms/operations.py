@@ -26,7 +26,7 @@ from dataclasses import asdict, dataclass, fields, replace
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from .channels import ChannelCatalog
@@ -1925,16 +1925,15 @@ class Comms:
         bindings. A prompt prefix or a matching body alone is not evidence.
         No transcript, input disposition, delivery/read cursor, or model is changed.
         """
-        import hashlib
-        from collections import Counter
-
         from .declarations import ScheduledTurn
         from .input_disposition import InputDispositions
 
         rows = InputDispositions(self.root).bound_bus_inputs()
-        native_counts = Counter(row["native_id"] for row in rows)
         existing = self.transcript_routes.input_bindings()
-        pending: dict[int, list[dict[str, object]]] = {}
+        groups: dict[str, list[dict[str, Any]]] = {}
+        needed = {row["sequence"] for row in rows}
+        envelopes: dict[int, Message] = {}
+        aliases = self.registry.snapshot().aliases
         report: dict[str, int | bool] = {
             "dry_run": dry_run,
             "eligible": 0,
@@ -1944,46 +1943,60 @@ class Comms:
             "conflicts": 0,
         }
         for row in rows:
-            if native_counts[row["native_id"]] != 1:
-                report["conflicts"] += 1
-            else:
-                pending.setdefault(row["sequence"], []).append(row)
+            groups.setdefault(row["native_id"], []).append(row)
         with self.bus.full_history_snapshot() as (_, messages):
             for message in messages:
-                for row in pending.pop(message.seq, []):
-                    native_id, sent_text = row["native_id"], row["sent_text"]
-                    if (
-                        not isinstance(native_id, str)
-                        or not isinstance(sent_text, str)
-                        or row["target"] != message.target
-                        or row["source_text"] != ScheduledTurn.incoming(message).prompt
-                    ):
-                        report["skipped"] += 1
-                        continue
-                    routing = TurnRouting((message,), None)
-                    binding = (
-                        hashlib.sha256(sent_text.encode("utf-8")).hexdigest(),
-                        json.dumps(routing.to_wire(), sort_keys=True),
+                if message.seq in needed:
+                    envelopes[message.seq] = message
+        for native_id, group in groups.items():
+            group.sort(key=lambda row: row["sequence"])
+            proof = {
+                (row["owner"], row["admission"], row["turn_id"], row["sent_text"]) for row in group
+            }
+            if (
+                len(proof) != 1
+                or len({row["sequence"] for row in group}) != len(group)
+                or (len(group) > 1 and not all(is_channel_target(row["target"]) for row in group))
+            ):
+                report["conflicts"] += 1
+                continue
+            origins: list[Message] = []
+            for row in group:
+                candidate = envelopes.get(row["sequence"])
+                if (
+                    candidate is None
+                    or row["target"] != candidate.target
+                    or row["source_text"]
+                    not in {
+                        ScheduledTurn.incoming(candidate).prompt,
+                        ScheduledTurn.incoming(candidate, aliases=aliases).prompt,
+                    }
+                ):
+                    break
+                origins.append(candidate)
+            source = "\n\n".join(row["source_text"] for row in group)
+            sent_text = group[0]["sent_text"]
+            if len(origins) != len(group) or not sent_text.endswith(source):
+                report["skipped"] += 1
+                continue
+            routing = TurnRouting(tuple(origins), None)
+            binding = (
+                hashlib.sha256(sent_text.encode("utf-8")).hexdigest(),
+                json.dumps(routing.to_wire(), sort_keys=True),
+            )
+            if native_id in existing:
+                report["already_bound" if existing[native_id] == binding else "conflicts"] += 1
+                continue
+            report["eligible"] += 1
+            if not dry_run:
+                try:
+                    self.record_input_display(
+                        native_id, source, sent_text=sent_text, routing=routing
                     )
-                    if native_id in existing:
-                        report[
-                            "already_bound" if existing[native_id] == binding else "conflicts"
-                        ] += 1
-                        continue
-                    report["eligible"] += 1
-                    if not dry_run:
-                        try:
-                            self.record_input_display(
-                                native_id,
-                                str(row["source_text"]),
-                                sent_text=sent_text,
-                                routing=routing,
-                            )
-                        except RelationViolationError:
-                            report["conflicts"] += 1
-                        else:
-                            report["repaired"] += 1
-        report["skipped"] += sum(len(group) for group in pending.values())
+                except RelationViolationError:
+                    report["conflicts"] += 1
+                else:
+                    report["repaired"] += 1
         return report
 
     # ─── Threads ──────────────────────────────────────────────────────────────
