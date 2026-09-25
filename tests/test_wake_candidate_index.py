@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import sys
@@ -9,11 +10,16 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.bus_publication import (
+    PRIVATE_WIRE_FIELD,
+    public_envelope_digest,
+    stable_thread_lookup,
+)
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.coordination import canonical_publication_key
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
 from agent_comms.coordination_store import MutationStore
-from agent_comms.declarations import Thread
+from agent_comms.declarations import RelationViolationError, Thread
 from agent_comms.operations import Comms
 from agent_comms.wake_candidate_index import (
     ProjectionRebuildRequiredError,
@@ -56,7 +62,7 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
     assert index.maintain(rebuild=True)
     with sqlite3.connect(index.path) as db:
         assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
-        assert db.execute("SELECT version FROM checkpoint").fetchone()[0] == 1
+        assert db.execute("SELECT version FROM checkpoint").fetchone()[0] == 2
     selected = index.page(
         root_id=root_id,
         recipient_lookup=lookup["Alice"],
@@ -182,6 +188,109 @@ def test_byte_budget_never_publishes_a_partial_candidate(tmp_path: Path) -> None
         )
         == 1
     )
+
+
+def _replace_rows(comms: Comms, rows: list[dict]) -> None:
+    path = comms.bus._path
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    path.chmod(0o600)
+
+
+def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> None:
+    comms, root_id, lookup = _private(tmp_path)
+    messages = [
+        comms.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3)
+    ]
+    rows = [json.loads(raw) for raw in comms.bus._path.read_text().splitlines()]
+    rows[1][PRIVATE_WIRE_FIELD] = {"version": 1, "response": {}}
+    _replace_rows(comms, rows)
+    index = WakeCandidateIndex(comms.bus)
+    with pytest.raises(ProjectionUnavailableError, match="malformed candidate response"):
+        index.maintain(rebuild=True)
+    with pytest.raises(ProjectionUnavailableError):
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=0,
+            required_through_seq=messages[2].seq,
+        )
+    with pytest.raises(RelationViolationError, match="malformed private bus receipt"):
+        comms.bus.read_initial_cohort(root_id, messages[2].seq)
+
+
+@pytest.mark.parametrize("corrupt", ["wire_root_id", "envelope_digest", "publication_key"])
+def test_response_identity_must_match_private_bus_before_later_candidate(
+    tmp_path: Path, corrupt: str
+) -> None:
+    comms, root_id, lookup = _private(tmp_path)
+    messages = [
+        comms.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3)
+    ]
+    rows = [json.loads(raw) for raw in comms.bus._path.read_text().splitlines()]
+    public = {key: value for key, value in rows[1].items() if key != PRIVATE_WIRE_FIELD}
+    response = {
+        "wire_root_id": root_id,
+        "execution_id": "one-execution",
+        "publication_key": canonical_publication_key("one-execution", "Alice"),
+        "envelope_digest": public_envelope_digest(public),
+    }
+    response[corrupt] = "0" * 64 if corrupt == "envelope_digest" else "wrong"
+    rows[1][PRIVATE_WIRE_FIELD] = {"version": 1, "response": response}
+    _replace_rows(comms, rows)
+    index = WakeCandidateIndex(comms.bus)
+    with pytest.raises(ProjectionUnavailableError, match="invalid or duplicate response"):
+        index.maintain(rebuild=True)
+    with pytest.raises(ProjectionUnavailableError):
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=0,
+            required_through_seq=messages[2].seq,
+        )
+    with pytest.raises(RelationViolationError, match="malformed private bus receipt"):
+        comms.bus.read_initial_cohort(root_id, messages[2].seq)
+
+
+def test_duplicate_private_response_key_fails_across_maintenance_batches(
+    tmp_path: Path,
+) -> None:
+    comms, root_id, lookup = _private(tmp_path)
+    messages = [
+        comms.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3, 4)
+    ]
+    rows = [json.loads(raw) for raw in comms.bus._path.read_text().splitlines()]
+    for row in rows[1:3]:
+        public = {key: value for key, value in row.items() if key != PRIVATE_WIRE_FIELD}
+        row[PRIVATE_WIRE_FIELD] = {
+            "version": 1,
+            "response": {
+                "wire_root_id": root_id,
+                "execution_id": "duplicate-execution",
+                "publication_key": canonical_publication_key("duplicate-execution", "Alice"),
+                "envelope_digest": public_envelope_digest(public),
+            },
+        }
+    _replace_rows(comms, rows)
+    index = WakeCandidateIndex(comms.bus)
+    assert not index.maintain(rebuild=True, max_rows=2)
+    first = index.page(
+        root_id=root_id,
+        recipient_lookup=lookup["Alice"],
+        after_seq=0,
+        required_through_seq=messages[1].seq,
+    )
+    assert [candidate.source_seq for candidate in first.entries] == [messages[0].seq]
+    with pytest.raises(ProjectionUnavailableError, match="duplicate response"):
+        index.maintain(max_rows=2)
+    with pytest.raises(ProjectionUnavailableError, match="stale"):
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=0,
+            required_through_seq=messages[3].seq,
+        )
+    with pytest.raises(RelationViolationError, match="malformed private bus receipt"):
+        comms.bus.read_initial_cohort(root_id, messages[3].seq)
 
 
 def test_rewrite_and_incomplete_tail_omit_optional_projection(tmp_path: Path) -> None:

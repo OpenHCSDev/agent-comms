@@ -26,10 +26,11 @@ from .bus_publication import (
     unique_wire_object,
     validate_initial_record,
 )
+from .coordination import canonical_publication_key
 from .declarations import Message, MessageBus, RelationViolationError
 from .wake import NoWakeDecision, WakeDecision
 
-_SCHEMA = 1
+_SCHEMA = 2
 _MAX_ROW = 8 * 1024 * 1024
 _TIMEOUT = 0.05  # Busy readers/writers must not stall a wake for seconds.
 
@@ -118,6 +119,10 @@ class WakeCandidateIndex:
                 "CREATE INDEX IF NOT EXISTS passive_recipient_seq "
                 "ON recipients(recipient_lookup,source_seq) WHERE wake_mode IS NULL"
             )
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS response_keys ("
+                "publication_key TEXT PRIMARY KEY) WITHOUT ROWID"
+            )
         try:
             version = db.execute("SELECT version FROM checkpoint WHERE singleton=1").fetchone()
         except sqlite3.DatabaseError as error:
@@ -171,6 +176,8 @@ class WakeCandidateIndex:
                         ):
                             raise ProjectionRebuildRequiredError("candidate bus prefix changed")
                     rows: list[tuple[int, str, str, str, str, str | None]] = []
+                    response_keys: list[tuple[str]] = []
+                    batch_keys: set[str] = set()
                     stream.seek(offset)
                     start = time.monotonic()
                     for _ in range(max_rows):
@@ -241,8 +248,38 @@ class WakeCandidateIndex:
                                         ),
                                     )
                                 )
-                        elif private is not None and set(private) != {"version", "response"}:
-                            raise ProjectionUnavailableError("unknown candidate private row")
+                        elif private is not None:
+                            if set(private) != {"version", "response"}:
+                                raise ProjectionUnavailableError("unknown candidate private row")
+                            receipt = private["response"]
+                            if not isinstance(receipt, dict) or set(receipt) != {
+                                "wire_root_id",
+                                "execution_id",
+                                "publication_key",
+                                "envelope_digest",
+                            }:
+                                raise ProjectionUnavailableError("malformed candidate response")
+                            execution_id = receipt["execution_id"]
+                            key = receipt["publication_key"]
+                            if (
+                                receipt["wire_root_id"] != root_id
+                                or receipt["envelope_digest"] != public_envelope_digest(public)
+                                or type(execution_id) is not str
+                                or type(key) is not str
+                                or key != canonical_publication_key(execution_id, message.target)
+                                or key in batch_keys
+                                or (
+                                    not rebuild
+                                    and db.execute(
+                                        "SELECT 1 FROM response_keys WHERE publication_key=?",
+                                        (key,),
+                                    ).fetchone()
+                                    is not None
+                                )
+                            ):
+                                raise ProjectionUnavailableError("invalid or duplicate response")
+                            batch_keys.add(key)
+                            response_keys.append((key,))
                     next_offset = stream.tell()
                     after = os.fstat(stream.fileno())
                     current_path = self.bus._path.stat()
@@ -252,7 +289,9 @@ class WakeCandidateIndex:
                     with db:
                         if rebuild:
                             db.execute("DELETE FROM recipients")
+                            db.execute("DELETE FROM response_keys")
                         db.executemany("INSERT INTO recipients VALUES (?,?,?,?,?,?)", rows)
+                        db.executemany("INSERT INTO response_keys VALUES (?)", response_keys)
                         db.execute(
                             "INSERT OR REPLACE INTO checkpoint VALUES (1,?,?,?,?,?,?,?)",
                             (
