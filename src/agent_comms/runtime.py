@@ -166,14 +166,14 @@ class RuntimeServer:
                     raise ValueError("A goal identity and revision are required for editing.")
                 if not isinstance(text, str) or not text.strip():
                     raise ValueError("A goal requires text.")
-                goal = await self.agent.edit_goal(session_id, goal_id, revision, text)
-                execution = self.agent._comms.goal_execution(name)
+                await self.agent.edit_goal(session_id, goal_id, revision, text)
+                goal, execution = self.agent._comms.goal_snapshot(name)
                 writer.write(
                     (
                         json.dumps(
                             {
                                 "result": {
-                                    "goal": asdict(goal),
+                                    "goal": asdict(goal) if goal is not None else None,
                                     "goalExecution": (
                                         asdict(execution) if execution is not None else None
                                     ),

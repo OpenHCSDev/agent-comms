@@ -177,7 +177,7 @@ class CommsAgent:
         self._catalog_generation = 0
         self._session_catalog_generation: dict[str, int] = {}
         self._session_config_signature: dict[str, tuple[str | None, str | None]] = {}
-        self._goal_execution_signatures: dict[str, GoalExecution | None] = {}
+        self._goal_execution_signatures: dict[str, tuple[Goal | None, GoalExecution | None]] = {}
         self._transcript_snapshots = False
         self._transcript_diffs = False
         self._model_requests: dict[str, asyncio.Future[None]] = {}
@@ -1014,7 +1014,7 @@ class CommsAgent:
 
     def _session_metadata(self, thread_name: str) -> dict[str, Any]:
         thread = self._comms.registry.require(thread_name)
-        execution = self._comms.goal_execution(thread_name)
+        goal, execution = self._comms.goal_snapshot(thread_name)
         info = self._comms.agent_info_of(thread_name)
         usage = (
             {"used": info.context_used, "size": info.context_size, "source": "last_response"}
@@ -1024,6 +1024,7 @@ class CommsAgent:
         return {
             "agentComms": {
                 "thread": thread_name,
+                "goal": asdict(goal) if goal else None,
                 "goalExecution": asdict(execution) if execution else None,
                 "wireRoot": str(self._comms.root.resolve()),
                 "persistence": "shared on-disk wire",
@@ -1237,20 +1238,24 @@ class CommsAgent:
         )
 
     async def _sync_goal_execution(self, session_id: str, thread_name: str) -> None:
-        execution = self._comms.goal_execution(thread_name)
+        goal, execution = self._comms.goal_snapshot(thread_name)
+        signature = (goal, execution)
         previous = self._goal_execution_signatures
-        if session_id in previous and previous[session_id] == execution:
+        if session_id in previous and previous[session_id] == signature:
             return
         await self._runtime.session_update(
             session_id=session_id,
             update=SessionInfoUpdate(
                 session_update="session_info_update",
                 field_meta={
-                    "agentComms": {"goalExecution": asdict(execution) if execution else None}
+                    "agentComms": {
+                        "goal": asdict(goal) if goal else None,
+                        "goalExecution": asdict(execution) if execution else None,
+                    }
                 },
             ),
         )
-        previous[session_id] = execution
+        previous[session_id] = signature
 
     async def _drain_owned_inbox(self, session_id: str) -> int:
         thread_name = await self._sync_session_identity(session_id)

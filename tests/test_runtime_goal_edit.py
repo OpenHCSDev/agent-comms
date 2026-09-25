@@ -1,5 +1,6 @@
 """Goal edits/history use the actual owner socket and persisted backend state."""
 
+import asyncio
 import os
 
 import pytest
@@ -19,8 +20,19 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
     session = response.session_id
     goal = comms.update_goal(session, "set", text="Review @child's implementation")
     paused = comms.update_goal(session, "paused", owner_action=True)
-    proxy = RuntimeProxy(CommsAgent(comms), session, socket_path(comms.root, os.getpid()))
+    updates = []
+
+    class Client:
+        async def session_update(self, session_id, update):
+            updates.append(update)
+
+    observer = CommsAgent(comms)
+    observer.on_connect(Client())
+    proxy = RuntimeProxy(observer, session, socket_path(comms.root, os.getpid()))
     try:
+        metadata = await proxy.subscribe()
+        assert metadata["agentComms"]["goal"]["revision"] == paused.revision
+        assert metadata["agentComms"]["goalExecution"]["state"] == "paused"
         result = await proxy.request(
             "edit_goal",
             goal_id=goal.id,
@@ -35,6 +47,12 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
         assert changed.progress == paused.progress
         assert comms.goal_pause(session).source == "owner"
         assert result["goalExecution"]["state"] == "paused"
+        async with asyncio.timeout(2):
+            while not any(
+                update.get("_meta", {}).get("agentComms", {}).get("goal") == result["goal"]
+                for update in updates
+            ):
+                await asyncio.sleep(0.01)
         history = (await proxy.request("goal_history", goal_id=goal.id))["history"]
         assert history[-1]["before"]["text"] == paused.text
         assert history[-1]["after"] == result["goal"]

@@ -2157,10 +2157,19 @@ class Comms:
         return waits.for_goal(self.registry.require(name).goal, waits.snapshot())
 
     def goal_execution(self, name: str) -> GoalExecution | None:
+        return self._goal_snapshot(name)[1]
+
+    def goal_snapshot(self, name: str) -> tuple[Goal | None, GoalExecution | None]:
+        """Read current goal and its scheduling projection as one owner snapshot."""
+        with _store_lock(self._wire_lock_path):
+            return self._goal_snapshot(name)
+
+    def _goal_snapshot(self, name: str) -> tuple[Goal | None, GoalExecution | None]:
         snapshot = self.registry.snapshot()
         canonical = snapshot.aliases.get(name, name)
-        return GoalWaits.execution(
-            snapshot.threads[canonical].goal,
+        goal = snapshot.threads[canonical].goal
+        return goal, GoalWaits.execution(
+            goal,
             GoalWaits(self.root / "goal_waits.json").snapshot(),
             snapshot,
         )
