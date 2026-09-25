@@ -1717,8 +1717,8 @@ class CommsAgent:
         if goal is not None and goal.active:
             task = (
                 f"Persistent goal {goal.id}: {goal.text}\nProgress: {goal.progress}\n"
-                "Work toward this goal while respecting follow-up instructions. Before ending, "
-                "use comms_goal with this goal_id and a progress summary. Set status completed "
+                "Work toward this goal while respecting follow-up instructions. "
+                "Use comms_goal with this goal_id to record useful progress. Set status completed "
                 "only after verifying success, blocked when you need user input, or active "
                 "to continue in another turn. Do not wait or poll; "
                 "the owner schedules continuation.\n\n" + task
@@ -1738,7 +1738,7 @@ class CommsAgent:
             )
         reply_parts: list[str] = []
         terminal_ok: bool | None = None
-        backend_work_observed = False
+        successful_tool_observed = False
         goal_tool_ok = False
         goal_attempt_resolved = False
         originated_goal_ids: set[str] = set()
@@ -1824,8 +1824,8 @@ class CommsAgent:
                     )
                 if reply_targets and kind == "chunk":
                     reply_parts.append(str(event.get("text") or ""))
-                if kind in {"chunk", "thinking", "tool_start", "tool_end"}:
-                    backend_work_observed = True
+                if kind == "tool_end" and event.get("ok") is True:
+                    successful_tool_observed = True
                 if kind == "done":
                     unknown_attempts = any(
                         self._dispositions.status(key) != "started"
@@ -1896,46 +1896,28 @@ class CommsAgent:
                     # activity. This is not a productive goal turn.
                     empty_success = (
                         not failed
-                        and not backend_work_observed
+                        and not successful_tool_observed
                         and not str(event.get("text") or "").strip()
                     )
-                    if current_goal == goal or (
+                    if (
                         current_goal
                         and current_goal.id == goal.id
                         and current_goal.active
                         and (failed or empty_success)
                     ):
-                        if failed or empty_success:
-                            # A stale value-CAS skip here would leave an active
-                            # goal for live drain to retry after an uncertain
-                            # backend result. Block the latest same-ID active
-                            # goal atomically, retaining newer progress.
-                            self._comms.block_goal_after_failed_turn(
-                                thread_name,
-                                started_goal=goal,
-                                expected_worktree=thread.worktree,
-                                diagnostic=(
-                                    "Backend turn failed; inspect local diagnostics "
-                                    "before resuming."
-                                    if failed
-                                    else "Backend reported success without assistant output "
-                                    "or tool activity; inspect the session before resuming."
-                                ),
-                            )
-                        else:
-                            # The provider turn finished, but no comms_goal
-                            # report can attest progress for its reserved
-                            # attempt. The ledger will block it below; show
-                            # the same disposition in the registry so the UI
-                            # offers explicit Retry rather than an unusable
-                            # Resume action.
-                            self._comms.block_goal_after_failed_turn(
-                                thread_name,
-                                started_goal=goal,
-                                expected_worktree=thread.worktree,
-                                diagnostic="Goal turn ended without a goal progress update; "
-                                "inspect the attempt before Retry.",
-                            )
+                        # Block the latest same-ID goal under the wire lock,
+                        # retaining any newer progress from a concurrent update.
+                        self._comms.block_goal_after_failed_turn(
+                            thread_name,
+                            started_goal=goal,
+                            expected_worktree=thread.worktree,
+                            diagnostic=(
+                                "Backend turn failed; inspect local diagnostics before resuming."
+                                if failed
+                                else "Backend reported success without assistant output "
+                                "or tool activity; inspect the session before resuming."
+                            ),
+                        )
                 if kind == "model_changed":
                     future = self._model_requests.get(event.get("id", ""))
                     if future is not None and not future.done():
@@ -2059,9 +2041,10 @@ class CommsAgent:
                     and current_goal.id == goal.id
                     and current_goal.reported_turn == turn_id
                 )
-                if terminal_ok is True and verified_report and current_goal is not None:
-                    witness = f"registry-revision:{current_goal.revision}"
-                    if current_goal.status == "completed":
+                if terminal_ok is True and current_goal is not None and current_goal.id == goal.id:
+                    witness = f"native-terminal:{turn_id}"
+                    if current_goal.status == "completed" and verified_report:
+                        witness = f"registry-revision:{current_goal.revision}"
                         self._goal_store.record_verified_completion(goal_permit, witness)
                         goal_attempt_resolved = True
                     elif current_goal.active:

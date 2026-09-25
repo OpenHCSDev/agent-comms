@@ -762,8 +762,9 @@ class GoalAttemptStore:
     def record_verified_progress(self, permit: LaunchPermit, progress_witness: str) -> Generation:
         """Advance only from a claimed launch and caller-verified progress witness.
 
-        The witness must be bound to an actual registry progress update by the
-        integration owner. This primitive alone cannot verify that other file.
+        The integration owner verifies a successful, productive native terminal
+        turn or an explicit registry progress report. A model progress report is
+        optional; this primitive cannot itself verify the turn's outcome.
         """
         if not progress_witness.strip():
             raise ValueError("A nonempty verified progress witness is required.")
