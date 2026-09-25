@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import { decideProjectServer } from '../src/commands.mjs';
 import { loadEffectiveDeclarations } from '../src/sources.mjs';
 
@@ -38,6 +39,8 @@ test('only a Pi-trusted local TUI can explicitly approve exact currently display
     await assert.rejects(decideProjectServer(ctx, options), /Pi project trust/);
     assert.equal(confirmations, 0);
     trusted = true;
+    await assert.rejects(decideProjectServer(ctx, options), /Saved Pi project trust/);
+    new ProjectTrustStore(agentDir).set(project, true);
     await assert.rejects(decideProjectServer(ctx, options), /literal environment is not supported/);
     assert.equal(confirmations, 0);
     await writeFile(file, config(declaration('fixture-command')));

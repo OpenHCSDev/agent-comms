@@ -32,6 +32,8 @@ test('project authority requires Pi trust AND separately sourced exact digest', 
   assert.deepEqual(decide(user, undefined, ledger(approval), false).map((entry) => [entry.scope, entry.status]),
     [['user', 'trust_required']]); // User server cwd is still project-controlled.
   assert.equal(decide(user, undefined, ledger(), true)[0].status, 'approved');
+  // The source owner supplies projectTrusted only after saved + live Pi trust.
+  // Its Pi auto-trust distinction is exercised in sources.test.mjs.
 });
 
 test('ledger rejects malformed or duplicated decisions without leaking fields', () => {

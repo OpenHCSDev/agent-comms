@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import { parseTrustLedger } from '../src/authority.mjs';
 import { parseNativeConfig } from '../src/config.mjs';
 import { recordProjectDecision } from '../src/ledger-write.mjs';
@@ -19,6 +20,7 @@ test('user-authorized atomic decision revokes prior digests; malformed ledger an
   const projectRoot = join(root, 'project');
   await mkdir(agentDir);
   await mkdir(join(projectRoot, '.pi'), { recursive: true });
+  new ProjectTrustStore(agentDir).set(projectRoot, true);
   const projectPath = join(projectRoot, '.pi', 'mcp.json');
   const ledgerPath = join(agentDir, 'mcp-trust.json');
   const load = () => loadEffectiveDeclarations({ ctx: {

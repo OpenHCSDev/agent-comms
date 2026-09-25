@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import { declarationDigest, parseNativeConfig } from '../src/config.mjs';
 import { loadEffectiveDeclarations, readOptional } from '../src/sources.mjs';
 
@@ -29,6 +30,9 @@ test('Pi project trust gates reading; exact external digest gates eligibility; n
       ctx: { cwd: project, isProjectTrusted: () => trusted }, agentDir, configDirName: '.pi',
     });
     assert.deepEqual((await load(false)).map(({ scope, status }) => [scope, status]), [['user', 'trust_required']]);
+    assert.deepEqual((await load(true)).map(({ scope, status }) => [scope, status]),
+      [['user', 'trust_required']]); // Pi auto-trust alone must not parse MCP project config.
+    new ProjectTrustStore(agentDir).set(project, true);
     await assert.rejects(load(true), /Invalid MCP config: JSON syntax/);
     await writeFile(projectPath, config([projectServer]));
     assert.deepEqual((await load(true)).map(({ scope, status }) => [scope, status]), [['project', 'trust_required']]);
@@ -40,6 +44,24 @@ test('Pi project trust gates reading; exact external digest gates eligibility; n
     await writeFile(projectPath, config([{ ...projectServer, transport: { ...projectServer.transport, args: ['changed'] } }]));
     assert.equal((await load(true))[0].status, 'trust_required');
     assert.equal(existsSync(marker), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('Pi implicit auto-trust cannot authorize a user server in project cwd', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mcp-user-auto-trust-'));
+  const project = join(root, 'project');
+  const agentDir = join(root, 'agent');
+  await mkdir(project); await mkdir(agentDir);
+  try {
+    await writeFile(join(agentDir, 'mcp.json'), config([server('node')]));
+    const load = () => loadEffectiveDeclarations({
+      ctx: { cwd: project, isProjectTrusted: () => true }, agentDir, configDirName: '.pi',
+    });
+    assert.equal((await load())[0].status, 'trust_required');
+    new ProjectTrustStore(agentDir).set(project, true);
+    assert.equal((await load())[0].status, 'approved');
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from 'node:test';
-import { CONFIG_DIR_NAME } from '@earendil-works/pi-coding-agent';
+import { CONFIG_DIR_NAME, ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import { declarationDigest, parseNativeConfig } from '../src/config.mjs';
 
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -91,6 +91,7 @@ test('real isolated Pi RPC starts only approved project fixture and closes it',
     ]) {
       // A malformed untrusted project file must not even be parsed by Pi's command.
       await writeFile(projectFile, trusted ? document : '{bad');
+      if (trusted) new ProjectTrustStore(agentDir).set(project, true);
       if (approval) await writeFile(join(agentDir, 'mcp-trust.json'), JSON.stringify({
         version: 1, decisions: [{ projectRoot: await realpath(project), scope: 'project', serverId: 'fixture',
           digest: declarationDigest(parseNativeConfig(document).servers[0]), decision: 'approve' }],

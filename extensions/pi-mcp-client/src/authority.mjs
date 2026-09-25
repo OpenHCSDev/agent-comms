@@ -81,9 +81,9 @@ export function effectiveDeclarations({ user, project, projectTrusted, projectRo
       row.projectRoot === projectRoot && row.scope === 'project' &&
       row.serverId === declaration.id && row.digest === digest
     )?.decision;
-    // Every stdio child uses the current project as cwd, including user-scope
-    // declarations. Relative executables/args can execute project-controlled
-    // code, so Pi project trust is required even for owner-trusted user config.
+    // Every stdio child uses project cwd. Pi automatically trusts projects
+    // with no .pi resources; for user-scope declarations that is NOT consent
+    // to execute project-relative code. Require an explicit saved trust entry.
     const status = !declaration.enabled ? 'disabled'
       : !projectTrusted ? 'trust_required'
       : scope === 'project' && Object.keys(declaration.transport.env).length ? 'unsupported_env'

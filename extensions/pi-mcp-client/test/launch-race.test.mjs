@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import { McpRuntime } from '../src/runtime.mjs';
 import { prepareStdioParameters } from '../src/launch-spec.mjs';
 import { recordProjectDecision } from '../src/ledger-write.mjs';
@@ -18,6 +19,7 @@ test('changed/revoked approval during async launch preparation never starts a st
   const source = join(project, '.pi', 'mcp.json');
   const marker = join(root, 'unsafe-start');
   await mkdir(agentDir); await mkdir(join(project, '.pi'), { recursive: true });
+  new ProjectTrustStore(agentDir).set(project, true);
   const declaration = { id: 'fixture', enabled: true, instructionsPolicy: 'status-only',
     transport: { type: 'stdio', command: process.execPath, args: ['-e',
       `require('fs').writeFileSync(${JSON.stringify(marker)},'started')`], cwd: 'project' } };

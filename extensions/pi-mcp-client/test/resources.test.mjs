@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import { decideCallGrant } from '../src/commands.mjs';
 import { McpRuntime } from '../src/runtime.mjs';
 import { registerResourceTools } from '../src/resources.mjs';
@@ -21,6 +22,7 @@ test('MCP resources and prompts are discoverable and usable as Pi tools with cal
   await mkdir(project);
   const path = join(agentDir, 'mcp.json');
   await writeFile(path, config(declaration));
+  new ProjectTrustStore(agentDir).set(project, true);
   const runtime = new McpRuntime({ ctx: { cwd: project, isProjectTrusted: () => true },
     agentDir, configDirName: '.pi' });
   const registered = new Map();

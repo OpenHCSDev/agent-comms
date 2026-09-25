@@ -16,7 +16,7 @@ test('ordinary managed Pi RPC loads package but never launches a user server fro
   const agentDir = join(root, 'agent');
   const project = join(root, 'project');
   const marker = join(root, 'unsafe-launch');
-  await mkdir(agentDir); await mkdir(join(project, '.pi'), { recursive: true });
+  await mkdir(agentDir); await mkdir(project);
   const env = { ...process.env, HOME: root, PI_CODING_AGENT_DIR: agentDir, CI: 'true', NO_COLOR: '1' };
   let child;
   try {
@@ -24,15 +24,17 @@ test('ordinary managed Pi RPC loads package but never launches a user server fro
       cwd: project, env, encoding: 'utf8', timeout: 20_000,
     });
     assert.equal(installed.status, 0, installed.stderr?.slice(-800));
-    await writeFile(join(project, '.pi', 'mcp.json'), '{malformed-untrusted');
+    // No .pi resources: Pi auto-trusts this cwd, but there is no explicit
+    // saved user decision authorizing a global server to execute project code.
+    await writeFile(join(project, 'project-controlled.mjs'),
+      `import {writeFileSync} from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'unsafe');`);
     await writeFile(join(agentDir, 'mcp.json'), JSON.stringify({ version: 1, servers: [{
       id: 'fixture', enabled: true, instructionsPolicy: 'status-only', transport: {
         type: 'stdio', command: process.execPath,
-        args: ['-e', `require('fs').writeFileSync(${JSON.stringify(marker)}, 'unsafe')`],
-        cwd: 'project',
+        args: ['./project-controlled.mjs'], cwd: 'project',
       },
     }] }));
-    child = spawn(process.execPath, [cli, '--mode', 'rpc', '--no-session', '--no-approve',
+    child = spawn(process.execPath, [cli, '--mode', 'rpc', '--no-session',
       '--no-skills', '--no-prompt-templates', '--no-themes', '--no-builtin-tools'], {
       cwd: project,
       env: { ...env, AGENT_COMMS_MANAGED: '1', PI_WORKTREE: project,

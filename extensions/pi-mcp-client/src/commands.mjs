@@ -1,4 +1,5 @@
 import { realpath } from 'node:fs/promises';
+import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import { loadEffectiveDeclarations } from './sources.mjs';
 import { recordCallGrant, recordProjectDecision } from './ledger-write.mjs';
 
@@ -44,7 +45,10 @@ export async function decideCallGrant(ctx, { agentDir, configDirName, id, decisi
 
 export async function decideProjectServer(ctx, { agentDir, configDirName, id, decision }) {
   if (ctx.mode !== 'tui') throw new Error('MCP approval requires a local interactive TUI');
-  if (!ctx.isProjectTrusted()) throw new Error('Pi project trust is required for MCP approval');
+  if (!ctx.isProjectTrusted() ||
+      new ProjectTrustStore(agentDir).get(await realpath(ctx.cwd)) !== true) {
+    throw new Error('Saved Pi project trust is required for MCP approval');
+  }
   if (!serverId.test(id) || !['approve', 'deny'].includes(decision)) {
     throw new Error('Invalid MCP approval request');
   }

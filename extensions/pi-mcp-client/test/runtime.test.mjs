@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
+import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import { McpRuntime } from '../src/runtime.mjs';
 import { recordProjectDecision } from '../src/ledger-write.mjs';
 
@@ -40,6 +41,7 @@ test('project stdio server spawns only after both gates, discovers and closes at
     assert.equal(existsSync(spawned), false);
     await runtime.stop();
     trusted = true;
+    new ProjectTrustStore(agentDir).set(project, true);
     runtime = new McpRuntime(options);
     await runtime.start();
     assert.equal(runtime.snapshot()[0].status, 'trust_required');

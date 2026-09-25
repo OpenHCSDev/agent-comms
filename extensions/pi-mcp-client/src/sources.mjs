@@ -1,6 +1,7 @@
 import { constants } from 'node:fs';
 import { open, realpath, lstat } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
+import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import { effectiveDeclarations, parseTrustLedger } from './authority.mjs';
 import { parseNativeConfig } from './config.mjs';
 
@@ -64,7 +65,11 @@ export async function loadEffectiveDeclarations({ ctx, agentDir, configDirName }
   const projectRoot = await realpath(ctx.cwd);
   const user = parseNativeConfig(await readOptional(join(agentDir, 'mcp.json')) ?? EMPTY_CONFIG);
   const ledger = await readTrustLedger(agentDir);
-  const projectTrusted = ctx.isProjectTrusted();
+  // Pi's built-in resource scan does not include .pi/mcp.json, and auto-trusts
+  // cwd without recognized resources. Require a saved Pi trust decision before
+  // reading MCP project config OR running user servers from project cwd.
+  const savedTrust = new ProjectTrustStore(agentDir).get(projectRoot) === true;
+  const projectTrusted = ctx.isProjectTrusted() && savedTrust;
   const project = projectTrusted
     ? parseNativeConfig(await readOptional(join(projectRoot, configDirName, 'mcp.json')) ?? EMPTY_CONFIG)
     : undefined;

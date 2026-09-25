@@ -31,10 +31,13 @@ whole existing declaration. Non-TTY writes are refused. A TTY can be simulated
 by another same-user process: this convenience check is **not** human
 attestation or an OS security boundary. This action does **not** grant Pi
 project trust, project-server approval, or autonomous call permission;
-those gates remain independent. Saved Pi project trust is required before the
-CLI writes project configuration. Every child uses project cwd, so **no scope**
-launches until Pi trusts the project: relative user-command arguments could
-otherwise execute untrusted project code. Project-scope literal `env` is refused
+those gates remain independent. Saved Pi project trust (`/trust` in Pi's local
+TUI, then restart) is required before the CLI writes project configuration.
+Every child uses project cwd, so **both scopes** require a saved Pi trust
+decision before MCP reads project declarations or launches: Pi auto-trusts
+projects without built-in `.pi` resources and does not recognize `.pi/mcp.json`
+as one, while relative user-command arguments could execute project code.
+Pi's temporary `--approve` alone is not a saved MCP project trust decision. Project-scope literal `env` is refused
 (hidden executable overrides are unsafe); use `envFrom`. User-scope literal
 `--env` values are saved in the owner-controlled `mcp.json`.
 
@@ -45,7 +48,7 @@ Optional user-scope `env` supplies literal values; `envFrom` maps child
 variables to host variable names. Project-scope literal `env` is ineligible;
 use `envFrom` for owner-controlled values. Unknown fields/transports fail. User config is
 `getAgentDir()/mcp.json`; project config is `<cwd>/<CONFIG_DIR_NAME>/mcp.json`.
-The project file is not read until Pi project trust is active. The package-owned
+The project file is not read until explicit saved Pi project trust is active. The package-owned
 `getAgentDir()/mcp-trust.json` separately approves the *exact* canonical
 project, scope, server ID and complete declaration digest. Changed declarations
 need a new approval; project overlays never fall back to user commands. On
