@@ -753,7 +753,7 @@ async def _stream_agent_events(
             while True:
                 message = await steering_queue.get()
                 original = dict(message) if isinstance(message, dict) else message
-                command = (
+                command: dict[str, Any] = (
                     dict(original)
                     if isinstance(original, dict)
                     else {
@@ -763,7 +763,7 @@ async def _stream_agent_events(
                     }
                 )
                 if command.get("type") == "interrupt_steering":
-                    selected = command.pop("_input_ids", [])
+                    selected: list[str] = command.pop("_input_ids", [])
                     while True:
                         input_state_changed.clear()
                         candidates = [item for item in pending_inputs if item[0] in selected]
