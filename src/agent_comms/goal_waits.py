@@ -40,6 +40,48 @@ class GoalWait:
 
 
 @dataclass(frozen=True, slots=True)
+class GoalInputReview:
+    """Ephemeral dependency review projection derived from bus and input authority."""
+
+    goal_id: str
+    targets: tuple[GoalWaitTarget, ...]
+    owners: frozenset[str]
+    senders: frozenset[str]
+    unknown: tuple[dict, ...]
+    eligible_keys: frozenset[str]
+
+    def public(self) -> dict:
+        from .input_disposition import InputDispositions
+
+        eligible, reviewed, excluded = [], [], []
+        for row in self.unknown:
+            item = InputDispositions.public(row)
+            if row["key"] not in self.eligible_keys:
+                excluded.append(
+                    {
+                        **item,
+                        "reason": (
+                            "owner_input_without_bus_sequence"
+                            if row["sequence"] is None
+                            else "not_a_direct_reply_from_declared_dependencies"
+                        ),
+                    }
+                )
+            elif InputDispositions.reviewed_for_goal(row, self.goal_id):
+                reviewed.append(item)
+            else:
+                eligible.append(item)
+        return {
+            "goal_id": self.goal_id,
+            "wait_for": [target.name for target in self.targets],
+            "reviewed_inputs": [item["inputId"] for item in eligible],
+            "messages": eligible,
+            "already_reviewed_inputs": reviewed,
+            "excluded_inputs": excluded,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class GoalWaits:
     path: Path
 

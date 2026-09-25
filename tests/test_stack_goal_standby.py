@@ -60,15 +60,16 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                         if index == 1 + offset:
                             arguments["wait_for"] = ["@child"]
                             if review_pending:
-                                arguments["reviewed_inputs"] = pending_keys
                                 tool_messages = [
                                     m for m in request["messages"] if m.get("role") == "tool"
                                 ]
                                 inspected = json.loads(tool_messages[-1]["content"])
                                 assert inspected["messages"] == []
-                                assert [
-                                    r["inputId"] for r in inspected["unresolved_inputs"]
-                                ] == pending_keys
+                                assert len(inspected["unresolved_inputs"]) == 9
+                                projection = inspected["standby_review"]
+                                assert len(projection["excluded_inputs"]) == 4
+                                assert projection["reviewed_inputs"] == pending_keys
+                                arguments["reviewed_inputs"] = projection["reviewed_inputs"]
                         delta = {
                             "role": "assistant",
                             "tool_calls": [
@@ -94,7 +95,13 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                                     "type": "function",
                                     "function": {
                                         "name": "comms_inbox",
-                                        "arguments": json.dumps({"thread": "parent"}),
+                                        "arguments": json.dumps(
+                                            {
+                                                "thread": "parent",
+                                                "goal_id": goal_id,
+                                                "wait_for": ["child"],
+                                            }
+                                        ),
                                     },
                                 }
                             ],
@@ -184,10 +191,20 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             )
             goal_id = goal.id
             if review_pending:
-                for text in ("WAIT_INSTRUCTION_ONE", "WAIT_INSTRUCTION_TWO"):
-                    early = comms.send_message("child", "parent", text)
+                for index in range(5):
+                    early = comms.send_message("child", "parent", f"WAIT_INSTRUCTION_{index}")
                     pending_keys.append(f"bus:{early.seq}")
                 await agent._drain_inbox("parent")
+                admission = comms.registry.snapshot().admission_generations["parent"]
+                for index in range(4):
+                    agent._dispositions.record(
+                        f"acp:owner-input-{index}",
+                        seq=None,
+                        owner="parent",
+                        admission=admission,
+                        target="parent",
+                        text=f"Uncertain owner input {index}",
+                    )
             agent._schedule_goal("parent")
             await asyncio.wait_for(agent._wake_tasks["parent"], 40)
             assert not failures, failures
