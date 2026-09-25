@@ -384,7 +384,9 @@ def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatc
     invoke_tool(comms, "comms_tags", {"action": "create", "name": "new"})
     assert "#new" in comms.channels()
     invoke_tool(comms, "comms_thread_tags", {"add": "new,api", "remove": "ui"})
-    assert comms.registry.require("other") == replace(original, tags=frozenset({"new", "api"}))
+    assert comms.registry.require("other") == replace(
+        original, tags=frozenset({"new", "api"}), channel_scope_generation=1
+    )
     invoke_tool(comms, "comms_set_channel", {"name": "team", "tags": "api,ui"})
     invoke_tool(comms, "comms_tags", {"action": "rename", "name": "api", "new_name": "backend"})
     assert "backend" in comms.registry.require("a").tags

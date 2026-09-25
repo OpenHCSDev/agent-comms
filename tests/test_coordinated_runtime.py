@@ -34,8 +34,10 @@ from agent_comms.coordination_store import (
     StaleFence,
 )
 from agent_comms.declarations import MessageBus, Thread
+from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, NativeTurnResult
 from agent_comms.operations import Comms
+from agent_comms.wake_injection import render_selected_wake_frame
 
 
 @pytest.fixture
@@ -177,6 +179,22 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     )
     assert alpha is not None and alpha.disposition is ClaimDisposition.IGNORED
     assert len(alpha_calls) == 1
+    assert "── comms: 1 selected ──" in alpha_calls[0][1]
+    assert f'"source_seq":{initial.message.seq}' in alpha_calls[0][1]
+    assert "engage only if this concerns your assigned task" in alpha_calls[0][1]
+    assert "No response obligation exists until triage engages" in alpha_calls[0][1]
+    assert "you owe a response" not in alpha_calls[0][1]
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        ignored = read_historical_native_inputs(
+            store,
+            wire_root_id=root_id,
+            recipient_lookup=stable_thread_lookup(people[1].created_at),
+            source_seq=initial.message.seq,
+        )
+        assert len(ignored) == 1 and ignored[0].stage == "triage"
+        assert ignored[0].triage_result == "ignore"
+        assert ignored[0].execution_id is None
+        assert not ignored[0].expected_prompt_equality_established
     assert len(comms.channel_history("#team")) == 1
     second, beta_calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", second)
@@ -186,6 +204,11 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert beta is not None and beta.disposition is ClaimDisposition.COMPLETED
     assert beta.exact_target == "#team" and beta.response_message_id
     assert len(beta_calls) == 2
+    assert "engage only if this concerns your assigned task" in beta_calls[0][1]
+    assert "expected: this is yours" in beta_calls[1][1]
+    assert '"target":"#team"' in beta_calls[1][1]
+    assert f'"source_seq":{initial.message.seq}' in beta_calls[1][1]
+    assert "This frame is a read-only projection, not file-write permission" in beta_calls[1][1]
     response = comms.channel_history("#team")[-1]
     assert response.body == "42" and response.sender == "beta"
     assert "_agent_comms_private_v1" not in response.to_wire()
@@ -229,7 +252,7 @@ async def test_initial_no_wake_observer_never_enters_model_or_claim_page(
         )
         is None
     )
-    assert not calls
+    assert not calls  # No-wake has no prompt frame or model invocation.
     assert len(comms.channel_history("#team")) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
@@ -240,8 +263,39 @@ async def test_initial_no_wake_observer_never_enters_model_or_claim_page(
         )
 
 
+def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -> None:
+    root, _root_id, comms, initial, people = _root(tmp_path, mentioned=True)
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        alpha_lookup = stable_thread_lookup(people[1].created_at)
+        beta_lookup = stable_thread_lookup(people[2].created_at)
+        assert sealed_cohort_claims(store, alpha_lookup) == ()
+        selected = sealed_cohort_claims(store, beta_lookup)[0]
+    # A pending FULL claim has no response obligation, and no frame may grant one.
+    with pytest.raises(IdentityConflict, match="response obligation"):
+        render_selected_wake_frame(initial, selected, people[2], phase="full")
+    with pytest.raises(IdentityConflict, match="bounded triage"):
+        render_selected_wake_frame(initial, selected, people[2], phase="triage")
+    forged = replace(selected, recipient="alpha", recipient_lookup=alpha_lookup)
+    with pytest.raises(IdentityConflict, match="selected N/K"):
+        render_selected_wake_frame(initial, forged, people[1], phase="full")
+    assert len(comms.channel_history("#team")) == 1  # Framing never publishes a row.
+
+
+def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: Path) -> None:
+    root, _root_id, comms, initial, people = _root(tmp_path)
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        lookup = stable_thread_lookup(people[1].created_at)
+        claim = sealed_cohort_claims(store, lookup)[0]
+    frame = render_selected_wake_frame(initial, claim, people[1], phase="triage")
+    assert f'"source_seq":{initial.message.seq}' in frame
+    assert '"wake_mode":"bounded_triage"' in frame
+    assert initial.message.body not in frame
+    assert "No response obligation exists until triage engages" in frame
+    assert len(comms.channel_history("#team")) == 1
+
+
 async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, monkeypatch) -> None:
-    root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
+    root, root_id, comms, initial, people = _root(tmp_path, direct=True)
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", runner)
@@ -250,7 +304,130 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
     )
     assert outcome is not None and outcome.exact_target == "sender"
     assert len(calls) == 1  # direct FULL, no separate triage invocation
+    assert "expected: this is yours" in calls[0][1]
+    assert '"audience":"direct"' in calls[0][1]
+    assert '"target":"sender"' in calls[0][1]
+    assert "you owe a response" in calls[0][1]
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        one = read_historical_native_inputs(
+            store,
+            wire_root_id=root_id,
+            recipient_lookup=stable_thread_lookup(people[2].created_at),
+            source_seq=initial.message.seq,
+        )
+        assert len(one) == 1 and one[0].stage == "full"
+        assert one[0].triage_result is None
+        assert one[0].input_id == outcome.input_id
     assert comms.bus.dm_history("sender", "beta")[-1].target == "sender"
+
+
+async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
+    tmp_path: Path, monkeypatch
+) -> None:
+    root, root_id, _comms, initial, people = _root(tmp_path)
+    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+    engaged, calls = _fake_model(decision="FULL")
+    monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", engaged)
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        assert (
+            read_historical_native_inputs(
+                store,
+                wire_root_id=root_id,
+                recipient_lookup=stable_thread_lookup(people[2].created_at),
+                source_seq=initial.message.seq,
+            )
+            == ()
+        )  # A selected pending claim has not accepted model input.
+        with store._transaction(), pytest.raises(IdentityConflict, match="committed snapshot"):
+            read_historical_native_inputs(
+                store,
+                wire_root_id=root_id,
+                recipient_lookup=stable_thread_lookup(people[2].created_at),
+                source_seq=initial.message.seq,
+            )
+    result = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+    )
+    assert result is not None and result.disposition is ClaimDisposition.COMPLETED
+    assert len(calls) == 2
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        rows = read_historical_native_inputs(
+            store,
+            wire_root_id=root_id,
+            recipient_lookup=stable_thread_lookup(people[2].created_at),
+            source_seq=initial.message.seq,
+        )
+        assert [row.stage for row in rows] == ["triage", "full"]
+        assert len({row.input_id for row in rows}) == 2
+        assert rows[0].claim_id == rows[1].claim_id == result.claim_id
+        assert rows[0].execution_id is None and rows[0].attempt_ordinal is None
+        assert rows[0].triage_result == "full"
+        assert rows[1].execution_id and rows[1].attempt_ordinal == 1
+        assert rows[1].triage_result is None
+        assert rows[0].owner_lookup == rows[1].owner_lookup
+        assert rows[0].owner_generation == rows[1].owner_generation == 1
+        assert all(not row.expected_prompt_equality_established for row in rows)
+        assert all(row.context.session_id == "isolated-session" for row in rows)
+        assert (
+            read_historical_native_inputs(
+                store,
+                wire_root_id=root_id,
+                recipient_lookup=stable_thread_lookup(people[1].created_at),
+                source_seq=initial.message.seq,
+            )
+            == ()
+        )  # Alpha's triage is pending, not a proof or max-seq gap to skip.
+        journal = Path(str(rows[0].context.session_file) + ".input-proof")
+        proofs = [json.loads(line) for line in journal.read_text().splitlines()]
+        proofs[0]["llmContextDigest"] = "0" * 64
+        journal.write_text("".join(json.dumps(row) + "\n" for row in proofs))
+        with pytest.raises(IdentityConflict, match="differs from live-recorded proof"):
+            read_historical_native_inputs(
+                store,
+                wire_root_id=root_id,
+                recipient_lookup=stable_thread_lookup(people[2].created_at),
+                source_seq=initial.message.seq,
+            )
+
+
+async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(
+    tmp_path: Path, monkeypatch
+) -> None:
+    root, root_id, _comms, initial, people = _root(tmp_path, mentioned=True)
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        assert (
+            read_historical_native_inputs(
+                store,
+                wire_root_id=root_id,
+                recipient_lookup=stable_thread_lookup(people[1].created_at),
+                source_seq=initial.message.seq,
+            )
+            == ()
+        )  # No-wake has no selected SQL claim and cannot gain a proof.
+    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+    failing, calls = _fake_model(fail_on=1)
+    monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", failing)
+    with pytest.raises(NativePiUnavailable):
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        )
+    assert len(calls) == 1
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        assert (
+            store._connection.execute(
+                "SELECT count(*) FROM native_runtime_inputs WHERE session_id IS NULL"
+            ).fetchone()[0]
+            == 1
+        )
+        assert (
+            read_historical_native_inputs(
+                store,
+                wire_root_id=root_id,
+                recipient_lookup=stable_thread_lookup(people[2].created_at),
+                source_seq=initial.message.seq,
+            )
+            == ()
+        )
 
 
 async def test_crash_after_triage_reservation_never_reissues_model(
