@@ -193,6 +193,33 @@ def test_goal_status_edits_and_explicit_contacts_are_independent(tmp_path: Path)
     assert comms.relationships.collaborations("owner")[0].note == "Explicit retained note"
 
 
+@pytest.mark.parametrize("goal_mention", [False, True])
+def test_collaboration_tool_ignores_unrelated_malformed_bus_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, goal_mention: bool
+) -> None:
+    comms = _wire(tmp_path)
+    manual = comms.relationships.edit("owner", "add", "peer", "Explicit note survives")
+    assert manual is not None
+    if goal_mention:
+        comms.update_goal("owner", "set", text="Review with @peer")
+    bus = comms.bus._path
+    bus.write_bytes(b'{"seq":1}\n')  # Complete JSON row, malformed as a Message.
+    bus.chmod(0o600)
+    original_bus = bus.read_bytes()
+    original_relationships = comms.relationships.path.read_bytes()
+    monkeypatch.delenv("PI_AGENT_ID", raising=False)
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
+    assert comms.relationships.collaborations("owner") == (manual,)
+    result = invoke_tool(comms, "comms_collaborations", {})
+    assert result["collaborations"] == [asdict(manual)]
+    if goal_mention:
+        assert result["visible_collaborators"][0]["sources"] == ("explicit", "goal_mention")
+    else:
+        assert result == {"collaborations": [asdict(manual)]}
+    assert bus.read_bytes() == original_bus
+    assert comms.relationships.path.read_bytes() == original_relationships
+
+
 def test_registry_write_failure_never_exposes_uncommitted_contact(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

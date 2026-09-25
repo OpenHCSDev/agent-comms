@@ -98,7 +98,15 @@ class ThreadCommsSnapshot:
     history_messages: int
     incoming_basis: str = "Current delivery scope, independent of read markers"
     unresolved_goal_mentions: tuple[GoalMentionDiagnostic, ...] = ()
-    explicit_collaborations: tuple[Collaboration, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ContactProjection:
+    """One registry/relationship snapshot, independent of bus history."""
+
+    explicit: tuple[Collaboration, ...]
+    visible: tuple[RelationshipEntry, ...]
+    diagnostics: tuple[GoalMentionDiagnostic, ...]
 
 
 class ThreadRelationships:
@@ -300,6 +308,57 @@ class ThreadRelationships:
                     for row in contacts
                     if thread.created_at in {row.owner_created_at, row.peer_created_at}
                 ),
+                tuple(row for row in diagnostics if row.owner == thread.name),
+            )
+
+    def contact_projection(self, owner: str) -> ContactProjection:
+        """Combine manual and bound-goal contacts without reading a bus row."""
+        with _store_lock(self.comms._wire_lock_path), _store_lock(self.path):
+            registry = self.comms.registry.snapshot()
+            thread = self.comms.registry.require(owner)
+            edges = self._unique_edges(self._canonical_edges(self._load(), registry))
+            explicit = tuple(
+                self._orient(edge, thread) for edge in edges if self._incident(edge, thread)
+            )
+            contacts, diagnostics = self._goal_contacts(registry)
+            visible: dict[tuple[str, float], RelationshipEntry] = {}
+            for edge in explicit:
+                live = registry.threads.get(edge.peer)
+                visible[(edge.peer, edge.peer_created)] = RelationshipEntry(
+                    edge.peer,
+                    "thread",
+                    detail=edge.note,
+                    available=live is not None and live.created_at == edge.peer_created,
+                    sources=("explicit",),
+                )
+            for contact in contacts:
+                if (contact.owner, contact.owner_created_at) == (thread.name, thread.created_at):
+                    peer_name, peer_created = contact.peer, contact.peer_created_at
+                elif (contact.peer, contact.peer_created_at) == (thread.name, thread.created_at):
+                    peer_name, peer_created = contact.owner, contact.owner_created_at
+                else:
+                    continue
+                identity = peer_name, peer_created
+                current = visible.get(identity)
+                provenance = (
+                    f"Mentioned by {contact.owner}'s goal {contact.goal_id} "
+                    f"text revision {contact.text_revision} (awareness only)"
+                )
+                visible[identity] = RelationshipEntry(
+                    peer_name,
+                    "thread",
+                    detail=(
+                        f"{current.detail}\n{provenance}"
+                        if current and current.detail
+                        else provenance
+                    ),
+                    available=True,  # _goal_contacts checked this exact live incarnation.
+                    sources=(*current.sources, "goal_mention") if current else ("goal_mention",),
+                    goal_contacts=(*current.goal_contacts, contact) if current else (contact,),
+                )
+            return ContactProjection(
+                explicit,
+                tuple(sorted(visible.values(), key=lambda row: (row.target, not row.available))),
                 tuple(row for row in diagnostics if row.owner == thread.name),
             )
 
@@ -516,11 +575,9 @@ class ThreadRelationships:
             if child.parent and canonical(child.parent) == thread.name
         ]
         collaborating: dict[tuple[str, float], RelationshipEntry] = {}
-        explicit_collaborations: list[Collaboration] = []
         for edge in self._unique_edges(edges):
             if not self._incident(edge, thread):
                 continue
-            explicit_collaborations.append(self._orient(edge, thread))
             other_name, other_created = self._counterpart(edge, thread)
             person = people.get(other_name)
             available = person is not None and person.thread.created_at == other_created
@@ -582,5 +639,4 @@ class ThreadRelationships:
             unresolved_goal_mentions=tuple(
                 row for row in goal_diagnostics if row.owner == thread.name
             ),
-            explicit_collaborations=tuple(explicit_collaborations),
         )

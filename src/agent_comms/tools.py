@@ -396,14 +396,11 @@ def _collaboration(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 
 def _collaborations(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     owner = _executing_thread()
-    snapshot = comms.relationships.snapshot(owner)
-    group = next(group for group in snapshot.groups if group.key == "collaborating")
+    projection = comms.relationships.contact_projection(owner)
     result: JsonObject = {
-        "collaborations": [
-            asdict(edge) for edge in snapshot.explicit_collaborations
-        ]  # Legacy explicit declarations remain independently editable.
-    }
-    if any(entry.goal_contacts for entry in group.entries):
+        "collaborations": [asdict(edge) for edge in projection.explicit]
+    }  # Legacy explicit declarations remain independently editable.
+    if any(entry.goal_contacts for entry in projection.visible):
         result["visible_collaborators"] = [
             {
                 "peer": entry.target,
@@ -412,12 +409,10 @@ def _collaborations(comms: Comms, arguments: Mapping[str, object]) -> JsonObject
                 "detail": entry.detail,
                 "goal_contacts": [asdict(contact) for contact in entry.goal_contacts],
             }
-            for entry in group.entries
+            for entry in projection.visible
         ]
-    if snapshot.unresolved_goal_mentions:
-        result["unresolved_goal_mentions"] = [
-            asdict(row) for row in snapshot.unresolved_goal_mentions
-        ]
+    if projection.diagnostics:
+        result["unresolved_goal_mentions"] = [asdict(row) for row in projection.diagnostics]
     return result
 
 
