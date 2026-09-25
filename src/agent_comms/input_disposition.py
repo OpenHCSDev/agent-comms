@@ -149,6 +149,17 @@ class InputDispositions:
             )
             return sorted(rows, key=lambda row: (row["sequence"] is None, row["sequence"] or 0))
 
+    def bound_bus_inputs(self) -> list[dict[str, Any]]:
+        """Snapshot receipt-bound bus inputs for explicit presentation repair only."""
+        with _store_lock(self.path):
+            return [
+                dict(row)
+                for row in self._read().values()
+                if row["sequence"] is not None
+                and row["native_id"] is not None
+                and row["sent_text"] is not None
+            ]
+
 
 class AcpDeliveryCursors:
     """ACP scheduling position, independent of human/UI read markers."""

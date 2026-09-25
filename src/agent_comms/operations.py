@@ -30,8 +30,8 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from .channels import ChannelCatalog
-from .goal_pauses import GoalPauseEvent, GoalPauseEvents
 from .goal_history import GoalHistoryEntry
+from .goal_pauses import GoalPauseEvent, GoalPauseEvents
 from .goal_waits import GoalWait, GoalWaits
 
 if TYPE_CHECKING:
@@ -1747,6 +1747,32 @@ class Comms:
         input_display: InputDisplay | None = None,
     ) -> list[TranscriptEvent]:
         role = message.get("role")
+        if (
+            role == "user"
+            and input_display is not None
+            and input_display.sent_text_digest is not None
+        ):
+            raw_content = message.get("content")
+            raw_text = (
+                raw_content
+                if isinstance(raw_content, str)
+                else (
+                    "\n".join(
+                        str(part.get("text") or "")
+                        for part in raw_content
+                        if isinstance(part, dict) and part.get("type") == "text"
+                    )
+                    if isinstance(raw_content, list)
+                    else None
+                )
+            )
+            if raw_text is not None and input_display.matches(raw_text):
+                # Exact per-input provenance wins over old turn-wide annotations,
+                # including explicitly bound human/internal inputs (no route).
+                routing = input_display.routing
+            else:
+                routing = None
+                input_display = None
         if role == "user" and routing is not None and routing.requests:
             return [
                 TranscriptEvent("user", request.body, routing=TurnRouting((request,), None))
@@ -1851,9 +1877,18 @@ class Comms:
             session_file, path.stat().st_size if session_file and path.is_file() else 0
         )
 
-    def record_input_display(self, native_id: str, display_text: str | None) -> None:
+    def record_input_display(
+        self,
+        native_id: str,
+        display_text: str | None,
+        *,
+        sent_text: str | None = None,
+        routing: TurnRouting | None = None,
+    ) -> None:
         """Bind UI text to the private native input ID, never a prompt prefix."""
-        self.transcript_routes.record_input_display(native_id, display_text)
+        self.transcript_routes.record_input_display(
+            native_id, display_text, sent_text=sent_text, routing=routing
+        )
 
     def record_turn_routing(
         self, name: str, checkpoint: TranscriptCursor, routing: TurnRouting
@@ -1882,6 +1917,74 @@ class Comms:
                         ids.append(record["id"])
                     break
         self.transcript_routes.record(session_file, tuple(ids), routing)
+
+    def repair_input_routing(self, *, dry_run: bool = True) -> dict[str, int | bool]:
+        """Explicit maintenance for old receipt-bound inputs, never a UI/wake scan.
+
+        Join committed envelopes by sequence to owner-persisted native ID/text
+        bindings. A prompt prefix or a matching body alone is not evidence.
+        No transcript, input disposition, delivery/read cursor, or model is changed.
+        """
+        import hashlib
+        from collections import Counter
+
+        from .declarations import ScheduledTurn
+        from .input_disposition import InputDispositions
+
+        rows = InputDispositions(self.root).bound_bus_inputs()
+        native_counts = Counter(row["native_id"] for row in rows)
+        existing = self.transcript_routes.input_bindings()
+        pending: dict[int, list[dict[str, object]]] = {}
+        report: dict[str, int | bool] = {
+            "dry_run": dry_run,
+            "eligible": 0,
+            "already_bound": 0,
+            "repaired": 0,
+            "skipped": 0,
+            "conflicts": 0,
+        }
+        for row in rows:
+            if native_counts[row["native_id"]] != 1:
+                report["conflicts"] += 1
+            else:
+                pending.setdefault(row["sequence"], []).append(row)
+        with self.bus.full_history_snapshot() as (_, messages):
+            for message in messages:
+                for row in pending.pop(message.seq, []):
+                    native_id, sent_text = row["native_id"], row["sent_text"]
+                    if (
+                        not isinstance(native_id, str)
+                        or not isinstance(sent_text, str)
+                        or row["target"] != message.target
+                        or row["source_text"] != ScheduledTurn.incoming(message).prompt
+                    ):
+                        report["skipped"] += 1
+                        continue
+                    routing = TurnRouting((message,), None)
+                    binding = (
+                        hashlib.sha256(sent_text.encode("utf-8")).hexdigest(),
+                        json.dumps(routing.to_wire(), sort_keys=True),
+                    )
+                    if native_id in existing:
+                        report[
+                            "already_bound" if existing[native_id] == binding else "conflicts"
+                        ] += 1
+                        continue
+                    report["eligible"] += 1
+                    if not dry_run:
+                        try:
+                            self.record_input_display(
+                                native_id,
+                                str(row["source_text"]),
+                                sent_text=sent_text,
+                                routing=routing,
+                            )
+                        except RelationViolationError:
+                            report["conflicts"] += 1
+                        else:
+                            report["repaired"] += 1
+        report["skipped"] += sum(len(group) for group in pending.values())
+        return report
 
     # ─── Threads ──────────────────────────────────────────────────────────────
 
@@ -2281,7 +2384,7 @@ class Comms:
             goal = thread.goal
             original_goal = goal
             edited_pause = self.goal_pause(name) if action == "edit" else None
-            wait_targets = ()
+            wait_targets: tuple[GoalWaitTarget, ...] = ()
             if action == "standby":
                 if not wait_for:
                     raise ValueError("Standby requires explicit wait_for thread names.")

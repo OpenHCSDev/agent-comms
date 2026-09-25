@@ -148,6 +148,7 @@ class CommsAgent:
         # including non-displayed steers, needs its own identified user start.
         self._forwarded_inputs: dict[str, set[str]] = {}
         self._steering_input_keys: dict[str, dict[str, str]] = {}
+        self._steering_origins: dict[str, dict[str, Message]] = {}
         self._steering_goal_ids: dict[str, dict[str, str | None]] = {}
         self._turn_input_keys: dict[str, set[str]] = {}
         self._dispositions = InputDispositions(comms.root)
@@ -1322,21 +1323,20 @@ class CommsAgent:
                 and starts_turn
                 and incoming.reply_target is None
             ):
+                input_id = f"bus-{message.seq}"
+                self._steering_origins.setdefault(session_id, {})[input_id] = message
                 if direct:
-                    input_id = f"bus-{message.seq}"
                     self._steering_input_keys.setdefault(session_id, {})[input_id] = key
                     self._turn_input_keys.setdefault(session_id, set()).add(key)
                     self._forwarded_inputs.setdefault(session_id, set()).add(input_id)
-                    backend_inbox.put_nowait(
-                        {
-                            "type": "prompt",
-                            "message": incoming.prompt,
-                            "streamingBehavior": "steer",
-                            "_input_id": input_id,
-                        }
-                    )
-                else:
-                    backend_inbox.put_nowait(incoming.prompt)
+                backend_inbox.put_nowait(
+                    {
+                        "type": "prompt",
+                        "message": incoming.prompt,
+                        "streamingBehavior": "steer",
+                        "_input_id": input_id,
+                    }
+                )
             elif admitted and self._auto_wake and self._runtime_enabled and starts_turn:
                 self._pending_turns.setdefault(session_id, []).append(incoming)
             await self._runtime.session_update(
@@ -1736,6 +1736,7 @@ class CommsAgent:
                     original_keys = (*original_keys, key)
         self._turn_input_keys[session_id] = set(original_keys)
         self._steering_input_keys[session_id] = {}
+        self._steering_origins[session_id] = {}
         self._steering_goal_ids[session_id] = {}
 
         @contextmanager
@@ -1879,10 +1880,18 @@ class CommsAgent:
                 if allowed:
                     if public_id is None:
                         display = original_display
+                        input_origins = origins
                     else:
                         row = self._dispositions.get(keys[0]) if keys else None
                         display = row["source_text"] if row is not None else sent_text
-                    self._comms.record_input_display(native_id, display)
+                        origin = self._steering_origins.get(session_id, {}).get(public_id)
+                        input_origins = (origin,) if origin is not None else ()
+                    self._comms.record_input_display(
+                        native_id,
+                        display,
+                        sent_text=sent_text,
+                        routing=TurnRouting(input_origins, None) if input_origins else None,
+                    )
                 yield True if allowed else None if defer_for_goal else False
 
         def native_start(public_id: str | None, native_id: str, sent_text: str) -> bool:
@@ -2449,12 +2458,30 @@ class CommsAgent:
                 pending = backend_inbox.get_nowait()
                 if isinstance(pending, str):
                     self._pending_turns.setdefault(session_id, []).append(ScheduledTurn(pending))
+                elif isinstance(pending, dict) and pending.get("type") == "prompt":
+                    input_id = pending.get("_input_id")
+                    pending_origin = (
+                        self._steering_origins.get(session_id, {}).get(input_id)
+                        if isinstance(input_id, str)
+                        else None
+                    )
+                    if (
+                        pending_origin is not None
+                        and input_id not in self._steering_input_keys.get(session_id, {})
+                    ):
+                        # The backend never requeues written/uncertain prompts.
+                        # Preserve the existing unsent channel requeue with its
+                        # envelope, instead of losing attribution to a string.
+                        self._pending_turns.setdefault(session_id, []).append(
+                            ScheduledTurn.incoming(pending_origin)
+                        )
             thread_name = await self._sync_session_identity(session_id)
             current_project = self._comms.registry.require(thread_name).worktree
             # Discard unresolved per-turn IDs without replay. Durable ACP input
             # disposition across owner crashes remains a separate integration.
             self._forwarded_inputs.pop(session_id, None)
             self._steering_input_keys.pop(session_id, None)
+            self._steering_origins.pop(session_id, None)
             self._steering_goal_ids.pop(session_id, None)
             self._turn_input_keys.pop(session_id, None)
             remaining = self._queued_inputs.pop(session_id, {})
