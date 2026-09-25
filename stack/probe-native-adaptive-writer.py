@@ -8,6 +8,7 @@ Pi 0.85.1's pinned writer, not permission to patch production or activate PR48.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import selectors
@@ -24,6 +25,7 @@ from agent_comms.declarations import Goal, Thread, ThreadRegistry  # noqa: E402
 
 SCRIPT = Path(__file__).with_suffix(".mjs")
 MANIFEST = Path(__file__).with_name("pi-native.sha256")
+PROTOTYPE_SHA = "6cfeed6722f8f6de9d820c05941ecadcb88425b8856ad8696518de16496be05c"
 
 
 def saved_entries(session_file: str) -> list[dict[str, object]]:
@@ -80,36 +82,51 @@ def self_test_no_line() -> None:
     print(f"no-line deadline PASS: child reaped in {elapsed:.2f}s")
 
 
-def run_case(case: str, package: Path) -> None:
-    subprocess.run(
-        ["sha256sum", "--check", "--status", str(MANIFEST)],
-        cwd=package,
-        check=True,
-        timeout=20,
-    )
+def run_case(case: str, package: Path, *, prototype: bool) -> None:
+    if prototype:
+        for row in MANIFEST.read_text().splitlines():
+            expected, relative = row.split("  ", 1)
+            if relative == "dist/core/session-manager.js":
+                expected = PROTOTYPE_SHA
+            actual = hashlib.sha256((package / relative).read_bytes()).hexdigest()
+            if actual != expected:
+                raise ValueError(f"Disposable native package mismatch: {relative}")
+    else:
+        subprocess.run(
+            ["sha256sum", "--check", "--status", str(MANIFEST)],
+            cwd=package,
+            check=True,
+            timeout=20,
+        )
     env = {
         "HOME": str(Path.home()),
         "PATH": os.environ["PATH"],
         "LANG": "C.UTF-8",
         "PI_NATIVE_PACKAGE_DIR": str(package),
     }
+    if case == "unknown-write":
+        env["PR48_PROBE_FAIL_AFTER_WRITE"] = "1"  # Only the disposable patch reads this.
     with tempfile.TemporaryDirectory(prefix="pr48-native-writer-gap-") as directory:
         root = Path(directory)
-        registry = ThreadRegistry(root / "registry.json")
-        registry.register(
-            Thread(
-                name="owner",
-                tags=frozenset(),
-                worktree=str(root),
-                pid=os.getpid(),
-                goal=Goal("original task", "goal-old"),
+        registry = None
+        claimed = None
+        claimed_epoch = None
+        if case in {"owner-goal", "owner-stop"}:
+            registry = ThreadRegistry(root / "registry.json")
+            registry.register(
+                Thread(
+                    name="owner",
+                    tags=frozenset(),
+                    worktree=str(root),
+                    pid=os.getpid(),
+                    goal=Goal("original task", "goal-old"),
+                )
             )
-        )
-        original_owner, original_epoch = registry.live_owner_with_epoch("owner")
-        claimed, claimed_epoch = registry.claim_live_turn_with_epoch(
-            original_owner, "turn-old", expected_epoch=original_epoch
-        )
-        assert claimed.active_turn is not None and claimed_epoch > original_epoch
+            original_owner, original_epoch = registry.live_owner_with_epoch("owner")
+            claimed, claimed_epoch = registry.claim_live_turn_with_epoch(
+                original_owner, "turn-old", expected_epoch=original_epoch
+            )
+            assert claimed.active_turn is not None and claimed_epoch > original_epoch
         proc = subprocess.Popen(
             ["node", str(SCRIPT), "pending", str(root)],
             stdin=subprocess.PIPE,
@@ -154,6 +171,7 @@ def run_case(case: str, package: Path) -> None:
                 action = "continue"
             elif case == "owner-goal":
                 # The registry, not JS labels, owns the goal and claimed turn.
+                assert registry is not None and claimed is not None and claimed_epoch is not None
                 registry.register(
                     replace(registry.require("owner"), goal=Goal("new task", "goal-new"))
                 )
@@ -166,7 +184,34 @@ def run_case(case: str, package: Path) -> None:
                     "ownerEpochBefore": claimed_epoch,
                     "ownerEpochAfter": current_epoch,
                 }
+                action = "continue-owner-goal"
+            elif case == "owner-stop":
+                assert registry is not None and claimed_epoch is not None
+                registry.unregister("owner")
+                assert not registry.status("owner").active
+                invalidation = {"ownerEpochBefore": claimed_epoch, "statusAfter": "stopped"}
+                action = "continue-owner-goal"
+            elif case == "crash-lock":
+                holder = subprocess.Popen(
+                    ["node", str(SCRIPT), "hold-lock", captured["sessionFile"]],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=env,
+                )
+                try:
+                    assert json.loads(read_capture_line(holder, timeout=5))["phase"] == "lock-held"
+                finally:
+                    if holder.poll() is None:
+                        holder.kill()
+                    holder.communicate(timeout=3)
+                assert Path(captured["sessionFile"] + ".pr48-writer.lock").exists()
+                invalidation = {"holderTerminated": holder.returncode is not None}
                 action = "continue"
+            elif case == "positive":
+                action = "continue"
+            elif case == "unknown-write":
+                action = "probe-unknown-write"
             else:
                 raise ValueError("Unknown negative case")
 
@@ -194,12 +239,33 @@ def run_case(case: str, package: Path) -> None:
                     sort_keys=True,
                 )
             )
-            # The target safety invariant is deliberately RED on the pinned
-            # native API: stale leaf, external writer, or owner/goal change
-            # must cause refusal BEFORE mutation, but appendCompaction lacks CAS.
-            assert (
-                result["commitId"] is None
-            ), f"UNSAFE {case}: native appendCompaction committed after preflight invalidation"
+            if case == "positive":
+                assert prototype, "Positive guarded append requires the disposable prototype"
+                assert result["commitId"] is not None and result["commitError"] is None
+                assert saved[-1]["id"] == result["commitId"]
+            else:
+                # These remain RED on pinned stock Pi. The disposable writer
+                # refuses before mutation except the injected post-write case:
+                # bytes may be visible but the outcome is unknown, never retried.
+                # Owner-scoped calls remain denied until a canonical bridge exists.
+                assert (
+                    result["commitId"] is None
+                ), f"UNSAFE {case}: native appendCompaction committed after preflight invalidation"
+                assert result["commitError"] is not None
+                if prototype:
+                    expected = {
+                        "local-leaf": "Invalid native compaction witness",
+                        "other-writer": "Native compaction source changed",
+                        "owner-goal": "Canonical Python owner commit attestation unavailable",
+                        "owner-stop": "Canonical Python owner commit attestation unavailable",
+                        "crash-lock": "Native session writer lock unavailable",
+                        "unknown-write": "Native compaction commit outcome unknown",
+                    }[case]
+                    assert expected in result["commitError"], result["commitError"]
+                    if case == "unknown-write":
+                        assert result["leafAfterCommit"] == captured["capturedLeaf"]
+                        assert saved[-1]["type"] == "compaction", "Post-write bytes may be visible"
+                        assert "Native session writer changed" in result["subsequentError"]
         finally:
             if proc.poll() is None:
                 proc.kill()
@@ -209,10 +275,23 @@ def run_case(case: str, package: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "case", choices=("local-leaf", "other-writer", "owner-goal", "self-test-no-line")
+        "case",
+        choices=(
+            "local-leaf",
+            "other-writer",
+            "owner-goal",
+            "owner-stop",
+            "crash-lock",
+            "unknown-write",
+            "positive",
+            "self-test-no-line",
+        ),
     )
     parser.add_argument(
         "--package", type=Path, help="verified read-only pinned Pi package directory"
+    )
+    parser.add_argument(
+        "--prototype", action="store_true", help="expect isolated patched native copy"
     )
     args = parser.parse_args()
     if args.case == "self-test-no-line":
@@ -220,7 +299,7 @@ def main() -> None:
         return
     if args.package is None:
         parser.error("--package is required for native cases")
-    run_case(args.case, args.package.resolve())
+    run_case(args.case, args.package.resolve(), prototype=args.prototype)
 
 
 if __name__ == "__main__":
