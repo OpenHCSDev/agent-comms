@@ -1466,6 +1466,28 @@ class CommsAgent:
         self._schedule_goal(session_id)
         return goal
 
+    async def edit_goal(
+        self, session_id: str, goal_id: str, expected_revision: int, text: str
+    ) -> Goal:
+        """Edit the current objective without replacing its identity or execution state."""
+        name = self._require_session(session_id)
+        goal = self._comms.registry.require(name).goal
+        if goal is None or goal.id != goal_id or goal.revision != expected_revision:
+            raise ValueError("The goal changed; refresh its state before editing.")
+        # update_goal owns the wire lock and atomically rechecks both this
+        # snapshot and the executing owner. Do not acquire its lock twice.
+        edited = self._comms.update_goal(
+            name,
+            "edit",
+            text=text,
+            goal_id=goal_id,
+            expected_goal=goal,
+            expected_owner_pid=os.getpid(),
+        )
+        assert edited is not None
+        await self._sync_thread_config(session_id)
+        return edited
+
     async def retry_goal(self, session_id: str, goal_id: str, expected_revision: int) -> Goal:
         """Record an explicit UI retry in the executing owner's private ledger."""
         if session_id in self._backend_inboxes or session_id in self._active_turns:
