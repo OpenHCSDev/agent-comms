@@ -735,9 +735,25 @@ class CommsAgent:
 
     async def replay_unknown_inputs(self, session_id: str, client: Any = None) -> None:
         owner = self._require_session(session_id)
-        overview = self._comms.input_delivery(owner)
+        overview = self._comms.input_delivery(
+            owner, awaiting_keys=self.awaiting_input_keys(session_id)
+        )
         for disposition in overview["inputs"]:
             await self._emit_public_input_disposition(session_id, disposition, client=client)
+
+    def awaiting_input_keys(self, session_id: str) -> frozenset[str] | None:
+        """Derive delivery notices from existing owner queues; never create new authority."""
+        owner = self._comms.registry.require(self._require_session(session_id))
+        if owner.pid != os.getpid() or not self._comms.registry.status(owner.name).running:
+            return None
+        keys = set(self._turn_input_keys.get(session_id, ()))
+        keys.update(self._steering_input_keys.get(session_id, {}).values())
+        keys.update(
+            self._dispositions.bus_key(turn.origin, owner)
+            for turn in self._pending_turns.get(session_id, ())
+            if turn.origin is not None
+        )
+        return frozenset(keys)
 
     async def emit_session_identity(self, session_id: str, name: str, client: Any = None) -> None:
         """Let a subscriber identify its owner before potentially long replay."""
@@ -1396,6 +1412,7 @@ class CommsAgent:
             )
         if pushed:
             self._comms.acknowledge_through(thread_name, self._inbox_cursors[session_id])
+            await self.emit_input_delivery_changed(session_id)
         self._schedule_wake(session_id)
         return pushed
 
@@ -2069,6 +2086,7 @@ class CommsAgent:
         self._active_turns[session_id] = turn_id
         try:
             await self._emit_event(session_id, self._started_event(thread_name, turn_id))
+            await self.emit_input_delivery_changed(session_id)
             await self._drain_inbox(session_id)
             session_file = thread.session_file
             fork_session = False
@@ -2551,6 +2569,7 @@ class CommsAgent:
             self._steering_origins.pop(session_id, None)
             self._steering_goal_ids.pop(session_id, None)
             self._turn_input_keys.pop(session_id, None)
+            await self.emit_input_delivery_changed(session_id)
             remaining = self._queued_inputs.pop(session_id, {})
             if remaining:
                 await self._emit_queue_state(
