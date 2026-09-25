@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from .channels import ChannelCatalog
+from .goal_pauses import GoalPauseEvent, GoalPauseEvents
 
 if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore
@@ -2132,6 +2133,11 @@ class Comms:
         self.channel_catalog.rename_thread(previous, current)
         return RenameThreadResult(previous, current, True)
 
+    def goal_pause(self, name: str) -> GoalPauseEvent | None:
+        """Return the action that paused this exact current goal revision, if known."""
+        events = GoalPauseEvents(self.root / "goal_pause_events.json")
+        return events.for_goal(self.registry.require(name).goal, events.snapshot())
+
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
         """Summarize threads with status and pending counts."""
         snapshot = self.registry.snapshot()
@@ -2142,12 +2148,18 @@ class Comms:
         }
         activities = self.activity.all_current()
         pending = self.bus.pending_counts_all(tuple(threads))
+        pause_events = GoalPauseEvents(self.root / "goal_pause_events.json").snapshot()
         return [
             {
                 **t.to_wire(),
                 "status": snapshot.statuses[name].value,
                 "is_fork": t.is_fork,
                 "pending": pending[name],
+                "goal_pause": (
+                    asdict(pause)
+                    if (pause := GoalPauseEvents.for_goal(t.goal, pause_events))
+                    else None
+                ),
                 "activity": activities[name].state.value if name in activities else "idle",
                 "activity_detail": activities[name].detail if name in activities else "",
             }
@@ -2228,7 +2240,7 @@ class Comms:
                 raise ValueError("This goal was replaced or cleared; refresh its state.")
             if expected_status is not None and (goal is None or goal.status != expected_status):
                 raise ValueError(
-                    (goal.owner_pause_instruction if goal is not None else None)
+                    (pause.owner_instruction if (pause := self.goal_pause(name)) else None)
                     or "This goal is no longer active; refresh its state."
                 )
             report_turn = thread.active_turn.id if thread.active_turn is not None else ""
@@ -2279,15 +2291,6 @@ class Comms:
                     progress=goal.progress if progress is None else progress,
                     revision=goal.revision + 1,
                     reported_turn=report_turn if model_report else goal.reported_turn,
-                    paused_by=(
-                        (
-                            GoalPauseSource.OWNER
-                            if owner_action
-                            else GoalPauseSource.MODEL if model_report else GoalPauseSource.RUNTIME
-                        )
-                        if action == "paused"
-                        else None if action == "active" else goal.paused_by
-                    ),
                 )
             else:
                 raise ValueError(f"Unknown goal action: {action}")
@@ -2301,6 +2304,17 @@ class Comms:
                 ),
                 self.registry.status(thread.name),
             )
+            if action == "paused" and goal is not None:
+                # The registry transition precedes attribution. A crash in between
+                # leaves an unknown actor, never attributes a later pause falsely.
+                source = (
+                    GoalPauseSource.OWNER
+                    if owner_action
+                    else GoalPauseSource.MODEL if model_report else GoalPauseSource.RUNTIME
+                )
+                GoalPauseEvents(self.root / "goal_pause_events.json").record(
+                    GoalPauseEvent(goal.id, goal.revision, source)
+                )
             return goal
 
     def block_goal_after_failed_turn(

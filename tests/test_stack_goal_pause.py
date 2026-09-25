@@ -196,7 +196,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(mo
                     assert native_user_starts() == 2
                 await view.slash_command("/goal pause")
                 paused = wire(root / "wire").registry.require("project").goal
-                assert paused.status == "paused" and paused.paused_by == "owner"
+                assert paused.status == "paused" and comms.goal_pause("project").source == "owner"
                 from agent_comms.tools import TOOLS
 
                 monkeypatch.setenv("PI_AGENT_ID", "project")
