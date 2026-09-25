@@ -15,6 +15,9 @@ from uuid import uuid4
 import pytest
 
 from agent_comms import backend
+from agent_comms.acp import CommsAgent
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.operations import wire
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="native Pi uses POSIX fsync")
 
@@ -60,9 +63,9 @@ def _saved_history(path: Path, cwd: Path, *, short: bool = False) -> None:
 
 
 @pytest.mark.parametrize(
-    "case", ["success", "summary_failure", "oversized_current", "oversized_summary"]
+    "case", ["success", "acp_success", "summary_failure", "oversized_current", "oversized_summary"]
 )
-async def test_saved_history_compacts_after_native_user_start(case: str) -> None:
+async def test_saved_history_compacts_after_native_user_start(case: str, monkeypatch) -> None:
     native_bin = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native_bin:
         pytest.skip("Set AC_NATIVE_STACK_BIN to the prepared pinned Pi launcher")
@@ -145,28 +148,73 @@ async def test_saved_history_compacts_after_native_user_start(case: str) -> None
                 "return original(url,...rest);};"
             )
             events = []
+            native_args = [
+                "--offline", "--no-extensions", "--no-skills", "--no-prompt-templates",
+                "--no-context-files", "--no-tools", "--provider", "openrouter",
+                "--model", "z-ai/glm-5.3-flash", "--thinking", "high",
+            ]
+            child_env = {
+                "PI_CODING_AGENT_DIR": str(agent),
+                "OPENROUTER_API_KEY": "offline-fixture-no-real-key",
+                "NODE_OPTIONS": f"--require={preload}", "PI_OFFLINE": "1",
+            }
             async def collect():
                 async for event in backend.stream_agent_events(
                     native_bin,
-                    ["--offline", "--no-extensions", "--no-skills", "--no-prompt-templates",
-                     "--no-context-files", "--no-tools", "--provider", "openrouter",
-                     "--model", "z-ai/glm-5.3-flash", "--thinking", "high"],
+                    native_args,
                     "x" * 600000 if case == "oversized_current" else "Reply OK.", str(project),
-                    env_extra={
-                        "PI_CODING_AGENT_DIR": str(agent),
-                        "OPENROUTER_API_KEY": "offline-fixture-no-real-key",
-                        "NODE_OPTIONS": f"--require={preload}", "PI_OFFLINE": "1",
-                    },
+                    env_extra=child_env,
                     session_file=str(session), require_input_id=True,
                     native_start=lambda *_: True,
                 ):
                     events.append(event)
-            await asyncio.wait_for(collect(), timeout=30)
+            if case == "acp_success":
+                for key, value in child_env.items():
+                    monkeypatch.setenv(key, value)
+                comms = wire(root / "wire")
+                owner = CommsAgent(
+                    comms, agent_bin=native_bin, agent_args=native_args,
+                    runtime_enabled=False, auto_wake=False,
+                )
+                updates = []
+
+                class Client:
+                    async def session_update(self, session_id, update):
+                        updates.append(update)
+
+                owner.on_connect(Client())
+                await owner.new_session(str(project))
+                owner._drain_tasks["project"].cancel()
+                await asyncio.gather(owner._drain_tasks["project"], return_exceptions=True)
+                comms.attach_session("project", str(session))
+                try:
+                    await asyncio.wait_for(
+                        owner._run_owned_input("project", "project", "Reply OK."), timeout=30
+                    )
+                finally:
+                    await owner.shutdown()
+            else:
+                await asyncio.wait_for(collect(), timeout=30)
         finally:
             server.shutdown()
             server.server_close()
             worker.join(timeout=2)
         kinds = [event["type"] for event in events]
+        if case == "acp_success":
+            rows = InputDispositions(comms.root)._read()
+            assert len(rows) == 1
+            assert next(iter(rows.values()))["status"] == "started"
+            assert len(calls) > 1
+            assert reasoning_efforts[:-1] == ["low"] * (len(calls) - 1)
+            assert reasoning_efforts[-1] == "high"
+            assert updates
+            texts = [
+                getattr(getattr(update, "content", None), "text", "") for update in updates
+            ]
+            assert any("summary" in text for text in texts)
+            assert not any("[agent error]" in text for text in texts)
+            assert '"type":"compaction"' in session.read_text()
+            return
         assert "input_started" in kinds
         assert events[-1]["type"] == "done"
         if case == "summary_failure":
