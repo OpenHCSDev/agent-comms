@@ -24,6 +24,8 @@ SUMMARY_RETURN = "    return retryAssistantCall(produce, retry, requestOptions.s
 REPORT_SUMMARY = (
     "    const response = await retryAssistantCall(produce, retry, requestOptions.signal, callbacks);\n"
     "    callbacks?.onSummaryResponse?.(response.usage);\n"
+    "    if (response.stopReason === 'stop' && !contentText(response.content).trim()) "
+    "throw new Error('Compaction returned an empty summary');\n"
     "    return response;\n"
 )
 TURN_PREFIX_PROMPT = (

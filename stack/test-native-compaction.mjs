@@ -37,6 +37,18 @@ async function summarize(body, previousSummary, instructions, contextWindow = 12
 const small = await summarize('short history', undefined, undefined);
 assert.equal(small.length, 1);
 
+let emptyCalls = 0;
+await assert.rejects(() => generateSummaryWithUsage(
+  [{ role: 'user', content: [{ type: 'text', text: 'history '.repeat(62500) }], timestamp: 1 }],
+  { provider: 'openrouter', id: 'fake', contextWindow: 128000, maxTokens: 8192 },
+  16384, 'local-fixture', {}, undefined, undefined, undefined, undefined,
+  async () => ({ result: async () => {
+    emptyCalls++;
+    return { stopReason: 'stop', content: [{ type: 'text', text: ' \n' }], usage };
+  }}), {}, { enabled: false, maxRetries: 0 }, {}, undefined,
+), /empty summary/);
+assert.equal(emptyCalls, 1, 'never advance or replay after an empty chunk summary');
+
 const ascii = await summarize(`START_MARKER\n${'history text '.repeat(30000)}\nEND_MARKER`);
 assert.ok(ascii.length > 1);
 assert.ok(ascii.some((prompt) => prompt.includes('START_MARKER')));
