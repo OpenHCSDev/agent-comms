@@ -796,6 +796,41 @@ class GoalPauseSource(StrEnum):
     RUNTIME = "runtime"
 
 
+class GoalExecutionState(StrEnum):
+    RUNNABLE = "runnable"
+    STANDBY = "standby"
+    PAUSED = "paused"
+    BLOCKED = "blocked"
+    COMPLETED = "completed"
+
+
+@dataclass(frozen=True, slots=True)
+class GoalWaitTarget:
+    name: str
+    created_at: float
+
+
+@dataclass(frozen=True, slots=True)
+class GoalExecution:
+    state: GoalExecutionState
+    goal_id: str
+    wait_for: tuple[GoalWaitTarget, ...] = ()
+
+    def presentation(self, title: str) -> ThreadPresentation:
+        if self.state is GoalExecutionState.STANDBY:
+            names = ", ".join(f"@{target.name}" for target in self.wait_for)
+            return ThreadPresentation(title, "◌", f"Standby · waiting for {names}")
+        return ThreadPresentation(title, "✓", self.state.value.title())
+
+    @classmethod
+    def from_wire(cls, data: Mapping) -> GoalExecution:
+        return cls(
+            GoalExecutionState(data["state"]),
+            str(data["goal_id"]),
+            tuple(GoalWaitTarget(**target) for target in data.get("wait_for", ())),
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class Goal:
     """One durable objective shared by its executing owner and all clients."""
@@ -1179,10 +1214,18 @@ class ThreadView:
     activity: Activity
     runtime: AgentRuntimeInfo | None
     last_seen: float
+    goal_execution: GoalExecution | None = None
 
     @property
     def presentation(self) -> ThreadPresentation:
         """One declaration-owned interpretation for every thread view."""
+        if (
+            self.status.active
+            and not self.activity.state.busy
+            and self.goal_execution is not None
+            and self.goal_execution.state is GoalExecutionState.STANDBY
+        ):
+            return self.goal_execution.presentation(self.thread.title or self.thread.name)
         return self.status.presentation(self.thread.title or self.thread.name, self.activity)
 
     def to_wire(self) -> dict[str, object]:
@@ -1195,6 +1238,7 @@ class ThreadView:
             "last_activity": self.activity.timestamp,
             "activity": self.activity.state.value,
             "activity_detail": self.activity.detail,
+            "goal_execution": asdict(self.goal_execution) if self.goal_execution else None,
             "model": self.runtime.model if self.runtime else self.thread.model,
             "session_name": self.runtime.session_name if self.runtime else None,
             "context_used": self.runtime.context_used if self.runtime else None,
@@ -1597,6 +1641,7 @@ class ScheduledTurn:
     prompt: str
     origin: Message | None = None
     goal_id: str | None = None
+    goal_wait_id: str | None = None
 
     @property
     def reply_target(self) -> str | None:

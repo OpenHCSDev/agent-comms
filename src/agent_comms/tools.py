@@ -26,7 +26,7 @@ ToolHandler = Callable[[Comms, Mapping[str, object]], JsonObject]
 @dataclass(frozen=True, slots=True)
 class ToolParameter:
     name: str
-    kind: Literal["string", "boolean"]
+    kind: Literal["string", "boolean", "array"]
     description: str
     required: bool = True
     default: object | None = None
@@ -35,6 +35,8 @@ class ToolParameter:
 
     def schema(self) -> JsonObject:
         schema: JsonObject = {"type": self.kind, "description": self.description}
+        if self.kind == "array":
+            schema["items"] = {"type": "string"}
         if self.choices:
             schema["enum"] = list(self.choices)
         if not self.required and self.default is not None:
@@ -91,9 +93,11 @@ class ToolDeclaration:
                 arguments[parameter.name] = parameter.default
                 continue
             value = raw_arguments[parameter.name]
-            expected = str if parameter.kind == "string" else bool
+            expected = {"string": str, "boolean": bool, "array": list}[parameter.kind]
             if not isinstance(value, expected):
                 raise ValueError(f"Argument {parameter.name!r} must be {parameter.kind}.")
+            if parameter.kind == "array" and any(not isinstance(item, str) for item in value):
+                raise ValueError(f"Argument {parameter.name!r} must contain strings.")
             if parameter.choices and value not in parameter.choices:
                 raise ValueError(
                     f"Argument {parameter.name!r} must be one of: " + ", ".join(parameter.choices)
@@ -264,6 +268,7 @@ def _goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
         expected_status="active",
         progress=str(arguments["progress"]),
         model_report=True,
+        wait_for=arguments["wait_for"] or (),
     )
     return {"goal": asdict(goal) if goal else None}
 
@@ -641,13 +646,26 @@ TOOLS = (
     ToolDeclaration(
         "comms_goal",
         "Goal progress",
-        "Update goal progress; complete it or block it when user input is needed.",
+        "Update goal progress; complete it or block it when user input is needed. "
+        "Use standby with explicit wait_for thread names when waiting for delegated work. "
+        "The goal remains active, but only a direct message from a named dependency or a user "
+        "follow-up starts its next turn. Do not repeatedly announce waiting "
+        "or return empty output.",
         (
             ToolParameter("goal_id", "string", "Goal identity provided in the turn context"),
             ToolParameter(
-                "status", "string", "Goal state", choices=("active", "completed", "blocked")
+                "status",
+                "string",
+                "Goal state",
+                choices=("active", "standby", "completed", "blocked"),
             ),
             ToolParameter("progress", "string", "Progress summary or reason input is needed"),
+            ToolParameter(
+                "wait_for",
+                "array",
+                "Explicit thread names or @names; required for standby",
+                required=False,
+            ),
         ),
         _goal,
     ),
