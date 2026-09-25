@@ -25,7 +25,7 @@ SUMMARY_RETURN = (
 )
 REPORT_SUMMARY = (
     "    const response = await retryAssistantCall(produce, retry, requestOptions.signal, callbacks);\n"
-    "    callbacks?.onSummaryResponse?.(response.usage);\n"
+    "    callbacks?.onSummaryResponse?.(response.usage, response.stopReason === 'stop' && contentText(response.content).trim() ? callbacks?.sourceProgress : undefined);\n"
     "    if (response.stopReason === 'stop' && !contentText(response.content).trim()) "
     "throw new Error('Compaction returned an empty summary');\n"
     "    return response;\n"
@@ -34,7 +34,38 @@ TURN_PREFIX_PROMPT = (
     "    const promptText = `<conversation>\\n${conversationText}\\n</conversation>\\n\\n"
     "${TURN_PREFIX_SUMMARIZATION_PROMPT}`;\n"
 )
-LIMIT_HELPER = """function summaryByteLimit(model, reserveTokens) {
+LIMIT_HELPER = """function summarySource(messages, previousSummary) {
+    const transcript = serializeConversation(convertToLlm(messages));
+    return previousSummary
+        ? `<previous-summary>\\n${previousSummary}\\n</previous-summary>\\n\\n${transcript}`
+        : transcript;
+}
+function sourceCallbacks(callbacks, done, total, phase) {
+    return { ...callbacks, sourceProgress: {
+        sourceBytesDone: (callbacks?.sourceOffset ?? 0) + done,
+        sourceBytesTotal: callbacks?.sourceTotal ?? total,
+        summaryPhase: phase ?? callbacks?.sourcePhase ?? "history",
+    } };
+}
+function summaryChunkEnd(source, start, byteLimit) {
+    let low = start + 1;
+    let high = Math.min(source.length, start + byteLimit);
+    while (low < high) {
+        const middle = Math.ceil((low + high) / 2);
+        if (Buffer.byteLength(source.slice(start, middle), 'utf8') <= byteLimit) low = middle;
+        else high = middle - 1;
+    }
+    let end = low;
+    if (end < source.length && /[\\uD800-\\uDBFF]/.test(source[end - 1])) end--;
+    // Preserve the final remainder; a trailing newline must not manufacture
+    // a separate provider request for a few closing characters.
+    if (end < source.length) {
+        const newline = source.lastIndexOf('\\n', end - 1);
+        if (newline > start + (end - start) / 2) end = newline + 1;
+    }
+    return end;
+}
+function summaryByteLimit(model, reserveTokens) {
     const window = model.contextWindow > 0 ? model.contextWindow : 128000;
     // Keep the serialized UTF-8 prompt below the model's token budget even
     // for poorly tokenizing text, with room for the system prompt and output.
@@ -49,47 +80,45 @@ TURN_PREFIX_BOUNDED = """    const byteLimit = summaryByteLimit(model, reserveTo
             signal, TURN_PREFIX_SUMMARIZATION_PROMPT, undefined, thinkingLevel,
             streamFn, env, retry, callbacks, sessionId);
     }
+    callbacks = sourceCallbacks(callbacks, Buffer.byteLength(conversationText, 'utf8'), Buffer.byteLength(conversationText, 'utf8'));
 """
 BOUNDED = """    // Bound every summary request. A context-overflow recovery cannot summarize
     // the same oversized branch in one provider prompt. Chunk the serialized
     // history and carry a rolling summary; each chunk is a distinct attempt.
     const transcript = serializeConversation(convertToLlm(currentMessages));
     const byteLimit = summaryByteLimit(model, reserveTokens);
+    const source = summarySource(currentMessages, previousSummary);
+    const sourceBytes = Buffer.byteLength(source, 'utf8');
     if (!boundedChunk && Buffer.byteLength(transcript, 'utf8') + Buffer.byteLength(previousSummary ?? '', 'utf8') > byteLimit * 0.75) {
-        const source = previousSummary
-            ? `<previous-summary>\\n${previousSummary}\\n</previous-summary>\\n\\n${transcript}`
-            : transcript;
         const chunkBytes = Math.floor(byteLimit * 0.7);
         const priorLimit = Math.floor(byteLimit * 0.2);
         let rolling;
         let combinedUsage;
+        let processedBytes = 0;
         for (let start = 0; start < source.length;) {
-            let end = Math.min(source.length, start + chunkBytes);
-            while (Buffer.byteLength(source.slice(start, end), 'utf8') > chunkBytes)
-                end = start + Math.max(1, Math.floor((end - start) * 0.75));
-            if (end < source.length && /[\\uD800-\\uDBFF]/.test(source[end - 1])) end--;
-            const newline = source.lastIndexOf('\\n', end);
-            if (newline > start + (end - start) / 2) end = newline + 1;
+            const end = summaryChunkEnd(source, start, chunkBytes);
             const part = source.slice(start, end);
             start = end;
             if (rolling && Buffer.byteLength(rolling, 'utf8') > priorLimit) {
                 const compressed = await generateSummaryWithUsage(
                     [{ role: 'user', content: [{ type: 'text', text: rolling }], timestamp: Date.now() }],
                     model, reserveTokens, apiKey, headers, signal, customInstructions,
-                    undefined, thinkingLevel, streamFn, env, retry, callbacks, sessionId, true);
+                    undefined, thinkingLevel, streamFn, env, retry, sourceCallbacks(callbacks, processedBytes, sourceBytes, "shrink"), sessionId, true);
                 rolling = compressed.text;
                 combinedUsage = combinedUsage ? combineUsage(combinedUsage, compressed.usage) : compressed.usage;
                 if (Buffer.byteLength(rolling, 'utf8') > priorLimit) throw new Error('Compaction summary exceeds its context budget');
             }
+            processedBytes += Buffer.byteLength(part, 'utf8');
             const step = await generateSummaryWithUsage(
                 [{ role: 'user', content: [{ type: 'text', text: part }], timestamp: Date.now() }],
                 model, reserveTokens, apiKey, headers, signal, customInstructions,
-                rolling, thinkingLevel, streamFn, env, retry, callbacks, sessionId, true);
+                rolling, thinkingLevel, streamFn, env, retry, sourceCallbacks(callbacks, processedBytes, sourceBytes), sessionId, true);
             rolling = step.text;
             combinedUsage = combinedUsage ? combineUsage(combinedUsage, step.usage) : step.usage;
         }
         return { text: rolling, usage: combinedUsage };
     }
+    if (!boundedChunk) callbacks = sourceCallbacks(callbacks, sourceBytes, sourceBytes);
 """
 
 
@@ -100,6 +129,17 @@ CUT_SEARCH = """            for (let c = 0; c < cutPoints.length; c++) {
 """
 CUT_FALLBACK = """            cutIndex = cutPoints[cutPoints.length - 1];
 """
+
+
+COMPACT_PREPARATION = "    const { firstKeptEntryId, messagesToSummarize, turnPrefixMessages, isSplitTurn, tokensBefore, previousSummary, fileOps, settings, } = preparation;\n"
+SOURCE_TOTAL = """    const historyBytes = messagesToSummarize.length || !isSplitTurn
+        ? Buffer.byteLength(summarySource(messagesToSummarize, previousSummary), 'utf8') : 0;
+    const prefixBytes = isSplitTurn ? Buffer.byteLength(summarySource(turnPrefixMessages), 'utf8') : 0;
+    callbacks = { ...callbacks, sourceTotal: historyBytes + prefixBytes, sourceOffset: 0, sourcePhase: "history" };
+    callbacks.onSummaryStart?.({ sourceBytesDone: 0, sourceBytesTotal: callbacks.sourceTotal, summaryPhase: "history" });
+"""
+PREFIX_CALL = "        const turnPrefixResult = await generateTurnPrefixSummary("
+PREFIX_OFFSET = '        callbacks = { ...callbacks, sourceOffset: historyBytes, sourcePhase: "current-turn" };\n'
 
 
 def main(path: Path) -> None:
@@ -114,6 +154,8 @@ def main(path: Path) -> None:
         or source.count(SUMMARY_RETURN) != 1
         or source.count(TURN_PREFIX_PROMPT) != 1
         or source.count(CUT_SEARCH) != 1
+        or source.count(COMPACT_PREPARATION) != 1
+        or source.count(PREFIX_CALL) != 1
     ):
         raise SystemExit("Native compaction anchors changed")
     source = source.replace(
@@ -143,6 +185,8 @@ def main(path: Path) -> None:
         "throw new Error('Turn prefix prompt exceeds its context budget');\n",
     )
     source = source.replace(CUT_SEARCH, CUT_FALLBACK + CUT_SEARCH, 1)
+    source = source.replace(COMPACT_PREPARATION, COMPACT_PREPARATION + SOURCE_TOTAL, 1)
+    source = source.replace(PREFIX_CALL, PREFIX_OFFSET + PREFIX_CALL, 1)
     path.write_text(source)
 
 

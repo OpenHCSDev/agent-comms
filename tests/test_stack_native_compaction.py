@@ -357,7 +357,17 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                 .get("phase")
                 == "progress"
             ]
-            assert progress == list(range(1, len(calls)))
+            assert progress == list(range(len(calls)))
+            source_progress = [
+                update.field_meta["agentComms"]["compaction"]
+                for update in updates
+                if (getattr(update, "field_meta", None) or {})
+                .get("agentComms", {})
+                .get("compaction", {})
+                .get("sourceBytesTotal")
+            ]
+            assert source_progress[0]["sourceBytesDone"] == 0
+            assert source_progress[-1]["sourceBytesDone"] == source_progress[-1]["sourceBytesTotal"]
             texts = [
                 getattr(getattr(update, "content", None), "text", "")
                 for update in updates
@@ -423,7 +433,21 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             assert all(not row["message"].get("isError") for row in tool_results)
             assert all(len(row["message"]["content"][0]["text"]) > 30000 for row in tool_results)
         assert reasoning_efforts[-1] == "high"
-        assert len([event for event in events if event["type"] == "compaction_progress"]) == len(
-            summary_efforts
-        )
+        assert len(
+            [
+                event
+                for event in events
+                if event["type"] == "compaction_progress" and event["chunk_index"] > 0
+            ]
+        ) == len(summary_efforts)
         assert len([event for event in events if event["type"] == "provider_usage"]) == len(calls)
+        source_progress = [event for event in events if event["type"] == "compaction_progress"]
+        assert source_progress[0]["chunk_index"] == 0
+        assert source_progress[0]["source_bytes_done"] == 0
+        assert source_progress[-1]["source_bytes_done"] == source_progress[-1]["source_bytes_total"]
+        assert all(
+            event["source_bytes_total"] == source_progress[0]["source_bytes_total"]
+            and event["source_bytes_done"]
+            >= (source_progress[index - 1]["source_bytes_done"] if index else 0)
+            for index, event in enumerate(source_progress)
+        )
