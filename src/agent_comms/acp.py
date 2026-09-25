@@ -291,13 +291,16 @@ class CommsAgent:
         with _store_lock(self._comms._wire_lock_path):
             owner = self._comms.registry.require(thread_name)
             admission = self._comms.registry.snapshot().admission_generations[owner.name]
-            self._passive_awareness.initialize(
-                owner,
-                admission=admission,
-                high_water=self._comms.message_high_water(),
-                channels=self._comms.channel_catalog.targets_for(owner.tags),
-                fresh=True,
-            )
+            # Optional awareness cannot turn a committed owner/session
+            # declaration into an apparent failed attach.
+            with suppress(OSError, TypeError, ValueError):
+                self._passive_awareness.initialize(
+                    owner,
+                    admission=admission,
+                    high_water=self._comms.message_high_water(),
+                    channels=self._comms.channel_catalog.targets_for(owner.tags),
+                    fresh=True,
+                )
         self._inbox_cursors[session_id] = cursor
         self._legacy_through[session_id] = legacy
         self._session_titles[session_id] = thread_name
@@ -355,13 +358,16 @@ class CommsAgent:
         with _store_lock(self._comms._wire_lock_path):
             owner = self._comms.registry.require(thread.name)
             admission = self._comms.registry.snapshot().admission_generations[owner.name]
-            self._passive_awareness.initialize(
-                owner,
-                admission=admission,
-                high_water=self._comms.message_high_water(),
-                channels=self._comms.channel_catalog.targets_for(owner.tags),
-                fresh=False,
-            )
+            # A previously committed session remains attachable even if
+            # the best-effort advisory ledger cannot be initialized.
+            with suppress(OSError, TypeError, ValueError):
+                self._passive_awareness.initialize(
+                    owner,
+                    admission=admission,
+                    high_water=self._comms.message_high_water(),
+                    channels=self._comms.channel_catalog.targets_for(owner.tags),
+                    fresh=False,
+                )
         self._inbox_cursors[session_id] = cursor
         self._legacy_through[session_id] = legacy
         self._session_titles[session_id] = thread.name
@@ -1900,12 +1906,15 @@ class CommsAgent:
                 )
                 if owner_ok and public_id is None and passive_frame:
                     assert current is not None
-                    owner_ok = self._passive_awareness.still_current(
-                        current,
-                        snapshot,
-                        self._comms.channel_catalog.targets_for(current.tags),
-                        passive_sources,
-                    )
+                    try:
+                        owner_ok = self._passive_awareness.still_current(
+                            current,
+                            snapshot,
+                            self._comms.channel_catalog.targets_for(current.tags),
+                            passive_sources,
+                        )
+                    except (OSError, TypeError, ValueError):
+                        owner_ok = False  # No stale advisory frame crosses native start.
                 # A newly activated goal may supersede a follow-up that has
                 # not yet been sent. Owner revocation still ends the turn.
                 defer_for_goal = (
@@ -2117,17 +2126,23 @@ class CommsAgent:
                         and current_thread.active_turn is not None
                         and current_thread.active_turn.id == turn_id
                     ):
-                        passive_frame = self._passive_awareness.frame(
-                            current_thread,
-                            snapshot,
-                            self._comms.channel_catalog.targets_for(current_thread.tags),
-                        )
-                        if passive_frame:
-                            passive_sources = self._passive_awareness.sources(current_thread)
-                            if passive_sources:
-                                task += passive_frame
-                            else:
-                                passive_frame = ""
+                        try:
+                            passive_frame = self._passive_awareness.frame(
+                                current_thread,
+                                snapshot,
+                                self._comms.channel_catalog.targets_for(current_thread.tags),
+                            )
+                            if passive_frame:
+                                passive_sources = self._passive_awareness.sources(current_thread)
+                                if passive_sources:
+                                    task += passive_frame
+                                else:
+                                    passive_frame = ""
+                        except (OSError, TypeError, ValueError):
+                            # Before native start, omit the optional projection;
+                            # the already-authorized owner task remains intact.
+                            passive_frame = ""
+                            passive_sources = ()
             session_file = thread.session_file
             fork_session = False
             if not session_file and thread.parent:

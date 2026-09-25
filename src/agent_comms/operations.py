@@ -1364,12 +1364,15 @@ class Comms:
             return
         owner = self.registry.require(name)
         snapshot = self.registry.snapshot()
-        awareness.scope_changed(
-            owner,
-            admission=snapshot.admission_generations[owner.name],
-            high_water=self.message_high_water(),
-            channels=self.channel_catalog.targets_for(owner.tags),
-        )
+        # The membership write already committed. Advisory storage is
+        # optional; a stale scope row suppresses its next-turn frame.
+        with suppress(OSError, TypeError, ValueError):
+            awareness.scope_changed(
+                owner,
+                admission=snapshot.admission_generations[owner.name],
+                high_water=self.message_high_water(),
+                channels=self.channel_catalog.targets_for(owner.tags),
+            )
 
     def update_tags(
         self, name: str, *, add: frozenset[str] = frozenset(), remove: frozenset[str] = frozenset()

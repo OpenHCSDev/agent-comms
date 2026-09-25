@@ -7,6 +7,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import Thread, wire
+from agent_comms import passive_channel_awareness as passive_store
 from agent_comms.acp import CommsAgent
 from agent_comms.bus_page_index import BusPageIndex
 from agent_comms.declarations import ThreadStatus
@@ -45,6 +46,69 @@ def _fake_events(captured, *, ok=True, abort=False):
         yield {"type": "done", "ok": ok, "text": ""}
 
     return events
+
+
+def _broken_advisory_write(*_args, **_kwargs):
+    raise OSError("injected advisory ledger fsync failure")
+
+
+async def test_tag_commit_survives_optional_advisory_write_failure(tmp_path, monkeypatch):
+    comms, agent, owner = await _agent(tmp_path, monkeypatch)
+    try:
+        comms.update_tags(owner, remove=frozenset({"comms"}))
+        ledger = comms.root / "acp_passive_channel_awareness.json"
+        before = ledger.read_bytes()
+        monkeypatch.setattr(passive_store, "_atomic_write_text", _broken_advisory_write)
+        updated = comms.update_tags(owner, add=frozenset({"comms"}))
+        assert "comms" in updated.tags
+        assert comms.registry.require(owner).tags == updated.tags
+        assert ledger.read_bytes() == before
+        current = comms.registry.require(owner)
+        assert (
+            agent._passive_awareness.frame(
+                current, comms.registry.snapshot(), comms.channel_catalog.targets_for(current.tags)
+            )
+            == ""
+        )
+    finally:
+        await agent.shutdown()
+
+
+async def test_new_session_survives_optional_advisory_initialize_failure(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    comms = wire(tmp_path / "wire")
+    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=False, auto_wake=False)
+    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(passive_store, "_atomic_write_text", _broken_advisory_write)
+    try:
+        owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+        assert comms.registry.require(owner).name == owner
+        assert owner in agent._sessions
+        assert not (comms.root / "acp_passive_channel_awareness.json").exists()
+    finally:
+        await agent.shutdown()
+
+
+async def test_load_session_survives_optional_advisory_initialize_failure(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    comms = wire(tmp_path / "wire")
+    first = CommsAgent(comms, agent_bin="pi", runtime_enabled=False, auto_wake=False)
+    monkeypatch.setattr(first, "_ensure_live_drain", lambda _session: None)
+    owner = (await first.new_session(str(tmp_path / "owner"))).session_id
+    ledger = comms.root / "acp_passive_channel_awareness.json"
+    assert ledger.exists()
+    ledger.unlink()  # Missing legacy advisory state requires a best-effort write.
+    second = CommsAgent(comms, agent_bin="pi", runtime_enabled=False, auto_wake=False)
+    monkeypatch.setattr(second, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(passive_store, "_atomic_write_text", _broken_advisory_write)
+    try:
+        await second.load_session(str(tmp_path / "owner"), owner)
+        assert owner in second._sessions
+        assert comms.registry.require(owner).name == owner
+        assert not ledger.exists()
+    finally:
+        await second.shutdown()
+        await first.shutdown()
 
 
 async def test_unmentioned_channel_notice_only_on_unrelated_natural_turn_and_after_ui_ack(
