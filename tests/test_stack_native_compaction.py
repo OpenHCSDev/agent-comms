@@ -81,11 +81,13 @@ async def test_saved_history_compacts_after_native_user_start(case: str) -> None
         agent = root / "agent"
         agent.mkdir(mode=0o700)
         calls: list[str] = []
+        reasoning_efforts: list[str | None] = []
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
-                self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
                 calls.append(self.path)
+                reasoning_efforts.append(request.get("reasoning", {}).get("effort"))
                 if case == "summary_failure":
                     body = b'{"error":{"message":"429 rate limit","type":"rate_limit_error"}}'
                     self.send_response(429)
@@ -148,7 +150,7 @@ async def test_saved_history_compacts_after_native_user_start(case: str) -> None
                     native_bin,
                     ["--offline", "--no-extensions", "--no-skills", "--no-prompt-templates",
                      "--no-context-files", "--no-tools", "--provider", "openrouter",
-                     "--model", "z-ai/glm-5.3-flash"],
+                     "--model", "z-ai/glm-5.3-flash", "--thinking", "high"],
                     "x" * 600000 if case == "oversized_current" else "Reply OK.", str(project),
                     env_extra={
                         "PI_CODING_AGENT_DIR": str(agent),
@@ -186,6 +188,8 @@ async def test_saved_history_compacts_after_native_user_start(case: str) -> None
         assert kinds.index("compaction_start") < kinds.index("compaction_end")
         assert events[-1]["ok"] is True
         assert len(calls) > 1
+        assert reasoning_efforts[:-1] == ["low"] * (len(calls) - 1)
+        assert reasoning_efforts[-1] == "high"
         assert len(
             [event for event in events if event["type"] == "compaction_progress"]
         ) == len(calls) - 1

@@ -46,11 +46,12 @@ COMPACTION_CALL = (
 )
 BOUNDED_COMPACTION_CALL = (
     '        let responseIndex = 0;\n'
+    '        // Summary work uses low reasoning even when the user turn requests high reasoning.\n'
     '        const callbacks = { ...this._summarizationRetryCallbacks({ source: "compaction", reason }), '
     'onSummaryResponse: (usage) => this._emit({ type: "compaction_progress", reason, '
     'chunkIndex: ++responseIndex, usage }) };\n'
     '        return compact(preparation, requestModel, apiKey, headers, customInstructions, '
-    'signal, this.thinkingLevel, this.agent.streamFunction, env, '
+    'signal, "low", this.agent.streamFunction, env, '
     '{ enabled: false, maxRetries: 0, provider: { maxRetries: 0 } }, callbacks, undefined);'
 )
 BRANCH_RETRY = '                    retry: this.settingsManager.getRetrySettings(),\n'
