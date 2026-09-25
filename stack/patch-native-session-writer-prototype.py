@@ -298,13 +298,18 @@ CAS_METHODS = """    /** Native-only observation; never a registry/goal/correcti
 """
 
 
+FAULT_HOOK = """                if (process.env.PR48_PROBE_FAIL_AFTER_WRITE === "1")
+                    throw new Error("Injected post-write uncertainty");
+"""
+
+
 def replace_once(source: str, before: str, after: str) -> str:
     if source.count(before) != 1:
         raise SystemExit("Pinned native SessionManager anchor changed")
     return source.replace(before, after, 1)
 
 
-def main(path: Path) -> None:
+def main(path: Path, *, production: bool = False) -> None:
     original = path.read_bytes()
     if hashlib.sha256(original).hexdigest() != BASE_SHA:
         raise SystemExit("Native SessionManager source does not match pinned Pi")
@@ -328,8 +333,16 @@ def main(path: Path) -> None:
         (COMPACTION_ANCHOR, CAS_METHODS + COMPACTION_ANCHOR),
     ):
         source = replace_once(source, before, after)
+    if production:
+        # The production patch must contain no test fault hooks. Probes run
+        # against this SHA cannot use PR48_PROBE_FAIL_AFTER_WRITE; the
+        # unknown-write case is then expected to stay RED (unprovable there).
+        source = replace_once(source, FAULT_HOOK, "")
     path.write_text(source)
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]))
+    args = sys.argv[1:]
+    production = "--production" in args
+    args = [arg for arg in args if arg != "--production"]
+    main(Path(args[0]), production=production)

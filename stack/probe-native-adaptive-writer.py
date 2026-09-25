@@ -31,6 +31,7 @@ from agent_comms.declarations import (  # noqa: E402
 SCRIPT = Path(__file__).with_suffix(".mjs")
 MANIFEST = Path(__file__).with_name("pi-native.sha256")
 PROTOTYPE_SHA = "d9f0e3b3e6ff8975a13d6a5f07cb88b13e399003d8725c409829edd4425afbe6"
+PRODUCTION_SHA = "536f29b64149b2c18a53667a7f8bba1bf243d0afba90aeac16b84bf132e3d760"
 
 
 def saved_entries(session_file: str) -> list[dict[str, object]]:
@@ -87,12 +88,12 @@ def self_test_no_line() -> None:
     print(f"no-line deadline PASS: child reaped in {elapsed:.2f}s")
 
 
-def run_case(case: str, package: Path, *, prototype: bool) -> None:
-    if prototype:
+def run_case(case: str, package: Path, *, prototype: bool, production: bool = False) -> None:
+    if prototype or production:
         for row in MANIFEST.read_text().splitlines():
             expected, relative = row.split("  ", 1)
             if relative == "dist/core/session-manager.js":
-                expected = PROTOTYPE_SHA
+                expected = PRODUCTION_SHA if production else PROTOTYPE_SHA
             actual = hashlib.sha256((package / relative).read_bytes()).hexdigest()
             if actual != expected:
                 raise ValueError(f"Disposable native package mismatch: {relative}")
@@ -110,6 +111,7 @@ def run_case(case: str, package: Path, *, prototype: bool) -> None:
         "PI_NATIVE_PACKAGE_DIR": str(package),
     }
     if case == "unknown-write":
+        assert not production, "unknown-write requires the prototype fault hook"
         env["PR48_PROBE_FAIL_AFTER_WRITE"] = "1"  # Only the disposable patch reads this.
     with tempfile.TemporaryDirectory(prefix="pr48-native-writer-gap-") as directory:
         root = Path(directory)
@@ -299,7 +301,9 @@ def run_case(case: str, package: Path, *, prototype: bool) -> None:
                 )
             )
             if case == "positive":
-                assert prototype, "Positive guarded append requires the disposable prototype"
+                assert prototype or production, (
+                    "Positive guarded append requires a disposable patched copy"
+                )
                 assert result["commitId"] is not None and result["commitError"] is None
                 assert saved[-1]["id"] == result["commitId"]
             else:
@@ -352,13 +356,23 @@ def main() -> None:
     parser.add_argument(
         "--prototype", action="store_true", help="expect isolated patched native copy"
     )
+    parser.add_argument(
+        "--production", action="store_true", help="expect hook-free production patch"
+    )
     args = parser.parse_args()
     if args.case == "self-test-no-line":
         self_test_no_line()
         return
     if args.package is None:
         parser.error("--package is required for native cases")
-    run_case(args.case, args.package.resolve(), prototype=args.prototype)
+    if args.prototype and args.production:
+        parser.error("choose either --prototype or --production")
+    run_case(
+        args.case,
+        args.package.resolve(),
+        prototype=args.prototype,
+        production=args.production,
+    )
 
 
 if __name__ == "__main__":
