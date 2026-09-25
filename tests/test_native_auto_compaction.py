@@ -106,6 +106,58 @@ console.log(JSON.stringify({ calls, maxRetries, failed }));
     assert json.loads(result.stdout) == {"calls": 1, "maxRetries": 0, "failed": True}
 
 
+def test_branch_summary_never_retries_an_uncertain_call() -> None:
+    selected = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
+    if not selected:
+        pytest.skip("Set AC_NATIVE_COPIED_PACKAGE to the prepared pinned Pi package")
+    package = Path(selected)
+    script = r"""
+import { pathToFileURL } from 'node:url';
+const { AgentSession } = await import(pathToFileURL(process.argv[1] + '/dist/core/agent-session.js').href);
+const entry = (id, parentId, content) => ({
+  id, parentId, type: 'message',
+  message: { role: 'user', content: [{ type: 'text', text: content }], timestamp: 1 },
+});
+const root = entry('root', null, 'root');
+const old = entry('old', 'root', 'old branch');
+const target = entry('target', 'root', 'target branch');
+const entries = { root, old, target };
+let calls = 0;
+let maxRetries;
+const owner = {
+  isStreaming: false,
+  model: { provider: 'openrouter', id: 'fake', contextWindow: 128000, maxTokens: 4096 },
+  sessionManager: {
+    getLeafId: () => 'old', getEntry: id => entries[id],
+    getBranch: id => id === 'old' ? [root, old] : [root, target],
+  },
+  _extensionRunner: { hasHandlers: () => false },
+  _getSummarizationRequestAuth: async model => ({ model, apiKey: 'fixture', headers: {}, env: {} }),
+  settingsManager: {
+    getBranchSummarySettings: () => ({ reserveTokens: 16384 }),
+    getRetrySettings: () => ({ enabled: true, maxRetries: 1, baseDelayMs: 1 }),
+  },
+  agent: { streamFunction: async (_model, _context, options) => {
+    calls++;
+    maxRetries = options.maxRetries;
+    return { result: async () => ({ stopReason: 'error', errorMessage: 'socket hang up', content: [] }) };
+  } },
+  _summarizationRetryCallbacks: () => ({}),
+};
+let failed = false;
+try { await AgentSession.prototype.navigateTree.call(owner, 'target', { summarize: true }); }
+catch { failed = true; }
+console.log(JSON.stringify({ calls, maxRetries, failed }));
+"""
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script, str(package)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert json.loads(result.stdout) == {"calls": 1, "maxRetries": 0, "failed": True}
+
+
 @pytest.mark.parametrize("status", [200, 503])
 async def test_tracked_prompt_compacts_locally_before_model_send(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status: int

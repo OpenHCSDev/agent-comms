@@ -77,6 +77,17 @@ FIRST_SEND_NEW = """        if (!messages) {
             preflightResult?.(true);
             await this._runAgentPrompt(messages);
 """
+BRANCH_SUMMARY_OLD = """                    streamFn: this.agent.streamFunction,
+                    retry: this.settingsManager.getRetrySettings(),
+                    callbacks: this._summarizationRetryCallbacks({ source: "branchSummary" }),
+"""
+BRANCH_SUMMARY_NEW = """                    // Branch summaries also make provider calls. A dropped
+                    // response is uncertain and cannot be retried automatically.
+                    streamFn: (model, context, options) =>
+                        this.agent.streamFunction(model, context, { ...options, maxRetries: 0 }),
+                    retry: { enabled: false, maxRetries: 0, baseDelayMs: 0 },
+                    callbacks: this._summarizationRetryCallbacks({ source: "branchSummary" }),
+"""
 
 
 def main(path: Path) -> None:
@@ -86,13 +97,20 @@ def main(path: Path) -> None:
     source = before.decode()
     if any(
         source.count(anchor) != 1
-        for anchor in (OLD, THRESHOLD_OLD, COMPACTION_CALL_OLD, FIRST_SEND_OLD)
+        for anchor in (
+            OLD,
+            THRESHOLD_OLD,
+            COMPACTION_CALL_OLD,
+            FIRST_SEND_OLD,
+            BRANCH_SUMMARY_OLD,
+        )
     ):
         raise SystemExit("Native compaction anchors changed")
     source = source.replace(OLD, NEW, 1)
     source = source.replace(THRESHOLD_OLD, THRESHOLD_NEW, 1)
     source = source.replace(COMPACTION_CALL_OLD, COMPACTION_CALL_NEW, 1)
     source = source.replace(FIRST_SEND_OLD, FIRST_SEND_NEW, 1)
+    source = source.replace(BRANCH_SUMMARY_OLD, BRANCH_SUMMARY_NEW, 1)
     path.write_text(source)
 
 
