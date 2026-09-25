@@ -93,8 +93,9 @@ async def test_sent_tool_message_is_visible_live_and_in_saved_history(
 
 
 async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    agent = CommsAgent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True)
     await agent.new_session(str(tmp_path / "worker"))
     comms.update_tags("worker", add=frozenset({"test"}))
     session = tmp_path / "session.jsonl"
@@ -109,6 +110,10 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
     agent._client = Client()
 
     async def events(*args, **kwargs):
+        native_id = "a" * 32
+        with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
+            assert allowed
+        assert kwargs["native_start"](None, native_id, args[2])
         with session.open("a") as output:
             for identity, role, content in (
                 ("u1", "user", args[2]),
@@ -119,7 +124,11 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
                         {
                             "type": "message",
                             "id": identity,
-                            "message": {"role": role, "content": content},
+                            "message": {
+                                "role": role,
+                                "content": content,
+                                **({"inputId": native_id} if role == "user" else {}),
+                            },
                         }
                     )
                     + "\n"
