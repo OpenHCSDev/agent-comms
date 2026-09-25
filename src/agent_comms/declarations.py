@@ -38,7 +38,7 @@ from typing import TYPE_CHECKING, BinaryIO, Self
 
 from .bus_activity_index import BusActivityIndex
 from .bus_display_index import BusDisplayIndex
-from .bus_page_index import BusPageIndex, StaleBusPageIndex
+from .bus_page_index import BusPageIndex, StaleBusPageIndexError
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     CommittedInitial,
@@ -4099,7 +4099,7 @@ class MessageBus:
                             max_bytes=max_bytes,
                             targets=targets,
                         )
-            except (OSError, sqlite3.DatabaseError, StaleBusPageIndex):
+            except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError):
                 # The JSONL bus remains authoritative if the disposable
                 # index is unavailable or its selected offsets disagree.
                 pass

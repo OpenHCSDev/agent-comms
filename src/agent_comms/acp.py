@@ -712,11 +712,7 @@ class CommsAgent:
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta={
-                    "agentComms": {
-                        "inputDisposition": InputDispositions.public(row)
-                    }
-                },
+                field_meta={"agentComms": {"inputDisposition": InputDispositions.public(row)}},
             ),
         )
 
@@ -1784,8 +1780,8 @@ class CommsAgent:
             # The durable admission owns the exact prompt, including the
             # names resolved at admission. Re-deriving it here can drift if
             # a recipient was renamed before or after inbox draining.
-            and task
-            == "\n\n".join(self._dispositions.get(key)["source_text"] for key in original_keys)
+            and (admitted_texts := self._dispositions.source_texts(original_keys)) is not None
+            and task == "\n\n".join(admitted_texts)
         )
 
         def input_keys_valid(public_id: str | None, keys: tuple[str, ...], text: str) -> bool:

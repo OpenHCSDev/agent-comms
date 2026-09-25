@@ -37,7 +37,7 @@ class SocketClient:
         await self.writer.drain()
 
 
-class OwnerIdentityChanged(RuntimeError):
+class OwnerIdentityChangedError(RuntimeError):
     """A saved attachment must not follow a reused thread name."""
 
 
@@ -276,7 +276,7 @@ class RuntimeProxy:
         if self._identity is None:
             self._identity = identity
         elif identity != self._identity:
-            raise OwnerIdentityChanged("Thread identity changed; open a new attachment.")
+            raise OwnerIdentityChangedError("Thread identity changed; open a new attachment.")
         if thread.pid <= 0 or not snapshot.statuses[canonical].running:
             raise ConnectionError(f"Thread {self.session_id!r} has no running owner.")
         return socket_path(self._comms.root, thread.pid)
@@ -375,7 +375,7 @@ class RuntimeProxy:
                             },
                         )
                     break
-                except OwnerIdentityChanged:
+                except OwnerIdentityChangedError:
                     return
                 except (OSError, RuntimeError):
                     await asyncio.sleep(0.1)
