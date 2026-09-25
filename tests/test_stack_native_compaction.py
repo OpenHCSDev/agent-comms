@@ -395,7 +395,20 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
         if case == "summary_failure":
             assert events[-1]["ok"] is False
             assert "compaction" in str(events[-1]["text"]).lower()
-            assert len(calls) == 1  # No automatic replay of a refused attempt.
+            # Independent map requests may already be in flight. Failure must
+            # neither retry one nor schedule a replacement or final synthesis.
+            assert 1 <= len(calls) <= 4
+            assert len(
+                {json.dumps(messages, sort_keys=True) for messages in request_messages}
+            ) == len(calls)
+            assert not any(
+                "Combine these chronological segment summaries" in json.dumps(messages)
+                for messages in request_messages
+            )
+            assert not any(
+                json.loads(line).get("type") == "compaction"
+                for line in session.read_text().splitlines()
+            )
             return
         if case == "oversized_current":
             assert events[-1]["ok"] is False

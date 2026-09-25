@@ -41,6 +41,7 @@ jobs:
           npm install -g --prefix "$HOME/.local/pi-npm" --ignore-scripts --no-audit --no-fund @earendil-works/pi-coding-agent@0.85.1
           stack/bin/prepare-pi-native
           node stack/test-native-compaction.mjs
+          node stack/test-native-parallel-compaction.mjs
           node stack/test-native-auto-compaction.mjs
 
       - name: Check native RPC compaction against localhost provider

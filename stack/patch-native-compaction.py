@@ -65,58 +65,96 @@ function summaryChunkEnd(source, start, byteLimit) {
     }
     return end;
 }
-function summaryByteLimit(model, reserveTokens) {
-    const window = model.contextWindow > 0 ? model.contextWindow : 128000;
-    // Keep the serialized UTF-8 prompt below the model's token budget even
-    // for poorly tokenizing text, with room for the system prompt and output.
-    const byteLimit = Math.floor((window - reserveTokens) * 0.75);
-    if (byteLimit < 4096) throw new Error('Compaction model context is too small');
-    return byteLimit;
-}
+
 """
-TURN_PREFIX_BOUNDED = """    const byteLimit = summaryByteLimit(model, reserveTokens);
-    if (Buffer.byteLength(conversationText, 'utf8') > byteLimit * 0.75) {
+TURN_PREFIX_BOUNDED = """    const policy = CompactionPolicy.fromEnvironment(env);
+    const byteLimit = policy.inputBytes(model, reserveTokens);
+    if (Buffer.byteLength(conversationText, 'utf8') > byteLimit * policy.sourceBudgetRatio) {
         return generateSummaryWithUsage(messages, model, reserveTokens, apiKey, headers,
             signal, TURN_PREFIX_SUMMARIZATION_PROMPT, undefined, thinkingLevel,
             streamFn, env, retry, callbacks, sessionId);
     }
     callbacks = sourceCallbacks(callbacks, Buffer.byteLength(conversationText, 'utf8'), Buffer.byteLength(conversationText, 'utf8'));
 """
-BOUNDED = """    // Bound every summary request. A context-overflow recovery cannot summarize
-    // the same oversized branch in one provider prompt. Chunk the serialized
-    // history and carry a rolling summary; each chunk is a distinct attempt.
+BOUNDED = """    // Keep provider prompts byte-bounded without pretending the chars/4
+    // estimator is a tokenizer. Independent source segments run at most four
+    // at a time; ordered synthesis replaces the serial rolling-summary chain.
     const transcript = serializeConversation(convertToLlm(currentMessages));
-    const byteLimit = summaryByteLimit(model, reserveTokens);
+    const policy = CompactionPolicy.fromEnvironment(env);
+    const byteLimit = policy.inputBytes(model, reserveTokens);
     const source = summarySource(currentMessages, previousSummary);
     const sourceBytes = Buffer.byteLength(source, 'utf8');
-    if (!boundedChunk && Buffer.byteLength(transcript, 'utf8') + Buffer.byteLength(previousSummary ?? '', 'utf8') > byteLimit * 0.75) {
-        const chunkBytes = Math.floor(byteLimit * 0.7);
-        const priorLimit = Math.floor(byteLimit * 0.2);
-        let rolling;
+    if (!boundedChunk && Buffer.byteLength(transcript, 'utf8') + Buffer.byteLength(previousSummary ?? '', 'utf8') > byteLimit * policy.sourceBudgetRatio) {
+        const chunkBytes = Math.floor(byteLimit * policy.sourceBudgetRatio);
+        const controller = new AbortController();
+        const abort = () => controller.abort(signal?.reason);
+        if (signal?.aborted) abort();
+        else signal?.addEventListener("abort", abort, { once: true });
         let combinedUsage;
         let processedBytes = 0;
-        for (let start = 0; start < source.length;) {
-            const end = summaryChunkEnd(source, start, chunkBytes);
-            const part = source.slice(start, end);
-            start = end;
-            if (rolling && Buffer.byteLength(rolling, 'utf8') > priorLimit) {
-                const compressed = await generateSummaryWithUsage(
-                    [{ role: 'user', content: [{ type: 'text', text: rolling }], timestamp: Date.now() }],
-                    model, reserveTokens, apiKey, headers, signal, customInstructions,
-                    undefined, thinkingLevel, streamFn, env, retry, sourceCallbacks(callbacks, processedBytes, sourceBytes, "shrink"), sessionId, true);
-                rolling = compressed.text;
-                combinedUsage = combinedUsage ? combineUsage(combinedUsage, compressed.usage) : compressed.usage;
-                if (Buffer.byteLength(rolling, 'utf8') > priorLimit) throw new Error('Compaction summary exceeds its context budget');
+        let failure;
+        const partsOf = (text) => {
+            const parts = [];
+            for (let start = 0; start < text.length;) {
+                const end = summaryChunkEnd(text, start, chunkBytes);
+                parts.push(text.slice(start, end));
+                start = end;
             }
-            processedBytes += Buffer.byteLength(part, 'utf8');
-            const step = await generateSummaryWithUsage(
-                [{ role: 'user', content: [{ type: 'text', text: part }], timestamp: Date.now() }],
-                model, reserveTokens, apiKey, headers, signal, customInstructions,
-                rolling, thinkingLevel, streamFn, env, retry, sourceCallbacks(callbacks, processedBytes, sourceBytes), sessionId, true);
-            rolling = step.text;
-            combinedUsage = combinedUsage ? combineUsage(combinedUsage, step.usage) : step.usage;
+            return parts;
+        };
+        const summarizeParts = async (parts, phase) => {
+            const results = new Array(parts.length);
+            let next = 0;
+            const workers = Array.from({ length: Math.min(policy.workers, parts.length) }, async () => {
+                while (next < parts.length && !failure && !controller.signal.aborted) {
+                    const index = next++;
+                    const part = parts[index];
+                    const focus = phase === "synthesis"
+                        ? "Combine these chronological segment summaries into one continuation summary. Preserve unresolved requests, constraints, exact paths, tool evidence and decisions. Later segments supersede earlier ones only when they explicitly change them."
+                        : `Independently summarize chronological segment ${index + 1} of ${parts.length}. Preserve unresolved requests, constraints, exact paths, tool evidence and decisions; later synthesis will combine every segment.`;
+                    const partCallbacks = { ...callbacks, sourceProgress: {},
+                        onSummaryResponse: (usage, completed) => {
+                            if (completed && phase !== "synthesis") processedBytes += Buffer.byteLength(part, 'utf8');
+                            const progress = sourceCallbacks(callbacks, processedBytes, sourceBytes,
+                                phase === "synthesis" ? "synthesis" : undefined).sourceProgress;
+                            callbacks?.onSummaryResponse?.(usage, completed ? progress : undefined);
+                        },
+                    };
+                    try {
+                        results[index] = await generateSummaryWithUsage(
+                            [{ role: 'user', content: [{ type: 'text', text: part }], timestamp: Date.now() }],
+                            model, reserveTokens, apiKey, headers, controller.signal,
+                            [customInstructions, focus].filter(Boolean).join('\\n\\n'),
+                            undefined, thinkingLevel, streamFn, env,
+                            { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } }, partCallbacks, sessionId, true);
+                    } catch (error) {
+                        failure ??= error;
+                        controller.abort(error);
+                    }
+                }
+            });
+            await Promise.all(workers);
+            if (failure) throw failure;
+            if (controller.signal.aborted) throw controller.signal.reason ?? new Error('Compaction aborted');
+            for (const result of results) combinedUsage = combinedUsage ? combineUsage(combinedUsage, result.usage) : result.usage;
+            return results.map(result => result.text);
+        };
+        try {
+            let summaries = await summarizeParts(partsOf(source), "map");
+            for (;;) {
+                const ordered = summaries.map((text, index) =>
+                    `<segment-summary index="${index + 1}">\\n${text}\\n</segment-summary>`).join('\\n\\n');
+                const pieces = partsOf(ordered);
+                const next = await summarizeParts(pieces, "synthesis");
+                if (pieces.length === 1) return { text: next[0], usage: combinedUsage };
+                if (next.reduce((sum, text) => sum + Buffer.byteLength(text, 'utf8'), 0) >= Buffer.byteLength(ordered, 'utf8'))
+                    throw new Error('Compaction summaries did not shrink within the context budget');
+                summaries = next;
+            }
+        } finally {
+            controller.abort();
+            signal?.removeEventListener("abort", abort);
         }
-        return { text: rolling, usage: combinedUsage };
     }
     if (!boundedChunk) callbacks = sourceCallbacks(callbacks, sourceBytes, sourceBytes);
 """
@@ -168,8 +206,7 @@ def main(path: Path) -> None:
     source = source.replace(
         TOKEN_LIMIT,
         "const maxTokens = boundedChunk "
-        "? Math.min(4096, Math.max(256, Math.floor(byteLimit / 12)), "
-        "model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY) "
+        "? policy.summaryTokens(model, byteLimit) "
         ": Math.min(Math.floor(0.8 * reserveTokens), model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);",
     )
     source = source.replace(
@@ -187,7 +224,7 @@ def main(path: Path) -> None:
     source = source.replace(CUT_SEARCH, CUT_FALLBACK + CUT_SEARCH, 1)
     source = source.replace(COMPACT_PREPARATION, COMPACT_PREPARATION + SOURCE_TOTAL, 1)
     source = source.replace(PREFIX_CALL, PREFIX_OFFSET + PREFIX_CALL, 1)
-    path.write_text(source)
+    path.write_text('import { CompactionPolicy } from "./agent-comms-policy.js";\n' + source)
 
 
 if __name__ == "__main__":
