@@ -2261,9 +2261,7 @@ class Comms:
                 or current.status not in {"active", "paused", "completed"}
             ):
                 return current
-            progress = (
-                f"{current.progress}\n\n" if current != started_goal and current.progress else ""
-            ) + diagnostic
+            progress = f"{current.progress}\n\n{diagnostic}" if current.progress else diagnostic
             blocked = replace(
                 current, status="blocked", progress=progress, revision=current.revision + 1
             )

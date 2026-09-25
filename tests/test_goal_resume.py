@@ -283,6 +283,25 @@ def test_automatic_failure_block_advances_goal_revision(comms, monkeypatch):
     assert Comms(comms.root).registry.require("owner").goal == blocked
 
 
+def test_automatic_failure_block_preserves_existing_goal_progress(comms, monkeypatch):
+    started = _goal(comms, monkeypatch)
+    goal = comms.update_goal(
+        "owner", "active", goal_id=started["id"], progress="Verified first step"
+    )
+    assert goal is not None
+
+    blocked = comms.block_goal_after_failed_turn(
+        "owner",
+        started_goal=goal,
+        expected_worktree="/wt",
+        diagnostic="Backend outcome uncertain.",
+    )
+
+    assert blocked is not None
+    assert blocked.status == "blocked"
+    assert blocked.progress == "Verified first step\n\nBackend outcome uncertain."
+
+
 def test_exhausted_goal_revision_refuses_transition_without_write(comms):
     comms.register(
         Thread(
