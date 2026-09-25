@@ -57,6 +57,9 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
         serving.start()
         config = root / "agent"
         config.mkdir(mode=0o700)
+        auth_file = config / "auth.json"
+        auth_file.write_text("{}")
+        auth_file.chmod(0o600)
         (config / "models.json").write_text(
             json.dumps(
                 {
@@ -102,6 +105,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
         project = root / "worker"
         project.mkdir()
         turn = None
+        warmup_proc = None
         try:
             await agent.new_session(str(project))
             comms.update_tags("worker", add=frozenset({"team"}))
@@ -111,6 +115,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             if case != "steer":
                 release.set()
                 await asyncio.wait_for(turn, 20)
+                warmup_proc = agent._persistent_backends["worker"].proc
                 message = comms.send_user_message(
                     "#team", "@worker QUEUED_CHANNEL_REQUEST", worktree=str(project)
                 )
@@ -132,6 +137,8 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 comms.update_goal("worker", "set", text="Changed goal")
             elif case == "stop":
                 comms.stop("worker")
+                await agent._sync_session_identity("worker")
+                assert warmup_proc is not None and warmup_proc.returncode is not None
             elif case == "reopen":
                 await agent.shutdown()
                 agent = CommsAgent(
@@ -148,6 +155,9 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 await asyncio.wait_for(agent._wake_tasks["worker"], 20)
             success = case in {"deliver", "batch", "steer", "rename", "batch_rename"}
             assert len(requests) == (2 if success else 1)
+            if case == "deliver":
+                assert warmup_proc is not None and warmup_proc.returncode is None
+                assert agent._persistent_backends["worker"].proc is warmup_proc
             assert agent._dispositions.status(key) == ("started" if success else "unknown")
             assert not agent._pending_turns.get("worker")
             rows = [
@@ -195,6 +205,8 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 turn.cancel()
                 await asyncio.gather(turn, return_exceptions=True)
             await agent.shutdown()
+            if warmup_proc is not None:
+                assert warmup_proc.returncode is not None
             server.shutdown()
             server.server_close()
             serving.join(timeout=2)

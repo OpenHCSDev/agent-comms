@@ -96,6 +96,9 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart):
         serving.start()
         config = root / "agent"
         config.mkdir(mode=0o700)
+        auth_file = config / "auth.json"
+        auth_file.write_text("{}")
+        auth_file.chmod(0o600)
         (config / "models.json").write_text(
             json.dumps(
                 {
@@ -154,6 +157,8 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart):
             assert comms.registry.require("parent").goal.active
             assert comms.goal_execution("parent").state is GoalExecutionState.STANDBY
             assert len(requests) == 2
+            first_proc = agent._persistent_backends["parent"].proc
+            assert first_proc is not None and first_proc.returncode is None
             agent._schedule_goal("parent")
             assert not agent._pending_turns.get("parent")
             assert agent._goal_store.snapshot(goal.id).number == 2
@@ -173,6 +178,10 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart):
             await asyncio.wait_for(agent._wake_tasks["parent"], 40)
             assert not failures, failures
             assert len(requests) == 4
+            if not restart:
+                assert agent._persistent_backends["parent"].proc is first_proc
+            else:
+                assert first_proc.returncode is not None
             assert agent._dispositions.status(f"bus:{message.seq}") == "started"
             assert comms.registry.require("parent").goal.status == "completed"
             assert agent._goal_store.snapshot(goal.id).state == "completed"

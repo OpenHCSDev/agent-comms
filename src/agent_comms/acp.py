@@ -143,6 +143,7 @@ class CommsAgent:
         self._drain_tasks: dict[str, asyncio.Task[None]] = {}
         self._turn_tasks: dict[str, asyncio.Task[Any]] = {}
         self._backend_inboxes: dict[str, asyncio.Queue[str | dict[str, Any]]] = {}
+        self._persistent_backends: dict[str, backend.PersistentPiSession] = {}
         self._queued_inputs: dict[str, dict[str, QueuedInput]] = {}
         # ACK/queue insertion is not model-read. Every accepted follow-up,
         # including non-displayed steers, needs its own identified user start.
@@ -960,6 +961,10 @@ class CommsAgent:
                 "Thinking level change timed out",
             )
             self._comms.set_thread_thinking_level(thread_name, value)
+        if session_id not in self._active_turns and (
+            persistent := self._persistent_backends.get(session_id)
+        ):
+            await persistent.close_idle()
         config_options = await self._config_options(thread_name)
         await self._runtime.session_update(
             session_id=session_id,
@@ -1136,6 +1141,16 @@ class CommsAgent:
         cached_name = self._require_session(session_id)
         thread = self._comms.registry.require(cached_name)
         thread_name = thread.name
+        if (
+            session_id not in self._active_turns
+            and (persistent := self._persistent_backends.get(session_id))
+            and (
+                thread_name != cached_name
+                or thread.pid != os.getpid()
+                or not self._comms.registry.status(thread_name).running
+            )
+        ):
+            await persistent.close_idle()
         self._sessions[session_id] = thread_name
         if (
             self._session_titles.get(session_id) != thread_name
@@ -2035,6 +2050,11 @@ class CommsAgent:
                     public_id, native_id, text, already_bound=True
                 ),
                 native_start=native_start,
+                persistent_session=(
+                    self._persistent_backends.setdefault(session_id, backend.PersistentPiSession())
+                    if backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
+                    else None
+                ),
             ):
                 kind = event.get("type")
                 if kind == "steering_interrupted":
@@ -2471,6 +2491,10 @@ class CommsAgent:
                     self._pending_turns.setdefault(session_id, []).append(ScheduledTurn(pending))
             thread_name = await self._sync_session_identity(session_id)
             current_project = self._comms.registry.require(thread_name).worktree
+            if current_project != thread.worktree and (
+                persistent := self._persistent_backends.get(session_id)
+            ):
+                await persistent.close_idle()
             # Discard unresolved per-turn IDs without replay. Durable ACP input
             # disposition across owner crashes remains a separate integration.
             self._forwarded_inputs.pop(session_id, None)
@@ -2542,6 +2566,9 @@ class CommsAgent:
                 *(backend.terminate_task_process(task) for task in turns),
                 return_exceptions=True,
             )
+        for persistent in self._persistent_backends.values():
+            await persistent.close_idle()
+        self._persistent_backends.clear()
         tasks = list(self._drain_tasks.values())
         self._drain_tasks.clear()
         for task in tasks:

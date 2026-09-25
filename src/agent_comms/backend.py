@@ -111,6 +111,81 @@ class _JsonLineReader:
             return record
 
 
+_FileRevision = tuple[int, int, int, int, int]
+
+
+def _file_revision(path: Path) -> _FileRevision | None:
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
+
+
+def _session_revision(
+    session_file: str | None,
+) -> tuple[_FileRevision, _FileRevision | None] | None:
+    if not isinstance(session_file, str) or not session_file:
+        return None
+    session = _file_revision(Path(session_file))
+    if session is None:
+        return None
+    return session, _file_revision(Path(session_file + ".input-proof"))
+
+
+class PersistentPiSession:
+    """One idle Pi RPC child, owned by one ACP session in one owner process.
+
+    A turn borrows the child only under the saved-session writer fence. The
+    revision check detects a separate writer between turns, so its in-memory
+    history cannot silently omit a compacted or appended saved session.
+    """
+
+    def __init__(self) -> None:
+        self.lock = asyncio.Lock()
+        self.proc: asyncio.subprocess.Process | None = None
+        self.reader: _JsonLineReader | None = None
+        self.stderr_task: asyncio.Task[str] | None = None
+        self.launch_key: tuple[Any, ...] | None = None
+        self.session_file: str | None = None
+        self.session_id: str | None = None
+        self.revision: tuple[_FileRevision, _FileRevision | None] | None = None
+        self.sensitive_diagnostics = False
+
+    def reusable(self, launch_key: tuple[Any, ...], session_file: str | None) -> bool:
+        return (
+            self.proc is not None
+            and self.proc.returncode is None
+            and self.reader is not None
+            and self.stderr_task is not None
+            and self.launch_key == launch_key
+            and self.session_file == session_file
+            and self.revision is not None
+            and self.revision == _session_revision(session_file)
+        )
+
+    async def close(self) -> None:
+        """Close while the caller owns ``lock`` or has stopped all turns."""
+        proc, stderr_task = self.proc, self.stderr_task
+        self.proc = None
+        self.reader = None
+        self.stderr_task = None
+        self.launch_key = None
+        self.session_file = None
+        self.session_id = None
+        self.revision = None
+        self.sensitive_diagnostics = False
+        if proc is not None:
+            await _terminate_process(proc)
+        if stderr_task is not None:
+            await asyncio.gather(stderr_task, return_exceptions=True)
+
+    async def close_idle(self) -> None:
+        """Wait for a borrowed turn's stats/cleanup before closing its child."""
+        async with self.lock:
+            await self.close()
+
+
 @dataclass(frozen=True, slots=True)
 class Model:
     id: str
@@ -522,6 +597,7 @@ async def stream_agent_events(
         Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
     ) = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
+    persistent_session: PersistentPiSession | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run the backend and yield events. Always ends with a ``done`` event.
 
@@ -536,7 +612,10 @@ async def stream_agent_events(
     try:
         from .session_fence import session_writer_fence
 
-        async with session_writer_fence(session_file):
+        async with (
+            session_writer_fence(session_file),
+            persistent_session.lock if persistent_session is not None else nullcontext(),
+        ):
             try:
                 async with aclosing(
                     _stream_agent_events(
@@ -556,6 +635,7 @@ async def stream_agent_events(
                         send_boundary=send_boundary,
                         native_start=native_start,
                         interrupt_boundary=interrupt_boundary,
+                        persistent_session=persistent_session,
                     )
                 ) as events:
                     async for event in events:
@@ -605,6 +685,7 @@ async def _stream_agent_events(
         Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
     ) = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
+    persistent_session: PersistentPiSession | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     if shutil.which(agent_bin) is None and not Path(agent_bin).is_file():
         yield {"type": "done", "text": f"agent backend {agent_bin!r} not found", "ok": False}
@@ -616,7 +697,11 @@ async def _stream_agent_events(
         return
     stdin_payload: bytes | None = None
     argv: list[str]
-    prompt_id = "agent-comms-prompt"
+    prompt_id = (
+        f"agent-comms-prompt-{secrets.token_hex(16)}"
+        if persistent_session is not None
+        else "agent-comms-prompt"
+    )
     preflight_id = f"agent-comms-preflight-{secrets.token_hex(16)}"
     original_input_id = secrets.token_hex(16)
     prompt_payload = b""
@@ -654,28 +739,51 @@ async def _stream_agent_events(
         options = env.get("NODE_OPTIONS", "")
         if flag not in options:
             env["NODE_OPTIONS"] = f"{options} {flag}".strip()
+    launch_key = (
+        agent_bin,
+        tuple(rpc_args or agent_args),
+        str(Path(cwd).resolve()),
+        tuple(sorted(env.items())),
+        auth_revision(),
+    )
+    reused = False
+    if persistent_session is not None:
+        reused = (
+            rpc_args is not None
+            and not fork_session
+            and persistent_session.reusable(launch_key, session_file)
+        )
+        if not reused:
+            await persistent_session.close()
     loop = asyncio.get_running_loop()
     launch_started_at = loop.time()
     session_bytes: int | None = None
     if session_file:
         with suppress(OSError):
             session_bytes = Path(session_file).stat().st_size
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *argv,
-            cwd=cwd if Path(cwd).is_dir() else None,
-            env=env,
-            stdin=(
-                asyncio.subprocess.PIPE if stdin_payload is not None else asyncio.subprocess.DEVNULL
-            ),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            start_new_session=os.name == "posix",
-        )
-    except OSError as exc:
-        yield {"type": "done", "text": f"agent launch failed: {exc}", "ok": False}
-        return
-    spawn_ms = round((loop.time() - launch_started_at) * 1000)
+    if reused:
+        assert persistent_session is not None and persistent_session.proc is not None
+        proc = persistent_session.proc
+        spawn_ms = 0
+    else:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv,
+                cwd=cwd if Path(cwd).is_dir() else None,
+                env=env,
+                stdin=(
+                    asyncio.subprocess.PIPE
+                    if stdin_payload is not None
+                    else asyncio.subprocess.DEVNULL
+                ),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                start_new_session=os.name == "posix",
+            )
+        except OSError as exc:
+            yield {"type": "done", "text": f"agent launch failed: {exc}", "ok": False}
+            return
+        spawn_ms = round((loop.time() - launch_started_at) * 1000)
 
     owner = asyncio.current_task()
     if owner is not None:
@@ -691,7 +799,12 @@ async def _stream_agent_events(
             tail = (tail + chunk)[-16_000:]
         return tail.decode(errors="replace").strip()
 
-    stderr_task = asyncio.create_task(stderr_tail())
+    stderr_task = (
+        persistent_session.stderr_task
+        if reused and persistent_session is not None
+        else asyncio.create_task(stderr_tail())
+    )
+    assert stderr_task is not None
     if owner is not None:
         _ACTIVE_STDERR_TASKS[owner] = stderr_task
     prompt_dispatched = False
@@ -710,6 +823,9 @@ async def _stream_agent_events(
     fail_reason = ""
     error_message: str | None = None
     image_input_sent = bool(images)
+    inherited_image_sensitive = bool(
+        reused and persistent_session is not None and persistent_session.sensitive_diagnostics
+    )
     assert proc.stdout is not None
 
     if rpc_args is None:
@@ -898,7 +1014,18 @@ async def _stream_agent_events(
     prompt_start_deadline: float | None = None
     initial_input_started = False
     stats_requested = False
-    reader = _JsonLineReader(proc.stdout)
+    stats_state_id = f"agent-comms-stats-state-{secrets.token_hex(16)}"
+    stats_usage_id = f"agent-comms-stats-usage-{secrets.token_hex(16)}"
+    stats_responses: set[str] = set()
+    stats_complete = False
+    stats_failed = False
+    agent_settled_seen = False
+    reader = (
+        persistent_session.reader
+        if reused and persistent_session is not None
+        else _JsonLineReader(proc.stdout)
+    )
+    assert reader is not None
     preflight_wait_started_at = loop.time()
     preflight_deadline = preflight_wait_started_at + CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
     if not require_input_id:
@@ -922,8 +1049,13 @@ async def _stream_agent_events(
             return
         stats_requested = True
         try:
-            proc.stdin.write((json.dumps({"type": "get_state"}) + "\n").encode())
-            proc.stdin.write((json.dumps({"type": "get_session_stats"}) + "\n").encode())
+            state_request = {"type": "get_state"}
+            usage_request = {"type": "get_session_stats"}
+            if persistent_session is not None:
+                state_request["id"] = stats_state_id
+                usage_request["id"] = stats_usage_id
+            proc.stdin.write((json.dumps(state_request) + "\n").encode())
+            proc.stdin.write((json.dumps(usage_request) + "\n").encode())
             await proc.stdin.drain()
         except (BrokenPipeError, ConnectionResetError):
             pass
@@ -1251,6 +1383,18 @@ async def _stream_agent_events(
                 fail_reason = "Pi native input-ID capability preflight failed."
                 await _terminate_process(proc)
                 break
+            if (
+                reused
+                and persistent_session is not None
+                and (
+                    state.get("sessionId") != persistent_session.session_id
+                    or state.get("sessionFile") != persistent_session.session_file
+                )
+            ):
+                session_identity_uncertain = True
+                fail_reason = _IDENTITY_FAILURE_TEXT
+                await _terminate_process(proc)
+                break
             native_capability_confirmed = True
             prompt_start_deadline = loop.time() + PROMPT_START_TIMEOUT_SECONDS
             assert proc.stdin is not None
@@ -1319,6 +1463,14 @@ async def _stream_agent_events(
             await abort_stalled_rpc()
             break
         now = loop.time()
+        if stats_requested and kind == "response" and persistent_session is not None:
+            response_id = payload.get("id")
+            if isinstance(response_id, str) and response_id in {stats_state_id, stats_usage_id}:
+                if payload.get("success") is True:
+                    stats_responses.add(response_id)
+                    stats_complete = len(stats_responses) == 2
+                else:
+                    stats_failed = True
         initial_prompt_response = (
             kind == "response" and command == "prompt" and payload.get("id") == prompt_id
         )
@@ -1379,7 +1531,7 @@ async def _stream_agent_events(
             else:
                 error_message = (
                     "Image prompt failed; backend diagnostics withheld."
-                    if image_input_sent
+                    if image_input_sent or inherited_image_sensitive
                     else str(payload.get("error") or "Prompt was rejected")
                 )
                 yield turn_state("failed", "prompt_rejected", 0, event_phase="shutdown")
@@ -1737,7 +1889,7 @@ async def _stream_agent_events(
                         yield context_info()
                     error_message = (
                         "Image prompt failed; backend diagnostics withheld."
-                        if image_input_sent
+                        if image_input_sent or inherited_image_sensitive
                         else str(message.get("errorMessage") or "").strip()
                         or f"Model request {stop_reason}"
                     )
@@ -1755,12 +1907,17 @@ async def _stream_agent_events(
                         context_used = confirmed_context_used
                         yield context_info()
                     provisional_usage = False
-        elif kind == "agent_settled" and not stats_requested:
-            last_model_progress = loop.time()
-            phase = "settling_stats"
-            yield {"type": "settled"}
-            if finish_event is None:
-                await request_stats()
+        elif kind == "agent_settled":
+            agent_settled_seen = True
+            if not stats_requested:
+                last_model_progress = loop.time()
+                phase = "settling_stats"
+                yield {"type": "settled"}
+                if finish_event is None:
+                    await request_stats()
+
+        if persistent_session is not None and (stats_complete or stats_failed):
+            break
 
     if steering_task is not None:
         steering_task.cancel()
@@ -1772,24 +1929,59 @@ async def _stream_agent_events(
     restore_pending_inputs()
     if owner is not None:
         _ACTIVE_INPUT_RESTORERS.pop(owner, None)
-    _close_child_stdin(proc)
-    try:
-        await asyncio.wait_for(proc.wait(), timeout=5.0)
-    except TimeoutError:
-        proc.terminate()
+    revision = _session_revision(active_session_file)
+    retained = bool(
+        persistent_session is not None
+        and require_input_id
+        and proc.returncode is None
+        and ok
+        and not fail_reason
+        and error_message is None
+        and not session_identity_uncertain
+        and not capability_failed
+        and not input_uncertain
+        and not unresolved_inputs
+        and initial_input_started
+        and initial_prompt_acknowledged
+        and final_assistant_stop
+        and agent_settled_seen
+        and stats_complete
+        and isinstance(initial_session_id, str)
+        and isinstance(initial_session_file, str)
+        and initial_session_file == active_session_file
+        and revision is not None
+    )
+    if retained:
+        assert persistent_session is not None
+        persistent_session.proc = proc
+        persistent_session.reader = reader
+        persistent_session.stderr_task = stderr_task
+        persistent_session.launch_key = launch_key
+        persistent_session.session_file = active_session_file
+        persistent_session.session_id = initial_session_id
+        persistent_session.revision = revision
+        persistent_session.sensitive_diagnostics = image_input_sent or inherited_image_sensitive
+    else:
+        _close_child_stdin(proc)
         try:
             await asyncio.wait_for(proc.wait(), timeout=5.0)
         except TimeoutError:
-            proc.kill()
-            await proc.wait()
-        ok = False
-        fail_reason = "agent backend did not exit"
+            proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5.0)
+            except TimeoutError:
+                proc.kill()
+                await proc.wait()
+            ok = False
+            fail_reason = "agent backend did not exit"
     if owner is not None:
         _ACTIVE_PROCESSES.pop(owner, None)
-    error_text = await stderr_task
+    error_text = "" if retained else await stderr_task
     if owner is not None:
         _ACTIVE_STDERR_TASKS.pop(owner, None)
-    transport_successful = ok and not fail_reason and proc.returncode == 0
+    if not retained and reused and persistent_session is not None:
+        await persistent_session.close()
+    transport_successful = ok and not fail_reason and (retained or proc.returncode == 0)
     otherwise_successful = transport_successful and error_message is None
     if otherwise_successful and not session_identity_uncertain:
         if not initial_input_started:
@@ -1834,7 +2026,7 @@ async def _stream_agent_events(
                 or fail_reason
                 or (
                     "Image prompt failed; backend diagnostics withheld."
-                    if image_input_sent and error_text
+                    if (image_input_sent or inherited_image_sensitive) and error_text
                     else error_text
                 )
                 or f"Backend exited with code {proc.returncode}"
