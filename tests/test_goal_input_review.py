@@ -1,5 +1,6 @@
 """Explicit inspection decisions unblock waiting without inventing native receipts."""
 
+import asyncio
 import os
 
 import pytest
@@ -80,6 +81,11 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
             report.invoke(comms, {**args, "reviewed_inputs": keys})["goal_execution"]["state"]
             == "standby"
         )
+        # Previously queued ordinary turns have an older goal revision and
+        # no wait witness. They must be dropped before any backend start, not
+        # replayed as dependency replies after the new standby decision.
+        if wake := agent._wake_tasks.get("worker"):
+            await asyncio.wait_for(wake, timeout=2)
         agent._schedule_goal("worker")
         assert not agent._pending_turns.get("worker")
         again = comms.goal_input_review("worker", goal.id, ["parent"])

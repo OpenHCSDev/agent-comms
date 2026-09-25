@@ -1770,6 +1770,23 @@ class ScheduledTurn:
     origin: Message | None = None
     goal_id: str | None = None
     goal_wait_id: str | None = None
+    # New ordinary direct DM interrupting an active goal, not a goal attempt.
+    # None distinguishes the ordinary path from all existing goal/wait turns.
+    direct_interrupt_goal_id: str | None = None
+    direct_interrupt_goal_revision: int | None = None
+    direct_interrupt_wait_id: str | None = None
+    direct_interrupt_input_key: str | None = None
+    direct_interrupt_ticket: str | None = None
+
+    def still_current_interrupt(self, goal: Goal | None, wait_id: str | None) -> bool:
+        """A queued direct DM never survives goal/wait replacement or an ABA revision."""
+        return self.direct_interrupt_goal_id is None or (
+            goal is not None
+            and goal.active
+            and goal.id == self.direct_interrupt_goal_id
+            and goal.revision == self.direct_interrupt_goal_revision
+            and wait_id == self.direct_interrupt_wait_id
+        )
 
     @property
     def reply_target(self) -> str | None:
