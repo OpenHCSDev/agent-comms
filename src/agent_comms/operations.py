@@ -2109,7 +2109,7 @@ class Comms:
             suffix = 2
             while self.registry.name_reserved(new_name):
                 if self.registry.canonical_name(new_name) == thread.name:
-                    return self._rename_thread(thread.name, thread.name, title=display_name)
+                    return self._rename_thread(thread.name, new_name, title=display_name)
                 new_name = f"{base_name}-{suffix}"
                 suffix += 1
             return self._rename_thread(thread.name, new_name, title=display_name)

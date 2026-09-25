@@ -2370,10 +2370,15 @@ class ThreadRegistry:
             current = self._threads[canonical]
             if not self._statuses[canonical].running:
                 raise RelationViolationError("Only a running thread can rename itself.")
-            if new_name in self._threads or new_name in self._aliases:
+            alias_owner = self._aliases.get(new_name)
+            if new_name in self._threads or (alias_owner is not None and alias_owner != canonical):
                 raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
             # Constructing the replacement proves the new name is valid.
             replacement = replace(current, name=new_name)
+            # Reclaim only this owner's old alias. A canonical name must not
+            # also remain an alias to itself after the declaration moves.
+            if alias_owner == canonical:
+                del self._aliases[new_name]
             status = self._statuses.pop(canonical)
             last_seen = self._last_seen.pop(canonical)
             del self._threads[canonical]
