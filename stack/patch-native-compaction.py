@@ -24,6 +24,8 @@ SUMMARY_RETURN = "    return retryAssistantCall(produce, retry, requestOptions.s
 REPORT_SUMMARY = (
     "    const response = await retryAssistantCall(produce, retry, requestOptions.signal, callbacks);\n"
     "    callbacks?.onSummaryResponse?.(response.usage);\n"
+    "    if (response.stopReason === 'stop' && !contentText(response.content).trim()) "
+    "throw new Error('Compaction returned an empty summary');\n"
     "    return response;\n"
 )
 TURN_PREFIX_PROMPT = (
@@ -32,7 +34,9 @@ TURN_PREFIX_PROMPT = (
 )
 LIMIT_HELPER = """function summaryByteLimit(model, reserveTokens) {
     const window = model.contextWindow > 0 ? model.contextWindow : 128000;
-    const byteLimit = Math.min(64000, Math.floor((window - reserveTokens) * 0.5));
+    // Keep the serialized UTF-8 prompt below the model's token budget even
+    // for poorly tokenizing text, with room for the system prompt and output.
+    const byteLimit = Math.floor((window - reserveTokens) * 0.75);
     if (byteLimit < 4096) throw new Error('Compaction model context is too small');
     return byteLimit;
 }
@@ -53,8 +57,8 @@ BOUNDED = """    // Bound every summary request. A context-overflow recovery can
         const source = previousSummary
             ? `<previous-summary>\\n${previousSummary}\\n</previous-summary>\\n\\n${transcript}`
             : transcript;
-        const chunkBytes = Math.floor(byteLimit * 0.5);
-        const priorLimit = Math.floor(byteLimit * 0.3);
+        const chunkBytes = Math.floor(byteLimit * 0.7);
+        const priorLimit = Math.floor(byteLimit * 0.2);
         let rolling;
         let combinedUsage;
         for (let start = 0; start < source.length;) {

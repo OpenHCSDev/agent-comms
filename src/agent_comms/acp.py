@@ -2397,6 +2397,25 @@ class CommsAgent:
                         size=size,
                     ),
                 )
+        elif kind == "compaction_progress":
+            chunk_index = event.get("chunk_index")
+            if type(chunk_index) is int and chunk_index > 0:
+                await client.session_update(
+                    session_id=session_id,
+                    update=AgentMessageChunk(
+                        session_update="agent_message_chunk",
+                        content=TextContentBlock(type="text", text=""),
+                        field_meta={
+                            "agentComms": {
+                                "compaction": {
+                                    "phase": "progress",
+                                    "status": "running",
+                                    "chunkIndex": chunk_index,
+                                }
+                            }
+                        },
+                    ),
+                )
         elif kind in {"compaction_start", "compaction_end"}:
             phase = (
                 "start"

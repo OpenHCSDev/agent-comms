@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import threading
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -90,7 +91,16 @@ def _saved_history(path: Path, cwd: Path, *, short: bool = False) -> None:
 
 
 @pytest.mark.parametrize(
-    "case", ["success", "acp_success", "summary_failure", "oversized_current", "oversized_summary"]
+    "case",
+    [
+        "success",
+        "acp_success",
+        "summary_failure",
+        "oversized_current",
+        "oversized_summary",
+        "compacted_resume",
+        "compacted_large",
+    ],
 )
 async def test_saved_history_compacts_after_native_user_start(case: str, monkeypatch) -> None:
     native_bin = os.environ.get("AC_NATIVE_STACK_BIN")
@@ -110,6 +120,26 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
         )
         session = root / "saved.jsonl"
         _saved_history(session, project, short=case in {"oversized_current", "oversized_summary"})
+        if case.startswith("compacted_"):
+            rows = [json.loads(line) for line in session.read_text().splitlines()]
+            # Real saved compaction retains recent assistant messages, including
+            # usage measured against the old full context. Reopen that branch.
+            boundary = datetime.fromtimestamp(1790290000.200, UTC).isoformat()
+            with session.open("a") as stream:
+                stream.write(
+                    json.dumps(
+                        {
+                            "type": "compaction",
+                            "id": "compact1",
+                            "parentId": rows[-1]["id"],
+                            "timestamp": boundary,
+                            "summary": "Earlier work completed.",
+                            "firstKeptEntryId": rows[-2 if case == "compacted_resume" else 1]["id"],
+                            "tokensBefore": 200001,
+                        }
+                    )
+                    + "\n"
+                )
         agent = root / "agent"
         agent.mkdir(mode=0o700)
         calls: list[str] = []
@@ -279,6 +309,16 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             assert reasoning_efforts[:-1] == ["low"] * (len(calls) - 1)
             assert reasoning_efforts[-1] == "high"
             assert updates
+            progress = [
+                update.field_meta["agentComms"]["compaction"]["chunkIndex"]
+                for update in updates
+                if (getattr(update, "field_meta", None) or {})
+                .get("agentComms", {})
+                .get("compaction", {})
+                .get("phase")
+                == "progress"
+            ]
+            assert progress == list(range(1, len(calls)))
             texts = [
                 getattr(getattr(update, "content", None), "text", "")
                 for update in updates
@@ -290,6 +330,19 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             return
         assert "input_started" in kinds
         assert events[-1]["type"] == "done"
+        if case == "compacted_resume":
+            assert events[-1]["ok"] is True
+            assert "compaction_start" not in kinds
+            assert reasoning_efforts == ["high"]
+            assert len(calls) == 1
+            assert (
+                sum(
+                    json.loads(line).get("type") == "compaction"
+                    for line in session.read_text().splitlines()
+                )
+                == 1
+            )
+            return
         if case == "summary_failure":
             assert events[-1]["ok"] is False
             assert "compaction" in str(events[-1]["text"]).lower()
