@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Self
 
 from .bus_activity_index import BusActivityIndex
+from .bus_display_index import BusDisplayIndex
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     CommittedInitial,
@@ -2561,17 +2562,64 @@ class MessageBus:
         ):
             return dict(self._display_activity), dict(cached_unread.counts)
 
-        activity = {scope.channel: ChannelActivity() for scope in activity_scopes}
-        counts = dict.fromkeys((scope.channel for scope in scopes), 0)
-        for message, _ in records:
+        def scope_key(scope: ChannelDisplayScope) -> list[object]:
+            return [
+                scope.channel,
+                sorted(scope.targets) if scope.targets is not None else None,
+                scope.any_mode,
+                sorted(scope.participant_names),
+                scope.after,
+                scope.expanded_after,
+            ]
+
+        def apply(record: Mapping, metrics: tuple[dict, dict]) -> None:
+            message = Message.from_wire(record)
+            clocks, unread = metrics
             for scope in activity_scopes:
                 if scope.includes(message):
-                    activity[scope.channel] = activity[scope.channel].observe(message)
-            if message.sender in viewer_names:
-                continue
-            for scope in scopes:
-                if scope.unread(message):
-                    counts[scope.channel] += 1
+                    last_message, last_user = clocks[scope.channel]
+                    clocks[scope.channel] = (
+                        max(last_message, message.timestamp),
+                        (
+                            max(last_user, message.timestamp)
+                            if message.sender_role is ThreadRole.USER
+                            else last_user
+                        ),
+                    )
+            if message.sender not in viewer_names:
+                for scope in scopes:
+                    if scope.unread(message):
+                        unread[scope.channel] += 1
+
+        initial = (
+            {scope.channel: (0.0, 0.0) for scope in activity_scopes},
+            dict.fromkeys((scope.channel for scope in scopes), 0),
+        )
+        projected = BusDisplayIndex(self._path, viewer).snapshot(
+            bus_revision,
+            [
+                [scope_key(scope) for scope in scopes],
+                [scope_key(scope) for scope in activity_scopes],
+                sorted(viewer_names),
+            ],
+            initial,
+            apply,
+        )
+        if projected is not None:
+            activity = {name: ChannelActivity(*clocks) for name, clocks in projected[0].items()}
+            counts = projected[1]
+        else:
+            activity = {scope.channel: ChannelActivity() for scope in activity_scopes}
+            counts = dict.fromkeys((scope.channel for scope in scopes), 0)
+            for message, _ in records:
+                for scope in activity_scopes:
+                    if scope.includes(message):
+                        activity[scope.channel] = activity[scope.channel].observe(message)
+                if message.sender in viewer_names:
+                    continue
+                for scope in scopes:
+                    if scope.unread(message):
+                        counts[scope.channel] += 1
         if bus_revision is not None and file_revision(self._path) == bus_revision:
             self._display_activity = activity
             self._display_activity_revision = activity_key
@@ -3480,6 +3528,37 @@ class MessageBus:
         global_read = markers.get(delivery.actor, 0)
         counts: dict[str, int] = {}
         with _store_lock(self._path):
+            try:
+                with BusRouteCounts(self._path) as route_counts:
+                    if route_counts.sync(self._pending_route_fields):
+                        for target, raw_sender in route_counts.routes():
+                            sender = delivery.canonical(raw_sender)
+                            if sender == delivery.actor or not (
+                                target in delivery.channels
+                                or delivery.canonical(target) == delivery.actor
+                            ):
+                                continue
+                            scope = (
+                                target
+                                if is_channel_target(target)
+                                else (
+                                    sender
+                                    if delivery.canonical(target) == delivery.actor
+                                    else delivery.canonical(target)
+                                )
+                            )
+                            cutoff = max(
+                                global_read,
+                                markers.get(self._marker_key(delivery.actor, scope), 0),
+                            )
+                            unread = route_counts.pair_after(target, raw_sender, cutoff)
+                            if unread:
+                                counts[scope] = counts.get(scope, 0) + unread
+                        self._pending_cache[name] = PendingCounts(revision, delivery, counts)
+                        return dict(counts)
+            except (OSError, sqlite3.DatabaseError):
+                # The JSONL bus remains authoritative if its disposable index fails.
+                pass
             for message in self._iter_log_unlocked():
                 if message.seq <= global_read or not delivery.delivers(message):
                     continue
