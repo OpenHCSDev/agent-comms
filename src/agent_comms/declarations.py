@@ -52,6 +52,7 @@ from .bus_route_counts import BusRouteCounts
 
 if TYPE_CHECKING:
     from .coordination import PublicationIntent
+    from .goal_history import GoalHistoryEntry
     from .private_registry_guard import PrivateRegistryGuard
 from .envelope_claim_transitions import (
     ClaimProjection,
@@ -2126,6 +2127,14 @@ class ThreadRegistry:
                 if not math.isfinite(candidate):
                     raise RelationViolationError("Registry creation identities collide.")
                 thread = replace(thread, created_at=candidate)
+            history = None
+            intent = None
+            before_goal = previous.goal if previous is not None else None
+            if before_goal != thread.goal:
+                from .goal_history import GoalHistoryStore
+
+                history = GoalHistoryStore(self._path)
+                intent = history.begin(thread.created_at, before_goal, thread.goal)
             self._threads[thread.name] = thread
             self._statuses[thread.name] = status
             self._last_seen[thread.name] = time.time()
@@ -2139,6 +2148,8 @@ class ThreadRegistry:
                 self._bump_admission_unlocked(thread.name)
             self._bump_owner_epoch_unlocked(thread.name)
             self._save_unlocked()
+            if history is not None and intent is not None:
+                history.commit(intent)
 
     def live_owner_with_epoch(self, name: str) -> tuple[Thread, int]:
         """Capture an active owner and its persistent incarnation under one lock.
@@ -2352,6 +2363,22 @@ class ThreadRegistry:
         return frozenset(
             {canonical, *(alias for alias, target in self._aliases.items() if target == canonical)}
         )
+
+    def goal_history(
+        self, name: str, *, goal_id: str | None = None
+    ) -> tuple[GoalHistoryEntry, ...]:
+        """Read this owner's recorded transitions, reconciling crash cuts first."""
+        from .goal_history import GoalHistoryStore
+
+        with _store_lock(self._path):
+            self._load_unlocked()
+            canonical = self._aliases.get(name, name)
+            thread = self._threads.get(canonical)
+            if thread is None:
+                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+            return GoalHistoryStore(self._path).history(
+                thread.created_at, thread.goal, goal_id=goal_id
+            )
 
     def name_reserved(self, name: str) -> bool:
         """Return whether a canonical name or permanent alias occupies text."""

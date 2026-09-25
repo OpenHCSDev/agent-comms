@@ -31,6 +31,7 @@ from uuid import uuid4
 
 from .channels import ChannelCatalog
 from .goal_pauses import GoalPauseEvent, GoalPauseEvents
+from .goal_history import GoalHistoryEntry
 
 if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore
@@ -2137,6 +2138,13 @@ class Comms:
         """Return the action that paused this exact current goal revision, if known."""
         events = GoalPauseEvents(self.root / "goal_pause_events.json")
         return events.for_goal(self.registry.require(name).goal, events.snapshot())
+
+    def goal_history(
+        self, name: str, *, goal_id: str | None = None
+    ) -> tuple[GoalHistoryEntry, ...]:
+        """Read durable revisions for one thread incarnation and optional goal ID."""
+        with _store_lock(self._wire_lock_path):
+            return self.registry.goal_history(name, goal_id=goal_id)
 
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
         """Summarize threads with status and pending counts."""

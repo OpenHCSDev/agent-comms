@@ -297,6 +297,28 @@ def _resume_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     return {"goal": asdict(goal)}
 
 
+def _edit_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
+    name = _executing_thread()
+    goal_id = str(arguments["goal_id"])
+    current = comms.registry.require(name).goal
+    if current is None or current.id != goal_id:
+        raise ValueError("This goal was replaced or cleared; refresh its state.")
+    goal = comms.update_goal(
+        name,
+        "edit",
+        text=str(arguments["text"]),
+        goal_id=goal_id,
+        expected_goal=current,
+    )
+    return {"goal": asdict(goal) if goal else None}
+
+
+def _goal_history(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
+    requested = str(arguments["goal_id"]).strip()
+    entries = comms.goal_history(_executing_thread(), goal_id=requested or None)
+    return {"history": [asdict(entry) for entry in entries]}
+
+
 def _collaboration(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     relationship = comms.relationships.edit(
         _executing_thread(),
@@ -639,6 +661,32 @@ TOOLS = (
             ToolParameter("progress", "string", "Progress summary for the resumed goal"),
         ),
         _resume_goal,
+    ),
+    ToolDeclaration(
+        "comms_edit_goal",
+        "Edit goal text",
+        "Edit your existing goal text while keeping its identity, status, and progress. "
+        "Use comms_set_goal only to replace the objective with a fresh goal ID.",
+        (
+            ToolParameter("goal_id", "string", "Identity of the existing goal to edit"),
+            ToolParameter("text", "string", "Revised objective text, including any @mentions"),
+        ),
+        _edit_goal,
+    ),
+    ToolDeclaration(
+        "comms_goal_history",
+        "Goal history",
+        "Read recorded goal revisions and clearly labeled legacy baselines or observation gaps.",
+        (
+            ToolParameter(
+                "goal_id",
+                "string",
+                "Optional goal ID; omit for this thread's full history",
+                required=False,
+                default="",
+            ),
+        ),
+        _goal_history,
     ),
     ToolDeclaration(
         "comms_threads",
