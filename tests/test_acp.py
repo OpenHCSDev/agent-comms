@@ -2024,9 +2024,8 @@ class TestFailureFeedback:
         assert history, "failed agent delivery must be reported where the request came from"
         notice = history[-1]
         assert notice.notice is True
-        assert notice.body == (
-            "Delivery failed: backend turn did not complete; inspect local diagnostics."
-        )
+        assert notice.body.startswith("Delivery failed: backend turn did not complete. ")
+        assert "[Open diagnostic](file://" in notice.body
         assert message not in notice.body
         assert not notice.starts_turn
         assert len(history) == 1
@@ -2064,9 +2063,8 @@ class TestFailureFeedback:
         assert len(history) == 1
         assert history[0].notice is True
         assert history[0].type is MessageType.ALERT
-        assert history[0].body == (
-            "Request failed: backend turn did not complete; inspect local diagnostics."
-        )
+        assert history[0].body.startswith("Request failed: backend turn did not complete. ")
+        assert "[Open diagnostic](file://" in history[0].body
         assert "SECRET_PRIVATE_938" not in history[0].body
         assert not history[0].starts_turn
         assert not routed
@@ -2094,9 +2092,8 @@ class TestFailureFeedback:
         history = wired.dm_history("proj", human.name)
         assert len(history) == 1
         assert history[0].notice is True
-        assert history[0].body == (
-            "Request failed: backend turn did not complete; inspect local diagnostics."
-        )
+        assert history[0].body.startswith("Request failed: backend turn did not complete. ")
+        assert "[Open diagnostic](file://" in history[0].body
         assert not routed
 
     async def test_successful_terminal_sends_complete_reply_and_records_route(

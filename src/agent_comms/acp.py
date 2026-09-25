@@ -70,6 +70,7 @@ from .declarations import (
     _store_lock,
     is_channel_target,
 )
+from .diagnostics import record_terminal_failure
 from .goal_attempts import (
     Generation,
     GoalAttemptError,
@@ -2060,6 +2061,7 @@ class CommsAgent:
             )
         reply_parts: list[str] = []
         terminal_ok: bool | None = None
+        terminal_failure: dict[str, Any] = {}
         successful_tool_observed = False
         goal_tool_ok = False
         goal_attempt_resolved = False
@@ -2185,6 +2187,7 @@ class CommsAgent:
                 if kind == "tool_end" and event.get("ok") is True:
                     successful_tool_observed = True
                 if kind == "done":
+                    terminal_failure = event
                     unknown_attempts = any(
                         self._dispositions.status(key) != "started"
                         for key in self._turn_input_keys.get(session_id, set())
@@ -2440,7 +2443,14 @@ class CommsAgent:
                 # result cannot turn them into a completed wire reply. Keep the
                 # failure notice non-waking, including for human reply targets.
                 # Backend text may include stderr, secrets, or content from an
-                # unrelated session. Only the local client gets that diagnostic.
+                # unrelated session. Persist only structural facts for headless owners.
+                diagnostic_path = record_terminal_failure(
+                    self._comms.root,
+                    turn_id=turn_id,
+                    thread=thread_name,
+                    event=terminal_failure,
+                    sequences=tuple(origin.seq for origin in origins),
+                )
                 notice_targets = tuple(
                     dict.fromkeys(
                         (*reply_targets,)
@@ -2456,7 +2466,8 @@ class CommsAgent:
                     self._comms.send(
                         thread_name,
                         target,
-                        f"{prefix}: backend turn did not complete; inspect local diagnostics.",
+                        f"{prefix}: backend turn did not complete. "
+                        f"[Open diagnostic]({diagnostic_path.as_uri()})",
                         MessageType.ALERT,
                         notice=True,
                     )
