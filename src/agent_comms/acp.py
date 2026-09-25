@@ -1001,6 +1001,12 @@ class CommsAgent:
 
     def _session_metadata(self, thread_name: str) -> dict[str, Any]:
         thread = self._comms.registry.require(thread_name)
+        info = self._comms.agent_info_of(thread_name)
+        usage = (
+            {"used": info.context_used, "size": info.context_size, "source": "last_response"}
+            if info is not None and info.context_used is not None and info.context_size
+            else None
+        )
         return {
             "agentComms": {
                 "thread": thread_name,
@@ -1008,6 +1014,7 @@ class CommsAgent:
                 "persistence": "shared on-disk wire",
                 "transport": "per-session stdio ACP",
                 "ownerPid": os.getpid(),
+                "contextUsage": usage,
                 "turnLifecycle": True,
                 "model": thread.model,
                 "thinkingLevel": thread.thinking_level,
