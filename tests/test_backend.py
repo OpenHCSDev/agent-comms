@@ -1560,7 +1560,7 @@ emit({"type": "compaction_progress", "reason": "threshold", "chunkIndex": 1,
       "sourceBytesDone": 500, "sourceBytesTotal": 1000, "summaryPhase": "history",
       "usage": {"totalTokens": 10}})
 emit({"type": "compaction_progress", "reason": "threshold", "chunkIndex": 2,
-      "usage": {"totalTokens": 11}})
+      "summaryPhase": "synthesis", "usage": {"totalTokens": 11}})
 emit({"type": "compaction_end", "reason": "threshold", "result": {"summary": "saved",
       "usage": {"totalTokens": 21}},
       "aborted": False, "willRetry": False})
@@ -1600,6 +1600,7 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
             "summary_phase": "history",
         }
         assert progress[1]["source_bytes_done"] == 500
+        assert progress[2]["summary_phase"] == "synthesis"
         assert [e["usage"]["totalTokens"] for e in events if e["type"] == "provider_usage"] == [
             10,
             11,

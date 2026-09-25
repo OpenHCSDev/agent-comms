@@ -2484,8 +2484,8 @@ class CommsAgent:
                                     ),
                                     **(
                                         {"summaryPhase": event["summary_phase"]}
-                                        if event.get("summary_phase")
-                                        in {"history", "current-turn", "shrink"}
+                                        if isinstance(event.get("summary_phase"), str)
+                                        and event["summary_phase"]
                                         else {}
                                     ),
                                 }

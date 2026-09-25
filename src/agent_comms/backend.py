@@ -1465,7 +1465,7 @@ async def _stream_agent_events(
                 progress = {"type": "compaction_progress", "chunk_index": chunk_index}
                 if measured:
                     progress.update(source_bytes_done=done, source_bytes_total=total)
-                if payload.get("summaryPhase") in {"history", "current-turn", "shrink"}:
+                if isinstance(payload.get("summaryPhase"), str) and payload["summaryPhase"]:
                     progress["summary_phase"] = payload["summaryPhase"]
                 yield progress
         elif kind == "compaction_end":
