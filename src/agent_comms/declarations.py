@@ -1549,7 +1549,9 @@ class Message:
             return ResponsePolicy.COLLECTIVE
         return ResponsePolicy.INFORMATIONAL
 
-    def response_eligibility(self, audience: Sequence[str]) -> ResponseEligibility:
+    def response_eligibility(
+        self, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
+    ) -> ResponseEligibility:
         """Resolve channel responders from canonical audience identities.
 
         Mention identities were canonicalized when the message was committed.
@@ -1560,7 +1562,10 @@ class Message:
         if policy is ResponsePolicy.COLLECTIVE:
             recipients = tuple(dict.fromkeys(audience))
         elif policy is ResponsePolicy.MENTIONED_ONLY:
-            selected = frozenset(mention.thread for mention in self.mentions)
+            aliases = aliases or {}
+            selected = frozenset(
+                aliases.get(mention.thread, mention.thread) for mention in self.mentions
+            )
             recipients = tuple(name for name in dict.fromkeys(audience) if name in selected)
         else:
             recipients = ()
@@ -1571,17 +1576,12 @@ class Message:
         """Whether every delivered recipient may start a turn."""
         return self.response_policy in {ResponsePolicy.DIRECT, ResponsePolicy.COLLECTIVE}
 
-    def starts_turn_for(self, name: str) -> bool:
+    def starts_turn_for(self, name: str, *, aliases: Mapping[str, str] | None = None) -> bool:
         """Whether this message enters one canonical recipient's model context."""
         channel = is_channel_target(self.target) or self.target in BROADCAST_ALIASES
         if not channel:
             return self.starts_turn
-        policy = self.response_policy
-        if policy is ResponsePolicy.COLLECTIVE:
-            return True
-        if policy is ResponsePolicy.MENTIONED_ONLY:
-            return any(mention.thread == name for mention in self.mentions)
-        return False
+        return name in self.response_eligibility((name,), aliases=aliases).recipients
 
     @property
     def reply_target(self) -> str | None:
@@ -1648,12 +1648,20 @@ class ScheduledTurn:
         return self.origin.reply_target if self.origin else None
 
     @classmethod
-    def incoming(cls, message: Message) -> ScheduledTurn:
+    def incoming(
+        cls, message: Message, *, aliases: Mapping[str, str] | None = None
+    ) -> ScheduledTurn:
         policy = message.response_policy
         if policy is ResponsePolicy.COLLECTIVE:
             guidance = "collective; channel members may respond"
         elif policy is ResponsePolicy.MENTIONED_ONLY:
-            names = ", ".join(dict.fromkeys(f"@{mention.thread}" for mention in message.mentions))
+            aliases = aliases or {}
+            names = ", ".join(
+                dict.fromkeys(
+                    f"@{aliases.get(mention.thread, mention.thread)}"
+                    for mention in message.mentions
+                )
+            )
             guidance = (
                 f"mentioned_only; only resolved mentioned identities may respond: {names}; "
                 "unmentioned observers dismiss quietly"
