@@ -20,7 +20,9 @@ TOKEN_LIMIT = (
     "model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);"
 )
 PROMPT_END = "    promptText += basePrompt;\n"
-SUMMARY_RETURN = "    return retryAssistantCall(produce, retry, requestOptions.signal, callbacks);\n"
+SUMMARY_RETURN = (
+    "    return retryAssistantCall(produce, retry, requestOptions.signal, callbacks);\n"
+)
 REPORT_SUMMARY = (
     "    const response = await retryAssistantCall(produce, retry, requestOptions.signal, callbacks);\n"
     "    callbacks?.onSummaryResponse?.(response.usage);\n"
@@ -91,6 +93,15 @@ BOUNDED = """    // Bound every summary request. A context-overflow recovery can
 """
 
 
+# A tool-result tail has no following valid cut yet. Keep its entire owning
+# assistant/tool-result group, rather than defaulting back to the oldest entry
+# and falsely concluding that nothing can be summarized.
+CUT_SEARCH = """            for (let c = 0; c < cutPoints.length; c++) {
+"""
+CUT_FALLBACK = """            cutIndex = cutPoints[cutPoints.length - 1];
+"""
+
+
 def main(path: Path) -> None:
     raw = path.read_bytes()
     if hashlib.sha256(raw).hexdigest() != STOCK_SHA:
@@ -102,6 +113,7 @@ def main(path: Path) -> None:
         or source.count(PROMPT_END) != 1
         or source.count(SUMMARY_RETURN) != 1
         or source.count(TURN_PREFIX_PROMPT) != 1
+        or source.count(CUT_SEARCH) != 1
     ):
         raise SystemExit("Native compaction anchors changed")
     source = source.replace(
@@ -130,6 +142,7 @@ def main(path: Path) -> None:
         + "    if (Buffer.byteLength(promptText, 'utf8') > byteLimit) "
         "throw new Error('Turn prefix prompt exceeds its context budget');\n",
     )
+    source = source.replace(CUT_SEARCH, CUT_FALLBACK + CUT_SEARCH, 1)
     path.write_text(source)
 
 
