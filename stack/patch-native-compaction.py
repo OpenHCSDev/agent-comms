@@ -20,6 +20,12 @@ TOKEN_LIMIT = (
     "model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);"
 )
 PROMPT_END = "    promptText += basePrompt;\n"
+SUMMARY_RETURN = "    return retryAssistantCall(produce, retry, requestOptions.signal, callbacks);\n"
+REPORT_SUMMARY = (
+    "    const response = await retryAssistantCall(produce, retry, requestOptions.signal, callbacks);\n"
+    "    callbacks?.onSummaryResponse?.(response.usage);\n"
+    "    return response;\n"
+)
 TURN_PREFIX_PROMPT = (
     "    const promptText = `<conversation>\\n${conversationText}\\n</conversation>\\n\\n"
     "${TURN_PREFIX_SUMMARIZATION_PROMPT}`;\n"
@@ -90,6 +96,7 @@ def main(path: Path) -> None:
         source.count(HEADER) != 1
         or source.count(TOKEN_LIMIT) != 1
         or source.count(PROMPT_END) != 1
+        or source.count(SUMMARY_RETURN) != 1
         or source.count(TURN_PREFIX_PROMPT) != 1
     ):
         raise SystemExit("Native compaction anchors changed")
@@ -99,6 +106,7 @@ def main(path: Path) -> None:
         + HEADER.replace("sessionId) {", "sessionId, boundedChunk = false) {")
         + BOUNDED,
     )
+    source = source.replace(SUMMARY_RETURN, REPORT_SUMMARY, 1)
     source = source.replace(
         TOKEN_LIMIT,
         "const maxTokens = boundedChunk "

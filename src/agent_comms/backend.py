@@ -821,6 +821,7 @@ async def _stream_agent_events(
     confirmed_context_used: int | None = None
     provisional_usage = False
     provider_response_index = 0
+    compaction_usage_recorded = False
     # A prompt ACK can mean handled/queued, and a final from an unrelated run
     # cannot complete this prompt. Observe this prompt's user message first.
     initial_prompt_acknowledged = False
@@ -842,6 +843,7 @@ async def _stream_agent_events(
     output_started = False
     forwarded_input_started = False
     compaction_started = False
+    prestart_compaction_failed = False
     retry_recovery_pending = False
     retry_recovery_reason = "provider_auto_retry_progress"
     started_during_abort: list[str | None] = []
@@ -1080,7 +1082,14 @@ async def _stream_agent_events(
                 read_timeout = None
             else:
                 read_timeout = max(0.0, last_model_progress + model_wait_timeout - loop.time())
-            if prompt_start_deadline is not None and not initial_input_started:
+            # Pi may compact a saved session before it emits this prompt's
+            # authoritative user start. That work has its own progress wait;
+            # the input-start clock resumes after compaction completes.
+            if (
+                prompt_start_deadline is not None
+                and not initial_input_started
+                and phase != "compaction"
+            ):
                 start_wait = max(0.0, prompt_start_deadline - loop.time())
                 read_timeout = (
                     min(read_timeout, start_wait) if read_timeout is not None else start_wait
@@ -1092,7 +1101,11 @@ async def _stream_agent_events(
                 fail_reason = "Pi native input-ID capability preflight timed out."
                 await _terminate_process(proc)
                 break
-            if prompt_start_deadline is not None and not initial_input_started:
+            if (
+                prompt_start_deadline is not None
+                and not initial_input_started
+                and phase != "compaction"
+            ):
                 fail_reason = "Pi RPC run ended without this prompt's user message start."
                 await _terminate_process(proc)
                 break
@@ -1338,6 +1351,7 @@ async def _stream_agent_events(
                 )
         elif kind == "compaction_start":
             compaction_started = True
+            compaction_usage_recorded = False
             last_model_progress = now
             phase = "compaction"
             # A compaction in flight invalidates the prior context meter even
@@ -1352,11 +1366,42 @@ async def _stream_agent_events(
                 "type": "compaction_start",
                 "reason": reason if reason in {"manual", "threshold", "overflow"} else "unknown",
             }
+        elif kind == "compaction_progress":
+            # Each chunk finished a separate provider response. Keep the
+            # no-progress watchdog bounded to the current response, not the
+            # full history length.
+            last_model_progress = now
+            phase = "compaction"
+            chunk_index = payload.get("chunkIndex")
+            usage = payload.get("usage")
+            if isinstance(usage, dict):
+                provider_response_index += 1
+                compaction_usage_recorded = True
+                yield {
+                    "type": "provider_usage",
+                    "response_id": str(provider_response_index),
+                    "usage": usage,
+                }
+            if type(chunk_index) is int and chunk_index > 0:
+                yield {"type": "compaction_progress", "chunk_index": chunk_index}
         elif kind == "compaction_end":
             last_model_progress = now
             phase = "model_wait"
             result = payload.get("result")
             completed = payload.get("aborted") is False and isinstance(result, dict)
+            if (
+                completed
+                and not compaction_usage_recorded
+                and isinstance(result.get("usage"), dict)
+            ):
+                provider_response_index += 1
+                yield {
+                    "type": "provider_usage",
+                    "response_id": str(provider_response_index),
+                    "usage": result["usage"],
+                }
+            if completed and not initial_input_started and prompt_start_deadline is not None:
+                prompt_start_deadline = now + PROMPT_START_TIMEOUT_SECONDS
             # A committed compaction starts a new context epoch. Aborted or
             # malformed completion remains UNKNOWN rather than fabricating 0.
             context_used = None
@@ -1373,6 +1418,21 @@ async def _stream_agent_events(
                 "context_used": None,
                 "will_retry": payload.get("willRetry") is True,
             }
+            if not completed and not initial_input_started:
+                # Pi otherwise continues with the uncompressed history and
+                # can send the same oversized context to the model. An
+                # attempted summary is uncertain, so only an explicit new
+                # decision may retry it.
+                prestart_compaction_failed = True
+                fail_reason = (
+                    "Context compaction failed before this input started; "
+                    "inspect ACP diagnostics."
+                )
+                yield turn_state(
+                    "failed", "prestart_compaction_failed", 0, event_phase="compaction"
+                )
+                await _terminate_process(proc)
+                break
             if payload.get("willRetry"):
                 final_assistant_stop = False
                 retry_recovery_pending = True
@@ -1646,6 +1706,23 @@ async def _stream_agent_events(
         and not input_uncertain
         and not unresolved_inputs
     )
+    reason_code: str | None = None
+    if capability_failed:
+        reason_code = "pi_input_id_unavailable"
+    elif prestart_compaction_failed:
+        reason_code = "prestart_compaction_failed"
+    elif session_identity_uncertain:
+        reason_code = "session_identity_uncertain"
+    elif authority_revoked:
+        reason_code = "input_authority_changed"
+    elif followup_start_unrecognized:
+        reason_code = "unrecognized_followup_input"
+    elif (transport_successful or input_uncertain or fail_reason) and not initial_input_started:
+        reason_code = "current_prompt_input_missing"
+    elif transport_successful and not final_assistant_stop:
+        reason_code = "assistant_final_stop_missing"
+    elif otherwise_successful and unresolved_inputs:
+        reason_code = "queued_input_start_missing"
     yield {
         "type": "done",
         "text": (
@@ -1665,34 +1742,5 @@ async def _stream_agent_events(
             )
         ),
         "ok": success and not session_identity_uncertain,
-        **(
-            {"reason_code": "pi_input_id_unavailable"}
-            if capability_failed
-            else (
-                {"reason_code": "session_identity_uncertain"}
-                if session_identity_uncertain
-                else (
-                    {"reason_code": "input_authority_changed"}
-                    if authority_revoked
-                    else (
-                        {"reason_code": "unrecognized_followup_input"}
-                        if followup_start_unrecognized
-                        else (
-                            {"reason_code": "current_prompt_input_missing"}
-                            if (transport_successful or input_uncertain or fail_reason)
-                            and not initial_input_started
-                            else (
-                                {"reason_code": "assistant_final_stop_missing"}
-                                if transport_successful and not final_assistant_stop
-                                else (
-                                    {"reason_code": "queued_input_start_missing"}
-                                    if otherwise_successful and unresolved_inputs
-                                    else {}
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        ),
+        **({"reason_code": reason_code} if reason_code else {}),
     }
