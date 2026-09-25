@@ -59,7 +59,9 @@ class GoalHistoryStore:
 
     @staticmethod
     def _sync_file(path: Path) -> None:
-        descriptor = os.open(path, os.O_RDONLY)
+        # Windows' CRT _commit (used by os.fsync) rejects a read-only fd.
+        # Retain the existing read-only POSIX reopen semantics.
+        descriptor = os.open(path, os.O_RDWR if os.name == "nt" else os.O_RDONLY)
         try:
             os.fsync(descriptor)
         finally:
