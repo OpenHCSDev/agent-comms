@@ -25,7 +25,9 @@ if [[ ! -x "$python" || ! -x "$toad" ]]; then
 fi
 
 export AGENT_COMMS_AGENT_BIN="${AGENT_COMMS_AGENT_BIN:-$stack_root/bin/pi-native}"
-# This terminal attaches to an owner; it must not inherit a child's identity.
+# This terminal attaches to an owner using the pinned stack. Shell developer
+# paths must not substitute worktree source for the pinned ACP or Toad packages.
+unset PYTHONPATH
 unset AGENT_COMMS_THREAD AGENT_COMMS_MANAGED PI_AGENT_ID PI_PARENT_ID PI_TASK PI_WORKTREE PI_PROMPT
 
 thread="${1:-agent-comms-ux}"
