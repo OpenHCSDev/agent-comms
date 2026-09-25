@@ -1,10 +1,42 @@
 """Direct input state survives a process exit without replaying an attempt."""
 
+import json
 from pathlib import Path
 
 import pytest
 
+from agent_comms.declarations import RelationViolationError
 from agent_comms.input_disposition import AcpDeliveryCursors, InputDispositions
+
+
+def test_batch_sources_are_one_snapshot_in_requested_order(tmp_path, monkeypatch):
+    store = InputDispositions(tmp_path)
+    for seq, text in ((7, "first admitted name"), (8, "second admitted name")):
+        store.record(f"bus:{seq}", seq=seq, owner="kid", admission=1, target="#team", text=text)
+    before = store.path.read_bytes()
+    reads = 0
+    read = store._read
+
+    def count_reads():
+        nonlocal reads
+        reads += 1
+        return read()
+
+    monkeypatch.setattr(store, "_read", count_reads)
+    assert store.source_texts(("bus:8", "bus:7")) == ("second admitted name", "first admitted name")
+    assert reads == 1
+    assert store.source_texts(("bus:7", "bus:9")) is None
+    assert store.path.read_bytes() == before  # No receipt, review, or replay authorization.
+
+
+def test_batch_sources_use_ledger_validation(tmp_path):
+    store = InputDispositions(tmp_path)
+    store.record("bus:7", seq=7, owner="kid", admission=1, target="#team", text="admitted")
+    data = json.loads(store.path.read_text())
+    data["rows"]["bus:7"]["source_text"] = None
+    store.path.write_text(json.dumps(data))
+    with pytest.raises(RelationViolationError, match="Invalid ACP input disposition rows"):
+        store.source_texts(("bus:7",))
 
 
 def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:
