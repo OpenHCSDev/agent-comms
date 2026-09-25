@@ -302,6 +302,49 @@ async def test_forged_dto_without_private_evidence_cannot_mark_context(
     assert len(comms.channel_history("#team")) == 1
 
 
+async def test_session_file_registration_during_native_triage_keeps_owner(
+    tmp_path: Path, monkeypatch
+) -> None:
+    root, root_id, comms, _initial, _people = _root(tmp_path)
+    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+    runner, calls = _fake_model(decision="IGNORE")
+
+    async def register_session(*args, **kwargs):
+        result = await runner(*args, **kwargs)
+        current = comms.registry.require("alpha")
+        comms.register(replace(current, session_file=str(root / "metadata.jsonl")))
+        return result
+
+    monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", register_session)
+    outcome = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
+    )
+    assert outcome is not None and outcome.disposition is ClaimDisposition.IGNORED
+    assert len(calls) == 1
+
+
+async def test_session_file_registration_during_native_full_turn_keeps_response(
+    tmp_path: Path, monkeypatch
+) -> None:
+    root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
+    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+    runner, calls = _fake_model()
+
+    async def register_session(*args, **kwargs):
+        result = await runner(*args, **kwargs)
+        current = comms.registry.require("beta")
+        comms.register(replace(current, session_file=str(root / "metadata.jsonl")))
+        return result
+
+    monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", register_session)
+    outcome = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+    )
+    assert outcome is not None and outcome.response_message_id
+    assert len(calls) == 1
+    assert len(comms.bus.dm_history("sender", "beta")) == 2
+
+
 async def test_owner_generation_revoked_during_native_triage_fails_closed(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -689,19 +732,21 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
         publish = getattr(runtime, method)
 
         def revoke_after_tx1(*args, **kwargs):
-            revoked_epoch = kwargs["owner_witness"].owner_epoch
+            revoked_epoch = kwargs["owner_witness"].admission_generation
             revoke_and_restore()
             if boundary.endswith("forged"):
                 # A same-UID caller can supply a fresh epoch in a dataclass.
                 # The locked registry snapshot must attest that THIS turn was
                 # created in that epoch, not merely compare caller assertions.
-                new_epoch = comms.registry.snapshot().owner_epochs["beta"]
+                new_epoch = comms.registry.snapshot().admission_generations["beta"]
                 assert new_epoch != revoked_epoch
-                kwargs["owner_witness"] = replace(kwargs["owner_witness"], owner_epoch=new_epoch)
+                kwargs["owner_witness"] = replace(
+                    kwargs["owner_witness"], admission_generation=new_epoch
+                )
             return publish(*args, **kwargs)
 
         monkeypatch.setattr(runtime, method, revoke_after_tx1)
-        with pytest.raises(StaleFence, match="turn stopped or changed"):
+        with pytest.raises(StaleFence, match="turn stopped or changed|turn witness is invalid"):
             await run_one_sealed_claim(
                 root,
                 wire_root_id=root_id,

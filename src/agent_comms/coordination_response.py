@@ -169,8 +169,9 @@ class LiveResponseOwner:
     recipient_lookup: str
     pid: int
     created_at: float
+    worktree: str
     active_turn: ActiveTurn
-    owner_epoch: int
+    admission_generation: int
 
 
 def _require_live_registry_owner(
@@ -185,8 +186,9 @@ def _require_live_registry_owner(
             or owner_witness.name != fence.owner_thread
             or type(owner_witness.active_turn) is not ActiveTurn
             or owner_witness.active_turn.owner_pid != owner_witness.pid
-            or type(owner_witness.owner_epoch) is not int
-            or owner_witness.owner_epoch < 1
+            or owner_witness.active_turn.admission_generation != owner_witness.admission_generation
+            or type(owner_witness.admission_generation) is not int
+            or owner_witness.admission_generation < 1
             or type(owner_witness.pid) is not int
             or (owner_pid is not None and owner_pid != owner_witness.pid)
         ):
@@ -210,9 +212,10 @@ def _require_live_registry_owner(
             and (
                 thread.created_at != owner_witness.created_at
                 or stable_thread_lookup(thread.created_at) != owner_witness.recipient_lookup
+                or thread.worktree != owner_witness.worktree
                 or thread.active_turn != owner_witness.active_turn
-                or snapshot.owner_epochs.get(thread.name) != owner_witness.owner_epoch
-                or snapshot.turn_epochs.get(thread.name) != owner_witness.owner_epoch
+                or snapshot.admission_generations.get(thread.name)
+                != owner_witness.admission_generation
             )
         )
     ):
