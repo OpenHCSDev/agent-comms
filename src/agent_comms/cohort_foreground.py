@@ -167,7 +167,7 @@ async def run_foreground_once(
         # automatic takeover of an uncertain claim.
         with _store_lock(comms._wire_lock_path):
             try:
-                current, _epoch = comms.registry.live_owner_with_epoch(name)
+                current, _generation = comms.registry.live_owner_with_admission(name)
             except (RelationViolationError, ValueError):
                 pass
             else:
