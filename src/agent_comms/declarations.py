@@ -1045,6 +1045,7 @@ class ActiveTurn:
     owner_pid: int
     started_at: float = field(default_factory=time.time)
     routing: TurnRouting | None = None
+    admission_generation: int | None = None
 
     @classmethod
     def from_wire(cls, data: Mapping) -> ActiveTurn:
@@ -1053,6 +1054,7 @@ class ActiveTurn:
             data["owner_pid"],
             data["started_at"],
             TurnRouting.from_wire(data["routing"]) if data.get("routing") else None,
+            data.get("admission_generation"),
         )
 
     def to_wire(self) -> dict[str, object]:
@@ -2162,6 +2164,69 @@ class ThreadRegistry:
                 raise RelationViolationError("live owner is stopped or unavailable")
             return owner, epoch
 
+    def live_owner_with_admission(self, name: str) -> tuple[Thread, int]:
+        """Read the durable process admission, independent of metadata revisions."""
+        with _store_lock(self._path):
+            self._load_unlocked()
+            canonical = self._aliases.get(name, name)
+            owner = self._threads.get(canonical)
+            status = self._statuses.get(canonical)
+            generation = self._admission_generations.get(canonical)
+            if (
+                owner is None
+                or status is None
+                or not status.active
+                or owner.pid != os.getpid()
+                or not owner.role.executable
+                or not self._epoch_metadata_present
+                or generation is None
+                or (
+                    owner is not None
+                    and owner.active_turn is not None
+                    and owner.active_turn.admission_generation != generation
+                )
+            ):
+                raise RelationViolationError("live owner is stopped or unavailable")
+            return owner, generation
+
+    def claim_live_turn_with_admission(
+        self, expected: Thread, turn_id: str, *, expected_generation: int
+    ) -> tuple[Thread, int]:
+        """Claim a turn against stable owner authority under the registry lock."""
+        if (
+            type(expected) is not Thread
+            or type(turn_id) is not str
+            or not 0 < len(turn_id) <= 128
+            or type(expected_generation) is not int
+            or expected_generation < 1
+        ):
+            raise ValueError("live owner turn requires exact admission and bounded ID")
+        with _store_lock(self._path):
+            self._load_unlocked()
+            current = self._threads.get(expected.name)
+            status = self._statuses.get(expected.name)
+            if (
+                not self._epoch_metadata_present
+                or self._admission_generations.get(expected.name) != expected_generation
+                or current is None
+                or status is None
+                or not status.active
+                or current.pid != os.getpid()
+                or not current.role.executable
+                or current.active_turn is not None
+                or (current.name, current.created_at, current.pid, current.role, current.worktree)
+                != (
+                    expected.name,
+                    expected.created_at,
+                    expected.pid,
+                    expected.role,
+                    expected.worktree,
+                )
+            ):
+                raise RelationViolationError("live owner stopped or changed before turn claim")
+            claimed, _epoch = self._claim_turn_unlocked(current, turn_id, None)
+            return claimed, expected_generation
+
     def claim_live_turn_with_epoch(
         self,
         expected: Thread,
@@ -2205,7 +2270,15 @@ class ThreadRegistry:
         self, current: Thread, turn_id: str, routing: TurnRouting | None
     ) -> tuple[Thread, int]:
         """Caller holds the registry lock and has checked live turn ownership."""
-        claimed = replace(current, active_turn=ActiveTurn(turn_id, current.pid, routing=routing))
+        claimed = replace(
+            current,
+            active_turn=ActiveTurn(
+                turn_id,
+                current.pid,
+                routing=routing,
+                admission_generation=self._admission_generations[current.name],
+            ),
+        )
         self._threads[current.name] = claimed
         self._last_seen[current.name] = time.time()
         self._bump_owner_epoch_unlocked(current.name)

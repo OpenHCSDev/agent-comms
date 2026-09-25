@@ -70,12 +70,31 @@ def _token_digest(token: str) -> str:
 
 
 def _require_registry_owner(comms: Comms, owner: Thread, epoch: int) -> None:
-    """Match one owner, turn and epoch in a single locked registry read."""
+    """Match stable process admission and exact turn across metadata writes."""
     try:
-        actual, actual_epoch = comms.registry.live_owner_with_epoch(owner.name)
+        actual, actual_epoch = comms.registry.live_owner_with_admission(owner.name)
     except (RelationViolationError, ValueError) as error:
         raise StaleFence("recipient registry owner stopped or changed") from error
-    if actual != owner or actual_epoch != epoch or actual.pid != os.getpid():
+    if (
+        actual_epoch != epoch
+        or actual.pid != os.getpid()
+        or (
+            actual.name,
+            actual.created_at,
+            actual.pid,
+            actual.role,
+            actual.worktree,
+            actual.active_turn,
+        )
+        != (
+            owner.name,
+            owner.created_at,
+            owner.pid,
+            owner.role,
+            owner.worktree,
+            owner.active_turn,
+        )
+    ):
         raise StaleFence("recipient registry owner stopped or changed")
 
 
@@ -449,7 +468,7 @@ async def run_one_sealed_claim(
             _assert_response_schema(store._connection)
             assert_native_runtime_schema(store._connection)
         try:
-            owner, owner_epoch = comms.registry.live_owner_with_epoch(owner_name)
+            owner, owner_epoch = comms.registry.live_owner_with_admission(owner_name)
         except (RelationViolationError, ValueError) as error:
             raise StaleFence("recipient registry identity stopped or changed") from error
         _require_registry_owner(comms, owner, owner_epoch)
@@ -494,8 +513,8 @@ async def run_one_sealed_claim(
         if owner.active_turn is None:
             owned_turn_id = secrets.token_hex(16)
             try:
-                owner, owner_epoch = comms.registry.claim_live_turn_with_epoch(
-                    owner, owned_turn_id, expected_epoch=owner_epoch
+                owner, owner_epoch = comms.registry.claim_live_turn_with_admission(
+                    owner, owned_turn_id, expected_generation=owner_epoch
                 )
             except RelationViolationError as error:
                 raise StaleFence("selected owner stopped before native turn") from error
@@ -503,7 +522,13 @@ async def run_one_sealed_claim(
         if owner.active_turn is None or owner.active_turn.owner_pid != owner.pid:
             raise StaleFence("selected recipient has no live owner-turn identity")
         owner_witness = LiveResponseOwner(
-            owner.name, lookup, owner.pid, owner.created_at, owner.active_turn, owner_epoch
+            owner.name,
+            lookup,
+            owner.pid,
+            owner.created_at,
+            owner.worktree,
+            owner.active_turn,
+            owner_epoch,
         )
         session_dir = root / "native-sessions" / lookup
         session_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
