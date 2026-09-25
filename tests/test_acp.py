@@ -93,6 +93,25 @@ class TestHandlers:
         assert changed.config_options[1].current_value == "high"
         assert agent._comms.registry.require("proj").thinking_level == "high"
 
+    async def test_attach_metadata_restores_saved_context_without_reading_transcript(
+        self, tmp_path
+    ):
+        agent = self._agent(tmp_path)
+        await agent.new_session(cwd="/wt/proj", mcp_servers=[])
+        agent._comms.set_agent_info(
+            "proj", model="test/model", context_used=38723, context_size=272000
+        )
+        reopened = CommsAgent(wire(agent._comms.root))
+        assert reopened._session_metadata("proj")["agentComms"]["contextUsage"] == {
+            "used": 38723,
+            "size": 272000,
+            "source": "last_response",
+        }
+        agent._comms.set_agent_info(
+            "proj", model="test/model", context_used=None, context_size=272000
+        )
+        assert reopened._session_metadata("proj")["agentComms"]["contextUsage"] is None
+
     async def test_unknown_model_is_rejected(self, tmp_path, monkeypatch):
         from acp import RequestError
 
