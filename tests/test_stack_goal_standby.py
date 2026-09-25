@@ -158,8 +158,8 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart):
             assert not agent._pending_turns.get("parent")
             assert agent._goal_store.snapshot(goal.id).number == 2
             if restart:
-                # Wait intent survives reopening; the memory-only launch grant
-                # does not. A lost grant requires explicit owner recovery.
+                # Wait intent survives reopening. The new executing owner may
+                # rotate only the unused READY grant at the send boundary.
                 await agent.shutdown()
                 comms = wire(root / "wire")
                 agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
@@ -172,13 +172,6 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart):
             await agent._drain_inbox("parent")
             await asyncio.wait_for(agent._wake_tasks["parent"], 40)
             assert not failures, failures
-            if restart:
-                assert len(requests) == 2
-                assert comms.registry.require("parent").goal.status == "blocked"
-                assert agent._dispositions.status(f"bus:{message.seq}") == "unknown"
-                agent._schedule_goal("parent")
-                assert not agent._pending_turns.get("parent")
-                return
             assert len(requests) == 4
             assert agent._dispositions.status(f"bus:{message.seq}") == "started"
             assert comms.registry.require("parent").goal.status == "completed"

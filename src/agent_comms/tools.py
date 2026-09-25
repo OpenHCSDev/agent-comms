@@ -96,7 +96,9 @@ class ToolDeclaration:
             expected = {"string": str, "boolean": bool, "array": list}[parameter.kind]
             if not isinstance(value, expected):
                 raise ValueError(f"Argument {parameter.name!r} must be {parameter.kind}.")
-            if parameter.kind == "array" and any(not isinstance(item, str) for item in value):
+            if parameter.kind == "array" and (
+                not isinstance(value, list) or any(not isinstance(item, str) for item in value)
+            ):
                 raise ValueError(f"Argument {parameter.name!r} must contain strings.")
             if parameter.choices and value not in parameter.choices:
                 raise ValueError(
@@ -261,6 +263,8 @@ def _set_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 
 
 def _goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
+    wait_for = arguments.get("wait_for")
+    assert wait_for is None or isinstance(wait_for, list)
     goal = comms.update_goal(
         _executing_thread(),
         str(arguments["status"]),
@@ -268,7 +272,7 @@ def _goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
         expected_status="active",
         progress=str(arguments["progress"]),
         model_report=True,
-        wait_for=arguments["wait_for"] or (),
+        wait_for=wait_for or (),
     )
     return {"goal": asdict(goal) if goal else None}
 

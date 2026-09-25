@@ -76,6 +76,7 @@ from .goal_attempts import (
     GoalAttemptStore,
     LaunchPermit,
     StaleAttempt,
+    UnresolvedAttempt,
 )
 from .input_disposition import AcpDeliveryCursors, InputDispositions
 from .operations import OBSERVATION_INTERVAL, Comms, wire
@@ -1483,7 +1484,11 @@ class CommsAgent:
                         diagnostic="Goal attempt unresolved; inspect diagnostics before Retry.",
                     )
                     return
-                store.ready_grant(goal.id, generation.number)
+                admission = self._comms.registry.snapshot().admission_generations[thread.name]
+                with _store_lock(self._comms._wire_lock_path):
+                    self._ready_goal_grant_locked(thread, admission, store, generation)
+            except StaleAttempt:
+                return
             except GoalAttemptError:
                 self._comms.block_goal_after_failed_turn(
                     thread.name,
@@ -1503,6 +1508,32 @@ class CommsAgent:
             private.mkdir(mode=0o700, exist_ok=True)
             self._goal_store = GoalAttemptStore.initialize(private)
         return self._goal_store
+
+    def _ready_goal_grant_locked(
+        self, owner: Thread, admission: int, store: GoalAttemptStore, generation: Generation
+    ) -> str:
+        """Caller holds the wire lock; READY recovery never authorizes an old owner."""
+        snapshot = self._comms.registry.snapshot()
+        name = snapshot.aliases.get(owner.name, owner.name)
+        current = snapshot.threads.get(name)
+        if (
+            current is None
+            or current.pid != os.getpid()
+            or current.pid != owner.pid
+            or current.created_at != owner.created_at
+            or current.worktree != owner.worktree
+            or not snapshot.statuses[name].running
+            or snapshot.admission_generations[name] != admission
+            or current.goal is None
+            or not current.goal.active
+            or current.goal.id != generation.goal_id
+        ):
+            raise StaleAttempt("The executing goal owner changed before READY recovery.")
+        try:
+            return store.ready_grant(generation.goal_id, generation.number)
+        except UnresolvedAttempt:
+            store.recover_unreserved_ready(generation.goal_id, generation.number)
+            return store.ready_grant(generation.goal_id, generation.number)
 
     async def set_goal(self, session_id: str, text: str) -> Goal:
         """Commit a UI goal through its executing owner and private launch ledger."""
@@ -1656,6 +1687,7 @@ class CommsAgent:
                 if autonomous_goal:
                     return
                 raise RequestError.invalid_params({"reason": "goal_attempt_unavailable"})
+            admission = self._comms.registry.snapshot().admission_generations[thread_name]
             with _store_lock(self._comms._wire_lock_path):
                 generation = store.snapshot(goal.id)
                 if generation is None or generation.state != "ready":
@@ -1663,7 +1695,7 @@ class CommsAgent:
                         return
                     raise RequestError.invalid_params({"reason": "goal_attempt_unavailable"})
                 try:
-                    grant = store.ready_grant(goal.id, generation.number)
+                    grant = self._ready_goal_grant_locked(thread, admission, store, generation)
                     reservation = store.reserve(goal.id, generation.number, ready_grant=grant)
                     goal_permit = store.claim_launch(reservation)
                 except GoalAttemptError as error:

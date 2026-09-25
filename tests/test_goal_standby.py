@@ -2,11 +2,14 @@
 
 import asyncio
 import json
+from dataclasses import replace
 
 import pytest
 
 from agent_comms import GoalExecution, GoalExecutionState, Thread
 from agent_comms.acp import CommsAgent
+from agent_comms.declarations import _store_lock
+from agent_comms.goal_attempts import GoalAttemptStore, StaleAttempt
 from agent_comms.operations import wire
 from agent_comms.tools import TOOLS
 
@@ -119,6 +122,34 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
         assert len(calls) == (1 if wake == "revoked" else 2)
         assert store.snapshot(goal.id).number == (2 if wake == "revoked" else 3)
         assert comms.goal_wait("parent") is None
+    finally:
+        await agent.shutdown()
+
+
+@pytest.mark.parametrize("changed", ["admission", "pid"])
+async def test_ready_recovery_rechecks_executing_owner_before_rotating(
+    tmp_path, monkeypatch, changed
+):
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    comms = wire(tmp_path / "wire")
+    agent = CommsAgent(comms, agent_bin="pi")
+    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    await agent.new_session(str(tmp_path / "parent"))
+    store = agent._open_goal_store()
+    goal = comms.update_goal("parent", "set", text="Work", owner_store=store)
+    owner = comms.registry.require("parent")
+    admission = comms.registry.snapshot().admission_generations["parent"]
+    if changed == "admission":
+        admission += 1
+    else:
+        owner = replace(owner, pid=owner.pid + 1)
+    old_grant = store.ready_grant(goal.id, 1)
+    try:
+        with _store_lock(comms._wire_lock_path), pytest.raises(StaleAttempt, match="owner changed"):
+            agent._ready_goal_grant_locked(
+                owner, admission, GoalAttemptStore(store.root), store.snapshot(goal.id)
+            )
+        assert store.ready_grant(goal.id, 1) == old_grant
     finally:
         await agent.shutdown()
 

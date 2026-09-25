@@ -31,3 +31,8 @@ local processes.
 Standby does not resolve previously failed goals. Empty successful turns still
 block an active goal; uncertain attempts remain unlaunchable and require an
 explicit owner decision.
+
+Standby also survives owner restart. A newly admitted owner may rotate a lost
+private grant only when the durable generation is still READY with no reserved
+attempt. It keeps the same generation and never sends the grant to the model.
+Reserved, claimed, failed, and completed attempts cannot use this recovery path.
