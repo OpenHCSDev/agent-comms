@@ -1,0 +1,182 @@
+/** Dormant, provider-free PR #48 contracts. Not imported by the Pi adapter or ACP.
+ * CompactionPolicy remains the only owner of native strategy/budget defaults.
+ * These derived views never authorize a provider send, goal, claim, or commit.
+ */
+import { CompactionPolicy } from './native-compaction-policy.mjs';
+
+const sourceKeys = ['cursor', 'sessionRevision', 'ownerEpoch', 'turnId', 'goalRevision'];
+const snapshotKeys = ['source', 'boundary', 'boundaryEvidenceRef', 'newHistoryBytes', 'hardBackstopDue'];
+const factKeys = ['id', 'kind', 'text', 'evidenceRef', 'sourceRevision'];
+const rowKeys = ['id', 'kind', 'text', 'toolCallId'];
+const factKinds = new Set(['task', 'correction', 'failure', 'identifier', 'goal-reference']);
+const rowKinds = new Set(['user', 'assistant', 'tool_call', 'tool_result']);
+const enc = new TextEncoder();
+
+function record(value, keys, name) {
+    if (!value || typeof value !== 'object' || Array.isArray(value) ||
+        Object.keys(value).some(key => !keys.includes(key)))
+        throw new Error(`Invalid ${name}`);
+}
+function label(value, name) {
+    if (typeof value !== 'string' || !value || value.length > 128 || !value.isWellFormed())
+        throw new Error(`Invalid ${name}`);
+    return value;
+}
+function source(value) {
+    record(value, sourceKeys, 'source fence');
+    const result = {};
+    for (const key of sourceKeys) {
+        result[key] = key === 'goalRevision' && value[key] === null
+            ? null : label(value[key], key);
+    }
+    return Object.freeze(result);
+}
+function sameSource(a, b) {
+    return sourceKeys.every(key => a[key] === b[key]);
+}
+function text(value, name) {
+    if (typeof value !== 'string' || !value.isWellFormed() || enc.encode(value).length > 131072)
+        throw new Error(`Invalid ${name}`);
+    return value;
+}
+function bytes(value) {
+    return enc.encode(JSON.stringify(value)).length;
+}
+function skip(reason) {
+    return Object.freeze({ kind: 'skip', reason });
+}
+
+/** Owner-observed candidate only. `source` must be the current owner fence:
+ * cursor, saved-session revision, owner epoch, turn ID, and goal revision.
+ * A model rubric may supply evidence, but neither it nor this decision grants
+ * admission. Recheck the fence at the real send and commit boundaries.
+ */
+export class TriggerRule {
+    constructor({ minNewHistoryBytes = 16384 } = {}) {
+        if (!Number.isSafeInteger(minNewHistoryBytes) || minNewHistoryBytes < 4096 ||
+            minNewHistoryBytes > 1 << 20) throw new Error('Invalid trigger cadence');
+        this.minNewHistoryBytes = minNewHistoryBytes;
+        Object.freeze(this);
+    }
+    evaluate(snapshot, currentSource) {
+        record(snapshot, snapshotKeys, 'trigger snapshot');
+        const captured = source(snapshot.source);
+        const current = source(currentSource);
+        if (typeof snapshot.hardBackstopDue !== 'boolean' ||
+            !Number.isSafeInteger(snapshot.newHistoryBytes) || snapshot.newHistoryBytes < 0 ||
+            snapshot.newHistoryBytes > 1 << 30 ||
+            !['completed-subtask', 'unfinished', 'none'].includes(snapshot.boundary))
+            throw new Error('Invalid trigger snapshot');
+        if (snapshot.boundary === 'completed-subtask') label(snapshot.boundaryEvidenceRef, 'boundary evidence');
+        else if (snapshot.boundaryEvidenceRef !== null) throw new Error('Invalid boundary evidence');
+        // The hard path is independent even when the adaptive snapshot is stale.
+        // This result is not a skip or permission to send: the existing owner
+        // must independently check its real context limit and run its backstop.
+        if (snapshot.hardBackstopDue)
+            return Object.freeze({ kind: 'independent-hard-path', reason: 'hard-context-limit' });
+        if (!sameSource(captured, current)) return skip('stale-source');
+        if (snapshot.boundary !== 'completed-subtask') return skip('unfinished-work');
+        if (snapshot.newHistoryBytes < this.minNewHistoryBytes) return skip('cadence');
+        return Object.freeze({
+            kind: 'candidate', authority: 'none', source: captured,
+            evidenceRef: snapshot.boundaryEvidenceRef,
+        });
+    }
+    stillCurrent(candidate, currentSource) {
+        if (!candidate || candidate.kind !== 'candidate') return false;
+        return sameSource(source(candidate.source), source(currentSource));
+    }
+}
+
+/** Conservative derived view from the canonical stores. Facts are explicit
+ * owner-provided references, not inferred authority or permission to mutate
+ * registry, goal/attempt, input disposition, or claim state. The budget is
+ * computed using the existing native CompactionPolicy for the selected model.
+ */
+export class RetentionPolicy {
+    constructor({ recentGroups = 3, compactionPolicy = new CompactionPolicy() } = {}) {
+        if (!Number.isSafeInteger(recentGroups) || recentGroups < 1 || recentGroups > 32)
+            throw new Error('Invalid recent window');
+        if (!(compactionPolicy instanceof CompactionPolicy))
+            throw new Error('Invalid declared compaction policy');
+        this.recentGroups = recentGroups;
+        this.compactionPolicy = compactionPolicy;
+        Object.freeze(this);
+    }
+    budgetFor(model, reserveTokens) {
+        if (!Number.isSafeInteger(model?.contextWindow) || model.contextWindow <= 0 ||
+            !Number.isSafeInteger(reserveTokens) || reserveTokens < 0)
+            throw new Error('Invalid retention model reserve');
+        // The native declaration owns the model/reserve calculation; no
+        // second local context-window formula or provider route is invented.
+        return this.compactionPolicy.inputBytes(model, reserveTokens);
+    }
+    select(snapshot, candidate, budget) {
+        record(snapshot, ['source', 'facts', 'tombstones', 'rows', 'previousSummary', 'customFocus'], 'retention snapshot');
+        record(budget, ['model', 'reserveTokens'], 'retention budget');
+        const budgetBytes = this.budgetFor(budget.model, budget.reserveTokens);
+        if (!Number.isSafeInteger(budgetBytes) || budgetBytes < 4096 || budgetBytes > 1 << 20)
+            throw new Error('Invalid retention budget');
+        const captured = source(snapshot.source);
+        if (!candidate || candidate.kind !== 'candidate' ||
+            !sameSource(source(candidate.source), captured)) return skip('stale-source');
+        if (!Array.isArray(snapshot.facts) || snapshot.facts.length > 128 ||
+            !Array.isArray(snapshot.tombstones) || snapshot.tombstones.length > 128 ||
+            !Array.isArray(snapshot.rows) || snapshot.rows.length > 256)
+            throw new Error('Invalid bounded retention snapshot');
+        const tombstones = new Set(snapshot.tombstones.map(id => label(id, 'tombstone')));
+        const facts = [];
+        const ids = new Set();
+        for (const item of snapshot.facts) {
+            record(item, factKeys, 'retained fact');
+            const id = label(item.id, 'fact ID');
+            if (ids.has(id)) throw new Error('Duplicate fact ID');
+            ids.add(id);
+            if (!factKinds.has(item.kind)) throw new Error('Unsupported fact kind');
+            if (item.sourceRevision !== captured.sessionRevision) return skip('stale-fact');
+            const fact = Object.freeze({
+                id, kind: item.kind, text: text(item.text, 'fact text'),
+                evidenceRef: label(item.evidenceRef, 'fact evidence'),
+                sourceRevision: captured.sessionRevision,
+            });
+            if (!tombstones.has(id)) facts.push(fact);
+        }
+        const rows = [];
+        const rowIds = new Set();
+        for (const row of snapshot.rows) {
+            record(row, rowKeys, 'recent row');
+            const id = label(row.id, 'row ID');
+            if (rowIds.has(id)) throw new Error('Duplicate row ID');
+            rowIds.add(id);
+            if (!rowKinds.has(row.kind)) throw new Error('Unsupported row kind');
+            const pair = row.kind === 'tool_call' || row.kind === 'tool_result';
+            if (pair) label(row.toolCallId, 'tool pair ID');
+            else if (row.toolCallId !== undefined) throw new Error('Unexpected tool pair ID');
+            rows.push(Object.freeze({ id, kind: row.kind, text: text(row.text, 'row text'),
+                ...(pair ? { toolCallId: row.toolCallId } : {}) }));
+        }
+        // Treat adjacent tool-call/result as an indivisible recent group. An
+        // unmatched result or pending call is a refusal, never a dropped half.
+        const groups = [];
+        for (let index = 0; index < rows.length; index++) {
+            const row = rows[index];
+            if (row.kind === 'tool_result') return skip('incomplete-tool-pair');
+            if (row.kind === 'tool_call') {
+                const next = rows[++index];
+                if (!next || next.kind !== 'tool_result' || next.toolCallId !== row.toolCallId)
+                    return skip('incomplete-tool-pair');
+                groups.push(Object.freeze([row, next]));
+            } else groups.push(Object.freeze([row]));
+        }
+        const recent = Object.freeze(groups.slice(-this.recentGroups).flat());
+        const result = Object.freeze({
+            kind: 'selection', authority: 'none', source: captured,
+            facts: Object.freeze(facts), recent,
+            previousSummary: text(snapshot.previousSummary, 'previous summary'),
+            customFocus: text(snapshot.customFocus, 'custom focus'),
+        });
+        // No partial reduction: caller must use the existing bounded strategy
+        // or decline this candidate, not truncate a tool pair or owner fact.
+        return bytes(result) <= budgetBytes ? result : skip('budget-exceeded');
+    }
+}
