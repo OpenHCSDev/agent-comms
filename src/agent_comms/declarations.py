@@ -789,6 +789,12 @@ def channel_tag(target: str) -> str:
 # own parent. Every Thread in the system derives its semantics from this type.
 
 
+class GoalPauseSource(StrEnum):
+    OWNER = "owner"
+    MODEL = "model"
+    RUNTIME = "runtime"
+
+
 @dataclass(frozen=True, slots=True)
 class Goal:
     """One durable objective shared by its executing owner and all clients."""

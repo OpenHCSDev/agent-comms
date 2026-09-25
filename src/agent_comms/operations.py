@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from .channels import ChannelCatalog
+from .goal_pauses import GoalPauseEvent, GoalPauseEvents
 
 if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore
@@ -48,6 +49,7 @@ from .declarations import (
     CoordinationSnapshot,
     DMDisplayBasis,
     Goal,
+    GoalPauseSource,
     MembershipChange,
     Message,
     MessageBus,
@@ -87,7 +89,7 @@ from .exporting import (
 )
 from .importing import ImportFormat, ImportLimits, ImportReceipt
 from .tool_results import ToolDiff
-from .transcript_routes import TranscriptRoutes
+from .transcript_routes import InputDisplay, TranscriptRoutes
 
 OBSERVATION_INTERVAL = 0.05
 
@@ -1546,7 +1548,16 @@ class Comms:
                     payload = json.loads(raw_line)
                 except (json.JSONDecodeError, UnicodeDecodeError):
                     continue
-                events = self._transcript_record_events(payload, routes.get(payload.get("id", "")))
+                message = payload.get("message")
+                events = self._transcript_record_events(
+                    payload,
+                    routes.get(payload.get("id", "")),
+                    (
+                        routes.input_display(message.get("inputId"))
+                        if isinstance(message, Mapping)
+                        else None
+                    ),
+                )
                 if events:
                     records.append(events)
                     if len(records) > max_messages:
@@ -1666,7 +1677,13 @@ class Comms:
                             events = (
                                 tuple(
                                     self._transcript_record_events(
-                                        value, routes.get(value.get("id", ""))
+                                        value,
+                                        routes.get(value.get("id", "")),
+                                        (
+                                            routes.input_display(value["message"].get("inputId"))
+                                            if isinstance(value.get("message"), Mapping)
+                                            else None
+                                        ),
                                     )
                                 )
                                 if isinstance(value, dict)
@@ -1701,7 +1718,10 @@ class Comms:
         )
 
     def _transcript_record_events(
-        self, payload: Mapping[str, object], routing: TurnRouting | None = None
+        self,
+        payload: Mapping[str, object],
+        routing: TurnRouting | None = None,
+        input_display: InputDisplay | None = None,
     ) -> list[TranscriptEvent]:
         if payload.get("type") == "compaction":
             summary = str(payload.get("summary") or "").strip()
@@ -1711,10 +1731,13 @@ class Comms:
         message = payload.get("message")
         if payload.get("type") != "message" or not isinstance(message, Mapping):
             return []
-        return self._transcript_message_events(message, routing)
+        return self._transcript_message_events(message, routing, input_display)
 
     def _transcript_message_events(
-        self, message: Mapping[str, object], routing: TurnRouting | None = None
+        self,
+        message: Mapping[str, object],
+        routing: TurnRouting | None = None,
+        input_display: InputDisplay | None = None,
     ) -> list[TranscriptEvent]:
         role = message.get("role")
         if role == "user" and routing is not None and routing.requests:
@@ -1734,7 +1757,25 @@ class Comms:
         else:
             return []
 
-        events: list[TranscriptEvent] = []
+        context_events: list[TranscriptEvent] = []
+        if role == "user" and input_display is not None:
+            raw_text = "\n".join(
+                str(part.get("text") or "")
+                for part in parts
+                if isinstance(part, dict) and part.get("type") == "text"
+            )
+            if raw_text and raw_text != input_display.text:
+                context_events.append(TranscriptEvent("context", raw_text))
+            if input_display.text is None:
+                return context_events
+            # The owner records the user's original text before adding model-only
+            # instructions. Preserve attachments while replacing just that text.
+            parts = (
+                {"type": "text", "text": input_display.text},
+                *(part for part in parts if isinstance(part, dict) and part.get("type") != "text"),
+            )
+
+        events: list[TranscriptEvent] = context_events
         for part in parts:
             if not isinstance(part, dict):
                 continue
@@ -1748,7 +1789,11 @@ class Comms:
             elif role == "assistant" and kind == "thinking":
                 events.append(TranscriptEvent("thinking", str(part.get("thinking") or "")))
             elif role == "assistant" and kind == "text":
-                events.append(TranscriptEvent("assistant", str(part.get("text") or "")))
+                text = str(part.get("text") or "")
+                if events and events[-1].kind == "assistant":
+                    events[-1] = replace(events[-1], text=events[-1].text + text)
+                else:
+                    events.append(TranscriptEvent("assistant", text))
             elif role == "assistant" and kind == "toolCall":
                 events.append(
                     TranscriptEvent(
@@ -1798,6 +1843,10 @@ class Comms:
         return TranscriptCursor(
             session_file, path.stat().st_size if session_file and path.is_file() else 0
         )
+
+    def record_input_display(self, native_id: str, display_text: str | None) -> None:
+        """Bind UI text to the private native input ID, never a prompt prefix."""
+        self.transcript_routes.record_input_display(native_id, display_text)
 
     def record_turn_routing(
         self, name: str, checkpoint: TranscriptCursor, routing: TurnRouting
@@ -2084,6 +2133,11 @@ class Comms:
         self.channel_catalog.rename_thread(previous, current)
         return RenameThreadResult(previous, current, True)
 
+    def goal_pause(self, name: str) -> GoalPauseEvent | None:
+        """Return the action that paused this exact current goal revision, if known."""
+        events = GoalPauseEvents(self.root / "goal_pause_events.json")
+        return events.for_goal(self.registry.require(name).goal, events.snapshot())
+
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
         """Summarize threads with status and pending counts."""
         snapshot = self.registry.snapshot()
@@ -2094,12 +2148,18 @@ class Comms:
         }
         activities = self.activity.all_current()
         pending = self.bus.pending_counts_all(tuple(threads))
+        pause_events = GoalPauseEvents(self.root / "goal_pause_events.json").snapshot()
         return [
             {
                 **t.to_wire(),
                 "status": snapshot.statuses[name].value,
                 "is_fork": t.is_fork,
                 "pending": pending[name],
+                "goal_pause": (
+                    asdict(pause)
+                    if (pause := GoalPauseEvents.for_goal(t.goal, pause_events))
+                    else None
+                ),
                 "activity": activities[name].state.value if name in activities else "idle",
                 "activity_detail": activities[name].detail if name in activities else "",
             }
@@ -2157,6 +2217,7 @@ class Comms:
         expected_status: str | None = None,
         expected_goal: Goal | None = None,
         model_report: bool = False,
+        owner_action: bool = False,
         owner_store: GoalAttemptStore | None = None,
         expected_owner_pid: int | None = None,
     ) -> Goal | None:
@@ -2178,7 +2239,10 @@ class Comms:
             if goal_id is not None and (goal is None or goal.id != goal_id):
                 raise ValueError("This goal was replaced or cleared; refresh its state.")
             if expected_status is not None and (goal is None or goal.status != expected_status):
-                raise ValueError("This goal is no longer active; refresh its state.")
+                raise ValueError(
+                    (pause.owner_instruction if (pause := self.goal_pause(name)) else None)
+                    or "This goal is no longer active; refresh its state."
+                )
             report_turn = thread.active_turn.id if thread.active_turn is not None else ""
             if model_report and thread.last_goal_report_turn == report_turn:
                 raise ValueError("This goal was already reported in this turn.")
@@ -2240,6 +2304,17 @@ class Comms:
                 ),
                 self.registry.status(thread.name),
             )
+            if action == "paused" and goal is not None:
+                # The registry transition precedes attribution. A crash in between
+                # leaves an unknown actor, never attributes a later pause falsely.
+                source = (
+                    GoalPauseSource.OWNER
+                    if owner_action
+                    else GoalPauseSource.MODEL if model_report else GoalPauseSource.RUNTIME
+                )
+                GoalPauseEvents(self.root / "goal_pause_events.json").record(
+                    GoalPauseEvent(goal.id, goal.revision, source)
+                )
             return goal
 
     def block_goal_after_failed_turn(

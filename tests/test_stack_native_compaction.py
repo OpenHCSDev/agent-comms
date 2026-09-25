@@ -95,6 +95,7 @@ def _saved_history(path: Path, cwd: Path, *, short: bool = False) -> None:
     [
         "success",
         "acp_success",
+        "tool_outputs",
         "summary_failure",
         "oversized_current",
         "oversized_summary",
@@ -120,6 +121,14 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
         )
         session = root / "saved.jsonl"
         _saved_history(session, project, short=case in {"oversized_current", "oversized_summary"})
+        if case == "tool_outputs":
+            rows = [json.loads(line) for line in session.read_text().splitlines()]
+            for row in rows:
+                if row.get("message", {}).get("role") == "assistant":
+                    row["message"]["usage"].update(input=90000, totalTokens=90001)
+            session.write_text("".join(json.dumps(row) + "\n" for row in rows))
+            for index in range(3):
+                (project / f"read-{index}.txt").write_text("abcdefghijklmno\n" * 2000)
         if case.startswith("compacted_"):
             rows = [json.loads(line) for line in session.read_text().splitlines()]
             # Real saved compaction retains recent assistant messages, including
@@ -144,11 +153,13 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
         agent.mkdir(mode=0o700)
         calls: list[str] = []
         reasoning_efforts: list[str | None] = []
+        request_messages: list[list[dict]] = []
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
                 request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
                 calls.append(self.path)
+                request_messages.append(request["messages"])
                 reasoning_efforts.append(request.get("reasoning", {}).get("effort"))
                 if case == "summary_failure":
                     body = b'{"error":{"message":"429 rate limit","type":"rate_limit_error"}}'
@@ -182,11 +193,36 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                         }
                     ],
                 }
+                if case == "tool_outputs" and len(calls) == 1:
+                    chunk["choices"][0]["delta"] = {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "index": index,
+                                "id": f"read_{index}",
+                                "type": "function",
+                                "function": {
+                                    "name": "read",
+                                    "arguments": json.dumps(
+                                        {"path": str(project / f"read-{index}.txt")}
+                                    ),
+                                },
+                            }
+                            for index in range(3)
+                        ],
+                    }
                 terminal = {
                     **chunk,
                     "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
                     "usage": {"prompt_tokens": 100, "completion_tokens": 3, "total_tokens": 103},
                 }
+                if case == "tool_outputs" and len(calls) == 1:
+                    terminal["choices"][0]["finish_reason"] = "tool_calls"
+                    terminal["usage"] = {
+                        "prompt_tokens": 91349,
+                        "completion_tokens": 3,
+                        "total_tokens": 91352,
+                    }
                 body = (
                     "".join(f"data: {json.dumps(row)}\n\n" for row in (chunk, terminal))
                     + "data: [DONE]\n\n"
@@ -246,6 +282,9 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                 "--thinking",
                 "high",
             ]
+            if case == "tool_outputs":
+                native_args.remove("--no-tools")
+                native_args.extend(["--tools", "read"])
             child_env = {
                 "PI_CODING_AGENT_DIR": str(agent),
                 "OPENROUTER_API_KEY": "offline-fixture-no-real-key",
@@ -318,7 +357,18 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                 .get("phase")
                 == "progress"
             ]
-            assert progress == list(range(1, len(calls)))
+            assert progress == sorted(progress)
+            assert set(progress) == set(range(len(calls)))
+            source_progress = [
+                update.field_meta["agentComms"]["compaction"]
+                for update in updates
+                if (getattr(update, "field_meta", None) or {})
+                .get("agentComms", {})
+                .get("compaction", {})
+                .get("sourceBytesTotal")
+            ]
+            assert source_progress[0]["sourceBytesDone"] == 0
+            assert source_progress[-1]["sourceBytesDone"] == source_progress[-1]["sourceBytesTotal"]
             texts = [
                 getattr(getattr(update, "content", None), "text", "")
                 for update in updates
@@ -346,7 +396,20 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
         if case == "summary_failure":
             assert events[-1]["ok"] is False
             assert "compaction" in str(events[-1]["text"]).lower()
-            assert len(calls) == 1  # No automatic replay of a refused attempt.
+            # Independent map requests may already be in flight. Failure must
+            # neither retry one nor schedule a replacement or final synthesis.
+            assert 1 <= len(calls) <= 4
+            assert len(
+                {json.dumps(messages, sort_keys=True) for messages in request_messages}
+            ) == len(calls)
+            assert not any(
+                "Combine these chronological segment summaries" in json.dumps(messages)
+                for messages in request_messages
+            )
+            assert not any(
+                json.loads(line).get("type") == "compaction"
+                for line in session.read_text().splitlines()
+            )
             return
         if case == "oversized_current":
             assert events[-1]["ok"] is False
@@ -362,10 +425,45 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
         assert kinds.index("compaction_start") < kinds.index("compaction_end")
         assert events[-1]["ok"] is True
         assert len(calls) > 1
-        assert reasoning_efforts[:-1] == ["low"] * (len(calls) - 1)
-        assert reasoning_efforts[-1] == "high"
-        assert (
-            len([event for event in events if event["type"] == "compaction_progress"])
-            == len(calls) - 1
+        summary_efforts = (
+            reasoning_efforts[1:-1] if case == "tool_outputs" else reasoning_efforts[:-1]
         )
+        assert summary_efforts == ["low"] * len(summary_efforts)
+        if case == "tool_outputs":
+            assert reasoning_efforts[0] == "high"
+            retained = request_messages[-1]
+            tool_calls = [
+                call["id"] for message in retained for call in message.get("tool_calls", [])
+            ]
+            tool_results_ids = [
+                message["tool_call_id"] for message in retained if message["role"] == "tool"
+            ]
+            assert sorted(tool_calls) == sorted(tool_results_ids) == ["read_0", "read_1", "read_2"]
+            saved = [json.loads(line) for line in session.read_text().splitlines()]
+            tool_results = [
+                row for row in saved if row.get("message", {}).get("role") == "toolResult"
+            ]
+            assert len(tool_results) == 3
+            assert all(not row["message"].get("isError") for row in tool_results)
+            assert all(len(row["message"]["content"][0]["text"]) > 30000 for row in tool_results)
+        assert reasoning_efforts[-1] == "high"
+        # Phase-start notifications repeat the last completed response counter;
+        # they must not be mistaken for an additional provider summary.
+        completed_indices = [
+            event["chunk_index"]
+            for event in events
+            if event["type"] == "compaction_progress" and event["chunk_index"] > 0
+        ]
+        assert completed_indices == sorted(completed_indices)
+        assert sorted(set(completed_indices)) == list(range(1, len(summary_efforts) + 1))
         assert len([event for event in events if event["type"] == "provider_usage"]) == len(calls)
+        source_progress = [event for event in events if event["type"] == "compaction_progress"]
+        assert source_progress[0]["chunk_index"] == 0
+        assert source_progress[0]["source_bytes_done"] == 0
+        assert source_progress[-1]["source_bytes_done"] == source_progress[-1]["source_bytes_total"]
+        assert all(
+            event["source_bytes_total"] == source_progress[0]["source_bytes_total"]
+            and event["source_bytes_done"]
+            >= (source_progress[index - 1]["source_bytes_done"] if index else 0)
+            for index, event in enumerate(source_progress)
+        )

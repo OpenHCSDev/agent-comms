@@ -19,13 +19,11 @@ import pytest
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "empty_response,compact_tools,queue_during_compact",
-    [(False, False, False), (True, False, False), (False, True, False), (False, True, True)],
-)
-async def test_mounted_goal_continues_without_progress_tool(
-    monkeypatch, empty_response, compact_tools, queue_during_compact
+@pytest.mark.parametrize("model_origin", [False, True])
+async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
+    monkeypatch, model_origin
 ):
+    empty_response = False
     native = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native or not os.environ.get("AC_TOAD_NATIVE_PILOT"):
         pytest.skip("Requires prepared native Pi and mounted Toad pilot dependencies")
@@ -33,37 +31,23 @@ async def test_mounted_goal_continues_without_progress_tool(
 
     from agent_comms import wire
 
-    live = bool(os.environ.get("AC_GOAL_LIVE_PROVIDER"))
-    if live and (empty_response or compact_tools):
+    live = False
+    if live and empty_response:
         pytest.skip("Only localhost provider can force the empty-response control")
     with TemporaryDirectory(prefix="ac-goal-continuation-", dir="/var/tmp") as raw:
         root = Path(raw)
         release = threading.Event()
-        release_summary = threading.Event()
-        if not queue_during_compact:
-            release_summary.set()
         requests = []
-        ordinary_requests = []
-        summary_requests = []
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
                 requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
                 index = len(requests)
-                summary = compact_tools and requests[-1].get("reasoning", {}).get("effort") == "low"
-                (summary_requests if summary else ordinary_requests).append(requests[-1])
-                ordinary_index = len(ordinary_requests)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.end_headers()
                 try:
-                    if summary:
-                        assert release_summary.wait(20)
-                    if not summary and (
-                        len(attempts()) >= 2
-                        if queue_during_compact
-                        else ordinary_index == (3 if compact_tools else 2)
-                    ):
+                    if index == 2:
                         assert release.wait(20)
                     chunk = {
                         "id": f"goal-response-{index}",
@@ -81,32 +65,28 @@ async def test_mounted_goal_continues_without_progress_tool(
                         ],
                         "usage": {"prompt_tokens": 20, "completion_tokens": 5, "total_tokens": 25},
                     }
-                    if compact_tools and not summary and ordinary_index == 1:
+                    if model_origin and index == 1:
+                        assert any(
+                            tool.get("function", {}).get("name") == "comms_set_goal"
+                            for tool in requests[0]["tools"]
+                        )
                         chunk["choices"][0] = {
                             "index": 0,
                             "delta": {
                                 "role": "assistant",
                                 "tool_calls": [
                                     {
-                                        "index": i,
-                                        "id": f"read_{i}",
+                                        "index": 0,
+                                        "id": "set_goal",
                                         "type": "function",
                                         "function": {
-                                            "name": "read",
-                                            "arguments": json.dumps(
-                                                {"path": str(project / f"read-{i}.txt")}
-                                            ),
+                                            "name": "comms_set_goal",
+                                            "arguments": json.dumps({"text": "Read fifty files"}),
                                         },
                                     }
-                                    for i in range(3)
                                 ],
                             },
                             "finish_reason": "tool_calls",
-                        }
-                        chunk["usage"] = {
-                            "prompt_tokens": 91349,
-                            "completion_tokens": 3,
-                            "total_tokens": 91352,
                         }
                     self.wfile.write(f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
                     self.wfile.flush()
@@ -133,11 +113,19 @@ async def test_mounted_goal_continues_without_progress_tool(
             "--model",
             model_id,
             "--thinking",
-            "high" if compact_tools else "off",
+            "off",
         ]
-        if compact_tools:
+        if model_origin:
             native_args.remove("--no-tools")
-            native_args.extend(["--tools", "read"])
+            native_args.extend(
+                [
+                    "--extension",
+                    str(Path(__file__).resolve().parents[1] / "extensions/pi-agent-comms/index.ts"),
+                ]
+            )
+            monkeypatch.setenv(
+                "PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"]
+            )
         for key, value in {
             "XDG_CONFIG_HOME": str(root / "config"),
             "XDG_DATA_HOME": str(root / "data"),
@@ -155,15 +143,7 @@ async def test_mounted_goal_continues_without_progress_tool(
                 json.dumps(
                     {
                         "providers": {
-                            "openrouter": {
-                                "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
-                                "modelOverrides": {
-                                    "z-ai/glm-5.3-flash": {
-                                        "contextWindow": 128000,
-                                        "maxTokens": 4096,
-                                    }
-                                },
-                            }
+                            "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
                         }
                     }
                 )
@@ -180,22 +160,6 @@ async def test_mounted_goal_continues_without_progress_tool(
             monkeypatch.setenv("NODE_OPTIONS", f"--require={preload}")
         project = root / "project"
         project.mkdir()
-        if compact_tools:
-            from test_stack_native_compaction import _saved_history
-
-            (project / ".pi").mkdir()
-            (project / ".pi/settings.json").write_text(
-                json.dumps({"compaction": {"enabled": True}})
-            )
-            session = root / "saved.jsonl"
-            _saved_history(session, project)
-            saved = [json.loads(line) for line in session.read_text().splitlines()]
-            for row in saved:
-                if row.get("message", {}).get("role") == "assistant":
-                    row["message"]["usage"].update(input=90000, totalTokens=90001)
-            session.write_text("".join(json.dumps(row) + "\n" for row in saved))
-            for index in range(3):
-                (project / f"read-{index}.txt").write_text("abcdefghijklmno\n" * 2000)
         app = ToadApp(
             agent_data={
                 "name": "Agent Comms",
@@ -231,21 +195,16 @@ async def test_mounted_goal_continues_without_progress_tool(
                     )
                 )
                 view = app.screen.conversation
-                if compact_tools:
-                    comms.attach_session("project", str(session))
-                view.prompt.text = "/goal List one useful testing practice each turn until I pause."
+                view.prompt.text = (
+                    "Set a persistent goal to read fifty files."
+                    if model_origin
+                    else "/goal List one useful testing practice each turn until I pause."
+                )
                 view.prompt.focus()
                 await pilot.press("enter")
-                if queue_during_compact:
-                    await until(lambda: bool(summary_requests))
-                    view.prompt.text = "FOLLOWUP_DURING_GOAL_COMPACTION"
-                    view.prompt.focus()
-                    await pilot.press("enter")
-                    await until(lambda: view.queued_prompts == ["FOLLOWUP_DURING_GOAL_COMPACTION"])
-                    release_summary.set()
                 await until(
                     lambda: (
-                        len(attempts()) >= 2
+                        len(attempts()) >= (1 if model_origin else 2)
                         or (
                             comms.registry.require("project").goal is not None
                             and comms.registry.require("project").goal.status == "blocked"
@@ -261,50 +220,13 @@ async def test_mounted_goal_continues_without_progress_tool(
                     return
                 assert state.status == "active", state.progress
                 rows = attempts()
-                assert rows[0][1] == "succeeded" and rows[0][2].startswith("native-terminal:")
-                assert rows[1][0] == 2
+                if model_origin:
+                    assert rows[0][1] == "claimed"
+                else:
+                    assert rows[0][1] == "succeeded" and rows[0][2].startswith("native-terminal:")
+                    assert rows[1][0] == 2
                 if not live:
-                    if queue_during_compact:
-                        await until(
-                            lambda: len(ordinary_requests) >= 3
-                            and not view.queued_prompts
-                            and sum(
-                                json.loads(line).get("message", {}).get("inputId") is not None
-                                for line in session.read_text().splitlines()
-                            )
-                            == 3
-                        )
-                    else:
-                        await until(lambda: len(ordinary_requests) == (3 if compact_tools else 2))
-                    if compact_tools:
-                        assert summary_requests
-                        saved = [json.loads(line) for line in session.read_text().splitlines()]
-                        assert sum(row.get("type") == "compaction" for row in saved) == 1
-                        tool_results = [
-                            row
-                            for row in saved
-                            if row.get("message", {}).get("role") == "toolResult"
-                        ]
-                        assert len(tool_results) == 3
-                        assert all(not row["message"].get("isError") for row in tool_results)
-                        assert all(
-                            len(row["message"]["content"][0]["text"]) > 30000
-                            for row in tool_results
-                        )
-                        # Summary requests belong to attempt one; they must not create
-                        # extra goal attempts or replay its original user input.
-                        assert sum(
-                            row.get("message", {}).get("inputId") is not None for row in saved
-                        ) == (3 if queue_during_compact else 2)
-                        if queue_during_compact:
-                            followups = [
-                                row
-                                for row in saved
-                                if row.get("message", {}).get("role") == "user"
-                                and "FOLLOWUP_DURING_GOAL_COMPACTION" in json.dumps(row)
-                            ]
-                            assert len(followups) == 1
-                            assert followups[0]["message"]["inputId"]
+                    await until(lambda: len(requests) == 2)
                 else:
 
                     def native_user_starts():
@@ -316,20 +238,39 @@ async def test_mounted_goal_continues_without_progress_tool(
 
                     await until(lambda: native_user_starts() >= 2)
                     assert native_user_starts() == 2
-                # Clear via the real UI route while the successor is in flight.
-                # It revokes further grants without replaying or canceling that turn.
-                await view.slash_command("/goal clear")
+                await view.slash_command("/goal pause")
+                paused = wire(root / "wire").registry.require("project").goal
+                assert paused.status == "paused" and comms.goal_pause("project").source == "owner"
+                from agent_comms.tools import TOOLS
+
+                monkeypatch.setenv("PI_AGENT_ID", "project")
+                report = next(tool for tool in TOOLS if tool.name == "comms_goal")
+                with pytest.raises(ValueError, match="paused by the owner.*Do not resume"):
+                    report.invoke(
+                        comms, {"goal_id": paused.id, "status": "active", "progress": "4/50"}
+                    )
+                assert comms.registry.require("project").goal == paused
                 release.set()
                 await until(lambda: not comms.registry.require("project").executing)
                 await asyncio.sleep(0.4)
+                preserved = wire(root / "wire").registry.require("project").goal
+                assert preserved == paused
+                assert attempts()[-1][1] == "succeeded"
+                assert len(attempts()) == (1 if model_origin else 2) and len(requests) == 2
+                if model_origin:
+                    session = Path(comms.registry.require("project").session_file)
+                    native_rows = [json.loads(line) for line in session.read_text().splitlines()]
+                    result = next(
+                        row["message"]
+                        for row in native_rows
+                        if row.get("message", {}).get("toolCallId") == "set_goal"
+                    )
+                    assert result["toolName"] == "comms_set_goal" and not result["isError"]
+                await view.slash_command("/goal clear")
                 assert comms.registry.require("project").goal is None
-                assert len(attempts()) == 2
-                if not live and not queue_during_compact:
-                    assert len(ordinary_requests) == (3 if compact_tools else 2)
                 assert app._exception is None
-                print(f"GOAL_CONTINUATION_OK provider={provider} attempts={len(attempts())}")
+                print(f"GOAL_OWNER_PAUSE_OK provider={provider} attempts={len(attempts())}")
         finally:
-            release_summary.set()
             release.set()
             server.shutdown()
             server.server_close()

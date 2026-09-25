@@ -26,8 +26,11 @@ from agent_comms import backend
         "oversized",
         "acp",
         "acp_stopped",
+        "acp_goal_original",
         "toad",
         "toad_delayed",
+        "toad_goal_queue",
+        "toad_goal_immediate",
     ],
 )
 async def test_send_now_interrupts_native_response(surface, monkeypatch):
@@ -42,6 +45,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
         agent.mkdir(mode=0o700)
         release = threading.Event()
         cancelled = threading.Event()
+        finish_followup = threading.Event()
         requests = []
 
         class Handler(BaseHTTPRequestHandler):
@@ -72,6 +76,8 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                         while not release.wait(0.05):
                             self.wfile.write(b": heartbeat\n\n")
                             self.wfile.flush()
+                    if surface.startswith("toad_goal") and index == 3:
+                        assert finish_followup.wait(20)
                     emit("", "stop")
                     self.wfile.write(b"data: [DONE]\n\n")
                     self.wfile.flush()
@@ -140,9 +146,18 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     cancelled,
                     monkeypatch,
                     surface == "toad_delayed",
+                    goal_mode=(
+                        surface.removeprefix("toad_goal_")
+                        if surface.startswith("toad_goal")
+                        else None
+                    ),
+                    release=release,
+                    finish_followup=finish_followup,
                 )
-                assert not release.is_set()
+                if surface != "toad_goal_queue":
+                    assert not release.is_set()
             finally:
+                finish_followup.set()
                 release.set()
                 server.shutdown()
                 server.server_close()
@@ -180,6 +195,13 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             await owner.new_session(str(root / "project"))
             owner._drain_tasks["project"].cancel()
             await asyncio.gather(owner._drain_tasks["project"], return_exceptions=True)
+            if surface == "acp_goal_original":
+                owner._comms.update_goal(
+                    "project",
+                    "set",
+                    text="Continue useful work",
+                    owner_store=owner._open_goal_store(),
+                )
 
         async def collect():
             if owner is not None:
@@ -309,7 +331,17 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
 
 
 async def _mounted_send_now(
-    root, native_bin, native_args, requests, cancelled, monkeypatch, delayed
+    root,
+    native_bin,
+    native_args,
+    requests,
+    cancelled,
+    monkeypatch,
+    delayed,
+    *,
+    goal_mode=None,
+    release=None,
+    finish_followup=None,
 ):
     import shlex
 
@@ -368,14 +400,19 @@ async def _mounted_send_now(
             view.prompt.focus()
             await pilot.press("enter")
 
-        await submit("ORIGINAL_INPUT")
+        await submit(
+            "/goal Keep doing useful work until stopped." if goal_mode else "ORIGINAL_INPUT"
+        )
         await until(
             lambda: any("OLD_PARTIAL" in block.source for block in view.query(AgentResponse))
         )
         await submit("URGENT_INPUT")
         await until(lambda: view.queued_prompts == ["URGENT_INPUT"])
         assert len(requests) == 1
-        await pilot.click(SendNow)
+        if goal_mode == "queue":
+            release.set()
+        else:
+            await pilot.click(SendNow)
         if delayed:
             await asyncio.sleep(0.2)
             assert len(requests) == 1
@@ -383,9 +420,21 @@ async def _mounted_send_now(
         await until(
             lambda: any("NEW_FINAL" in block.source for block in view.query(AgentResponse)), 3
         )
+        if goal_mode:
+            from agent_comms import wire
+
+            comms = wire(root / "wire")
+            await until(lambda: not view.queued_prompts and len(requests) == 3)
+            goal = comms.registry.require("project").goal
+            assert goal is not None and goal.active, goal
+            assert "User follow-up" in json.dumps(requests[1])
+            assert "URGENT_INPUT" in json.dumps(requests[1])
+            await view.slash_command("/goal clear")
+            finish_followup.set()
         await until(lambda: not view.queued_prompts and view.busy_count == 0)
-        assert await asyncio.to_thread(cancelled.wait, 2)
-        assert len(requests) == 2
+        if goal_mode != "queue":
+            assert await asyncio.to_thread(cancelled.wait, 2)
+        assert len(requests) == (3 if goal_mode else 2)
         assert sum("URGENT_INPUT" in block.content for block in view.query(UserInput)) == 1
         assert not any("[agent error]" in block.source for block in view.query(AgentResponse))
         assert app._exception is None
