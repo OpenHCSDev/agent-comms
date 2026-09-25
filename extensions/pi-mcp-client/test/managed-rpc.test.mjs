@@ -1,0 +1,84 @@
+import assert from 'node:assert/strict';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { test } from 'node:test';
+
+const packageDir = fileURLToPath(new URL('../', import.meta.url));
+const cli = fileURLToPath(new URL('../node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js', import.meta.url));
+const bootstrap = fileURLToPath(new URL('../../../src/agent_comms/pi_project_bootstrap.mjs', import.meta.url));
+
+test('ordinary managed Pi RPC loads package but never launches a user server from untrusted project cwd', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mcp-managed-rpc-'));
+  const agentDir = join(root, 'agent');
+  const project = join(root, 'project');
+  const marker = join(root, 'unsafe-launch');
+  await mkdir(agentDir); await mkdir(join(project, '.pi'), { recursive: true });
+  const env = { ...process.env, HOME: root, PI_CODING_AGENT_DIR: agentDir, CI: 'true', NO_COLOR: '1' };
+  let child;
+  try {
+    const installed = spawnSync(process.execPath, [cli, 'install', packageDir], {
+      cwd: project, env, encoding: 'utf8', timeout: 20_000,
+    });
+    assert.equal(installed.status, 0, installed.stderr?.slice(-800));
+    await writeFile(join(project, '.pi', 'mcp.json'), '{malformed-untrusted');
+    await writeFile(join(agentDir, 'mcp.json'), JSON.stringify({ version: 1, servers: [{
+      id: 'fixture', enabled: true, instructionsPolicy: 'status-only', transport: {
+        type: 'stdio', command: process.execPath,
+        args: ['-e', `require('fs').writeFileSync(${JSON.stringify(marker)}, 'unsafe')`],
+        cwd: 'project',
+      },
+    }] }));
+    child = spawn(process.execPath, [cli, '--mode', 'rpc', '--no-session', '--no-approve',
+      '--no-skills', '--no-prompt-templates', '--no-themes', '--no-builtin-tools'], {
+      cwd: project,
+      env: { ...env, AGENT_COMMS_MANAGED: '1', PI_WORKTREE: project,
+        NODE_OPTIONS: `--import=${pathToFileURL(bootstrap).href}` },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let output = '';
+    let stderr = '';
+    child.stderr.on('data', (bytes) => { stderr += bytes.toString(); });
+    const commands = new Promise((resolve, reject) => {
+      child.stdout.on('data', (bytes) => {
+        output += bytes.toString();
+        let newline;
+        while ((newline = output.indexOf('\n')) !== -1) {
+          const line = output.slice(0, newline); output = output.slice(newline + 1);
+          if (!line) continue;
+          let message;
+          try { message = JSON.parse(line); } catch (error) { reject(error); return; }
+          if (message.id === 'commands') {
+            if (message.success) resolve(message.data.commands.map((command) => command.name));
+            else reject(new Error(JSON.stringify(message)));
+          }
+        }
+      });
+      child.on('exit', (code) => reject(new Error(`managed Pi RPC exited ${code}: ${stderr.slice(-800)}`)));
+    });
+    child.stdin.write(JSON.stringify({ id: 'commands', type: 'get_commands' }) + '\n');
+    let timer;
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`managed Pi RPC timeout: ${stderr.slice(-800)}`)), 10_000);
+    });
+    let result;
+    try { result = await Promise.race([commands, deadline]); }
+    finally { clearTimeout(timer); }
+    assert.ok(result.includes('mcp-status'));
+    assert.ok(result.includes('mcp-approve'));
+    assert.equal(existsSync(marker), false);
+  } finally {
+    if (child) {
+      child.stdin.destroy();
+      if (child.exitCode === null && child.signalCode === null) {
+        const exited = new Promise((resolve) => child.once('exit', resolve));
+        child.kill();
+        await exited;
+      }
+    }
+    await rm(root, { recursive: true, force: true });
+  }
+});

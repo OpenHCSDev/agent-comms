@@ -33,8 +33,10 @@ export default function (pi) {
         .map(({ scope, declaration, status }) => ({ scope, id: declaration.id, status }));
       const lines = await Promise.all(entries.map(async ({ scope, id, status, server, tools, resources, prompts }) => {
         const valid = !!active && status === 'ready' && await active.authorized(id, ctx);
-        const state = status === 'ready' && !valid ? 'stale_restart_required' : status;
-        const calls = valid ? await active.preauthorized(id, ctx) ? 'automatic' : 'confirm' : 'unavailable';
+        const automatic = valid && await active.preauthorized(id, ctx);
+        const live = valid && !!active.ready(id);
+        const state = status === 'ready' && !live ? 'stale_restart_required' : status;
+        const calls = live ? automatic ? 'automatic' : 'confirm' : 'unavailable';
         return `${scope}/${id}: ${state}; calls=${calls}` +
           (server ? ` (${server}; ${tools} tools, ${resources} resources, ${prompts} prompts)` : '');
       }));
