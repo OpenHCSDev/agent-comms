@@ -92,6 +92,12 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority() -> None:
                 attempt_ordinal=1,
             )
             verify_selected_wake(comms, store, admission, owner.name)
+            foreign_root = Path(dirname) / "foreign"
+            foreign_root.mkdir(mode=0o700)
+            with MutationStore(str(foreign_root / "coordination.sqlite3")) as foreign:
+                store._connection.backup(foreign._connection)
+                with pytest.raises(IdentityConflict):
+                    verify_selected_wake(comms, foreign, admission, owner.name)
             for candidate, name in (
                 (replace(admission, recipient_lookup=bob_lookup), "Bob"),
                 (replace(admission, wake_revision=engaged.revision + 1), "Alice"),

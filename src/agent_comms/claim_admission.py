@@ -29,6 +29,8 @@ def verify_selected_wake(
         raise TypeError("Wake admission requires the actual wire and coordinator stores")
     if type(admission) is not WakeAdmission or type(owner_name) is not str:
         raise IdentityConflict("Wake admission is not typed")
+    if store.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
+        raise IdentityConflict("Wake coordinator does not belong to this wire root")
     with _store_lock(comms._wire_lock_path):
         try:
             initial = comms.bus.read_initial_cohort(admission.wire_root_id, admission.source_seq)
