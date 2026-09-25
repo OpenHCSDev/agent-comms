@@ -6,7 +6,10 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
 
+
+@pytest.mark.skipif(os.name == "nt", reason="toad-comms is a POSIX Bash launcher")
 def test_toad_launcher_drops_inherited_pythonpath(tmp_path: Path) -> None:
     stack = tmp_path / "stack"
     bin_dir = stack / ".venv" / "bin"
@@ -22,10 +25,7 @@ def test_toad_launcher_drops_inherited_pythonpath(tmp_path: Path) -> None:
     )
     python.chmod(0o755)
     toad = bin_dir / "toad"
-    toad.write_text(
-        "#!/bin/sh\n"
-        'printf "PYTHONPATH=%s\\n" "${PYTHONPATH-unset}"\n'
-    )
+    toad.write_text("#!/bin/sh\n" 'printf "PYTHONPATH=%s\\n" "${PYTHONPATH-unset}"\n')
     toad.chmod(0o755)
 
     env = os.environ.copy()

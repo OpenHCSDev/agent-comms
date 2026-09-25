@@ -9,6 +9,8 @@ from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.operations import wire
 from agent_comms.runtime import RuntimeProxy, socket_path
 
+pytestmark = pytest.mark.skipif(os.name == "nt", reason="ACP runtime uses Unix domain sockets")
+
 
 @pytest.fixture(autouse=True)
 def _models_without_pi_discovery(monkeypatch):
