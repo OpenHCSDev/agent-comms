@@ -1,6 +1,6 @@
 # Seamless channel notification, N/K wake, and resource ownership
 
-Status: **draft integration, not file-write authority**. The branch now has a versioned wake-admission field on claim rows and a read-only verifier that checks the committed N/K source, sealed selected receipt, current execution, owner admission generation, and exact turn. It does not publish a bound file claim or gate any write. The N/K session-metadata race fix merged separately in PR #38 at `8c053ec47b41d263c4b4768138726707a43c4a5e`; this branch is rebased onto it. This proposal remains separate from the merged sidebar route-count projection.
+Status: **draft integration, not file-write authority**. The branch has a versioned wake-admission field, a selected-wake verifier, and a test-gated operation that commits one bound claim in the private bus. The operation checks the sealed selected receipt, current execution, owner admission generation, and exact turn under the wire, bus, registry, and coordinator locks. It is not wired into ordinary channel sends or any native write tool, and it does not install a coordinator admission receipt. The N/K session-metadata race fix merged separately in PR #38 at `8c053ec47b41d263c4b4768138726707a43c4a5e`; this branch is rebased onto it. This proposal remains separate from the merged sidebar route-count projection.
 
 ## User-facing behavior
 
@@ -38,7 +38,7 @@ Subsequent focused implementation commits on this **draft PR** should add a type
 * Add an internal `pre_write_admission` adapter for a disposable fake-Pi edit tool. Return a typed denial before writing if ownership cannot be proved. **Do not attach a cosmetic tool-only hook and call arbitrary shell writes protected.**
 * Add a read-only projection used by CLI/Pi/ACP/Toad to show the same owner, generation, selected claim and passive observer state; UI reading the projection must never grant work.
 
-Only after publication and write-gate slices are implemented and reviewed should this be wired into ordinary channel sends and every supported write path. The current branch has **syntax and read-only verification only**. `tests/test_claim_admission_baseline.py` shows an unselected N/K observer can still make an independent explicit file claim on the same marked private root, without a wake-claim binding. That is a current-gap characterization, not permission to edit another worker's file or a test of the future write gate.
+Only after publication, recovery, and write-gate slices are implemented and reviewed should this be wired into ordinary channel sends and every supported write path. The current branch can publish one bound claim from an explicit selected-wake admission, but **does not gate a file write or provide an ordinary-channel bridge**. `tests/test_claim_admission_baseline.py` shows an unselected N/K observer can still make an independent explicit file claim on the same marked private root, without a wake-claim binding. That is a current-gap characterization, not permission to edit another worker's file or a test of the future write gate.
 
 ## No-provider acceptance matrix
 

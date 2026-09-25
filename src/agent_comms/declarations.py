@@ -28,7 +28,7 @@ import uuid
 from bisect import bisect_left
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import closing, contextmanager, suppress
+from contextlib import closing, contextmanager, nullcontext, suppress
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from enum import Enum, StrEnum
@@ -59,6 +59,7 @@ from .envelope_claim_transitions import (
     ClaimProjection,
     ClaimRelease,
     ClaimTransition,
+    WakeAdmission,
     apply_transition,
     normalize_existing_file,
     parse_complete_transition_line,
@@ -2907,8 +2908,8 @@ class MessageBus:
 
         if not exists(message.sender):
             raise UnregisteredThreadError(f"Sender {message.sender!r} is not a registered thread.")
-        if message.target == BuiltinChannel.ANY.value or self._channels.is_view_target(
-            message.target
+        if message.target == BuiltinChannel.ANY.value or (
+            is_channel_target(message.target) and self._channels.is_view_target(message.target)
         ):
             raise RelationViolationError(
                 f"View {message.target!r} is a projection, not a routable target."
@@ -3076,6 +3077,9 @@ class MessageBus:
         incarnation: str,
         claims: Sequence[str | Path] = (),
         releases: Sequence[str | Path] = (),
+        _locked_registry_snapshot: RegistrySnapshot | None = None,
+        _bus_locked: bool = False,
+        _admission: WakeAdmission | None = None,
     ) -> Message:
         """One guarded message and whole-set claim transition in ONE bus row.
 
@@ -3099,11 +3103,17 @@ class MessageBus:
             raise RelationViolationError("Claim and release sets must be finite sequences.")
         if len(claims) + len(releases) > 32:
             raise RelationViolationError("Claim envelope exceeds the bounded resource set.")
-        with _store_lock(self._path):
+        if _admission is not None and (
+            not claims or releases or not _bus_locked or _locked_registry_snapshot is None
+        ):
+            raise RelationViolationError("Bound claims require the selected wake boundary.")
+        with nullcontext() if _bus_locked else _store_lock(self._path):
             metadata = self._private_marker_unlocked()
             if metadata.get("claim_envelopes_version") != 1:
                 raise RelationViolationError("Claim read barrier is unavailable.")
-            sender, target = self._validate_publish_request(message)
+            sender, target = self._validate_publish_request(
+                message, registry_snapshot=_locked_registry_snapshot
+            )
             projection, verified_sequence = self._claim_projection_unlocked(metadata)
             # The verified bus high-water also covers rows left by an earlier
             # uncertain append. Reserve and sync the next sequence before use.
@@ -3115,6 +3125,7 @@ class MessageBus:
                 sender=sender,
                 target=target,
                 sequence=last_sequence + 1,
+                snapshot=_locked_registry_snapshot,
             )
             owner_incarnation = str(incarnation)
             requested = tuple(sorted(normalize_existing_file(worktree, path) for path in claims))
@@ -3133,6 +3144,7 @@ class MessageBus:
                 requested,
                 tuple(release_records),
                 uuid.uuid4().hex if requested else None,
+                _admission,
             )
             # The typed decoder imposes its own bound. Never return success on a
             # durable row that every future guarded reader would reject.

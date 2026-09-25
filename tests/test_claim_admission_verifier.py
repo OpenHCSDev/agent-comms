@@ -11,13 +11,13 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms.bus_publication import stable_thread_lookup
-from agent_comms.claim_admission import verify_selected_wake
+from agent_comms.claim_admission import publish_selected_resource_claim, verify_selected_wake
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordinated_runtime import _engage
 from agent_comms.coordination import AttemptPhase, ClaimDisposition
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
 from agent_comms.coordination_store import IdentityConflict, MutationStore, prepare_fence_token
-from agent_comms.declarations import Thread
+from agent_comms.declarations import ClaimEnvelopeUnknownError, Thread
 from agent_comms.envelope_claim_transitions import WakeAdmission
 from agent_comms.operations import Comms
 
@@ -26,12 +26,16 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_selected_wake_verifier_refuses_no_wake_and_stale_authority() -> None:
+def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     with TemporaryDirectory(prefix="ac-claim-verify-", dir="/var/tmp") as dirname:
         root = Path(dirname) / "wire"
         root.mkdir(mode=0o700)
         worktree = Path(dirname) / "work"
         worktree.mkdir(mode=0o700)
+        resource = worktree / "module.py"
+        resource.write_text("value = 1\n")
         comms = Comms(root)
         for name, created in (("sender", 17021.0), ("Alice", 17022.0), ("Bob", 17023.0)):
             comms.register(
@@ -40,6 +44,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority() -> None:
                 )
             )
         root_id = comms.initialize_private_initial_protocol()
+        comms.initialize_private_claim_protocol()
         message = comms.send_initial_cohort("sender", "#team", "@Alice investigate")
         initial = comms.bus.read_initial_cohort(root_id, message.seq)
         with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -92,6 +97,29 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority() -> None:
                 attempt_ordinal=1,
             )
             verify_selected_wake(comms, store, admission, owner.name)
+            with pytest.raises(IdentityConflict):
+                publish_selected_resource_claim(
+                    comms, store, replace(admission, recipient_lookup=bob_lookup), "Bob", resource
+                )
+            assert comms.claim_projection().get(str(resource)) is None
+            append = comms.bus._append_private_unlocked
+
+            def append_then_lose_receipt(metadata: dict[str, int | str], row: dict) -> None:
+                append(metadata, row)
+                raise OSError("lost acknowledgement after durable append")
+
+            with monkeypatch.context() as patch:
+                patch.setattr(comms.bus, "_append_private_unlocked", append_then_lose_receipt)
+                with pytest.raises(ClaimEnvelopeUnknownError):
+                    publish_selected_resource_claim(comms, store, admission, owner.name, resource)
+            selected_owner = Comms(root).claim_projection()[str(resource)]
+            assert selected_owner.admission == admission
+            assert selected_owner.resource == str(resource)
+            assert (
+                publish_selected_resource_claim(comms, store, admission, owner.name, resource)
+                == selected_owner
+            )
+            assert len(comms.full_history()) == 2
             foreign_root = Path(dirname) / "foreign"
             foreign_root.mkdir(mode=0o700)
             with MutationStore(str(foreign_root / "coordination.sqlite3")) as foreign:
@@ -120,6 +148,17 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority() -> None:
             )
             with pytest.raises(IdentityConflict):
                 verify_selected_wake(comms, store, admission, "Alice")
+            with pytest.raises(IdentityConflict):
+                publish_selected_resource_claim(
+                    comms,
+                    store,
+                    replace(admission, operation_id="e" * 32),
+                    "Alice",
+                    resource,
+                )
             comms.registry.unregister("Alice")
             with pytest.raises(IdentityConflict):
                 verify_selected_wake(comms, store, admission, "Alice")
+            with pytest.raises(IdentityConflict):
+                publish_selected_resource_claim(comms, store, admission, "Alice", resource)
+            assert len(comms.full_history()) == 2
