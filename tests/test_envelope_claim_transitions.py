@@ -7,7 +7,6 @@ from dataclasses import asdict, replace
 import pytest
 
 from agent_comms.declarations import Message, MessageType
-
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
     ClaimOwner,

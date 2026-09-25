@@ -13,7 +13,7 @@ import pytest
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.claim_admission import verify_selected_wake
 from agent_comms.cohort_schema import install_private_cohort_schema
-from agent_comms.coordinated_runtime import _engage, _execution_id
+from agent_comms.coordinated_runtime import _engage
 from agent_comms.coordination import AttemptPhase, ClaimDisposition
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
 from agent_comms.coordination_store import IdentityConflict, MutationStore, prepare_fence_token
