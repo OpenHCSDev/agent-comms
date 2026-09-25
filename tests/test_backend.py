@@ -2363,6 +2363,42 @@ if select.select([sys.stdin], [], [], 0.2)[0]:
         assert events[-1]["reason_code"] == "pi_input_id_unavailable"
         assert not received.exists()
 
+    async def test_preflight_timeout_reports_phase_duration_and_session_size(
+        self, tmp_path, monkeypatch
+    ):
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_bytes(b"x" * 123)
+        received = tmp_path / "received-prompt"
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + f"""
+import json, select, sys, time
+state = json.loads(sys.stdin.readline())
+assert state["type"] == "get_state"
+time.sleep(0.3)
+if select.select([sys.stdin], [], [], 0)[0]:
+    line = sys.stdin.readline()
+    if line: open({str(received)!r}, "w").write(line)
+""",
+        )
+        monkeypatch.setattr(backend, "CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS", 0.05)
+        events = [
+            event
+            async for event in backend.stream_agent_events(
+                stub, [], "secret prompt", str(tmp_path), session_file=str(session_file)
+            )
+        ]
+        done = events[-1]
+        assert done["ok"] is False
+        assert done["reason_code"] == "pi_input_id_unavailable"
+        assert "phase=await_get_state" in done["text"]
+        assert "session_bytes=123" in done["text"]
+        assert "elapsed_ms=" in done["text"]
+        assert "wait_ms=" in done["text"]
+        assert "spawn_ms=" in done["text"]
+        assert "secret prompt" not in done["text"]
+        assert not received.exists()
+
     @pytest.mark.parametrize(
         ("case", "expected_ok"),
         [

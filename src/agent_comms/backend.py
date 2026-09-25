@@ -654,6 +654,12 @@ async def _stream_agent_events(
         options = env.get("NODE_OPTIONS", "")
         if flag not in options:
             env["NODE_OPTIONS"] = f"{options} {flag}".strip()
+    loop = asyncio.get_running_loop()
+    launch_started_at = loop.time()
+    session_bytes: int | None = None
+    if session_file:
+        with suppress(OSError):
+            session_bytes = Path(session_file).stat().st_size
     try:
         proc = await asyncio.create_subprocess_exec(
             *argv,
@@ -669,6 +675,7 @@ async def _stream_agent_events(
     except OSError as exc:
         yield {"type": "done", "text": f"agent launch failed: {exc}", "ok": False}
         return
+    spawn_ms = round((loop.time() - launch_started_at) * 1000)
 
     owner = asyncio.current_task()
     if owner is not None:
@@ -892,8 +899,8 @@ async def _stream_agent_events(
     initial_input_started = False
     stats_requested = False
     reader = _JsonLineReader(proc.stdout)
-    loop = asyncio.get_running_loop()
-    preflight_deadline = loop.time() + CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
+    preflight_wait_started_at = loop.time()
+    preflight_deadline = preflight_wait_started_at + CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
     if not require_input_id:
         prompt_start_deadline = loop.time() + PROMPT_START_TIMEOUT_SECONDS
     last_model_progress = loop.time()
@@ -1159,7 +1166,14 @@ async def _stream_agent_events(
         except TimeoutError:
             if require_input_id and not native_capability_confirmed:
                 capability_failed = True
-                fail_reason = "Pi native input-ID capability preflight timed out."
+                elapsed_ms = round((loop.time() - launch_started_at) * 1000)
+                wait_ms = round((loop.time() - preflight_wait_started_at) * 1000)
+                session_size = session_bytes if session_bytes is not None else "unknown"
+                fail_reason = (
+                    "Pi native input-ID capability preflight timed out "
+                    f"(phase=await_get_state, elapsed_ms={elapsed_ms}, "
+                    f"wait_ms={wait_ms}, spawn_ms={spawn_ms}, session_bytes={session_size})."
+                )
                 await _terminate_process(proc)
                 break
             if (
