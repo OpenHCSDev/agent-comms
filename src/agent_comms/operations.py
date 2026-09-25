@@ -2261,6 +2261,15 @@ class Comms:
         events = GoalPauseEvents(self.root / "goal_pause_events.json")
         return events.for_goal(self.registry.require(name).goal, events.snapshot())
 
+    def unresolved_inputs(self, name: str) -> list[dict[str, Any]]:
+        """Project durable unresolved inputs; reading never schedules another attempt."""
+        from .input_disposition import InputDispositions
+
+        with _store_lock(self._wire_lock_path):
+            self.registry.require(name)
+            rows = InputDispositions(self.root).unknown(self.registry.aliases_for(name))
+            return [InputDispositions.public(row) for row in rows]
+
     def goal_history(
         self, name: str, *, goal_id: str | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
@@ -2390,11 +2399,30 @@ class Comms:
         owner_store: GoalAttemptStore | None = None,
         expected_owner_pid: int | None = None,
         wait_for: Sequence[str] = (),
+        reviewed_inputs: Sequence[str] = (),
     ) -> Goal | None:
         """Apply a goal transition; automated callers may compare a captured goal atomically."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             goal = thread.goal
+            if expected_owner_pid is not None and (
+                thread.pid != expected_owner_pid or not self.registry.status(thread.name).running
+            ):
+                raise ValueError("The goal owner changed; refresh its state.")
+            if owner_store is not None and action != "set":
+                raise ValueError("Owner goal authority applies only to goal creation.")
+            # The automatic turn-end pause/block must not overwrite progress
+            # written by a separate tool process after ACP's precheck. Check
+            # the entire immutable snapshot under the same lock as the write.
+            if expected_goal is not None and goal != expected_goal:
+                raise ValueError("Goal changed during resume; refresh its state.")
+            if goal_id is not None and (goal is None or goal.id != goal_id):
+                raise ValueError("This goal was replaced or cleared; refresh its state.")
+            if expected_status is not None and (goal is None or goal.status != expected_status):
+                raise ValueError(
+                    (pause.owner_instruction if (pause := self.goal_pause(name)) else None)
+                    or "This goal is no longer active; refresh its state."
+                )
             original_goal = goal
             edited_pause = self.goal_pause(name) if action == "edit" else None
             wait_targets: tuple[GoalWaitTarget, ...] = ()
@@ -2415,18 +2443,49 @@ class Comms:
 
                 aliases = self.registry.aliases_for(thread.name)
                 cursor = AcpDeliveryCursors(self.root).cursor(aliases)
-                unresolved = {
+                dispositions = InputDispositions(self.root)
+                unknown = {row["key"]: row for row in dispositions.unknown(aliases)}
+                reviewed_keys = tuple(dict.fromkeys(reviewed_inputs))
+                if any(
+                    key not in unknown or unknown[key]["sequence"] is None for key in reviewed_keys
+                ):
+                    raise ValueError(
+                        "Review only this recipient's exact unresolved bus input keys."
+                    )
+                reviewed_sequences = {unknown[key]["sequence"] for key in reviewed_keys}
+                prior_reviews = {
                     row["sequence"]
-                    for row in InputDispositions(self.root).unknown(aliases)
-                    if row["sequence"] is not None
+                    for row in unknown.values()
+                    if goal is not None and dispositions.reviewed_for_goal(row, goal.id)
+                }
+                unresolved = {
+                    row["sequence"] for row in unknown.values() if row["sequence"] is not None
                 }
                 senders = frozenset(
                     alias for target in resolved for alias in self.registry.aliases_for(target.name)
                 )
+                if reviewed_sequences:
+                    selected = self.bus._history_page(
+                        lambda message: message.seq in reviewed_sequences
+                        and message.target in aliases
+                        and message.sender in senders,
+                        before=None,
+                        after=min(reviewed_sequences) - 1,
+                        limit=len(reviewed_sequences),
+                        max_bytes=max(
+                            256 * 1024,
+                            sum(len(json.dumps(unknown[key]).encode()) for key in reviewed_keys),
+                        ),
+                    )
+                    if {message.seq for message in selected.messages} != reviewed_sequences:
+                        raise ValueError(
+                            "Review only direct inputs from these declared dependencies."
+                        )
                 pending = self.bus._history_page(
                     lambda message: message.target in aliases
                     and message.sender in senders
-                    and (message.seq > cursor or message.seq in unresolved),
+                    and (message.seq > cursor or message.seq in unresolved)
+                    and message.seq not in reviewed_sequences | prior_reviews,
                     before=None,
                     after=None,
                     limit=1,
@@ -2436,29 +2495,13 @@ class Comms:
                     sequence = pending.messages[0].seq
                     raise ValueError(
                         f"Dependency reply {sequence} is already pending or UNKNOWN. "
-                        "Inspect that message during this turn before entering standby; "
-                        "it will not be replayed automatically."
+                        "Use comms_inbox to inspect unresolved_inputs, then pass their exact "
+                        "inputId keys in comms_goal reviewed_inputs to explicitly wait "
+                        "for a later reply. "
+                        "This does not mark them STARTED or replay them."
                     )
-            elif wait_for:
-                raise ValueError("wait_for is only valid for standby.")
-            if expected_owner_pid is not None and (
-                thread.pid != expected_owner_pid or not self.registry.status(thread.name).running
-            ):
-                raise ValueError("The goal owner changed; refresh its state.")
-            if owner_store is not None and action != "set":
-                raise ValueError("Owner goal authority applies only to goal creation.")
-            # The automatic turn-end pause/block must not overwrite progress
-            # written by a separate tool process after ACP's precheck. Check
-            # the entire immutable snapshot under the same lock as the write.
-            if expected_goal is not None and goal != expected_goal:
-                raise ValueError("Goal changed during resume; refresh its state.")
-            if goal_id is not None and (goal is None or goal.id != goal_id):
-                raise ValueError("This goal was replaced or cleared; refresh its state.")
-            if expected_status is not None and (goal is None or goal.status != expected_status):
-                raise ValueError(
-                    (pause.owner_instruction if (pause := self.goal_pause(name)) else None)
-                    or "This goal is no longer active; refresh its state."
-                )
+            elif wait_for or reviewed_inputs:
+                raise ValueError("wait_for and reviewed_inputs are only valid for standby.")
             report_turn = thread.active_turn.id if thread.active_turn is not None else ""
             if model_report and thread.last_goal_report_turn == report_turn:
                 raise ValueError("This goal was already reported in this turn.")
@@ -2519,6 +2562,13 @@ class Comms:
             waits = GoalWaits(self.root / "goal_waits.json")
             if action == "standby":
                 assert goal is not None
+                dispositions.review_for_goal(
+                    reviewed_keys,
+                    owners=aliases,
+                    goal_id=goal.id,
+                    goal_revision=goal.revision,
+                    turn_id=report_turn,
+                )
                 # Commit scheduling authority first. A crash before the registry
                 # progress update must leave this same goal waiting, not runnable.
                 waits.record(

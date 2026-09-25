@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 
-class StaleBusPageIndex(ValueError):
+class StaleBusPageIndex(ValueError):  # noqa: N818 - public index invalidation outcome
     """A disposable offset no longer identifies its claimed wire row."""
 
 

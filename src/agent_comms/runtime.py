@@ -37,7 +37,7 @@ class SocketClient:
         await self.writer.drain()
 
 
-class OwnerIdentityChanged(RuntimeError):
+class OwnerIdentityChanged(RuntimeError):  # noqa: N818 - public lifecycle outcome name
     """A saved attachment must not follow a reused thread name."""
 
 
@@ -149,6 +149,10 @@ class RuntimeServer:
                 else:
                     result = await handler(session_id, request.get("instructions"))
                 writer.write((json.dumps({"result": result}) + "\n").encode())
+                await writer.drain()
+            elif action == "input_dispositions":
+                rows = self.agent._comms.unresolved_inputs(name)
+                writer.write((json.dumps({"result": {"inputs": rows}}) + "\n").encode())
                 await writer.drain()
             elif action == "goal_history":
                 from dataclasses import asdict

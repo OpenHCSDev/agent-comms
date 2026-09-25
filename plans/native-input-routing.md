@@ -79,3 +79,27 @@ A read-only preview on the live wire found 68 eligible native inputs, zero
 conflicts/skips, and wrote zero repairs. No live apply, prompt, ACK, or restart
 was performed. The full-suite checkpoint above is historical until a new full
 run completes on the combined head.
+
+## Final local integration receipt
+
+Reconciled through main `e914235`, retaining persistent native-owner behavior
+and the newer standby validation ordering. Full local suite without coverage:
+**1,415 passed, 46 skipped**. The optional eight localhost-only native channel
+cases also passed separately. Whole-tree Ruff, mypy (55 source files), and
+Black checks passed.
+
+Updated inherited fixtures to explicitly recognize goal-only metadata, use
+fresh native IDs for distinct attempts, and prove native receipt authorization
+for channel routing instead of using a text-only echo backend. Content/order
+assertions remain. Minor inherited lint/type defects were corrected without
+renaming public exception types or changing goal transitions.
+
+A separate coverage-enabled invocation was interrupted after 1,234 passes and
+7 skips; it is not a complete coverage-gate receipt. The completed local
+non-coverage suite and separate native checks above are the execution receipts;
+this work proceeds from local validation without waiting for GitHub CI.
+
+Toad's `native_input_attribution_pilot.py` passed against this source: incoming
+and outgoing live/replay headers agree, a human quoting a transport header stays
+human, repaired receipt-bound history works, and the agent inbox remains
+unacknowledged by display repair. No live repair has been applied.

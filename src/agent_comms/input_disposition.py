@@ -149,6 +149,37 @@ class InputDispositions:
             self._write(rows)
             return True
 
+    def review_for_goal(
+        self,
+        keys: tuple[str, ...],
+        *,
+        owners: frozenset[str],
+        goal_id: str,
+        goal_revision: int,
+        turn_id: str,
+    ) -> None:
+        """Record an explicit wait decision, without claiming native start or replay."""
+        with _store_lock(self.path):
+            rows = self._read()
+            if any(
+                key not in rows
+                or rows[key]["owner"] not in owners
+                or rows[key]["status"] != "unknown"
+                for key in keys
+            ):
+                raise ValueError("Reviewed inputs changed; inspect them again.")
+            for key in keys:
+                rows[key].setdefault("goal_reviews", {})[goal_id] = {
+                    "goal_revision": goal_revision,
+                    "turn_id": turn_id,
+                }
+            if keys:
+                self._write(rows)
+
+    @staticmethod
+    def reviewed_for_goal(row: dict[str, Any], goal_id: str) -> bool:
+        return goal_id in row.get("goal_reviews", {})
+
     def status(self, key: str) -> str | None:
         with _store_lock(self.path):
             row = self._read().get(key)
@@ -158,6 +189,20 @@ class InputDispositions:
         with _store_lock(self.path):
             row = self._read().get(key)
             return dict(row) if row is not None else None
+
+    @staticmethod
+    def public(row: dict[str, Any]) -> dict[str, Any]:
+        """Public delivery projection; native receipt authority stays private."""
+        return {
+            "inputId": row["key"].removeprefix("acp:"),
+            "sequence": row["sequence"],
+            "target": row["target"],
+            "text": row["source_text"],
+            "status": row["status"],
+            **(
+                {"reviewedForGoals": sorted(row["goal_reviews"])} if row.get("goal_reviews") else {}
+            ),
+        }
 
     def unknown(self, owners: frozenset[str]) -> list[dict[str, Any]]:
         with _store_lock(self.path):

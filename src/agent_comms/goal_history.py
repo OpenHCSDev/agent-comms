@@ -94,7 +94,8 @@ class GoalHistoryStore:
                     "CREATE TABLE IF NOT EXISTS entries ("
                     "sequence INTEGER PRIMARY KEY, owner_created_at REAL NOT NULL, "
                     "kind TEXT NOT NULL CHECK(kind IN ('transition','baseline','observed_gap')), "
-                    "state TEXT NOT NULL CHECK(state IN ('pending','committed','aborted','uncertain')), "
+                    "state TEXT NOT NULL "
+                    "CHECK(state IN ('pending','committed','aborted','uncertain')), "
                     "observed_at REAL NOT NULL, before_goal TEXT, after_goal TEXT)"
                 )
                 connection.execute(
@@ -132,7 +133,9 @@ class GoalHistoryStore:
             with closing(self._connect()) as connection:
                 connection.execute("BEGIN IMMEDIATE")
                 cursor = connection.execute(sql, parameters)
-                sequence = int(cursor.lastrowid)
+                sequence = cursor.lastrowid
+                if sequence is None:
+                    raise GoalHistoryError("Goal history write returned no row identity.")
                 connection.commit()
             self._sync()
             return sequence

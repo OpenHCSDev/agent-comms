@@ -7,8 +7,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Thread
-from agent_comms import declarations
+from agent_comms import Thread, declarations
 from agent_comms.goal_history import GoalHistoryStore
 from agent_comms.operations import Comms
 from agent_comms.tools import TOOLS

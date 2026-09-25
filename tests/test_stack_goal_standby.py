@@ -15,8 +15,8 @@ from agent_comms import GoalExecutionState, Thread, wire
 from agent_comms.acp import CommsAgent
 
 
-@pytest.mark.parametrize("restart", [False, True])
-async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart):
+@pytest.mark.parametrize("restart, review_pending", [(False, False), (True, False), (True, True)])
+async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, review_pending):
     native = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native:
         pytest.skip("Requires the prepared native Pi stack")
@@ -25,6 +25,8 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart):
         requests = []
         failures = []
         goal_id = None
+        pending_keys = []
+        offset = int(review_pending)
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
@@ -32,12 +34,14 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart):
                     request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                     requests.append(request)
                     index = len(requests)
-                    assert index <= 4, "Standby must not schedule another provider turn"
+                    assert index <= 4 + offset, "Standby must not schedule another provider turn"
                     delta = {
-                        "content": "Waiting for child." if index == 2 else "Reviewed and done."
+                        "content": (
+                            "Waiting for child." if index == 2 + offset else "Reviewed and done."
+                        )
                     }
                     finish = "stop"
-                    if index in {1, 3}:
+                    if index in {1 + offset, 3 + offset}:
                         schema = next(
                             t["function"]
                             for t in request["tools"]
@@ -46,13 +50,25 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart):
                         assert "standby" in schema["parameters"]["properties"]["status"]["enum"]
                         arguments = {
                             "goal_id": goal_id,
-                            "status": "standby" if index == 1 else "completed",
+                            "status": "standby" if index == 1 + offset else "completed",
                             "progress": (
-                                "Waiting for child" if index == 1 else "Verified child report"
+                                "Waiting for child"
+                                if index == 1 + offset
+                                else "Verified child report"
                             ),
                         }
-                        if index == 1:
+                        if index == 1 + offset:
                             arguments["wait_for"] = ["@child"]
+                            if review_pending:
+                                arguments["reviewed_inputs"] = pending_keys
+                                tool_messages = [
+                                    m for m in request["messages"] if m.get("role") == "tool"
+                                ]
+                                inspected = json.loads(tool_messages[-1]["content"])
+                                assert inspected["messages"] == []
+                                assert [
+                                    r["inputId"] for r in inspected["unresolved_inputs"]
+                                ] == pending_keys
                         delta = {
                             "role": "assistant",
                             "tool_calls": [
@@ -63,6 +79,22 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart):
                                     "function": {
                                         "name": "comms_goal",
                                         "arguments": json.dumps(arguments),
+                                    },
+                                }
+                            ],
+                        }
+                        finish = "tool_calls"
+                    if review_pending and index == 1:
+                        delta = {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "inspect_inputs",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "comms_inbox",
+                                        "arguments": json.dumps({"thread": "parent"}),
                                     },
                                 }
                             ],
@@ -96,6 +128,9 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart):
         serving.start()
         config = root / "agent"
         config.mkdir(mode=0o700)
+        auth_file = config / "auth.json"
+        auth_file.write_text("{}")
+        auth_file.chmod(0o600)
         (config / "models.json").write_text(
             json.dumps(
                 {
@@ -148,12 +183,19 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart):
                 "parent", "set", text="Review @child report", owner_store=agent._open_goal_store()
             )
             goal_id = goal.id
+            if review_pending:
+                for text in ("WAIT_INSTRUCTION_ONE", "WAIT_INSTRUCTION_TWO"):
+                    early = comms.send_message("child", "parent", text)
+                    pending_keys.append(f"bus:{early.seq}")
+                await agent._drain_inbox("parent")
             agent._schedule_goal("parent")
             await asyncio.wait_for(agent._wake_tasks["parent"], 40)
             assert not failures, failures
             assert comms.registry.require("parent").goal.active
             assert comms.goal_execution("parent").state is GoalExecutionState.STANDBY
-            assert len(requests) == 2
+            assert len(requests) == 2 + offset
+            first_proc = agent._persistent_backends["parent"].proc
+            assert first_proc is not None and first_proc.returncode is None
             agent._schedule_goal("parent")
             assert not agent._pending_turns.get("parent")
             assert agent._goal_store.snapshot(goal.id).number == 2
@@ -167,13 +209,21 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart):
                 await agent.load_session(str(project), "parent")
                 agent._schedule_goal("parent")
                 assert comms.goal_execution("parent").state is GoalExecutionState.STANDBY
-                assert not agent._pending_turns.get("parent") and len(requests) == 2
+                assert not agent._pending_turns.get("parent") and len(requests) == 2 + offset
             message = comms.send_message("child", "parent", "CHILD_REPORT_EXACT_NATIVE_INPUT")
             await agent._drain_inbox("parent")
             await asyncio.wait_for(agent._wake_tasks["parent"], 40)
             assert not failures, failures
-            assert len(requests) == 4
+            assert len(requests) == 4 + offset
+            if not restart:
+                assert agent._persistent_backends["parent"].proc is first_proc
+            else:
+                assert first_proc.returncode is not None
             assert agent._dispositions.status(f"bus:{message.seq}") == "started"
+            for key in pending_keys:
+                row = agent._dispositions.get(key)
+                assert row["status"] == "unknown" and row["native_id"] is None
+                assert agent._dispositions.reviewed_for_goal(row, goal.id)
             assert comms.registry.require("parent").goal.status == "completed"
             assert agent._goal_store.snapshot(goal.id).state == "completed"
             session = Path(comms.registry.require("parent").session_file)

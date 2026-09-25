@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from acp.schema import ConfigOptionUpdate, SessionInfoUpdate
 
 from agent_comms.acp import CommsAgent
 from agent_comms.backend import NATIVE_INPUT_CAPABILITY
@@ -679,7 +680,7 @@ class TestAgentTurn:
         title_updates = [
             update
             for update in sent
-            if getattr(update, "session_update", None) == "session_info_update"
+            if isinstance(update, SessionInfoUpdate) and "title" in update.model_fields_set
         ]
         assert title_updates == []
         assert wired.agent_info_of("proj").session_name == "Agent-chosen title"
@@ -747,7 +748,7 @@ class TestAgentTurn:
         title_updates = [
             update
             for update in sent
-            if getattr(update, "session_update", None) == "session_info_update"
+            if isinstance(update, SessionInfoUpdate) and "title" in update.model_fields_set
         ]
         assert [update.title for update in title_updates] == ["renamed proj"]
         assert title_updates[0].field_meta == {"agentComms": {"thread": "renamed-proj"}}
@@ -1841,7 +1842,12 @@ class TestAgentTurnForwarding:
                 for key in ("inputDisposition", "inputStarted", "queue")
             )
         ]
-        kinds = [type(u).__name__ for u in sent]
+        goal_updates = [update for update in sent if isinstance(update, SessionInfoUpdate)]
+        assert len(goal_updates) == 1
+        assert goal_updates[0].field_meta == {"agentComms": {"goal": None, "goalExecution": None}}
+        assert "title" not in goal_updates[0].model_fields_set
+        sent = [update for update in sent if update not in goal_updates]
+        kinds = [type(update).__name__ for update in sent]
         assert kinds == [
             "AgentMessageChunk",  # turn-started metadata before any model output
             "AgentThoughtChunk",  # actual backend thinking
@@ -2165,7 +2171,10 @@ class TestLiveConfigSync:
         # The session response already supplied the options, so the first sync
         # must not republish them.
         await agent._sync_thread_config("proj")
-        assert sent == []
+        assert not any(isinstance(update, ConfigOptionUpdate) for update in sent)
+        assert len(sent) == 1 and isinstance(sent[0], SessionInfoUpdate)
+        assert sent[0].field_meta == {"agentComms": {"goal": None, "goalExecution": None}}
+        sent.clear()
         # Another thread can change this thread's model; the view must follow.
         wired.set_thread_model("proj", "openrouter/deepseek/deepseek-v4.1-flash")
         await agent._sync_thread_config("proj")
