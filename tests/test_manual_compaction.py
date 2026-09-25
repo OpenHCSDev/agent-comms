@@ -251,11 +251,17 @@ class LoopbackProvider:
                 # This attempt stays in flight until Pi is cancelled.
                 await asyncio.wait_for(reader.read(), 20)
                 return
-            if self.status == 503:
-                body = b'{"error":{"message":"loopback retryable failure","type":"server_error"}}'
+            if self.status in {400, 503}:
+                body = (
+                    b'{"error":{"message":"maximum context length exceeded; '
+                    b'private prompt","type":"context_length_exceeded"}}'
+                    if self.status == 400
+                    else b'{"error":{"message":"loopback retryable failure",'
+                    b'"type":"server_error"}}'
+                )
                 writer.write(
-                    b"HTTP/1.1 503 Service Unavailable\r\n"
-                    b"Content-Type: application/json\r\nContent-Length: "
+                    f"HTTP/1.1 {self.status} Failure\r\n".encode()
+                    + b"Content-Type: application/json\r\nContent-Length: "
                     + str(len(body)).encode()
                     + b"\r\nConnection: close\r\n\r\n"
                     + body
@@ -289,7 +295,7 @@ class LoopbackProvider:
             await writer.wait_closed()
 
 
-@pytest.mark.parametrize("status", [503, 200])
+@pytest.mark.parametrize("status", [400, 503, 200])
 async def test_real_pi_compacts_exact_saved_session(tmp_path, monkeypatch, status):
     provider = LoopbackProvider(status=status)
     server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
@@ -324,7 +330,12 @@ async def test_real_pi_compacts_exact_saved_session(tmp_path, monkeypatch, statu
             str(tmp_path),
             timeout_seconds=15,
         )
-        assert provider.posts >= 1, (result, provider.paths)
+        if status in {400, 503}:
+            # A failed provider response is an uncertain paid attempt. Pi must
+            # not replay it even when inherited settings request retries.
+            assert provider.posts == 1, (result, provider.paths)
+        else:
+            assert provider.posts >= 1, (result, provider.paths)
         assert all(path == "POST /v1/chat/completions HTTP/1.1" for path in provider.paths)
         assert not Path((tmp_path / "profile").read_text()).exists()
         assert (inherited / "auth.json").read_text() == fake_auth
@@ -335,7 +346,12 @@ async def test_real_pi_compacts_exact_saved_session(tmp_path, monkeypatch, statu
             assert json.loads(session.read_bytes().splitlines()[-1])["type"] == "compaction"
         else:
             assert result["ok"] is False
-            assert result["error"] == "Compaction provider returned HTTP 503."
+            assert result["error"] == (
+                "Compaction summary exceeded the model context limit."
+                if status == 400
+                else "Compaction provider returned HTTP 503."
+            )
+            assert "private prompt" not in result["error"]
             assert session.read_bytes().startswith(before)
             assert all(
                 json.loads(row)["type"] != "compaction" for row in session.read_bytes().splitlines()
