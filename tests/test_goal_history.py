@@ -19,6 +19,14 @@ def _wire(tmp_path) -> Comms:
     return comms
 
 
+def test_history_file_fsync_reopens_with_supported_platform_flags(tmp_path):
+    path = tmp_path / "history.sqlite3"
+    path.write_bytes(b"journal bytes")
+    # Windows' os.fsync delegates to the CRT, which rejects O_RDONLY fds.
+    GoalHistoryStore._sync_file(path)
+    assert path.read_bytes() == b"journal bytes"
+
+
 def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path, monkeypatch):
     comms = _wire(tmp_path)
     first = comms.update_goal("worker", "set", text="Ask @reviewer about the release")
