@@ -43,7 +43,11 @@ The identical pause text was published twice, sequences 6791 and 6793,
 94.96–120.44 seconds after the first publication, or 43.63–69.12 seconds after
 the second. Content correlation alone cannot distinguish identical sends.
 No matching entry was found in nra-architecture's currently selected session;
-that absence is not proof of loss and must not authorize replay.
+its ACP log then resolves that absence: two client `session/cancel` requests
+surround the queued channel turn's start/settle events (lines 196–200 in
+`Agent_Comms_2026-09-25T11_03_23_770030.txt`). The queued turn began at
+1790348709.204 and was cancelled before a native user entry was recorded.
+That is not evidence of spontaneous loss and must not authorize replay.
 
 Reproduce the read-only correlation (JSON output includes ambiguity and limits):
 
