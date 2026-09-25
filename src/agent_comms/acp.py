@@ -1271,10 +1271,6 @@ class CommsAgent:
         page = self._comms.incoming_page(thread_name, after=after) if after < high_water else None
         incoming_messages = page.messages if page else ()
         for message in incoming_messages:
-            incoming = ScheduledTurn.incoming(message)
-            starts_turn = message.starts_turn_for(thread_name)
-            aliases = self._comms.registry.aliases_for(thread_name)
-            direct = starts_turn and message.target in aliases
             admitted = True
             dependency_wait = None
             row: dict[str, Any] | None = None
@@ -1283,6 +1279,19 @@ class CommsAgent:
                 current_name = snapshot.aliases.get(thread_name, thread_name)
                 current = snapshot.threads[current_name]
                 status = snapshot.statuses[current_name]
+                aliases = frozenset(
+                    {
+                        current_name,
+                        *(
+                            alias
+                            for alias, target in snapshot.aliases.items()
+                            if target == current_name
+                        ),
+                    }
+                )
+                incoming = ScheduledTurn.incoming(message, aliases=snapshot.aliases)
+                starts_turn = message.starts_turn_for(current_name, aliases=snapshot.aliases)
+                direct = starts_turn and message.target in aliases
                 if starts_turn:
                     wait = self._comms.goal_wait(current_name) if direct else None
                     if wait is not None and wait.matches(message, snapshot):
