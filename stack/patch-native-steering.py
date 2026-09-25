@@ -44,6 +44,9 @@ CONTINUE = """        // Only a new explicit Send now command permits this conti
             this._emit({ type: "steering_interrupt_completed" });
             return selected;
         }
+        // Read the actual completed run's signal, including cancellation during
+        // awaited listeners. Plain abort never authorizes an implicit continuation.
+        if (this._lastAgentRunSignal?.aborted) return false;
 """
 
 
@@ -83,6 +86,12 @@ def main(package):
         "{ skipInitialSteeringPoll: true });\n"
         "                else await this.agent.continue();\n"
         "            }",
+    )
+    source = replace_once(
+        source,
+        "    _handleAgentEvent = async (event) => {\n",
+        "    _handleAgentEvent = async (event, signal) => {\n"
+        '        if (event.type === "agent_end") this._lastAgentRunSignal = signal;\n',
     )
     session.write_text(source)
     source = replace_once(

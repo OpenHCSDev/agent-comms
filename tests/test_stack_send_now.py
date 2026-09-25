@@ -24,6 +24,7 @@ from agent_comms import backend
         "backend_terminal",
         "backend_terminal_queue",
         "backend_terminal_cancel",
+        "native_terminal_cancel",
         "priority",
         "revoked",
         "oversized",
@@ -211,6 +212,64 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     assert not release.is_set()
             finally:
                 finish_followup.set()
+                release.set()
+                server.shutdown()
+                server.server_close()
+                worker.join(timeout=2)
+            return
+        if surface == "native_terminal_cancel":
+            process = await asyncio.create_subprocess_exec(
+                native_bin,
+                *native_args,
+                "--mode",
+                "rpc",
+                "--session",
+                str(root / "native.jsonl"),
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            rpc_events = []
+
+            async def send_rpc(command):
+                process.stdin.write((json.dumps(command) + "\n").encode())
+                await process.stdin.drain()
+
+            async def until_response(identity):
+                async with asyncio.timeout(15):
+                    while True:
+                        line = await process.stdout.readline()
+                        assert line, rpc_events
+                        event = json.loads(line)
+                        rpc_events.append(event)
+                        if event.get("type") == "response" and event.get("id") == identity:
+                            assert event.get("success"), event
+                            return
+
+            try:
+                # Untracked RPC is supported too: a plain cancel must not turn
+                # queued steering into a fresh implicit provider attempt.
+                await send_rpc({"type": "prompt", "id": "original", "message": "ORIGINAL_INPUT"})
+                await until_response("original")
+                async with asyncio.timeout(15):
+                    while not terminal_pid.exists():
+                        await asyncio.sleep(0.01)
+                await send_rpc({"type": "steer", "id": "queued", "message": "UNTRACKED_QUEUED"})
+                await until_response("queued")
+                await send_rpc({"type": "abort", "id": "cancel"})
+                await until_response("cancel")
+                assert len(requests) == 1, "Plain cancel must not start a queued provider turn"
+                assert not any(
+                    event.get("type") == "message_start"
+                    and event.get("message", {}).get("role") == "user"
+                    and "UNTRACKED_QUEUED" in json.dumps(event)
+                    for event in rpc_events
+                )
+                assert not Path(f"/proc/{terminal_pid.read_text()}").exists()
+            finally:
+                if process.returncode is None:
+                    process.terminate()
+                await asyncio.wait_for(process.communicate(), 5)
                 release.set()
                 server.shutdown()
                 server.server_close()
