@@ -120,7 +120,9 @@ class BusDisplayIndex:
         apply: Callable[[Mapping[str, Any], DisplayMetrics], None],
     ) -> DisplayMetrics | None:
         if revision is None:
-            return initial
+            # The caller may have opened a newer bus boundary after its first
+            # revision check. Its captured records then own this snapshot.
+            return None
         try:
             stream = self.bus_path.open("rb")
         except FileNotFoundError:

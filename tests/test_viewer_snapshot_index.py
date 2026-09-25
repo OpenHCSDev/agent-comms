@@ -2,6 +2,7 @@
 
 import json
 import os
+from contextlib import contextmanager
 from unittest.mock import patch
 
 from agent_comms import Thread, wire
@@ -53,3 +54,30 @@ def test_display_checkpoint_damage_and_bus_replacement_rebuild(tmp_path):
     replacement.write_bytes(bus_path.read_bytes().splitlines(keepends=True)[-1])
     os.replace(replacement, bus_path)
     assert wire(tmp_path).viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
+
+
+def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
+    tmp_path, monkeypatch
+):
+    comms = wire(tmp_path)
+    comms.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
+    comms.register(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+    comms.send("bob", "#team", "first")
+    bus_path = comms.bus._path
+    first = json.loads(bus_path.read_text().splitlines()[0])
+    raced_timestamp = first["ts"] + 10
+    original = comms.bus._record_snapshot
+
+    @contextmanager
+    def append_before_open(*args, **kwargs):
+        row = dict(first, seq=2, ts=raced_timestamp, text="raced append")
+        with bus_path.open("a") as stream:
+            stream.write(json.dumps(row) + "\n")
+        with original(*args, **kwargs) as boundary:
+            yield boundary
+
+    monkeypatch.setattr(comms.bus, "_record_snapshot", append_before_open)
+    snapshot = comms.viewer_snapshot(str(tmp_path))
+    team = next(view for view in snapshot.channels if view.channel.name == "#team")
+    assert snapshot.channel_unread["#team"] == 2
+    assert team.last_activity == raced_timestamp
