@@ -19,7 +19,7 @@ from agent_comms import backend
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="native Pi uses POSIX fsync")
 
 
-def _saved_history(path: Path, cwd: Path) -> None:
+def _saved_history(path: Path, cwd: Path, *, short: bool = False) -> None:
     """Create a real Pi branch whose last usage exceeds a 128K model window."""
     timestamp = "2026-09-24T00:00:00.000Z"
     rows: list[dict] = [
@@ -34,7 +34,8 @@ def _saved_history(path: Path, cwd: Path) -> None:
         rows.append({
             "type": "message", "id": user_id, "parentId": parent, "timestamp": timestamp,
             "message": {
-                "role": "user", "content": [{"type": "text", "text": "x" * 6000}],
+                "role": "user",
+                "content": [{"type": "text", "text": "x" * (1000 if short else 6000)}],
                 "timestamp": 1790290000000 + 2 * index,
             },
         })
@@ -58,8 +59,10 @@ def _saved_history(path: Path, cwd: Path) -> None:
     path.chmod(0o600)
 
 
-@pytest.mark.parametrize("summary_failure", [False, True])
-async def test_saved_history_compacts_after_native_user_start(summary_failure: bool) -> None:
+@pytest.mark.parametrize(
+    "case", ["success", "summary_failure", "oversized_current", "oversized_summary"]
+)
+async def test_saved_history_compacts_after_native_user_start(case: str) -> None:
     native_bin = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native_bin:
         pytest.skip("Set AC_NATIVE_STACK_BIN to the prepared pinned Pi launcher")
@@ -72,7 +75,9 @@ async def test_saved_history_compacts_after_native_user_start(summary_failure: b
             "compaction": {"enabled": True},
         }))
         session = root / "saved.jsonl"
-        _saved_history(session, project)
+        _saved_history(
+            session, project, short=case in {"oversized_current", "oversized_summary"}
+        )
         agent = root / "agent"
         agent.mkdir(mode=0o700)
         calls: list[str] = []
@@ -81,7 +86,7 @@ async def test_saved_history_compacts_after_native_user_start(summary_failure: b
             def do_POST(self):
                 self.rfile.read(int(self.headers.get("Content-Length", "0")))
                 calls.append(self.path)
-                if summary_failure:
+                if case == "summary_failure":
                     body = b'{"error":{"message":"429 rate limit","type":"rate_limit_error"}}'
                     self.send_response(429)
                     self.send_header("Content-Type", "application/json")
@@ -92,7 +97,9 @@ async def test_saved_history_compacts_after_native_user_start(summary_failure: b
                 chunk = {
                     "id": f"fixture-{len(calls)}", "object": "chat.completion.chunk",
                     "created": 12345, "model": "z-ai/glm-5.3-flash",
-                    "choices": [{"index": 0, "delta": {"role": "assistant", "content": "summary"},
+                    "choices": [{"index": 0, "delta": {"role": "assistant", "content": (
+                        "y" * 600000 if case == "oversized_summary" else "summary"
+                    )},
                                  "finish_reason": None}],
                 }
                 terminal = {
@@ -142,7 +149,7 @@ async def test_saved_history_compacts_after_native_user_start(summary_failure: b
                     ["--offline", "--no-extensions", "--no-skills", "--no-prompt-templates",
                      "--no-context-files", "--no-tools", "--provider", "openrouter",
                      "--model", "z-ai/glm-5.3-flash"],
-                    "Reply OK.", str(project),
+                    "x" * 600000 if case == "oversized_current" else "Reply OK.", str(project),
                     env_extra={
                         "PI_CODING_AGENT_DIR": str(agent),
                         "OPENROUTER_API_KEY": "offline-fixture-no-real-key",
@@ -158,14 +165,25 @@ async def test_saved_history_compacts_after_native_user_start(summary_failure: b
             server.server_close()
             worker.join(timeout=2)
         kinds = [event["type"] for event in events]
-        assert kinds.index("input_started") < kinds.index("compaction_start")
-        assert kinds.index("compaction_start") < kinds.index("compaction_end")
+        assert "input_started" in kinds
         assert events[-1]["type"] == "done"
-        if summary_failure:
+        if case == "summary_failure":
             assert events[-1]["ok"] is False
             assert "compaction" in str(events[-1]["text"]).lower()
             assert len(calls) == 1  # No automatic replay of a refused attempt.
             return
+        if case == "oversized_current":
+            assert events[-1]["ok"] is False
+            assert "oversized" in str(events[-1]["text"]).lower()
+            assert calls == []  # A single uncompactable user input costs no summary call.
+            return
+        if case == "oversized_summary":
+            assert events[-1]["ok"] is False
+            assert "oversized" in str(events[-1]["text"]).lower()
+            assert len(calls) == 1  # Committed summary, then refusal before the user prompt.
+            return
+        assert kinds.index("input_started") < kinds.index("compaction_start")
+        assert kinds.index("compaction_start") < kinds.index("compaction_end")
         assert events[-1]["ok"] is True
         assert len(calls) > 1
         assert len(

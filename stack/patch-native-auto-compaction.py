@@ -20,13 +20,21 @@ METHOD = """    _installNativeCompactionBeforeProvider() {
             const settings = this.settingsManager.getCompactionSettings();
             if (!shouldCompact(estimateContextTokens(transformed).tokens, this.model.contextWindow, settings))
                 return transformed;
+            const budget = this.model.contextWindow - settings.reserveTokens;
+            const currentInput = transformed.findLast((message) => message.role === "user" &&
+                this._nativeInputClaims.has(message.inputId));
+            if (currentInput && estimateTokens(currentInput) > budget)
+                throw new Error("Native input is oversized and cannot be compacted; prompt refused");
             const before = getLatestCompactionEntry(this.sessionManager.getBranch());
             await this._runAutoCompaction("threshold", false);
             const after = getLatestCompactionEntry(this.sessionManager.getBranch());
             if (!after || after.id === before?.id)
                 throw new Error("Native threshold compaction did not commit; prompt refused");
             const fresh = this.agent.state.messages.slice();
-            return previous ? await previous.call(this.agent, fresh, signal) : fresh;
+            const finalMessages = previous ? await previous.call(this.agent, fresh, signal) : fresh;
+            if (shouldCompact(estimateMessagesTokens(finalMessages), this.model.contextWindow, settings))
+                throw new Error("Native threshold compaction left an oversized context; prompt refused");
+            return finalMessages;
         };
     }
 """
