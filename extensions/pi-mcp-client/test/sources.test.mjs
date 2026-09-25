@@ -34,7 +34,7 @@ test('Pi project trust gates reading; exact external digest gates eligibility; n
     assert.deepEqual((await load(true)).map(({ scope, status }) => [scope, status]), [['project', 'trust_required']]);
     const digest = declarationDigest(parseNativeConfig(config([projectServer])).servers[0]);
     await writeFile(join(agentDir, 'mcp-trust.json'), JSON.stringify({ version: 1, decisions: [
-      { projectRoot: await realpath(project), serverId: 'local', digest, decision: 'approve' },
+      { projectRoot: await realpath(project), scope: 'project', serverId: 'local', digest, decision: 'approve' },
     ] }));
     assert.deepEqual((await load(true)).map(({ scope, status }) => [scope, status]), [['project', 'approved']]);
     await writeFile(projectPath, config([{ ...projectServer, transport: { ...projectServer.transport, args: ['changed'] } }]));

@@ -4,6 +4,7 @@ import { declarationDigest } from './config.mjs';
 
 const approval = z.strictObject({
   projectRoot: z.string().min(1),
+  scope: z.literal('project'),
   serverId: z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/),
   digest: z.string().regex(/^[a-f0-9]{64}$/),
   decision: z.enum(['approve', 'deny']),
@@ -14,7 +15,7 @@ const ledgerSchema = z.strictObject({
 }).superRefine((value, ctx) => {
   const seen = new Set();
   for (const [index, row] of value.decisions.entries()) {
-    const key = JSON.stringify([row.projectRoot, row.serverId, row.digest]);
+    const key = JSON.stringify([row.projectRoot, row.scope, row.serverId, row.digest]);
     if (seen.has(key)) {
       ctx.addIssue({ code: 'custom', message: 'Duplicate decision', path: ['decisions', index] });
     }
@@ -53,7 +54,8 @@ export function effectiveDeclarations({ user, project, projectTrusted, projectRo
   return [...combined.values()].map(({ scope, declaration }) => {
     const digest = declarationDigest(declaration);
     const decision = scope === 'project' && ledger.decisions.find((row) =>
-      row.projectRoot === projectRoot && row.serverId === declaration.id && row.digest === digest
+      row.projectRoot === projectRoot && row.scope === 'project' &&
+      row.serverId === declaration.id && row.digest === digest
     )?.decision;
     const status = !declaration.enabled ? 'disabled'
       : scope === 'user' || decision === 'approve' ? 'approved'

@@ -17,7 +17,7 @@ export async function recordProjectDecision({ agentDir, projectRoot, declaration
   // and the exact declaration to the user BEFORE invoking this method.
   const canonicalRoot = await realpath(projectRoot);
   const digest = declarationDigest(declaration);
-  const row = { projectRoot: canonicalRoot, serverId: declaration.id, digest, decision };
+  const row = { projectRoot: canonicalRoot, scope: 'project', serverId: declaration.id, digest, decision };
   parseTrustLedger(JSON.stringify({ version: 1, decisions: [row] }));
   const ledgerPath = join(agentDir, 'mcp-trust.json');
   const lockPath = ledgerPath + '.lock';
@@ -52,7 +52,7 @@ export async function recordProjectDecision({ agentDir, projectRoot, declaration
         throw new Error('MCP decision was written but directory durability is unknown', { cause: error });
       }
     }
-    return { projectRoot: canonicalRoot, serverId: declaration.id, digest, decision };
+    return row;
   } finally {
     if (temp) await rm(temp, { force: true });
     await rmdir(lockPath);

@@ -17,7 +17,7 @@ test('project authority requires Pi trust AND separately sourced exact digest', 
   const declaration = server('project-command');
   const user = config(server('user-command'));
   const project = config(declaration);
-  const approval = { projectRoot, serverId: 'one', digest: declarationDigest(project.servers[0]), decision: 'approve' };
+  const approval = { projectRoot, scope: 'project', serverId: 'one', digest: declarationDigest(project.servers[0]), decision: 'approve' };
   assert.deepEqual(decide(user, project, ledger()).map((entry) => [entry.scope, entry.status]),
     [['project', 'trust_required']]); // Never silently fall back to the user server.
   assert.deepEqual(decide(user, project, ledger(approval)).map((entry) => [entry.scope, entry.status]),
@@ -31,11 +31,12 @@ test('project authority requires Pi trust AND separately sourced exact digest', 
 });
 
 test('ledger rejects malformed or duplicated decisions without leaking fields', () => {
-  const decision = { projectRoot, serverId: 'one', digest: 'a'.repeat(64), decision: 'approve' };
+  const decision = { projectRoot, scope: 'project', serverId: 'one', digest: 'a'.repeat(64), decision: 'approve' };
   for (const raw of [
     '{"version":1,"decisions":[{"secret":"never-expose-me"}',
     JSON.stringify({ version: 1, decisions: [decision, decision] }),
     JSON.stringify({ version: 1, decisions: [{ ...decision, trust: true }] }),
+    JSON.stringify({ version: 1, decisions: [{ ...decision, scope: 'user' }] }),
     JSON.stringify({ version: 1, decisions: [{ ...decision, digest: 'never-expose-me' }] }),
   ]) {
     assert.throws(() => parseTrustLedger(raw), (error) =>

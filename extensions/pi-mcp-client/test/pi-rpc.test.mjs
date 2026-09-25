@@ -86,7 +86,7 @@ test('real isolated Pi RPC trusts project only by Pi policy and never starts dec
       // A malformed untrusted project file must not even be parsed by Pi's command.
       await writeFile(projectFile, trusted ? document : '{bad');
       if (approval) await writeFile(join(agentDir, 'mcp-trust.json'), JSON.stringify({
-        version: 1, decisions: [{ projectRoot: await realpath(project), serverId: 'fixture',
+        version: 1, decisions: [{ projectRoot: await realpath(project), scope: 'project', serverId: 'fixture',
           digest: declarationDigest(parseNativeConfig(document).servers[0]), decision: 'approve' }],
       }));
       const client = await rpc({ project, agentDir, trust: trusted });
