@@ -2,9 +2,10 @@
 
 The Pi package manifest loads `index.mjs` **by default when the package is installed**.
 It connects approved stdio servers when a Pi session starts, discovers tools,
-resources and prompts, and closes children on session shutdown. It provides
-`/mcp-status`, `/mcp-approve <id>`, and `/mcp-deny <id>`. Pi model-tool
-exposure is the next implementation slice.
+resources and prompts, registers bounded discovered Pi tools, and closes children
+on session shutdown. It provides `/mcp-status`, `/mcp-approve <id>`, and
+`/mcp-deny <id>`. Tool calls require a local Pi TUI confirmation; detached/RPC
+tool calls fail until a correlated controller or out-of-band tool policy is added.
 
 ```sh
 cd extensions/pi-mcp-client
@@ -29,8 +30,12 @@ approval is refused until a correlated human-controller bridge exists. The
 launch-spec builder rejects unapproved/mismatched project contexts and
 constructs a narrow SDK environment with explicit `envFrom`, canonical cwd and
 piped stderr. The package-owned Pi session uses the official SDK, drains child
-stderr without exposing it, and does not retry ambiguous calls. An approval
-written during a session takes effect on its next start.
+stderr without exposing it, and does not retry ambiguous calls. Every tool
+call rechecks the current declaration and ledger before one SDK request; Pi
+cancellation, bounded progress and 60-second inactivity/15-minute absolute
+timeouts go to the official SDK. MCP text/images map to bounded Pi content;
+unsupported binary is explicitly omitted. An approval written during a session
+takes effect on its next start.
 
 The offline suite tests the official SDK's real stdio handshake, capability-
 gated bounded tools/resources/prompts discovery, operations, progress,
@@ -38,5 +43,6 @@ cancellation and cleanup against a generic fixture. It also runs an isolated
 real Pi RPC process with `--no-approve` and `--approve`: untrusted files are not
 read, absent/stale digests cause zero spawns, and an approved generic fixture
 initializes/discovers and exits on shutdown. No provider call is made. PR #77
-remains draft; Pi tool exposure, agent-comms/ACP projection, Toad controls and
-their independent review are still outstanding.
+remains draft; resources/prompts in the model, headless tool-call approval,
+agent-comms/ACP projection, Toad controls and independent review are still
+outstanding.

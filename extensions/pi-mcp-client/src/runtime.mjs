@@ -65,7 +65,17 @@ export class McpRuntime {
     }));
   }
 
-  /** Package-owned lookup for the later Pi tool/resource/prompt projection. */
+  /** Recheck the exact declaration before every remote operation, not just launch. */
+  async authorized(id, ctx) {
+    const active = this.#connections.get(id);
+    if (!active || active.record.state !== 'ready' || this.#stopped) return false;
+    const current = await loadEffectiveDeclarations({ ...this.#options, ctx });
+    return current.some(({ declaration, digest, projectRoot, status, scope }) =>
+      declaration.id === id && scope === active.record.entry.scope && status === 'approved' &&
+      digest === active.record.entry.digest && projectRoot === active.record.entry.projectRoot);
+  }
+
+  /** Package-owned lookup for the Pi tool/resource/prompt projection. */
   ready(id) {
     const connection = this.#connections.get(id);
     if (!connection || connection.record.state !== 'ready' || this.#stopped) return undefined;
