@@ -2283,57 +2283,12 @@ class Comms:
         owner_store: GoalAttemptStore | None = None,
         expected_owner_pid: int | None = None,
         wait_for: Sequence[str] = (),
+        reviewed_inputs: Sequence[str] = (),
     ) -> Goal | None:
         """Apply a goal transition; automated callers may compare a captured goal atomically."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             goal = thread.goal
-            original_goal = goal
-            edited_pause = self.goal_pause(name) if action == "edit" else None
-            wait_targets = ()
-            if action == "standby":
-                if not wait_for:
-                    raise ValueError("Standby requires explicit wait_for thread names.")
-                resolved = tuple(
-                    self.registry.require(target.removeprefix("@")) for target in wait_for
-                )
-                if any(target.created_at == thread.created_at for target in resolved):
-                    raise ValueError("A goal cannot wait for its own thread.")
-                wait_targets = tuple(
-                    dict.fromkeys(
-                        GoalWaitTarget(target.name, target.created_at) for target in resolved
-                    )
-                )
-                from .input_disposition import AcpDeliveryCursors, InputDispositions
-
-                aliases = self.registry.aliases_for(thread.name)
-                cursor = AcpDeliveryCursors(self.root).cursor(aliases)
-                unresolved = {
-                    row["sequence"]
-                    for row in InputDispositions(self.root).unknown(aliases)
-                    if row["sequence"] is not None
-                }
-                senders = frozenset(
-                    alias for target in resolved for alias in self.registry.aliases_for(target.name)
-                )
-                pending = self.bus._history_page(
-                    lambda message: message.target in aliases
-                    and message.sender in senders
-                    and (message.seq > cursor or message.seq in unresolved),
-                    before=None,
-                    after=None,
-                    limit=1,
-                    max_bytes=256 * 1024,
-                )
-                if pending.messages:
-                    sequence = pending.messages[0].seq
-                    raise ValueError(
-                        f"Dependency reply {sequence} is already pending or UNKNOWN. "
-                        "Inspect that message during this turn before entering standby; "
-                        "it will not be replayed automatically."
-                    )
-            elif wait_for:
-                raise ValueError("wait_for is only valid for standby.")
             if expected_owner_pid is not None and (
                 thread.pid != expected_owner_pid or not self.registry.status(thread.name).running
             ):
@@ -2352,6 +2307,85 @@ class Comms:
                     (pause.owner_instruction if (pause := self.goal_pause(name)) else None)
                     or "This goal is no longer active; refresh its state."
                 )
+            original_goal = goal
+            edited_pause = self.goal_pause(name) if action == "edit" else None
+            wait_targets: tuple[GoalWaitTarget, ...] = ()
+            if action == "standby":
+                if not wait_for:
+                    raise ValueError("Standby requires explicit wait_for thread names.")
+                resolved = tuple(
+                    self.registry.require(target.removeprefix("@")) for target in wait_for
+                )
+                if any(target.created_at == thread.created_at for target in resolved):
+                    raise ValueError("A goal cannot wait for its own thread.")
+                wait_targets = tuple(
+                    dict.fromkeys(
+                        GoalWaitTarget(target.name, target.created_at) for target in resolved
+                    )
+                )
+                from .input_disposition import AcpDeliveryCursors, InputDispositions
+
+                aliases = self.registry.aliases_for(thread.name)
+                cursor = AcpDeliveryCursors(self.root).cursor(aliases)
+                dispositions = InputDispositions(self.root)
+                unknown = {row["key"]: row for row in dispositions.unknown(aliases)}
+                reviewed_keys = tuple(dict.fromkeys(reviewed_inputs))
+                if any(
+                    key not in unknown or unknown[key]["sequence"] is None for key in reviewed_keys
+                ):
+                    raise ValueError(
+                        "Review only this recipient's exact unresolved bus input keys."
+                    )
+                reviewed_sequences = {unknown[key]["sequence"] for key in reviewed_keys}
+                prior_reviews = {
+                    row["sequence"]
+                    for row in unknown.values()
+                    if goal is not None and dispositions.reviewed_for_goal(row, goal.id)
+                }
+                unresolved = {
+                    row["sequence"] for row in unknown.values() if row["sequence"] is not None
+                }
+                senders = frozenset(
+                    alias for target in resolved for alias in self.registry.aliases_for(target.name)
+                )
+                if reviewed_sequences:
+                    selected = self.bus._history_page(
+                        lambda message: message.seq in reviewed_sequences
+                        and message.target in aliases
+                        and message.sender in senders,
+                        before=None,
+                        after=min(reviewed_sequences) - 1,
+                        limit=len(reviewed_sequences),
+                        max_bytes=max(
+                            256 * 1024,
+                            sum(len(json.dumps(unknown[key]).encode()) for key in reviewed_keys),
+                        ),
+                    )
+                    if {message.seq for message in selected.messages} != reviewed_sequences:
+                        raise ValueError(
+                            "Review only direct inputs from these declared dependencies."
+                        )
+                pending = self.bus._history_page(
+                    lambda message: message.target in aliases
+                    and message.sender in senders
+                    and (message.seq > cursor or message.seq in unresolved)
+                    and message.seq not in reviewed_sequences | prior_reviews,
+                    before=None,
+                    after=None,
+                    limit=1,
+                    max_bytes=256 * 1024,
+                )
+                if pending.messages:
+                    sequence = pending.messages[0].seq
+                    raise ValueError(
+                        f"Dependency reply {sequence} is already pending or UNKNOWN. "
+                        "Use comms_inbox to inspect unresolved_inputs, then pass their exact "
+                        "inputId keys in comms_goal reviewed_inputs to explicitly wait "
+                        "for a later reply. "
+                        "This does not mark them STARTED or replay them."
+                    )
+            elif wait_for or reviewed_inputs:
+                raise ValueError("wait_for and reviewed_inputs are only valid for standby.")
             report_turn = thread.active_turn.id if thread.active_turn is not None else ""
             if model_report and thread.last_goal_report_turn == report_turn:
                 raise ValueError("This goal was already reported in this turn.")
@@ -2412,6 +2446,13 @@ class Comms:
             waits = GoalWaits(self.root / "goal_waits.json")
             if action == "standby":
                 assert goal is not None
+                dispositions.review_for_goal(
+                    reviewed_keys,
+                    owners=aliases,
+                    goal_id=goal.id,
+                    goal_revision=goal.revision,
+                    turn_id=report_turn,
+                )
                 # Commit scheduling authority first. A crash before the registry
                 # progress update must leave this same goal waiting, not runnable.
                 waits.record(

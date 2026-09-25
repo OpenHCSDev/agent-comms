@@ -144,7 +144,11 @@ def _inbox(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     thread = str(arguments["thread"])
     messages = [message.to_wire() for message in comms.inbox(thread)]
     acknowledged = comms.acknowledge(thread) if arguments["ack"] else 0
-    return {"messages": messages, "acknowledged": acknowledged}
+    return {
+        "messages": messages,
+        "acknowledged": acknowledged,
+        "unresolved_inputs": comms.unresolved_inputs(thread),
+    }
 
 
 def _fork(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
@@ -265,6 +269,8 @@ def _set_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 def _goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     wait_for = arguments.get("wait_for")
     assert wait_for is None or isinstance(wait_for, list)
+    reviewed_inputs = arguments.get("reviewed_inputs")
+    assert reviewed_inputs is None or isinstance(reviewed_inputs, list)
     name = _executing_thread()
     comms.update_goal(
         name,
@@ -274,6 +280,7 @@ def _goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
         progress=str(arguments["progress"]),
         model_report=True,
         wait_for=wait_for or (),
+        reviewed_inputs=reviewed_inputs or (),
     )
     goal, execution = comms.goal_snapshot(name)
     return {
@@ -659,7 +666,10 @@ TOOLS = (
         "Use standby with explicit wait_for thread names when waiting for delegated work. "
         "The goal remains active, but only a direct message from a named dependency or a user "
         "follow-up starts its next turn. Do not repeatedly announce waiting "
-        "or return empty output.",
+        "or return empty output. If existing dependency replies block standby, inspect "
+        "comms_inbox unresolved_inputs and explicitly include their inputId keys "
+        "in reviewed_inputs; "
+        "this records your decision to wait for a later reply without replaying uncertain inputs.",
         (
             ToolParameter("goal_id", "string", "Goal identity provided in the turn context"),
             ToolParameter(
@@ -673,6 +683,12 @@ TOOLS = (
                 "wait_for",
                 "array",
                 "Explicit thread names or @names; required for standby",
+                required=False,
+            ),
+            ToolParameter(
+                "reviewed_inputs",
+                "array",
+                "Exact unresolved inputId keys inspected and handled for this goal; standby only",
                 required=False,
             ),
         ),
@@ -782,7 +798,9 @@ TOOLS = (
     ToolDeclaration(
         "comms_inbox",
         "Comms Inbox",
-        "Fetch undelivered messages for a thread and optionally mark them delivered.",
+        "Fetch undelivered messages and unresolved native input attempts for a thread. "
+        "Optional ACK changes only the inbox marker; unresolved_inputs remain UNKNOWN. "
+        "After inspecting dependencies, comms_goal reviewed_inputs records a wait decision.",
         (
             ToolParameter("thread", "string", "Thread name"),
             ToolParameter(
