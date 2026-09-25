@@ -2394,6 +2394,9 @@ if select.select([sys.stdin], [], [], 0)[0]:
         assert done["reason_code"] == "pi_input_id_unavailable"
         assert "phase=await_get_state" in done["text"]
         assert "session_bytes=123" in done["text"]
+        assert done["diagnostic"]["reason"] == "native_preflight_timeout"
+        assert done["diagnostic"]["session_bytes"] == 123
+        assert done["diagnostic"]["wait_ms"] >= 0
         assert "elapsed_ms=" in done["text"]
         assert "wait_ms=" in done["text"]
         assert "spawn_ms=" in done["text"]

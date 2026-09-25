@@ -39,6 +39,18 @@ def _unlock(fd: int) -> None:
         fcntl.flock(fd, fcntl.LOCK_UN)
 
 
+def _open_lock(path: Path) -> int:
+    """Prepare one advisory-lock descriptor on POSIX and Windows."""
+    fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        if os.name == "nt" and os.fstat(fd).st_size == 0:
+            os.write(fd, b"\0")
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
 @asynccontextmanager
 async def session_writer_fence(session_file: str | None) -> AsyncIterator[None]:
     """Hold a per-session cross-process writer lock across the Pi child lifetime."""
@@ -46,15 +58,9 @@ async def session_writer_fence(session_file: str | None) -> AsyncIterator[None]:
         yield
         return
     path = _lock_path(session_file)
-    fd = os.open(
-        path,
-        os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
-        0o600,
-    )
+    fd = _open_lock(path)
     locked = False
     try:
-        if os.name == "nt" and os.fstat(fd).st_size == 0:
-            os.write(fd, b"\0")
         while not locked:
             try:
                 _try_lock(fd)
