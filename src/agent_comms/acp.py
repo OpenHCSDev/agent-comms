@@ -2919,7 +2919,8 @@ class CommsAgent:
                 text = str(event["text"])
                 # An explicit error event in this turn already showed the failure.
                 if prior_error != text:
-                    await self._emit_text(session_id, f"[agent error] {text}", client)
+                    await self._emit_event(session_id, {"type": "error", "text": text}, client)
+                    self._emitted_errors.pop(session_id, None)
 
     @staticmethod
     def _sanitized_compaction_summary(value: Any) -> str:
