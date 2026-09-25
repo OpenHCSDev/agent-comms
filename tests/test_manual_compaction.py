@@ -330,7 +330,12 @@ async def test_real_pi_compacts_exact_saved_session(tmp_path, monkeypatch, statu
             str(tmp_path),
             timeout_seconds=15,
         )
-        assert provider.posts >= 1, (result, provider.paths)
+        if status in {400, 503}:
+            # A failed provider response is an uncertain paid attempt. Pi must
+            # not replay it even when inherited settings request retries.
+            assert provider.posts == 1, (result, provider.paths)
+        else:
+            assert provider.posts >= 1, (result, provider.paths)
         assert all(path == "POST /v1/chat/completions HTTP/1.1" for path in provider.paths)
         assert not Path((tmp_path / "profile").read_text()).exists()
         assert (inherited / "auth.json").read_text() == fake_auth
