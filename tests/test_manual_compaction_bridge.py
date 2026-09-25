@@ -85,6 +85,25 @@ async def test_bridge_uses_persisted_model_when_worker_has_no_base_args(tmp_path
         await owner.shutdown()
 
 
+async def test_bridge_abort_exposes_safe_failure_reason(tmp_path, monkeypatch):
+    owner, updates = await _owner(tmp_path)
+
+    async def failed(*_args, **_kwargs):
+        return {"ok": False, "error": "Compaction provider returned HTTP 400."}
+
+    monkeypatch.setattr("agent_comms.manual_compaction.compact_session", failed)
+    try:
+        result = await compact_context(owner, "project")
+        assert result == {"ok": False, "error": "Compaction provider returned HTTP 400."}
+        phases = [item["compaction"] for item in _metadata(updates) if "compaction" in item]
+        assert [phase["phase"] for phase in phases] == ["start", "abort"]
+        assert phases[-1]["summary"] == result["error"]
+        assert phases[-1]["contextState"] == "unknown"
+        assert phases[-1]["willRetry"] is False
+    finally:
+        await owner.shutdown()
+
+
 async def test_bridge_busy_then_cancel_never_replays(tmp_path, monkeypatch):
     owner, updates = await _owner(tmp_path)
     entered = asyncio.Event()
