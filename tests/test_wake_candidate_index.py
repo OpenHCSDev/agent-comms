@@ -270,9 +270,16 @@ def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> 
         comms.bus.read_initial_cohort(root_id, messages[2].seq)
 
 
-@pytest.mark.parametrize("corrupt", ["wire_root_id", "envelope_digest", "publication_key"])
+@pytest.mark.parametrize(
+    ("corrupt", "expected"),
+    [
+        ("wire_root_id", "foreign private response root"),
+        ("envelope_digest", "private response envelope mismatch"),
+        ("publication_key", "malformed candidate response receipt"),
+    ],
+)
 def test_response_identity_must_match_private_bus_before_later_candidate(
-    tmp_path: Path, corrupt: str
+    tmp_path: Path, corrupt: str, expected: str
 ) -> None:
     comms, root_id, lookup = _private(tmp_path)
     messages = [
@@ -290,7 +297,7 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
     rows[1][PRIVATE_WIRE_FIELD] = {"version": 1, "response": response}
     _replace_rows(comms, rows)
     index = WakeCandidateIndex(comms.bus)
-    with pytest.raises(ProjectionUnavailableError, match="invalid or duplicate response"):
+    with pytest.raises(ProjectionUnavailableError, match=expected):
         index.maintain(rebuild=True)
     with pytest.raises(ProjectionUnavailableError):
         index.page(
@@ -303,8 +310,9 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
         comms.bus.read_initial_cohort(root_id, messages[2].seq)
 
 
-def test_duplicate_private_response_key_fails_across_maintenance_batches(
-    tmp_path: Path,
+@pytest.mark.parametrize("first_batch_rows", [2, 4], ids=["stored-key", "same-batch"])
+def test_duplicate_private_response_key_rejected_by_unique_constraint(
+    tmp_path: Path, first_batch_rows: int
 ) -> None:
     comms, root_id, lookup = _private(tmp_path)
     messages = [
@@ -324,7 +332,20 @@ def test_duplicate_private_response_key_fails_across_maintenance_batches(
         }
     _replace_rows(comms, rows)
     index = WakeCandidateIndex(comms.bus)
-    assert not index.maintain(rebuild=True, max_rows=2)
+    if first_batch_rows == 4:
+        with pytest.raises(
+            ProjectionUnavailableError, match="duplicate private response publication key"
+        ):
+            index.maintain(rebuild=True, max_rows=first_batch_rows)
+        with pytest.raises(ProjectionUnavailableError):
+            index.page(
+                root_id=root_id,
+                recipient_lookup=lookup["Alice"],
+                after_seq=0,
+                required_through_seq=messages[3].seq,
+            )
+        return
+    assert not index.maintain(rebuild=True, max_rows=first_batch_rows)
     first = index.page(
         root_id=root_id,
         recipient_lookup=lookup["Alice"],
@@ -332,7 +353,9 @@ def test_duplicate_private_response_key_fails_across_maintenance_batches(
         required_through_seq=messages[1].seq,
     )
     assert [candidate.source_seq for candidate in first.entries] == [messages[0].seq]
-    with pytest.raises(ProjectionUnavailableError, match="duplicate response"):
+    with pytest.raises(
+        ProjectionUnavailableError, match="duplicate private response publication key"
+    ):
         index.maintain(max_rows=2)
     with pytest.raises(ProjectionUnavailableError, match="stale"):
         index.page(

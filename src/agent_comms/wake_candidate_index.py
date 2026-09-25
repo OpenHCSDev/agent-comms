@@ -26,7 +26,7 @@ from .bus_publication import (
     unique_wire_object,
     validate_initial_record,
 )
-from .coordination import canonical_publication_key
+from .coordination import CoordinationError, PublicationReceipt
 from .declarations import Message, MessageBus, RelationViolationError
 from .wake import NoWakeDecision, WakeDecision
 
@@ -58,6 +58,42 @@ class CandidatePage:
     through_seq: int
     entries: tuple[Candidate, ...]
     has_more: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _IndexedResponse:
+    """The existing typed receipt plus its two private-bus-only fields."""
+
+    receipt: PublicationReceipt
+    wire_root_id: str
+    envelope_digest: str
+
+
+def _parse_response(message: Message, private: dict[str, Any]) -> _IndexedResponse:
+    raw = private["response"]
+    if not isinstance(raw, dict) or set(raw) != {
+        "wire_root_id",
+        "execution_id",
+        "publication_key",
+        "envelope_digest",
+    }:
+        raise ProjectionUnavailableError("malformed candidate response")
+    try:
+        receipt = PublicationReceipt(
+            raw["execution_id"],
+            raw["publication_key"],
+            message.seq,
+            message.message_id,
+            message.sender,
+            message.target,
+            message.type,
+            message.notice,
+            message.timestamp,
+            hashlib.sha256(message.body.encode("utf-8")).hexdigest(),
+        )
+    except (CoordinationError, TypeError, ValueError, UnicodeError) as error:
+        raise ProjectionUnavailableError("malformed candidate response receipt") from error
+    return _IndexedResponse(receipt, raw["wire_root_id"], raw["envelope_digest"])
 
 
 class WakeCandidateIndex:
@@ -183,7 +219,6 @@ class WakeCandidateIndex:
                             raise ProjectionRebuildRequiredError("candidate bus prefix changed")
                     rows: list[tuple[int, str, str, str, str, str | None]] = []
                     response_keys: list[tuple[str]] = []
-                    batch_keys: set[str] = set()
                     stream.seek(offset)
                     start = time.monotonic()
                     for _ in range(max_rows):
@@ -215,7 +250,7 @@ class WakeCandidateIndex:
                             raise ProjectionUnavailableError(
                                 "candidate bus envelope is not canonical"
                             )
-                        public_envelope_digest(public)
+                        envelope_digest = public_envelope_digest(public)
                         last_seq = message.seq
                         private = record.get(PRIVATE_WIRE_FIELD)
                         if has_private_wire_fields(record):
@@ -257,35 +292,14 @@ class WakeCandidateIndex:
                         elif private is not None:
                             if set(private) != {"version", "response"}:
                                 raise ProjectionUnavailableError("unknown candidate private row")
-                            receipt = private["response"]
-                            if not isinstance(receipt, dict) or set(receipt) != {
-                                "wire_root_id",
-                                "execution_id",
-                                "publication_key",
-                                "envelope_digest",
-                            }:
-                                raise ProjectionUnavailableError("malformed candidate response")
-                            execution_id = receipt["execution_id"]
-                            key = receipt["publication_key"]
-                            if (
-                                receipt["wire_root_id"] != root_id
-                                or receipt["envelope_digest"] != public_envelope_digest(public)
-                                or type(execution_id) is not str
-                                or type(key) is not str
-                                or key != canonical_publication_key(execution_id, message.target)
-                                or key in batch_keys
-                                or (
-                                    not rebuild
-                                    and db.execute(
-                                        "SELECT 1 FROM response_keys WHERE publication_key=?",
-                                        (key,),
-                                    ).fetchone()
-                                    is not None
+                            response = _parse_response(message, private)
+                            if response.wire_root_id != root_id:
+                                raise ProjectionUnavailableError("foreign private response root")
+                            if response.envelope_digest != envelope_digest:
+                                raise ProjectionUnavailableError(
+                                    "private response envelope mismatch"
                                 )
-                            ):
-                                raise ProjectionUnavailableError("invalid or duplicate response")
-                            batch_keys.add(key)
-                            response_keys.append((key,))
+                            response_keys.append((response.receipt.publication_key,))
                     next_offset = stream.tell()
                     after = os.fstat(stream.fileno())
                     current_path = self.bus._path.stat()
@@ -297,7 +311,12 @@ class WakeCandidateIndex:
                             db.execute("DELETE FROM recipients")
                             db.execute("DELETE FROM response_keys")
                         db.executemany("INSERT INTO recipients VALUES (?,?,?,?,?,?)", rows)
-                        db.executemany("INSERT INTO response_keys VALUES (?)", response_keys)
+                        try:
+                            db.executemany("INSERT INTO response_keys VALUES (?)", response_keys)
+                        except sqlite3.IntegrityError as error:
+                            raise ProjectionUnavailableError(
+                                "duplicate private response publication key"
+                            ) from error
                         db.execute(
                             "INSERT OR REPLACE INTO checkpoint VALUES (1,?,?,?,?,?,?,?)",
                             (
