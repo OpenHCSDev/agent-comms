@@ -21,6 +21,47 @@ async def until(predicate, timeout=10):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
+async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
+    from acp.exceptions import RequestError
+
+    comms = wire(tmp_path / "wire")
+    owner = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    client = CommsAgent(comms)
+    response = await owner.new_session(str(tmp_path / "project"))
+    proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
+    request = {
+        "prompt": [{"type": "text", "text": "Do not launch"}],
+        "meta": {"agentComms": {"delivery": "invalid"}},
+    }
+    try:
+        with pytest.raises(RequestError) as caught:
+            await proxy.request("prompt", **request)
+        assert caught.value.code == -32602
+        assert caught.value.data == {"reason": "delivery must be queue or steer"}
+        # The older, already-running proxy reads only the string field.
+        reader, writer = await asyncio.open_unix_connection(proxy.path)
+        try:
+            writer.write(
+                (
+                    json.dumps({"action": "prompt", "thread": response.session_id, **request})
+                    + "\n"
+                ).encode()
+            )
+            await writer.drain()
+            result = json.loads(await reader.readline())
+            assert result["error"] == "delivery must be queue or steer"
+        finally:
+            writer.close()
+            await writer.wait_closed()
+        assert comms.registry.require(response.session_id).active_turn is None
+    finally:
+        await proxy.close()
+        await client.shutdown()
+        await owner.shutdown()
+
+
+@pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime and /bin/echo backend")
 async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path):
     comms = wire(tmp_path / ("long-wire-" * 16))

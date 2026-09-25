@@ -107,6 +107,16 @@ ACTIVITY_WINDOW = 60.0  # keep the turn open while a peer is thinking/working
 IDLE_GRACE = 1.0  # peers idle for this long -> drain and end the turn
 
 
+def _goal_attempt_unavailable() -> RequestError:
+    return RequestError.invalid_params(
+        {
+            "reason": "goal_attempt_unavailable",
+            "details": "The goal has no launchable attempt. Inspect its state and use "
+            "Retry for a failed attempt; no prompt was sent to Pi.",
+        }
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class QueuedInput:
     text: str
@@ -1631,17 +1641,22 @@ class CommsAgent:
         goal = self._comms.registry.require(name).goal
         if goal is None or goal.id != goal_id or goal.revision != expected_revision:
             raise ValueError("The goal changed; refresh its state before updating.")
-        updated = self._comms.update_goal(
-            name,
-            status,
-            goal_id=goal_id,
-            expected_goal=goal,
-            expected_owner_pid=os.getpid(),
-            owner_action=True,
-        )
+        try:
+            updated = self._comms.update_goal(
+                name,
+                status,
+                goal_id=goal_id,
+                expected_goal=goal,
+                expected_owner_pid=os.getpid(),
+                owner_action=True,
+                owner_store=self._open_goal_store() if status == "active" else None,
+            )
+        finally:
+            # Resume can discover that a paused attempt failed. Publish the
+            # reconciled BLOCKED state even when the action returns an error.
+            await self._sync_thread_config(session_id)
         if status == "active":
             self._schedule_goal(session_id)
-        await self._sync_thread_config(session_id)
         return updated
 
     async def retry_goal(self, session_id: str, goal_id: str, expected_revision: int) -> Goal:
@@ -1756,14 +1771,14 @@ class CommsAgent:
             if store is None:
                 if autonomous_goal:
                     return
-                raise RequestError.invalid_params({"reason": "goal_attempt_unavailable"})
+                raise _goal_attempt_unavailable()
             admission = self._comms.registry.snapshot().admission_generations[thread_name]
             with _store_lock(self._comms._wire_lock_path):
                 generation = store.snapshot(goal.id)
                 if generation is None or generation.state != "ready":
                     if autonomous_goal:
                         return
-                    raise RequestError.invalid_params({"reason": "goal_attempt_unavailable"})
+                    raise _goal_attempt_unavailable()
                 try:
                     grant = self._ready_goal_grant_locked(thread, admission, store, generation)
                     reservation = store.reserve(goal.id, generation.number, ready_grant=grant)
@@ -1771,9 +1786,7 @@ class CommsAgent:
                 except GoalAttemptError as error:
                     if autonomous_goal:
                         return
-                    raise RequestError.invalid_params(
-                        {"reason": "goal_attempt_unavailable"}
-                    ) from error
+                    raise _goal_attempt_unavailable() from error
         self._sessions[session_id] = thread_name
         # Error-display deduplication belongs to one backend turn, not a session.
         self._emitted_errors.pop(session_id, None)

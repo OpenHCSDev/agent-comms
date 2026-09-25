@@ -1390,6 +1390,54 @@ class TestAgentTurn:
         finally:
             await agent.shutdown()
 
+    @pytest.mark.parametrize("failed", [False, True])
+    async def test_owner_resume_checks_attempt_before_publishing_active(
+        self, wired, tmp_path, monkeypatch, failed
+    ):
+        agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+        monkeypatch.setattr(agent, "_schedule_goal", lambda _session: None)
+        updates = []
+
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+
+        agent._client = Client()
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        goal = await agent.set_goal("proj", "Keep working")
+        store = agent._goal_store
+        assert store is not None
+        if failed:
+            reservation = store.reserve(goal.id, 1)
+            store.claim_launch(reservation)
+            store.record_failed(reservation, "Interrupted by owner")
+        paused = await agent.update_goal("proj", "paused", goal.id, goal.revision)
+        updates.clear()
+        try:
+            if failed:
+                with pytest.raises(ValueError, match="use Retry"):
+                    await agent.update_goal("proj", "active", goal.id, paused.revision)
+                blocked = wired.registry.require("proj").goal
+                assert blocked.status == "blocked"
+                assert store.snapshot(goal.id).state == "blocked"
+                assert store.snapshot(goal.id).number == 1
+                assert any(
+                    (update.field_meta or {}).get("agentComms", {}).get("goal", {}).get("status")
+                    == "blocked"
+                    for update in updates
+                )
+                # Only the explicit Retry control creates fresh authority.
+                await agent.retry_goal("proj", goal.id, blocked.revision)
+                assert store.snapshot(goal.id).number == 2
+            else:
+                await agent.update_goal("proj", "active", goal.id, paused.revision)
+                assert store.snapshot(goal.id).number == 1
+            assert wired.registry.require("proj").goal.status == "active"
+            assert store.snapshot(goal.id).state == "ready"
+        finally:
+            await agent.shutdown()
+
     async def test_reopened_owner_recovers_unused_ready_grant_without_replaying(
         self, wired, tmp_path, monkeypatch
     ):
