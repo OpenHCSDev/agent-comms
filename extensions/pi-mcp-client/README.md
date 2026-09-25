@@ -48,7 +48,14 @@ use `envFrom` for owner-controlled values. Unknown fields/transports fail. User 
 The project file is not read until Pi project trust is active. The package-owned
 `getAgentDir()/mcp-trust.json` separately approves the *exact* canonical
 project, scope, server ID and complete declaration digest. Changed declarations
-need a new approval; project overlays never fall back to user commands.
+need a new approval; project overlays never fall back to user commands. On
+POSIX, decision writes durably stage a `.unsafe` marker before rename and
+refuse all grants if commit durability becomes uncertain; do not remove this
+marker automatically or treat a failed write as a denied approval. Windows
+parent-directory durability has not been established: project approvals and
+persistent autonomous-call grants are disabled there, and existing ledger
+grants are ignored. Windows support is incomplete; this draft is not ready
+for a cross-platform release.
 
 Approval shows the complete command, arguments, root and digest in a local Pi
 TUI confirmation without exposing literal environment values. RPC/headless
@@ -57,8 +64,11 @@ launch-spec builder rejects unapproved/mismatched project contexts and
 constructs a narrow SDK environment with explicit `envFrom`, canonical cwd and
 piped stderr. The package-owned Pi session uses the official SDK, drains child
 stderr without exposing it, and does not retry ambiguous calls. Every tool
-call rechecks the current declaration and ledger before one SDK request; Pi
-cancellation, bounded progress and 60-second inactivity/15-minute absolute
+call rechecks the current declaration and ledger before one SDK request; a
+local `/mcp-deny` revalidates and closes invalid children after its attempt,
+including when a decision write becomes uncertain. Out-of-band file edits are noticed on the
+next status check/operation or session restart, not proactively watched; close
+the session when revoking externally. Pi cancellation, bounded progress and 60-second inactivity/15-minute absolute
 timeouts go to the official SDK. MCP text/images map to bounded Pi content;
 unsupported binary is explicitly omitted. An approval written during a session
 takes effect on its next start.

@@ -12,7 +12,8 @@ const make = (command) => ({ id: 'fixture', enabled: true, instructionsPolicy: '
   transport: { type: 'stdio', command, args: [], cwd: 'project' } });
 const config = (declaration) => JSON.stringify({ version: 1, servers: [declaration] });
 
-test('user-authorized atomic decision revokes prior digests; malformed ledger and lock fail closed', async () => {
+test('user-authorized atomic decision revokes prior digests; malformed ledger and lock fail closed',
+  { skip: process.platform === 'win32' && 'Windows durable decision writes are disabled' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'mcp-ledger-'));
   const agentDir = join(root, 'agent');
   const projectRoot = join(root, 'project');

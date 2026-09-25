@@ -1,10 +1,9 @@
-import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { callGrantDecision, parseTrustLedger } from './authority.mjs';
+import { callGrantDecision } from './authority.mjs';
 import { discover } from './discover.mjs';
 import { prepareStdioParameters } from './launch-spec.mjs';
-import { loadEffectiveDeclarations, readOptional } from './sources.mjs';
+import { loadEffectiveDeclarations, readTrustLedger } from './sources.mjs';
 
 /** One Pi-session owner for all approved MCP connections; no retries of calls. */
 export class McpRuntime {
@@ -84,22 +83,45 @@ export class McpRuntime {
     }));
   }
 
-  /** Recheck the exact declaration before every remote operation, not just launch. */
+  async #disconnect(id) {
+    const active = this.#connections.get(id);
+    if (!active) return;
+    this.#connections.delete(id);
+    active.record.state = 'stale_restart_required';
+    try { await active.client.close(); } catch { /* retain fail-closed state */ }
+    try { await active.transport.close(); } catch { /* child close was attempted */ }
+  }
+
+  /** Recheck the exact declaration and close stale children before remote operations. */
   async authorized(id, ctx) {
     const active = this.#connections.get(id);
     if (!active || active.record.state !== 'ready' || this.#stopped) return false;
-    const current = await loadEffectiveDeclarations({ ...this.#options, ctx });
-    return current.some(({ declaration, digest, projectRoot, status, scope }) =>
-      declaration.id === id && scope === active.record.entry.scope && status === 'approved' &&
-      digest === active.record.entry.digest && projectRoot === active.record.entry.projectRoot);
+    let allowed = false;
+    try {
+      const current = await loadEffectiveDeclarations({ ...this.#options, ctx });
+      allowed = current.some(({ declaration, digest, projectRoot, status, scope }) =>
+        declaration.id === id && scope === active.record.entry.scope && status === 'approved' &&
+        digest === active.record.entry.digest && projectRoot === active.record.entry.projectRoot);
+    } catch {
+      // A malformed/uncertain ledger is not permission to keep a child alive.
+    }
+    if (!allowed) await this.#disconnect(id);
+    return allowed;
+  }
+
+  /** After a decision write (even an uncertain failure), retire invalid children now. */
+  async refresh(ctx) {
+    for (const id of [...this.#connections.keys()]) await this.authorized(id, ctx);
   }
 
   /** Separate out-of-band grant permits noninteractive calls on this exact live declaration. */
   async preauthorized(id, ctx) {
     if (!await this.authorized(id, ctx)) return false;
-    const entry = this.#connections.get(id).record.entry;
-    const text = await readOptional(join(this.#options.agentDir, 'mcp-trust.json'));
-    const ledger = parseTrustLedger(text ?? '{"version":1,"decisions":[],"callGrants":[]}');
+    const entry = this.#connections.get(id)?.record.entry;
+    if (!entry) return false;
+    let ledger;
+    try { ledger = await readTrustLedger(this.#options.agentDir); }
+    catch { await this.#disconnect(id); return false; }
     return callGrantDecision(ledger, entry) === 'allow';
   }
 

@@ -7,6 +7,27 @@ import { parseNativeConfig } from './config.mjs';
 const EMPTY_CONFIG = '{"version":1,"servers":[]}';
 const EMPTY_LEDGER = '{"version":1,"decisions":[]}';
 
+/** A durable pre-rename marker means a grant/revocation commit is uncertain. */
+export async function readTrustLedger(agentDir) {
+  const unsafe = join(agentDir, 'mcp-trust.json.unsafe');
+  const check = async () => {
+    try {
+      await lstat(unsafe);
+      throw new Error('MCP decision ledger durability is uncertain');
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  };
+  await check();
+  const ledger = parseTrustLedger(await readOptional(join(agentDir, 'mcp-trust.json')) ?? EMPTY_LEDGER);
+  await check();
+  // A copied Windows ledger has no locally proven durable revocation policy.
+  // User-scope local TUI calls remain possible, but no persisted approvals
+  // or headless grants are ever accepted there.
+  if (process.platform === 'win32') return { version: 1, decisions: [], callGrants: [] };
+  return ledger;
+}
+
 export async function readOptional(path) {
   let file;
   try {
@@ -42,7 +63,7 @@ export async function loadEffectiveDeclarations({ ctx, agentDir, configDirName }
   if (!isAbsolute(agentDir)) throw new Error('Absolute Pi agent directory required');
   const projectRoot = await realpath(ctx.cwd);
   const user = parseNativeConfig(await readOptional(join(agentDir, 'mcp.json')) ?? EMPTY_CONFIG);
-  const ledger = parseTrustLedger(await readOptional(join(agentDir, 'mcp-trust.json')) ?? EMPTY_LEDGER);
+  const ledger = await readTrustLedger(agentDir);
   const projectTrusted = ctx.isProjectTrusted();
   const project = projectTrusted
     ? parseNativeConfig(await readOptional(join(projectRoot, configDirName, 'mcp.json')) ?? EMPTY_CONFIG)

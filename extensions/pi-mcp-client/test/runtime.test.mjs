@@ -10,7 +10,8 @@ import { recordProjectDecision } from '../src/ledger-write.mjs';
 
 const config = (declaration) => JSON.stringify({ version: 1, servers: [declaration] });
 
-test('project stdio server spawns only after both gates, discovers and closes at session end', async () => {
+test('project stdio server spawns only after both gates, discovers and closes at session end',
+  { skip: process.platform === 'win32' && 'Windows durable decision writes are disabled' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'mcp-runtime-'));
   const agentDir = join(root, 'agent');
   const project = join(root, 'project');
@@ -64,6 +65,12 @@ test('project stdio server spawns only after both gates, discovers and closes at
       assert.equal(await readFile(spawned, 'utf8'), 'started');
       const ready = runtime.ready('fixture');
       assert.equal((await ready.client.callTool({ name: 'echo', arguments: { message: 'ok' } })).content[0].text, 'ok');
+      await recordProjectDecision({ agentDir, projectRoot: project,
+        declaration, decision: 'deny' });
+      await runtime.refresh(ctx); // The package's /mcp-deny handler does this in finally.
+      assert.equal(runtime.snapshot()[0].status, 'stale_restart_required');
+      assert.equal(runtime.ready('fixture'), undefined);
+      assert.equal(await readFile(stopped, 'utf8'), 'closed');
     } finally {
       await runtime.stop();
     }

@@ -12,7 +12,8 @@ const declaration = { id: 'fixture', enabled: true, instructionsPolicy: 'status-
   transport: { type: 'stdio', command: process.execPath, args: [fixture], cwd: 'project' } };
 const config = (value) => JSON.stringify({ version: 1, servers: [value] });
 
-test('MCP resources and prompts are discoverable and usable as Pi tools with call authorization', async () => {
+test('MCP resources and prompts are discoverable and usable as Pi tools with call authorization',
+  { skip: process.platform === 'win32' && 'Windows durable decision writes are disabled' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'mcp-resources-'));
   const agentDir = join(root, 'agent');
   const project = join(root, 'project');

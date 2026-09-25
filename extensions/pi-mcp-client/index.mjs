@@ -45,7 +45,9 @@ export default function (pi) {
     pi.registerCommand(name, {
       description: `${decision === 'allow' ? 'Preauthorize headless' : 'Require confirmation for'} calls on one exact MCP declaration`,
       handler: async (args, ctx) => {
-        const changed = await decideCallGrant(ctx, { ...options(ctx), id: args.trim(), decision });
+        let changed;
+        try { changed = await decideCallGrant(ctx, { ...options(ctx), id: args.trim(), decision }); }
+        finally { await runtime?.refresh(ctx); }
         ctx.ui.notify(changed ? `MCP call policy set to ${decision}` : 'MCP call policy unchanged', 'info');
       },
     });
@@ -54,9 +56,13 @@ export default function (pi) {
     pi.registerCommand(name, {
       description: `${decision} an exact project MCP declaration in the local TUI`,
       handler: async (args, ctx) => {
-        const confirmed = await decideProjectServer(ctx, { ...options(ctx),
-          id: args.trim(), decision });
-        ctx.ui.notify(confirmed ? `MCP declaration ${decision === 'deny' ? 'denied' : 'approved'}; restart session to apply`
+        let confirmed;
+        try {
+          confirmed = await decideProjectServer(ctx, { ...options(ctx), id: args.trim(), decision });
+        } finally { await runtime?.refresh(ctx); }
+        ctx.ui.notify(confirmed ? decision === 'deny'
+          ? 'MCP declaration denied; active connection closed if present'
+          : 'MCP declaration approved; restart session to connect'
           : 'MCP decision cancelled', 'info');
       },
     });

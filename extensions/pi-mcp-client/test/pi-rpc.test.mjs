@@ -63,7 +63,8 @@ async function rpc({ project, agentDir, trust }) {
   return { child, closed, request, events, stderr: () => stderr };
 }
 
-test('real isolated Pi RPC starts only approved project fixture and closes it', async () => {
+test('real isolated Pi RPC starts only approved project fixture and closes it',
+  { skip: process.platform === 'win32' && 'Windows durable decision writes are disabled' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'mcp-pi-rpc-'));
   const project = join(root, 'project');
   const agentDir = join(root, 'agent');

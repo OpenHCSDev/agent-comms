@@ -12,7 +12,8 @@ const declaration = { id: 'fixture', enabled: true, instructionsPolicy: 'status-
   transport: { type: 'stdio', command: process.execPath, args: [fixture], cwd: 'project' } };
 const config = (value) => JSON.stringify({ version: 1, servers: [value] });
 
-test('separate TUI call grant enables and revokes headless calls only for the exact declaration', async () => {
+test('separate TUI call grant enables and revokes headless calls only for the exact declaration',
+  { skip: process.platform === 'win32' && 'Windows durable decision writes are disabled' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'mcp-grant-'));
   const agentDir = join(root, 'agent');
   const project = join(root, 'project');
@@ -43,13 +44,15 @@ test('separate TUI call grant enables and revokes headless calls only for the ex
     const response = await echo.execute('', args, signal, undefined, headless);
     assert.equal(response.content[0].text, 'headless-ok');
     assert.equal(confirmations, 1); // No headless dialog was attempted.
-    await writeFile(path, config({ ...declaration, transport: {
-      ...declaration.transport, args: ['changed'] } }));
-    await assert.rejects(echo.execute('', args, signal, undefined, headless), /no longer authorized|approved server/);
-    await writeFile(path, config(declaration));
     assert.equal(await decideCallGrant(tui, { ...options, decision: 'ask' }), true);
     assert.equal(await runtime.preauthorized('fixture', headless), false);
     await assert.rejects(echo.execute('', args, signal, undefined, headless), /human controller/);
+    await writeFile(path, config({ ...declaration, transport: {
+      ...declaration.transport, args: ['changed'] } }));
+    await assert.rejects(echo.execute('', args, signal, undefined, headless), /no longer authorized|approved server/);
+    assert.equal(runtime.ready('fixture'), undefined);
+    await writeFile(path, config(declaration));
+    assert.equal(runtime.ready('fixture'), undefined); // No silent reconnect after stale mutation.
   } finally {
     await runtime.stop();
     await rm(root, { recursive: true, force: true });

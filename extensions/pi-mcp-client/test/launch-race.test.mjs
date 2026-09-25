@@ -10,7 +10,8 @@ import { recordProjectDecision } from '../src/ledger-write.mjs';
 
 const config = (server) => JSON.stringify({ version: 1, servers: [server] });
 
-test('changed/revoked approval during async launch preparation never starts a stale server', async () => {
+test('changed/revoked approval during async launch preparation never starts a stale server',
+  { skip: process.platform === 'win32' && 'Windows durable decision writes are disabled' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'mcp-launch-race-'));
   const agentDir = join(root, 'agent');
   const project = join(root, 'project');

@@ -10,6 +10,7 @@ async function updateLedger(agentDir, update) {
   if (!isAbsolute(agentDir)) throw new Error('Absolute Pi agent directory required');
   return updateJsonFile(join(agentDir, 'mcp-trust.json'), {
     initial: EMPTY_LEDGER, parse: parseTrustLedger, mode: 0o600, update,
+    durableAuthority: true,
   });
 }
 

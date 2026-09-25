@@ -12,7 +12,8 @@ const declaration = (command) => ({ id: 'one', enabled: true, instructionsPolicy
     env: {}, envFrom: { TOKEN: 'MCP_TOKEN' } } });
 const config = (entry) => JSON.stringify({ version: 1, servers: [entry] });
 
-test('only a Pi-trusted local TUI can explicitly approve exact currently displayed project bytes', async () => {
+test('only a Pi-trusted local TUI can explicitly approve exact currently displayed project bytes',
+  { skip: process.platform === 'win32' && 'Windows durable decision writes are disabled' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'mcp-command-'));
   const agentDir = join(root, 'agent');
   const project = join(root, 'project');

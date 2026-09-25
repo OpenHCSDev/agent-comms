@@ -49,10 +49,11 @@ test('Pi tools preserve discovered input schemas and require a human plus fresh 
     const headless = { ...ctx, mode: 'rpc' };
     await assert.rejects(echo.execute('call-3', { message: 'denied' }, signal, undefined, headless), /human controller/);
     assert.equal(confirms, 2);
-    await writeFile(file, config({ ...declaration, transport: { ...declaration.transport, args: ['changed'] } }));
-    await assert.rejects(echo.execute('call-4', { message: 'stale' }, signal, undefined, ctx), /no longer authorized/);
     const aborted = new AbortController(); aborted.abort();
-    await assert.rejects(echo.execute('call-5', { message: 'cancelled' }, aborted.signal, undefined, ctx), /cancelled/);
+    await assert.rejects(echo.execute('call-4', { message: 'cancelled' }, aborted.signal, undefined, ctx), /cancelled/);
+    await writeFile(file, config({ ...declaration, transport: { ...declaration.transport, args: ['changed'] } }));
+    await assert.rejects(echo.execute('call-5', { message: 'stale' }, signal, undefined, ctx), /no longer authorized/);
+    assert.equal(runtime.ready('fixture'), undefined);
   } finally {
     await runtime.stop();
     await rm(root, { recursive: true, force: true });
