@@ -92,6 +92,12 @@ class BusPageIndex:
             with self.connection:
                 if not valid:
                     self.connection.execute("DELETE FROM rows")
+                    last_sequence = None
+                else:
+                    last_row = self.connection.execute(
+                        "SELECT seq FROM rows ORDER BY id DESC LIMIT 1"
+                    ).fetchone()
+                    last_sequence = last_row[0] if last_row else None
                 stream.seek(offset)
                 while stream.tell() < size:
                     row_offset = stream.tell()
@@ -108,10 +114,15 @@ class BusPageIndex:
                     from .declarations import Message
 
                     message = Message.from_wire(record)
+                    if last_sequence is not None and message.seq <= last_sequence:
+                        # The page collector uses wire order. A cache sorted
+                        # by sequence must not hide malformed legacy order.
+                        raise StaleBusPageIndex("Wire sequences are not increasing.")
                     self.connection.execute(
                         "INSERT INTO rows(seq,offset,sender,target) VALUES(?,?,?,?)",
                         (message.seq, row_offset, message.sender, message.target),
                     )
+                    last_sequence = message.seq
                 self.connection.execute(
                     "INSERT OR REPLACE INTO metadata VALUES('source',?)",
                     (

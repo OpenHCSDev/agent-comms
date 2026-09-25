@@ -6,6 +6,8 @@ import json
 import os
 import sqlite3
 
+import pytest
+
 from agent_comms import Message, MessageBus, MessageType, Thread, ThreadRegistry
 from agent_comms.declarations import _iter_jsonl_records
 
@@ -90,6 +92,17 @@ def test_zero_sequence_legacy_row_counts_as_older_than_after_zero(tmp_path):
     page = bus.incoming_page("b", after=0)
     assert [message.seq for message in page.messages] == [1]
     assert page.has_older is True
+
+
+def test_index_does_not_reorder_nonmonotonic_legacy_wire(tmp_path):
+    bus = _bus(tmp_path)
+    rows = [
+        Message("a", "b", "second", MessageType.INFO, seq=2),
+        Message("a", "b", "first", MessageType.INFO, seq=1),
+    ]
+    bus._path.write_bytes(b"".join((json.dumps(row.to_wire()) + "\n").encode() for row in rows))
+    with pytest.raises(ValueError, match="unique messages in seq order"):
+        bus.full_history_page()
 
 
 def test_indexed_pages_equal_scan_oracle_across_cursors_and_budgets(tmp_path):
