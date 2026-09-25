@@ -14,7 +14,7 @@ from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.claim_admission import verify_selected_wake
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordinated_runtime import _engage, _execution_id
-from agent_comms.coordination import ClaimDisposition
+from agent_comms.coordination import AttemptPhase, ClaimDisposition
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
 from agent_comms.coordination_store import IdentityConflict, MutationStore, prepare_fence_token
 from agent_comms.declarations import Thread
@@ -67,7 +67,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority() -> None:
             snapshot = store.mark_pending(
                 execution_id, expected_revision=snapshot.execution.revision
             ).value
-            store.start_attempt(
+            started = store.start_attempt(
                 execution_id,
                 1,
                 owner.name,
@@ -106,6 +106,20 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority() -> None:
             ):
                 with pytest.raises(IdentityConflict):
                     verify_selected_wake(comms, store, candidate, name)
+            fence = started.value.fence
+            for phase in (AttemptPhase.PROMPT_ACCEPTED, AttemptPhase.MODEL_RUNNING):
+                fence = store.advance_attempt(
+                    fence, phase, expected_pointer_revision=started.value.snapshot.pointer_revision
+                ).value.fence
+            store.advance_attempt(
+                fence,
+                AttemptPhase.SETTLING,
+                expected_pointer_revision=started.value.snapshot.pointer_revision,
+                backend_done=True,
+                process_dead=True,
+            )
+            with pytest.raises(IdentityConflict):
+                verify_selected_wake(comms, store, admission, "Alice")
             comms.registry.unregister("Alice")
             with pytest.raises(IdentityConflict):
                 verify_selected_wake(comms, store, admission, "Alice")

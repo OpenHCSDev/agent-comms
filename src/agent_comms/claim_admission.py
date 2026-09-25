@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from .bus_publication import stable_thread_lookup
 from .coordination import (
-    ACTIVE_ATTEMPT_PHASES,
+    AttemptPhase,
     ClaimDisposition,
     ExecutionStatus,
     TriageVerdict,
@@ -79,7 +79,15 @@ def verify_selected_wake(
                 or snapshot.execution.owner_thread != owner.name
                 or not snapshot.is_current
                 or attempt is None
-                or attempt.phase not in ACTIVE_ATTEMPT_PHASES
+                or attempt.phase
+                not in {
+                    AttemptPhase.PROMPT_STARTING,
+                    AttemptPhase.PROMPT_ACCEPTED,
+                    AttemptPhase.MODEL_RUNNING,
+                    AttemptPhase.TOOL_RUNNING,
+                }
+                or attempt.backend_done
+                or attempt.process_dead
                 or attempt.attempt_ordinal != admission.attempt_ordinal
                 or attempt.owner_generation != admission.participant_generation
                 or attempt.owner_thread != owner.name
