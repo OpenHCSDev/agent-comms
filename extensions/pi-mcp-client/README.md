@@ -1,9 +1,8 @@
-# Pi MCP client — default-off control and contract probe (no server sessions yet)
+# Pi MCP client (draft)
 
-This draft verifies the official MCP SDK's local stdio handshake,
-capability-gated tools/resources/prompts discovery, cursor pagination, calls,
-progress, cancellation, and child cleanup against a generic fixture server. `discover()` rejects a
-truncated/repeated/invalid catalog instead of presenting it as complete.
+The Pi package manifest loads `index.mjs` **by default when the package is installed**.
+It currently provides `/mcp-status`, `/mcp-approve <id>`, and `/mcp-deny <id>`;
+actual server connections and Pi model tools are the next implementation slice.
 
 ```sh
 cd extensions/pi-mcp-client
@@ -11,37 +10,29 @@ npm ci --ignore-scripts
 npm test
 ```
 
-**Default off:** the Pi package manifest loads no extension. A strict inert
-version-1 native declaration parser and canonical declaration digest are present.
-An inert loader now reads user `mcp.json` and separate `mcp-trust.json` from a
-Pi-owned agent directory, and project `<CONFIG_DIR_NAME>/mcp.json` **only** when
-`ctx.isProjectTrusted()` is true. Approval requires an exact project-realpath,
-server-ID, declaration-digest match from the external ledger. A small opt-in Pi
-extension (`index.mjs`) offers `/mcp-status`, `/mcp-approve <id>`, and
-`/mcp-deny <id>`. Approval shows the full command/arguments/digest, redacts
-literal environment values, requires Pi project trust and an actual local TUI
-confirmation, then writes the external ledger atomically. It rejects approval
-in headless/RPC mode rather than assuming an RPC dialog has a human responder.
-**No declared server is started** and no MCP tool is exposed to Pi. The package
-manifest still has `pi.extensions=[]`; do not install or activate it in a live
-project before independent review. There is no provider/model call, agent-comms
-backend integration, Toad control, or OpenHCS-specific behavior.
+The native config is `{"version":1,"servers":[...]}` with unique server IDs.
+Each entry requires `id`, `enabled`, `instructionsPolicy:"status-only"`, and
+`transport:{"type":"stdio","command":"...","args":[],"cwd":"project"}`.
+Optional `env` supplies literal values; `envFrom` maps child variables to host
+variable names. Unknown fields/transports fail. User config is
+`getAgentDir()/mcp.json`; project config is `<cwd>/<CONFIG_DIR_NAME>/mcp.json`.
+The project file is not read until Pi project trust is active. The package-owned
+`getAgentDir()/mcp-trust.json` separately approves the *exact* canonical
+project, scope, server ID and complete declaration digest. Changed declarations
+need a new approval; project overlays never fall back to user commands.
 
-The provisional native document uses `{"version":1,"servers":[...]}` so duplicate
-server IDs can be rejected rather than hidden by JSON object parsing. Each entry
-requires `id`, `enabled`, `instructionsPolicy:"status-only"`, and a `stdio`
-transport with `command`, `args`, `cwd:"project"`, plus optional `env` and
-`envFrom` maps. Unknown fields and transports fail closed. This is deliberately
-smaller than the planned final config; do not mistake its digest for approval.
-Do not install or advertise this as a usable MCP client. This probe deliberately
-uses only the fixture's explicit command; never read untrusted project declarations
-or launch one as a consequence of opening a project.
+Approval shows the complete command, arguments, root and digest in a local Pi
+TUI confirmation without exposing literal environment values. RPC/headless
+approval is refused until a correlated human-controller bridge exists. The
+inert launch-spec builder rejects unapproved/mismatched project contexts and
+constructs a narrow SDK environment with explicit `envFrom`, canonical cwd and
+piped stderr. No transport is constructed or server launched by this builder.
 
-Next gate: independently review/freeze the source/ledger/approval contract.
-The no-provider suite exercises **real isolated Pi RPC** with `--no-approve` and
-`--approve`, with absent/present external digest, verifies refusal to approve in
-headless mode, and confirms zero declared server spawns. The TUI approval dialog
-still needs an executable human-UI test. Only after trust gates and independent
-review may a package-owned session lifecycle, Pi tools, calls, results and
-headless-safe status be added. Generic Pi RPC/ACP approval forwarding and Toad
-remain subsequent separately reviewed slices.
+The offline suite tests the official SDK's real stdio handshake, capability-
+gated bounded tools/resources/prompts discovery, operations, progress,
+cancellation and cleanup against a generic fixture. It also runs an isolated
+real Pi RPC process with `--no-approve` and `--approve`: untrusted files are not
+read, absent/stale digests cannot authorize a declaration, and no declared
+server starts. No provider call is made. PR #77 remains draft; session lifecycle,
+Pi tool exposure, agent-comms/ACP projection, Toad controls and their
+independent review are still outstanding.

@@ -17,7 +17,7 @@ async function rpc({ project, agentDir, trust }) {
   const child = spawn(process.execPath, [cli, '--mode', 'rpc', '--no-session',
     '--no-extensions', '--no-skills', '--no-prompt-templates', '--no-themes',
     '--no-context-files', '--no-builtin-tools',
-    trust ? '--approve' : '--no-approve', '-e', join(packageDir, 'index.mjs')], {
+    trust ? '--approve' : '--no-approve', '-e', packageDir], {
     cwd: project,
     env: { PATH: process.env.PATH ?? '', HOME: dirname(agentDir),
       PI_CODING_AGENT_DIR: agentDir, CI: 'true', NO_COLOR: '1' },

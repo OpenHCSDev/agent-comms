@@ -60,6 +60,6 @@ export function effectiveDeclarations({ user, project, projectTrusted, projectRo
     const status = !declaration.enabled ? 'disabled'
       : scope === 'user' || decision === 'approve' ? 'approved'
       : decision === 'deny' ? 'denied' : 'trust_required';
-    return { scope, declaration, digest, status };
+    return { projectRoot, scope, declaration, digest, status };
   });
 }
