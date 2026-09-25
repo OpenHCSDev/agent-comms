@@ -55,6 +55,10 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
     invalid["admission"]["version"] = 99
     with pytest.raises(ClaimTransitionError):
         parse_complete_transition_line((json.dumps(invalid) + "\n").encode())
+    null_admission = json.loads(raw)
+    null_admission["admission"] = None
+    with pytest.raises(ClaimTransitionError, match="Wake admission"):
+        parse_complete_transition_line((json.dumps(null_admission) + "\n").encode())
 
 
 def transition(
@@ -63,6 +67,12 @@ def transition(
     return ClaimTransition(
         owner, incarnation, seq, f"msg-{seq}", tuple(claims), tuple(releases), generation
     )
+
+
+def legacy_wire_row(value):
+    row = asdict(value)
+    del row["admission"]
+    return row
 
 
 def resources(tmp_path):
@@ -234,7 +244,7 @@ def test_only_exact_typed_nonempty_sequenced_envelopes(tmp_path):
 
 def test_parser_rejects_partial_duplicate_and_malformed_unverified_lines(tmp_path):
     _, a, _ = resources(tmp_path)
-    row = asdict(transition(1, claims=(a,), generation=G1))
+    row = legacy_wire_row(transition(1, claims=(a,), generation=G1))
     complete = (json.dumps(row, separators=(",", ":")) + "\n").encode()
     assert parse_complete_transition_line(complete) == transition(1, claims=(a,), generation=G1)
     cases = (
@@ -250,7 +260,7 @@ def test_parser_rejects_partial_duplicate_and_malformed_unverified_lines(tmp_pat
         with pytest.raises(ClaimTransitionError):
             parse_complete_transition_line(raw)
     release = transition(2, releases=(ClaimRelease(a, G1),))
-    release_line = json.dumps(asdict(release), separators=(",", ":")).encode()
+    release_line = json.dumps(legacy_wire_row(release), separators=(",", ":")).encode()
     nested_duplicate = (
         release_line.replace(
             b'"generation":"' + G1.encode() + b'"',
@@ -286,11 +296,13 @@ def test_raw_path_aliases_cannot_acquire_or_release_same_file(tmp_path):
             transition(2, owner="competitor", claims=(alias,), generation=G2)
         with pytest.raises(ClaimTransitionError, match="canonical absolute"):
             ClaimRelease(alias, G1)
-        claiming_row = asdict(transition(2, owner="competitor", claims=(a,), generation=G2))
+        claiming_row = legacy_wire_row(
+            transition(2, owner="competitor", claims=(a,), generation=G2)
+        )
         claiming_row["claims"] = [alias]
         with pytest.raises(ClaimTransitionError, match="canonical absolute"):
             parse_complete_transition_line((json.dumps(claiming_row) + "\n").encode())
-        releasing_row = asdict(transition(2, releases=(ClaimRelease(a, G1),)))
+        releasing_row = legacy_wire_row(transition(2, releases=(ClaimRelease(a, G1),)))
         releasing_row["releases"][0]["resource"] = alias
         with pytest.raises(ClaimTransitionError, match="canonical absolute"):
             parse_complete_transition_line((json.dumps(releasing_row) + "\n").encode())

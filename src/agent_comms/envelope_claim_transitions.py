@@ -318,7 +318,7 @@ def parse_complete_transition_line(raw: bytes) -> ClaimTransition:
             raise ClaimTransitionError("Invalid release record.")
         releases.append(ClaimRelease(release["resource"], release["generation"]))
     admission = None
-    if "admission" in data and data["admission"] is not None:
+    if "admission" in data:
         value = data["admission"]
         fields = {
             "wire_root_id",
