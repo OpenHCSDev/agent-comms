@@ -1543,8 +1543,7 @@ time.sleep(60)
         monkeypatch.setattr(backend, "PROMPT_START_TIMEOUT_SECONDS", 0.1)
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + """\
+            f"#!{sys.executable}\n" + """\
 import json, sys, time
 def emit(value):
     print(json.dumps(value), flush=True)
@@ -1574,23 +1573,30 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
         events = [
             event
             async for event in backend.stream_agent_events(
-                stub, [], "task", str(tmp_path), model_wait_timeout=0.5,
+                stub,
+                [],
+                "task",
+                str(tmp_path),
+                model_wait_timeout=0.5,
                 require_input_id=True,
             )
         ]
         assert [e["type"] for e in events if e["type"].startswith("compaction_")] == [
-            "compaction_start", "compaction_progress", "compaction_progress", "compaction_end",
+            "compaction_start",
+            "compaction_progress",
+            "compaction_progress",
+            "compaction_end",
         ]
-        assert [
-            e["usage"]["totalTokens"] for e in events if e["type"] == "provider_usage"
-        ] == [10, 11]
+        assert [e["usage"]["totalTokens"] for e in events if e["type"] == "provider_usage"] == [
+            10,
+            11,
+        ]
         assert events[-1] == {"type": "done", "ok": True, "text": "ok"}
 
     async def test_prestart_compaction_failure_refuses_prompt(self, tmp_path):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + """\
+            f"#!{sys.executable}\n" + """\
 import json, sys
 def emit(value):
     print(json.dumps(value), flush=True)
@@ -1610,8 +1616,13 @@ emit({"type": "agent_settled"})
 """,
         )
         events = [
-            event async for event in backend.stream_agent_events(
-                stub, [], "task", str(tmp_path), require_input_id=True,
+            event
+            async for event in backend.stream_agent_events(
+                stub,
+                [],
+                "task",
+                str(tmp_path),
+                require_input_id=True,
             )
         ]
         assert not [event for event in events if event["type"] == "input_started"]

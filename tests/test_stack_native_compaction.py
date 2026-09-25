@@ -27,36 +27,63 @@ def _saved_history(path: Path, cwd: Path, *, short: bool = False) -> None:
     timestamp = "2026-09-24T00:00:00.000Z"
     rows: list[dict] = [
         {
-            "type": "session", "version": 3, "id": str(uuid4()),
-            "timestamp": timestamp, "cwd": str(cwd), "parentSession": None,
+            "type": "session",
+            "version": 3,
+            "id": str(uuid4()),
+            "timestamp": timestamp,
+            "cwd": str(cwd),
+            "parentSession": None,
         }
     ]
     parent = None
     for index in range(100):
         user_id, assistant_id = f"{2 * index + 1:08x}", f"{2 * index + 2:08x}"
-        rows.append({
-            "type": "message", "id": user_id, "parentId": parent, "timestamp": timestamp,
-            "message": {
-                "role": "user",
-                "content": [{"type": "text", "text": "x" * (1000 if short else 6000)}],
-                "timestamp": 1790290000000 + 2 * index,
-            },
-        })
-        rows.append({
-            "type": "message", "id": assistant_id, "parentId": user_id,
-            "timestamp": timestamp,
-            "message": {
-                "role": "assistant", "content": [{"type": "text", "text": "ack"}],
-                "api": "openai-completions", "provider": "openrouter",
-                "model": "z-ai/glm-5.3-flash", "stopReason": "stop",
-                "rawStopReason": "stop", "timestamp": 1790290000001 + 2 * index,
-                "usage": {
-                    "input": 200000, "output": 1, "cacheRead": 0,
-                    "cacheWrite": 0, "reasoning": 0, "totalTokens": 200001,
-                    "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0},
+        rows.append(
+            {
+                "type": "message",
+                "id": user_id,
+                "parentId": parent,
+                "timestamp": timestamp,
+                "message": {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "x" * (1000 if short else 6000)}],
+                    "timestamp": 1790290000000 + 2 * index,
                 },
-            },
-        })
+            }
+        )
+        rows.append(
+            {
+                "type": "message",
+                "id": assistant_id,
+                "parentId": user_id,
+                "timestamp": timestamp,
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "ack"}],
+                    "api": "openai-completions",
+                    "provider": "openrouter",
+                    "model": "z-ai/glm-5.3-flash",
+                    "stopReason": "stop",
+                    "rawStopReason": "stop",
+                    "timestamp": 1790290000001 + 2 * index,
+                    "usage": {
+                        "input": 200000,
+                        "output": 1,
+                        "cacheRead": 0,
+                        "cacheWrite": 0,
+                        "reasoning": 0,
+                        "totalTokens": 200001,
+                        "cost": {
+                            "input": 0,
+                            "output": 0,
+                            "cacheRead": 0,
+                            "cacheWrite": 0,
+                            "total": 0,
+                        },
+                    },
+                },
+            }
+        )
         parent = assistant_id
     path.write_text("".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows))
     path.chmod(0o600)
@@ -73,14 +100,16 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
         root = Path(raw)
         project = root / "project"
         (project / ".pi").mkdir(parents=True, mode=0o700)
-        (project / ".pi" / "settings.json").write_text(json.dumps({
-            "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
-            "compaction": {"enabled": True},
-        }))
-        session = root / "saved.jsonl"
-        _saved_history(
-            session, project, short=case in {"oversized_current", "oversized_summary"}
+        (project / ".pi" / "settings.json").write_text(
+            json.dumps(
+                {
+                    "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
+                    "compaction": {"enabled": True},
+                }
+            )
         )
+        session = root / "saved.jsonl"
+        _saved_history(session, project, short=case in {"oversized_current", "oversized_summary"})
         agent = root / "agent"
         agent.mkdir(mode=0o700)
         calls: list[str] = []
@@ -100,14 +129,28 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                     self.wfile.write(body)
                     return
                 chunk = {
-                    "id": f"fixture-{len(calls)}", "object": "chat.completion.chunk",
-                    "created": 12345, "model": "z-ai/glm-5.3-flash",
-                    "choices": [{"index": 0, "delta": {"role": "assistant", "content": (
-                        "y" * 600000 if case == "oversized_summary"
-                        else "FINAL_OWNER_REPLY" if case == "acp_success"
-                        and reasoning_efforts[-1] == "high" else "summary"
-                    )},
-                                 "finish_reason": None}],
+                    "id": f"fixture-{len(calls)}",
+                    "object": "chat.completion.chunk",
+                    "created": 12345,
+                    "model": "z-ai/glm-5.3-flash",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "role": "assistant",
+                                "content": (
+                                    "y" * 600000
+                                    if case == "oversized_summary"
+                                    else (
+                                        "FINAL_OWNER_REPLY"
+                                        if case == "acp_success" and reasoning_efforts[-1] == "high"
+                                        else "summary"
+                                    )
+                                ),
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
                 }
                 terminal = {
                     **chunk,
@@ -131,14 +174,23 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
         worker = threading.Thread(target=server.serve_forever, daemon=True)
         worker.start()
         try:
-            (agent / "models.json").write_text(json.dumps({
-                "providers": {"openrouter": {
-                    "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
-                    "modelOverrides": {"z-ai/glm-5.3-flash": {
-                        "contextWindow": 128000, "maxTokens": 4096,
-                    }},
-                }},
-            }))
+            (agent / "models.json").write_text(
+                json.dumps(
+                    {
+                        "providers": {
+                            "openrouter": {
+                                "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
+                                "modelOverrides": {
+                                    "z-ai/glm-5.3-flash": {
+                                        "contextWindow": 128000,
+                                        "maxTokens": 4096,
+                                    }
+                                },
+                            }
+                        },
+                    }
+                )
+            )
             (agent / "models.json").chmod(0o600)
             preload = root / "local-only.cjs"
             preload.write_text(
@@ -151,32 +203,49 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             )
             events = []
             native_args = [
-                "--offline", "--no-extensions", "--no-skills", "--no-prompt-templates",
-                "--no-context-files", "--no-tools", "--provider", "openrouter",
-                "--model", "z-ai/glm-5.3-flash", "--thinking", "high",
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-prompt-templates",
+                "--no-context-files",
+                "--no-tools",
+                "--provider",
+                "openrouter",
+                "--model",
+                "z-ai/glm-5.3-flash",
+                "--thinking",
+                "high",
             ]
             child_env = {
                 "PI_CODING_AGENT_DIR": str(agent),
                 "OPENROUTER_API_KEY": "offline-fixture-no-real-key",
-                "NODE_OPTIONS": f"--require={preload}", "PI_OFFLINE": "1",
+                "NODE_OPTIONS": f"--require={preload}",
+                "PI_OFFLINE": "1",
             }
+
             async def collect():
                 async for event in backend.stream_agent_events(
                     native_bin,
                     native_args,
-                    "x" * 600000 if case == "oversized_current" else "Reply OK.", str(project),
+                    "x" * 600000 if case == "oversized_current" else "Reply OK.",
+                    str(project),
                     env_extra=child_env,
-                    session_file=str(session), require_input_id=True,
+                    session_file=str(session),
+                    require_input_id=True,
                     native_start=lambda *_: True,
                 ):
                     events.append(event)
+
             if case == "acp_success":
                 for key, value in child_env.items():
                     monkeypatch.setenv(key, value)
                 comms = wire(root / "wire")
                 owner = CommsAgent(
-                    comms, agent_bin=native_bin, agent_args=native_args,
-                    runtime_enabled=False, auto_wake=False,
+                    comms,
+                    agent_bin=native_bin,
+                    agent_args=native_args,
+                    runtime_enabled=False,
+                    auto_wake=False,
                 )
                 updates = []
 
@@ -242,7 +311,8 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
         assert len(calls) > 1
         assert reasoning_efforts[:-1] == ["low"] * (len(calls) - 1)
         assert reasoning_efforts[-1] == "high"
-        assert len(
-            [event for event in events if event["type"] == "compaction_progress"]
-        ) == len(calls) - 1
+        assert (
+            len([event for event in events if event["type"] == "compaction_progress"])
+            == len(calls) - 1
+        )
         assert len([event for event in events if event["type"] == "provider_usage"]) == len(calls)

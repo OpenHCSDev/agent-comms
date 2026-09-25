@@ -1706,23 +1706,23 @@ async def _stream_agent_events(
         and not input_uncertain
         and not unresolved_inputs
     )
-    reason_code: str | None = None
+    terminal_reason_code: str | None = None
     if capability_failed:
-        reason_code = "pi_input_id_unavailable"
+        terminal_reason_code = "pi_input_id_unavailable"
     elif prestart_compaction_failed:
-        reason_code = "prestart_compaction_failed"
+        terminal_reason_code = "prestart_compaction_failed"
     elif session_identity_uncertain:
-        reason_code = "session_identity_uncertain"
+        terminal_reason_code = "session_identity_uncertain"
     elif authority_revoked:
-        reason_code = "input_authority_changed"
+        terminal_reason_code = "input_authority_changed"
     elif followup_start_unrecognized:
-        reason_code = "unrecognized_followup_input"
+        terminal_reason_code = "unrecognized_followup_input"
     elif (transport_successful or input_uncertain or fail_reason) and not initial_input_started:
-        reason_code = "current_prompt_input_missing"
+        terminal_reason_code = "current_prompt_input_missing"
     elif transport_successful and not final_assistant_stop:
-        reason_code = "assistant_final_stop_missing"
+        terminal_reason_code = "assistant_final_stop_missing"
     elif otherwise_successful and unresolved_inputs:
-        reason_code = "queued_input_start_missing"
+        terminal_reason_code = "queued_input_start_missing"
     yield {
         "type": "done",
         "text": (
@@ -1742,5 +1742,5 @@ async def _stream_agent_events(
             )
         ),
         "ok": success and not session_identity_uncertain,
-        **({"reason_code": reason_code} if reason_code else {}),
+        **({"reason_code": terminal_reason_code} if terminal_reason_code else {}),
     }
