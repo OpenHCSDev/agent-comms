@@ -37,6 +37,10 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
         recipient_lookup="e" * 32,
         execution_id="execution-7",
         operation_id="f" * 32,
+        owner_admission_generation=2,
+        turn_id="turn-7",
+        participant_generation=1,
+        attempt_ordinal=1,
     )
     claimed = ClaimTransition("owner", "epoch-1", 8, "msg-8", (resource,), (), G1, admission)
     raw = (json.dumps(asdict(claimed), separators=(",", ":")) + "\n").encode()

@@ -101,6 +101,10 @@ class WakeAdmission:
     recipient_lookup: str
     execution_id: str
     operation_id: str
+    owner_admission_generation: int
+    turn_id: str
+    participant_generation: int
+    attempt_ordinal: int
     version: int = 1
 
     def __post_init__(self) -> None:
@@ -122,10 +126,18 @@ class WakeAdmission:
             or self.wake_revision <= 0
             or type(self.version) is not int
             or self.version != 1
+            or type(self.owner_admission_generation) is not int
+            or self.owner_admission_generation <= 0
+            or type(self.participant_generation) is not int
+            or self.participant_generation <= 0
+            or type(self.attempt_ordinal) is not int
+            or self.attempt_ordinal <= 0
         ):
             raise ClaimTransitionError("Wake admission version or revision is invalid.")
         _text(self.source_message_id, "Source message ID")
         _text(self.execution_id, "Execution ID")
+        if not (type(self.turn_id) is str and 0 < len(self.turn_id) <= 128):
+            raise ClaimTransitionError("Wake admission turn ID is invalid.")
         if ":" in self.execution_id:
             raise ClaimTransitionError("Execution ID cannot contain a colon.")
         if (
@@ -329,6 +341,10 @@ def parse_complete_transition_line(raw: bytes) -> ClaimTransition:
             "recipient_lookup",
             "execution_id",
             "operation_id",
+            "owner_admission_generation",
+            "turn_id",
+            "participant_generation",
+            "attempt_ordinal",
             "version",
         }
         if type(value) is not dict or set(value) != fields:
