@@ -513,6 +513,12 @@ class CommsAgent:
                 ],
             )
             return PromptResponse.model_validate(result)
+        if options.get("sendNow") is True:
+            inbox = self._backend_inboxes.get(session_id)
+            selected = list(self._queued_inputs.get(session_id, {}))
+            if inbox is not None and selected:
+                inbox.put_nowait({"type": "interrupt_steering", "_input_ids": selected})
+            return PromptResponse(stop_reason="end_turn")
         text = self._prompt_text(prompt)
         if (
             session_id in self._active_turns
@@ -554,13 +560,15 @@ class CommsAgent:
                     {
                         "type": "prompt",
                         "message": "User follow-up:\n" + text.removeprefix(AGENT_PREFIX),
-                        # Both deliveries steer: Pi injects at the next safe
-                        # boundary, not after the whole run.
+                        # Queue once; explicit immediate delivery interrupts the
+                        # current response after this exact input is accepted.
                         "streamingBehavior": "steer",
                         "_input_id": input_id,
                         **({"images": [image.to_rpc() for image in images]} if images else {}),
                     }
                 )
+                if delivery == "steer":
+                    inbox.put_nowait({"type": "interrupt_steering", "_input_ids": [input_id]})
             except BaseException:
                 self._queued_inputs.get(session_id, {}).pop(input_id, None)
                 raise
@@ -1585,7 +1593,7 @@ class CommsAgent:
 
         @contextmanager
         def send_boundary(
-            public_id: str | None, native_id: str, sent_text: str
+            public_id: str | None, native_id: str, sent_text: str, *, already_bound: bool = False
         ) -> Iterator[bool | None]:
             # This lock spans the final authority read and stdin.write only.
             # Pi's turn, ACK, and provider response happen after it is released.
@@ -1656,12 +1664,18 @@ class CommsAgent:
                             row is None
                             or row["status"] != "unknown"
                             or row["admission"] != snapshot.admission_generations[canonical]
-                            or not self._dispositions.bind(
-                                key,
-                                admission=row["admission"],
-                                turn_id=turn_id,
-                                native_id=native_id,
-                                text=sent_text,
+                            or not (
+                                row["native_id"] == native_id
+                                and row["turn_id"] == turn_id
+                                and row["sent_text"] == sent_text
+                                if already_bound
+                                else self._dispositions.bind(
+                                    key,
+                                    admission=row["admission"],
+                                    turn_id=turn_id,
+                                    native_id=native_id,
+                                    text=sent_text,
+                                )
                             )
                         ):
                             allowed = False
@@ -1778,9 +1792,14 @@ class CommsAgent:
                 steering_queue=backend_inbox,
                 finish_event=finish_event,
                 send_boundary=send_boundary,
+                interrupt_boundary=lambda public_id, native_id, text: send_boundary(
+                    public_id, native_id, text, already_bound=True
+                ),
                 native_start=native_start,
             ):
                 kind = event.get("type")
+                if kind == "steering_interrupted":
+                    reply_parts.clear()
                 if kind == "input_refused":
                     input_id = event.get("id")
                     if isinstance(input_id, str):
