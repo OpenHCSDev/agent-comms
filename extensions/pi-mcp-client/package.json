@@ -1,0 +1,12 @@
+{
+  "name": "@openhcsdev/pi-mcp-client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Default-off MCP client contract probes for a future Pi package",
+  "keywords": ["pi-package"],
+  "pi": { "extensions": [] },
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "dependencies": { "@modelcontextprotocol/sdk": "1.30.1" },
+  "devDependencies": { "zod": "4.6.5" }
+}
