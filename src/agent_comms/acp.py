@@ -163,6 +163,8 @@ class CommsAgent:
         self._steering_origins: dict[str, dict[str, Message]] = {}
         self._steering_goal_ids: dict[str, dict[str, str | None]] = {}
         self._turn_input_keys: dict[str, set[str]] = {}
+        self._turn_original_input_keys: dict[str, tuple[str, ...]] = {}
+        self._turn_input_text: dict[str, str] = {}
         self._dispositions = InputDispositions(comms.root)
         self._goal_store: GoalAttemptStore | None = None
         self._pending_goal_origins: dict[str, str] = {}
@@ -2098,6 +2100,9 @@ class CommsAgent:
         finish_event = asyncio.Event()
         self._backend_inboxes[session_id] = backend_inbox
         self._active_turns[session_id] = turn_id
+        if original_owner_input and original_keys:
+            self._turn_original_input_keys[session_id] = tuple(original_keys)
+            self._turn_input_text[session_id] = original_display or task
         try:
             await self._emit_event(session_id, self._started_event(thread_name, turn_id))
             await self.emit_input_delivery_changed(session_id)
@@ -2589,6 +2594,8 @@ class CommsAgent:
             # Discard unresolved per-turn IDs without replay. Durable ACP input
             # disposition across owner crashes remains a separate integration.
             self._forwarded_inputs.pop(session_id, None)
+            self._turn_original_input_keys.pop(session_id, None)
+            self._turn_input_text.pop(session_id, None)
             self._steering_input_keys.pop(session_id, None)
             self._steering_origins.pop(session_id, None)
             self._steering_goal_ids.pop(session_id, None)
@@ -2886,14 +2893,34 @@ class CommsAgent:
         elif kind == "error":
             text = str(event.get("text") or "Backend failed")
             self._emitted_errors[session_id] = text
-            await self._emit_text(session_id, f"[agent error] {text}", client)
+            failed_input = None
+            input_text = self._turn_input_text.get(session_id)
+            if input_text and any(
+                self._dispositions.status(key) != "started"
+                for key in self._turn_original_input_keys.get(session_id, ())
+            ):
+                failed_input = {"text": input_text, "reason": text}
+            await client.session_update(
+                session_id=session_id,
+                update=AgentMessageChunk(
+                    session_update="agent_message_chunk",
+                    content=TextContentBlock(type="text", text=f"[agent error] {text}"),
+                    field_meta={
+                        "agentComms": {
+                            **({"inputFailed": failed_input} if failed_input else {}),
+                            "route": None,
+                        }
+                    },
+                ),
+            )
         elif kind == "done":
             prior_error = self._emitted_errors.pop(session_id, None)
             if not event.get("ok") and event.get("text"):
                 text = str(event["text"])
                 # An explicit error event in this turn already showed the failure.
                 if prior_error != text:
-                    await self._emit_text(session_id, f"[agent error] {text}", client)
+                    await self._emit_event(session_id, {"type": "error", "text": text}, client)
+                    self._emitted_errors.pop(session_id, None)
 
     @staticmethod
     def _sanitized_compaction_summary(value: Any) -> str:
