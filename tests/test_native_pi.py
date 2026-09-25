@@ -173,8 +173,11 @@ async def test_unprivate_session_rejected_before_pi_process_starts(
         )
 
 
+@pytest.mark.parametrize(
+    ("deny_group_signal", "ignore_term"), [(False, False), (True, False), (True, True)]
+)
 async def test_tracked_launch_pins_private_no_retry_settings_before_subprocess(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, deny_group_signal: bool, ignore_term: bool
 ) -> None:
     import agent_comms.native_pi as native
 
@@ -197,11 +200,20 @@ async def test_tracked_launch_pins_private_no_retry_settings_before_subprocess(
     monkeypatch.setenv("OPENROUTER_API_KEY", "a-token-not-to-persist")
     original = asyncio.create_subprocess_exec
     launches = []
-    fake_stub = """import json, sys
+    processes = []
+    fake_stub = (
+        (
+            "import signal, time\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            if ignore_term
+            else ""
+        )
+        + """import json, sys
 request = json.loads(sys.stdin.readline())
 print(json.dumps({"type": "response", "id": request["id"],
                   "command": "get_state", "success": False}), flush=True)
 """
+        + ("time.sleep(30)\n" if ignore_term else "")
+    )
 
     async def launch(*argv, **kwargs):
         launches.append(argv)
@@ -223,13 +235,22 @@ print(json.dumps({"type": "response", "id": request["id"],
         assert b"a-token-not-to-persist" not in policy.read_bytes()
         assert not (agent_dir / "auth.json").exists()
         assert not list(agent_dir.glob(".settings-*.tmp"))
-        return await original(
+        process = await original(
             sys.executable,
             "-u",
             "-c",
             fake_stub,
             **kwargs,
         )
+        processes.append(process)
+        return process
+
+    if deny_group_signal:
+
+        def denied_group_signal(_pid, _signal):
+            raise PermissionError(errno.EPERM, "injected macOS process-group denial")
+
+        monkeypatch.setattr(native.os, "killpg", denied_group_signal)
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(native.asyncio, "create_subprocess_exec", launch)
@@ -242,6 +263,7 @@ print(json.dumps({"type": "response", "id": request["id"],
             session_dir=sessions,
         )
     assert len(launches) == 1
+    assert processes[0].returncode is not None
     assert not list(inherited.iterdir())
 
 
