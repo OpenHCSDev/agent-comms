@@ -119,3 +119,23 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
         ]
     finally:
         await agent.shutdown()
+
+
+def test_adjacent_assistant_text_parts_preserve_one_markdown_message(tmp_path):
+    comms = wire(tmp_path / "wire")
+    events = comms._transcript_message_events(
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "## Summary\n\n**Bold"},
+                {"type": "text", "text": " text**\n\n- First\n- Second\n"},
+                {"type": "thinking", "thinking": "separate reasoning"},
+                {"type": "text", "text": "After reasoning."},
+            ],
+        }
+    )
+    assert [(event.kind, event.text) for event in events] == [
+        ("assistant", "## Summary\n\n**Bold text**\n\n- First\n- Second\n"),
+        ("thinking", "separate reasoning"),
+        ("assistant", "After reasoning."),
+    ]

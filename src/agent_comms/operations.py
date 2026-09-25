@@ -1787,7 +1787,11 @@ class Comms:
             elif role == "assistant" and kind == "thinking":
                 events.append(TranscriptEvent("thinking", str(part.get("thinking") or "")))
             elif role == "assistant" and kind == "text":
-                events.append(TranscriptEvent("assistant", str(part.get("text") or "")))
+                text = str(part.get("text") or "")
+                if events and events[-1].kind == "assistant":
+                    events[-1] = replace(events[-1], text=events[-1].text + text)
+                else:
+                    events.append(TranscriptEvent("assistant", text))
             elif role == "assistant" and kind == "toolCall":
                 events.append(
                     TranscriptEvent(
