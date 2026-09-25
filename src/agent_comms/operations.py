@@ -87,7 +87,7 @@ from .exporting import (
 )
 from .importing import ImportFormat, ImportLimits, ImportReceipt
 from .tool_results import ToolDiff
-from .transcript_routes import TranscriptRoutes
+from .transcript_routes import InputDisplay, TranscriptRoutes
 
 OBSERVATION_INTERVAL = 0.05
 
@@ -1546,7 +1546,16 @@ class Comms:
                     payload = json.loads(raw_line)
                 except (json.JSONDecodeError, UnicodeDecodeError):
                     continue
-                events = self._transcript_record_events(payload, routes.get(payload.get("id", "")))
+                message = payload.get("message")
+                events = self._transcript_record_events(
+                    payload,
+                    routes.get(payload.get("id", "")),
+                    (
+                        routes.input_display(message.get("inputId"))
+                        if isinstance(message, Mapping)
+                        else None
+                    ),
+                )
                 if events:
                     records.append(events)
                     if len(records) > max_messages:
@@ -1666,7 +1675,13 @@ class Comms:
                             events = (
                                 tuple(
                                     self._transcript_record_events(
-                                        value, routes.get(value.get("id", ""))
+                                        value,
+                                        routes.get(value.get("id", "")),
+                                        (
+                                            routes.input_display(value["message"].get("inputId"))
+                                            if isinstance(value.get("message"), Mapping)
+                                            else None
+                                        ),
                                     )
                                 )
                                 if isinstance(value, dict)
@@ -1701,7 +1716,10 @@ class Comms:
         )
 
     def _transcript_record_events(
-        self, payload: Mapping[str, object], routing: TurnRouting | None = None
+        self,
+        payload: Mapping[str, object],
+        routing: TurnRouting | None = None,
+        input_display: InputDisplay | None = None,
     ) -> list[TranscriptEvent]:
         if payload.get("type") == "compaction":
             summary = str(payload.get("summary") or "").strip()
@@ -1711,12 +1729,17 @@ class Comms:
         message = payload.get("message")
         if payload.get("type") != "message" or not isinstance(message, Mapping):
             return []
-        return self._transcript_message_events(message, routing)
+        return self._transcript_message_events(message, routing, input_display)
 
     def _transcript_message_events(
-        self, message: Mapping[str, object], routing: TurnRouting | None = None
+        self,
+        message: Mapping[str, object],
+        routing: TurnRouting | None = None,
+        input_display: InputDisplay | None = None,
     ) -> list[TranscriptEvent]:
         role = message.get("role")
+        if role == "user" and input_display is not None and input_display.text is None:
+            return []
         if role == "user" and routing is not None and routing.requests:
             return [
                 TranscriptEvent("user", request.body, routing=TurnRouting((request,), None))
@@ -1733,6 +1756,14 @@ class Comms:
             parts = content
         else:
             return []
+
+        if role == "user" and input_display is not None:
+            # The owner records the user's original text before adding model-only
+            # instructions. Preserve attachments while replacing just that text.
+            parts = (
+                {"type": "text", "text": input_display.text},
+                *(part for part in parts if isinstance(part, dict) and part.get("type") != "text"),
+            )
 
         events: list[TranscriptEvent] = []
         for part in parts:
@@ -1798,6 +1829,10 @@ class Comms:
         return TranscriptCursor(
             session_file, path.stat().st_size if session_file and path.is_file() else 0
         )
+
+    def record_input_display(self, native_id: str, display_text: str | None) -> None:
+        """Bind UI text to the private native input ID, never a prompt prefix."""
+        self.transcript_routes.record_input_display(native_id, display_text)
 
     def record_turn_routing(
         self, name: str, checkpoint: TranscriptCursor, routing: TurnRouting
