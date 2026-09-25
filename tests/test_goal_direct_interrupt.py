@@ -41,6 +41,8 @@ async def test_new_nondependency_direct_dm_interrupts_active_goal_without_attemp
         task = args[2]
         seen.append(task)
         assert "ordinary direct-message interruption" in task
+        assert f"Persistent goal {goal.id} is parked" in task
+        assert "Use comms_goal with this goal_id" not in task
         assert "A separate question" in task
         native = "a" * 32
         with kwargs["send_boundary"](None, native, task) as allowed:

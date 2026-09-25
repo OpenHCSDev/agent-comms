@@ -2199,26 +2199,31 @@ class CommsAgent:
             f"Peer state: {json.dumps(peers)}\n\n{task}"
         )
         if goal is not None and goal.active:
-            task = (
-                f"Persistent goal {goal.id}: {goal.text}\nProgress: {goal.progress}\n"
-                "Work toward this goal while respecting follow-up instructions. "
-                "Use comms_goal with this goal_id to record useful progress. Set status completed "
-                "only after verifying success, blocked when you need user input, or active "
-                "to continue useful work in another turn. When waiting for delegated work, "
-                "set status standby with explicit wait_for thread names and explain what you need. "
-                "The goal stays active without polling; a direct message from a named dependency "
-                "or an explicit user follow-up starts the next goal turn. "
-                "Do not return empty output "
-                "or repeatedly announce waiting. Do not wait or poll; "
-                "the owner schedules continuation.\n\n" + task
-            )
-        if direct_interrupt:
-            task = (
-                "This is an ordinary direct-message interruption, NOT a goal attempt or a "
-                "declared dependency reply. Respond to this message, but do not report goal "
-                "progress, clear the existing goal wait, or retry an UNKNOWN input. "
-                "The goal remains separately scheduled.\n\n" + task
-            )
+            if direct_interrupt:
+                task = (
+                    f"Persistent goal {goal.id} is parked for this ordinary direct-message "
+                    "interruption. This is NOT a goal attempt or declared dependency reply. "
+                    "Respond to this message first; do not call comms_goal merely to finish "
+                    "the DM, report goal progress, clear its standby wait, or retry an UNKNOWN "
+                    "input. The goal remains separately scheduled.\n\n" + task
+                )
+            else:
+                task = (
+                    f"Persistent goal {goal.id}: {goal.text}\nProgress: {goal.progress}\n"
+                    "Work toward this goal while respecting follow-up instructions. "
+                    "Use comms_goal with this goal_id to record useful progress. "
+                    "Set status completed "
+                    "only after verifying success, blocked when you need user input, or active "
+                    "to continue useful work in another turn. When waiting for delegated work, "
+                    "set status standby with explicit wait_for thread names "
+                    "and explain what you need. "
+                    "The goal stays active without polling; a direct message from a named "
+                    "dependency "
+                    "or an explicit user follow-up starts the next goal turn. "
+                    "Do not return empty output "
+                    "or repeatedly announce waiting. Do not wait or poll; "
+                    "the owner schedules continuation.\n\n" + task
+                )
         if thread.auto_title_pending:
             task = (
                 "Give this new thread a concise topic title before doing the task: call "
