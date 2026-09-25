@@ -1169,6 +1169,7 @@ class ActiveTurn:
     started_at: float = field(default_factory=time.time)
     routing: TurnRouting | None = None
     admission_generation: int | None = None
+    turn_generation: int | None = None
 
     @classmethod
     def from_wire(cls, data: Mapping) -> ActiveTurn:
@@ -1178,10 +1179,22 @@ class ActiveTurn:
             data["started_at"],
             TurnRouting.from_wire(data["routing"]) if data.get("routing") else None,
             data.get("admission_generation"),
+            data.get("turn_generation"),
         )
 
     def to_wire(self) -> dict[str, object]:
         return {**asdict(self), "routing": self.routing.to_wire() if self.routing else None}
+
+
+@dataclass(frozen=True, slots=True)
+class FinishedTurnFence:
+    """Durable exact-turn completion witness, not a reply or model grant."""
+
+    name: str
+    created_at: float
+    turn_id: str
+    turn_generation: int
+    admission_generation: int
 
 
 class _GeneratedCreationTime(float):
@@ -1215,6 +1228,8 @@ class Thread:
     active_turn: ActiveTurn | None = None
     last_goal_report_turn: str | None = None
     channel_scope_generation: int = 0
+    turn_generation: int = 0
+    last_finished_turn_id: str | None = None
 
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)
@@ -1222,8 +1237,15 @@ class Thread:
         if generated:
             object.__setattr__(self, "created_at", float(self.created_at))
         object.__setattr__(self, "role", ThreadRole(self.role))
-        if self.active_turn is not None and self.active_turn.owner_pid != self.pid:
-            raise RelationViolationError("A turn must belong to the registered executor.")
+        if self.active_turn is not None:
+            if self.active_turn.owner_pid != self.pid:
+                raise RelationViolationError("A turn must belong to the registered executor.")
+            if self.active_turn.turn_generation is not None and (
+                type(self.active_turn.turn_generation) is not int
+                or self.active_turn.turn_generation <= 0
+                or self.active_turn.turn_generation != self.turn_generation
+            ):
+                raise RelationViolationError("Active turn generation differs from its owner.")
         if self.last_goal_report_turn is not None and not isinstance(
             self.last_goal_report_turn, str
         ):
@@ -1233,6 +1255,14 @@ class Thread:
             or not 0 <= self.channel_scope_generation < 1 << 63
         ):
             raise ValueError("Channel scope generation must be a nonnegative 63-bit integer.")
+        if type(self.turn_generation) is not int or not 0 <= self.turn_generation < 1 << 63:
+            raise ValueError("Turn generation must be an exact nonnegative 63-bit integer.")
+        if self.last_finished_turn_id is not None and (
+            type(self.last_finished_turn_id) is not str
+            or not self.last_finished_turn_id
+            or self.turn_generation == 0
+        ):
+            raise ValueError("Finished turn requires a prior turn generation and ID.")
         for tag in self.tags:
             Tag(tag)
         allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
@@ -2142,6 +2172,8 @@ class ThreadRegistry:
                 ),
                 last_goal_report_turn=data.get("last_goal_report_turn"),
                 channel_scope_generation=data.get("channel_scope_generation", 0),
+                turn_generation=data.get("turn_generation", 0),
+                last_finished_turn_id=data.get("last_finished_turn_id"),
             )
             self._statuses[name] = ThreadStatus(data.get("status", "running"))
             self._last_seen[name] = data.get("last_seen", 0.0)
@@ -2263,6 +2295,17 @@ class ThreadRegistry:
                     # A metadata writer cannot erase or forge channel scope history.
                     thread = replace(
                         thread, channel_scope_generation=previous.channel_scope_generation
+                    )
+                if thread.turn_generation < previous.turn_generation:
+                    # A stale metadata writer cannot reset a completed-turn fence.
+                    thread = replace(
+                        thread,
+                        turn_generation=previous.turn_generation,
+                        last_finished_turn_id=(
+                            previous.last_finished_turn_id
+                            if thread.active_turn == previous.active_turn
+                            else None
+                        ),
                     )
             elif any(
                 existing.created_at == thread.created_at for existing in self._threads.values()
@@ -2440,13 +2483,18 @@ class ThreadRegistry:
         self, current: Thread, turn_id: str, routing: TurnRouting | None
     ) -> tuple[Thread, int]:
         """Caller holds the registry lock and has checked live turn ownership."""
+        if current.turn_generation >= (1 << 63) - 1:
+            raise RelationViolationError("Turn generation exhausted")
         claimed = replace(
             current,
+            turn_generation=current.turn_generation + 1,
+            last_finished_turn_id=None,
             active_turn=ActiveTurn(
                 turn_id,
                 current.pid,
                 routing=routing,
                 admission_generation=self._admission_generations[current.name],
+                turn_generation=current.turn_generation + 1,
             ),
         )
         self._threads[current.name] = claimed
@@ -2493,18 +2541,44 @@ class ThreadRegistry:
         )
         return claimed
 
-    def finish_claimed_turn(self, name: str, turn_id: str) -> bool:
-        """Release only the exact owned turn, resolving retained aliases under lock."""
+    def finish_claimed_turn_with_fence(
+        self, name: str, turn_id: str
+    ) -> tuple[bool, FinishedTurnFence | None]:
+        """Atomically release one exact turn and return its durable witness."""
         with _store_lock(self._path):
             self._load_unlocked()
             name = self._aliases.get(name, name)
             current = self._threads.get(name)
             if current is None or current.active_turn is None or current.active_turn.id != turn_id:
-                return False
-            self._threads[name] = replace(current, active_turn=None)
+                return False, None
+            admission = current.active_turn.admission_generation
+            attested = (
+                current.turn_generation > 0
+                and type(admission) is int
+                and admission > 0
+                and self._admission_generations.get(name) == admission
+                and current.active_turn.turn_generation == current.turn_generation
+                and self._statuses[name].active
+            )
+            self._threads[name] = replace(
+                current,
+                active_turn=None,
+                last_finished_turn_id=(current.active_turn.id if current.turn_generation else None),
+            )
+            self._last_seen[name] = time.time()
             self._bump_owner_epoch_unlocked(name)
             self._save_unlocked()
-            return True
+            if not attested:
+                return True, None
+            assert type(admission) is int
+            return True, FinishedTurnFence(
+                current.name, current.created_at, turn_id, current.turn_generation, admission
+            )
+
+    def finish_claimed_turn(self, name: str, turn_id: str) -> bool:
+        """Release only the exact owned turn, resolving retained aliases under lock."""
+        released, _ = self.finish_claimed_turn_with_fence(name, turn_id)
+        return released
 
     def canonical_name(self, name: str) -> str:
         self._load()

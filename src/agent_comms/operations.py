@@ -51,6 +51,7 @@ from .declarations import (
     ChannelView,
     CoordinationSnapshot,
     DMDisplayBasis,
+    FinishedTurnFence,
     Goal,
     GoalExecution,
     GoalPauseSource,
@@ -934,13 +935,14 @@ class Comms:
                 self.registry.finish_claimed_turn(claimed.name, turn_id)
                 raise
 
-    def finish_turn(self, name: str, turn_id: str) -> None:
+    def finish_turn(self, name: str, turn_id: str) -> FinishedTurnFence | None:
+        """Persist exact terminal identity before publishing a delayed callback."""
         with _store_lock(self._wire_lock_path):
-            thread = self.registry.require(name)
-            if thread.active_turn is None or thread.active_turn.id != turn_id:
-                return
-            self.registry.register(replace(thread, active_turn=None), self.registry.status(name))
-            self.activity.emit(Activity(thread.name, ActivityState.IDLE))
+            released, fence = self.registry.finish_claimed_turn_with_fence(name, turn_id)
+            if not released:
+                return None
+            self.activity.emit(Activity(self.registry.canonical_name(name), ActivityState.IDLE))
+            return fence
 
     def set_agent_info(
         self,
@@ -2101,7 +2103,13 @@ class Comms:
                     raise RelationViolationError(
                         "Cannot replace an executor during its active turn."
                     )
-                thread = replace(thread, pid=existing.pid, active_turn=existing.active_turn)
+                thread = replace(
+                    thread,
+                    pid=existing.pid,
+                    active_turn=existing.active_turn,
+                    turn_generation=existing.turn_generation,
+                    last_finished_turn_id=existing.last_finished_turn_id,
+                )
             tags = thread.tags
             session_file = thread.session_file
             model = thread.model
@@ -2386,19 +2394,28 @@ class Comms:
         waits = GoalWaits(self.root / "goal_waits.json")
         return waits.for_goal(self.registry.require(name).goal, waits.snapshot())
 
-    def pause_waits_after_terminal_turn(self, name: str, *, created_at: float) -> tuple[str, ...]:
-        """Surface a silent dependency terminal result; never create a model input.
+    def pause_waits_after_terminal_turn(self, fence: FinishedTurnFence | None) -> tuple[str, ...]:
+        """Pause only for the latest exact, still-idle, completed child turn.
 
-        ACP calls this only *after* its terminal reply has been published. Its
-        earlier `finish_turn` is a UI settlement, not proof that no reply will
-        follow. The saved waiter/target incarnations and exact current goal
-        are rechecked under the same wire lock as the bus and pause writes.
+        ACP invokes this after terminal publication, never at the earlier UI
+        `settled` event. A later turn (even already finished) invalidates the
+        old fence; a rename or unrelated metadata edit does not.
         """
+        if type(fence) is not FinishedTurnFence:
+            return ()
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
-            canonical = snapshot.aliases.get(name, name)
+            canonical = snapshot.aliases.get(fence.name, fence.name)
             source = snapshot.threads.get(canonical)
-            if source is None or source.created_at != created_at or source.active_turn is not None:
+            if (
+                source is None
+                or source.created_at != fence.created_at
+                or source.active_turn is not None
+                or source.turn_generation != fence.turn_generation
+                or source.last_finished_turn_id != fence.turn_id
+                or snapshot.admission_generations.get(canonical) != fence.admission_generation
+                or not snapshot.statuses[canonical].active
+            ):
                 return ()
             waits = GoalWaits(self.root / "goal_waits.json").snapshot()
             paused: list[str] = []
@@ -2411,10 +2428,14 @@ class Comms:
                     wait is None
                     or wait.owner_created_at != owner.created_at
                     or wait.revision > goal.revision
+                    or len(wait.target_turn_generations) != len(wait.targets)
                     or not any(
                         snapshot.aliases.get(target.name, target.name) == canonical
-                        and target.created_at == created_at
-                        for target in wait.targets
+                        and target.created_at == fence.created_at
+                        and (generation := wait.target_turn_generations[index]) is not None
+                        and type(generation) is int
+                        and 0 < generation <= fence.turn_generation
+                        for index, target in enumerate(wait.targets)
                     )
                     or any(
                         GoalWaits.target_has_active_turn(target, snapshot)
@@ -2793,6 +2814,16 @@ class Comms:
                         self.message_high_water(),
                         wait_targets,
                         owner_created_at=thread.created_at,
+                        target_turn_generations=tuple(
+                            (
+                                snapshot.threads[
+                                    snapshot.aliases.get(target.name, target.name)
+                                ].turn_generation
+                                if GoalWaits.target_has_active_turn(target, snapshot)
+                                else None
+                            )
+                            for target in wait_targets
+                        ),
                     )
                 )
             self.registry.register(

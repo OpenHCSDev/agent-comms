@@ -26,6 +26,8 @@ class GoalWait:
     after_seq: int
     targets: tuple[GoalWaitTarget, ...]
     owner_created_at: float | None = None
+    # Positional with targets. Legacy waits cannot attest a terminal callback.
+    target_turn_generations: tuple[int | None, ...] = ()
 
     def matches(self, message: Message, snapshot: RegistrySnapshot) -> bool:
         sender = snapshot.threads.get(snapshot.aliases.get(message.sender, message.sender))
@@ -99,6 +101,7 @@ class GoalWaits:
                 after_seq=row["after_seq"],
                 targets=tuple(GoalWaitTarget(**target) for target in row["targets"]),
                 owner_created_at=row.get("owner_created_at"),
+                target_turn_generations=tuple(row.get("target_turn_generations", ())),
             )
             for key, row in data.items()
         }
