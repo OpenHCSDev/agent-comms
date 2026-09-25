@@ -350,7 +350,20 @@ class RuntimeProxy:
                 self.writer.close()
             while not self._closed:
                 try:
-                    reader, _metadata = await self._subscribe_once()
+                    reader, metadata = await self._subscribe_once()
+                    image_support = getattr(self.agent, "_proxy_image_support", None)
+                    if isinstance(image_support, dict):
+                        image_support[self.session_id] = (
+                            metadata.get("agentComms", {}).get("imagePrompts") is True
+                        )
+                    if "configOptions" in metadata and self.agent._client is not None:
+                        await self.agent._client.session_update(
+                            session_id=self.session_id,
+                            update={
+                                "sessionUpdate": "config_option_update",
+                                "configOptions": metadata["configOptions"],
+                            },
+                        )
                     break
                 except OwnerIdentityChanged:
                     return

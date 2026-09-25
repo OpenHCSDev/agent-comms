@@ -99,7 +99,19 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
             calls.append((owner, request["action"], request["thread"]))
             if request["action"] == "subscribe":
                 connections.append(writer)
-                writer.write(b'{"ready": {"agentComms": {}}}\n')
+                writer.write(
+                    (
+                        json.dumps(
+                            {
+                                "ready": {
+                                    "agentComms": {"imagePrompts": owner == "new"},
+                                    "configOptions": [{"id": "model", "currentValue": owner}],
+                                }
+                            }
+                        )
+                        + "\n"
+                    ).encode()
+                )
                 writer.write((json.dumps({"update": {"owner": owner}}) + "\n").encode())
                 await writer.drain()
                 await reader.read()
@@ -134,6 +146,17 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
         new_server = await asyncio.start_unix_server(handler("new"), path=new_path)
         assert await asyncio.wait_for(request, 3) == {"owner": "new"}
         await until(lambda: ("worker", {"owner": "new"}) in updates)
+        await until(
+            lambda: (
+                "worker",
+                {
+                    "sessionUpdate": "config_option_update",
+                    "configOptions": [{"id": "model", "currentValue": "new"}],
+                },
+            )
+            in updates
+        )
+        assert client._proxy_image_support["worker"] is True
         assert ("new", "subscribe", "worker") in calls
         assert ("new", "cancel", "worker") in calls
         assert calls.count(("old", "cancel", "worker")) == 1
