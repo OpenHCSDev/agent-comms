@@ -7,6 +7,7 @@ claim historical proof that a model consumed an old channel message.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import asdict, dataclass, replace
@@ -47,6 +48,27 @@ class Collaboration:
 
 
 @dataclass(frozen=True, slots=True)
+class GoalDerivedContact:
+    """Mutual *visibility* only; a mention never accepts work or dispatches a wake."""
+
+    owner: str
+    owner_created_at: float
+    peer: str
+    peer_created_at: float
+    goal_id: str
+    text_revision: int
+
+
+@dataclass(frozen=True, slots=True)
+class GoalMentionDiagnostic:
+    owner: str
+    goal_id: str
+    text_revision: int
+    token: str
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
 class RelationshipEntry:
     target: str
     kind: str
@@ -55,6 +77,8 @@ class RelationshipEntry:
     timestamp: float = 0
     detail: str = ""
     available: bool = True
+    sources: tuple[str, ...] = ()
+    goal_contacts: tuple[GoalDerivedContact, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +97,8 @@ class ThreadCommsSnapshot:
     history_limited: bool
     history_messages: int
     incoming_basis: str = "Current delivery scope, independent of read markers"
+    unresolved_goal_mentions: tuple[GoalMentionDiagnostic, ...] = ()
+    explicit_collaborations: tuple[Collaboration, ...] = ()
 
 
 class ThreadRelationships:
@@ -194,6 +220,87 @@ class ThreadRelationships:
             edges = self._unique_edges(self._canonical_edges(self._load(), registry))
             return tuple(
                 self._orient(edge, thread) for edge in edges if self._incident(edge, thread)
+            )
+
+    @staticmethod
+    def _goal_contacts(
+        registry: RegistrySnapshot,
+    ) -> tuple[tuple[GoalDerivedContact, ...], tuple[GoalMentionDiagnostic, ...]]:
+        """Resolve only saved incarnations from active goals in ONE registry snapshot."""
+        contacts: list[GoalDerivedContact] = []
+        diagnostics: list[GoalMentionDiagnostic] = []
+        for owner in registry.threads.values():
+            goal = owner.goal
+            if goal is None or not goal.active or not owner.role.executable:
+                continue
+            source = goal.mention_source
+            if (
+                source is None
+                or source.goal_id != goal.id
+                or source.text_digest != hashlib.sha256(goal.text.encode("utf-8")).hexdigest()
+                or source.owner_created_at != owner.created_at
+                or registry.aliases.get(source.owner_name, source.owner_name) != owner.name
+                or source.text_revision > goal.revision
+            ):
+                continue  # Legacy/unbound goals cannot attest a peer incarnation.
+            for binding in source.bindings:
+                if binding.resolution != "resolved":
+                    diagnostics.append(
+                        GoalMentionDiagnostic(
+                            owner.name,
+                            goal.id,
+                            source.text_revision,
+                            binding.token,
+                            binding.resolution,
+                        )
+                    )
+                    continue
+                bound_name = binding.peer_name
+                name = registry.aliases.get(bound_name, bound_name) if bound_name else None
+                peer = registry.threads.get(name) if name is not None else None
+                if (
+                    peer is None
+                    or peer.created_at != binding.peer_created_at
+                    or not peer.role.executable
+                    or peer.created_at == owner.created_at
+                ):
+                    diagnostics.append(
+                        GoalMentionDiagnostic(
+                            owner.name,
+                            goal.id,
+                            source.text_revision,
+                            binding.token,
+                            "stale_incarnation",
+                        )
+                    )
+                    continue
+                contacts.append(
+                    GoalDerivedContact(
+                        owner.name,
+                        owner.created_at,
+                        peer.name,
+                        peer.created_at,
+                        goal.id,
+                        source.text_revision,
+                    )
+                )
+        return tuple(contacts), tuple(diagnostics)
+
+    def goal_contacts(
+        self, owner: str
+    ) -> tuple[tuple[GoalDerivedContact, ...], tuple[GoalMentionDiagnostic, ...]]:
+        """Read-only mutual view; never changes an explicit contact or delivery."""
+        with _store_lock(self.comms._wire_lock_path), _store_lock(self.path):
+            registry = self.comms.registry.snapshot()
+            thread = self.comms.registry.require(owner)
+            contacts, diagnostics = self._goal_contacts(registry)
+            return (
+                tuple(
+                    row
+                    for row in contacts
+                    if thread.created_at in {row.owner_created_at, row.peer_created_at}
+                ),
+                tuple(row for row in diagnostics if row.owner == thread.name),
             )
 
     def edit(self, owner: str, action: str, peer: str, note: str = "") -> Collaboration | None:
@@ -331,6 +438,7 @@ class ThreadRelationships:
             registry = self.comms.registry.snapshot()
             state = self._load()
             edges = self._canonical_edges(state, registry)
+            goal_contacts, goal_diagnostics = self._goal_contacts(registry)
             delivery = self.comms.bus._delivery_scope(thread.name)
         people = {
             view.thread.name: view
@@ -407,21 +515,48 @@ class ThreadRelationships:
             for child in registry.threads.values()
             if child.parent and canonical(child.parent) == thread.name
         ]
-        collaborating = []
+        collaborating: dict[tuple[str, float], RelationshipEntry] = {}
+        explicit_collaborations: list[Collaboration] = []
         for edge in self._unique_edges(edges):
             if not self._incident(edge, thread):
                 continue
+            explicit_collaborations.append(self._orient(edge, thread))
             other_name, other_created = self._counterpart(edge, thread)
             person = people.get(other_name)
             available = person is not None and person.thread.created_at == other_created
-            collaborating.append(
-                RelationshipEntry(
-                    other_name,
-                    "thread",
-                    person if available else None,
-                    detail=edge.note,
-                    available=available,
-                )
+            collaborating[(other_name, other_created)] = RelationshipEntry(
+                other_name,
+                "thread",
+                person if available else None,
+                detail=edge.note,
+                available=available,
+                sources=("explicit",),
+            )
+        for contact in goal_contacts:
+            if (contact.owner, contact.owner_created_at) == (thread.name, thread.created_at):
+                other_name, other_created = contact.peer, contact.peer_created_at
+            elif (contact.peer, contact.peer_created_at) == (thread.name, thread.created_at):
+                other_name, other_created = contact.owner, contact.owner_created_at
+            else:
+                continue
+            contact_identity = other_name, other_created
+            current = collaborating.get(contact_identity)
+            person = people.get(other_name)
+            available = person is not None and person.thread.created_at == other_created
+            provenance = (
+                f"Mentioned by {contact.owner}'s goal {contact.goal_id} "
+                f"text revision {contact.text_revision} (awareness only)"
+            )
+            collaborating[contact_identity] = RelationshipEntry(
+                other_name,
+                "thread",
+                person if available else None,
+                detail=(
+                    f"{current.detail}\n{provenance}" if current and current.detail else provenance
+                ),
+                available=available,
+                sources=(*current.sources, "goal_mention") if current else ("goal_mention",),
+                goal_contacts=(*current.goal_contacts, contact) if current else (contact,),
             )
         return ThreadCommsSnapshot(
             thread.name,
@@ -438,10 +573,14 @@ class ThreadRelationships:
                 RelationshipGroup(
                     "collaborating",
                     "Collaborating",
-                    ordered(collaborating, "collaborating"),
+                    ordered(list(collaborating.values()), "collaborating"),
                     orders["collaborating"],
                 ),
             ),
             limited,
             len(messages),
+            unresolved_goal_mentions=tuple(
+                row for row in goal_diagnostics if row.owner == thread.name
+            ),
+            explicit_collaborations=tuple(explicit_collaborations),
         )

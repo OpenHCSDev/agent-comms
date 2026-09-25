@@ -31,6 +31,7 @@ from uuid import uuid4
 
 from .channels import ChannelCatalog
 from .goal_history import GoalHistoryEntry
+from .goal_mentions import bind_goal_mentions
 from .goal_pauses import GoalPauseEvent, GoalPauseEvents
 from .goal_waits import GoalInputReview, GoalWait, GoalWaits
 
@@ -2559,6 +2560,17 @@ class Comms:
             new_goal = (
                 Goal(text=text.strip(), id=uuid4().hex, revision=1) if action == "set" else None
             )
+            if new_goal is not None:
+                new_goal = replace(
+                    new_goal,
+                    mention_source=bind_goal_mentions(
+                        new_goal.text,
+                        new_goal.id,
+                        new_goal.revision,
+                        thread,
+                        self.registry.snapshot(),
+                    ),
+                )
             if owner_store is not None and new_goal is not None:
                 # The private grant exists before the visible active goal. A
                 # crash in between leaves only an unreachable ledger row.
@@ -2593,7 +2605,20 @@ class Comms:
                     raise ValueError("No goal is set for this thread.")
                 if not text.strip():
                     raise ValueError("A goal requires text.")
-                goal = replace(goal, text=text.strip(), revision=goal.revision + 1)
+                edited_text = text.strip()
+                edited_revision = goal.revision + 1
+                goal = replace(
+                    goal,
+                    text=edited_text,
+                    revision=edited_revision,
+                    mention_source=bind_goal_mentions(
+                        edited_text,
+                        goal.id,
+                        edited_revision,
+                        thread,
+                        self.registry.snapshot(),
+                    ),
+                )
             elif action in {"active", "standby", "paused", "blocked", "completed"}:
                 if goal is None:
                     raise ValueError("No goal is set for this thread.")

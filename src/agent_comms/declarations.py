@@ -837,6 +837,68 @@ class GoalExecution:
 
 
 @dataclass(frozen=True, slots=True)
+class GoalMentionBinding:
+    """An exact goal token resolved once, never rebound by a later name reuse."""
+
+    token: str
+    resolution: str
+    peer_name: str | None = None
+    peer_created_at: float | None = None
+
+    def __post_init__(self) -> None:
+        if not self.token or self.resolution not in {
+            "resolved",
+            "self",
+            "unknown",
+            "alias",
+            "malformed",
+            "limit_exceeded",
+            "non_executable",
+        }:
+            raise ValueError("Invalid goal mention binding.")
+        if self.resolution == "resolved":
+            if (
+                not self.peer_name
+                or not isinstance(self.peer_created_at, (float, int))
+                or isinstance(self.peer_created_at, bool)
+                or not math.isfinite(self.peer_created_at)
+            ):
+                raise ValueError("Resolved goal mention requires a stable peer incarnation.")
+        elif self.peer_name is not None or self.peer_created_at is not None:
+            raise ValueError("Unresolved goal mention cannot name a peer incarnation.")
+
+
+@dataclass(frozen=True, slots=True)
+class GoalMentionSource:
+    """Text-revision and owner-incarnation proof saved with its registry Goal."""
+
+    goal_id: str
+    text_revision: int
+    text_digest: str
+    owner_name: str
+    owner_created_at: float
+    bindings: tuple[GoalMentionBinding, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            not self.goal_id
+            or type(self.text_revision) is not int
+            or not 0 <= self.text_revision < 1 << 63
+            or type(self.text_digest) is not str
+            or len(self.text_digest) != 64
+            or not self.owner_name
+            or type(self.owner_created_at) not in {float, int}
+            or not math.isfinite(self.owner_created_at)
+        ):
+            raise ValueError("Invalid goal mention source.")
+        bindings = tuple(
+            row if isinstance(row, GoalMentionBinding) else GoalMentionBinding(**row)
+            for row in self.bindings
+        )
+        object.__setattr__(self, "bindings", bindings)
+
+
+@dataclass(frozen=True, slots=True)
 class Goal:
     """One durable objective shared by its executing owner and all clients."""
 
@@ -849,6 +911,7 @@ class Goal:
     # identical values, so a captured Goal cannot pass a stale CAS after ABA.
     revision: int = 0
     reported_turn: str | None = None
+    mention_source: GoalMentionSource | None = None
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:
@@ -859,6 +922,15 @@ class Goal:
             raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
         if self.reported_turn is not None and not isinstance(self.reported_turn, str):
             raise ValueError("Goal reported turn must be a string or null.")
+        source = self.mention_source
+        if isinstance(source, dict):
+            source = GoalMentionSource(**source)
+            object.__setattr__(self, "mention_source", source)
+        # Older registry writers can change the Goal without updating this
+        # optional projection. Preserve their current-state authority; readers
+        # suppress stale mention bindings rather than rejecting the whole goal.
+        if source is not None and not isinstance(source, GoalMentionSource):
+            raise ValueError("Invalid goal mention source.")
 
     @property
     def active(self) -> bool:
