@@ -99,6 +99,7 @@ test('real isolated Pi RPC starts only approved project fixture and closes it', 
         const commands = (await client.request('get_commands')).data.commands.map((entry) => entry.name);
         assert.ok(commands.includes('mcp-status'), JSON.stringify(commands));
         assert.ok(commands.includes('mcp-approve'), JSON.stringify(commands));
+        assert.ok(commands.includes('mcp-allow-calls'), JSON.stringify(commands));
         await client.request('prompt', { message: '/mcp-status' });
         assert.equal(client.events.some((message) =>
           message.type === 'extension_ui_request' &&

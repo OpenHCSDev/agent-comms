@@ -9,15 +9,31 @@ const approval = z.strictObject({
   digest: z.string().regex(/^[a-f0-9]{64}$/),
   decision: z.enum(['approve', 'deny']),
 });
+const callGrant = z.strictObject({
+  projectRoot: z.string().min(1),
+  scope: z.enum(['user', 'project']),
+  serverId: z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/),
+  digest: z.string().regex(/^[a-f0-9]{64}$/),
+  decision: z.enum(['allow', 'ask']),
+});
 const ledgerSchema = z.strictObject({
   version: z.literal(1),
   decisions: z.array(approval).max(256),
+  callGrants: z.array(callGrant).max(256).default([]),
 }).superRefine((value, ctx) => {
   const seen = new Set();
   for (const [index, row] of value.decisions.entries()) {
     const key = JSON.stringify([row.projectRoot, row.scope, row.serverId, row.digest]);
     if (seen.has(key)) {
       ctx.addIssue({ code: 'custom', message: 'Duplicate decision', path: ['decisions', index] });
+    }
+    seen.add(key);
+  }
+  seen.clear();
+  for (const [index, row] of value.callGrants.entries()) {
+    const key = JSON.stringify([row.projectRoot, row.scope, row.serverId, row.digest]);
+    if (seen.has(key)) {
+      ctx.addIssue({ code: 'custom', message: 'Duplicate call grant', path: ['callGrants', index] });
     }
     seen.add(key);
   }
@@ -40,6 +56,12 @@ export function parseTrustLedger(text) {
 }
 
 /** Derive executable eligibility. This does not open transports or resolve credentials. */
+export function callGrantDecision(ledger, entry) {
+  return ledger.callGrants.find((row) => row.projectRoot === entry.projectRoot &&
+    row.scope === entry.scope && row.serverId === entry.declaration.id &&
+    row.digest === entry.digest)?.decision ?? 'ask';
+}
+
 export function effectiveDeclarations({ user, project, projectTrusted, projectRoot, ledger }) {
   if (!isAbsolute(projectRoot)) throw new Error('Canonical absolute project root required');
   const combined = new Map(user.servers.map((server) => [server.id,

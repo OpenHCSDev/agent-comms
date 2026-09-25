@@ -1,8 +1,10 @@
+import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { callGrantDecision, parseTrustLedger } from './authority.mjs';
 import { discover } from './discover.mjs';
 import { prepareStdioParameters } from './launch-spec.mjs';
-import { loadEffectiveDeclarations } from './sources.mjs';
+import { loadEffectiveDeclarations, readOptional } from './sources.mjs';
 
 /** One Pi-session owner for all approved MCP connections; no retries of calls. */
 export class McpRuntime {
@@ -73,6 +75,15 @@ export class McpRuntime {
     return current.some(({ declaration, digest, projectRoot, status, scope }) =>
       declaration.id === id && scope === active.record.entry.scope && status === 'approved' &&
       digest === active.record.entry.digest && projectRoot === active.record.entry.projectRoot);
+  }
+
+  /** Separate out-of-band grant permits noninteractive calls on this exact live declaration. */
+  async preauthorized(id, ctx) {
+    if (!await this.authorized(id, ctx)) return false;
+    const entry = this.#connections.get(id).record.entry;
+    const text = await readOptional(join(this.#options.agentDir, 'mcp-trust.json'));
+    const ledger = parseTrustLedger(text ?? '{"version":1,"decisions":[],"callGrants":[]}');
+    return callGrantDecision(ledger, entry) === 'allow';
   }
 
   /** Package-owned lookup for the Pi tool/resource/prompt projection. */

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { decideCallGrant } from '../src/commands.mjs';
 import { McpRuntime } from '../src/runtime.mjs';
 import { registerResourceTools } from '../src/resources.mjs';
 
@@ -48,6 +49,16 @@ test('MCP resources and prompts are discoverable and usable as Pi tools with cal
     await assert.rejects(registered.get('mcp_get_prompt').execute('',
       { serverId: 'fixture', name: 'greeting' }, signal, undefined, { ...ctx, mode: 'rpc' }), /human controller/);
     assert.equal(approvals, 2);
+    assert.equal(await decideCallGrant(ctx, { agentDir, configDirName: '.pi',
+      id: 'fixture', decision: 'allow' }), true);
+    const headlessResource = await registered.get('mcp_read_resource').execute('',
+      { serverId: 'fixture', uri: 'fixture://example' }, signal, undefined, { ...ctx, mode: 'rpc' });
+    assert.match(headlessResource.content[0].text, /fixture data/);
+    const headlessPrompt = await registered.get('mcp_get_prompt').execute('',
+      { serverId: 'fixture', name: 'greeting', arguments: { name: 'Pi' } }, signal, undefined,
+      { ...ctx, mode: 'rpc' });
+    assert.match(headlessPrompt.content[0].text, /Hello, Pi/);
+    assert.equal(approvals, 3); // Only the grant required a TUI confirmation.
     await writeFile(path, config({ ...declaration, transport: { ...declaration.transport, args: ['changed'] } }));
     await assert.rejects(registered.get('mcp_read_resource').execute('',
       { serverId: 'fixture', uri: 'fixture://example' }, signal, undefined, ctx), /no longer authorized/);

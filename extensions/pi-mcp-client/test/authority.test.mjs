@@ -38,6 +38,12 @@ test('ledger rejects malformed or duplicated decisions without leaking fields', 
     JSON.stringify({ version: 1, decisions: [{ ...decision, trust: true }] }),
     JSON.stringify({ version: 1, decisions: [{ ...decision, scope: 'user' }] }),
     JSON.stringify({ version: 1, decisions: [{ ...decision, digest: 'never-expose-me' }] }),
+    JSON.stringify({ version: 1, decisions: [], callGrants: [
+      { ...decision, decision: 'allow' }, { ...decision, decision: 'allow' },
+    ] }),
+    JSON.stringify({ version: 1, decisions: [], callGrants: [
+      { ...decision, decision: 'auto-allow' },
+    ] }),
   ]) {
     assert.throws(() => parseTrustLedger(raw), (error) =>
       error.message.startsWith('Invalid MCP trust ledger:') && !error.message.includes('never-expose-me'));

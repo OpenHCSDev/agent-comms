@@ -4,9 +4,11 @@ The Pi package manifest loads `index.mjs` **by default when the package is insta
 It connects approved stdio servers when a Pi session starts, discovers tools,
 resources and prompts, registers bounded discovered Pi tools (including a
 resource/prompt catalog and read/get operations), and closes children on session
-shutdown. It provides `/mcp-status`, `/mcp-approve <id>`, and
-`/mcp-deny <id>`. Tool calls require a local Pi TUI confirmation; detached/RPC
-tool calls fail until a correlated controller or out-of-band tool policy is added.
+shutdown. It provides `/mcp-status`, `/mcp-approve <id>`, `/mcp-deny <id>`, and
+`/mcp-allow-calls <id>` / `/mcp-confirm-calls <id>`. Tool calls normally require
+a local Pi TUI confirmation. An explicit, separate user-owned call grant permits
+headless/RPC calls for the exact project, scope, server and declaration digest;
+otherwise headless calls fail without attempting a dialog.
 
 ```sh
 cd extensions/pi-mcp-client

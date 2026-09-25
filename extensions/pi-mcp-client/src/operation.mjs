@@ -9,10 +9,17 @@ function displayCall(serverId, label, params) {
 export async function confirmedClient(runtime, serverId, label, args, ctx, signal) {
   const before = runtime.ready(serverId);
   const scope = runtime.snapshot().find((item) => item.id === serverId)?.scope;
-  if (!before || ctx.mode !== 'tui' || (scope === 'project' && !ctx.isProjectTrusted())) {
-    throw new Error('MCP operation requires an approved server and a local human controller');
+  if (!before || (scope === 'project' && !ctx.isProjectTrusted())) {
+    throw new Error('MCP operation requires an approved server');
   }
   if (signal.aborted) throw new Error('MCP operation cancelled');
+  if (!await runtime.authorized(serverId, ctx)) throw new Error('MCP operation no longer authorized');
+  if (await runtime.preauthorized(serverId, ctx)) {
+    const ready = runtime.ready(serverId);
+    if (!ready) throw new Error('MCP operation no longer connected');
+    return ready.client;
+  }
+  if (ctx.mode !== 'tui') throw new Error('MCP operation requires a local human controller');
   if (!await ctx.ui.confirm(`Run MCP ${serverId}/${label}?`, displayCall(serverId, label, args))) {
     throw new Error('MCP operation denied by user');
   }

@@ -1,5 +1,5 @@
 import { CONFIG_DIR_NAME, getAgentDir } from '@earendil-works/pi-coding-agent';
-import { decideProjectServer } from './src/commands.mjs';
+import { decideCallGrant, decideProjectServer } from './src/commands.mjs';
 import { loadEffectiveDeclarations } from './src/sources.mjs';
 import { McpRuntime } from './src/runtime.mjs';
 import { registerReadyTools } from './src/tools.mjs';
@@ -20,18 +20,30 @@ export default function (pi) {
     runtime = undefined;
   });
   pi.registerCommand('mcp-status', {
-    description: 'Show inert MCP declaration eligibility (does not start servers)',
+    description: 'Show MCP connection, discovery and call-approval status',
     handler: async (_args, ctx) => {
-      const entries = runtime?.snapshot() ?? (await loadEffectiveDeclarations(options(ctx)))
+      const active = runtime;
+      const entries = active?.snapshot() ?? (await loadEffectiveDeclarations(options(ctx)))
         .map(({ scope, declaration, status }) => ({ scope, id: declaration.id, status }));
-      const status = entries.length
-        ? entries.map(({ scope, id, status: state, server, tools, resources, prompts }) =>
-          `${scope}/${id}: ${state}${server ? ` (${server}; ${tools} tools, ${resources} resources, ${prompts} prompts)` : ''}`)
-          .join('\n')
-        : 'No MCP declarations';
-      ctx.ui.notify(`MCP:\n${status}`, 'info');
+      const lines = await Promise.all(entries.map(async ({ scope, id, status, server, tools, resources, prompts }) => {
+        const valid = !!active && status === 'ready' && await active.authorized(id, ctx);
+        const state = status === 'ready' && !valid ? 'stale_restart_required' : status;
+        const calls = valid ? await active.preauthorized(id, ctx) ? 'automatic' : 'confirm' : 'unavailable';
+        return `${scope}/${id}: ${state}; calls=${calls}` +
+          (server ? ` (${server}; ${tools} tools, ${resources} resources, ${prompts} prompts)` : '');
+      }));
+      ctx.ui.notify(`MCP:\n${lines.join('\n') || 'No MCP declarations'}`, 'info');
     },
   });
+  for (const [name, decision] of [['mcp-allow-calls', 'allow'], ['mcp-confirm-calls', 'ask']]) {
+    pi.registerCommand(name, {
+      description: `${decision === 'allow' ? 'Preauthorize headless' : 'Require confirmation for'} calls on one exact MCP declaration`,
+      handler: async (args, ctx) => {
+        const changed = await decideCallGrant(ctx, { ...options(ctx), id: args.trim(), decision });
+        ctx.ui.notify(changed ? `MCP call policy set to ${decision}` : 'MCP call policy unchanged', 'info');
+      },
+    });
+  }
   for (const [name, decision] of [['mcp-approve', 'approve'], ['mcp-deny', 'deny']]) {
     pi.registerCommand(name, {
       description: `${decision} an exact project MCP declaration in the local TUI`,
