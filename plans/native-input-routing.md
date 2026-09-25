@@ -94,10 +94,17 @@ for channel routing instead of using a text-only echo backend. Content/order
 assertions remain. Minor inherited lint/type defects were corrected without
 renaming public exception types or changing goal transitions.
 
-A separate coverage-enabled invocation was interrupted after 1,234 passes and
-7 skips; it is not a complete coverage-gate receipt. The completed local
-non-coverage suite and separate native checks above are the execution receipts;
-this work proceeds from local validation without waiting for GitHub CI.
+After reconciling main through `8d320b9` (including the owner goal-snapshot
+contract required by current Toad), the serial suite passed 1,419 tests with
+46 skips in 128.39 seconds. At the user's request, added `pytest-xdist` to dev
+dependencies and made multiprocessing the default: automatic CPU detection,
+at most eight workers, work stealing, and the existing combined coverage gate.
+`pytest -n 0` remains available for debugging.
+
+The complete parallel run passed **1,419 tests, 46 skipped in 32.15 seconds**
+with **88.81% coverage**, exceeding the unchanged 85% threshold. This supersedes
+the earlier interrupted coverage attempt. Work proceeds from local validation
+without waiting for GitHub CI.
 
 Toad's `native_input_attribution_pilot.py` passed against this source: incoming
 and outgoing live/replay headers agree, a human quoting a transport header stays
