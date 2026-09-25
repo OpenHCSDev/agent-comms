@@ -5,6 +5,9 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import { decideCallGrant } from '../src/commands.mjs';
+import { recordCallGrant, recordProjectDecision } from '../src/ledger-write.mjs';
+import { loadEffectiveDeclarations, readTrustLedger } from '../src/sources.mjs';
+import { callGrantDecision } from '../src/authority.mjs';
 import { McpRuntime } from '../src/runtime.mjs';
 import { registerReadyTools } from '../src/tools.mjs';
 
@@ -65,6 +68,41 @@ test('separate TUI call grant enables and revokes headless calls only for the ex
     assert.equal(runtime.ready('fixture'), undefined); // No silent reconnect after stale mutation.
   } finally {
     await runtime.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('denial between a project grant snapshot and its locked write cannot revive headless authority',
+  { skip: process.platform === 'win32' && 'Windows durable decision writes are disabled' }, async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mcp-grant-race-'));
+  const agentDir = join(root, 'agent');
+  const project = join(root, 'project');
+  await mkdir(agentDir); await mkdir(project); await mkdir(join(project, '.pi'));
+  await writeFile(join(project, '.pi', 'mcp.json'), config(declaration));
+  new ProjectTrustStore(agentDir).set(project, true);
+  try {
+    const options = { agentDir, configDirName: '.pi',
+      ctx: { cwd: project, isProjectTrusted: () => true } };
+    await recordProjectDecision({ agentDir, projectRoot: project,
+      declaration, decision: 'approve' });
+    const staleApproved = (await loadEffectiveDeclarations(options))[0];
+    assert.equal(staleApproved.status, 'approved');
+    // This denial commits while the caller is still displaying or handling
+    // the first approved snapshot, before its recordCallGrant acquires the lock.
+    await recordProjectDecision({ agentDir, projectRoot: project,
+      declaration, decision: 'deny' });
+    await assert.rejects(recordCallGrant({ agentDir, entry: staleApproved, decision: 'allow' }),
+      /approval changed before call grant commit/);
+    await recordProjectDecision({ agentDir, projectRoot: project,
+      declaration, decision: 'approve' });
+    const current = (await loadEffectiveDeclarations(options))[0];
+    assert.equal(current.status, 'approved');
+    assert.equal(callGrantDecision(await readTrustLedger(agentDir), current), 'ask');
+    // User-scope has no separate project declaration approval ledger row.
+    const user = { ...current, scope: 'user' };
+    await recordCallGrant({ agentDir, entry: user, decision: 'allow' });
+    assert.equal(callGrantDecision(await readTrustLedger(agentDir), user), 'allow');
+  } finally {
     await rm(root, { recursive: true, force: true });
   }
 });

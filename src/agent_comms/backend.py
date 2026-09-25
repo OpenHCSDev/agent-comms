@@ -33,7 +33,7 @@ import secrets
 import shutil
 import signal
 import unicodedata
-from collections.abc import AsyncGenerator, AsyncIterator, Callable, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import AbstractContextManager, aclosing, nullcontext, suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -598,6 +598,7 @@ async def stream_agent_events(
     ) = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
     persistent_session: PersistentPiSession | None = None,
+    ui_request: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run the backend and yield events. Always ends with a ``done`` event.
 
@@ -636,6 +637,7 @@ async def stream_agent_events(
                         native_start=native_start,
                         interrupt_boundary=interrupt_boundary,
                         persistent_session=persistent_session,
+                        ui_request=ui_request,
                     )
                 ) as events:
                     async for event in events:
@@ -686,6 +688,7 @@ async def _stream_agent_events(
     ) = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
     persistent_session: PersistentPiSession | None = None,
+    ui_request: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]] | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     if shutil.which(agent_bin) is None and not Path(agent_bin).is_file():
         yield {"type": "done", "text": f"agent backend {agent_bin!r} not found", "ok": False}
@@ -1042,6 +1045,7 @@ async def _stream_agent_events(
     retry_recovery_pending = False
     retry_recovery_reason = "provider_auto_retry_progress"
     started_during_abort: list[str | None] = []
+    ui_seen: set[str] = set()
 
     async def request_stats() -> None:
         nonlocal stats_requested
@@ -1462,6 +1466,50 @@ async def _stream_agent_events(
             fail_reason = _IDENTITY_FAILURE_TEXT
             await abort_stalled_rpc()
             break
+        if kind == "extension_ui_request":
+            # The only return path for Pi dialogs is this exact child stdin.
+            # Never relay a request across a new child/session or infer a human
+            # controller from an ACP subscriber/broadcast update.
+            request_id = payload.get("id")
+            method = payload.get("method")
+            if type(request_id) is not str or not request_id or len(request_id) > 128:
+                fail_reason = "Pi extension UI request lacked a bounded ID."
+                await _terminate_process(proc)
+                break
+            if method not in {"confirm", "select", "input", "editor"}:
+                continue  # Fire-and-forget UI notification has no response.
+            choice: dict[str, Any] | None = None
+            if (request_id not in ui_seen and len(ui_seen) < 64 and
+                    ui_request is not None and initial_prompt_acknowledged and
+                    initial_input_started and initial_session_observed and
+                    isinstance(initial_session_id, str) and initial_session_id and
+                    not session_identity_uncertain and not input_uncertain):
+                ui_seen.add(request_id)
+                with suppress(Exception):
+                    # Controller errors deny; do not expose raw UI/extension text.
+                    choice = await asyncio.wait_for(ui_request(payload), timeout=15)
+            response: dict[str, Any] = {
+                "type": "extension_ui_response", "id": request_id, "cancelled": True,
+            }
+            if method == "confirm" and isinstance(choice, dict):
+                response = {"type": "extension_ui_response", "id": request_id,
+                            "confirmed": choice.get("confirmed") is True}
+            elif method == "select" and isinstance(choice, dict):
+                options = payload.get("options")
+                if (isinstance(options, list) and type(choice.get("value")) is str and
+                        choice["value"] in options):
+                    response = {"type": "extension_ui_response", "id": request_id,
+                                "value": choice["value"]}
+            try:
+                if proc.stdin is None or proc.returncode is not None:
+                    raise BrokenPipeError
+                proc.stdin.write((json.dumps(response) + "\n").encode())
+                await asyncio.wait_for(proc.stdin.drain(), timeout=2)
+            except (BrokenPipeError, ConnectionResetError, TimeoutError):
+                fail_reason = "Pi extension UI response could not reach the requesting child."
+                await _terminate_process(proc)
+                break
+            continue
         now = loop.time()
         if stats_requested and kind == "response" and persistent_session is not None:
             response_id = payload.get("id")

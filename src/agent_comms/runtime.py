@@ -10,9 +10,14 @@ import asyncio
 import hashlib
 import json
 import os
+import secrets
 import tempfile
+from contextlib import suppress
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, cast
+
+from acp.schema import RequestPermissionResponse
 
 
 def socket_path(root: Path, pid: int) -> Path:
@@ -24,9 +29,40 @@ def socket_path(root: Path, pid: int) -> Path:
     return Path(tempfile.gettempdir()) / f"ac-{digest}-{pid}.sock"
 
 
+UNBOUND_CONTROLLER = object()
+ACP_PERMISSION_TIMEOUT_SECONDS = 14.0
+
+
 class SocketClient:
     def __init__(self, writer: asyncio.StreamWriter):
         self.writer = writer
+        self.token = secrets.token_hex(32)
+        self.pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
+
+    async def permission(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+        if len(self.pending) >= 4:
+            return None
+        request_id = secrets.token_hex(16)
+        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
+        self.pending[request_id] = future
+        try:
+            self.writer.write((json.dumps({"permissionRequest": {
+                "id": request_id, **payload,
+            }}) + "\n").encode())
+            await asyncio.wait_for(self.writer.drain(), timeout=2)
+            return await asyncio.wait_for(future, timeout=15)
+        except (OSError, ConnectionError, TimeoutError, asyncio.CancelledError):
+            return None
+        finally:
+            self.pending.pop(request_id, None)
+            if not future.done():
+                future.cancel()
+
+    def disconnected(self) -> None:
+        for future in self.pending.values():
+            if not future.done():
+                future.cancel()
+        self.pending.clear()
 
     async def session_update(self, *, session_id: str, update: Any) -> None:
         self.writer.write(
@@ -46,6 +82,11 @@ class RuntimeServer:
         self.agent = agent
         self.server: asyncio.Server | None = None
         self.clients: dict[str, set[SocketClient]] = {}
+        # Set only while handling a prompt on this particular attachment.
+        # Never publish this bearer to ACP metadata, the transcript or other sockets.
+        self.controller: ContextVar[SocketClient | None | object] = ContextVar(
+            "runtime_permission_controller", default=UNBOUND_CONTROLLER
+        )
         self.path = socket_path(agent._comms.root, os.getpid())
 
     async def start(self) -> None:
@@ -64,6 +105,18 @@ class RuntimeServer:
                 await client.session_update(session_id=session_id, update=update)
             except (ConnectionError, OSError):
                 self.clients[session_id].discard(client)
+
+    def is_controller(self, session_id: str, controller: SocketClient) -> bool:
+        return (controller in self.clients.get(session_id, ()) and
+                not controller.writer.is_closing())
+
+    async def request_permission(
+        self, session_id: str, controller: SocketClient, payload: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        if not self.is_controller(session_id, controller):
+            return None
+        reply = await controller.permission(payload)
+        return reply if self.is_controller(session_id, controller) else None
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         client = SocketClient(writer)
@@ -98,6 +151,7 @@ class RuntimeServer:
                     (
                         json.dumps(
                             {
+                                "controllerToken": client.token,
                                 "ready": {
                                     **metadata,
                                     "configOptions": [
@@ -111,11 +165,27 @@ class RuntimeServer:
                     ).encode()
                 )
                 await writer.drain()
-                await reader.read()
+                while line := await reader.readline():
+                    response = json.loads(line)
+                    receipt = (
+                        response.get("permissionResponse") if isinstance(response, dict) else None
+                    )
+                    if not isinstance(receipt, dict):
+                        continue
+                    pending = client.pending.get(receipt.get("id"))
+                    if pending is not None and not pending.done():
+                        pending.set_result(receipt)
             elif action == "prompt":
-                result = await self.agent.prompt(
-                    session_id, request["prompt"], field_meta=request.get("meta") or {}
-                )
+                controller = next((subscriber for subscriber in self.clients.get(session_id, ())
+                    if subscriber.token == request.get("controllerToken") and
+                    not subscriber.writer.is_closing()), None)
+                context = self.controller.set(controller)
+                try:
+                    result = await self.agent.prompt(
+                        session_id, request["prompt"], field_meta=request.get("meta") or {}
+                    )
+                finally:
+                    self.controller.reset(context)
                 writer.write(
                     (
                         json.dumps({"result": result.model_dump(by_alias=True, exclude_none=True)})
@@ -238,11 +308,13 @@ class RuntimeServer:
         finally:
             if session_id is not None:
                 self.clients.get(session_id, set()).discard(client)
+            client.disconnected()
             writer.close()
 
     async def close(self) -> None:
         for clients in self.clients.values():
             for client in clients:
+                client.disconnected()
                 client.writer.close()
         if self.server is not None:
             self.server.close()
@@ -267,6 +339,8 @@ class RuntimeProxy:
         self.writer: asyncio.StreamWriter | None = None
         self.task: asyncio.Task[None] | None = None
         self._closed = False
+        self._controller_token: str | None = None
+        self._permission_tasks: dict[str, asyncio.Task[None]] = {}
         try:
             thread = comms.registry.require(session_id)
         except ValueError:
@@ -342,6 +416,12 @@ class RuntimeProxy:
                 if "error" in data:
                     raise RuntimeError(data["error"])
                 if "ready" in data:
+                    token = data.get("controllerToken")
+                    # Older detached owners remain attachable for ordinary
+                    # messages, but can never become a permission controller.
+                    self._controller_token = (
+                        token if isinstance(token, str) and len(token) == 64 else None
+                    )
                     return reader, cast(dict[str, Any], data["ready"])
                 await self.update(data)
             raise RuntimeError("Thread owner disconnected during attachment")
@@ -354,6 +434,45 @@ class RuntimeProxy:
             await self.agent._client.session_update(
                 session_id=self.session_id, update=data["update"]
             )
+        if "permissionRequest" in data:
+            request = data["permissionRequest"]
+            if (
+                not isinstance(request, dict)
+                or not isinstance(request.get("id"), str)
+                or len(self._permission_tasks) >= 4
+            ):
+                return
+            request_id = request["id"]
+            if request_id in self._permission_tasks:
+                return
+            token = self._controller_token
+
+            async def ask() -> None:
+                outcome: dict[str, Any] = {"outcome": "cancelled"}
+                try:
+                    if self.agent._client is not None and token == self._controller_token:
+                        reply = await asyncio.wait_for(self.agent._client.request_permission(
+                            session_id=self.session_id, tool_call=request["toolCall"],
+                            options=request["options"]), timeout=ACP_PERMISSION_TIMEOUT_SECONDS)
+                        outcome = RequestPermissionResponse.model_validate(reply).model_dump(
+                            by_alias=True, exclude_none=True
+                        )["outcome"]
+                except (Exception, asyncio.CancelledError):
+                    # The owner receives a denial, not client exception text.
+                    pass
+                finally:
+                    if (
+                        token == self._controller_token and self.writer is not None
+                        and not self.writer.is_closing()
+                    ):
+                        self.writer.write((json.dumps({"permissionResponse": {
+                            "id": request_id, **outcome,
+                        }}) + "\n").encode())
+                        with suppress(OSError, ConnectionError, TimeoutError):
+                            await asyncio.wait_for(self.writer.drain(), timeout=1)
+                    self._permission_tasks.pop(request_id, None)
+
+            self._permission_tasks[request_id] = asyncio.create_task(ask())
 
     async def forward(self, reader: asyncio.StreamReader) -> None:
         while not self._closed:
@@ -364,6 +483,10 @@ class RuntimeProxy:
                 pass  # A reset subscription is safe to establish again.
             except ValueError:
                 return
+            self._controller_token = None
+            for permission in self._permission_tasks.values():
+                permission.cancel()
+            self._permission_tasks.clear()
             if self.writer is not None:
                 self.writer.close()
             while not self._closed:
@@ -393,7 +516,10 @@ class RuntimeProxy:
         try:
             writer.write(
                 (
-                    json.dumps({"action": action, "thread": self.session_id, **kwargs}) + "\n"
+                    json.dumps({"action": action, "thread": self.session_id,
+                        **({"controllerToken": self._controller_token}
+                           if action == "prompt" else {}),
+                        **kwargs}) + "\n"
                 ).encode()
             )
             await writer.drain()
@@ -409,6 +535,10 @@ class RuntimeProxy:
 
     async def close(self) -> None:
         self._closed = True
+        self._controller_token = None
+        for permission in self._permission_tasks.values():
+            permission.cancel()
+        self._permission_tasks.clear()
         if self.writer is not None:
             self.writer.close()
         if self.task is not None:

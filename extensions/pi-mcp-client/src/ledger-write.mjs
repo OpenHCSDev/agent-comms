@@ -38,10 +38,22 @@ export async function recordCallGrant({ agentDir, entry, decision }) {
   const row = { projectRoot: entry.projectRoot, scope: entry.scope,
     serverId: entry.declaration.id, digest: entry.digest, decision };
   parseTrustLedger(JSON.stringify({ version: 1, decisions: [], callGrants: [row] }));
-  await updateLedger(agentDir, (current) => ({ ...current,
-    callGrants: [...current.callGrants.filter((existing) =>
-      existing.projectRoot !== row.projectRoot || existing.scope !== row.scope ||
-      existing.serverId !== row.serverId), row],
-  }));
+  await updateLedger(agentDir, (current) => {
+    // Check the approval INSIDE the same ledger writer lock as the grant.
+    // A concurrent deny between the caller's approved snapshot and this
+    // mutation must not recreate an autonomous grant that a later approval
+    // of the same digest would revive.
+    if (row.scope === 'project' && !current.decisions.some((decision) =>
+      decision.projectRoot === row.projectRoot && decision.scope === 'project' &&
+      decision.serverId === row.serverId && decision.digest === row.digest &&
+      decision.decision === 'approve')) {
+      throw new Error('MCP project approval changed before call grant commit');
+    }
+    return { ...current,
+      callGrants: [...current.callGrants.filter((existing) =>
+        existing.projectRoot !== row.projectRoot || existing.scope !== row.scope ||
+        existing.serverId !== row.serverId), row],
+    };
+  });
   return row;
 }
