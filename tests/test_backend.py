@@ -2726,7 +2726,7 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
         assert end["reason"] == "threshold"
         assert end["aborted"] is aborted
         assert end["context_used"] is None
-        assert end["summary"] == (None if aborted else summary.strip()[:4096])
+        assert end["summary"] == (None if aborted else summary)
         assert events[-2]["type"] == "agent_info" and events[-2]["context_used"] is None
         assert events[-1]["ok"] is True
 

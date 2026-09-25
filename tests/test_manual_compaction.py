@@ -16,6 +16,11 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX process groups
 PACKAGE = Path.home() / ".local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent"
 
 
+def test_manual_summary_preserves_markdown():
+    summary = "## Decisions\n\n" + "- Keep this decision.\n" * 250 + "\n## Next\nContinue."
+    assert compact._summary(summary) == summary
+
+
 def test_large_saved_session_passes_local_preflight(tmp_path):
     session = tmp_path / "long.jsonl"
     saved_session(session)

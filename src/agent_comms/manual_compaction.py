@@ -15,14 +15,13 @@ import shutil
 import signal
 import stat
 import tempfile
-import unicodedata
 from collections.abc import Sequence
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from .backend import configured_model, rpc_args_for
+from .backend import compaction_summary, configured_model, rpc_args_for
 
 MAX_LINE = 64 * 1024
 MAX_OUTPUT = 256 * 1024
@@ -399,10 +398,7 @@ def _startup_metadata(before: bytes, after: bytes) -> bool:
 
 
 def _summary(value: Any) -> str:
-    if not isinstance(value, str):
-        return ""
-    safe = "".join(" " if unicodedata.category(char).startswith("C") else char for char in value)
-    return " ".join(safe.split())[:1000]
+    return compaction_summary(value)
 
 
 def _count(value: Any) -> int | None:
