@@ -17,6 +17,7 @@ import pytest
 
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
+from agent_comms.declarations import ActivityState
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import wire
 
@@ -96,6 +97,7 @@ def _saved_history(path: Path, cwd: Path, *, short: bool = False) -> None:
         "success",
         "acp_success",
         "tool_outputs",
+        "post_compaction_tool_rounds",
         "summary_failure",
         "oversized_current",
         "oversized_summary",
@@ -120,7 +122,15 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             )
         )
         session = root / "saved.jsonl"
+        summary_entered = threading.Event()
+        release_summary = threading.Event()
         _saved_history(session, project, short=case in {"oversized_current", "oversized_summary"})
+        if case == "post_compaction_tool_rounds":
+            rows = [json.loads(line) for line in session.read_text().splitlines()]
+            rows[1]["message"]["content"][0]["text"] = "LEGACY_DISCARDED_HISTORY " + "x" * 6000
+            session.write_text("".join(json.dumps(row) + "\n" for row in rows))
+            for index in range(3):
+                (project / f"read-{index}.txt").write_text(f"TOOL_ROUND_{index}\n")
         if case == "tool_outputs":
             rows = [json.loads(line) for line in session.read_text().splitlines()]
             for row in rows:
@@ -154,6 +164,7 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
         calls: list[str] = []
         reasoning_efforts: list[str | None] = []
         request_messages: list[list[dict]] = []
+        normal_requests: list[list[dict]] = []
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
@@ -161,6 +172,9 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                 calls.append(self.path)
                 request_messages.append(request["messages"])
                 reasoning_efforts.append(request.get("reasoning", {}).get("effort"))
+                if case == "acp_success" and request.get("reasoning", {}).get("effort") == "low":
+                    summary_entered.set()
+                    assert release_summary.wait(timeout=15), "Test did not release compaction"
                 if case == "summary_failure":
                     body = b'{"error":{"message":"429 rate limit","type":"rate_limit_error"}}'
                     self.send_response(429)
@@ -169,6 +183,10 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                     self.end_headers()
                     self.wfile.write(body)
                     return
+                normal_round = 0
+                if case == "post_compaction_tool_rounds" and reasoning_efforts[-1] == "high":
+                    normal_requests.append(request["messages"])
+                    normal_round = len(normal_requests)
                 chunk = {
                     "id": f"fixture-{len(calls)}",
                     "object": "chat.completion.chunk",
@@ -211,11 +229,30 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                             for index in range(3)
                         ],
                     }
+                if 1 <= normal_round <= 3:
+                    chunk["choices"][0]["delta"] = {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": f"post_compact_{normal_round}",
+                                "type": "function",
+                                "function": {
+                                    "name": "read",
+                                    "arguments": json.dumps(
+                                        {"path": str(project / f"read-{normal_round - 1}.txt")}
+                                    ),
+                                },
+                            }
+                        ],
+                    }
                 terminal = {
                     **chunk,
                     "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
                     "usage": {"prompt_tokens": 100, "completion_tokens": 3, "total_tokens": 103},
                 }
+                if 1 <= normal_round <= 3:
+                    terminal["choices"][0]["finish_reason"] = "tool_calls"
                 if case == "tool_outputs" and len(calls) == 1:
                     terminal["choices"][0]["finish_reason"] = "tool_calls"
                     terminal["usage"] = {
@@ -282,7 +319,7 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                 "--thinking",
                 "high",
             ]
-            if case == "tool_outputs":
+            if case in {"tool_outputs", "post_compaction_tool_rounds"}:
                 native_args.remove("--no-tools")
                 native_args.extend(["--tools", "read"])
             child_env = {
@@ -317,21 +354,47 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                     auto_wake=False,
                 )
                 updates = []
+                resumed_activity = []
 
                 class Client:
                     async def session_update(self, session_id, update):
                         updates.append(update)
+                        phase = (
+                            (getattr(update, "field_meta", None) or {})
+                            .get("agentComms", {})
+                            .get("compaction", {})
+                            .get("phase")
+                        )
+                        if phase == "end":
+                            resumed_activity.append(comms.activity_of("project"))
 
                 owner.on_connect(Client())
                 await owner.new_session(str(project))
                 owner._drain_tasks["project"].cancel()
                 await asyncio.gather(owner._drain_tasks["project"], return_exceptions=True)
                 comms.attach_session("project", str(session))
+                turn = asyncio.create_task(
+                    owner._run_owned_input("project", "project", "Reply OK.")
+                )
                 try:
-                    await asyncio.wait_for(
-                        owner._run_owned_input("project", "project", "Reply OK."), timeout=30
+                    assert await asyncio.to_thread(summary_entered.wait, 10)
+                    activity = comms.activity_of("project")
+                    assert activity.state is ActivityState.WORKING
+                    assert activity.detail == "Compacting context"
+                    view = next(
+                        item for item in comms.thread_views() if item.thread.name == "project"
                     )
+                    assert view.presentation.summary == "Working · Compacting context"
+                    release_summary.set()
+                    await asyncio.wait_for(turn, timeout=30)
+                    assert resumed_activity and resumed_activity[-1].state is ActivityState.THINKING
+                    assert "Compacting" not in resumed_activity[-1].detail
+                    assert comms.activity_of("project").state is ActivityState.IDLE
                 finally:
+                    release_summary.set()
+                    if not turn.done():
+                        turn.cancel()
+                    await asyncio.gather(turn, return_exceptions=True)
                     await owner.shutdown()
             else:
                 await asyncio.wait_for(collect(), timeout=30)
@@ -380,6 +443,31 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             return
         assert "input_started" in kinds
         assert events[-1]["type"] == "done"
+        if case == "post_compaction_tool_rounds":
+            assert events[-1]["ok"] is True
+            assert len(normal_requests) == 4
+            assert sum(event["type"] == "compaction_end" for event in events) == 1
+            for index, messages in enumerate(normal_requests):
+                serialized = json.dumps(messages)
+                resurrected = "LEGACY_DISCARDED_HISTORY" in serialized
+                assert not resurrected, f"Old history resurrected in round {index}"
+                assert len(serialized) < 100000, f"Compacted context regrew in round {index}"
+                assert "summary" in serialized
+                tool_calls = [
+                    call["id"] for message in messages for call in message.get("tool_calls", [])
+                ]
+                tool_results = [
+                    message["tool_call_id"] for message in messages if message["role"] == "tool"
+                ]
+                assert (
+                    tool_calls == tool_results == [f"post_compact_{n}" for n in range(1, index + 1)]
+                )
+                for n in range(index):
+                    assert f"TOOL_ROUND_{n}" in serialized
+            assert len([event for event in events if event["type"] == "provider_usage"]) == len(
+                calls
+            )
+            return
         if case == "compacted_resume":
             assert events[-1]["ok"] is True
             assert "compaction_start" not in kinds
