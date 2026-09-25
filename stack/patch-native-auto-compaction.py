@@ -18,7 +18,13 @@ METHOD = """    _installNativeCompactionBeforeProvider() {
             if (!this._nativeRunHadTrackedInput || !this.model || this.model.contextWindow <= 0)
                 return transformed;
             const settings = this.settingsManager.getCompactionSettings();
-            if (!shouldCompact(estimateContextTokens(transformed).tokens, this.model.contextWindow, settings))
+            // Retained assistant usage still measures the old full context until
+            // a response follows the latest compaction. Use Pi's authoritative
+            // usage validity check before consulting that saved measurement.
+            const contextTokens = this.getContextUsage()?.tokens === null
+                ? estimateMessagesTokens(transformed)
+                : estimateContextTokens(transformed).tokens;
+            if (!shouldCompact(contextTokens, this.model.contextWindow, settings))
                 return transformed;
             const budget = this.model.contextWindow - settings.reserveTokens;
             const currentInput = transformed.findLast((message) => message.role === "user" &&
