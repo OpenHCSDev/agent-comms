@@ -146,6 +146,7 @@ class CommsAgent:
         # including non-displayed steers, needs its own identified user start.
         self._forwarded_inputs: dict[str, set[str]] = {}
         self._steering_input_keys: dict[str, dict[str, str]] = {}
+        self._steering_goal_ids: dict[str, dict[str, str | None]] = {}
         self._turn_input_keys: dict[str, set[str]] = {}
         self._dispositions = InputDispositions(comms.root)
         self._goal_store: GoalAttemptStore | None = None
@@ -540,6 +541,10 @@ class CommsAgent:
                     self._require_session(session_id), self._require_session(session_id)
                 )
                 admission = snapshot.admission_generations[owner]
+                admitted_goal = snapshot.threads[owner].goal
+                self._steering_goal_ids.setdefault(session_id, {})[input_id] = (
+                    admitted_goal.id if admitted_goal is not None and admitted_goal.active else None
+                )
                 self._dispositions.record(
                     key,
                     seq=None,
@@ -1524,6 +1529,7 @@ class CommsAgent:
         autonomous_goal: bool = False,
     ) -> None:
         """Stream a real coding agent's reply: events to the client, status to the wire."""
+        original_display = None if autonomous_goal else (initial_display_text or task)
         owner_task = asyncio.current_task()
         assert owner_task is not None
         thread = self._comms.registry.require(thread_name)
@@ -1597,6 +1603,7 @@ class CommsAgent:
                     original_keys = (*original_keys, key)
         self._turn_input_keys[session_id] = set(original_keys)
         self._steering_input_keys[session_id] = {}
+        self._steering_goal_ids[session_id] = {}
 
         @contextmanager
         def send_boundary(
@@ -1617,6 +1624,25 @@ class CommsAgent:
                     )
                 else:
                     goal_ok = current_goal is None or not current_goal.active
+                input_permit = goal_permit
+                admitted_goals = self._steering_goal_ids.get(session_id, {})
+                owner_followup = public_id is not None and public_id in admitted_goals
+                if owner_followup:
+                    admitted_goal_id = admitted_goals[public_id]
+                    current_goal_id = (
+                        current_goal.id
+                        if current_goal is not None and current_goal.active
+                        else None
+                    )
+                    goal_ok = admitted_goal_id == current_goal_id
+                    input_permit = (
+                        goal_permit
+                        if goal_permit is not None
+                        and goal_permit.reservation.goal_id == admitted_goal_id
+                        else originated_attempts.get(admitted_goal_id or "")
+                    )
+                    if current_goal_id is not None and input_permit is None:
+                        goal_ok = False
                 keys = (
                     original_keys
                     if public_id is None
@@ -1649,10 +1675,15 @@ class CommsAgent:
                 allowed = (
                     owner_ok
                     and goal_ok
-                    and not (keys and current_goal is not None and current_goal.active)
+                    and not (
+                        keys
+                        and current_goal is not None
+                        and current_goal.active
+                        and not owner_followup
+                    )
                 )
-                if allowed and goal_permit is not None:
-                    attempt = goal_permit.reservation
+                if allowed and input_permit is not None:
+                    attempt = input_permit.reservation
                     assert self._goal_store is not None
                     allowed = self._goal_store._is_attempt(
                         attempt,
@@ -1687,6 +1718,13 @@ class CommsAgent:
                         ):
                             allowed = False
                             break
+                if allowed:
+                    if public_id is None:
+                        display = original_display
+                    else:
+                        row = self._dispositions.get(keys[0]) if keys else None
+                        display = row["source_text"] if row is not None else sent_text
+                    self._comms.record_input_display(native_id, display)
                 yield True if allowed else None if defer_for_goal else False
 
         def native_start(public_id: str | None, native_id: str, sent_text: str) -> bool:
@@ -2222,6 +2260,7 @@ class CommsAgent:
             # disposition across owner crashes remains a separate integration.
             self._forwarded_inputs.pop(session_id, None)
             self._steering_input_keys.pop(session_id, None)
+            self._steering_goal_ids.pop(session_id, None)
             self._turn_input_keys.pop(session_id, None)
             remaining = self._queued_inputs.pop(session_id, {})
             if remaining:
