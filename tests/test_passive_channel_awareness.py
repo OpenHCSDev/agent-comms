@@ -232,6 +232,55 @@ async def test_mentioned_recipient_not_passive_and_scope_loss_fails_closed(tmp_p
         await agent.shutdown()
 
 
+@pytest.mark.parametrize("oversized_first", [False, True])
+async def test_oversized_warm_index_row_does_not_starve_short_notice(
+    tmp_path, monkeypatch, oversized_first
+):
+    comms, agent, owner = await _agent(tmp_path, monkeypatch)
+    try:
+        before = _cursor(comms, owner)
+        huge = "X" * (17 * 1024)
+        if oversized_first:
+            comms.send("speaker", "#comms", huge)
+            huge_seq = comms.message_high_water()
+        comms.send("speaker", "#comms", "RECENT SHORT NOTICE")
+        if not oversized_first:
+            comms.send("speaker", "#comms", huge)
+            huge_seq = comms.message_high_water()
+        await agent._drain_inbox(owner)  # Build a validated, warm page index.
+        current = comms.registry.require(owner)
+        frame = agent._passive_awareness.frame(
+            current, comms.registry.snapshot(), comms.channel_catalog.targets_for(current.tags)
+        )
+        assert "RECENT SHORT NOTICE" in frame
+        assert '"oversized_channel_rows_omitted":1' in frame
+        assert f'"oversized_source_seq_range":[{huge_seq},{huge_seq}]' in frame
+        assert huge not in frame
+        assert _cursor(comms, owner) == before
+    finally:
+        await agent.shutdown()
+
+
+async def test_previously_selected_source_becoming_oversized_still_fails_closed(
+    tmp_path, monkeypatch
+):
+    comms, agent, owner = await _agent(tmp_path, monkeypatch)
+    try:
+        comms.send("speaker", "#comms", "ORIGINAL short content")
+        await agent._drain_inbox(owner)
+        current = comms.registry.require(owner)
+        channels = comms.channel_catalog.targets_for(current.tags)
+        assert "ORIGINAL short content" in agent._passive_awareness.frame(
+            current, comms.registry.snapshot(), channels
+        )
+        bus = comms.root / "bus.jsonl"
+        bus.write_bytes(bus.read_bytes().replace(b"ORIGINAL short content", b"Y" * (17 * 1024)))
+        comms.incoming_page(owner, after=0)  # Rebuild a current index over changed source.
+        assert agent._passive_awareness.frame(current, comms.registry.snapshot(), channels) == ""
+    finally:
+        await agent.shutdown()
+
+
 async def test_tail_fairness_repeats_but_shows_newest_and_reports_omitted_range(
     tmp_path, monkeypatch
 ):

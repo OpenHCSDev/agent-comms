@@ -15,7 +15,11 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from .bus_page_index import BusPageIndex, StaleBusPageIndexError
+from .bus_page_index import (
+    BusPageIndex,
+    OversizedIndexedBusRowError,
+    StaleBusPageIndexError,
+)
 from .declarations import (
     Message,
     RegistrySnapshot,
@@ -286,6 +290,7 @@ class PassiveChannelAwareness:
                             if original is None or _digest(original) != digest:
                                 return ""
                         selected: list[Message] = []
+                        oversized: list[int] = []
                         inspected = 0
                         earliest = 0
                         has_older = False
@@ -304,7 +309,14 @@ class PassiveChannelAwareness:
                                 inspected += 1
                                 seq, _, _, channel = indexed
                                 earliest = seq
-                                message = self._exact(index, stream, seq, channel)
+                                try:
+                                    message = self._exact(index, stream, seq, channel)
+                                except OversizedIndexedBusRowError:
+                                    # Only a current, previously validated index may
+                                    # omit a too-large candidate. A previously shown
+                                    # source above still fails closed on any mismatch.
+                                    oversized.append(seq)
+                                    continue
                                 if message is None:
                                     return ""
                                 if snapshot.aliases.get(
@@ -340,6 +352,10 @@ class PassiveChannelAwareness:
                             "scope_after": row["scope_after"],
                             "notices": notices,
                             "other_channel_rows_not_shown_in_window": inspected - len(selected),
+                            "oversized_channel_rows_omitted": len(oversized),
+                            "oversized_source_seq_range": (
+                                [min(oversized), max(oversized)] if oversized else None
+                            ),
                             "older_channel_rows_may_be_omitted_in_range": (
                                 [max(row["cursor"], row["scope_after"]) + 1, earliest - 1]
                                 if has_older

@@ -19,6 +19,10 @@ class StaleBusPageIndexError(ValueError):
     """A disposable offset no longer identifies its claimed wire row."""
 
 
+class OversizedIndexedBusRowError(StaleBusPageIndexError):
+    """A warm indexed row exceeds an optional projection's byte budget."""
+
+
 class BusPageIndex:
     def __init__(self, bus_path: Path):
         self.bus_path = bus_path
@@ -202,7 +206,7 @@ class BusPageIndex:
         stream.seek(offset)
         raw = stream.readline(max_bytes + 1 if max_bytes is not None else -1)
         if max_bytes is not None and len(raw) > max_bytes:
-            raise StaleBusPageIndexError("Indexed bus row exceeds advisory byte budget.")
+            raise OversizedIndexedBusRowError("Indexed bus row exceeds advisory byte budget.")
         try:
             record = json.loads(raw)
         except ValueError as error:
