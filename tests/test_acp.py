@@ -108,6 +108,11 @@ class TestHandlers:
                 session_id="proj", config_id="model", value="openrouter/missing"
             )
 
+    async def test_compaction_details_preserve_markdown(self, tmp_path):
+        summary = "## Decisions\n\n" + "- Keep this decision.\n" * 80 + "\n## Next\nContinue."
+        assert CommsAgent._sanitized_compaction_summary(summary) == summary
+        assert "\x1b" not in CommsAgent._sanitized_compaction_summary("\x1b[2J\nSafe")
+
     async def test_compaction_is_an_owner_operation_with_result_metadata(
         self, tmp_path, monkeypatch
     ):
