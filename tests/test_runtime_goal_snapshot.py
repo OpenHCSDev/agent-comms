@@ -41,7 +41,7 @@ async def test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling(g
     for _ in range(2):
         result = await proxy.request("goal_snapshot")
         assert result == {
-            "goal": asdict(expected_goal),
+            "goal": json.loads(json.dumps(asdict(expected_goal))),
             "goalExecution": json.loads(json.dumps(asdict(expected_execution))),
         }
         assert result["goalExecution"]["state"] == "standby"
