@@ -2,9 +2,11 @@
 
 import json
 import os
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 import pytest
+
+from agent_comms.declarations import Message, MessageType
 
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
@@ -13,6 +15,7 @@ from agent_comms.envelope_claim_transitions import (
     ClaimRelease,
     ClaimTransition,
     ClaimTransitionError,
+    WakeAdmission,
     apply_transition,
     normalize_existing_file,
     parse_complete_transition_line,
@@ -21,6 +24,37 @@ from agent_comms.envelope_claim_transitions import (
 
 G1 = "a" * 32
 G2 = "b" * 32
+
+
+def test_selected_wake_binding_survives_claim_projection(tmp_path):
+    _, resource, _ = resources(tmp_path)
+    admission = WakeAdmission(
+        wire_root_id="c" * 32,
+        source_seq=7,
+        source_message_id="source-7",
+        wake_claim_id="cohort-v1:" + "d" * 64,
+        wake_revision=3,
+        recipient_lookup="e" * 32,
+        execution_id="execution-7",
+        operation_id="f" * 32,
+    )
+    claimed = ClaimTransition("owner", "epoch-1", 8, "msg-8", (resource,), (), G1, admission)
+    raw = (json.dumps(asdict(claimed), separators=(",", ":")) + "\n").encode()
+    decoded = parse_complete_transition_line(raw)
+    assert decoded == claimed
+    assert apply_transition(ClaimProjection(), decoded)[resource].admission == admission
+
+    message = Message("owner", "peer", "Claim file", MessageType.INFO, seq=8, timestamp=1.0)
+    bound = replace(
+        message,
+        claim_transition=replace(claimed, message_id=message.message_id),
+    )
+    assert Message.from_wire(bound.to_wire()) == bound
+
+    invalid = json.loads(raw)
+    invalid["admission"]["version"] = 99
+    with pytest.raises(ClaimTransitionError):
+        parse_complete_transition_line((json.dumps(invalid) + "\n").encode())
 
 
 def transition(

@@ -90,6 +90,54 @@ def _resource(value: object) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class WakeAdmission:
+    """A selected N/K execution bound into the durable resource-claim row."""
+
+    wire_root_id: str
+    source_seq: int
+    source_message_id: str
+    wake_claim_id: str
+    wake_revision: int
+    recipient_lookup: str
+    execution_id: str
+    operation_id: str
+    version: int = 1
+
+    def __post_init__(self) -> None:
+        for label, value, size in (
+            ("Wire root", self.wire_root_id, 32),
+            ("Recipient lookup", self.recipient_lookup, 32),
+            ("Operation ID", self.operation_id, 32),
+        ):
+            if (
+                type(value) is not str
+                or len(value) != size
+                or any(character not in "0123456789abcdef" for character in value)
+            ):
+                raise ClaimTransitionError(f"{label} must be lowercase hex.")
+        if (
+            type(self.source_seq) is not int
+            or self.source_seq <= 0
+            or type(self.wake_revision) is not int
+            or self.wake_revision <= 0
+            or type(self.version) is not int
+            or self.version != 1
+        ):
+            raise ClaimTransitionError("Wake admission version or revision is invalid.")
+        _text(self.source_message_id, "Source message ID")
+        _text(self.execution_id, "Execution ID")
+        if ":" in self.execution_id:
+            raise ClaimTransitionError("Execution ID cannot contain a colon.")
+        if (
+            type(self.wake_claim_id) is not str
+            or not self.wake_claim_id.startswith("cohort-v1:")
+            or len(self.wake_claim_id) != len("cohort-v1:") + 64
+            or any(character not in "0123456789abcdef" for character in self.wake_claim_id[10:])
+        ):
+            raise ClaimTransitionError("Wake claim ID is invalid.")
+
+
+@dataclass(frozen=True, slots=True)
 class ClaimRelease:
     resource: str
     generation: str
@@ -110,6 +158,7 @@ class ClaimTransition:
     claims: tuple[str, ...] = ()
     releases: tuple[ClaimRelease, ...] = ()
     generation: str | None = None
+    admission: WakeAdmission | None = None
 
     def __post_init__(self) -> None:
         _text(self.owner, "Owner")
@@ -132,6 +181,10 @@ class ClaimTransition:
             _generation(self.generation)
         elif self.generation is not None:
             raise ClaimTransitionError("A release-only envelope cannot mint a generation.")
+        if self.admission is not None and (
+            type(self.admission) is not WakeAdmission or not self.claims or self.releases
+        ):
+            raise ClaimTransitionError("Wake admission requires a claim-only transition.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +195,7 @@ class ClaimOwner:
     generation: str
     seq: int
     message_id: str
+    admission: WakeAdmission | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +270,7 @@ def apply_transition(previous: ClaimProjection, transition: ClaimTransition) -> 
             transition.generation,
             transition.seq,
             transition.message_id,
+            transition.admission,
         )
     return ClaimProjection(transition.seq, next_state)
 
@@ -253,7 +308,7 @@ def parse_complete_transition_line(raw: bytes) -> ClaimTransition:
     except (UnicodeError, ValueError) as error:
         raise ClaimTransitionError("Invalid transition JSON.") from error
     required = {"owner", "incarnation", "seq", "message_id", "claims", "releases", "generation"}
-    if type(data) is not dict or set(data) != required:
+    if type(data) is not dict or set(data) not in (required, required | {"admission"}):
         raise ClaimTransitionError("Transition has missing or unknown fields.")
     if type(data["claims"]) is not list or type(data["releases"]) is not list:
         raise ClaimTransitionError("Transition resources must be arrays.")
@@ -262,6 +317,23 @@ def parse_complete_transition_line(raw: bytes) -> ClaimTransition:
         if type(release) is not dict or set(release) != {"resource", "generation"}:
             raise ClaimTransitionError("Invalid release record.")
         releases.append(ClaimRelease(release["resource"], release["generation"]))
+    admission = None
+    if "admission" in data and data["admission"] is not None:
+        value = data["admission"]
+        fields = {
+            "wire_root_id",
+            "source_seq",
+            "source_message_id",
+            "wake_claim_id",
+            "wake_revision",
+            "recipient_lookup",
+            "execution_id",
+            "operation_id",
+            "version",
+        }
+        if type(value) is not dict or set(value) != fields:
+            raise ClaimTransitionError("Wake admission has missing or unknown fields.")
+        admission = WakeAdmission(**value)
     return ClaimTransition(
         data["owner"],
         data["incarnation"],
@@ -270,4 +342,5 @@ def parse_complete_transition_line(raw: bytes) -> ClaimTransition:
         tuple(data["claims"]),
         tuple(releases),
         data["generation"],
+        admission,
     )

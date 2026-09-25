@@ -79,7 +79,7 @@ class ClaimEnvelopeUnknownError(RelationViolationError):
 
 
 def _claim_transition_wire(transition: ClaimTransition) -> dict[str, object]:
-    return {
+    value: dict[str, object] = {
         "owner": transition.owner,
         "incarnation": transition.incarnation,
         "seq": transition.seq,
@@ -88,6 +88,9 @@ def _claim_transition_wire(transition: ClaimTransition) -> dict[str, object]:
         "releases": [asdict(release) for release in transition.releases],
         "generation": transition.generation,
     }
+    if transition.admission is not None:
+        value["admission"] = asdict(transition.admission)
+    return value
 
 
 def _claim_transition_from_wire(value: object) -> ClaimTransition:
