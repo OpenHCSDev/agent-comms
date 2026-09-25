@@ -447,13 +447,15 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             assert all(not row["message"].get("isError") for row in tool_results)
             assert all(len(row["message"]["content"][0]["text"]) > 30000 for row in tool_results)
         assert reasoning_efforts[-1] == "high"
-        assert len(
-            [
-                event
-                for event in events
-                if event["type"] == "compaction_progress" and event["chunk_index"] > 0
-            ]
-        ) == len(summary_efforts)
+        # Phase-start notifications repeat the last completed response counter;
+        # they must not be mistaken for an additional provider summary.
+        completed_indices = [
+            event["chunk_index"]
+            for event in events
+            if event["type"] == "compaction_progress" and event["chunk_index"] > 0
+        ]
+        assert completed_indices == sorted(completed_indices)
+        assert sorted(set(completed_indices)) == list(range(1, len(summary_efforts) + 1))
         assert len([event for event in events if event["type"] == "provider_usage"]) == len(calls)
         source_progress = [event for event in events if event["type"] == "compaction_progress"]
         assert source_progress[0]["chunk_index"] == 0
