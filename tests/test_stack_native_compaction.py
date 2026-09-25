@@ -17,6 +17,7 @@ import pytest
 
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
+from agent_comms.declarations import ActivityState
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import wire
 
@@ -120,6 +121,8 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             )
         )
         session = root / "saved.jsonl"
+        summary_entered = threading.Event()
+        release_summary = threading.Event()
         _saved_history(session, project, short=case in {"oversized_current", "oversized_summary"})
         if case == "tool_outputs":
             rows = [json.loads(line) for line in session.read_text().splitlines()]
@@ -161,6 +164,9 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                 calls.append(self.path)
                 request_messages.append(request["messages"])
                 reasoning_efforts.append(request.get("reasoning", {}).get("effort"))
+                if case == "acp_success" and request.get("reasoning", {}).get("effort") == "low":
+                    summary_entered.set()
+                    assert release_summary.wait(timeout=15), "Test did not release compaction"
                 if case == "summary_failure":
                     body = b'{"error":{"message":"429 rate limit","type":"rate_limit_error"}}'
                     self.send_response(429)
@@ -317,21 +323,47 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                     auto_wake=False,
                 )
                 updates = []
+                resumed_activity = []
 
                 class Client:
                     async def session_update(self, session_id, update):
                         updates.append(update)
+                        phase = (
+                            (getattr(update, "field_meta", None) or {})
+                            .get("agentComms", {})
+                            .get("compaction", {})
+                            .get("phase")
+                        )
+                        if phase == "end":
+                            resumed_activity.append(comms.activity_of("project"))
 
                 owner.on_connect(Client())
                 await owner.new_session(str(project))
                 owner._drain_tasks["project"].cancel()
                 await asyncio.gather(owner._drain_tasks["project"], return_exceptions=True)
                 comms.attach_session("project", str(session))
+                turn = asyncio.create_task(
+                    owner._run_owned_input("project", "project", "Reply OK.")
+                )
                 try:
-                    await asyncio.wait_for(
-                        owner._run_owned_input("project", "project", "Reply OK."), timeout=30
+                    assert await asyncio.to_thread(summary_entered.wait, 10)
+                    activity = comms.activity_of("project")
+                    assert activity.state is ActivityState.WORKING
+                    assert activity.detail == "Compacting context"
+                    view = next(
+                        item for item in comms.thread_views() if item.thread.name == "project"
                     )
+                    assert view.presentation.summary == "Working · Compacting context"
+                    release_summary.set()
+                    await asyncio.wait_for(turn, timeout=30)
+                    assert resumed_activity and resumed_activity[-1].state is ActivityState.THINKING
+                    assert "Compacting" not in resumed_activity[-1].detail
+                    assert comms.activity_of("project").state is ActivityState.IDLE
                 finally:
+                    release_summary.set()
+                    if not turn.done():
+                        turn.cancel()
+                    await asyncio.gather(turn, return_exceptions=True)
                     await owner.shutdown()
             else:
                 await asyncio.wait_for(collect(), timeout=30)

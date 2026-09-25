@@ -1819,6 +1819,17 @@ class CommsAgent:
         unattributed_usage: list[tuple[str, dict[str, Any]]] = []
         settled = False
         cancelled = False
+        compaction_resume_activity: tuple[ActivityState, str] | None = None
+
+        def update_turn_activity(state: ActivityState, detail: str) -> None:
+            nonlocal compaction_resume_activity
+            if compaction_resume_activity is not None:
+                # Tool notifications may arrive while a summary is in flight.
+                # Retain the next activity without hiding active compaction.
+                compaction_resume_activity = (state, detail)
+            else:
+                self._comms.set_activity(thread_name, state, detail)
+
         backend_inbox: asyncio.Queue[str | dict[str, Any]] = asyncio.Queue()
         finish_event = asyncio.Event()
         self._backend_inboxes[session_id] = backend_inbox
@@ -1890,6 +1901,19 @@ class CommsAgent:
                         unattributed_usage.append((response_id, usage))
                     continue
                 if kind in {"compaction_start", "compaction_end"}:
+                    if kind == "compaction_start":
+                        if compaction_resume_activity is None:
+                            current_activity = self._comms.activity_of(thread_name)
+                            compaction_resume_activity = (
+                                current_activity.state,
+                                current_activity.detail,
+                            )
+                        self._comms.set_activity(
+                            thread_name, ActivityState.WORKING, "Compacting context"
+                        )
+                    elif compaction_resume_activity is not None:
+                        self._comms.set_activity(thread_name, *compaction_resume_activity)
+                        compaction_resume_activity = None
                     # A previous usage sample is not authoritative after Pi
                     # starts compaction, even if the attempt later aborts.
                     info = self._comms.agent_info_of(thread_name)
@@ -2043,9 +2067,7 @@ class CommsAgent:
                     ):
                         self._comms.set_thread_thinking_level(thread_name, event["thinking_level"])
                 elif kind == "tool_start":
-                    self._comms.set_activity(
-                        thread_name, ActivityState.WORKING, event.get("title", "")
-                    )
+                    update_turn_activity(ActivityState.WORKING, event.get("title", ""))
                 elif kind == "tool_end":
                     if event.get("name") == "comms_goal" and event.get("ok") is True:
                         goal_tool_ok = True
@@ -2065,8 +2087,9 @@ class CommsAgent:
                                     store.record_provider_usage(origin_permit, response_id, usage)
                                 unattributed_usage.clear()
                                 self._pending_goal_origins[thread_name] = current_goal.id
-                    self._comms.set_activity(thread_name, ActivityState.THINKING, task[:80])
+                    update_turn_activity(ActivityState.THINKING, task[:80])
                 elif kind == "settled":
+                    compaction_resume_activity = None
                     self._comms.finish_turn(thread_name, turn_id)
                     settled = True
                     finish_event.set()
