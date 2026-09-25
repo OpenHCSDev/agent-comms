@@ -32,6 +32,7 @@ import os
 import secrets
 import shutil
 import signal
+import unicodedata
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Sequence
 from contextlib import AbstractContextManager, aclosing, nullcontext, suppress
 from dataclasses import dataclass
@@ -42,6 +43,17 @@ from uuid import uuid4
 from .image_inputs import ImageInput
 from .native_pi import CAPABILITY as NATIVE_INPUT_CAPABILITY
 from .tool_results import ToolDiff
+
+
+def compaction_summary(value: Any) -> str:
+    """Preserve saved Markdown, excluding terminal control codes."""
+    if not isinstance(value, str):
+        return ""
+    return "".join(
+        char if char in "\n\t" or not unicodedata.category(char).startswith("C") else " "
+        for char in value.replace("\r\n", "\n")
+    )
+
 
 RPC_FLAG = "--mode"
 RPC_VALUE = "rpc"
@@ -1414,7 +1426,7 @@ async def _stream_agent_events(
                 "type": "compaction_end",
                 "reason": reason if reason in {"manual", "threshold", "overflow"} else "unknown",
                 "aborted": not completed,
-                "summary": summary.strip()[:4096] if isinstance(summary, str) else None,
+                "summary": compaction_summary(summary) if isinstance(summary, str) else None,
                 "context_used": None,
                 "will_retry": payload.get("willRetry") is True,
             }

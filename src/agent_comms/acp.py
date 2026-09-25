@@ -24,7 +24,6 @@ import re
 import shlex
 import sys
 import time
-import unicodedata
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, replace
@@ -2502,12 +2501,7 @@ class CommsAgent:
     @staticmethod
     def _sanitized_compaction_summary(value: Any) -> str:
         """Preserve the saved Markdown summary, excluding terminal control codes."""
-        if not isinstance(value, str):
-            return ""
-        return "".join(
-            char if char in "\n\t" or not unicodedata.category(char).startswith("C") else " "
-            for char in value.replace("\r\n", "\n")
-        )
+        return backend.compaction_summary(value)
 
     @staticmethod
     def _prompt_text(prompt: list[Any]) -> str:
