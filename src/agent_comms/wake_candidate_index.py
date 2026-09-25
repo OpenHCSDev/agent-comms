@@ -69,6 +69,24 @@ class _IndexedResponse:
     envelope_digest: str
 
 
+_RecipientRow = tuple[int, str, str, str, str, str | None]
+
+
+@dataclass(frozen=True, slots=True)
+class _ParsedRow:
+    seq: int
+    recipients: tuple[_RecipientRow, ...]
+    response: _IndexedResponse | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ReplayBatch:
+    next_offset: int
+    last_seq: int
+    recipients: tuple[_RecipientRow, ...]
+    response_keys: tuple[tuple[str], ...]
+
+
 def _parse_response(message: Message, private: dict[str, Any]) -> _IndexedResponse:
     raw = private["response"]
     if not isinstance(raw, dict) or set(raw) != {
@@ -170,166 +188,213 @@ class WakeCandidateIndex:
         ):
             raise ProjectionRebuildRequiredError("candidate index schema version changed")
 
-    def maintain(
-        self, *, rebuild: bool = False, max_rows: int = 64, max_bytes: int = 256 * 1024
-    ) -> bool:
-        """Replay at most one bounded complete prefix, never under a bus lock.
-
-        Returns true only when this call reaches the current byte end. A source
-        replacement/torn row/corrupt checkpoint omits the supplement rather
-        than guessing or scanning the whole log on a wake.
-        """
+    @staticmethod
+    def _validate_limits(max_rows: int, max_bytes: int) -> None:
         if type(max_rows) is not int or not 1 <= max_rows <= 256:
             raise ValueError("max_rows must be between 1 and 256")
         if type(max_bytes) is not int or not 1 <= max_bytes <= _MAX_ROW:
             raise ValueError("max_bytes must be a bounded positive byte count")
+
+    @classmethod
+    def _checkpoint_start(
+        cls,
+        db: sqlite3.Connection,
+        stream: Any,
+        stat: os.stat_result,
+        root_id: str,
+        *,
+        rebuild: bool,
+    ) -> tuple[int, int]:
+        """Check the committed source identity and its bounded prefix fingerprint."""
+        checkpoint = db.execute(
+            "SELECT root_id,device,inode,byte_offset,tail_digest,last_seq "
+            "FROM checkpoint WHERE singleton=1"
+        ).fetchone()
+        if checkpoint is None and not rebuild:
+            raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
+        if rebuild:
+            return 0, 0
+        saved_root, dev, ino, offset, tail, last_seq = checkpoint
+        if (
+            saved_root != root_id
+            or dev != stat.st_dev
+            or ino != stat.st_ino
+            or type(offset) is not int
+            or offset < 0
+            or offset > stat.st_size
+            or type(last_seq) is not int
+            or last_seq < 0
+            or type(tail) is not str
+            or cls._tail(stream, offset) != tail
+        ):
+            raise ProjectionRebuildRequiredError("candidate bus prefix changed")
+        return offset, last_seq
+
+    @staticmethod
+    def _parse_row(record: dict[str, Any], root_id: str, last_seq: int) -> _ParsedRow:
+        """Interpret one raw bus object without mistaking its sideband for authority."""
+        message = Message.from_wire(record)
+        public = {key: value for key, value in record.items() if key != PRIVATE_WIRE_FIELD}
+        if (
+            type(record.get("seq")) is not int
+            or message.seq <= last_seq
+            or _canonical(public) != _canonical(message.to_wire())
+        ):
+            raise ProjectionUnavailableError("candidate bus envelope is not canonical")
+        envelope_digest = public_envelope_digest(public)
+        private = record.get(PRIVATE_WIRE_FIELD)
+        if has_private_wire_fields(record):
+            if set(key for key in record if key.startswith("_agent_comms_private")) != {
+                PRIVATE_WIRE_FIELD
+            }:
+                raise ProjectionUnavailableError("unknown candidate private namespace")
+            if (
+                not isinstance(private, dict)
+                or type(private.get("version")) is not int
+                or private["version"] != 1
+            ):
+                raise ProjectionUnavailableError("unknown candidate private row")
+        if isinstance(private, dict) and set(private) == {"version", "initial"}:
+            initial = validate_initial_record(record, root_id)
+            rows: list[_RecipientRow] = []
+            for recipient, decision in zip(
+                initial.audience.recipients, initial.decisions, strict=True
+            ):
+                if type(decision) not in {WakeDecision, NoWakeDecision}:
+                    raise ProjectionUnavailableError("unknown candidate wake decision")
+                rows.append(
+                    (
+                        message.seq,
+                        message.message_id,
+                        recipient.recipient_lookup,
+                        message.sender,
+                        message.target,
+                        decision.wake_mode.value if type(decision) is WakeDecision else None,
+                    )
+                )
+            return _ParsedRow(message.seq, tuple(rows), None)
+        if private is not None:
+            if set(private) != {"version", "response"}:
+                raise ProjectionUnavailableError("unknown candidate private row")
+            response = _parse_response(message, private)
+            if response.wire_root_id != root_id:
+                raise ProjectionUnavailableError("foreign private response root")
+            if response.envelope_digest != envelope_digest:
+                raise ProjectionUnavailableError("private response envelope mismatch")
+            return _ParsedRow(message.seq, (), response)
+        return _ParsedRow(message.seq, (), None)
+
+    @classmethod
+    def _replay_prefix(
+        cls,
+        stream: Any,
+        offset: int,
+        last_seq: int,
+        root_id: str,
+        *,
+        max_rows: int,
+        max_bytes: int,
+    ) -> _ReplayBatch:
+        """Read only a bounded complete prefix; yield parsed receipts to SQL."""
+        rows: list[_RecipientRow] = []
+        response_keys: list[tuple[str]] = []
+        stream.seek(offset)
+        start = time.monotonic()
+        for _ in range(max_rows):
+            if time.monotonic() - start > 0.2:
+                break  # Bounded maintenance; no expensive hot-path rebuild.
+            available = max_bytes - (stream.tell() - offset)
+            if available <= 0:
+                break
+            raw = stream.readline(min(available, _MAX_ROW) + 1)
+            if not raw:
+                break
+            if len(raw) > available:
+                stream.seek(-(len(raw)), os.SEEK_CUR)
+                break
+            if not raw.endswith(b"\n"):
+                raise ProjectionUnavailableError("incomplete candidate bus row")
+            record = json.loads(raw, object_pairs_hook=unique_wire_object)
+            if not isinstance(record, dict):
+                raise ProjectionUnavailableError("candidate bus row is not an object")
+            parsed = cls._parse_row(record, root_id, last_seq)
+            last_seq = parsed.seq
+            rows.extend(parsed.recipients)
+            if parsed.response is not None:
+                response_keys.append((parsed.response.receipt.publication_key,))
+        return _ReplayBatch(stream.tell(), last_seq, tuple(rows), tuple(response_keys))
+
+    def _source_end(self, stream: Any, next_offset: int) -> tuple[os.stat_result, str]:
+        """Reject path replacement before committing an index checkpoint."""
+        after = os.fstat(stream.fileno())
+        current_path = self.bus._path.stat()
+        if (after.st_dev, after.st_ino) != (current_path.st_dev, current_path.st_ino):
+            raise ProjectionRebuildRequiredError("candidate bus was replaced")
+        return after, self._tail(stream, next_offset)
+
+    @staticmethod
+    def _commit_batch(
+        db: sqlite3.Connection,
+        batch: _ReplayBatch,
+        stat: os.stat_result,
+        root_id: str,
+        tail: str,
+        *,
+        rebuild: bool,
+    ) -> None:
+        """Replace derived rows and checkpoint together, or expose neither."""
+        with db:
+            if rebuild:
+                db.execute("DELETE FROM recipients")
+                db.execute("DELETE FROM response_keys")
+            db.executemany("INSERT INTO recipients VALUES (?,?,?,?,?,?)", batch.recipients)
+            try:
+                db.executemany("INSERT INTO response_keys VALUES (?)", batch.response_keys)
+            except sqlite3.IntegrityError as error:
+                raise ProjectionUnavailableError(
+                    "duplicate private response publication key"
+                ) from error
+            db.execute(
+                "INSERT OR REPLACE INTO checkpoint VALUES (1,?,?,?,?,?,?,?)",
+                (
+                    _SCHEMA,
+                    root_id,
+                    stat.st_dev,
+                    stat.st_ino,
+                    batch.next_offset,
+                    tail,
+                    batch.last_seq,
+                ),
+            )
+
+    def maintain(
+        self, *, rebuild: bool = False, max_rows: int = 64, max_bytes: int = 256 * 1024
+    ) -> bool:
+        """Replay one bounded prefix; never scan or rebuild on the send/wake path."""
+        self._validate_limits(max_rows, max_bytes)
         try:
             marker = self.bus._private_marker_unlocked()
             root_id = str(marker["wire_root_id"])
             with self.bus._path.open("rb") as stream:
                 stat = os.fstat(stream.fileno())
                 with closing(self._connect(self.path, readonly=False)) as db:
-                    # Explicit bounded rebuild discards all v1 derived state and
-                    # recreates response-key history before v2 becomes visible.
+                    # Only explicit bounded rebuild may discard old v1 derived
+                    # state; v2 and its response keys commit together.
                     self._schema(db, create=True, allow_v1_rebuild=rebuild)
-                    checkpoint = db.execute(
-                        "SELECT root_id,device,inode,byte_offset,tail_digest,last_seq "
-                        "FROM checkpoint WHERE singleton=1"
-                    ).fetchone()
-                    if checkpoint is None and not rebuild:
-                        raise ProjectionRebuildRequiredError(
-                            "candidate index requires initial rebuild"
-                        )
-                    if rebuild:
-                        offset, last_seq = 0, 0
-                    else:
-                        saved_root, dev, ino, offset, tail, last_seq = checkpoint
-                        if (
-                            saved_root != root_id
-                            or dev != stat.st_dev
-                            or ino != stat.st_ino
-                            or type(offset) is not int
-                            or offset < 0
-                            or offset > stat.st_size
-                            or type(last_seq) is not int
-                            or last_seq < 0
-                            or type(tail) is not str
-                            or self._tail(stream, offset) != tail
-                        ):
-                            raise ProjectionRebuildRequiredError("candidate bus prefix changed")
-                    rows: list[tuple[int, str, str, str, str, str | None]] = []
-                    response_keys: list[tuple[str]] = []
-                    stream.seek(offset)
-                    start = time.monotonic()
-                    for _ in range(max_rows):
-                        if time.monotonic() - start > 0.2:
-                            break  # Bounded maintenance; no expensive hot-path rebuild.
-                        available = max_bytes - (stream.tell() - offset)
-                        if available <= 0:
-                            break
-                        raw = stream.readline(min(available, _MAX_ROW) + 1)
-                        if not raw:
-                            break
-                        if len(raw) > available:
-                            stream.seek(-(len(raw)), os.SEEK_CUR)
-                            break
-                        if not raw.endswith(b"\n"):
-                            raise ProjectionUnavailableError("incomplete candidate bus row")
-                        record = json.loads(raw, object_pairs_hook=unique_wire_object)
-                        if not isinstance(record, dict):
-                            raise ProjectionUnavailableError("candidate bus row is not an object")
-                        message = Message.from_wire(record)
-                        public = {
-                            key: value for key, value in record.items() if key != PRIVATE_WIRE_FIELD
-                        }
-                        if (
-                            type(record.get("seq")) is not int
-                            or message.seq <= last_seq
-                            or _canonical(public) != _canonical(message.to_wire())
-                        ):
-                            raise ProjectionUnavailableError(
-                                "candidate bus envelope is not canonical"
-                            )
-                        envelope_digest = public_envelope_digest(public)
-                        last_seq = message.seq
-                        private = record.get(PRIVATE_WIRE_FIELD)
-                        if has_private_wire_fields(record):
-                            if set(
-                                key for key in record if key.startswith("_agent_comms_private")
-                            ) != {PRIVATE_WIRE_FIELD}:
-                                raise ProjectionUnavailableError(
-                                    "unknown candidate private namespace"
-                                )
-                            if (
-                                not isinstance(private, dict)
-                                or type(private.get("version")) is not int
-                                or private["version"] != 1
-                            ):
-                                raise ProjectionUnavailableError("unknown candidate private row")
-                        if isinstance(private, dict) and set(private) == {"version", "initial"}:
-                            initial = validate_initial_record(record, root_id)
-                            for recipient, decision in zip(
-                                initial.audience.recipients, initial.decisions, strict=True
-                            ):
-                                if type(decision) not in {WakeDecision, NoWakeDecision}:
-                                    raise ProjectionUnavailableError(
-                                        "unknown candidate wake decision"
-                                    )
-                                rows.append(
-                                    (
-                                        message.seq,
-                                        message.message_id,
-                                        recipient.recipient_lookup,
-                                        message.sender,
-                                        message.target,
-                                        (
-                                            decision.wake_mode.value
-                                            if type(decision) is WakeDecision
-                                            else None
-                                        ),
-                                    )
-                                )
-                        elif private is not None:
-                            if set(private) != {"version", "response"}:
-                                raise ProjectionUnavailableError("unknown candidate private row")
-                            response = _parse_response(message, private)
-                            if response.wire_root_id != root_id:
-                                raise ProjectionUnavailableError("foreign private response root")
-                            if response.envelope_digest != envelope_digest:
-                                raise ProjectionUnavailableError(
-                                    "private response envelope mismatch"
-                                )
-                            response_keys.append((response.receipt.publication_key,))
-                    next_offset = stream.tell()
-                    after = os.fstat(stream.fileno())
-                    current_path = self.bus._path.stat()
-                    if (after.st_dev, after.st_ino) != (current_path.st_dev, current_path.st_ino):
-                        raise ProjectionRebuildRequiredError("candidate bus was replaced")
-                    tail = self._tail(stream, next_offset)
-                    with db:
-                        if rebuild:
-                            db.execute("DELETE FROM recipients")
-                            db.execute("DELETE FROM response_keys")
-                        db.executemany("INSERT INTO recipients VALUES (?,?,?,?,?,?)", rows)
-                        try:
-                            db.executemany("INSERT INTO response_keys VALUES (?)", response_keys)
-                        except sqlite3.IntegrityError as error:
-                            raise ProjectionUnavailableError(
-                                "duplicate private response publication key"
-                            ) from error
-                        db.execute(
-                            "INSERT OR REPLACE INTO checkpoint VALUES (1,?,?,?,?,?,?,?)",
-                            (
-                                _SCHEMA,
-                                root_id,
-                                stat.st_dev,
-                                stat.st_ino,
-                                next_offset,
-                                tail,
-                                last_seq,
-                            ),
-                        )
-                    return next_offset == after.st_size
+                    offset, last_seq = self._checkpoint_start(
+                        db, stream, stat, root_id, rebuild=rebuild
+                    )
+                    batch = self._replay_prefix(
+                        stream,
+                        offset,
+                        last_seq,
+                        root_id,
+                        max_rows=max_rows,
+                        max_bytes=max_bytes,
+                    )
+                    after, tail = self._source_end(stream, batch.next_offset)
+                    self._commit_batch(db, batch, stat, root_id, tail, rebuild=rebuild)
+                    return batch.next_offset == after.st_size
         except (
             OSError,
             ValueError,

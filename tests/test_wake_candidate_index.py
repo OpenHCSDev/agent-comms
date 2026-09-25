@@ -111,6 +111,27 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
     )
 
 
+@pytest.mark.parametrize(
+    ("limits", "expected"),
+    [
+        ({"max_rows": True}, "max_rows"),
+        ({"max_rows": 0}, "max_rows"),
+        ({"max_rows": 257}, "max_rows"),
+        ({"max_bytes": True}, "max_bytes"),
+        ({"max_bytes": 0}, "max_bytes"),
+        ({"max_bytes": 8 * 1024 * 1024 + 1}, "max_bytes"),
+    ],
+)
+def test_maintenance_limits_fail_before_schema_or_checkpoint(
+    tmp_path: Path, limits: dict[str, object], expected: str
+) -> None:
+    comms, _, _ = _private(tmp_path)
+    index = WakeCandidateIndex(comms.bus)
+    with pytest.raises(ValueError, match=expected):
+        index.maintain(**limits)
+    assert not index.path.exists()
+
+
 def test_bounded_maintenance_replays_append_without_duplicate_or_cursor(tmp_path: Path) -> None:
     comms, root_id, lookup = _private(tmp_path)
     first = comms.send_initial_cohort("sender", "Alice", "first")
@@ -353,10 +374,18 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
         required_through_seq=messages[1].seq,
     )
     assert [candidate.source_seq for candidate in first.entries] == [messages[0].seq]
+    with sqlite3.connect(index.path) as db:
+        checkpoint = db.execute("SELECT * FROM checkpoint").fetchall()
+        recipients = db.execute("SELECT * FROM recipients").fetchall()
+        keys = db.execute("SELECT * FROM response_keys").fetchall()
     with pytest.raises(
         ProjectionUnavailableError, match="duplicate private response publication key"
     ):
         index.maintain(max_rows=2)
+    with sqlite3.connect(index.path) as db:
+        assert db.execute("SELECT * FROM checkpoint").fetchall() == checkpoint
+        assert db.execute("SELECT * FROM recipients").fetchall() == recipients
+        assert db.execute("SELECT * FROM response_keys").fetchall() == keys
     with pytest.raises(ProjectionUnavailableError, match="stale"):
         index.page(
             root_id=root_id,
