@@ -20,10 +20,11 @@ import pytest
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "empty_response,compact_tools", [(False, False), (True, False), (False, True)]
+    "empty_response,compact_tools,queue_during_compact",
+    [(False, False, False), (True, False, False), (False, True, False), (False, True, True)],
 )
 async def test_mounted_goal_continues_without_progress_tool(
-    monkeypatch, empty_response, compact_tools
+    monkeypatch, empty_response, compact_tools, queue_during_compact
 ):
     native = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native or not os.environ.get("AC_TOAD_NATIVE_PILOT"):
@@ -38,6 +39,9 @@ async def test_mounted_goal_continues_without_progress_tool(
     with TemporaryDirectory(prefix="ac-goal-continuation-", dir="/var/tmp") as raw:
         root = Path(raw)
         release = threading.Event()
+        release_summary = threading.Event()
+        if not queue_during_compact:
+            release_summary.set()
         requests = []
         ordinary_requests = []
         summary_requests = []
@@ -53,7 +57,13 @@ async def test_mounted_goal_continues_without_progress_tool(
                 self.send_header("Content-Type", "text/event-stream")
                 self.end_headers()
                 try:
-                    if not summary and ordinary_index == (3 if compact_tools else 2):
+                    if summary:
+                        assert release_summary.wait(20)
+                    if not summary and (
+                        len(attempts()) >= 2
+                        if queue_during_compact
+                        else ordinary_index == (3 if compact_tools else 2)
+                    ):
                         assert release.wait(20)
                     chunk = {
                         "id": f"goal-response-{index}",
@@ -226,6 +236,13 @@ async def test_mounted_goal_continues_without_progress_tool(
                 view.prompt.text = "/goal List one useful testing practice each turn until I pause."
                 view.prompt.focus()
                 await pilot.press("enter")
+                if queue_during_compact:
+                    await until(lambda: bool(summary_requests))
+                    view.prompt.text = "FOLLOWUP_DURING_GOAL_COMPACTION"
+                    view.prompt.focus()
+                    await pilot.press("enter")
+                    await until(lambda: view.queued_prompts == ["FOLLOWUP_DURING_GOAL_COMPACTION"])
+                    release_summary.set()
                 await until(
                     lambda: (
                         len(attempts()) >= 2
@@ -247,7 +264,18 @@ async def test_mounted_goal_continues_without_progress_tool(
                 assert rows[0][1] == "succeeded" and rows[0][2].startswith("native-terminal:")
                 assert rows[1][0] == 2
                 if not live:
-                    await until(lambda: len(ordinary_requests) == (3 if compact_tools else 2))
+                    if queue_during_compact:
+                        await until(
+                            lambda: len(ordinary_requests) >= 3
+                            and not view.queued_prompts
+                            and sum(
+                                json.loads(line).get("message", {}).get("inputId") is not None
+                                for line in session.read_text().splitlines()
+                            )
+                            == 3
+                        )
+                    else:
+                        await until(lambda: len(ordinary_requests) == (3 if compact_tools else 2))
                     if compact_tools:
                         assert summary_requests
                         saved = [json.loads(line) for line in session.read_text().splitlines()]
@@ -265,10 +293,18 @@ async def test_mounted_goal_continues_without_progress_tool(
                         )
                         # Summary requests belong to attempt one; they must not create
                         # extra goal attempts or replay its original user input.
-                        assert (
-                            sum(row.get("message", {}).get("inputId") is not None for row in saved)
-                            == 2
-                        )
+                        assert sum(
+                            row.get("message", {}).get("inputId") is not None for row in saved
+                        ) == (3 if queue_during_compact else 2)
+                        if queue_during_compact:
+                            followups = [
+                                row
+                                for row in saved
+                                if row.get("message", {}).get("role") == "user"
+                                and "FOLLOWUP_DURING_GOAL_COMPACTION" in json.dumps(row)
+                            ]
+                            assert len(followups) == 1
+                            assert followups[0]["message"]["inputId"]
                 else:
 
                     def native_user_starts():
@@ -288,11 +324,12 @@ async def test_mounted_goal_continues_without_progress_tool(
                 await asyncio.sleep(0.4)
                 assert comms.registry.require("project").goal is None
                 assert len(attempts()) == 2
-                if not live:
+                if not live and not queue_during_compact:
                     assert len(ordinary_requests) == (3 if compact_tools else 2)
                 assert app._exception is None
                 print(f"GOAL_CONTINUATION_OK provider={provider} attempts={len(attempts())}")
         finally:
+            release_summary.set()
             release.set()
             server.shutdown()
             server.server_close()

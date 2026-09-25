@@ -2446,7 +2446,10 @@ class CommsAgent:
                 )
         elif kind == "compaction_progress":
             chunk_index = event.get("chunk_index")
-            if type(chunk_index) is int and chunk_index > 0:
+            done = event.get("source_bytes_done")
+            total = event.get("source_bytes_total")
+            measured = type(done) is int and type(total) is int and 0 <= done <= total and total > 0
+            if type(chunk_index) is int and (chunk_index > 0 or chunk_index == 0 and measured):
                 await client.session_update(
                     session_id=session_id,
                     update=AgentMessageChunk(
@@ -2458,6 +2461,17 @@ class CommsAgent:
                                     "phase": "progress",
                                     "status": "running",
                                     "chunkIndex": chunk_index,
+                                    **(
+                                        {"sourceBytesDone": done, "sourceBytesTotal": total}
+                                        if measured
+                                        else {}
+                                    ),
+                                    **(
+                                        {"summaryPhase": event["summary_phase"]}
+                                        if event.get("summary_phase")
+                                        in {"history", "current-turn", "shrink"}
+                                        else {}
+                                    ),
                                 }
                             }
                         },
