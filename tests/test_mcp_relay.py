@@ -27,18 +27,23 @@ def stub(tmp_path: Path, body: str) -> str:
     return str(path)
 
 
-@pytest.mark.parametrize("method,choice,answer", [
-    ("confirm", {"confirmed": True}, {"confirmed": True}),
-    ("confirm", None, {"cancelled": True}),
-    ("confirm", {"value": "forged"}, {"confirmed": False}),
-    ("select", {"value": "one"}, {"value": "one"}),
-    ("select", {"value": "forged"}, {"cancelled": True}),
-])
+@pytest.mark.parametrize(
+    "method,choice,answer",
+    [
+        ("confirm", {"confirmed": True}, {"confirmed": True}),
+        ("confirm", None, {"cancelled": True}),
+        ("confirm", {"value": "forged"}, {"confirmed": False}),
+        ("select", {"value": "one"}, {"value": "one"}),
+        ("select", {"value": "forged"}, {"cancelled": True}),
+    ],
+)
 async def test_same_child_ui_reply_is_correlated_and_denied_without_controller(
     tmp_path, method, choice, answer
 ):
     marker = tmp_path / "received.json"
-    program = stub(tmp_path, f'''
+    program = stub(
+        tmp_path,
+        f"""
 import json, sys
 send = lambda row: print(json.dumps(row), flush=True)
 state = json.loads(sys.stdin.readline())
@@ -55,26 +60,34 @@ reply = json.loads(sys.stdin.readline())
 with open({str(marker)!r}, "w") as output: json.dump(reply, output)
 send({{"type": "message_end", "message": {{"role": "assistant", "stopReason": "stop"}}}})
 send({{"type": "agent_settled"}})
-''')
+""",
+    )
     requests = []
 
     async def controller(request):
         requests.append(request)
         return choice
 
-    events = await asyncio.wait_for(collect_backend(program, tmp_path, controller if choice
-        is not None else None), timeout=6)
+    events = await asyncio.wait_for(
+        collect_backend(program, tmp_path, controller if choice is not None else None), timeout=6
+    )
     assert marker.exists()
     assert json.loads(marker.read_text()) == {
-        "type": "extension_ui_response", "id": "owned-ui-1", **answer,
+        "type": "extension_ui_response",
+        "id": "owned-ui-1",
+        **answer,
     }
     assert len(requests) == (0 if choice is None else 1)
     assert events[-1]["type"] == "done"
 
 
 async def collect_backend(program, cwd, controller):
-    return [event async for event in backend.stream_agent_events(program, [], "fixture", str(cwd),
-        ui_request=controller)]
+    return [
+        event
+        async for event in backend.stream_agent_events(
+            program, [], "fixture", str(cwd), ui_request=controller
+        )
+    ]
 
 
 async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path, monkeypatch):
@@ -84,18 +97,20 @@ async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path
     turn = "turn-1"
     agent._active_turns[session_id] = turn
     request = {"id": "ui-1", "method": "confirm", "title": "Confirm", "message": "One action"}
+
     class DirectController:
         async def request_permission(self, **kwargs):
             assert kwargs["session_id"] == session_id
             return {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
+
     controller = DirectController()
     agent._client = controller
     assert (await agent._extension_ui_permission(session_id, turn, controller, request)) == {
         "confirmed": True,
     }
-    assert (await agent._extension_ui_permission(
-        session_id, "wrong-turn", controller, request
-    )) is None
+    assert (
+        await agent._extension_ui_permission(session_id, "wrong-turn", controller, request)
+    ) is None
     assert await agent._extension_ui_permission(session_id, turn, None, request) is None
     assert agent._runtime.controller.get() is UNBOUND_CONTROLLER
     entered, release = asyncio.Event(), asyncio.Event()
@@ -106,9 +121,9 @@ async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path
         return {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
 
     controller.request_permission = delayed
-    in_flight = asyncio.create_task(agent._extension_ui_permission(
-        session_id, turn, controller, request
-    ))
+    in_flight = asyncio.create_task(
+        agent._extension_ui_permission(session_id, turn, controller, request)
+    )
     await asyncio.wait_for(entered.wait(), timeout=1)
     agent._active_turns[session_id] = "successor-turn"
     release.set()
@@ -120,10 +135,54 @@ async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path
         await asyncio.Event().wait()
 
     controller.request_permission = unresponsive
-    assert await asyncio.wait_for(agent._extension_ui_permission(
-        session_id, turn, controller, request
-    ), timeout=1) is None
+    assert (
+        await asyncio.wait_for(
+            agent._extension_ui_permission(session_id, turn, controller, request), timeout=1
+        )
+        is None
+    )
     await agent.shutdown()
+
+
+def test_live_receipt_rejects_stale_input_malformed_and_ambiguous_claims():
+    input_id = "a" * 32
+    valid = {
+        "version": 1,
+        "source": "pi-mcp-client",
+        "inputId": input_id,
+        "state": "running",
+        "lifetime": "turn",
+        "servers": [
+            {
+                "id": "one",
+                "scope": "user",
+                "state": "ready",
+                "calls": "confirm",
+                "tools": 1,
+                "resources": 0,
+                "prompts": 0,
+            }
+        ],
+    }
+
+    def wire_claim(claim):
+        return {"method": "setStatus", "statusKey": "pi-mcp/live-v1", "statusText": claim}
+
+    assert backend._pi_mcp_live_receipt(wire_claim(json.dumps(valid)), input_id) == valid
+    assert backend._pi_mcp_live_receipt(wire_claim(json.dumps(valid)), "b" * 32) is None
+    assert (
+        backend._pi_mcp_live_receipt(
+            wire_claim(json.dumps(valid).replace('"version": 1', '"version": 1, "version": 1')),
+            input_id,
+        )
+        is None
+    )
+    valid["servers"][0]["calls"] = "automatic"
+    valid["servers"][0]["state"] = "denied"
+    assert backend._pi_mcp_live_receipt(wire_claim(json.dumps(valid)), input_id) is None
+    valid["servers"][0]["calls"] = "unavailable"
+    valid["servers"][0]["id"] = "\x1b[2J"
+    assert backend._pi_mcp_live_receipt(wire_claim(json.dumps(valid)), input_id) is None
 
 
 async def test_explicit_owner_cancellation_is_not_swallowed_by_socket_permission():
@@ -156,29 +215,40 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
     proxies = []
     try:
         for index in range(2):
+
             async def update(**kwargs):
                 pass
 
             async def answer(*, position=index, **kwargs):
                 calls[position].append(kwargs)
                 return {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
+
             instance = SimpleNamespace(session_update=update, request_permission=answer)
-            fake = SimpleNamespace(_comms=owner._comms, _transcript_snapshots=False,
-                _transcript_diffs=False, _client=instance)
+            fake = SimpleNamespace(
+                _comms=owner._comms,
+                _transcript_snapshots=False,
+                _transcript_diffs=False,
+                _client=instance,
+            )
             proxy = RuntimeProxy(fake, session_id, owner._runtime.path)
             await proxy.subscribe()
             proxies.append(proxy)
         assert proxies[0]._controller_token != proxies[1]._controller_token
         assert "controllerToken" not in owner._session_metadata(session_id)["agentComms"]
-        request = {"id": "only-one-child", "method": "confirm",
-                   "title": "Approve once?", "message": "Exactly this request"}
+        request = {
+            "id": "only-one-child",
+            "method": "confirm",
+            "title": "Approve once?",
+            "message": "Exactly this request",
+        }
 
         async def fake_prompt(session_id, prompt, **kwargs):
             controller = owner._runtime.controller.get()
             owner._active_turns[session_id] = "private-turn"
             try:
                 answer = await owner._extension_ui_permission(
-                    session_id, "private-turn", controller, request)
+                    session_id, "private-turn", controller, request
+                )
             finally:
                 owner._active_turns.pop(session_id, None)
             return PromptResponse(stop_reason="end_turn", field_meta={"answer": answer})
@@ -240,31 +310,60 @@ async def test_detached_acp_turn_uses_real_package_sdk_without_model_or_provider
     starts = tmp_path / "server-starts"
     server_fixture = (package / "test" / "fixture-server.mjs").as_uri()
     wrapper = tmp_path / "server-wrapper.mjs"
-    wrapper.write_text(f'''
+    wrapper.write_text(f"""
 import {{appendFileSync}} from 'node:fs';
 appendFileSync({json.dumps(str(starts))}, String(process.pid) + '\\n');
 await import({json.dumps(server_fixture)});
-''')
-    config = {"version": 1, "servers": [{
-        "id": "fixture", "enabled": True, "instructionsPolicy": "status-only",
-        "transport": {"type": "stdio", "command": node,
-                      "args": [str(wrapper)], "cwd": "project"},
-    }]}
+""")
+    config = {
+        "version": 1,
+        "servers": [
+            {
+                "id": "fixture",
+                "enabled": True,
+                "instructionsPolicy": "status-only",
+                "transport": {
+                    "type": "stdio",
+                    "command": node,
+                    "args": [str(wrapper)],
+                    "cwd": "project",
+                },
+            }
+        ],
+    }
     (agent_dir / "mcp.json").write_text(json.dumps(config))
-    isolated = {"PATH": os.environ.get("PATH", ""), "HOME": str(tmp_path),
-                "PI_CODING_AGENT_DIR": str(agent_dir), "CI": "true", "NO_COLOR": "1",
-                "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash"}
+    isolated = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": str(tmp_path),
+        "PI_CODING_AGENT_DIR": str(agent_dir),
+        "CI": "true",
+        "NO_COLOR": "1",
+        "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
+    }
     trust = package / "node_modules" / "@earendil-works" / "pi-coding-agent" / "dist" / "index.js"
-    saved = subprocess.run([node, "--input-type=module", "-e", f'''
+    saved = subprocess.run(
+        [
+            node,
+            "--input-type=module",
+            "-e",
+            f"""
 import {{ProjectTrustStore}} from {json.dumps(trust.as_uri())};
 new ProjectTrustStore({json.dumps(str(agent_dir))}).set({json.dumps(str(project))}, true);
-'''], cwd=project, env=isolated, capture_output=True, text=True, timeout=5)
+""",
+        ],
+        cwd=project,
+        env=isolated,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
     assert saved.returncode == 0, saved.stderr
     script = tmp_path / "pi-mcp-rpc-stub"
-    script.write_text(f'''#!{node}
+    script.write_text(f"""#!{node}
 import {{createInterface}} from 'node:readline';
 import {{McpRuntime}} from {json.dumps((package / "src" / "runtime.mjs").as_uri())};
 import {{registerReadyTools}} from {json.dumps((package / "src" / "tools.mjs").as_uri())};
+import {{liveStatusReceipt}} from {json.dumps((package / "src" / "live-status.mjs").as_uri())};
 const send = (row) => process.stdout.write(JSON.stringify(row) + '\\n');
 const ctx = {{cwd:process.cwd(), isProjectTrusted:()=>true, mode:'rpc', ui:{{
   confirm(title,message,opts) {{
@@ -293,7 +392,16 @@ input.on('line', async line => {{
     }}}});
   }} else if (row.type==='prompt') {{
     send({{type:'response',id:row.id,command:'prompt',success:true}});
+    const receipt=await liveStatusReceipt(runtime,ctx,row.inputId);
+    send({{type:'extension_ui_request',id:'early',method:'setStatus',
+      statusKey:'pi-mcp/live-v1',statusText:JSON.stringify(receipt)}});
     send({{type:'message_start',message:{{role:'user',content:row.message,inputId:row.inputId}}}});
+    send({{type:'extension_ui_request',id:'wrong-input',method:'setStatus',
+      statusKey:'pi-mcp/live-v1',statusText:JSON.stringify({{...receipt,inputId:'b'.repeat(32)}})}});
+    send({{type:'extension_ui_request',id:'live',method:'setStatus',
+      statusKey:'pi-mcp/live-v1',statusText:JSON.stringify(receipt)}});
+    send({{type:'extension_ui_request',id:'duplicate',method:'setStatus',
+      statusKey:'pi-mcp/live-v1',statusText:JSON.stringify(receipt)}});
     send({{type:'tool_execution_start',toolCallId:'call-1',toolName:echo.name,
           args:{{message:'from-sdk'}}}});
     try {{
@@ -316,11 +424,12 @@ input.on('line', async line => {{
     if (settled) {{ await runtime.stop(); process.exit(0); }}
   }}
 }});
-''')
+""")
     script.chmod(0o755)
     monkeypatch.setattr(backend.os, "environ", isolated)
-    owner = CommsAgent(wire(tmp_path / "wire"), agent_bin=str(script),
-                       agent_args=[], auto_wake=False)
+    owner = CommsAgent(
+        wire(tmp_path / "wire"), agent_bin=str(script), agent_args=[], auto_wake=False
+    )
     updates = []
     approvals = []
 
@@ -340,8 +449,10 @@ input.on('line', async line => {{
             # controller. A bound None must not fall back to owner._client.
             context = owner._runtime.controller.set(None) if not has_controller else None
             try:
-                result = await asyncio.wait_for(owner.prompt("project", [
-                    {"type": "text", "text": "run package fixture"}]), timeout=15)
+                result = await asyncio.wait_for(
+                    owner.prompt("project", [{"type": "text", "text": "run package fixture"}]),
+                    timeout=15,
+                )
             finally:
                 if context is not None:
                     owner._runtime.controller.reset(context)
@@ -351,11 +462,20 @@ input.on('line', async line => {{
         for pid in map(int, starts.read_text().splitlines()):
             with pytest.raises(ProcessLookupError):
                 os.kill(pid, 0)
-        rendered = [update.model_dump(by_alias=True, exclude_none=True)
-                    for update in updates]
+        rendered = [update.model_dump(by_alias=True, exclude_none=True) for update in updates]
+        receipts = [row.get("_meta", {}).get("agentComms", {}).get("mcpClient") for row in rendered]
+        receipts = [receipt for receipt in receipts if receipt is not None]
+        assert len(receipts) == 2
+        assert all(
+            receipt["version"] == 1
+            and receipt["source"] == "pi-mcp-client"
+            and receipt["lifetime"] == "turn"
+            and receipt["servers"][0]["state"] == "ready"
+            for receipt in receipts
+        )
         if has_controller:
-            assert sum('from-sdk' in json.dumps(update) for update in rendered) >= 2
+            assert sum("from-sdk" in json.dumps(update) for update in rendered) >= 2
         else:
-            assert sum('denied' in json.dumps(update) for update in rendered) >= 2
+            assert sum("denied" in json.dumps(update) for update in rendered) >= 2
     finally:
         await owner.shutdown()

@@ -74,6 +74,10 @@ export class McpRuntime {
     }
   }
 
+  isRunning() {
+    return this.#started && !this.#stopped;
+  }
+
   snapshot() {
     return this.#entries.map(({ entry, state, catalog, stderrBytes }) => ({
       id: entry.declaration.id, scope: entry.scope, status: state,

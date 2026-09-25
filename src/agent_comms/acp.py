@@ -289,9 +289,11 @@ class CommsAgent:
         # them would misrepresent both the effective config and launch policy.
         if mcp_servers is not None and (type(mcp_servers) is not list or mcp_servers):
             raise RequestError.invalid_params(
-                {"reason": (
-                    "ACP mcpServers are unsupported; use Pi's native MCP package configuration."
-                )}
+                {
+                    "reason": (
+                        "ACP mcpServers are unsupported; use Pi's native MCP package configuration."
+                    )
+                }
             )
 
     async def new_session(
@@ -626,7 +628,8 @@ class CommsAgent:
             existing = self._runtime.controller.get()
             context = (
                 self._runtime.controller.set(self._client)
-                if existing is UNBOUND_CONTROLLER else None
+                if existing is UNBOUND_CONTROLLER
+                else None
             )
             try:
                 return await self._prompt_owned(
@@ -1730,7 +1733,10 @@ class CommsAgent:
         return await self._drain_inbox(session_id)
 
     async def _extension_ui_permission(
-        self, session_id: str, turn_id: str, controller: Any,
+        self,
+        session_id: str,
+        turn_id: str,
+        controller: Any,
         request: dict[str, Any],
     ) -> dict[str, Any] | None:
         """Project one bounded Pi UI dialog to exactly the turn's ACP controller.
@@ -1754,36 +1760,57 @@ class CommsAgent:
             ]
         elif method == "select":
             values = request.get("options")
-            if (type(values) is not list or not 1 <= len(values) <= 8 or
-                    any(type(item) is not str or not item or len(item) > 100 for item in values)):
+            if (
+                type(values) is not list
+                or not 1 <= len(values) <= 8
+                or any(type(item) is not str or not item or len(item) > 100 for item in values)
+            ):
                 return None
             choices = {f"choice-{index}": value for index, value in enumerate(values)}
-            options = [PermissionOption(option_id=key, name=f"Choose {value}", kind="allow_once")
-                       for key, value in choices.items()]
+            options = [
+                PermissionOption(option_id=key, name=f"Choose {value}", kind="allow_once")
+                for key, value in choices.items()
+            ]
             options.append(PermissionOption(option_id="deny", name="Cancel", kind="reject_once"))
             body = "Select one Pi extension option for this turn only."
         else:
             return None
-        tool_call = ToolCallUpdate(tool_call_id=f"pi-ui-{turn_id}-{request['id']}",
-            kind="other", title=title,
-            content=[ContentToolCallContent(type="content", content=TextContentBlock(
-                type="text", text=body))])
+        tool_call = ToolCallUpdate(
+            tool_call_id=f"pi-ui-{turn_id}-{request['id']}",
+            kind="other",
+            title=title,
+            content=[
+                ContentToolCallContent(
+                    type="content", content=TextContentBlock(type="text", text=body)
+                )
+            ],
+        )
         try:
             if isinstance(controller, SocketClient):
-                reply = await self._runtime.request_permission(session_id, controller, {
-                    "toolCall": tool_call.model_dump(by_alias=True, exclude_none=True),
-                    "options": [option.model_dump(by_alias=True, exclude_none=True)
-                                for option in options],
-                })
+                reply = await self._runtime.request_permission(
+                    session_id,
+                    controller,
+                    {
+                        "toolCall": tool_call.model_dump(by_alias=True, exclude_none=True),
+                        "options": [
+                            option.model_dump(by_alias=True, exclude_none=True)
+                            for option in options
+                        ],
+                    },
+                )
                 if not isinstance(reply, dict):
                     return None
                 outcome = reply
             elif controller is self._client:
-                response = await asyncio.wait_for(controller.request_permission(
-                    session_id=session_id, tool_call=tool_call, options=options),
-                    timeout=ACP_PERMISSION_TIMEOUT_SECONDS)
+                response = await asyncio.wait_for(
+                    controller.request_permission(
+                        session_id=session_id, tool_call=tool_call, options=options
+                    ),
+                    timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
+                )
                 outcome = RequestPermissionResponse.model_validate(response).outcome.model_dump(
-                    by_alias=True, exclude_none=True)
+                    by_alias=True, exclude_none=True
+                )
             else:
                 return None
         except Exception:
@@ -1792,8 +1819,9 @@ class CommsAgent:
             return None
         if self._active_turns.get(session_id) != turn_id:
             return None
-        if (isinstance(controller, SocketClient) and
-                not self._runtime.is_controller(session_id, controller)):
+        if isinstance(controller, SocketClient) and not self._runtime.is_controller(
+            session_id, controller
+        ):
             return None
         selected = outcome.get("optionId")
         if outcome.get("outcome") != "selected" or type(selected) is not str:
@@ -2848,6 +2876,15 @@ class CommsAgent:
                 update=AgentThoughtChunk(
                     session_update="agent_thought_chunk",
                     content=TextContentBlock(type="text", text=event.get("text") or ""),
+                ),
+            )
+        elif kind == "mcp_live_status":
+            await client.session_update(
+                session_id=session_id,
+                update=AgentMessageChunk(
+                    session_update="agent_message_chunk",
+                    content=TextContentBlock(type="text", text=""),
+                    field_meta={"agentComms": {"mcpClient": event["receipt"]}},
                 ),
             )
         elif kind == "agent_info":

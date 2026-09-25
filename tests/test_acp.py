@@ -68,14 +68,16 @@ class TestHandlers:
 
         def no_owner(*args, **kwargs):
             raise AssertionError("foreign ACP declaration reached owner acquisition")
+
         monkeypatch.setattr(agent._comms, "ensure_owner", no_owner)
         for supplied in [[{"name": "untrusted", "command": "bad"}], {"bad": "shape"}]:
             with pytest.raises(RequestError) as new_error:
                 await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=supplied)
             assert "mcpServers are unsupported" in new_error.value.data["reason"]
             with pytest.raises(RequestError) as load_error:
-                await agent.load_session(cwd=str(tmp_path / "project"),
-                                         session_id="nonexistent", mcp_servers=supplied)
+                await agent.load_session(
+                    cwd=str(tmp_path / "project"), session_id="nonexistent", mcp_servers=supplied
+                )
             assert "mcpServers are unsupported" in load_error.value.data["reason"]
         assert len(agent._comms.registry.snapshot().threads) == 0
 

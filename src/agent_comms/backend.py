@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import secrets
 import shutil
 import signal
@@ -82,6 +83,94 @@ CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS = 5.0
 PROMPT_START_TIMEOUT_SECONDS = 180.0
 _SESSION_MUTATING_COMMANDS = frozenset({"new_session", "switch_session", "fork", "clone"})
 _IDENTITY_FAILURE_TEXT = "Pi session identity changed during this turn."
+_MCP_LIVE_STATES = frozenset(
+    {
+        "ready",
+        "error",
+        "disabled",
+        "trust_required",
+        "unsupported_env",
+        "denied",
+        "stale_restart_required",
+        "connecting",
+        "approved",
+    }
+)
+
+
+def _unique_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate live-status field")
+        result[key] = value
+    return result
+
+
+def _pi_mcp_live_receipt(payload: dict[str, Any], input_id: str) -> dict[str, Any] | None:
+    """Project only a bounded package claim from the same Pi child and native input.
+
+    This is observed live status, never MCP approval or call authorization. A
+    same-user Pi extension may mimic an extension UI status; this is not a
+    cryptographic attestation of the package against other local extensions.
+    """
+    if payload.get("method") != "setStatus" or payload.get("statusKey") != "pi-mcp/live-v1":
+        return None
+    text = payload.get("statusText")
+    if not isinstance(text, str) or len(text) > 8192:
+        return None
+    try:
+        data = json.loads(text, object_pairs_hook=_unique_json_pairs)
+    except (ValueError, TypeError):
+        return None
+    if (
+        not isinstance(data, dict)
+        or set(data) != {"version", "source", "inputId", "state", "lifetime", "servers"}
+        or type(data["version"]) is not int
+        or data["version"] != 1
+        or (
+            data["source"] != "pi-mcp-client"
+            or data["state"] != "running"
+            or data["lifetime"] != "turn"
+            or data["inputId"] != input_id
+            or not isinstance(data["servers"], list)
+            or len(data["servers"]) > 32
+        )
+    ):
+        return None
+    seen: set[str] = set()
+    for row in data["servers"]:
+        if not isinstance(row, dict) or set(row) != {
+            "id",
+            "scope",
+            "state",
+            "calls",
+            "tools",
+            "resources",
+            "prompts",
+        }:
+            return None
+        if (
+            not isinstance(row["id"], str)
+            or not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", row["id"])
+            or row["id"] in seen
+            or type(row["scope"]) is not str
+            or (
+                row["scope"] not in {"user", "project"}
+                or type(row["state"]) is not str
+                or row["state"] not in _MCP_LIVE_STATES
+                or type(row["calls"]) is not str
+                or row["calls"] not in {"automatic", "confirm", "unavailable"}
+            )
+        ):
+            return None
+        seen.add(row["id"])
+        if (row["state"] == "ready") != (row["calls"] != "unavailable"):
+            return None
+        for key in ("tools", "resources", "prompts"):
+            if type(row[key]) is not int or not 0 <= row[key] <= 10_000:
+                return None
+    return data
 
 
 class _JsonLineReader:
@@ -1016,6 +1105,7 @@ async def _stream_agent_events(
     capability_failed = False
     prompt_start_deadline: float | None = None
     initial_input_started = False
+    live_status_seen = False
     stats_requested = False
     stats_state_id = f"agent-comms-stats-state-{secrets.token_hex(16)}"
     stats_usage_id = f"agent-comms-stats-usage-{secrets.token_hex(16)}"
@@ -1467,6 +1557,25 @@ async def _stream_agent_events(
             await abort_stalled_rpc()
             break
         if kind == "extension_ui_request":
+            if payload.get("method") == "setStatus":
+                if (
+                    not live_status_seen
+                    and not stats_requested
+                    and require_input_id
+                    and native_capability_confirmed
+                    and initial_prompt_acknowledged
+                    and initial_input_started
+                    and initial_session_observed
+                    and isinstance(initial_session_id, str)
+                    and bool(initial_session_id)
+                    and not session_identity_uncertain
+                    and not input_uncertain
+                ):
+                    receipt = _pi_mcp_live_receipt(payload, original_input_id)
+                    if receipt is not None:
+                        live_status_seen = True
+                        yield {"type": "mcp_live_status", "receipt": receipt}
+                continue
             # The only return path for Pi dialogs is this exact child stdin.
             # Never relay a request across a new child/session or infer a human
             # controller from an ACP subscriber/broadcast update.
@@ -1479,27 +1588,45 @@ async def _stream_agent_events(
             if method not in {"confirm", "select", "input", "editor"}:
                 continue  # Fire-and-forget UI notification has no response.
             choice: dict[str, Any] | None = None
-            if (request_id not in ui_seen and len(ui_seen) < 64 and
-                    ui_request is not None and initial_prompt_acknowledged and
-                    initial_input_started and initial_session_observed and
-                    isinstance(initial_session_id, str) and initial_session_id and
-                    not session_identity_uncertain and not input_uncertain):
+            if (
+                request_id not in ui_seen
+                and len(ui_seen) < 64
+                and ui_request is not None
+                and initial_prompt_acknowledged
+                and initial_input_started
+                and initial_session_observed
+                and isinstance(initial_session_id, str)
+                and initial_session_id
+                and not session_identity_uncertain
+                and not input_uncertain
+            ):
                 ui_seen.add(request_id)
                 with suppress(Exception):
                     # Controller errors deny; do not expose raw UI/extension text.
                     choice = await asyncio.wait_for(ui_request(payload), timeout=15)
             response: dict[str, Any] = {
-                "type": "extension_ui_response", "id": request_id, "cancelled": True,
+                "type": "extension_ui_response",
+                "id": request_id,
+                "cancelled": True,
             }
             if method == "confirm" and isinstance(choice, dict):
-                response = {"type": "extension_ui_response", "id": request_id,
-                            "confirmed": choice.get("confirmed") is True}
+                response = {
+                    "type": "extension_ui_response",
+                    "id": request_id,
+                    "confirmed": choice.get("confirmed") is True,
+                }
             elif method == "select" and isinstance(choice, dict):
                 options = payload.get("options")
-                if (isinstance(options, list) and type(choice.get("value")) is str and
-                        choice["value"] in options):
-                    response = {"type": "extension_ui_response", "id": request_id,
-                                "value": choice["value"]}
+                if (
+                    isinstance(options, list)
+                    and type(choice.get("value")) is str
+                    and choice["value"] in options
+                ):
+                    response = {
+                        "type": "extension_ui_response",
+                        "id": request_id,
+                        "value": choice["value"],
+                    }
             try:
                 if proc.stdin is None or proc.returncode is not None:
                     raise BrokenPipeError

@@ -47,9 +47,19 @@ class SocketClient:
         self.pending[request_id] = future
         task = asyncio.current_task()
         try:
-            self.writer.write((json.dumps({"permissionRequest": {
-                "id": request_id, **payload,
-            }}) + "\n").encode())
+            self.writer.write(
+                (
+                    json.dumps(
+                        {
+                            "permissionRequest": {
+                                "id": request_id,
+                                **payload,
+                            }
+                        }
+                    )
+                    + "\n"
+                ).encode()
+            )
             await asyncio.wait_for(self.writer.drain(), timeout=2)
             # Cancellation can race wait_for's completion of a fast drain.
             # A pending owner cancel must not become a 15-second dialog wait.
@@ -119,8 +129,7 @@ class RuntimeServer:
                 self.clients[session_id].discard(client)
 
     def is_controller(self, session_id: str, controller: SocketClient) -> bool:
-        return (controller in self.clients.get(session_id, ()) and
-                not controller.writer.is_closing())
+        return controller in self.clients.get(session_id, ()) and not controller.writer.is_closing()
 
     async def request_permission(
         self, session_id: str, controller: SocketClient, payload: dict[str, Any]
@@ -170,7 +179,7 @@ class RuntimeServer:
                                         option.model_dump(by_alias=True, exclude_none=True)
                                         for option in config_options
                                     ],
-                                }
+                                },
                             }
                         )
                         + "\n"
@@ -184,13 +193,20 @@ class RuntimeServer:
                     )
                     if not isinstance(receipt, dict):
                         continue
-                    pending = client.pending.get(receipt.get("id"))
+                    reply_id = receipt.get("id")
+                    pending = client.pending.get(reply_id) if isinstance(reply_id, str) else None
                     if pending is not None and not pending.done():
                         pending.set_result(receipt)
             elif action == "prompt":
-                controller = next((subscriber for subscriber in self.clients.get(session_id, ())
-                    if subscriber.token == request.get("controllerToken") and
-                    not subscriber.writer.is_closing()), None)
+                controller = next(
+                    (
+                        subscriber
+                        for subscriber in self.clients.get(session_id, ())
+                        if subscriber.token == request.get("controllerToken")
+                        and not subscriber.writer.is_closing()
+                    ),
+                    None,
+                )
                 context = self.controller.set(controller)
                 try:
                     result = await self.agent.prompt(
@@ -463,9 +479,14 @@ class RuntimeProxy:
                 outcome: dict[str, Any] = {"outcome": "cancelled"}
                 try:
                     if self.agent._client is not None and token == self._controller_token:
-                        reply = await asyncio.wait_for(self.agent._client.request_permission(
-                            session_id=self.session_id, tool_call=request["toolCall"],
-                            options=request["options"]), timeout=ACP_PERMISSION_TIMEOUT_SECONDS)
+                        reply = await asyncio.wait_for(
+                            self.agent._client.request_permission(
+                                session_id=self.session_id,
+                                tool_call=request["toolCall"],
+                                options=request["options"],
+                            ),
+                            timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
+                        )
                         outcome = RequestPermissionResponse.model_validate(reply).model_dump(
                             by_alias=True, exclude_none=True
                         )["outcome"]
@@ -474,12 +495,23 @@ class RuntimeProxy:
                     pass
                 finally:
                     if (
-                        token == self._controller_token and self.writer is not None
+                        token == self._controller_token
+                        and self.writer is not None
                         and not self.writer.is_closing()
                     ):
-                        self.writer.write((json.dumps({"permissionResponse": {
-                            "id": request_id, **outcome,
-                        }}) + "\n").encode())
+                        self.writer.write(
+                            (
+                                json.dumps(
+                                    {
+                                        "permissionResponse": {
+                                            "id": request_id,
+                                            **outcome,
+                                        }
+                                    }
+                                )
+                                + "\n"
+                            ).encode()
+                        )
                         with suppress(OSError, ConnectionError, TimeoutError):
                             await asyncio.wait_for(self.writer.drain(), timeout=1)
                     self._permission_tasks.pop(request_id, None)
@@ -528,10 +560,19 @@ class RuntimeProxy:
         try:
             writer.write(
                 (
-                    json.dumps({"action": action, "thread": self.session_id,
-                        **({"controllerToken": self._controller_token}
-                           if action == "prompt" else {}),
-                        **kwargs}) + "\n"
+                    json.dumps(
+                        {
+                            "action": action,
+                            "thread": self.session_id,
+                            **(
+                                {"controllerToken": self._controller_token}
+                                if action == "prompt"
+                                else {}
+                            ),
+                            **kwargs,
+                        }
+                    )
+                    + "\n"
                 ).encode()
             )
             await writer.drain()

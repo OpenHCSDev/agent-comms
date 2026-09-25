@@ -54,6 +54,20 @@ Pi's temporary `--approve` alone is not a saved MCP project trust decision. Proj
 (hidden executable overrides are unsafe); use `envFrom`. User-scope literal
 `--env` values are saved in the owner-controlled `mcp.json`.
 
+In an active **native-input-proof Pi RPC turn**, the package emits a bounded
+`extension_ui_request` with `method:"setStatus"`, key `pi-mcp/live-v1`, and a
+JSON receipt after the native user start. Version 1 includes `source`, the
+exact `inputId`, `state:"running"`, `lifetime:"turn"`, and redacted per-server
+`id`/`scope`/`state`/`calls`/discovery counts. Agent-comms only forwards a
+strictly validated receipt from that same child and input as ACP
+`_meta.agentComms.mcpClient`; absent, invalid, stale or disconnected receipts
+leave live state **unknown**, not `running` or `unavailable`. The receipt is
+informational; consumers must expire it at turn settlement. It **never**
+grants trust or calls.
+It is not cryptographic provenance against another trusted same-user Pi
+extension. The separate static CLI always reports `live:not_running`, never
+this active-turn snapshot. Stock Pi without native input proof emits no receipt.
+
 The native config is `{"version":1,"servers":[...]}` with unique server IDs.
 Each entry requires `id`, `enabled`, `instructionsPolicy:"status-only"`, and
 `transport:{"type":"stdio","command":"...","args":[],"cwd":"project"}`.
@@ -97,6 +111,7 @@ real Pi RPC process with `--no-approve` and `--approve`: untrusted files are not
 read, absent/stale digests cause zero spawns, and an approved generic fixture
 initializes/discovers and exits on shutdown. Offline local-PTY CLI tests cover
 exact-digest launch/call decisions, denial and zero server spawn. No provider call is made. PR #77
-remains draft; ACP extension-UI projection, Toad controls, HTTP transport,
-explicit foreign config import and final independent exact-byte review remain
-outstanding.
+remains draft. ACP generic extension-UI projection and native-input-correlated
+status relay have provider-free fixture coverage; a real Pi→ACP→Toad linked
+run, Toad live rendering, HTTP transport, explicit foreign config import, and
+final independent exact-byte review remain outstanding.

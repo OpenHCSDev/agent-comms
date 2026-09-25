@@ -2,6 +2,7 @@ import { CONFIG_DIR_NAME, getAgentDir } from '@earendil-works/pi-coding-agent';
 import { decideCallGrant, decideProjectServer } from './src/commands.mjs';
 import { loadEffectiveDeclarations } from './src/sources.mjs';
 import { McpRuntime } from './src/runtime.mjs';
+import { liveStatusReceipt } from './src/live-status.mjs';
 import { registerReadyTools } from './src/tools.mjs';
 import { registerResourceTools } from './src/resources.mjs';
 
@@ -24,6 +25,26 @@ export default function (pi) {
   pi.on('session_shutdown', async () => {
     await runtime?.stop();
     runtime = undefined;
+  });
+  pi.on('message_start', (event, ctx) => {
+    // Native Pi stamps the exact user input on its own event. Stock Pi (no
+    // native input proof), non-RPC clients, and extension-created messages do
+    // not produce a live receipt. The status has no trust/decision authority.
+    const inputId = event.message?.inputId;
+    if (ctx.mode !== 'rpc' || event.message?.role !== 'user' ||
+        !/^[a-f0-9]{32}$/.test(inputId)) return;
+    const owner = runtime;
+    if (!owner) return;
+    // Pi sends its authoritative user message after extension event handlers.
+    // Defer this fire-and-forget status until that native start can reach RPC.
+    setImmediate(() => {
+      if (runtime !== owner) return;
+      void liveStatusReceipt(owner, ctx, inputId).then((receipt) => {
+        if (receipt && runtime === owner) {
+          ctx.ui.setStatus('pi-mcp/live-v1', JSON.stringify(receipt));
+        }
+      }).catch(() => {}); // Missing/stale status remains unknown, never positive.
+    });
   });
   pi.registerCommand('mcp-status', {
     description: 'Show MCP connection, discovery and call-approval status',
