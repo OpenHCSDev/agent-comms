@@ -36,3 +36,31 @@ def test_legacy_cursor_does_not_authorize_old_inputs(tmp_path: Path) -> None:
     assert cursor.initialize(frozenset({"kid"}), "kid", high_water=9, fresh=False) == (0, 9)
     with pytest.raises(ValueError):
         cursor.advance(frozenset({"kid"}), -1)
+
+
+def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path: Path) -> None:
+    import os
+
+    from agent_comms import Thread
+    from agent_comms.operations import wire
+
+    comms = wire(tmp_path)
+    comms.register(Thread(name="kid", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+    store = InputDispositions(comms.root)
+    store.record("bus:7", seq=7, owner="kid", admission=1, target="#review", text="exact source")
+    store.record("bus:8", seq=8, owner="peer", admission=1, target="#review", text="other owner")
+    store.bind("bus:7", admission=1, turn_id="turn", native_id="a" * 32, text="private wrapper")
+    comms.rename_managed_thread("kid", "new-kid", owner_pid=os.getpid())
+    expected = [
+        {
+            "inputId": "bus:7",
+            "sequence": 7,
+            "target": "#review",
+            "text": "exact source",
+            "status": "unknown",
+        }
+    ]
+    assert comms.unresolved_inputs("new-kid") == expected
+    assert comms.unresolved_inputs("kid") == expected
+    assert store.started("bus:7", turn_id="turn", native_id="a" * 32, text="private wrapper")
+    assert comms.unresolved_inputs("new-kid") == []

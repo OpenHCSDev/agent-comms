@@ -713,13 +713,7 @@ class CommsAgent:
                 content=TextContentBlock(type="text", text=""),
                 field_meta={
                     "agentComms": {
-                        "inputDisposition": {
-                            "inputId": row["key"].removeprefix("acp:"),
-                            "sequence": row["sequence"],
-                            "target": row["target"],
-                            "text": row["source_text"],
-                            "status": row["status"],
-                        }
+                        "inputDisposition": InputDispositions.public(row)
                     }
                 },
             ),

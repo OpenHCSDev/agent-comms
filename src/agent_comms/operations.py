@@ -26,12 +26,12 @@ from dataclasses import asdict, dataclass, fields, replace
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from .channels import ChannelCatalog
-from .goal_pauses import GoalPauseEvent, GoalPauseEvents
 from .goal_history import GoalHistoryEntry
+from .goal_pauses import GoalPauseEvent, GoalPauseEvents
 from .goal_waits import GoalWait, GoalWaits
 
 if TYPE_CHECKING:
@@ -2144,6 +2144,15 @@ class Comms:
         """Return the action that paused this exact current goal revision, if known."""
         events = GoalPauseEvents(self.root / "goal_pause_events.json")
         return events.for_goal(self.registry.require(name).goal, events.snapshot())
+
+    def unresolved_inputs(self, name: str) -> list[dict[str, Any]]:
+        """Project durable unresolved inputs; reading never schedules another attempt."""
+        from .input_disposition import InputDispositions
+
+        with _store_lock(self._wire_lock_path):
+            self.registry.require(name)
+            rows = InputDispositions(self.root).unknown(self.registry.aliases_for(name))
+            return [InputDispositions.public(row) for row in rows]
 
     def goal_history(
         self, name: str, *, goal_id: str | None = None
