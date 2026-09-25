@@ -115,13 +115,15 @@ def test_publication_failure_precedes_ack(inbox_comms, monkeypatch):
     assert ledger.path.read_bytes() == authority_before
 
 
-def test_oversized_standby_exposes_counts_without_unseen_review_keys(inbox_comms, monkeypatch):
+@pytest.mark.parametrize("large_body", ["large relevant reply " * 5_000, "🧪" * 3_000])
+def test_oversized_standby_exposes_counts_without_unseen_review_keys(
+    inbox_comms, monkeypatch, large_body
+):
     comms = inbox_comms
     monkeypatch.setenv("PI_AGENT_ID", "b")
     goal = comms.update_goal("b", "set", text="Wait for a after reviewing its replies")
     messages = [
-        comms.send_message("a", "b", body)
-        for body in ("large relevant reply " * 5_000, "Previously reviewed reply")
+        comms.send_message("a", "b", body) for body in (large_body, "Previously reviewed reply")
     ]
     dispositions = InputDispositions(comms.root)
     for message in messages:
@@ -201,3 +203,128 @@ def test_cached_materialization_restores_private_modes_and_corrupt_content(tmp_p
     artifact.write_text("accidentally changed snapshot")
     assert materialize_oversized_output(tmp_path, response) == artifact
     assert json.loads(artifact.read_text()) == response
+
+
+def test_small_dependency_review_stays_inline_despite_large_excluded_history(
+    inbox_comms, monkeypatch
+):
+    comms = inbox_comms
+    monkeypatch.setenv("PI_AGENT_ID", "b")
+    goal = comms.update_goal("b", "set", text="Review a and wait for its next reply")
+    dispositions = InputDispositions(comms.root)
+    for index in range(930):
+        dispositions.record(
+            f"acp:owner-{index}",
+            seq=None,
+            owner="b",
+            admission=1,
+            target="b",
+            text="Uncertain owner input " * 45,
+        )
+    messages = [
+        comms.send_message("a", "b", body)
+        for body in ("Already reviewed", "Complete new reply: " + "x" * 548)
+    ]
+    for message in messages:
+        dispositions.record(
+            f"bus:{message.seq}",
+            seq=message.seq,
+            owner="b",
+            admission=1,
+            target="b",
+            text=message.body,
+        )
+    dispositions.review_for_goal(
+        (f"bus:{messages[0].seq}",),
+        owners=frozenset({"b"}),
+        goal_id=goal.id,
+        goal_revision=goal.revision,
+        turn_id="previous-review",
+    )
+    before = dispositions.path.read_bytes()
+    result = invoke_tool(
+        comms, "comms_inbox", {"thread": "b", "goal_id": goal.id, "wait_for": ["a"]}
+    )
+    review = result["standby_review"]
+    assert [row["text"] for row in review["messages"]] == [messages[1].body]
+    assert review["reviewed_inputs"] == [f"bus:{messages[1].seq}"]
+    assert review["messages_complete"] is True and review["complete"] is False
+    assert review["goal_id"] == goal.id and review["wait_for"] == ["a"]
+    assert review["counts"] == {
+        "messages": 1,
+        "already_reviewed_inputs": 1,
+        "excluded_inputs": 930,
+    }
+    assert "excluded_inputs" not in review and "already_reviewed_inputs" not in review
+    assert len(json.dumps(result, indent=2).encode()) <= MAX_INLINE_OUTPUT_BYTES
+    assert result["complete"] is False and result["ackDeferred"] is True
+    assert result["acknowledged"] == 0 and comms.pending_count("b") == 2
+    assert dispositions.path.read_bytes() == before
+    full = json.loads(Path(result["result_file"]).read_text())
+    assert full["standby_review"] == comms.goal_input_review("b", goal.id, ["a"])
+    assert len(full["standby_review"]["excluded_inputs"]) == 930
+    report = {
+        "goal_id": goal.id,
+        "status": "standby",
+        "progress": "Wait for next reply",
+        "wait_for": ["a"],
+        "reviewed_inputs": review["reviewed_inputs"],
+    }
+    with pytest.raises(ValueError, match="recipient"):
+        invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": ["acp:owner-0"]})
+    assert dispositions.path.read_bytes() == before
+    # A reply arriving after this snapshot still blocks standby atomically.
+    late = comms.send_message("a", "b", "New evidence after inbox inspection")
+    dispositions.record(
+        f"bus:{late.seq}", seq=late.seq, owner="b", admission=1, target="b", text=late.body
+    )
+    after_arrival = dispositions.path.read_bytes()
+    with pytest.raises(ValueError, match="pending or UNKNOWN"):
+        invoke_tool(comms, "comms_goal", report)
+    assert dispositions.path.read_bytes() == after_arrival
+    fresh = invoke_tool(
+        comms, "comms_inbox", {"thread": "b", "goal_id": goal.id, "wait_for": ["a"]}
+    )["standby_review"]
+    assert fresh["reviewed_inputs"] == [f"bus:{messages[1].seq}", f"bus:{late.seq}"]
+    invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": fresh["reviewed_inputs"]})
+    assert comms.goal_wait("b") is not None
+    assert dispositions.status(f"bus:{messages[1].seq}") == "unknown"
+    assert not dispositions.get("acp:owner-0").get("goal_reviews")
+
+
+async def test_pending_dependency_becomes_reviewable_after_owner_admission(tmp_path, monkeypatch):
+    from agent_comms import wire
+    from agent_comms.acp import CommsAgent
+
+    monkeypatch.setenv("PI_AGENT_ID", "b")
+    comms = wire(tmp_path / "wire")
+    owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+    monkeypatch.setattr(owner, "_ensure_live_drain", lambda _: None)
+    await owner.new_session(str(tmp_path / "b"))
+    comms.register(Thread("a", frozenset(), str(tmp_path)))
+    goal = comms.update_goal(
+        "b", "set", text="Review dependency and wait", owner_store=owner._open_goal_store()
+    )
+    args = {"thread": "b", "ack": False, "goal_id": goal.id, "wait_for": ["a"]}
+    report = {"goal_id": goal.id, "status": "standby", "progress": "Wait", "wait_for": ["a"]}
+    try:
+        message = comms.send_message("a", "b", "Reply before the owner has admitted it")
+        before = invoke_tool(comms, "comms_inbox", args)
+        assert before["messages"] == [message.to_wire()]
+        assert before["standby_review"]["reviewed_inputs"] == []
+        with pytest.raises(ValueError, match="pending or UNKNOWN"):
+            invoke_tool(comms, "comms_goal", report)
+        await owner._drain_inbox("b")
+        after = invoke_tool(comms, "comms_inbox", args)
+        assert after["standby_review"]["reviewed_inputs"] == [f"bus:{message.seq}"]
+        assert message.body in after["standby_review"]["messages"][0]["text"]
+        invoke_tool(
+            comms,
+            "comms_goal",
+            {**report, "reviewed_inputs": after["standby_review"]["reviewed_inputs"]},
+        )
+        assert comms.goal_wait("b") is not None
+        assert owner._dispositions.status(f"bus:{message.seq}") == "unknown"
+        assert not owner._pending_turns.get("b") and not owner._backend_inboxes
+    finally:
+        await owner.shutdown()
