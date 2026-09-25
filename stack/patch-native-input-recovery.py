@@ -5,7 +5,7 @@ import hashlib
 import sys
 from pathlib import Path
 
-SOURCE_SHA = "38a1ea134a702b63f00e1119fb5f459c147f577c23928d5ee59600659a06cb9a"
+SOURCE_SHA = "09f9bc9b6791532a307d115a868cf1e5552c53efaac48225aac03a3acd3d4901"
 
 
 def main(session: Path) -> None:
