@@ -99,7 +99,8 @@ async def test_channel_native_receipts_are_per_recipient_and_per_sequence(tmp_pa
         assert {(row["owner"], row["sequence"], row["status"]) for row in rows} == {
             (name, message.seq, "started") for name in ("alpha", "beta") for message in messages
         }
-        assert len({row["native_id"] for row in rows}) == len(calls) == 4
+        assert len({row["native_id"] for row in rows}) == len(calls) == 2
+        assert all("Request one" in text and "Request two" in text for _, text in calls)
     finally:
         await agent.shutdown()
 
@@ -174,3 +175,42 @@ asyncio.run(run())
             assert rows[0]["source_text"].endswith("CRASH_REQUEST")
         finally:
             await agent.shutdown()
+
+
+@pytest.mark.parametrize("mismatch", ["original", "native", "duplicate"])
+async def test_channel_batch_never_credits_omitted_or_duplicate_sequences(
+    tmp_path, monkeypatch, mismatch
+):
+    from agent_comms.declarations import ScheduledTurn
+
+    comms = wire(tmp_path / "wire")
+    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    await agent.new_session(str(tmp_path / "worker"))
+    comms.update_tags("worker", add=frozenset({"team"}))
+    messages = tuple(
+        comms.send_user_message("#team", body, worktree=str(tmp_path))
+        for body in ("FIRST", "SECOND")
+    )
+    await agent._drain_inbox("worker")
+    prompt = "\n\n".join(ScheduledTurn.incoming(message).prompt for message in messages)
+    if mismatch == "original":
+        prompt = ScheduledTurn.incoming(messages[0]).prompt
+    origins = messages if mismatch != "duplicate" else (messages[0], messages[0])
+
+    async def events(*args, **kwargs):
+        text = args[2] if mismatch != "native" else args[2].replace("SECOND", "OMITTED")
+        with kwargs["send_boundary"](None, "a" * 32, text) as allowed:
+            assert allowed is False
+        assert not kwargs["native_start"](None, "a" * 32, text)
+        yield {"type": "done", "ok": False, "text": "Refused malformed batch"}
+
+    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    try:
+        await agent._run_agent_turn("worker", "worker", prompt, origins=origins)
+        rows = agent._dispositions.unknown(frozenset({"worker"}))
+        assert {row["sequence"] for row in rows} == {message.seq for message in messages}
+        assert all(row["native_id"] is None for row in rows)
+    finally:
+        await agent.shutdown()

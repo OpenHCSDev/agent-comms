@@ -1403,14 +1403,7 @@ class CommsAgent:
                         pending = [turn for turn in pending if turn.goal_id is None]
                     if not pending:
                         continue
-                    # Every bus sequence needs its own exact native receipt.
-                    # Combining channel requests would make one input ID stand
-                    # for several independently durable dispositions.
-                    pending, remaining = (
-                        (pending[:1], pending[1:])
-                        if pending[0].origin is not None
-                        else ScheduledTurn.take_batch(pending)
-                    )
+                    pending, remaining = ScheduledTurn.take_batch(pending)
                     if remaining:
                         self._pending_turns[session_id] = remaining
                     self._turn_tasks[session_id] = asyncio.current_task()  # type: ignore[assignment]
@@ -1750,6 +1743,22 @@ class CommsAgent:
         self._turn_input_keys[session_id] = set(original_keys)
         self._steering_input_keys[session_id] = {}
         self._steering_goal_ids[session_id] = {}
+        channel_batch = (
+            len(origins) > 1
+            and len({origin.seq for origin in origins}) == len(origins)
+            and all(origin.seq > 0 and is_channel_target(origin.target) for origin in origins)
+            and original_keys
+            == tuple(self._dispositions.bus_key(origin, thread) for origin in origins)
+            and task == "\n\n".join(ScheduledTurn.incoming(origin).prompt for origin in origins)
+        )
+
+        def input_keys_valid(public_id: str | None, keys: tuple[str, ...], text: str) -> bool:
+            # One authoritative user start proves every sequence in an exact
+            # channel batch. Never credit an omitted/reordered original input,
+            # a mixed direct batch, or a differently transformed native prompt.
+            return len(keys) <= 1 or (
+                public_id is None and channel_batch and keys == original_keys and text == task
+            )
 
         @contextmanager
         def send_boundary(
@@ -1802,7 +1811,7 @@ class CommsAgent:
                 )
                 owner_ok = (
                     current is not None
-                    and len(keys) <= 1
+                    and input_keys_valid(public_id, keys, sent_text)
                     and snapshot.statuses[canonical].running
                     and snapshot.admission_generations.get(canonical) == turn_admission
                     and current.pid == thread.pid
@@ -1908,7 +1917,7 @@ class CommsAgent:
                     else ()
                 )
             )
-            return len(keys) <= 1 and all(
+            return input_keys_valid(public_id, keys, sent_text) and all(
                 self._dispositions.started(
                     key, turn_id=turn_id, native_id=native_id, text=sent_text
                 )

@@ -14,7 +14,9 @@ from agent_comms import Thread, wire
 from agent_comms.acp import CommsAgent
 
 
-@pytest.mark.parametrize("case", ["deliver", "goal", "stop", "reopen", "steer", "rename"])
+@pytest.mark.parametrize(
+    "case", ["deliver", "batch", "goal", "stop", "reopen", "steer", "rename", "batch_rename"]
+)
 async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
     native = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native:
@@ -114,7 +116,14 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 )
             else:
                 message = comms.send_message("peer", "#team", "@worker STEER_CHANNEL_REQUEST")
-            if case == "rename":
+            messages = [message]
+            if case in {"batch", "batch_rename"}:
+                messages.append(
+                    comms.send_user_message(
+                        "#team", "SECOND_CHANNEL_REQUEST", worktree=str(project)
+                    )
+                )
+            if case in {"rename", "batch_rename"}:
                 comms.registry.rename("worker", "renamed-worker")
             await agent._drain_inbox("worker")
             key = agent._dispositions.bus_key(message, comms.registry.require("worker"))
@@ -137,7 +146,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             elif case != "reopen":
                 CommsAgent._schedule_wake(agent, "worker")
                 await asyncio.wait_for(agent._wake_tasks["worker"], 20)
-            success = case in {"deliver", "steer", "rename"}
+            success = case in {"deliver", "batch", "steer", "rename", "batch_rename"}
             assert len(requests) == (2 if success else 1)
             assert agent._dispositions.status(key) == ("started" if success else "unknown")
             assert not agent._pending_turns.get("worker")
@@ -152,14 +161,21 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             ]
             matched = [row for row in native_inputs if "CHANNEL_REQUEST" in json.dumps(row)]
             assert len(matched) == int(success)
-            if case == "rename":
+            if case in {"rename", "batch_rename"}:
                 assert (
                     "only resolved mentioned identities may respond: @renamed-worker"
                     in json.dumps(matched[0])
                 )
             if success:
                 assert matched[0]["inputId"] == agent._dispositions.get(key)["native_id"]
-            if case in {"deliver", "rename"}:
+                for origin in messages:
+                    row = agent._dispositions.get(
+                        agent._dispositions.bus_key(origin, comms.registry.require("worker"))
+                    )
+                    assert row["status"] == "started"
+                    assert row["native_id"] == matched[0]["inputId"]
+                    assert origin.body in json.dumps(matched[0])
+            if case in {"deliver", "rename", "batch_rename"}:
                 assert comms.channel_history("#team")[-1].body == "RECEIVED"
             if not success:
                 updates = []
