@@ -12,11 +12,14 @@ npm test
 ```
 
 **Default off:** the Pi package manifest loads no extension. A strict inert
-version-1 native declaration parser and canonical declaration digest are present,
-but no user/project configuration file is read, no approval ledger is written or
-checked, and no declared server is launched. No exposed Pi tools, provider/model
-call, agent-comms backend integration, Toad control, or OpenHCS-specific behavior
-is implemented.
+version-1 native declaration parser and canonical declaration digest are present.
+An inert loader now reads user `mcp.json` and separate `mcp-trust.json` from a
+Pi-owned agent directory, and project `<CONFIG_DIR_NAME>/mcp.json` **only** when
+`ctx.isProjectTrusted()` is true. Approval requires an exact project-realpath,
+server-ID, declaration-digest match from the external ledger. It derives status,
+but does not write/approve anything or launch any server. It is not loaded by Pi;
+no exposed Pi tools, provider/model call, agent-comms backend integration, Toad
+control, or OpenHCS-specific behavior is implemented.
 
 The provisional native document uses `{"version":1,"servers":[...]}` so duplicate
 server IDs can be rejected rather than hidden by JSON object parsing. Each entry
@@ -28,8 +31,10 @@ Do not install or advertise this as a usable MCP client. This probe deliberately
 uses only the fixture's explicit command; never read untrusted project declarations
 or launch one as a consequence of opening a project.
 
-Next gate: independently review/freeze this provisional native schema and add
-an external exact-digest approval ledger behind Pi's project-trust authority;
-test changed/untrusted project commands cause zero SDK transports/spawns. Only then wire a package-owned
+Next gate: independently review/freeze the native config, Pi-trust-gated read
+contract and external ledger schema; add a user-authorized, durable ledger writer
+and a Pi extension that cannot start sessions unless eligibility is approved.
+The current tests cover zero SDK transports/spawns on changed/untrusted project
+commands; actual Pi-context and process-boundary tests remain outstanding. Only then wire a package-owned
 session lifecycle, calls, results, and headless-safe status. Generic Pi RPC/ACP
 approval forwarding and Toad remain subsequent separately reviewed slices.
