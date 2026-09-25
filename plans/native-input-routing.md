@@ -110,3 +110,17 @@ Toad's `native_input_attribution_pilot.py` passed against this source: incoming
 and outgoing live/replay headers agree, a human quoting a transport header stays
 human, repaired receipt-bound history works, and the agent inbox remains
 unacknowledged by display repair. No live repair has been applied.
+
+## Merge-readiness refresh
+
+Reconciled current main `071a0e8`, including maintenance-contract cleanup,
+bounded inbox output, and delivery-history dismissal. Resolved overlapping
+earlier static/fixture fixes in favor of main's owning contracts (including
+its renamed exception types, goal-history transactions, and source-text
+projection); preserved exact native input routing.
+
+The combined local xdist suite passed **1,434 tests, 47 skipped in 37.66s**,
+with **88.95% coverage**. All **8 native Pi channel cases passed in 5.17s**
+using localhost-only responses. Whole-tree Ruff, mypy (56 source files),
+Black (159 files), and whitespace checks passed. Merge this core PR before
+the dependent Toad PR #34. No CI wait is needed for these local receipts.

@@ -2270,6 +2270,28 @@ class Comms:
             rows = InputDispositions(self.root).unknown(self.registry.aliases_for(name))
             return [InputDispositions.public(row) for row in rows]
 
+    def input_delivery(self, name: str, *, include_history: bool = False) -> dict[str, Any]:
+        """Read current delivery notices and separately counted migration history."""
+        from .input_disposition import AcpDeliveryCursors, InputDispositions
+
+        with _store_lock(self._wire_lock_path):
+            self.registry.require(name)
+            aliases = self.registry.aliases_for(name)
+            boundary = AcpDeliveryCursors(self.root).legacy_through(aliases)
+            return InputDispositions(self.root).delivery_overview(
+                aliases, boundary, include_history=include_history
+            )
+
+    def dismiss_historical_inputs(self, name: str) -> dict[str, Any]:
+        """Clear only migration notices; UNKNOWN remains unresolved and unreplayable."""
+        from .input_disposition import AcpDeliveryCursors, InputDispositions
+
+        with _store_lock(self._wire_lock_path):
+            self.registry.require(name)
+            aliases = self.registry.aliases_for(name)
+            boundary = AcpDeliveryCursors(self.root).legacy_through(aliases)
+            return InputDispositions(self.root).dismiss_historical(aliases, boundary)
+
     def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> dict:
         """Project exact review eligibility for one current goal and dependency set."""
         with _store_lock(self._wire_lock_path):

@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from dataclasses import asdict
 from pathlib import Path
 
 import pytest
@@ -1846,8 +1847,8 @@ class TestAgentTurnForwarding:
         assert len(goal_updates) == 1
         assert goal_updates[0].field_meta == {"agentComms": {"goal": None, "goalExecution": None}}
         assert "title" not in goal_updates[0].model_fields_set
-        sent = [update for update in sent if update not in goal_updates]
-        kinds = [type(update).__name__ for update in sent]
+        sent = [update for update in sent if not isinstance(update, SessionInfoUpdate)]
+        kinds = [type(u).__name__ for u in sent]
         assert kinds == [
             "AgentMessageChunk",  # turn-started metadata before any model output
             "AgentThoughtChunk",  # actual backend thinking
@@ -2174,12 +2175,62 @@ class TestLiveConfigSync:
         assert not any(isinstance(update, ConfigOptionUpdate) for update in sent)
         assert len(sent) == 1 and isinstance(sent[0], SessionInfoUpdate)
         assert sent[0].field_meta == {"agentComms": {"goal": None, "goalExecution": None}}
+        assert "title" not in sent[0].model_fields_set
         sent.clear()
         # Another thread can change this thread's model; the view must follow.
         wired.set_thread_model("proj", "openrouter/deepseek/deepseek-v4.1-flash")
         await agent._sync_thread_config("proj")
         assert len(sent) == 1
-        assert type(sent[-1]).__name__ == "ConfigOptionUpdate"
+        assert isinstance(sent[0], ConfigOptionUpdate)
+
+    async def test_goal_metadata_updates_once_per_change(self, wired, tmp_path, monkeypatch):
+        agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
+        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _: None)
+        sent: list = []
+
+        class FakeClient:
+            async def session_update(self, session_id=None, update=None, **kw):
+                sent.append(update)
+
+        async def assert_snapshot_update():
+            goal, execution = wired.goal_snapshot("proj")
+            await agent._sync_thread_config("proj")
+            assert len(sent) == 1 and isinstance(sent[0], SessionInfoUpdate)
+            assert sent[0].field_meta == {
+                "agentComms": {
+                    "goal": asdict(goal) if goal else None,
+                    "goalExecution": asdict(execution) if execution else None,
+                }
+            }
+            assert "title" not in sent[0].model_fields_set
+            sent.clear()
+            await agent._sync_thread_config("proj")
+            assert sent == []
+
+        agent._client = FakeClient()
+        try:
+            await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+            await assert_snapshot_update()
+            goal = wired.update_goal("proj", "set", text="Handle assigned work")
+            await assert_snapshot_update()
+
+            wired.register(Thread("child", frozenset(), str(tmp_path)))
+            wired.update_goal("proj", "standby", goal_id=goal.id, wait_for=["child"])
+            await assert_snapshot_update()
+
+            # Renaming a dependency changes only the execution projection.
+            before_goal, before_execution = wired.goal_snapshot("proj")
+            wired.registry.rename("child", "renamed-child")
+            after_goal, after_execution = wired.goal_snapshot("proj")
+            assert after_goal == before_goal
+            assert after_execution != before_execution
+            assert after_execution.wait_for[0].name == "renamed-child"
+            await assert_snapshot_update()
+
+            wired.update_goal("proj", "clear", goal_id=goal.id)
+            await assert_snapshot_update()
+        finally:
+            await agent.shutdown()
 
 
 class TestQueueControl:

@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 
-class StaleBusPageIndex(ValueError):  # noqa: N818 - public index invalidation outcome
+class StaleBusPageIndexError(ValueError):
     """A disposable offset no longer identifies its claimed wire row."""
 
 
@@ -117,7 +117,7 @@ class BusPageIndex:
                     if last_sequence is not None and message.seq <= last_sequence:
                         # The page collector uses wire order. A cache sorted
                         # by sequence must not hide malformed legacy order.
-                        raise StaleBusPageIndex("Wire sequences are not increasing.")
+                        raise StaleBusPageIndexError("Wire sequences are not increasing.")
                     self.connection.execute(
                         "INSERT INTO rows(seq,offset,sender,target) VALUES(?,?,?,?)",
                         (message.seq, row_offset, message.sender, message.target),
@@ -176,12 +176,12 @@ class BusPageIndex:
         try:
             record = json.loads(raw)
         except ValueError as error:
-            raise StaleBusPageIndex("Indexed bus row is invalid.") from error
+            raise StaleBusPageIndexError("Indexed bus row is invalid.") from error
         if (
             not isinstance(record, Mapping)
             or int(record.get("seq", 0)) != seq
             or record.get("from") != sender
             or record.get("to") != target
         ):
-            raise StaleBusPageIndex("Indexed bus row changed.")
+            raise StaleBusPageIndexError("Indexed bus row changed.")
         return record, len(raw)

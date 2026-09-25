@@ -55,6 +55,7 @@ class InputDispositions:
             or type(row.get("admission")) is not int
             or type(row.get("target")) is not str
             or type(row.get("source_text")) is not str
+            or type(row.get("notice_dismissed", False)) is not bool
             or (row.get("sequence") is not None and type(row.get("sequence")) is not int)
             or (row.get("turn_id") is not None and type(row.get("turn_id")) is not str)
             or (
@@ -190,6 +191,18 @@ class InputDispositions:
             row = self._read().get(key)
             return dict(row) if row is not None else None
 
+    def source_texts(self, keys: tuple[str, ...]) -> tuple[str, ...] | None:
+        """Read exact admitted texts, in caller order, from one ledger snapshot.
+
+        A missing input prevents batch validation. Reading these texts never
+        authorizes delivery or changes UNKNOWN to STARTED.
+        """
+        with _store_lock(self.path):
+            rows = self._read()
+            if any(key not in rows for key in keys):
+                return None
+            return tuple(rows[key]["source_text"] for key in keys)
+
     @staticmethod
     def public(row: dict[str, Any]) -> dict[str, Any]:
         """Public delivery projection; native receipt authority stays private."""
@@ -203,6 +216,74 @@ class InputDispositions:
                 {"reviewedForGoals": sorted(row["goal_reviews"])} if row.get("goal_reviews") else {}
             ),
         }
+
+    @staticmethod
+    def _historical(row: dict[str, Any], legacy_through: int) -> bool:
+        return (
+            row["sequence"] is not None
+            and row["sequence"] <= legacy_through
+            and row["native_id"] is None
+        )
+
+    @classmethod
+    def _delivery_overview(
+        cls,
+        rows: dict[str, dict[str, Any]],
+        owners: frozenset[str],
+        legacy_through: int,
+        *,
+        include_history: bool = False,
+    ) -> dict[str, Any]:
+        current = []
+        historical = []
+        dismissed = 0
+        historical_count = 0
+        ordered = sorted(
+            (row for row in rows.values() if row["owner"] in owners and row["status"] == "unknown"),
+            key=lambda row: (row["sequence"] is None, row["sequence"] or 0),
+        )
+        for row in ordered:
+            if cls._historical(row, legacy_through):
+                notice_dismissed = row.get("notice_dismissed", False)
+                dismissed += int(notice_dismissed)
+                historical_count += int(not notice_dismissed)
+                if include_history:
+                    historical.append({**cls.public(row), "noticeDismissed": notice_dismissed})
+            else:
+                current.append(cls.public(row))
+        return {
+            "inputs": current,
+            "historicalCount": historical_count,
+            "dismissedHistoricalCount": dismissed,
+            "historicalInputs": historical,
+        }
+
+    def delivery_overview(
+        self, owners: frozenset[str], legacy_through: int, *, include_history: bool = False
+    ) -> dict[str, Any]:
+        """Project migration history separately; historical bodies are opt-in."""
+        with _store_lock(self.path):
+            return self._delivery_overview(
+                self._read(), owners, legacy_through, include_history=include_history
+            )
+
+    def dismiss_historical(self, owners: frozenset[str], legacy_through: int) -> dict[str, Any]:
+        """Dismiss migration notices, leaving delivery and goal authority intact."""
+        with _store_lock(self.path):
+            rows = self._read()
+            changed = False
+            for row in rows.values():
+                if (
+                    row["owner"] in owners
+                    and row["status"] == "unknown"
+                    and self._historical(row, legacy_through)
+                    and not row.get("notice_dismissed", False)
+                ):
+                    row["notice_dismissed"] = True
+                    changed = True
+            if changed:
+                self._write(rows)
+            return self._delivery_overview(rows, owners, legacy_through)
 
     def unknown(self, owners: frozenset[str]) -> list[dict[str, Any]]:
         with _store_lock(self.path):
@@ -293,8 +374,15 @@ class AcpDeliveryCursors:
 
     def cursor(self, aliases: frozenset[str]) -> int:
         """Read the scheduling boundary without creating or advancing it."""
+        return self._boundary(aliases, "cursor")
+
+    def legacy_through(self, aliases: frozenset[str]) -> int:
+        """Read the durable migration boundary without inventing one for fresh owners."""
+        return self._boundary(aliases, "legacy_through")
+
+    def _boundary(self, aliases: frozenset[str], field: str) -> int:
         with _store_lock(self.path):
             rows = [row for name, row in self._read().items() if name in aliases]
             if len(rows) > 1:
                 raise RelationViolationError("Ambiguous ACP delivery cursor after rename")
-            return rows[0]["cursor"] if rows else 0
+            return rows[0][field] if rows else 0

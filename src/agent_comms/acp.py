@@ -708,20 +708,36 @@ class CommsAgent:
     async def _emit_input_disposition(
         self, session_id: str, row: dict[str, Any], client: Any = None
     ) -> None:
+        await self._emit_public_input_disposition(session_id, InputDispositions.public(row), client)
+
+    async def _emit_public_input_disposition(
+        self, session_id: str, disposition: dict[str, Any], client: Any = None
+    ) -> None:
         await (client or self._runtime).session_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta={"agentComms": {"inputDisposition": InputDispositions.public(row)}},
+                field_meta={"agentComms": {"inputDisposition": disposition}},
+            ),
+        )
+
+    async def emit_input_delivery_changed(self, session_id: str) -> None:
+        """Invalidate attached views after a notice-only owner action."""
+        await self._runtime.session_update(
+            session_id=session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=""),
+                field_meta={"agentComms": {"inputDeliveryChanged": True}},
             ),
         )
 
     async def replay_unknown_inputs(self, session_id: str, client: Any = None) -> None:
         owner = self._require_session(session_id)
-        aliases = self._comms.registry.aliases_for(owner)
-        for row in self._dispositions.unknown(aliases):
-            await self._emit_input_disposition(session_id, row, client=client)
+        overview = self._comms.input_delivery(owner)
+        for disposition in overview["inputs"]:
+            await self._emit_public_input_disposition(session_id, disposition, client=client)
 
     async def emit_session_identity(self, session_id: str, name: str, client: Any = None) -> None:
         """Let a subscriber identify its owner before potentially long replay."""
@@ -1775,15 +1791,6 @@ class CommsAgent:
         self._steering_origins[session_id] = {}
         self._steering_goal_ids[session_id] = {}
 
-        def admitted_channel_prompt() -> str | None:
-            parts: list[str] = []
-            for key in original_keys:
-                row = self._dispositions.get(key)
-                if row is None:
-                    return None
-                parts.append(row["source_text"])
-            return "\n\n".join(parts)
-
         channel_batch = (
             len(origins) > 1
             and len({origin.seq for origin in origins}) == len(origins)
@@ -1793,7 +1800,8 @@ class CommsAgent:
             # The durable admission owns the exact prompt, including the
             # names resolved at admission. Re-deriving it here can drift if
             # a recipient was renamed before or after inbox draining.
-            and task == admitted_channel_prompt()
+            and (admitted_texts := self._dispositions.source_texts(original_keys)) is not None
+            and task == "\n\n".join(admitted_texts)
         )
 
         def input_keys_valid(public_id: str | None, keys: tuple[str, ...], text: str) -> bool:

@@ -13,7 +13,8 @@ import os
 import sqlite3
 import stat
 import time
-from contextlib import closing
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
@@ -128,17 +129,15 @@ class GoalHistoryStore:
         except (TypeError, ValueError) as error:
             raise GoalHistoryError("Goal history contains an invalid goal snapshot.") from error
 
-    def _write(self, sql: str, parameters: tuple[object, ...]) -> int:
+    @contextmanager
+    def _transaction(self) -> Iterator[sqlite3.Connection]:
+        """Share durable commit mechanics without inventing an operation result."""
         try:
             with closing(self._connect()) as connection:
                 connection.execute("BEGIN IMMEDIATE")
-                cursor = connection.execute(sql, parameters)
-                sequence = cursor.lastrowid
-                if sequence is None:
-                    raise GoalHistoryError("Goal history write returned no row identity.")
+                yield connection
                 connection.commit()
             self._sync()
-            return sequence
         except (OSError, sqlite3.Error) as error:
             raise GoalHistoryError("Goal history write durability is uncertain.") from error
 
@@ -150,25 +149,33 @@ class GoalHistoryStore:
         before: Goal | None,
         after: Goal | None,
     ) -> int:
-        return self._write(
-            "INSERT INTO entries(owner_created_at,kind,state,observed_at,before_goal,after_goal) "
-            "VALUES(?,?,?,?,?,?)",
-            (
-                owner_created_at,
-                kind,
-                state,
-                time.time(),
-                self._encode(before),
-                self._encode(after),
-            ),
-        )
+        with self._transaction() as connection:
+            cursor = connection.execute(
+                "INSERT INTO entries"
+                "(owner_created_at,kind,state,observed_at,before_goal,after_goal) "
+                "VALUES(?,?,?,?,?,?)",
+                (
+                    owner_created_at,
+                    kind,
+                    state,
+                    time.time(),
+                    self._encode(before),
+                    self._encode(after),
+                ),
+            )
+            sequence = cursor.lastrowid
+            if sequence is None:
+                raise GoalHistoryError("Goal history insert returned no sequence.")
+        return sequence
 
     def _set_state(
         self, sequence: int, state: Literal["committed", "aborted", "uncertain"]
     ) -> None:
-        self._write(
-            "UPDATE entries SET state=? WHERE sequence=? AND state='pending'", (state, sequence)
-        )
+        with self._transaction() as connection:
+            connection.execute(
+                "UPDATE entries SET state=? WHERE sequence=? AND state='pending'",
+                (state, sequence),
+            )
 
     def _sync_visible_registry(self) -> None:
         """Adopt a visible post-crash registry value before attesting an intent."""

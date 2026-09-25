@@ -37,7 +37,7 @@ class SocketClient:
         await self.writer.drain()
 
 
-class OwnerIdentityChanged(RuntimeError):  # noqa: N818 - public lifecycle outcome name
+class OwnerIdentityChangedError(RuntimeError):
     """A saved attachment must not follow a reused thread name."""
 
 
@@ -151,8 +151,16 @@ class RuntimeServer:
                 writer.write((json.dumps({"result": result}) + "\n").encode())
                 await writer.drain()
             elif action == "input_dispositions":
-                rows = self.agent._comms.unresolved_inputs(name)
-                writer.write((json.dumps({"result": {"inputs": rows}}) + "\n").encode())
+                include_history = request.get("include_history", False)
+                if type(include_history) is not bool:
+                    raise ValueError("include_history must be a boolean.")
+                result = self.agent._comms.input_delivery(name, include_history=include_history)
+                writer.write((json.dumps({"result": result}) + "\n").encode())
+                await writer.drain()
+            elif action == "dismiss_historical_inputs":
+                result = self.agent._comms.dismiss_historical_inputs(name)
+                await self.agent.emit_input_delivery_changed(session_id)
+                writer.write((json.dumps({"result": result}) + "\n").encode())
                 await writer.drain()
             elif action == "goal_history":
                 from dataclasses import asdict
@@ -276,7 +284,7 @@ class RuntimeProxy:
         if self._identity is None:
             self._identity = identity
         elif identity != self._identity:
-            raise OwnerIdentityChanged("Thread identity changed; open a new attachment.")
+            raise OwnerIdentityChangedError("Thread identity changed; open a new attachment.")
         if thread.pid <= 0 or not snapshot.statuses[canonical].running:
             raise ConnectionError(f"Thread {self.session_id!r} has no running owner.")
         return socket_path(self._comms.root, thread.pid)
@@ -375,7 +383,7 @@ class RuntimeProxy:
                             },
                         )
                     break
-                except OwnerIdentityChanged:
+                except OwnerIdentityChangedError:
                     return
                 except (OSError, RuntimeError):
                     await asyncio.sleep(0.1)
