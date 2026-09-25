@@ -55,6 +55,9 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
                     "wait_for": ["@child"],
                 },
             )
+            assert result["goal"]["status"] == "active"
+            assert result["goal_execution"]["state"] == "standby"
+            assert [target["name"] for target in result["goal_execution"]["wait_for"]] == ["child"]
             yield {
                 "type": "tool_end",
                 "id": "wait",

@@ -265,8 +265,9 @@ def _set_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 def _goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     wait_for = arguments.get("wait_for")
     assert wait_for is None or isinstance(wait_for, list)
-    goal = comms.update_goal(
-        _executing_thread(),
+    name = _executing_thread()
+    comms.update_goal(
+        name,
         str(arguments["status"]),
         goal_id=str(arguments["goal_id"]),
         expected_status="active",
@@ -274,7 +275,11 @@ def _goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
         model_report=True,
         wait_for=wait_for or (),
     )
-    return {"goal": asdict(goal) if goal else None}
+    goal, execution = comms.goal_snapshot(name)
+    return {
+        "goal": asdict(goal) if goal else None,
+        "goal_execution": asdict(execution) if execution else None,
+    }
 
 
 def _resume_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
