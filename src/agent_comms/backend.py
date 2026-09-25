@@ -885,12 +885,13 @@ async def _stream_agent_events(
     authority_revoked = False
     followup_start_unrecognized = False
     final_assistant_stop = False
+    forwarded_generation = 0
     if steering_queue is not None and proc.stdin is not None:
         stdin = proc.stdin
 
         async def forward_steering() -> None:
             nonlocal fail_reason, input_uncertain, authority_revoked
-            nonlocal final_assistant_stop, image_input_sent
+            nonlocal final_assistant_stop, image_input_sent, forwarded_generation
             while True:
                 message = await steering_queue.get()
                 original = dict(message) if isinstance(message, dict) else message
@@ -981,6 +982,7 @@ async def _stream_agent_events(
                         if authorized:
                             if command.get("images"):
                                 image_input_sent = True
+                            forwarded_generation += 1
                             stdin.write((json.dumps(command) + "\n").encode())
                     if not authorized:
                         if authorized is False:
@@ -1037,6 +1039,10 @@ async def _stream_agent_events(
     stats_responses: set[str] = set()
     stats_complete = False
     stats_failed = False
+    stats_busy = False
+    stats_generation = 0
+    settlement_count = 0
+    stats_settlement_count = 0
     agent_settled_seen = False
     reader = (
         persistent_session.reader
@@ -1062,10 +1068,15 @@ async def _stream_agent_events(
     started_during_abort: list[str | None] = []
 
     async def request_stats() -> None:
-        nonlocal stats_requested
+        nonlocal stats_requested, stats_state_id, stats_usage_id
+        nonlocal stats_generation, stats_settlement_count
         if proc.stdin is None or stats_requested:
             return
         stats_requested = True
+        stats_generation = forwarded_generation
+        stats_settlement_count = settlement_count
+        stats_state_id = f"agent-comms-stats-state-{secrets.token_hex(16)}"
+        stats_usage_id = f"agent-comms-stats-usage-{secrets.token_hex(16)}"
         try:
             state_request = {"type": "get_state"}
             usage_request = {"type": "get_session_stats"}
@@ -1500,6 +1511,10 @@ async def _stream_agent_events(
                 if payload.get("success") is True:
                     stats_responses.add(response_id)
                     stats_complete = len(stats_responses) == 2
+                    if response_id == stats_state_id and isinstance(data, dict):
+                        stats_busy = (
+                            data.get("isStreaming") is True or data.get("isCompacting") is True
+                        )
                 else:
                     stats_failed = True
         initial_prompt_response = (
@@ -1827,7 +1842,8 @@ async def _stream_agent_events(
                 if isinstance(context, dict) and not session_identity_uncertain:
                     context_size = context.get("contextWindow") or context_size
                 yield context_info()
-                break
+                if persistent_session is None:
+                    break
         elif kind == "message_update":
             message = payload.get("message") or {}
             if not isinstance(message, dict):
@@ -1939,15 +1955,46 @@ async def _stream_agent_events(
                         yield context_info()
                     provisional_usage = False
         elif kind == "agent_settled":
+            settlement_count += 1
+            # Pi can emit an older run's settlement after a forwarded prompt
+            # has already crossed stdin. Keep the owner's turn alive until
+            # that input receives its own start, final response and settlement.
+            if persistent_session is not None and pending_inputs:
+                continue
             agent_settled_seen = True
             if not stats_requested:
                 last_model_progress = loop.time()
                 phase = "settling_stats"
-                yield {"type": "settled"}
-                if finish_event is None:
+                if persistent_session is not None:
+                    await request_stats()
+                else:
+                    yield {"type": "settled"}
+                if persistent_session is None and finish_event is None:
                     await request_stats()
 
         if persistent_session is not None and (stats_complete or stats_failed):
+            # Publishing the stats above can enqueue a follow-up. Give the
+            # already-woken forwarder its turn before checking the send epoch.
+            await asyncio.sleep(0)
+            queued_commands = steering_queue is not None and not steering_queue.empty()
+            if not stats_failed and (
+                stats_busy
+                or pending_inputs
+                or queued_commands
+                or forwarded_generation != stats_generation
+            ):
+                # These snapshots describe an earlier settlement, not a
+                # barrier against a late prompt. Do not publish owner-idle or
+                # close Pi while its newer run is working.
+                stats_requested = stats_complete = stats_busy = False
+                stats_responses.clear()
+                phase = "model_wait"
+                if (
+                    settlement_count > stats_settlement_count or queued_commands
+                ) and not pending_inputs:
+                    await request_stats()
+                continue
+            yield {"type": "settled"}
             break
 
     if steering_task is not None:
