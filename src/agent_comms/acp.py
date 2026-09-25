@@ -1781,7 +1781,7 @@ class CommsAgent:
                 raise ValueError("The blocked goal changed; refresh its state.")
             if self._pending_goal_origins.get(name) == goal_id:
                 raise ValueError("Wait for the goal origin turn to finish.")
-            resumed = replace(goal, status="active", revision=goal.revision + 1)
+            resumed = replace(goal, status="active", block_reason=None, revision=goal.revision + 1)
             store = self._open_goal_store()
             generation = store.snapshot(goal_id)
             if generation is None:

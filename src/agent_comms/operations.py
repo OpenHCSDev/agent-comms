@@ -103,6 +103,16 @@ from .transcript_routes import InputDisplay, TranscriptRoutes
 OBSERVATION_INTERVAL = 0.05
 
 
+def _required_block_reason(reason: str | None) -> str:
+    """Validate a new block's own reason; prior progress is never a fallback."""
+    if type(reason) is not str or not reason.strip():
+        raise ValueError("Blocking a goal requires a nonempty reason for the needed input.")
+    normalized = reason.strip()
+    if len(normalized) > 1024:
+        raise ValueError("A blocked-goal reason must be at most 1024 characters.")
+    return normalized
+
+
 def _owner_launch_proof(name: str, pid: int, epoch: int) -> bytes:
     """Fixed-size pipe proof bound to the complete name and owner incarnation.
 
@@ -2649,6 +2659,7 @@ class Comms:
         *,
         text: str = "",
         progress: str | None = None,
+        block_reason: str | None = None,
         goal_id: str | None = None,
         expected_status: str | None = None,
         expected_goal: Goal | None = None,
@@ -2821,6 +2832,15 @@ class Comms:
                     ),
                 )
             elif action in {"active", "standby", "paused", "blocked", "completed"}:
+                if action == "blocked":
+                    # Do not recycle a prior progress report as the reason.
+                    reason = _required_block_reason(
+                        block_reason if block_reason is not None else progress
+                    )
+                elif block_reason is not None:
+                    raise ValueError("Only a blocked goal can have a block reason.")
+                else:
+                    reason = None
                 if goal is None:
                     raise ValueError("No goal is set for this thread.")
                 if goal.status == "blocked" and action != "blocked":
@@ -2853,6 +2873,7 @@ class Comms:
                     goal,
                     status="active" if action == "standby" else action,
                     progress=goal.progress if progress is None else progress,
+                    block_reason=reason,
                     revision=goal.revision + 1,
                     reported_turn=report_turn if model_report else goal.reported_turn,
                 )
@@ -2940,7 +2961,11 @@ class Comms:
                 return current
             progress = f"{current.progress}\n\n{diagnostic}" if current.progress else diagnostic
             blocked = replace(
-                current, status="blocked", progress=progress, revision=current.revision + 1
+                current,
+                status="blocked",
+                progress=progress,
+                block_reason=_required_block_reason(diagnostic),
+                revision=current.revision + 1,
             )
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
             return blocked
@@ -2965,7 +2990,11 @@ class Comms:
             ):
                 return current
             blocked = replace(
-                current, status="blocked", progress=diagnostic, revision=current.revision + 1
+                current,
+                status="blocked",
+                progress=diagnostic,
+                block_reason=_required_block_reason(diagnostic),
+                revision=current.revision + 1,
             )
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
             return blocked
