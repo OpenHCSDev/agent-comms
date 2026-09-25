@@ -39,6 +39,13 @@ METHOD = """    _installNativeCompactionBeforeProvider() {
             if (!after || after.id === before?.id)
                 throw new Error("Native threshold compaction did not commit; prompt refused");
             const fresh = this.agent.state.messages.slice();
+            // The loop owns a separate raw array from agent.state.messages.
+            // Returning a transformed snapshot only fixes this request: the next
+            // tool/steering round would otherwise resurrect the old loop history.
+            // Replace that raw array only after the durable compaction commit;
+            // extension transforms remain transport-only and must not be stored.
+            messages.length = 0;
+            for (const message of fresh) messages.push(message);
             const finalMessages = previous ? await previous.call(this.agent, fresh, signal) : fresh;
             if (shouldCompact(estimateMessagesTokens(finalMessages), this.model.contextWindow, settings))
                 throw new Error("Native threshold compaction left an oversized context; prompt refused");
