@@ -143,6 +143,47 @@ class RuntimeServer:
                     result = await handler(session_id, request.get("instructions"))
                 writer.write((json.dumps({"result": result}) + "\n").encode())
                 await writer.drain()
+            elif action == "goal_history":
+                from dataclasses import asdict
+
+                goal_id = request.get("goal_id")
+                if goal_id is not None and not isinstance(goal_id, str):
+                    raise ValueError("Goal identity must be a string.")
+                history = self.agent._comms.goal_history(name, goal_id=goal_id)
+                writer.write(
+                    (
+                        json.dumps({"result": {"history": [asdict(row) for row in history]}}) + "\n"
+                    ).encode()
+                )
+                await writer.drain()
+            elif action == "edit_goal":
+                from dataclasses import asdict
+
+                goal_id = request.get("goal_id")
+                revision = request.get("expected_revision")
+                text = request.get("text")
+                if type(goal_id) is not str or type(revision) is not int:
+                    raise ValueError("A goal identity and revision are required for editing.")
+                if not isinstance(text, str) or not text.strip():
+                    raise ValueError("A goal requires text.")
+                await self.agent.edit_goal(session_id, goal_id, revision, text)
+                goal, execution = self.agent._comms.goal_snapshot(name)
+                writer.write(
+                    (
+                        json.dumps(
+                            {
+                                "result": {
+                                    "goal": asdict(goal) if goal is not None else None,
+                                    "goalExecution": (
+                                        asdict(execution) if execution is not None else None
+                                    ),
+                                }
+                            }
+                        )
+                        + "\n"
+                    ).encode()
+                )
+                await writer.drain()
             elif action == "retry_goal":
                 goal_id = request.get("goal_id")
                 revision = request.get("expected_revision")

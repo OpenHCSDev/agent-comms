@@ -118,6 +118,50 @@ def test_claim_is_one_shot_and_reopened_store_cannot_replay(store):
         reopened.reserve("goal", 1)
 
 
+def test_owner_can_rotate_only_unused_ready_grant_without_changing_generation(store):
+    initial = store.create_goal("goal")
+    old_grant = store.ready_grant("goal", 1)
+    reopened = GoalAttemptStore(store.root)
+    assert reopened.recover_unreserved_ready("goal", 1) == initial
+    with pytest.raises(UnresolvedAttempt):
+        store.reserve("goal", 1, ready_grant=old_grant)
+    attempt = reopened.reserve("goal", 1)
+    assert attempt.generation == 1
+    with pytest.raises(ReservationConflict):
+        reopened.recover_unreserved_ready("goal", 1)
+
+
+@pytest.mark.parametrize("phase", ["reserved", "claimed", "failed", "completed"])
+def test_ready_recovery_never_replays_an_existing_attempt(store, phase):
+    store.create_goal("goal")
+    reservation = store.reserve("goal", 1)
+    if phase != "reserved":
+        permit = store.claim_launch(reservation)
+        if phase == "failed":
+            store.record_failed(reservation, "Uncertain provider outcome")
+        elif phase == "completed":
+            store.record_verified_completion(permit, "verified terminal")
+    before = store.snapshot("goal")
+    reopened = GoalAttemptStore(store.root)
+    with pytest.raises(ReservationConflict):
+        reopened.recover_unreserved_ready("goal", 1)
+    assert reopened.snapshot("goal") == before
+
+
+def test_failed_ready_rotation_never_exposes_a_launch_grant(store, monkeypatch):
+    store.create_goal("goal")
+    reopened = GoalAttemptStore(store.root)
+
+    def fail_sync():
+        raise OSError("injected durability failure")
+
+    monkeypatch.setattr(reopened, "_sync", fail_sync)
+    with pytest.raises(StorageUncertain):
+        reopened.recover_unreserved_ready("goal", 1)
+    with pytest.raises(UnresolvedAttempt):
+        reopened.ready_grant("goal", 1)
+
+
 def test_crash_after_reservation_before_outcome_never_auto_reissues(store):
     store.create_goal("goal")
     ctx = multiprocessing.get_context("spawn")

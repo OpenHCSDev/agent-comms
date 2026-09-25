@@ -26,7 +26,7 @@ ToolHandler = Callable[[Comms, Mapping[str, object]], JsonObject]
 @dataclass(frozen=True, slots=True)
 class ToolParameter:
     name: str
-    kind: Literal["string", "boolean"]
+    kind: Literal["string", "boolean", "array"]
     description: str
     required: bool = True
     default: object | None = None
@@ -35,6 +35,8 @@ class ToolParameter:
 
     def schema(self) -> JsonObject:
         schema: JsonObject = {"type": self.kind, "description": self.description}
+        if self.kind == "array":
+            schema["items"] = {"type": "string"}
         if self.choices:
             schema["enum"] = list(self.choices)
         if not self.required and self.default is not None:
@@ -91,9 +93,13 @@ class ToolDeclaration:
                 arguments[parameter.name] = parameter.default
                 continue
             value = raw_arguments[parameter.name]
-            expected = str if parameter.kind == "string" else bool
+            expected = {"string": str, "boolean": bool, "array": list}[parameter.kind]
             if not isinstance(value, expected):
                 raise ValueError(f"Argument {parameter.name!r} must be {parameter.kind}.")
+            if parameter.kind == "array" and (
+                not isinstance(value, list) or any(not isinstance(item, str) for item in value)
+            ):
+                raise ValueError(f"Argument {parameter.name!r} must contain strings.")
             if parameter.choices and value not in parameter.choices:
                 raise ValueError(
                     f"Argument {parameter.name!r} must be one of: " + ", ".join(parameter.choices)
@@ -257,15 +263,23 @@ def _set_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 
 
 def _goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    goal = comms.update_goal(
-        _executing_thread(),
+    wait_for = arguments.get("wait_for")
+    assert wait_for is None or isinstance(wait_for, list)
+    name = _executing_thread()
+    comms.update_goal(
+        name,
         str(arguments["status"]),
         goal_id=str(arguments["goal_id"]),
         expected_status="active",
         progress=str(arguments["progress"]),
         model_report=True,
+        wait_for=wait_for or (),
     )
-    return {"goal": asdict(goal) if goal else None}
+    goal, execution = comms.goal_snapshot(name)
+    return {
+        "goal": asdict(goal) if goal else None,
+        "goal_execution": asdict(execution) if execution else None,
+    }
 
 
 def _resume_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
@@ -295,6 +309,28 @@ def _resume_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     if goal is None or not goal.active or goal.progress != progress:
         raise ValueError("Goal changed during resume; refresh its state.")
     return {"goal": asdict(goal)}
+
+
+def _edit_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
+    name = _executing_thread()
+    goal_id = str(arguments["goal_id"])
+    current = comms.registry.require(name).goal
+    if current is None or current.id != goal_id:
+        raise ValueError("This goal was replaced or cleared; refresh its state.")
+    goal = comms.update_goal(
+        name,
+        "edit",
+        text=str(arguments["text"]),
+        goal_id=goal_id,
+        expected_goal=current,
+    )
+    return {"goal": asdict(goal) if goal else None}
+
+
+def _goal_history(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
+    requested = str(arguments["goal_id"]).strip()
+    entries = comms.goal_history(_executing_thread(), goal_id=requested or None)
+    return {"history": [asdict(entry) for entry in entries]}
 
 
 def _collaboration(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
@@ -619,13 +655,26 @@ TOOLS = (
     ToolDeclaration(
         "comms_goal",
         "Goal progress",
-        "Update goal progress; complete it or block it when user input is needed.",
+        "Update goal progress; complete it or block it when user input is needed. "
+        "Use standby with explicit wait_for thread names when waiting for delegated work. "
+        "The goal remains active, but only a direct message from a named dependency or a user "
+        "follow-up starts its next turn. Do not repeatedly announce waiting "
+        "or return empty output.",
         (
             ToolParameter("goal_id", "string", "Goal identity provided in the turn context"),
             ToolParameter(
-                "status", "string", "Goal state", choices=("active", "completed", "blocked")
+                "status",
+                "string",
+                "Goal state",
+                choices=("active", "standby", "completed", "blocked"),
             ),
             ToolParameter("progress", "string", "Progress summary or reason input is needed"),
+            ToolParameter(
+                "wait_for",
+                "array",
+                "Explicit thread names or @names; required for standby",
+                required=False,
+            ),
         ),
         _goal,
     ),
@@ -639,6 +688,32 @@ TOOLS = (
             ToolParameter("progress", "string", "Progress summary for the resumed goal"),
         ),
         _resume_goal,
+    ),
+    ToolDeclaration(
+        "comms_edit_goal",
+        "Edit goal text",
+        "Edit your existing goal text while keeping its identity, status, and progress. "
+        "Use comms_set_goal only to replace the objective with a fresh goal ID.",
+        (
+            ToolParameter("goal_id", "string", "Identity of the existing goal to edit"),
+            ToolParameter("text", "string", "Revised objective text, including any @mentions"),
+        ),
+        _edit_goal,
+    ),
+    ToolDeclaration(
+        "comms_goal_history",
+        "Goal history",
+        "Read recorded goal revisions and clearly labeled legacy baselines or observation gaps.",
+        (
+            ToolParameter(
+                "goal_id",
+                "string",
+                "Optional goal ID; omit for this thread's full history",
+                required=False,
+                default="",
+            ),
+        ),
+        _goal_history,
     ),
     ToolDeclaration(
         "comms_threads",

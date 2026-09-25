@@ -385,6 +385,27 @@ class GoalAttemptStore:
             raise UnresolvedAttempt("No acknowledged ready grant is available; decide explicitly.")
         return grant
 
+    def recover_unreserved_ready(self, goal_id: str, expected_generation: int) -> Generation:
+        """Rotate an unused grant after the caller rechecks executing-owner authority.
+
+        READY with no attempt proves this generation has never been reserved:
+        reserve durably changes both fields before any launch. Rotation keeps
+        the generation and invalidates older grants without replaying an attempt.
+        The new secret remains in this owner instance, outside model context.
+        """
+
+        def write(conn: sqlite3.Connection, digest: str) -> Generation:
+            changed = conn.execute(
+                "UPDATE goals SET ready_digest=? WHERE goal_id=? AND generation=? "
+                "AND state='ready' AND attempt_id IS NULL",
+                (digest, goal_id, expected_generation),
+            ).rowcount
+            if changed != 1:
+                raise ReservationConflict("Only an unreserved READY generation can be recovered.")
+            return Generation(goal_id, expected_generation, "ready", None)
+
+        return self._ready_change(goal_id, expected_generation, write)
+
     def _is_attempt(self, attempt: Reservation, phase: str, generation: Generation) -> bool:
         if not self._is_generation(generation):
             return False
@@ -419,8 +440,8 @@ class GoalAttemptStore:
         """Reserve once, using acknowledged authority delegated by the goal writer.
 
         A reopened store never reconstructs a grant from a visible SQLite row.
-        It must receive the original writer's grant, or a fresh explicit user
-        decision must rotate the READY grant first.
+        It must receive the original writer's grant, or its executing owner
+        must explicitly rotate a still-unreserved READY grant first.
         """
         if ready_grant is None:
             ready_grant = self._ready_grants.get((goal_id, expected_generation))

@@ -1388,13 +1388,14 @@ class TestAgentTurn:
         finally:
             await agent.shutdown()
 
-    async def test_reopened_owner_marks_active_goal_without_grant_blocked(
+    async def test_reopened_owner_recovers_unused_ready_grant_without_replaying(
         self, wired, tmp_path, monkeypatch
     ):
         from agent_comms.goal_attempts import GoalAttemptStore
 
         agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
         monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+        monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.update_goal("proj", "set", text="No silent stalled goal")
         store = agent._open_goal_store()
@@ -1403,10 +1404,11 @@ class TestAgentTurn:
         try:
             agent._schedule_goal("proj")
             current = wired.registry.require("proj").goal
-            assert current is not None and current.status == "blocked"
-            assert "grant unavailable" in current.progress
-            assert not agent._pending_turns.get("proj")
+            assert current is not None and current.status == "active"
+            assert len(agent._pending_turns["proj"]) == 1
             assert store.snapshot(goal.id).state == "ready"
+            assert store.snapshot(goal.id).number == 1
+            assert agent._goal_store.ready_grant(goal.id, 1)
         finally:
             await agent.shutdown()
 
