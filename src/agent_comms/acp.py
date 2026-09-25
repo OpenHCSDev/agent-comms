@@ -1627,8 +1627,6 @@ class CommsAgent:
 
     async def retry_goal(self, session_id: str, goal_id: str, expected_revision: int) -> Goal:
         """Record an explicit UI retry in the executing owner's private ledger."""
-        if session_id in self._backend_inboxes or session_id in self._active_turns:
-            raise ValueError("Wait for the current turn to finish before retrying the goal.")
         name = self._require_session(session_id)
         with _store_lock(self._comms._wire_lock_path):
             thread = self._comms.registry.require(name)
@@ -1674,7 +1672,11 @@ class CommsAgent:
             self._comms.registry.register(
                 replace(thread, goal=resumed), self._comms.registry.status(name)
             )
+        # READY records the accepted owner decision even during an unrelated
+        # turn. The scheduler's existing busy fences defer launch until that
+        # turn finishes; reserved/claimed attempts remain unretryable above.
         self._schedule_goal(session_id)
+        await self._sync_goal_execution(session_id, name)
         return resumed
 
     async def _drain_count(self, session_id: str) -> int:
