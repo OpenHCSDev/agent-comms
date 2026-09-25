@@ -167,17 +167,23 @@ class RuntimeServer:
                     ).encode()
                 )
                 await writer.drain()
-            elif action == "edit_goal":
+            elif action in {"goal_snapshot", "edit_goal", "update_goal"}:
                 from dataclasses import asdict
 
-                goal_id = request.get("goal_id")
-                revision = request.get("expected_revision")
-                text = request.get("text")
-                if type(goal_id) is not str or type(revision) is not int:
-                    raise ValueError("A goal identity and revision are required for editing.")
-                if not isinstance(text, str) or not text.strip():
-                    raise ValueError("A goal requires text.")
-                await self.agent.edit_goal(session_id, goal_id, revision, text)
+                if action != "goal_snapshot":
+                    goal_id = request.get("goal_id")
+                    revision = request.get("expected_revision")
+                    if type(goal_id) is not str or type(revision) is not int:
+                        raise ValueError("A goal identity and revision are required for updating.")
+                    if action == "edit_goal":
+                        text = request.get("text")
+                        if not isinstance(text, str) or not text.strip():
+                            raise ValueError("A goal requires text.")
+                        await self.agent.edit_goal(session_id, goal_id, revision, text)
+                    else:
+                        await self.agent.update_goal(
+                            session_id, request.get("status"), goal_id, revision
+                        )
                 goal, execution = self.agent._comms.goal_snapshot(name)
                 writer.write(
                     (

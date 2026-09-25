@@ -32,7 +32,7 @@ from uuid import uuid4
 from .channels import ChannelCatalog
 from .goal_history import GoalHistoryEntry
 from .goal_pauses import GoalPauseEvent, GoalPauseEvents
-from .goal_waits import GoalWait, GoalWaits
+from .goal_waits import GoalInputReview, GoalWait, GoalWaits
 
 if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore
@@ -2270,6 +2270,59 @@ class Comms:
             rows = InputDispositions(self.root).unknown(self.registry.aliases_for(name))
             return [InputDispositions.public(row) for row in rows]
 
+    def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> dict:
+        """Project exact review eligibility for one current goal and dependency set."""
+        with _store_lock(self._wire_lock_path):
+            return self._goal_input_review(self.registry.require(name), goal_id, wait_for).public()
+
+    def _goal_input_review(
+        self, thread: Thread, goal_id: str, wait_for: Sequence[str]
+    ) -> GoalInputReview:
+        from .input_disposition import InputDispositions
+
+        goal = thread.goal
+        if goal is None or goal.id != goal_id:
+            raise ValueError("This goal was replaced or cleared; refresh its state.")
+        if not goal.active:
+            raise ValueError(
+                (pause.owner_instruction if (pause := self.goal_pause(thread.name)) else None)
+                or "This goal is no longer active; refresh its state."
+            )
+        if not wait_for:
+            raise ValueError("Standby requires explicit wait_for thread names.")
+        resolved = tuple(self.registry.require(target.removeprefix("@")) for target in wait_for)
+        if any(target.created_at == thread.created_at for target in resolved):
+            raise ValueError("A goal cannot wait for its own thread.")
+        targets = tuple(
+            dict.fromkeys(GoalWaitTarget(target.name, target.created_at) for target in resolved)
+        )
+        owners = self.registry.aliases_for(thread.name)
+        senders = frozenset(
+            alias for target in resolved for alias in self.registry.aliases_for(target.name)
+        )
+        unknown = tuple(InputDispositions(self.root).unknown(owners))
+        sequences = {row["sequence"] for row in unknown if row["sequence"] is not None}
+        eligible = set()
+        if sequences:
+            selected = self.bus._history_page(
+                lambda message: message.seq in sequences
+                and message.target in owners
+                and message.sender in senders,
+                before=None,
+                after=min(sequences) - 1,
+                limit=len(sequences),
+                max_bytes=max(256 * 1024, sum(len(json.dumps(row).encode()) for row in unknown)),
+            )
+            eligible = {message.seq for message in selected.messages}
+        return GoalInputReview(
+            goal_id,
+            targets,
+            owners,
+            senders,
+            unknown,
+            frozenset(row["key"] for row in unknown if row["sequence"] in eligible),
+        )
+
     def goal_history(
         self, name: str, *, goal_id: str | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
@@ -2427,24 +2480,16 @@ class Comms:
             edited_pause = self.goal_pause(name) if action == "edit" else None
             wait_targets: tuple[GoalWaitTarget, ...] = ()
             if action == "standby":
-                if not wait_for:
-                    raise ValueError("Standby requires explicit wait_for thread names.")
-                resolved = tuple(
-                    self.registry.require(target.removeprefix("@")) for target in wait_for
-                )
-                if any(target.created_at == thread.created_at for target in resolved):
-                    raise ValueError("A goal cannot wait for its own thread.")
-                wait_targets = tuple(
-                    dict.fromkeys(
-                        GoalWaitTarget(target.name, target.created_at) for target in resolved
-                    )
-                )
+                if goal is None:
+                    raise ValueError("No goal is set for this thread.")
+                review = self._goal_input_review(thread, goal.id, wait_for)
+                wait_targets = review.targets
                 from .input_disposition import AcpDeliveryCursors, InputDispositions
 
-                aliases = self.registry.aliases_for(thread.name)
+                aliases = review.owners
                 cursor = AcpDeliveryCursors(self.root).cursor(aliases)
                 dispositions = InputDispositions(self.root)
-                unknown = {row["key"]: row for row in dispositions.unknown(aliases)}
+                unknown = {row["key"]: row for row in review.unknown}
                 reviewed_keys = tuple(dict.fromkeys(reviewed_inputs))
                 if any(
                     key not in unknown or unknown[key]["sequence"] is None for key in reviewed_keys
@@ -2461,26 +2506,9 @@ class Comms:
                 unresolved = {
                     row["sequence"] for row in unknown.values() if row["sequence"] is not None
                 }
-                senders = frozenset(
-                    alias for target in resolved for alias in self.registry.aliases_for(target.name)
-                )
-                if reviewed_sequences:
-                    selected = self.bus._history_page(
-                        lambda message: message.seq in reviewed_sequences
-                        and message.target in aliases
-                        and message.sender in senders,
-                        before=None,
-                        after=min(reviewed_sequences) - 1,
-                        limit=len(reviewed_sequences),
-                        max_bytes=max(
-                            256 * 1024,
-                            sum(len(json.dumps(unknown[key]).encode()) for key in reviewed_keys),
-                        ),
-                    )
-                    if {message.seq for message in selected.messages} != reviewed_sequences:
-                        raise ValueError(
-                            "Review only direct inputs from these declared dependencies."
-                        )
+                senders = review.senders
+                if not set(reviewed_keys) <= review.eligible_keys:
+                    raise ValueError("Review only direct inputs from these declared dependencies.")
                 pending = self.bus._history_page(
                     lambda message: message.target in aliases
                     and message.sender in senders
@@ -2495,9 +2523,10 @@ class Comms:
                     sequence = pending.messages[0].seq
                     raise ValueError(
                         f"Dependency reply {sequence} is already pending or UNKNOWN. "
-                        "Use comms_inbox to inspect unresolved_inputs, then pass their exact "
-                        "inputId keys in comms_goal reviewed_inputs to explicitly wait "
-                        "for a later reply. "
+                        f"Call comms_inbox with goal_id={goal.id!r} and "
+                        f"wait_for={list(wait_for)!r}. Inspect standby_review.messages, then "
+                        "pass only standby_review.reviewed_inputs to comms_goal to wait "
+                        "for a later reply. Do not pass excluded owner or other dependency inputs. "
                         "This does not mark them STARTED or replay them."
                     )
             elif wait_for or reviewed_inputs:
