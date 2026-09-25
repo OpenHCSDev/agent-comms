@@ -18,7 +18,10 @@ test('CLI redacts literal env values, reports saved trust, refuses unattended wr
   const marker = join(root, 'unexpected-launch');
   await mkdir(projectRoot);
   const call = (...args) => spawnSync(process.execPath, [cli, ...args], {
-    cwd: projectRoot, env: { ...process.env, PI_CODING_AGENT_DIR: agentDir },
+    cwd: projectRoot, env: { PATH: process.env.PATH ?? '', HOME: root,
+      PI_CODING_AGENT_DIR: agentDir, CI: 'true', NO_COLOR: '1',
+      ...(process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot ?? '' } : {}),
+    },
     input: 'fixture:0123456789ab\n', encoding: 'utf8', timeout: 5000,
   });
   try {

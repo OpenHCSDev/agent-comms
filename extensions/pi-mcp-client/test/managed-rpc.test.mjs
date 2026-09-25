@@ -17,7 +17,12 @@ test('ordinary managed Pi RPC loads package but never launches a user server fro
   const project = join(root, 'project');
   const marker = join(root, 'unsafe-launch');
   await mkdir(agentDir); await mkdir(project);
-  const env = { ...process.env, HOME: root, PI_CODING_AGENT_DIR: agentDir, CI: 'true', NO_COLOR: '1' };
+  // Never inherit the managed worker's provider keys, live Pi settings,
+  // NODE_OPTIONS bootstrap, or coordination identity into this fixture.
+  const env = { PATH: process.env.PATH ?? '', HOME: root,
+    PI_CODING_AGENT_DIR: agentDir, CI: 'true', NO_COLOR: '1',
+    ...(process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot ?? '' } : {}),
+  };
   let child;
   try {
     const installed = spawnSync(process.execPath, [cli, 'install', packageDir], {
