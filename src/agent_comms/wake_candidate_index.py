@@ -96,7 +96,7 @@ class WakeCandidateIndex:
         return db
 
     @staticmethod
-    def _schema(db: sqlite3.Connection, *, create: bool) -> None:
+    def _schema(db: sqlite3.Connection, *, create: bool, allow_v1_rebuild: bool = False) -> None:
         if create:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS checkpoint ("
@@ -127,7 +127,11 @@ class WakeCandidateIndex:
             version = db.execute("SELECT version FROM checkpoint WHERE singleton=1").fetchone()
         except sqlite3.DatabaseError as error:
             raise ProjectionRebuildRequiredError("candidate index schema is unavailable") from error
-        if version is not None and version[0] != _SCHEMA:
+        if (
+            version is not None
+            and version[0] != _SCHEMA
+            and not (create and allow_v1_rebuild and version[0] == 1)
+        ):
             raise ProjectionRebuildRequiredError("candidate index schema version changed")
 
     def maintain(
@@ -149,7 +153,9 @@ class WakeCandidateIndex:
             with self.bus._path.open("rb") as stream:
                 stat = os.fstat(stream.fileno())
                 with closing(self._connect(self.path, readonly=False)) as db:
-                    self._schema(db, create=True)
+                    # Explicit bounded rebuild discards all v1 derived state and
+                    # recreates response-key history before v2 becomes visible.
+                    self._schema(db, create=True, allow_v1_rebuild=rebuild)
                     checkpoint = db.execute(
                         "SELECT root_id,device,inode,byte_offset,tail_digest,last_seq "
                         "FROM checkpoint WHERE singleton=1"

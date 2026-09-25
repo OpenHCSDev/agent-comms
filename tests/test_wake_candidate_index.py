@@ -164,6 +164,58 @@ def test_bounded_maintenance_replays_append_without_duplicate_or_cursor(tmp_path
         )
 
 
+def test_explicit_bounded_rebuild_upgrades_v1_without_exposing_old_rows(
+    tmp_path: Path,
+) -> None:
+    comms, root_id, lookup = _private(tmp_path)
+    first = comms.send_initial_cohort("sender", "Alice", "first")
+    second = comms.send_initial_cohort("sender", "Alice", "second")
+    index = WakeCandidateIndex(comms.bus)
+    assert index.maintain(rebuild=True)
+    with sqlite3.connect(index.path) as db:
+        db.execute("DROP TABLE response_keys")  # v1 had no cross-batch key history.
+        db.execute("UPDATE checkpoint SET version=1")
+    with pytest.raises(ProjectionRebuildRequiredError, match="schema version"):
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=0,
+            required_through_seq=first.seq,
+        )
+    with pytest.raises(ProjectionRebuildRequiredError, match="schema version"):
+        index.maintain()
+    assert not index.maintain(rebuild=True, max_rows=1)
+    with sqlite3.connect(index.path) as db:
+        assert db.execute("SELECT version FROM checkpoint").fetchone()[0] == 2
+        assert db.execute(
+            "SELECT name FROM sqlite_master WHERE name='response_keys'"
+        ).fetchone() == ("response_keys",)
+        assert db.execute("SELECT count(*) FROM recipients").fetchone()[0] == 1
+    with pytest.raises(ProjectionUnavailableError, match="stale"):
+        index.page(
+            root_id=root_id,
+            recipient_lookup=lookup["Alice"],
+            after_seq=0,
+            required_through_seq=second.seq,
+        )
+    assert index.maintain(max_rows=1)
+    assert (
+        len(
+            index.page(
+                root_id=root_id,
+                recipient_lookup=lookup["Alice"],
+                after_seq=0,
+                required_through_seq=second.seq,
+            ).entries
+        )
+        == 2
+    )
+    with sqlite3.connect(index.path) as db:
+        db.execute("UPDATE checkpoint SET version=3")
+    with pytest.raises(ProjectionRebuildRequiredError, match="schema version"):
+        index.maintain(rebuild=True)  # Unknown future schemas are not auto-destroyed.
+
+
 def test_byte_budget_never_publishes_a_partial_candidate(tmp_path: Path) -> None:
     comms, root_id, lookup = _private(tmp_path)
     message = comms.send_initial_cohort("sender", "Alice", "a" * 4096)
