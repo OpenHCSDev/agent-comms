@@ -130,6 +130,7 @@ async def test_compact_failure_is_not_end_turn_success(tmp_path, monkeypatch):
         with pytest.raises(RequestError) as failure:
             await agent.prompt(session, [block("/compact")])
         assert failure.value.data == {"reason": "uncertain compaction"}
+        assert str(failure.value) == "uncertain compaction"
     finally:
         await agent.shutdown()
 

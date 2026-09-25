@@ -458,7 +458,7 @@ class CommsAgent:
                 reason = (
                     result.get("error") if isinstance(result, dict) else None
                 ) or "Compaction failed or is uncertain; not retried."
-                raise RequestError.internal_error({"reason": str(reason)})
+                raise RequestError(-32603, str(reason), {"reason": str(reason)})
             return PromptResponse(
                 stop_reason="end_turn",
                 field_meta={"agentComms": {"compaction": result}},
@@ -1423,6 +1423,24 @@ class CommsAgent:
             self._goal_store = GoalAttemptStore.initialize(private)
         return self._goal_store
 
+    async def set_goal(self, session_id: str, text: str) -> Goal:
+        """Commit a UI goal through its executing owner and private launch ledger."""
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("A goal requires text.")
+        if backend.rpc_args_for(self._agent_bin, self._agent_args) is None:
+            raise ValueError("Persistent goals require a native Pi backend.")
+        name = self._require_session(session_id)
+        goal = self._comms.update_goal(
+            name,
+            "set",
+            text=text,
+            owner_store=self._open_goal_store(),
+            expected_owner_pid=os.getpid(),
+        )
+        assert goal is not None
+        self._schedule_goal(session_id)
+        return goal
+
     async def retry_goal(self, session_id: str, goal_id: str, expected_revision: int) -> Goal:
         """Record an explicit UI retry in the executing owner's private ledger."""
         if session_id in self._backend_inboxes or session_id in self._active_turns:
@@ -1446,7 +1464,12 @@ class CommsAgent:
             store = self._open_goal_store()
             generation = store.snapshot(goal_id)
             if generation is None:
-                raise ValueError("The goal attempt is unresolved; inspect it before retrying.")
+                # Older UI clients wrote only the registry goal. This explicit
+                # human Retry may create the missing ledger; it never silently
+                # replays a prior unknown provider attempt.
+                store.create_goal(goal_id)
+                generation = store.snapshot(goal_id)
+                assert generation is not None
             if generation.state == "blocked" and generation.attempt_id:
                 store.authorize_retry(
                     goal_id,
