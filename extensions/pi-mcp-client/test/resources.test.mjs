@@ -49,8 +49,12 @@ test('MCP resources and prompts are discoverable and usable as Pi tools with cal
     assert.equal(approvals, 2);
     await assert.rejects(registered.get('mcp_read_resource').execute('',
       { serverId: 'fixture', uri: 'fixture://unknown' }, signal, undefined, ctx), /not discovered/);
+    const unattended = { ...ctx, mode: 'rpc', ui: { confirm: async (_title, _body, opts) => {
+      assert.equal(opts.timeout, 15_000);
+      return false;
+    } } };
     await assert.rejects(registered.get('mcp_get_prompt').execute('',
-      { serverId: 'fixture', name: 'greeting' }, signal, undefined, { ...ctx, mode: 'rpc' }), /human controller/);
+      { serverId: 'fixture', name: 'greeting' }, signal, undefined, unattended), /denied by user/);
     assert.equal(approvals, 2);
     assert.equal(await decideCallGrant(ctx, { agentDir, configDirName: '.pi',
       id: 'fixture', decision: 'allow' }), true);

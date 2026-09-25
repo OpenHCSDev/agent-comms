@@ -48,6 +48,7 @@ test('ordinary managed Pi RPC loads package but never launches a user server fro
     });
     let output = '';
     let stderr = '';
+    let statusResolver;
     child.stderr.on('data', (bytes) => { stderr += bytes.toString(); });
     const commands = new Promise((resolve, reject) => {
       child.stdout.on('data', (bytes) => {
@@ -61,6 +62,10 @@ test('ordinary managed Pi RPC loads package but never launches a user server fro
           if (message.id === 'commands') {
             if (message.success) resolve(message.data.commands.map((command) => command.name));
             else reject(new Error(JSON.stringify(message)));
+          }
+          if (message.type === 'extension_ui_request' && message.method === 'notify' &&
+              typeof message.message === 'string' && message.message.startsWith('MCP:\n')) {
+            statusResolver?.(message.message);
           }
         }
       });
@@ -76,14 +81,31 @@ test('ordinary managed Pi RPC loads package but never launches a user server fro
     finally { clearTimeout(timer); }
     assert.ok(result.includes('mcp-status'));
     assert.ok(result.includes('mcp-approve'));
+    const status = new Promise((resolve) => { statusResolver = resolve; });
+    child.stdin.write(JSON.stringify({ id: 'mcp-status', type: 'prompt', message: '/mcp-status' }) + '\n');
+    let statusTimer;
+    const observed = await Promise.race([status, new Promise((_, reject) => {
+      statusTimer = setTimeout(() => reject(new Error('managed Pi MCP status timed out')), 5000);
+    })]).finally(() => clearTimeout(statusTimer));
+    assert.match(observed, /user\/fixture: trust_required; calls=unavailable/);
     assert.equal(existsSync(marker), false);
   } finally {
     if (child) {
       child.stdin.destroy();
       if (child.exitCode === null && child.signalCode === null) {
         const exited = new Promise((resolve) => child.once('exit', resolve));
+        const waitForExit = async () => {
+          let timer;
+          try { return await Promise.race([exited.then(() => true), new Promise((resolve) => {
+            timer = setTimeout(() => resolve(false), 2000);
+          })]); }
+          finally { clearTimeout(timer); }
+        };
         child.kill();
-        await exited;
+        if (!await waitForExit()) {
+          child.kill('SIGKILL');
+          if (!await waitForExit()) throw new Error('managed Pi RPC child did not exit');
+        }
       }
     }
     await rm(root, { recursive: true, force: true });

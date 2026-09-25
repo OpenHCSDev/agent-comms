@@ -19,8 +19,13 @@ export async function confirmedClient(runtime, serverId, label, args, ctx, signa
     if (!ready) throw new Error('MCP operation no longer connected');
     return ready.client;
   }
-  if (ctx.mode !== 'tui') throw new Error('MCP operation requires a local human controller');
-  if (!await ctx.ui.confirm(`Run MCP ${serverId}/${label}?`, displayCall(serverId, label, args))) {
+  if (!['tui', 'rpc'].includes(ctx.mode)) {
+    throw new Error('MCP operation requires a local human controller');
+  }
+  // RPC emits Pi's correlated extension_ui_request; the owning frontend must
+  // answer it. Without a controller Pi itself defaults to denial at this bound.
+  if (!await ctx.ui.confirm(`Run MCP ${serverId}/${label}?`,
+    displayCall(serverId, label, args), { timeout: 15_000 })) {
     throw new Error('MCP operation denied by user');
   }
   if (signal.aborted || !await runtime.authorized(serverId, ctx)) {

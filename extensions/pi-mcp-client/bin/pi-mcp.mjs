@@ -5,8 +5,10 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { CONFIG_DIR_NAME, getAgentDir, ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import { writeNativeServer } from '../src/config-write.mjs';
+import { decideCallGrant, decideProjectServer } from '../src/commands.mjs';
 import { declarationDigest, parseNativeConfig } from '../src/config.mjs';
 import { loadEffectiveDeclarations } from '../src/sources.mjs';
+import { inventorySnapshot } from '../src/inventory.mjs';
 
 function options(args) {
   const parsed = { arg: [], env: {}, envFrom: {} };
@@ -17,7 +19,7 @@ function options(args) {
       parsed[flag.slice(2)] = true;
       continue;
     }
-    if (!['--project', '--scope', '--id', '--command', '--arg', '--env', '--env-from'].includes(flag)) {
+    if (!['--project', '--scope', '--id', '--digest', '--command', '--arg', '--env', '--env-from'].includes(flag)) {
       throw new Error(`Unknown MCP option ${flag}`);
     }
     const value = args[++index];
@@ -53,6 +55,36 @@ async function status(opts, agentDir) {
   return { version: 1, projectRoot, projectTrustedSaved: projectTrusted,
     projectConfigSkipped: !projectTrusted && existsSync(join(projectRoot, CONFIG_DIR_NAME, 'mcp.json')),
     servers };
+}
+
+async function decisionAction(action, decision, opts, agentDir) {
+  if (Object.keys(opts).some((key) => !['arg', 'env', 'envFrom', 'project', 'id', 'digest'].includes(key)) ||
+      !opts.id || !/^[a-f0-9]{64}$/.test(opts.digest ?? '')) {
+    throw new Error('MCP decision requires --id and an exact --digest');
+  }
+  // CLI is an out-of-band LOCAL controller, not a headless approval API.
+  // A same-user process can emulate a TTY; this is consent UX, not an OS boundary.
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error('MCP decisions require an interactive local TTY');
+  }
+  const projectRoot = await realpath(opts.project ?? process.cwd());
+  const projectTrusted = new ProjectTrustStore(agentDir).get(projectRoot) === true;
+  const ctx = { cwd: projectRoot, isProjectTrusted: () => projectTrusted, mode: 'tui',
+    ui: { async confirm(title, display) {
+      const challenge = `${decision}:${opts.id}:${opts.digest}`;
+      process.stdout.write(`${title}\n${display}\n`);
+      const prompt = createInterface({ input: process.stdin, output: process.stdout });
+      try {
+        return (await prompt.question(`Type ${challenge} to apply: `)) === challenge;
+      } finally { prompt.close(); }
+    } },
+  };
+  const args = { agentDir, configDirName: CONFIG_DIR_NAME, id: opts.id,
+    decision, expectedDigest: opts.digest };
+  const applied = action === 'trust' ? await decideProjectServer(ctx, args)
+    : await decideCallGrant(ctx, args);
+  return { version: 2, action, decision, id: opts.id, digest: opts.digest,
+    projectRoot, applied, applies: 'next_pi_turn' };
 }
 
 async function add(opts, agentDir) {
@@ -94,17 +126,35 @@ async function add(opts, agentDir) {
 
 try {
   const [action, ...args] = process.argv.slice(2);
-  const opts = options(args);
+  const opts = action === 'trust' || action === 'calls' ? {} : options(args);
   const agentDir = getAgentDir();
   if (action === 'status') {
     if (Object.keys(opts).some((key) => !['arg', 'env', 'envFrom', 'project', 'json'].includes(key))) {
       throw new Error('status accepts only --project and --json');
     }
     process.stdout.write(JSON.stringify(await status(opts, agentDir)) + '\n');
+  } else if (action === 'inventory') {
+    if (Object.keys(opts).some((key) => !['arg', 'env', 'envFrom', 'project', 'json'].includes(key))) {
+      throw new Error('inventory accepts only --project and --json');
+    }
+    const projectRoot = await realpath(opts.project ?? process.cwd());
+    const projectTrusted = new ProjectTrustStore(agentDir).get(projectRoot) === true;
+    process.stdout.write(JSON.stringify(await inventorySnapshot({
+      ctx: { cwd: projectRoot, isProjectTrusted: () => projectTrusted },
+      agentDir, configDirName: CONFIG_DIR_NAME,
+    })) + '\n');
+  } else if (action === 'trust' || action === 'calls') {
+    const [decision, ...optionsArgs] = args;
+    if (!((action === 'trust' && ['approve', 'deny'].includes(decision)) ||
+          (action === 'calls' && ['allow', 'ask'].includes(decision)))) {
+      throw new Error('Invalid MCP decision action');
+    }
+    process.stdout.write(JSON.stringify(await decisionAction(action, decision,
+      options(optionsArgs), agentDir)) + '\n');
   } else if (action === 'add') {
     process.stdout.write(JSON.stringify(await add(opts, agentDir)) + '\n');
   } else {
-    throw new Error('Usage: pi-mcp status [--project PATH] [--json] | add --scope user|project --id ID --command EXECUTABLE [--arg ARG ...] [--env NAME=VALUE] [--env-from NAME=SOURCE] [--dry-run] [--replace]');
+    throw new Error('Usage: pi-mcp status|inventory [--project PATH] [--json] | trust approve|deny --id ID --digest SHA256 [--project PATH] | calls allow|ask --id ID --digest SHA256 [--project PATH] | add --scope user|project --id ID --command EXECUTABLE [--arg ARG ...] [--env NAME=VALUE] [--env-from NAME=SOURCE] [--dry-run] [--replace]');
   }
 } catch (error) {
   console.error(`pi-mcp: ${error.message}`);

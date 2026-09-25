@@ -8,7 +8,9 @@ shutdown. It provides `/mcp-status`, `/mcp-approve <id>`, `/mcp-deny <id>`, and
 `/mcp-allow-calls <id>` / `/mcp-confirm-calls <id>`. Tool calls normally require
 a local Pi TUI confirmation. An explicit, separate user-owned call grant permits
 headless/RPC calls for the exact project, scope, server and declaration digest;
-otherwise headless calls fail without attempting a dialog.
+otherwise an RPC call asks its one controller through Pi's correlated extension UI
+with a 15-second deny default. A detached worker without a controller must answer
+denial immediately; a direct RPC client that ignores the prompt gets Pi's timeout.
 
 ```sh
 cd extensions/pi-mcp-client
@@ -21,9 +23,13 @@ node /absolute/path/to/extensions/pi-mcp-client/bin/pi-mcp.mjs status --json
 ```
 
 The package-owned `pi-mcp` CLI provides a **static**, redacted JSON status
-snapshot (`pi-mcp status --json [--project PATH]`) for thin frontends. It reports
-saved Pi project trust, not temporary Pi session overrides, and never opens a
-transport. `pi-mcp add --scope user|project --id fixture --command /absolute/executable
+snapshot (`pi-mcp status --json [--project PATH]`) and a version-2 typed
+`pi-mcp inventory --json [--project PATH]` for thin frontends. Inventory has
+separate `declarations.user` and `declarations.project` rows, effective-winner
+and call-policy fields, and `live.state: "not_running"`; it withholds project
+rows before saved Pi trust and never includes executable arguments, literal
+environment values or credentials. Neither command opens a transport. They
+report saved Pi project trust, not temporary Pi session overrides. `pi-mcp add --scope user|project --id fixture --command /absolute/executable
 --arg some-argument [--env-from CHILD=HOST]` creates a native stdio declaration
 only after an interactive local TTY acknowledges its ID and digest; `--dry-run`
 emits an inert redacted JSON receipt, and `--replace` explicitly replaces a
@@ -31,7 +37,14 @@ whole existing declaration. Non-TTY writes are refused. A TTY can be simulated
 by another same-user process: this convenience check is **not** human
 attestation or an OS security boundary. This action does **not** grant Pi
 project trust, project-server approval, or autonomous call permission;
-those gates remain independent. Saved Pi project trust (`/trust` in Pi's local
+those gates remain independent. Out-of-band `pi-mcp trust approve|deny --id ID
+--digest SHA256 [--project PATH]` and `pi-mcp calls allow|ask --id ID
+--digest SHA256 [--project PATH]` require a local interactive TTY to show the
+full exact declaration and type an action/ID/digest challenge. The trust action
+requires saved Pi trust; changed digests are refused before or after display.
+Decisions apply to the next Pi turn. A TTY is consent UX, not a security
+boundary against an already trusted same-user process. Non-TTY mutation fails;
+there is no headless `--yes` approval. Saved Pi project trust (`/trust` in Pi's local
 TUI, then restart) is required before the CLI writes project configuration.
 Every child uses project cwd, so **both scopes** require a saved Pi trust
 decision before MCP reads project declarations or launches: Pi auto-trusts
@@ -61,8 +74,9 @@ grants are ignored. Windows support is incomplete; this draft is not ready
 for a cross-platform release.
 
 Approval shows the complete command, arguments, root and digest in a local Pi
-TUI confirmation without exposing literal environment values. RPC/headless
-approval is refused until a correlated human-controller bridge exists. The
+TUI or CLI confirmation without exposing literal environment values. Project
+launch decisions and durable call grants remain refused through RPC even when
+per-call Pi extension-UI confirmation is available. The
 launch-spec builder rejects unapproved/mismatched project contexts and
 constructs a narrow SDK environment with explicit `envFrom`, canonical cwd and
 piped stderr. The package-owned Pi session uses the official SDK, drains child
@@ -81,7 +95,8 @@ gated bounded tools/resources/prompts discovery, operations, progress,
 cancellation and cleanup against a generic fixture. It also runs an isolated
 real Pi RPC process with `--no-approve` and `--approve`: untrusted files are not
 read, absent/stale digests cause zero spawns, and an approved generic fixture
-initializes/discovers and exits on shutdown. No provider call is made. PR #77
+initializes/discovers and exits on shutdown. Offline local-PTY CLI tests cover
+exact-digest launch/call decisions, denial and zero server spawn. No provider call is made. PR #77
 remains draft; ACP extension-UI projection, Toad controls, HTTP transport,
 explicit foreign config import and final independent exact-byte review remain
 outstanding.

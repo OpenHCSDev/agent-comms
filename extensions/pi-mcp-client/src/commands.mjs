@@ -21,7 +21,7 @@ function approvalDisplay(entry, action, projectRoot) {
 }
 
 /** Only a real local TUI may prompt: RPC/headless clients have no verified dialog responder yet. */
-export async function decideCallGrant(ctx, { agentDir, configDirName, id, decision }) {
+export async function decideCallGrant(ctx, { agentDir, configDirName, id, decision, expectedDigest }) {
   if (ctx.mode !== 'tui') throw new Error('MCP call policy requires a local interactive TUI');
   if (!serverId.test(id) || !['allow', 'ask'].includes(decision)) {
     throw new Error('Invalid MCP call policy request');
@@ -30,6 +30,9 @@ export async function decideCallGrant(ctx, { agentDir, configDirName, id, decisi
   const entry = (await loadEffectiveDeclarations(options)).find((item) =>
     item.declaration.id === id && item.status === 'approved');
   if (!entry) throw new Error('Approved MCP declaration not found');
+  if (expectedDigest !== undefined && entry.digest !== expectedDigest) {
+    throw new Error('MCP declaration digest changed before policy approval');
+  }
   const intro = decision === 'allow'
     ? 'Allow ALL MCP tools, resource reads and prompt retrieval from this server without future per-call confirmation?'
     : 'Require per-call human confirmation for this server again?';
@@ -38,12 +41,15 @@ export async function decideCallGrant(ctx, { agentDir, configDirName, id, decisi
   const current = (await loadEffectiveDeclarations(options)).find((item) =>
     item.declaration.id === id && item.status === 'approved');
   if (!current || current.scope !== entry.scope || current.projectRoot !== entry.projectRoot ||
-      current.digest !== entry.digest) throw new Error('MCP declaration changed during policy approval');
+      current.digest !== entry.digest ||
+      (expectedDigest !== undefined && current.digest !== expectedDigest)) {
+    throw new Error('MCP declaration changed during policy approval');
+  }
   await recordCallGrant({ agentDir, entry: current, decision });
   return true;
 }
 
-export async function decideProjectServer(ctx, { agentDir, configDirName, id, decision }) {
+export async function decideProjectServer(ctx, { agentDir, configDirName, id, decision, expectedDigest }) {
   if (ctx.mode !== 'tui') throw new Error('MCP approval requires a local interactive TUI');
   if (!ctx.isProjectTrusted() ||
       new ProjectTrustStore(agentDir).get(await realpath(ctx.cwd)) !== true) {
@@ -56,6 +62,9 @@ export async function decideProjectServer(ctx, { agentDir, configDirName, id, de
   const eligible = (await loadEffectiveDeclarations(options)).find((entry) =>
     entry.scope === 'project' && entry.declaration.id === id);
   if (!eligible || !eligible.declaration.enabled) throw new Error('Enabled project MCP declaration not found');
+  if (expectedDigest !== undefined && eligible.digest !== expectedDigest) {
+    throw new Error('MCP declaration digest changed before approval');
+  }
   if (Object.keys(eligible.declaration.transport.env).length) {
     throw new Error('Project MCP literal environment is not supported; use envFrom');
   }
@@ -68,7 +77,9 @@ export async function decideProjectServer(ctx, { agentDir, configDirName, id, de
   // commit an approval for bytes that no longer match what the human saw.
   const current = (await loadEffectiveDeclarations(options)).find((entry) =>
     entry.scope === 'project' && entry.declaration.id === id);
-  if (!current || current.digest !== eligible.digest || !current.declaration.enabled) {
+  if (!current || current.digest !== eligible.digest ||
+      (expectedDigest !== undefined && current.digest !== expectedDigest) ||
+      !current.declaration.enabled) {
     throw new Error('MCP declaration changed during approval; try again');
   }
   await recordProjectDecision({ agentDir, projectRoot,

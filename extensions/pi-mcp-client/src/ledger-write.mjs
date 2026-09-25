@@ -24,6 +24,11 @@ export async function recordProjectDecision({ agentDir, projectRoot, declaration
   await updateLedger(agentDir, (current) => ({ ...current,
     decisions: [...current.decisions.filter((entry) =>
       entry.projectRoot !== canonicalRoot || entry.serverId !== declaration.id), row],
+    // A launch denial also retires any previous autonomous call grant for
+    // this project/server. Reapproval must not silently revive an old grant.
+    callGrants: decision === 'deny' ? current.callGrants.filter((entry) =>
+      entry.projectRoot !== canonicalRoot || entry.scope !== 'project' ||
+      entry.serverId !== declaration.id) : current.callGrants,
   }));
   return row;
 }

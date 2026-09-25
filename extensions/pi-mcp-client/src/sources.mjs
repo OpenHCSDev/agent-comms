@@ -60,7 +60,7 @@ export async function readOptional(path) {
 }
 
 /** Read Pi-owned user/approval files; read project config ONLY after Pi trust. No launch here. */
-export async function loadEffectiveDeclarations({ ctx, agentDir, configDirName }) {
+export async function loadDeclarationSnapshot({ ctx, agentDir, configDirName }) {
   if (!isAbsolute(agentDir)) throw new Error('Absolute Pi agent directory required');
   const projectRoot = await realpath(ctx.cwd);
   const user = parseNativeConfig(await readOptional(join(agentDir, 'mcp.json')) ?? EMPTY_CONFIG);
@@ -73,5 +73,10 @@ export async function loadEffectiveDeclarations({ ctx, agentDir, configDirName }
   const project = projectTrusted
     ? parseNativeConfig(await readOptional(join(projectRoot, configDirName, 'mcp.json')) ?? EMPTY_CONFIG)
     : undefined;
-  return effectiveDeclarations({ user, project, projectTrusted, projectRoot, ledger });
+  return { projectRoot, projectTrusted, user, project, ledger,
+    effective: effectiveDeclarations({ user, project, projectTrusted, projectRoot, ledger }) };
+}
+
+export async function loadEffectiveDeclarations(options) {
+  return (await loadDeclarationSnapshot(options)).effective;
 }

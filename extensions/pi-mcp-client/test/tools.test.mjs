@@ -48,8 +48,11 @@ test('Pi tools preserve discovered input schemas and require a human plus fresh 
     assert.equal(result.content[0].text, '3');
     assert.equal(progress.length, 3);
     assert.equal(confirms, 2);
-    const headless = { ...ctx, mode: 'rpc' };
-    await assert.rejects(echo.execute('call-3', { message: 'denied' }, signal, undefined, headless), /human controller/);
+    const headless = { ...ctx, mode: 'rpc', ui: { confirm: async (_title, _body, opts) => {
+      assert.equal(opts.timeout, 15_000);
+      return false;
+    } } };
+    await assert.rejects(echo.execute('call-3', { message: 'denied' }, signal, undefined, headless), /denied by user/);
     assert.equal(confirms, 2);
     const aborted = new AbortController(); aborted.abort();
     await assert.rejects(echo.execute('call-4', { message: 'cancelled' }, aborted.signal, undefined, ctx), /cancelled/);
