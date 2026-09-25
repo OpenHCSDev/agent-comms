@@ -80,6 +80,7 @@ from .goal_attempts import (
 )
 from .input_disposition import AcpDeliveryCursors, InputDispositions
 from .operations import OBSERVATION_INTERVAL, Comms, wire
+from .passive_channel_awareness import PassiveChannelAwareness
 from .runtime import RuntimeProxy, RuntimeServer, socket_path
 from .tool_results import tool_result_content
 from .wire_watch import open_wire_watcher
@@ -156,6 +157,7 @@ class CommsAgent:
         self._goal_store: GoalAttemptStore | None = None
         self._pending_goal_origins: dict[str, str] = {}
         self._delivery_cursors = AcpDeliveryCursors(comms.root)
+        self._passive_awareness = PassiveChannelAwareness(comms.root)
         self._legacy_through: dict[str, int] = {}
         self._session_titles: dict[str, str] = {}
         self._display_titles: dict[str, str | None] = {}
@@ -286,6 +288,16 @@ class CommsAgent:
             high_water=self._comms.message_high_water(),
             fresh=True,
         )
+        with _store_lock(self._comms._wire_lock_path):
+            owner = self._comms.registry.require(thread_name)
+            admission = self._comms.registry.snapshot().admission_generations[owner.name]
+            self._passive_awareness.initialize(
+                owner,
+                admission=admission,
+                high_water=self._comms.message_high_water(),
+                channels=self._comms.channel_catalog.targets_for(owner.tags),
+                fresh=True,
+            )
         self._inbox_cursors[session_id] = cursor
         self._legacy_through[session_id] = legacy
         self._session_titles[session_id] = thread_name
@@ -340,6 +352,16 @@ class CommsAgent:
             high_water=self._comms.message_high_water(),
             fresh=False,
         )
+        with _store_lock(self._comms._wire_lock_path):
+            owner = self._comms.registry.require(thread.name)
+            admission = self._comms.registry.snapshot().admission_generations[owner.name]
+            self._passive_awareness.initialize(
+                owner,
+                admission=admission,
+                high_water=self._comms.message_high_water(),
+                channels=self._comms.channel_catalog.targets_for(owner.tags),
+                fresh=False,
+            )
         self._inbox_cursors[session_id] = cursor
         self._legacy_through[session_id] = legacy
         self._session_titles[session_id] = thread.name
@@ -1793,6 +1815,8 @@ class CommsAgent:
         self._steering_origins[session_id] = {}
         self._steering_goal_ids[session_id] = {}
 
+        passive_frame = ""
+        passive_sources: tuple[tuple[int, str, str], ...] = ()
         channel_batch = (
             len(origins) > 1
             and len({origin.seq for origin in origins}) == len(origins)
@@ -1874,6 +1898,14 @@ class CommsAgent:
                     and current.active_turn is not None
                     and current.active_turn.id == turn_id
                 )
+                if owner_ok and public_id is None and passive_frame:
+                    assert current is not None
+                    owner_ok = self._passive_awareness.still_current(
+                        current,
+                        snapshot,
+                        self._comms.channel_catalog.targets_for(current.tags),
+                        passive_sources,
+                    )
                 # A newly activated goal may supersede a follow-up that has
                 # not yet been sent. Owner revocation still ends the turn.
                 defer_for_goal = (
@@ -2070,6 +2102,32 @@ class CommsAgent:
         try:
             await self._emit_event(session_id, self._started_event(thread_name, turn_id))
             await self._drain_inbox(session_id)
+            # ACP delivery/ACK/UI updates above are not model context. This
+            # bounded projection is prepared ONLY inside an already authorized
+            # natural turn, from a separate owner-bound source cursor. It never
+            # advances that cursor or creates a wake, claim or native receipt.
+            if backend.rpc_args_for(self._agent_bin, self._agent_args) is not None:
+                with _store_lock(self._comms._wire_lock_path):
+                    snapshot = self._comms.registry.snapshot()
+                    current_thread = snapshot.threads.get(thread_name)
+                    if (
+                        current_thread is not None
+                        and current_thread.created_at == thread.created_at
+                        and snapshot.admission_generations.get(thread_name) == turn_admission
+                        and current_thread.active_turn is not None
+                        and current_thread.active_turn.id == turn_id
+                    ):
+                        passive_frame = self._passive_awareness.frame(
+                            current_thread,
+                            snapshot,
+                            self._comms.channel_catalog.targets_for(current_thread.tags),
+                        )
+                        if passive_frame:
+                            passive_sources = self._passive_awareness.sources(current_thread)
+                            if passive_sources:
+                                task += passive_frame
+                            else:
+                                passive_frame = ""
             session_file = thread.session_file
             fork_session = False
             if not session_file and thread.parent:

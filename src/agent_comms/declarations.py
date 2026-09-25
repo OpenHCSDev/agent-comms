@@ -1210,6 +1210,7 @@ class Thread:
     role: ThreadRole = ThreadRole.AGENT
     active_turn: ActiveTurn | None = None
     last_goal_report_turn: str | None = None
+    channel_scope_generation: int = 0
 
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)
@@ -1223,6 +1224,11 @@ class Thread:
             self.last_goal_report_turn, str
         ):
             raise ValueError("Last goal report turn must be a string or null.")
+        if (
+            type(self.channel_scope_generation) is not int
+            or not 0 <= self.channel_scope_generation < 1 << 63
+        ):
+            raise ValueError("Channel scope generation must be a nonnegative 63-bit integer.")
         for tag in self.tags:
             Tag(tag)
         allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
@@ -2131,6 +2137,7 @@ class ThreadRegistry:
                     ActiveTurn.from_wire(data["active_turn"]) if data.get("active_turn") else None
                 ),
                 last_goal_report_turn=data.get("last_goal_report_turn"),
+                channel_scope_generation=data.get("channel_scope_generation", 0),
             )
             self._statuses[name] = ThreadStatus(data.get("status", "running"))
             self._last_seen[name] = data.get("last_seen", 0.0)
@@ -2241,6 +2248,18 @@ class ThreadRegistry:
             previous_status = self._statuses.get(thread.name)
             if previous:
                 thread = replace(thread, created_at=previous.created_at)
+                if thread.tags != previous.tags:
+                    if previous.channel_scope_generation >= (1 << 63) - 1:
+                        raise RelationViolationError("Channel scope generation exhausted")
+                    thread = replace(
+                        thread,
+                        channel_scope_generation=previous.channel_scope_generation + 1,
+                    )
+                elif thread.channel_scope_generation != previous.channel_scope_generation:
+                    # A metadata writer cannot erase or forge channel scope history.
+                    thread = replace(
+                        thread, channel_scope_generation=previous.channel_scope_generation
+                    )
             elif any(
                 existing.created_at == thread.created_at for existing in self._threads.values()
             ):

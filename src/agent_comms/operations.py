@@ -1355,6 +1355,22 @@ class Comms:
             self.channel_catalog.write(tags | {tag.name}, channels)
         return tag
 
+    def _rebase_passive_channel_scope(self, name: str) -> None:
+        """Membership changes cut off former scope without claiming input delivery."""
+        from .passive_channel_awareness import PassiveChannelAwareness
+
+        awareness = PassiveChannelAwareness(self.root)
+        if not awareness.path.exists():
+            return
+        owner = self.registry.require(name)
+        snapshot = self.registry.snapshot()
+        awareness.scope_changed(
+            owner,
+            admission=snapshot.admission_generations[owner.name],
+            high_water=self.message_high_water(),
+            channels=self.channel_catalog.targets_for(owner.tags),
+        )
+
     def update_tags(
         self, name: str, *, add: frozenset[str] = frozenset(), remove: frozenset[str] = frozenset()
     ) -> Thread:
@@ -1366,6 +1382,7 @@ class Comms:
             previous_channels = self.channel_catalog.views()
             updated = replace(thread, tags=(thread.tags | add) - remove)
             self.registry.register(updated, self.registry.status(thread.name))
+            updated = self.registry.require(thread.name)
             self.channel_catalog.remember_tags(add, time.time())
             if thread.role.executable and thread.tags != updated.tags:
                 channels = {**previous_channels, **self.channel_catalog.views()}
@@ -1382,6 +1399,8 @@ class Comms:
                                 membership=change,
                             )
                         )
+            if thread.tags != updated.tags:
+                self._rebase_passive_channel_scope(updated.name)
             return updated
 
     def set_channel(self, name: str, tags: frozenset[str]) -> Channel:
@@ -2136,6 +2155,8 @@ class Comms:
             self.registry.register(thread, new_owner=new_owner)
 
             self.channel_catalog.remember_tags(thread.tags, thread.created_at)
+            if existing is not None and existing.tags != thread.tags:
+                self._rebase_passive_channel_scope(thread.name)
 
     def claim_thread(
         self,

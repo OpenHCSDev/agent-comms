@@ -138,6 +138,32 @@ class BusPageIndex:
                 )
             return True
 
+    def current(self) -> bool:
+        """Read-only warm-cache check; never rebuild the bus on a wake."""
+        try:
+            with self.bus_path.open("rb") as stream:
+                stat = os.fstat(stream.fileno())
+                size = stat.st_size
+                if size:
+                    stream.seek(size - 1)
+                    if stream.read(1) != b"\n":
+                        return False
+                saved_row = self.connection.execute(
+                    "SELECT value FROM metadata WHERE key='source'"
+                ).fetchone()
+                saved = json.loads(saved_row[0]) if saved_row else None
+                if not isinstance(saved, dict):
+                    return False
+                return (
+                    saved.get("version") == 1
+                    and saved.get("offset") == size
+                    and saved.get("identity")
+                    == [stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns]
+                    and saved.get("tail") == self._tail(stream, size)
+                )
+        except (OSError, ValueError, TypeError, sqlite3.DatabaseError):
+            return False
+
     def offsets(
         self,
         *,
@@ -169,10 +195,14 @@ class BusPageIndex:
         return self.connection.execute(query, params)
 
     @staticmethod
-    def record(stream: BinaryIO, row: tuple[int, int, str, str]) -> tuple[Mapping, int]:
+    def record(
+        stream: BinaryIO, row: tuple[int, int, str, str], *, max_bytes: int | None = None
+    ) -> tuple[Mapping, int]:
         seq, offset, sender, target = row
         stream.seek(offset)
-        raw = stream.readline()
+        raw = stream.readline(max_bytes + 1 if max_bytes is not None else -1)
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise StaleBusPageIndexError("Indexed bus row exceeds advisory byte budget.")
         try:
             record = json.loads(raw)
         except ValueError as error:
