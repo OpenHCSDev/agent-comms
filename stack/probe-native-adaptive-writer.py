@@ -10,9 +10,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import selectors
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -26,6 +28,56 @@ MANIFEST = Path(__file__).with_name("pi-native.sha256")
 
 def saved_entries(session_file: str) -> list[dict[str, object]]:
     return [json.loads(line) for line in Path(session_file).read_text().splitlines()]
+
+
+def read_capture_line(proc: subprocess.Popen[str], *, timeout: float = 10.0) -> str:
+    """Bound BOTH time and bytes before trusting a child startup receipt."""
+    assert proc.stdout is not None
+    deadline = time.monotonic() + timeout
+    captured = bytearray()
+    with selectors.DefaultSelector() as selector:
+        selector.register(proc.stdout, selectors.EVENT_READ)
+        while len(captured) < 4096:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not selector.select(remaining):
+                raise TimeoutError("Native capture produced no complete line before deadline")
+            chunk = os.read(proc.stdout.fileno(), 4096 - len(captured))
+            if not chunk:
+                raise EOFError("Native capture closed stdout before a complete line")
+            captured.extend(chunk)
+            if b"\n" in captured:
+                line, trailing = bytes(captured).split(b"\n", 1)
+                if trailing:
+                    raise ValueError("Native capture emitted unexpected extra output")
+                return line.decode("utf-8")
+    raise ValueError("Native capture record exceeds 4096 bytes")
+
+
+def self_test_no_line() -> None:
+    """A child that writes only a partial line cannot strand this probe."""
+    script = "import sys,time; sys.stdout.write('partial'); sys.stdout.flush(); time.sleep(30)"
+    child = subprocess.Popen(
+        [sys.executable, "-u", "-c", script],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    started = time.monotonic()
+    try:
+        try:
+            read_capture_line(child, timeout=0.3)
+        except TimeoutError:
+            pass
+        else:
+            raise AssertionError("A no-line child cannot produce a capture receipt")
+    finally:
+        if child.poll() is None:
+            child.kill()
+        child.communicate(timeout=3)
+    elapsed = time.monotonic() - started
+    assert child.returncode is not None and elapsed < 3, "No-line child did not settle promptly"
+    print(f"no-line deadline PASS: child reaped in {elapsed:.2f}s")
 
 
 def run_case(case: str, package: Path) -> None:
@@ -68,11 +120,15 @@ def run_case(case: str, package: Path) -> None:
         )
         try:
             assert proc.stdout is not None and proc.stdin is not None
-            captured_line = proc.stdout.readline()
-            if not captured_line:
+            try:
+                captured_line = read_capture_line(proc)
+            except (TimeoutError, EOFError, ValueError) as error:
+                if proc.poll() is None:
+                    proc.kill()
+                _, stderr = proc.communicate(timeout=3)
                 raise RuntimeError(
-                    f"Native capture exited: {proc.stderr.read() if proc.stderr else ''}"
-                )
+                    f"Native capture failed: {error}; stderr={stderr[:2048]}"
+                ) from error
             captured = json.loads(captured_line)
             assert captured["phase"] == "captured"
             assert captured["capturedLeaf"]
@@ -152,11 +208,18 @@ def run_case(case: str, package: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("case", choices=("local-leaf", "other-writer", "owner-goal"))
     parser.add_argument(
-        "--package", type=Path, required=True, help="verified read-only pinned Pi package directory"
+        "case", choices=("local-leaf", "other-writer", "owner-goal", "self-test-no-line")
+    )
+    parser.add_argument(
+        "--package", type=Path, help="verified read-only pinned Pi package directory"
     )
     args = parser.parse_args()
+    if args.case == "self-test-no-line":
+        self_test_no_line()
+        return
+    if args.package is None:
+        parser.error("--package is required for native cases")
     run_case(args.case, args.package.resolve())
 
 
