@@ -18,7 +18,16 @@ from agent_comms import backend
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "surface",
-    ["backend", "backend_duplicate", "revoked", "acp", "acp_stopped", "toad", "toad_delayed"],
+    [
+        "backend",
+        "backend_duplicate",
+        "revoked",
+        "oversized",
+        "acp",
+        "acp_stopped",
+        "toad",
+        "toad_delayed",
+    ],
 )
 async def test_send_now_interrupts_native_response(surface, monkeypatch):
     if surface.startswith("toad") and not os.environ.get("AC_TOAD_NATIVE_PILOT"):
@@ -80,6 +89,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     "providers": {
                         "openrouter": {
                             "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
+                            "modelOverrides": {"z-ai/glm-5.3-flash": {"contextWindow": 128000}},
                         }
                     }
                 }
@@ -202,7 +212,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             await asyncio.wait_for(first_chunk.wait(), 15)
             command = {
                 "type": "prompt",
-                "message": "URGENT_INPUT",
+                "message": "x" * 800000 if surface == "oversized" else "URGENT_INPUT",
                 "streamingBehavior": "steer",
                 "_input_id": "urgent",
             }
@@ -233,10 +243,14 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     row["status"] == "unknown" for row in owner._dispositions._read().values()
                 )
                 return
-            if surface == "revoked":
+            if surface in {"revoked", "oversized"}:
                 await asyncio.wait_for(task, 10)
                 assert events[-1]["ok"] is False, events
-                assert len(requests) == 1 and not started.is_set()
+                assert len(requests) == 1
+                if surface == "revoked":
+                    assert not started.is_set()
+                else:
+                    assert any("oversized" in e.get("text", "").lower() for e in events), events
                 assert queue.empty(), "Uncertain queued input must never be replayed"
                 return
             await asyncio.wait_for(started.wait(), 3)

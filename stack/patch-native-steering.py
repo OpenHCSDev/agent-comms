@@ -27,7 +27,7 @@ CONTINUE = """        // Only a new explicit Send now command permits this conti
         this._nativeInterruptIds = undefined;
         if (interruptedIds && this.agent.steeringQueue.messages.some(message =>
             interruptedIds.includes(message.inputId))) {
-            this._nativeRunHadTrackedInput = false;
+            this._nativeRunHadTrackedInput = true;
             this._emit({ type: "steering_interrupt_completed" });
             return true;
         }
