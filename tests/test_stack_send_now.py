@@ -26,6 +26,7 @@ from agent_comms import backend
         "oversized",
         "acp",
         "acp_stopped",
+        "acp_goal_original",
         "toad",
         "toad_delayed",
         "toad_goal_queue",
@@ -194,6 +195,13 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             await owner.new_session(str(root / "project"))
             owner._drain_tasks["project"].cancel()
             await asyncio.gather(owner._drain_tasks["project"], return_exceptions=True)
+            if surface == "acp_goal_original":
+                owner._comms.update_goal(
+                    "project",
+                    "set",
+                    text="Continue useful work",
+                    owner_store=owner._open_goal_store(),
+                )
 
         async def collect():
             if owner is not None:

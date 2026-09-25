@@ -823,6 +823,10 @@ class CommsAgent:
         with _store_lock(self._comms._wire_lock_path):
             snapshot = self._comms.registry.snapshot()
             canonical = snapshot.aliases.get(thread_name, thread_name)
+            admitted_goal = snapshot.threads[canonical].goal
+            original_goal_id = (
+                admitted_goal.id if admitted_goal is not None and admitted_goal.active else None
+            )
             self._dispositions.record(
                 key,
                 seq=None,
@@ -841,6 +845,8 @@ class CommsAgent:
             images=images,
             original_keys=(key,),
             initial_display_text=display_text,
+            original_owner_input=True,
+            original_goal_id=original_goal_id,
         )
 
     def _debug_log(self, message: str) -> None:
@@ -1527,6 +1533,8 @@ class CommsAgent:
         original_keys: tuple[str, ...] = (),
         initial_display_text: str | None = None,
         autonomous_goal: bool = False,
+        original_owner_input: bool = False,
+        original_goal_id: str | None = None,
     ) -> None:
         """Stream a real coding agent's reply: events to the client, status to the wire."""
         original_display = None if autonomous_goal else (initial_display_text or task)
@@ -1542,6 +1550,10 @@ class CommsAgent:
             # must not run for a direct whose UNKNOWN row needs that proof.
             return
         goal = thread.goal
+        if original_owner_input and original_goal_id != (
+            goal.id if goal is not None and goal.active else None
+        ):
+            raise RequestError.invalid_params({"reason": "input_authority_changed"})
         goal_permit: LaunchPermit | None = None
         if autonomous_goal and (goal is None or not goal.active):
             return
@@ -1681,6 +1693,7 @@ class CommsAgent:
                         and current_goal is not None
                         and current_goal.active
                         and not owner_followup
+                        and not (public_id is None and original_owner_input)
                     )
                 )
                 if allowed and input_permit is not None:
