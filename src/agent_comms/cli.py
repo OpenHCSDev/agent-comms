@@ -58,6 +58,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("tools", help="Emit the shared adapter tool catalog")
 
+    p_repair = sub.add_parser(
+        "repair-input-routing", help="Preview historical native-input attribution repair"
+    )
+    p_repair.add_argument("--apply", action="store_true", help="Persist verified input routing")
+
     p_import = sub.add_parser("import-thread", help="Import an OpenCode/Codex context snapshot")
     p_import.add_argument("--format", required=True, choices=[kind.value for kind in ImportFormat])
     p_import.add_argument(
@@ -294,6 +299,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             else:
                 _emit({"everything": [m.to_wire() for m in comms.full_history()]})
+        elif args.command == "repair-input-routing":
+            _emit(comms.repair_input_routing(dry_run=not args.apply))
         elif args.command == "threads":
             _emit({"threads": list(comms.list_threads(active_only=args.active_only))})
         elif args.command == "thread":

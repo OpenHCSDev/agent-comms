@@ -1747,6 +1747,32 @@ class Comms:
         input_display: InputDisplay | None = None,
     ) -> list[TranscriptEvent]:
         role = message.get("role")
+        if (
+            role == "user"
+            and input_display is not None
+            and input_display.sent_text_digest is not None
+        ):
+            raw_content = message.get("content")
+            raw_text = (
+                raw_content
+                if isinstance(raw_content, str)
+                else (
+                    "\n".join(
+                        str(part.get("text") or "")
+                        for part in raw_content
+                        if isinstance(part, dict) and part.get("type") == "text"
+                    )
+                    if isinstance(raw_content, list)
+                    else None
+                )
+            )
+            if raw_text is not None and input_display.matches(raw_text):
+                # Exact per-input provenance wins over old turn-wide annotations,
+                # including explicitly bound human/internal inputs (no route).
+                routing = input_display.routing
+            else:
+                routing = None
+                input_display = None
         if role == "user" and routing is not None and routing.requests:
             return [
                 TranscriptEvent("user", request.body, routing=TurnRouting((request,), None))
@@ -1851,9 +1877,18 @@ class Comms:
             session_file, path.stat().st_size if session_file and path.is_file() else 0
         )
 
-    def record_input_display(self, native_id: str, display_text: str | None) -> None:
+    def record_input_display(
+        self,
+        native_id: str,
+        display_text: str | None,
+        *,
+        sent_text: str | None = None,
+        routing: TurnRouting | None = None,
+    ) -> None:
         """Bind UI text to the private native input ID, never a prompt prefix."""
-        self.transcript_routes.record_input_display(native_id, display_text)
+        self.transcript_routes.record_input_display(
+            native_id, display_text, sent_text=sent_text, routing=routing
+        )
 
     def record_turn_routing(
         self, name: str, checkpoint: TranscriptCursor, routing: TurnRouting
@@ -1882,6 +1917,87 @@ class Comms:
                         ids.append(record["id"])
                     break
         self.transcript_routes.record(session_file, tuple(ids), routing)
+
+    def repair_input_routing(self, *, dry_run: bool = True) -> dict[str, int | bool]:
+        """Explicit maintenance for old receipt-bound inputs, never a UI/wake scan.
+
+        Join committed envelopes by sequence to owner-persisted native ID/text
+        bindings. A prompt prefix or a matching body alone is not evidence.
+        No transcript, input disposition, delivery/read cursor, or model is changed.
+        """
+        from .declarations import ScheduledTurn
+        from .input_disposition import InputDispositions
+
+        rows = InputDispositions(self.root).bound_bus_inputs()
+        existing = self.transcript_routes.input_bindings()
+        groups: dict[str, list[dict[str, Any]]] = {}
+        needed = {row["sequence"] for row in rows}
+        envelopes: dict[int, Message] = {}
+        aliases = self.registry.snapshot().aliases
+        report: dict[str, int | bool] = {
+            "dry_run": dry_run,
+            "eligible": 0,
+            "already_bound": 0,
+            "repaired": 0,
+            "skipped": 0,
+            "conflicts": 0,
+        }
+        for row in rows:
+            groups.setdefault(row["native_id"], []).append(row)
+        with self.bus.full_history_snapshot() as (_, messages):
+            for message in messages:
+                if message.seq in needed:
+                    envelopes[message.seq] = message
+        for native_id, group in groups.items():
+            group.sort(key=lambda row: row["sequence"])
+            proof = {
+                (row["owner"], row["admission"], row["turn_id"], row["sent_text"]) for row in group
+            }
+            if (
+                len(proof) != 1
+                or len({row["sequence"] for row in group}) != len(group)
+                or (len(group) > 1 and not all(is_channel_target(row["target"]) for row in group))
+            ):
+                report["conflicts"] += 1
+                continue
+            origins: list[Message] = []
+            for row in group:
+                candidate = envelopes.get(row["sequence"])
+                if (
+                    candidate is None
+                    or row["target"] != candidate.target
+                    or row["source_text"]
+                    not in {
+                        ScheduledTurn.incoming(candidate).prompt,
+                        ScheduledTurn.incoming(candidate, aliases=aliases).prompt,
+                    }
+                ):
+                    break
+                origins.append(candidate)
+            source = "\n\n".join(row["source_text"] for row in group)
+            sent_text = group[0]["sent_text"]
+            if len(origins) != len(group) or not sent_text.endswith(source):
+                report["skipped"] += 1
+                continue
+            routing = TurnRouting(tuple(origins), None)
+            binding = (
+                hashlib.sha256(sent_text.encode("utf-8")).hexdigest(),
+                json.dumps(routing.to_wire(), sort_keys=True),
+            )
+            if native_id in existing:
+                report["already_bound" if existing[native_id] == binding else "conflicts"] += 1
+                continue
+            report["eligible"] += 1
+            if not dry_run:
+                try:
+                    self.record_input_display(
+                        native_id, source, sent_text=sent_text, routing=routing
+                    )
+                except RelationViolationError:
+                    report["conflicts"] += 1
+                else:
+                    report["repaired"] += 1
+        return report
 
     # ─── Threads ──────────────────────────────────────────────────────────────
 

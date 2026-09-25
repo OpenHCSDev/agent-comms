@@ -1,4 +1,5 @@
 import asyncio
+from uuid import uuid4
 
 import pytest
 
@@ -7,7 +8,7 @@ from agent_comms.acp import CommsAgent
 
 
 def _native_receipt(args, kwargs):
-    native_id = "a" * 32
+    native_id = uuid4().hex
     with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
         assert allowed is True
     assert kwargs["native_start"](None, native_id, args[2])

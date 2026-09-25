@@ -38,6 +38,7 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-asyncio>=0.23",
+    "pytest-xdist>=3.6",
     "black==26.5.1",
     "ruff==0.16.0",
     "mypy==2.3.0",
@@ -69,7 +70,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--cov=agent_comms --cov-report=term-missing --cov-fail-under=85"
+addopts = "-n auto --maxprocesses=8 --dist=worksteal --cov=agent_comms --cov-report=term-missing --cov-fail-under=85"
 asyncio_mode = "auto"
 
 [tool.black]
