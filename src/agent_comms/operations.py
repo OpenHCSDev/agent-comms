@@ -74,6 +74,7 @@ from .declarations import (
     ThreadSort,
     ThreadStatus,
     ThreadView,
+    TurnClaimFence,
     TurnRouting,
     UnregisteredThreadError,
     WireRevision,
@@ -926,7 +927,7 @@ class Comms:
 
     def begin_turn(
         self, name: str, turn_id: str, detail: str = "", routing: TurnRouting | None = None
-    ) -> None:
+    ) -> TurnClaimFence:
         with _store_lock(self._wire_lock_path):
             claimed, _ = self.registry.claim_local_turn(name, turn_id, routing=routing)
             try:
@@ -934,11 +935,21 @@ class Comms:
             except BaseException:
                 self.registry.finish_claimed_turn(claimed.name, turn_id)
                 raise
+            assert claimed.active_turn is not None
+            admission = claimed.active_turn.admission_generation
+            assert type(admission) is int
+            return TurnClaimFence(
+                claimed.name, claimed.created_at, turn_id, claimed.turn_generation, admission
+            )
 
-    def finish_turn(self, name: str, turn_id: str) -> FinishedTurnFence | None:
-        """Persist exact terminal identity before publishing a delayed callback."""
+    def finish_turn(
+        self, name: str, turn_id: str, *, expected: TurnClaimFence | None = None
+    ) -> FinishedTurnFence | None:
+        """Persist exact terminal identity; ID-only legacy release cannot attest a fence."""
         with _store_lock(self._wire_lock_path):
-            released, fence = self.registry.finish_claimed_turn_with_fence(name, turn_id)
+            released, fence = self.registry.finish_claimed_turn_with_fence(
+                name, turn_id, expected=expected
+            )
             if not released:
                 return None
             self.activity.emit(Activity(self.registry.canonical_name(name), ActivityState.IDLE))

@@ -823,7 +823,7 @@ class CommsAgent:
                 )
             else:
                 turn_id = uuid4().hex
-                self._comms.begin_turn(thread_name, turn_id, "Waiting for replies")
+                turn_claim = self._comms.begin_turn(thread_name, turn_id, "Waiting for replies")
                 self._active_turns[session_id] = turn_id
                 try:
                     await self._emit_event(session_id, self._started_event(thread_name, turn_id))
@@ -831,7 +831,9 @@ class CommsAgent:
                     await self._collect_replies(session_id, thread_name, sent_seq)
                 finally:
                     self._active_turns.pop(session_id, None)
-                    terminal_fence = self._comms.finish_turn(thread_name, turn_id)
+                    terminal_fence = self._comms.finish_turn(
+                        thread_name, turn_id, expected=turn_claim
+                    )
                     try:
                         await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
                     finally:
@@ -1799,7 +1801,7 @@ class CommsAgent:
             origins, MessageRoute(thread_name, reply_targets) if reply_targets else None
         )
         checkpoint = self._comms.transcript_checkpoint(thread_name)
-        self._comms.begin_turn(thread_name, turn_id, task[:80], routing)
+        turn_claim = self._comms.begin_turn(thread_name, turn_id, task[:80], routing)
         turn_admission = self._comms.registry.snapshot().admission_generations[thread_name]
         direct_origins = tuple(
             origin
@@ -2408,7 +2410,9 @@ class CommsAgent:
                     update_turn_activity(ActivityState.THINKING, task[:80])
                 elif kind == "settled":
                     compaction_resume_activity = None
-                    terminal_fence = self._comms.finish_turn(thread_name, turn_id)
+                    terminal_fence = self._comms.finish_turn(
+                        thread_name, turn_id, expected=turn_claim
+                    )
                     settled = True
                     finish_event.set()
                     self._active_turns.pop(session_id, None)
@@ -2647,7 +2651,7 @@ class CommsAgent:
                     )
                 )
             if not settled:
-                terminal_fence = self._comms.finish_turn(thread_name, turn_id)
+                terminal_fence = self._comms.finish_turn(thread_name, turn_id, expected=turn_claim)
                 self._active_turns.pop(session_id, None)
                 try:
                     await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})

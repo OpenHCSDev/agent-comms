@@ -1187,6 +1187,17 @@ class ActiveTurn:
 
 
 @dataclass(frozen=True, slots=True)
+class TurnClaimFence:
+    """Exact local begin-turn claim; a reused turn ID is not this claim."""
+
+    name: str
+    created_at: float
+    turn_id: str
+    turn_generation: int
+    admission_generation: int
+
+
+@dataclass(frozen=True, slots=True)
 class FinishedTurnFence:
     """Durable exact-turn completion witness, not a reply or model grant."""
 
@@ -2542,9 +2553,9 @@ class ThreadRegistry:
         return claimed
 
     def finish_claimed_turn_with_fence(
-        self, name: str, turn_id: str
+        self, name: str, turn_id: str, *, expected: TurnClaimFence | None = None
     ) -> tuple[bool, FinishedTurnFence | None]:
-        """Atomically release one exact turn and return its durable witness."""
+        """Release only the claimed turn; legacy ID-only release cannot attest a fence."""
         with _store_lock(self._path):
             self._load_unlocked()
             name = self._aliases.get(name, name)
@@ -2552,8 +2563,19 @@ class ThreadRegistry:
             if current is None or current.active_turn is None or current.active_turn.id != turn_id:
                 return False, None
             admission = current.active_turn.admission_generation
+            if expected is not None and (
+                type(expected) is not TurnClaimFence
+                or self._aliases.get(expected.name, expected.name) != name
+                or expected.created_at != current.created_at
+                or expected.turn_id != turn_id
+                or expected.turn_generation != current.turn_generation
+                or expected.admission_generation != admission
+                or current.active_turn.turn_generation != expected.turn_generation
+            ):
+                return False, None
             attested = (
-                current.turn_generation > 0
+                expected is not None
+                and current.turn_generation > 0
                 and type(admission) is int
                 and admission > 0
                 and self._admission_generations.get(name) == admission

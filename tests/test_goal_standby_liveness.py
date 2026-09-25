@@ -18,14 +18,31 @@ def _thread(comms, name, worktree):
     comms.register(Thread(name, frozenset(), str(worktree), pid=os.getpid()))
 
 
+def _begin(comms, name, turn_id):
+    claim = comms.begin_turn(name, turn_id)
+    comms._test_claims[name] = claim
+    return claim
+
+
+def _finish(comms, name, turn_id):
+    canonical = comms.registry.canonical_name(name)
+    claim = next(
+        claim
+        for claim in comms._test_claims.values()
+        if comms.registry.canonical_name(claim.name) == canonical
+    )
+    return comms.finish_turn(name, turn_id, expected=claim)
+
+
 def _waiting(tmp_path, *, second=False):
     comms = wire(tmp_path / "wire")
+    comms._test_claims = {}
     _thread(comms, "owner", tmp_path)
     _thread(comms, "child", tmp_path)
-    comms.begin_turn("child", "child-turn")
+    _begin(comms, "child", "child-turn")
     if second:
         _thread(comms, "other", tmp_path)
-        comms.begin_turn("other", "other-turn")
+        _begin(comms, "other", "other-turn")
     goal = comms.update_goal("owner", "set", text="Review the delegated work")
     assert goal is not None
     targets = ["child", "other"] if second else ["child"]
@@ -56,7 +73,7 @@ def test_idle_target_refusal_is_side_effect_free(tmp_path):
 
 def test_mixed_targets_project_idle_without_suppressing_active_alternative(tmp_path):
     comms, goal = _waiting(tmp_path, second=True)
-    other_fence = comms.finish_turn("other", "other-turn")
+    other_fence = _finish(comms, "other", "other-turn")
     execution = comms.goal_execution("owner")
     assert [target.name for target in execution.inactive_wait_for] == ["other"]
     assert "no active turn: @other" in execution.presentation("owner").summary
@@ -68,9 +85,9 @@ def test_mixed_targets_project_idle_without_suppressing_active_alternative(tmp_p
 
 def test_last_target_finishes_silently_pauses_once_and_reopens(tmp_path):
     comms, goal = _waiting(tmp_path, second=True)
-    other_fence = comms.finish_turn("other", "other-turn")
+    other_fence = _finish(comms, "other", "other-turn")
     assert comms.pause_waits_after_terminal_turn(other_fence) == ()
-    child_fence = comms.finish_turn("child", "child-turn")
+    child_fence = _finish(comms, "child", "child-turn")
     assert comms.pause_waits_after_terminal_turn(child_fence) == ("owner",)
     reopened = Comms(comms.root)
     paused = reopened.registry.require("owner").goal
@@ -91,7 +108,7 @@ def test_only_substantive_direct_reply_prevents_pause(tmp_path, notice):
     comms.send_message(
         "child", "owner", "Result" if not notice else "Failure notice", notice=notice
     )
-    child_fence = comms.finish_turn("child", "child-turn")
+    child_fence = _finish(comms, "child", "child-turn")
     changed = comms.pause_waits_after_terminal_turn(child_fence)
     assert changed == (("owner",) if notice else ())
     assert (comms.registry.require("owner").goal.status == "paused") is notice
@@ -101,7 +118,7 @@ def test_only_substantive_direct_reply_prevents_pause(tmp_path, notice):
 def test_renamed_target_keeps_incarnation_but_replacement_fails_closed(tmp_path):
     comms, goal = _waiting(tmp_path)
     comms.registry.rename("child", "renamed-child")
-    child_fence = comms.finish_turn("renamed-child", "child-turn")
+    child_fence = _finish(comms, "renamed-child", "child-turn")
     assert comms.pause_waits_after_terminal_turn(child_fence) == ("owner",)
     assert comms.registry.require("owner").goal.status == "paused"
     assert comms.registry.require("owner").goal.id == goal.id
@@ -116,7 +133,7 @@ def test_renamed_target_keeps_incarnation_but_replacement_fails_closed(tmp_path)
 
 def test_pause_write_precedes_wait_clear_on_crash_and_stays_nonrunnable(tmp_path, monkeypatch):
     comms, goal = _waiting(tmp_path)
-    child_fence = comms.finish_turn("child", "child-turn")
+    child_fence = _finish(comms, "child", "child-turn")
 
     def crash_before_wait_clear(*_args, **_kwargs):
         raise OSError("injected crash after paused registry")
@@ -135,7 +152,7 @@ def test_pause_write_precedes_wait_clear_on_crash_and_stays_nonrunnable(tmp_path
 def test_replaced_target_cannot_report_for_old_incarnation(tmp_path):
     comms, goal = _waiting(tmp_path)
     old = comms.registry.require("child")
-    old_fence = comms.finish_turn("child", "child-turn")
+    old_fence = _finish(comms, "child", "child-turn")
     comms.registry.unregister("child")
     comms.registry.remove("child")
     _thread(comms, "child", tmp_path)
@@ -151,7 +168,7 @@ def test_replaced_target_cannot_report_for_old_incarnation(tmp_path):
 
 def test_reply_arriving_after_idle_check_stays_visible_without_model_start(tmp_path, monkeypatch):
     comms, _goal = _waiting(tmp_path)
-    child_fence = comms.finish_turn("child", "child-turn")
+    child_fence = _finish(comms, "child", "child-turn")
     checked = threading.Event()
     sent = threading.Event()
 
@@ -180,7 +197,7 @@ def test_reply_arriving_after_idle_check_stays_visible_without_model_start(tmp_p
 
 def test_terminal_hook_rechecks_goal_and_owner_identity(tmp_path):
     comms, goal = _waiting(tmp_path)
-    child_fence = comms.finish_turn("child", "child-turn")
+    child_fence = _finish(comms, "child", "child-turn")
     newer = comms.update_goal("owner", "edit", goal_id=goal.id, text="new exact objective")
     assert newer is not None
     # Goal text edits preserve wait; the exact current revision is updated, not lost.
@@ -203,14 +220,39 @@ def test_stopped_dependency_cannot_be_declared_live(tmp_path):
         comms.update_goal("owner", "standby", goal_id=goal.id, wait_for=["child"])
 
 
+def test_delayed_old_finish_cannot_release_new_active_same_id_or_pause(tmp_path):
+    comms, _goal = _waiting(tmp_path)
+    old_claim = comms._test_claims["child"]
+    old_fence = _finish(comms, "child", "child-turn")
+    new_claim = _begin(comms, "child", "child-turn")
+    assert new_claim.turn_generation == old_claim.turn_generation + 1
+    active = comms.registry.require("child").active_turn
+    assert comms.finish_turn("child", "child-turn", expected=old_claim) is None
+    assert comms.registry.require("child").active_turn == active
+    assert comms.pause_waits_after_terminal_turn(old_fence) == ()
+    assert comms.registry.require("owner").goal.active
+    assert comms.goal_wait("owner") is not None
+    new_fence = comms.finish_turn("child", "child-turn", expected=new_claim)
+    assert new_fence is not None and new_fence.turn_generation == new_claim.turn_generation
+    assert comms.pause_waits_after_terminal_turn(new_fence) == ("owner",)
+
+
+def test_legacy_id_only_finish_cannot_attest_pause(tmp_path):
+    comms, _goal = _waiting(tmp_path)
+    assert comms.finish_turn("child", "child-turn") is None
+    assert comms.registry.require("child").active_turn is None
+    assert comms.pause_waits_after_terminal_turn(None) == ()
+    assert comms.registry.require("owner").goal.active
+
+
 @pytest.mark.parametrize("reuse_turn_id", [False, True])
 def test_delayed_old_terminal_cannot_pause_newer_turn_before_reply(tmp_path, reuse_turn_id):
     comms, goal = _waiting(tmp_path)
-    old_fence = comms.finish_turn("child", "child-turn")
+    old_fence = _finish(comms, "child", "child-turn")
     assert old_fence is not None
     newer_id = "child-turn" if reuse_turn_id else "new-child-turn"
-    comms.begin_turn("child", newer_id)
-    new_fence = comms.finish_turn("child", newer_id)
+    _begin(comms, "child", newer_id)
+    new_fence = _finish(comms, "child", newer_id)
     assert new_fence is not None
     assert new_fence.turn_generation == old_fence.turn_generation + 1
     assert comms.pause_waits_after_terminal_turn(old_fence) == ()
@@ -227,9 +269,9 @@ def test_delayed_old_terminal_cannot_pause_newer_turn_before_reply(tmp_path, reu
 
 def test_newer_silent_terminal_still_pauses_waiter(tmp_path):
     comms, _goal = _waiting(tmp_path)
-    old_fence = comms.finish_turn("child", "child-turn")
-    comms.begin_turn("child", "new-child-turn")
-    new_fence = comms.finish_turn("child", "new-child-turn")
+    old_fence = _finish(comms, "child", "child-turn")
+    _begin(comms, "child", "new-child-turn")
+    new_fence = _finish(comms, "child", "new-child-turn")
     assert comms.pause_waits_after_terminal_turn(old_fence) == ()
     assert comms.pause_waits_after_terminal_turn(new_fence) == ("owner",)
     assert comms.goal_wait("owner") is None
@@ -237,7 +279,7 @@ def test_newer_silent_terminal_still_pauses_waiter(tmp_path):
 
 def test_terminal_fence_survives_rename_not_stop_or_metadata_edit(tmp_path):
     comms, _goal = _waiting(tmp_path)
-    fence = comms.finish_turn("child", "child-turn")
+    fence = _finish(comms, "child", "child-turn")
     assert fence is not None
     child = comms.registry.require("child")
     comms.registry.register(replace(child, title="New title"), ThreadStatus.RUNNING)
@@ -246,7 +288,7 @@ def test_terminal_fence_survives_rename_not_stop_or_metadata_edit(tmp_path):
     assert comms.pause_waits_after_terminal_turn(fence) == ("owner",)
 
     another, _goal = _waiting(tmp_path / "stop")
-    stale = another.finish_turn("child", "child-turn")
+    stale = _finish(another, "child", "child-turn")
     child = another.registry.require("child")
     another.registry.unregister("child")
     another.registry.register(replace(child, active_turn=None), ThreadStatus.RUNNING)
@@ -259,7 +301,7 @@ def test_legacy_wait_without_turn_generation_cannot_infer_terminal_authority(tmp
     wait = comms.goal_wait("owner")
     assert wait is not None
     GoalWaits(comms.root / "goal_waits.json").record(replace(wait, target_turn_generations=()))
-    fence = comms.finish_turn("child", "child-turn")
+    fence = _finish(comms, "child", "child-turn")
     assert comms.pause_waits_after_terminal_turn(fence) == ()
     assert comms.registry.require("owner").goal.active
 
@@ -294,8 +336,8 @@ async def test_acp_delayed_old_callback_after_new_finish_before_reply(tmp_path, 
     try:
         await asyncio.wait_for(old_settled.wait(), 2)
         assert comms.registry.require(child).active_turn is None
-        comms.begin_turn(child, "new-child-turn")
-        new_fence = comms.finish_turn(child, "new-child-turn")
+        new_claim = comms.begin_turn(child, "new-child-turn")
+        new_fence = comms.finish_turn(child, "new-child-turn", expected=new_claim)
         release_old.set()
         await asyncio.wait_for(old_task, 2)  # OLD callback sees idle NEW turn, no reply yet.
         assert comms.registry.require("owner").goal.active
