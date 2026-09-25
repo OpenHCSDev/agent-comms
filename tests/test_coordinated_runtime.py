@@ -345,6 +345,32 @@ async def test_session_file_registration_during_native_full_turn_keeps_response(
     assert len(comms.bus.dm_history("sender", "beta")) == 2
 
 
+async def test_project_change_during_native_full_turn_denies_response(
+    tmp_path: Path, monkeypatch
+) -> None:
+    root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
+    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+    runner, calls = _fake_model()
+    other_project = tmp_path / "other-project"
+    other_project.mkdir()
+
+    async def change_project(*args, **kwargs):
+        result = await runner(*args, **kwargs)
+        current = comms.registry.require("beta")
+        before = comms.registry.snapshot().admission_generations["beta"]
+        comms.register(replace(current, worktree=str(other_project)))
+        assert comms.registry.snapshot().admission_generations["beta"] == before
+        return result
+
+    monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", change_project)
+    with pytest.raises(StaleFence, match="owner stopped or changed"):
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        )
+    assert len(calls) == 1
+    assert len(comms.bus.dm_history("sender", "beta")) == 1
+
+
 async def test_owner_generation_revoked_during_native_triage_fails_closed(
     tmp_path: Path, monkeypatch
 ) -> None:

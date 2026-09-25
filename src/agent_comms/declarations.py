@@ -2128,7 +2128,6 @@ class ThreadRegistry:
                 or new_owner
                 or previous.pid != thread.pid
                 or previous.role != thread.role
-                or previous.worktree != thread.worktree
                 or (previous_status is not None and previous_status.active != status.active)
             ):
                 self._bump_admission_unlocked(thread.name)
