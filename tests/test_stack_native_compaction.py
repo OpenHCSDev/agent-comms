@@ -103,7 +103,9 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                     "id": f"fixture-{len(calls)}", "object": "chat.completion.chunk",
                     "created": 12345, "model": "z-ai/glm-5.3-flash",
                     "choices": [{"index": 0, "delta": {"role": "assistant", "content": (
-                        "y" * 600000 if case == "oversized_summary" else "summary"
+                        "y" * 600000 if case == "oversized_summary"
+                        else "FINAL_OWNER_REPLY" if case == "acp_success"
+                        and reasoning_efforts[-1] == "high" else "summary"
                     )},
                                  "finish_reason": None}],
                 }
@@ -209,9 +211,11 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             assert reasoning_efforts[-1] == "high"
             assert updates
             texts = [
-                getattr(getattr(update, "content", None), "text", "") for update in updates
+                getattr(getattr(update, "content", None), "text", "")
+                for update in updates
+                if getattr(update, "session_update", None) == "agent_message_chunk"
             ]
-            assert any("summary" in text for text in texts)
+            assert any("FINAL_OWNER_REPLY" in text for text in texts)
             assert not any("[agent error]" in text for text in texts)
             assert '"type":"compaction"' in session.read_text()
             return
