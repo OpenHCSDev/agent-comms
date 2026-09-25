@@ -7,7 +7,7 @@ import { parseNativeConfig } from './config.mjs';
 const EMPTY_CONFIG = '{"version":1,"servers":[]}';
 const EMPTY_LEDGER = '{"version":1,"decisions":[]}';
 
-async function readOptional(path) {
+export async function readOptional(path) {
   let file;
   try {
     // O_NOFOLLOW prevents treating a project-controlled symlink as a user config.
