@@ -1000,6 +1000,17 @@ class TestThreadOps:
         with pytest.raises(RelationViolationError, match="running"):
             wired.rename_self("renamed")
 
+    def test_rename_self_reclaims_own_alias_but_not_another_owners(self, wired, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
+        assert wired.rename_self("pr17").current == "pr17"
+        assert wired.rename_self("PR111").current == "PR111"
+        assert wired.registry.snapshot().aliases == {"pr17": "PR111"}
+        assert wired.registry.require("fixer").parent == "PR111"
+
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
+        with pytest.raises(RelationViolationError, match="already in use"):
+            wired.rename_self("pr17")
+
     def test_managed_rename_normalizes_title_and_proves_owner(self, wired):
         wired.register(
             Thread(
@@ -1039,6 +1050,16 @@ class TestThreadOps:
         result = wired.rename_managed_thread("generated-7", "testing 123", owner_pid=456)
 
         assert result.current == "testing-123-2"
+
+    def test_managed_rename_reclaims_own_alias(self, wired):
+        wired.register(
+            Thread(name="generated-7", tags=frozenset(), worktree="/tmp/project", pid=os.getpid())
+        )
+        assert wired.rename_managed_thread("generated-7", "chosen", owner_pid=os.getpid()).changed
+        result = wired.rename_managed_thread("chosen", "generated-7", owner_pid=os.getpid())
+        assert (result.previous, result.current, result.changed) == ("chosen", "generated-7", True)
+        assert wired.registry.snapshot().aliases["chosen"] == "generated-7"
+        assert "generated-7" not in wired.registry.snapshot().aliases
 
     def test_old_alias_cannot_be_reused(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
