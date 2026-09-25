@@ -212,10 +212,8 @@ def _store_lock(store_path: Path) -> Iterator[None]:
         if os.name == "nt":
             import msvcrt
 
-            lock_file.seek(0, os.SEEK_END)
-            if lock_file.tell() == 0:
-                lock_file.write(b"\0")
-                lock_file.flush()
+            # Windows permits locking a byte beyond EOF. Writing a sentinel
+            # before taking the lock races with another process holding it.
             lock_file.seek(0)
             while True:
                 try:
