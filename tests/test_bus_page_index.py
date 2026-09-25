@@ -108,7 +108,10 @@ def test_index_does_not_reorder_nonmonotonic_legacy_wire(tmp_path):
 def test_indexed_pages_equal_scan_oracle_across_cursors_and_budgets(tmp_path):
     bus = _bus(tmp_path)
     bus._path.write_bytes(_rows(30))
-    matches = lambda message: message.target == "b"
+
+    def matches(message):
+        return message.target == "b"
+
     for before, after in ((None, None), (18, None), (1, None), (None, 0), (None, 17)):
         for limit, max_bytes in ((1, 20), (3, 120), (100, 10000)):
             oracle = bus._collect_history_page(

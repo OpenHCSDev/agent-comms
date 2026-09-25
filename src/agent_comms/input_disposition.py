@@ -190,6 +190,18 @@ class InputDispositions:
             row = self._read().get(key)
             return dict(row) if row is not None else None
 
+    def source_texts(self, keys: tuple[str, ...]) -> tuple[str, ...] | None:
+        """Read exact admitted texts, in caller order, from one ledger snapshot.
+
+        A missing input prevents batch validation. Reading these texts never
+        authorizes delivery or changes UNKNOWN to STARTED.
+        """
+        with _store_lock(self.path):
+            rows = self._read()
+            if any(key not in rows for key in keys):
+                return None
+            return tuple(rows[key]["source_text"] for key in keys)
+
     @staticmethod
     def public(row: dict[str, Any]) -> dict[str, Any]:
         """Public delivery projection; native receipt authority stays private."""

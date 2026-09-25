@@ -7,9 +7,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Thread
-from agent_comms import declarations
-from agent_comms.goal_history import GoalHistoryStore
+from agent_comms import Thread, declarations
+from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
 from agent_comms.operations import Comms
 from agent_comms.tools import TOOLS
 
@@ -93,17 +92,28 @@ def test_crash_before_registry_write_does_not_expose_history_intent(tmp_path, mo
     assert len(entries) == 1 and entries[0].after == current
 
 
-def test_crash_after_registry_write_reconciles_pending_history(tmp_path, monkeypatch):
+@pytest.mark.parametrize("failure", ["before_history_commit", "after_history_commit"])
+def test_crash_after_registry_write_reconciles_pending_history(tmp_path, monkeypatch, failure):
     comms = _wire(tmp_path)
     current = comms.update_goal("worker", "set", text="Keep current")
 
+    commit = GoalHistoryStore.commit
+
+    def fail_commit(store, sequence):
+        if failure == "before_history_commit":
+            raise OSError("lost history ACK")
+
+        def fail_sync():
+            raise OSError("lost history ACK")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(store, "_sync", fail_sync)
+            commit(store, sequence)
+
     with monkeypatch.context() as patch:
-        patch.setattr(
-            GoalHistoryStore,
-            "commit",
-            lambda self, sequence: (_ for _ in ()).throw(OSError("lost history ACK")),
-        )
-        with pytest.raises(OSError, match="lost history ACK"):
+        patch.setattr(GoalHistoryStore, "commit", fail_commit)
+        expected = OSError if failure == "before_history_commit" else GoalHistoryError
+        with pytest.raises(expected):
             comms.update_goal("worker", "paused", goal_id=current.id)
 
     reopened = Comms(comms.root)
