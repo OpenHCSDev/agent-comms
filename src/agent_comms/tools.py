@@ -428,11 +428,25 @@ def _collaboration(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 
 
 def _collaborations(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    return {
-        "collaborations": [
-            asdict(edge) for edge in comms.relationships.collaborations(_executing_thread())
+    owner = _executing_thread()
+    projection = comms.relationships.contact_projection(owner)
+    result: JsonObject = {
+        "collaborations": [asdict(edge) for edge in projection.explicit]
+    }  # Legacy explicit declarations remain independently editable.
+    if any(entry.goal_contacts for entry in projection.visible):
+        result["visible_collaborators"] = [
+            {
+                "peer": entry.target,
+                "available": entry.available,
+                "sources": entry.sources,
+                "detail": entry.detail,
+                "goal_contacts": [asdict(contact) for contact in entry.goal_contacts],
+            }
+            for entry in projection.visible
         ]
-    }
+    if projection.diagnostics:
+        result["unresolved_goal_mentions"] = [asdict(row) for row in projection.diagnostics]
+    return result
 
 
 def _tags(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
@@ -839,8 +853,8 @@ TOOLS = (
     ToolDeclaration(
         "comms_collaborations",
         "List collaborations",
-        "Read your mutual contacts, including links created by either participant, "
-        "without changing delivery or owners.",
+        "Read explicit contacts and goal-derived awareness with provenance, "
+        "without changing delivery, work acceptance or owners.",
         (),
         _collaborations,
     ),

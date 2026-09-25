@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import stat
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -175,6 +176,8 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
     full_review = json.loads(Path(result["result_file"]).read_text())["standby_review"]
     assert full_review == review
     assert full_review["messages"][0]["text"] == messages[0].body
+    comms.registry.register(replace(comms.registry.require("a"), pid=os.getpid()))
+    comms.begin_turn("a", "next-a-result-in-flight")
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": full_review["reviewed_inputs"]})
     assert comms.goal_wait("b") is not None
     assert all(dispositions.status(f"bus:{message.seq}") == "unknown" for message in messages)
@@ -210,6 +213,10 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
 ):
     comms = inbox_comms
     monkeypatch.setenv("PI_AGENT_ID", "b")
+    # The reviewed standby liveness gate refuses a declared dependency with
+    # no active turn. Give "a" a live in-process turn for this fixture only.
+    comms.register(replace(comms.registry.require("a"), pid=os.getpid()))
+    comms.begin_turn("a", "a-review-in-flight")
     goal = comms.update_goal("b", "set", text="Review a and wait for its next reply")
     dispositions = InputDispositions(comms.root)
     for index in range(930):
@@ -301,7 +308,8 @@ async def test_pending_dependency_becomes_reviewable_after_owner_admission(tmp_p
     owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(owner, "_ensure_live_drain", lambda _: None)
     await owner.new_session(str(tmp_path / "b"))
-    comms.register(Thread("a", frozenset(), str(tmp_path)))
+    comms.register(Thread("a", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.begin_turn("a", "a-admission-in-flight")
     goal = comms.update_goal(
         "b", "set", text="Review dependency and wait", owner_store=owner._open_goal_store()
     )
@@ -325,6 +333,11 @@ async def test_pending_dependency_becomes_reviewable_after_owner_admission(tmp_p
         )
         assert comms.goal_wait("b") is not None
         assert owner._dispositions.status(f"bus:{message.seq}") == "unknown"
-        assert not owner._pending_turns.get("b") and not owner._backend_inboxes
+        # The pre-standby drain legitimately queued one ordinary direct-DM
+        # interrupt (no goal permit, wait/witness captured then). It must be
+        # stale after the standby transition and never replay the input.
+        pending = owner._pending_turns.get("b", [])
+        assert len(pending) == 1 and pending[0].direct_interrupt_goal_id == goal.id
+        assert pending[0].goal_wait_id is None
     finally:
         await owner.shutdown()

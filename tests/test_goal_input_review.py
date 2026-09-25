@@ -1,5 +1,8 @@
 """Explicit inspection decisions unblock waiting without inventing native receipts."""
 
+import asyncio
+import os
+
 import pytest
 
 from agent_comms import Thread, wire
@@ -13,7 +16,8 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _: None)
     await agent.new_session(str(tmp_path / "worker"))
-    comms.register(Thread("parent", frozenset(), str(tmp_path)))
+    comms.register(Thread("parent", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.begin_turn("parent", "parent-delegation-in-flight")
     comms.register(Thread("other", frozenset(), str(tmp_path)))
     goal = comms.update_goal(
         "worker", "set", text="Delegate and wait", owner_store=agent._open_goal_store()
@@ -77,6 +81,11 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
             report.invoke(comms, {**args, "reviewed_inputs": keys})["goal_execution"]["state"]
             == "standby"
         )
+        # Previously queued ordinary turns have an older goal revision and
+        # no wait witness. They must be dropped before any backend start, not
+        # replayed as dependency replies after the new standby decision.
+        if wake := agent._wake_tasks.get("worker"):
+            await asyncio.wait_for(wake, timeout=2)
         agent._schedule_goal("worker")
         assert not agent._pending_turns.get("worker")
         again = comms.goal_input_review("worker", goal.id, ["parent"])

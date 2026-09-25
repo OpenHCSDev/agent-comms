@@ -59,6 +59,7 @@ from acp.schema import (
 from . import backend
 from .declarations import (
     ActivityState,
+    FinishedTurnFence,
     Goal,
     GoalExecution,
     Message,
@@ -81,6 +82,7 @@ from .goal_attempts import (
 )
 from .input_disposition import AcpDeliveryCursors, InputDispositions
 from .operations import OBSERVATION_INTERVAL, Comms, wire
+from .passive_channel_awareness import PassiveChannelAwareness
 from .runtime import RuntimeProxy, RuntimeServer, socket_path
 from .tool_results import tool_result_content
 from .wire_watch import open_wire_watcher
@@ -169,6 +171,7 @@ class CommsAgent:
         self._goal_store: GoalAttemptStore | None = None
         self._pending_goal_origins: dict[str, str] = {}
         self._delivery_cursors = AcpDeliveryCursors(comms.root)
+        self._passive_awareness = PassiveChannelAwareness(comms.root)
         self._legacy_through: dict[str, int] = {}
         self._session_titles: dict[str, str] = {}
         self._display_titles: dict[str, str | None] = {}
@@ -179,6 +182,9 @@ class CommsAgent:
         self._proxy_image_support: dict[str, bool] = {}
         self._auto_wake = auto_wake
         self._pending_turns: dict[str, list[ScheduledTurn]] = {}
+        # Ephemeral one-shot tickets exist only for freshly recorded direct
+        # inputs. Reopening a durable UNKNOWN row cannot mint one by itself.
+        self._direct_interrupt_tickets: dict[str, dict[str, str]] = {}
         self._drain_locks: dict[str, asyncio.Lock] = {}
         self._turn_locks: dict[str, asyncio.Lock] = {}
         self._closing = False
@@ -299,6 +305,19 @@ class CommsAgent:
             high_water=self._comms.message_high_water(),
             fresh=True,
         )
+        with _store_lock(self._comms._wire_lock_path):
+            owner = self._comms.registry.require(thread_name)
+            admission = self._comms.registry.snapshot().admission_generations[owner.name]
+            # Optional awareness cannot turn a committed owner/session
+            # declaration into an apparent failed attach.
+            with suppress(OSError, TypeError, ValueError):
+                self._passive_awareness.initialize(
+                    owner,
+                    admission=admission,
+                    high_water=self._comms.message_high_water(),
+                    channels=self._comms.channel_catalog.targets_for(owner.tags),
+                    fresh=True,
+                )
         self._inbox_cursors[session_id] = cursor
         self._legacy_through[session_id] = legacy
         self._session_titles[session_id] = thread_name
@@ -353,6 +372,19 @@ class CommsAgent:
             high_water=self._comms.message_high_water(),
             fresh=False,
         )
+        with _store_lock(self._comms._wire_lock_path):
+            owner = self._comms.registry.require(thread.name)
+            admission = self._comms.registry.snapshot().admission_generations[owner.name]
+            # A previously committed session remains attachable even if
+            # the best-effort advisory ledger cannot be initialized.
+            with suppress(OSError, TypeError, ValueError):
+                self._passive_awareness.initialize(
+                    owner,
+                    admission=admission,
+                    high_water=self._comms.message_high_water(),
+                    channels=self._comms.channel_catalog.targets_for(owner.tags),
+                    fresh=False,
+                )
         self._inbox_cursors[session_id] = cursor
         self._legacy_through[session_id] = legacy
         self._session_titles[session_id] = thread.name
@@ -822,7 +854,7 @@ class CommsAgent:
                 )
             else:
                 turn_id = uuid4().hex
-                self._comms.begin_turn(thread_name, turn_id, "Waiting for replies")
+                turn_claim = self._comms.begin_turn(thread_name, turn_id, "Waiting for replies")
                 self._active_turns[session_id] = turn_id
                 try:
                     await self._emit_event(session_id, self._started_event(thread_name, turn_id))
@@ -830,8 +862,15 @@ class CommsAgent:
                     await self._collect_replies(session_id, thread_name, sent_seq)
                 finally:
                     self._active_turns.pop(session_id, None)
-                    self._comms.finish_turn(thread_name, turn_id)
-                    await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
+                    terminal_fence = self._comms.finish_turn(
+                        thread_name, turn_id, expected=turn_claim
+                    )
+                    try:
+                        await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
+                    finally:
+                        # Relay output, if any, is committed before the waiter
+                        # observes that this dependency finished silently.
+                        self._comms.pause_waits_after_terminal_turn(terminal_fence)
             self._debug_log("prompt:returning")
             return PromptResponse(stop_reason="end_turn")
         except asyncio.CancelledError:
@@ -1349,6 +1388,15 @@ class CommsAgent:
                         incoming = replace(
                             incoming, goal_id=wait.goal_id, goal_wait_id=wait.wait_id
                         )
+                    elif direct and current.goal is not None and current.goal.active:
+                        # A NEW direct DM may interrupt the goal without being
+                        # a declared dependency reply or a goal continuation.
+                        incoming = replace(
+                            incoming,
+                            direct_interrupt_goal_id=current.goal.id,
+                            direct_interrupt_goal_revision=current.goal.revision,
+                            direct_interrupt_wait_id=wait.wait_id if wait else None,
+                        )
                     key = self._dispositions.bus_key(message, current)
                     admitted = self._dispositions.record(
                         key,
@@ -1367,9 +1415,23 @@ class CommsAgent:
                             current.goal is None
                             or not current.goal.active
                             or dependency_wait is not None
+                            or incoming.direct_interrupt_goal_id is not None
                         )
                         and backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
                     )
+                    if (
+                        admitted
+                        and incoming.direct_interrupt_goal_id is not None
+                        and self._auto_wake
+                        and self._runtime_enabled
+                    ):
+                        ticket = uuid4().hex
+                        self._direct_interrupt_tickets.setdefault(session_id, {})[key] = ticket
+                        incoming = replace(
+                            incoming,
+                            direct_interrupt_input_key=key,
+                            direct_interrupt_ticket=ticket,
+                        )
                 self._delivery_cursors.advance(aliases, message.seq)
                 self._inbox_cursors[session_id] = message.seq
             if row is not None and row["status"] == "unknown":
@@ -1377,6 +1439,7 @@ class CommsAgent:
             if (
                 admitted
                 and dependency_wait is None
+                and incoming.direct_interrupt_goal_id is None
                 and backend_inbox is not None
                 and starts_turn
                 and incoming.reply_target is None
@@ -1428,6 +1491,13 @@ class CommsAgent:
         self._schedule_wake(session_id)
         return pushed
 
+    def _forget_direct_interrupt(self, session_id: str, turn: ScheduledTurn) -> None:
+        tickets = self._direct_interrupt_tickets.get(session_id, {})
+        if turn.direct_interrupt_input_key and tickets.get(turn.direct_interrupt_input_key) == (
+            turn.direct_interrupt_ticket
+        ):
+            tickets.pop(turn.direct_interrupt_input_key, None)
+
     def _schedule_wake(self, session_id: str) -> None:
         if (
             self._closing
@@ -1447,12 +1517,25 @@ class CommsAgent:
                     if not self._comms.registry.status(owner.name).running:
                         # The durable UNKNOWN rows remain visible. A stopped
                         # owner cannot launch a turn from this old wake queue.
+                        for turn in pending:
+                            self._forget_direct_interrupt(session_id, turn)
                         continue
                     goal = owner.goal
+                    wait = self._comms.goal_wait(owner.name)
+                    wait_id = wait.wait_id if wait else None
+                    old_pending = pending
                     if goal is not None and goal.active:
-                        pending = [turn for turn in pending if turn.goal_id == goal.id]
+                        pending = [
+                            turn
+                            for turn in pending
+                            if (turn.goal_id == goal.id or turn.direct_interrupt_goal_id == goal.id)
+                            and turn.still_current_interrupt(goal, wait_id)
+                        ]
                     else:
                         pending = [turn for turn in pending if turn.goal_id is None]
+                    for turn in old_pending:
+                        if turn not in pending:
+                            self._forget_direct_interrupt(session_id, turn)
                     if not pending:
                         continue
                     pending, remaining = ScheduledTurn.take_batch(pending)
@@ -1478,6 +1561,13 @@ class CommsAgent:
                                 and pending[0].origin is None
                             ),
                             dependency_wait_id=pending[0].goal_wait_id,
+                            direct_interrupt_goal_id=pending[0].direct_interrupt_goal_id,
+                            direct_interrupt_goal_revision=pending[
+                                0
+                            ].direct_interrupt_goal_revision,
+                            direct_interrupt_wait_id=pending[0].direct_interrupt_wait_id,
+                            direct_interrupt_input_key=pending[0].direct_interrupt_input_key,
+                            direct_interrupt_ticket=pending[0].direct_interrupt_ticket,
                         )
                     except RequestError:
                         if pending[0].goal_wait_id is None or goal is None:
@@ -1504,12 +1594,25 @@ class CommsAgent:
             or session_id in self._turn_tasks
             or session_id in self._backend_inboxes
             or session_id in self._active_turns
-            or self._pending_turns.get(session_id)
         ):
             return
         if (wake := self._wake_tasks.get(session_id)) is not None and not wake.done():
             return
         thread = self._comms.registry.require(self._require_session(session_id))
+        if pending := self._pending_turns.get(session_id):
+            wait = self._comms.goal_wait(thread.name)
+            fresh = [
+                turn
+                for turn in pending
+                if turn.still_current_interrupt(thread.goal, wait.wait_id if wait else None)
+            ]
+            for turn in pending:
+                if turn not in fresh:
+                    self._forget_direct_interrupt(session_id, turn)
+            if fresh:
+                self._pending_turns[session_id] = fresh
+                return
+            self._pending_turns.pop(session_id, None)
         if thread.pid != os.getpid() or not self._comms.registry.status(thread.name).running:
             return
         goal = thread.goal
@@ -1733,6 +1836,11 @@ class CommsAgent:
         original_owner_input: bool = False,
         original_goal_id: str | None = None,
         dependency_wait_id: str | None = None,
+        direct_interrupt_goal_id: str | None = None,
+        direct_interrupt_goal_revision: int | None = None,
+        direct_interrupt_wait_id: str | None = None,
+        direct_interrupt_input_key: str | None = None,
+        direct_interrupt_ticket: str | None = None,
     ) -> None:
         """Stream a real coding agent's reply: events to the client, status to the wire."""
         original_display = None if autonomous_goal else (initial_display_text or task)
@@ -1748,7 +1856,50 @@ class CommsAgent:
             return
         goal = thread.goal
         wait = self._comms.goal_wait(thread_name)
-        if wait is not None and not original_owner_input and wait.wait_id != dependency_wait_id:
+        direct_interrupt = direct_interrupt_goal_id is not None
+        if direct_interrupt:
+            tickets = self._direct_interrupt_tickets.get(session_id, {})
+            if (
+                direct_interrupt_input_key is None
+                or direct_interrupt_ticket is None
+                or tickets.get(direct_interrupt_input_key) != direct_interrupt_ticket
+            ):
+                return
+            tickets.pop(direct_interrupt_input_key, None)  # one admission, one turn at most
+            # A typed interruption must be one NEW exact direct input. No
+            # standby wait may be replaced/cleared between admission and start.
+            aliases = self._comms.registry.aliases_for(thread_name)
+            if (
+                autonomous_goal
+                or original_owner_input
+                or dependency_wait_id is not None
+                or goal is None
+                or not goal.active
+                or goal.id != direct_interrupt_goal_id
+                or goal.revision != direct_interrupt_goal_revision
+                or (wait.wait_id if wait else None) != direct_interrupt_wait_id
+                or len(origins) != 1
+                or origins[0].seq <= 0
+                or origins[0].target not in aliases
+                or direct_interrupt_input_key is None
+                or original_keys
+                or direct_interrupt_input_key != self._dispositions.bus_key(origins[0], thread)
+            ):
+                return
+            row = self._dispositions.get(direct_interrupt_input_key)
+            if (
+                row is None
+                or row["status"] != "unknown"
+                or row["native_id"] is not None
+                or row["sequence"] != origins[0].seq
+            ):
+                return
+        if (
+            wait is not None
+            and not original_owner_input
+            and not direct_interrupt
+            and wait.wait_id != dependency_wait_id
+        ):
             return
         if dependency_wait_id is not None and (wait is None or wait.wait_id != dependency_wait_id):
             return
@@ -1759,7 +1910,7 @@ class CommsAgent:
         goal_permit: LaunchPermit | None = None
         if autonomous_goal and (goal is None or not goal.active):
             return
-        if goal is not None and goal.active:
+        if goal is not None and goal.active and not direct_interrupt:
             if backend.rpc_args_for(self._agent_bin, self._agent_args) is None:
                 if autonomous_goal:
                     return
@@ -1797,7 +1948,7 @@ class CommsAgent:
             origins, MessageRoute(thread_name, reply_targets) if reply_targets else None
         )
         checkpoint = self._comms.transcript_checkpoint(thread_name)
-        self._comms.begin_turn(thread_name, turn_id, task[:80], routing)
+        turn_claim = self._comms.begin_turn(thread_name, turn_id, task[:80], routing)
         turn_admission = self._comms.registry.snapshot().admission_generations[thread_name]
         direct_origins = tuple(
             origin
@@ -1825,6 +1976,8 @@ class CommsAgent:
         self._steering_origins[session_id] = {}
         self._steering_goal_ids[session_id] = {}
 
+        passive_frame = ""
+        passive_sources: tuple[tuple[int, str, str], ...] = ()
         channel_batch = (
             len(origins) > 1
             and len({origin.seq for origin in origins}) == len(origins)
@@ -1895,6 +2048,20 @@ class CommsAgent:
                         else ()
                     )
                 )
+                interrupt_ok = (
+                    direct_interrupt
+                    and public_id is None
+                    and current_goal is not None
+                    and current_goal.active
+                    and current_goal.id == direct_interrupt_goal_id
+                    and current_goal.revision == direct_interrupt_goal_revision
+                    and (current_wait.wait_id if current_wait else None) == direct_interrupt_wait_id
+                    and len(direct_origins) == 1
+                    and len(keys) == 1
+                    and current is not None
+                    and keys[0] == direct_interrupt_input_key
+                    and keys[0] == self._dispositions.bus_key(direct_origins[0], current)
+                )
                 owner_ok = (
                     current is not None
                     and input_keys_valid(public_id, keys, sent_text)
@@ -1906,6 +2073,17 @@ class CommsAgent:
                     and current.active_turn is not None
                     and current.active_turn.id == turn_id
                 )
+                if owner_ok and public_id is None and passive_frame:
+                    assert current is not None
+                    try:
+                        owner_ok = self._passive_awareness.still_current(
+                            current,
+                            snapshot,
+                            self._comms.channel_catalog.targets_for(current.tags),
+                            passive_sources,
+                        )
+                    except (OSError, TypeError, ValueError):
+                        owner_ok = False  # No stale advisory frame crosses native start.
                 # A newly activated goal may supersede a follow-up that has
                 # not yet been sent. Owner revocation still ends the turn.
                 defer_for_goal = (
@@ -1922,6 +2100,7 @@ class CommsAgent:
                         current_wait is None
                         or owner_followup
                         or (public_id is None and original_owner_input)
+                        or interrupt_ok
                         or (
                             public_id is None
                             and current_wait.wait_id == dependency_wait_id
@@ -1942,7 +2121,11 @@ class CommsAgent:
                         and not owner_followup
                         and not (
                             public_id is None
-                            and (original_owner_input or dependency_wait_id is not None)
+                            and (
+                                original_owner_input
+                                or dependency_wait_id is not None
+                                or interrupt_ok
+                            )
                         )
                     )
                 )
@@ -1982,7 +2165,7 @@ class CommsAgent:
                         ):
                             allowed = False
                             break
-                if allowed and current_wait is not None:
+                if allowed and current_wait is not None and not interrupt_ok:
                     allowed = self._comms.consume_goal_wait(canonical, current_wait.wait_id)
                 if allowed:
                     if public_id is None:
@@ -2048,19 +2231,31 @@ class CommsAgent:
             f"Peer state: {json.dumps(peers)}\n\n{task}"
         )
         if goal is not None and goal.active:
-            task = (
-                f"Persistent goal {goal.id}: {goal.text}\nProgress: {goal.progress}\n"
-                "Work toward this goal while respecting follow-up instructions. "
-                "Use comms_goal with this goal_id to record useful progress. Set status completed "
-                "only after verifying success, blocked when you need user input, or active "
-                "to continue useful work in another turn. When waiting for delegated work, "
-                "set status standby with explicit wait_for thread names and explain what you need. "
-                "The goal stays active without polling; a direct message from a named dependency "
-                "or an explicit user follow-up starts the next goal turn. "
-                "Do not return empty output "
-                "or repeatedly announce waiting. Do not wait or poll; "
-                "the owner schedules continuation.\n\n" + task
-            )
+            if direct_interrupt:
+                task = (
+                    f"Persistent goal {goal.id} is parked for this ordinary direct-message "
+                    "interruption. This is NOT a goal attempt or declared dependency reply. "
+                    "Respond to this message first; do not call comms_goal merely to finish "
+                    "the DM, report goal progress, clear its standby wait, or retry an UNKNOWN "
+                    "input. The goal remains separately scheduled.\n\n" + task
+                )
+            else:
+                task = (
+                    f"Persistent goal {goal.id}: {goal.text}\nProgress: {goal.progress}\n"
+                    "Work toward this goal while respecting follow-up instructions. "
+                    "Use comms_goal with this goal_id to record useful progress. "
+                    "Set status completed "
+                    "only after verifying success, blocked when you need user input, or active "
+                    "to continue useful work in another turn. When waiting for delegated work, "
+                    "set status standby with explicit wait_for thread names "
+                    "and explain what you need. "
+                    "The goal stays active without polling; a direct message from a named "
+                    "dependency "
+                    "or an explicit user follow-up starts the next goal turn. "
+                    "Do not return empty output "
+                    "or repeatedly announce waiting. Do not wait or poll; "
+                    "the owner schedules continuation.\n\n" + task
+                )
         if thread.auto_title_pending:
             task = (
                 "Give this new thread a concise topic title before doing the task: call "
@@ -2084,6 +2279,7 @@ class CommsAgent:
         originated_attempts: dict[str, LaunchPermit] = {}
         unattributed_usage: list[tuple[str, dict[str, Any]]] = []
         settled = False
+        terminal_fence: FinishedTurnFence | None = None
         cancelled = False
         compaction_resume_activity: tuple[ActivityState, str] | None = None
 
@@ -2107,6 +2303,38 @@ class CommsAgent:
             await self._emit_event(session_id, self._started_event(thread_name, turn_id))
             await self.emit_input_delivery_changed(session_id)
             await self._drain_inbox(session_id)
+            # ACP delivery/ACK/UI updates above are not model context. This
+            # bounded projection is prepared ONLY inside an already authorized
+            # natural turn, from a separate owner-bound source cursor. It never
+            # advances that cursor or creates a wake, claim or native receipt.
+            if backend.rpc_args_for(self._agent_bin, self._agent_args) is not None:
+                with _store_lock(self._comms._wire_lock_path):
+                    snapshot = self._comms.registry.snapshot()
+                    current_thread = snapshot.threads.get(thread_name)
+                    if (
+                        current_thread is not None
+                        and current_thread.created_at == thread.created_at
+                        and snapshot.admission_generations.get(thread_name) == turn_admission
+                        and current_thread.active_turn is not None
+                        and current_thread.active_turn.id == turn_id
+                    ):
+                        try:
+                            passive_frame = self._passive_awareness.frame(
+                                current_thread,
+                                snapshot,
+                                self._comms.channel_catalog.targets_for(current_thread.tags),
+                            )
+                            if passive_frame:
+                                passive_sources = self._passive_awareness.sources(current_thread)
+                                if passive_sources:
+                                    task += passive_frame
+                                else:
+                                    passive_frame = ""
+                        except (OSError, TypeError, ValueError):
+                            # Before native start, omit the optional projection;
+                            # the already-authorized owner task remains intact.
+                            passive_frame = ""
+                            passive_sources = ()
             session_file = thread.session_file
             fork_session = False
             if not session_file and thread.parent:
@@ -2266,6 +2494,7 @@ class CommsAgent:
                     kind == "done"
                     and goal is not None
                     and goal.active
+                    and not direct_interrupt
                     and self._comms.registry.require(thread_name).worktree == thread.worktree
                 ):
                     current_goal = self._comms.registry.require(thread_name).goal
@@ -2367,7 +2596,9 @@ class CommsAgent:
                     update_turn_activity(ActivityState.THINKING, task[:80])
                 elif kind == "settled":
                     compaction_resume_activity = None
-                    self._comms.finish_turn(thread_name, turn_id)
+                    terminal_fence = self._comms.finish_turn(
+                        thread_name, turn_id, expected=turn_claim
+                    )
                     settled = True
                     finish_event.set()
                     self._active_turns.pop(session_id, None)
@@ -2393,7 +2624,7 @@ class CommsAgent:
                         )
                 if kind in {"input_started", "done", "settled"}:
                     await self._sync_goal_execution(session_id, thread_name)
-            if terminal_ok is None and goal is not None and goal.active:
+            if terminal_ok is None and goal is not None and goal.active and not direct_interrupt:
                 # An EOF without a done event is a failed turn, not a signal to
                 # schedule the still-active goal again on the next live drain.
                 current_thread = self._comms.registry.require(thread_name)
@@ -2617,9 +2848,16 @@ class CommsAgent:
                     )
                 )
             if not settled:
-                self._comms.finish_turn(thread_name, turn_id)
+                terminal_fence = self._comms.finish_turn(thread_name, turn_id, expected=turn_claim)
                 self._active_turns.pop(session_id, None)
-                await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
+                try:
+                    await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
+                finally:
+                    self._comms.pause_waits_after_terminal_turn(terminal_fence)
+            else:
+                # `settled` precedes terminal `done` in native RPC. Reconcile
+                # only after the terminal reply or failure notice was published.
+                self._comms.pause_waits_after_terminal_turn(terminal_fence)
 
     def _started_event(self, thread_name: str, turn_id: str) -> dict[str, Any]:
         """Project one owner-authored turn without inventing presentation timestamps."""
@@ -2653,6 +2891,7 @@ class CommsAgent:
         self._closing = True
         for wake_task in self._wake_tasks.values():
             wake_task.cancel()
+        self._direct_interrupt_tickets.clear()
         await asyncio.gather(*self._wake_tasks.values(), return_exceptions=True)
         for proxy in self._proxies.values():
             await proxy.close()
