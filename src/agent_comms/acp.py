@@ -1283,14 +1283,14 @@ class CommsAgent:
                 current_name = snapshot.aliases.get(thread_name, thread_name)
                 current = snapshot.threads[current_name]
                 status = snapshot.statuses[current_name]
-                if direct:
-                    wait = self._comms.goal_wait(current_name)
+                if starts_turn:
+                    wait = self._comms.goal_wait(current_name) if direct else None
                     if wait is not None and wait.matches(message, snapshot):
                         dependency_wait = wait
                         incoming = replace(
                             incoming, goal_id=wait.goal_id, goal_wait_id=wait.wait_id
                         )
-                    key = f"bus:{message.seq}"
+                    key = self._dispositions.bus_key(message, current)
                     admitted = self._dispositions.record(
                         key,
                         seq=message.seq,
@@ -1322,21 +1322,18 @@ class CommsAgent:
                 and starts_turn
                 and incoming.reply_target is None
             ):
-                if direct:
-                    input_id = f"bus-{message.seq}"
-                    self._steering_input_keys.setdefault(session_id, {})[input_id] = key
-                    self._turn_input_keys.setdefault(session_id, set()).add(key)
-                    self._forwarded_inputs.setdefault(session_id, set()).add(input_id)
-                    backend_inbox.put_nowait(
-                        {
-                            "type": "prompt",
-                            "message": incoming.prompt,
-                            "streamingBehavior": "steer",
-                            "_input_id": input_id,
-                        }
-                    )
-                else:
-                    backend_inbox.put_nowait(incoming.prompt)
+                input_id = f"bus-{message.seq}"
+                self._steering_input_keys.setdefault(session_id, {})[input_id] = key
+                self._turn_input_keys.setdefault(session_id, set()).add(key)
+                self._forwarded_inputs.setdefault(session_id, set()).add(input_id)
+                backend_inbox.put_nowait(
+                    {
+                        "type": "prompt",
+                        "message": incoming.prompt,
+                        "streamingBehavior": "steer",
+                        "_input_id": input_id,
+                    }
+                )
             elif admitted and self._auto_wake and self._runtime_enabled and starts_turn:
                 self._pending_turns.setdefault(session_id, []).append(incoming)
             await self._runtime.session_update(
@@ -1397,7 +1394,14 @@ class CommsAgent:
                         pending = [turn for turn in pending if turn.goal_id is None]
                     if not pending:
                         continue
-                    pending, remaining = ScheduledTurn.take_batch(pending)
+                    # Every bus sequence needs its own exact native receipt.
+                    # Combining channel requests would make one input ID stand
+                    # for several independently durable dispositions.
+                    pending, remaining = (
+                        (pending[:1], pending[1:])
+                        if pending[0].origin is not None
+                        else ScheduledTurn.take_batch(pending)
+                    )
                     if remaining:
                         self._pending_turns[session_id] = remaining
                     self._turn_tasks[session_id] = asyncio.current_task()  # type: ignore[assignment]
@@ -1652,12 +1656,11 @@ class CommsAgent:
         assert owner_task is not None
         thread = self._comms.registry.require(thread_name)
         thread_name = thread.name
-        direct_targets = self._comms.registry.aliases_for(thread_name)
         if backend.rpc_args_for(self._agent_bin, self._agent_args) is None and any(
-            origin.seq > 0 and origin.target in direct_targets for origin in origins
+            origin.seq > 0 for origin in origins
         ):
             # A text backend has no native user-start receipt. Its process
-            # must not run for a direct whose UNKNOWN row needs that proof.
+            # must not run for a bus input whose UNKNOWN row needs that proof.
             return
         goal = thread.goal
         wait = self._comms.goal_wait(thread_name)
@@ -1719,11 +1722,12 @@ class CommsAgent:
             for origin in origins
             if origin.seq > 0 and origin.target in self._comms.registry.aliases_for(thread_name)
         )
-        if direct_origins:
+        bus_origins = tuple(origin for origin in origins if origin.seq > 0)
+        if bus_origins:
             with _store_lock(self._comms._wire_lock_path):
                 snapshot = self._comms.registry.snapshot()
-                for origin in direct_origins:
-                    key = f"bus:{origin.seq}"
+                for origin in bus_origins:
+                    key = self._dispositions.bus_key(origin, thread)
                     if self._dispositions.get(key) is None:
                         self._dispositions.record(
                             key,
