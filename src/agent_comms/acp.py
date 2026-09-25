@@ -906,7 +906,7 @@ class CommsAgent:
             return
         name = self._sessions.get(session_id)
         if name and (goal := self._comms.registry.require(name).goal) and goal.active:
-            self._comms.update_goal(name, "paused", goal_id=goal.id)
+            self._comms.update_goal(name, "paused", goal_id=goal.id, owner_action=True)
         task = self._turn_tasks.get(session_id)
         if task is not None:
             task.cancel()
@@ -2125,7 +2125,9 @@ class CommsAgent:
                         witness = f"registry-revision:{current_goal.revision}"
                         self._goal_store.record_verified_completion(goal_permit, witness)
                         goal_attempt_resolved = True
-                    elif current_goal.active:
+                    elif current_goal.active or current_goal.status == "paused":
+                        # A successful in-flight turn may finish after owner pause.
+                        # Preserve success; the scheduler will not launch while paused.
                         self._goal_store.record_verified_progress(goal_permit, witness)
                         goal_attempt_resolved = True
                 if not goal_attempt_resolved:

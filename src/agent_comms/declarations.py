@@ -789,6 +789,12 @@ def channel_tag(target: str) -> str:
 # own parent. Every Thread in the system derives its semantics from this type.
 
 
+class GoalPauseSource(StrEnum):
+    OWNER = "owner"
+    MODEL = "model"
+    RUNTIME = "runtime"
+
+
 @dataclass(frozen=True, slots=True)
 class Goal:
     """One durable objective shared by its executing owner and all clients."""
@@ -802,8 +808,11 @@ class Goal:
     # identical values, so a captured Goal cannot pass a stale CAS after ABA.
     revision: int = 0
     reported_turn: str | None = None
+    paused_by: GoalPauseSource | None = None
 
     def __post_init__(self) -> None:
+        if self.paused_by is not None:
+            object.__setattr__(self, "paused_by", GoalPauseSource(self.paused_by))
         if not self.text.strip() or not self.id:
             raise ValueError("A goal requires text and an identity.")
         if self.status not in {"active", "paused", "blocked", "completed"}:
@@ -816,6 +825,15 @@ class Goal:
     @property
     def active(self) -> bool:
         return self.status == "active"
+
+    @property
+    def owner_pause_instruction(self) -> str | None:
+        if self.status == "paused" and self.paused_by is GoalPauseSource.OWNER:
+            return (
+                "This goal was paused by the owner. Do not resume or continue it; "
+                "wait for the owner to explicitly resume it using the goal controls."
+            )
+        return None
 
     @property
     def toggle_action(self) -> str:

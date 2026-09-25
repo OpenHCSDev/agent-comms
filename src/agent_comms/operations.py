@@ -48,6 +48,7 @@ from .declarations import (
     CoordinationSnapshot,
     DMDisplayBasis,
     Goal,
+    GoalPauseSource,
     MembershipChange,
     Message,
     MessageBus,
@@ -2204,6 +2205,7 @@ class Comms:
         expected_status: str | None = None,
         expected_goal: Goal | None = None,
         model_report: bool = False,
+        owner_action: bool = False,
         owner_store: GoalAttemptStore | None = None,
         expected_owner_pid: int | None = None,
     ) -> Goal | None:
@@ -2225,7 +2227,10 @@ class Comms:
             if goal_id is not None and (goal is None or goal.id != goal_id):
                 raise ValueError("This goal was replaced or cleared; refresh its state.")
             if expected_status is not None and (goal is None or goal.status != expected_status):
-                raise ValueError("This goal is no longer active; refresh its state.")
+                raise ValueError(
+                    (goal.owner_pause_instruction if goal is not None else None)
+                    or "This goal is no longer active; refresh its state."
+                )
             report_turn = thread.active_turn.id if thread.active_turn is not None else ""
             if model_report and thread.last_goal_report_turn == report_turn:
                 raise ValueError("This goal was already reported in this turn.")
@@ -2274,6 +2279,15 @@ class Comms:
                     progress=goal.progress if progress is None else progress,
                     revision=goal.revision + 1,
                     reported_turn=report_turn if model_report else goal.reported_turn,
+                    paused_by=(
+                        (
+                            GoalPauseSource.OWNER
+                            if owner_action
+                            else GoalPauseSource.MODEL if model_report else GoalPauseSource.RUNTIME
+                        )
+                        if action == "paused"
+                        else None if action == "active" else goal.paused_by
+                    ),
                 )
             else:
                 raise ValueError(f"Unknown goal action: {action}")
