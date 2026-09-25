@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import { writeNativeServer } from '../src/config-write.mjs';
 import { parseNativeConfig } from '../src/config.mjs';
 import { loadEffectiveDeclarations } from '../src/sources.mjs';
@@ -22,6 +23,10 @@ test('native config writer adds/replaces whole declarations without launch or se
     const input = declaration(process.execPath);
     input.transport.args = ['-e', `require('fs').writeFileSync(${JSON.stringify(marker)},'launched')`];
     const opts = { agentDir, projectRoot, configDirName: '.pi', scope: 'project' };
+    await assert.rejects(writeNativeServer({ ...opts, declaration: input }), /Saved Pi project trust required/);
+    assert.equal(existsSync(join(projectRoot, '.pi', 'mcp.json')), false);
+    await mkdir(agentDir, { recursive: true });
+    new ProjectTrustStore(agentDir).set(projectRoot, true);
     const added = await writeNativeServer({ ...opts, declaration: input });
     assert.equal(added.id, 'fixture');
     assert.equal(existsSync(marker), false);
@@ -49,6 +54,8 @@ test('native config writer refuses a project config directory symlink', async ()
   const elsewhere = join(root, 'elsewhere');
   await mkdir(projectRoot); await mkdir(elsewhere);
   await symlink(elsewhere, join(projectRoot, '.pi'));
+  await mkdir(join(root, 'agent'));
+  new ProjectTrustStore(join(root, 'agent')).set(projectRoot, true);
   try {
     await assert.rejects(writeNativeServer({ agentDir: join(root, 'agent'), projectRoot,
       configDirName: '.pi', scope: 'project', declaration: declaration('noop') }), /symlink refused/);

@@ -1,5 +1,6 @@
 import { lstat, mkdir, realpath } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
+import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import { updateJsonFile } from './atomic-file.mjs';
 import { declarationDigest, parseNativeConfig } from './config.mjs';
 
@@ -13,6 +14,9 @@ export async function writeNativeServer({ agentDir, projectRoot, configDirName, 
     throw new Error('Invalid MCP config destination');
   }
   const canonicalRoot = await realpath(projectRoot);
+  if (scope === 'project' && new ProjectTrustStore(agentDir).get(canonicalRoot) !== true) {
+    throw new Error('Saved Pi project trust required before editing project MCP config');
+  }
   const server = parseNativeConfig(JSON.stringify({ version: 1, servers: [declaration] })).servers[0];
   const directory = scope === 'user' ? agentDir : join(canonicalRoot, configDirName);
   await mkdir(directory, { recursive: true, mode: scope === 'user' ? 0o700 : 0o755 });

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,7 +36,9 @@ test('CLI redacts literal env values, reports saved trust, refuses unattended wr
     assert.equal(existsSync(join(projectRoot, '.pi', 'mcp.json')), false);
     const declaration = { id: 'fixture', enabled: true, instructionsPolicy: 'status-only',
       transport: { type: 'stdio', command: process.execPath, args: [], cwd: 'project' } };
-    await writeNativeServer({ agentDir, projectRoot, configDirName: '.pi', scope: 'project', declaration });
+    await mkdir(join(projectRoot, '.pi'));
+    await writeFile(join(projectRoot, '.pi', 'mcp.json'),
+      JSON.stringify({ version: 1, servers: [declaration] }));
     let status = call('status', '--json');
     assert.equal(status.status, 0, status.stderr);
     let json = JSON.parse(status.stdout);
