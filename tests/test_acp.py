@@ -2214,7 +2214,8 @@ class TestLiveConfigSync:
             goal = wired.update_goal("proj", "set", text="Handle assigned work")
             await assert_snapshot_update()
 
-            wired.register(Thread("child", frozenset(), str(tmp_path)))
+            wired.register(Thread("child", frozenset(), str(tmp_path), pid=os.getpid()))
+            wired.begin_turn("child", "child-metadata-work")
             wired.update_goal("proj", "standby", goal_id=goal.id, wait_for=["child"])
             await assert_snapshot_update()
 

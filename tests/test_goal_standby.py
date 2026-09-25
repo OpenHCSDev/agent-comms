@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from dataclasses import replace
 
 import pytest
@@ -24,7 +25,8 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "parent"))
-    comms.register(Thread("child", frozenset(), str(tmp_path)))
+    comms.register(Thread("child", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.begin_turn("child", "child-review-in-flight")
     comms.register(Thread("other", frozenset(), str(tmp_path)))
     store = agent._open_goal_store()
     goal = comms.update_goal("parent", "set", text="Review @child work", owner_store=store)

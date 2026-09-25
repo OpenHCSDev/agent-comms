@@ -2386,6 +2386,100 @@ class Comms:
         waits = GoalWaits(self.root / "goal_waits.json")
         return waits.for_goal(self.registry.require(name).goal, waits.snapshot())
 
+    def pause_waits_after_terminal_turn(self, name: str, *, created_at: float) -> tuple[str, ...]:
+        """Surface a silent dependency terminal result; never create a model input.
+
+        ACP calls this only *after* its terminal reply has been published. Its
+        earlier `finish_turn` is a UI settlement, not proof that no reply will
+        follow. The saved waiter/target incarnations and exact current goal
+        are rechecked under the same wire lock as the bus and pause writes.
+        """
+        with _store_lock(self._wire_lock_path):
+            snapshot = self.registry.snapshot()
+            canonical = snapshot.aliases.get(name, name)
+            source = snapshot.threads.get(canonical)
+            if source is None or source.created_at != created_at or source.active_turn is not None:
+                return ()
+            waits = GoalWaits(self.root / "goal_waits.json").snapshot()
+            paused: list[str] = []
+            for owner in snapshot.threads.values():
+                goal = owner.goal
+                if goal is None or not goal.active:
+                    continue
+                wait = waits.get(goal.id)
+                if (
+                    wait is None
+                    or wait.owner_created_at != owner.created_at
+                    or wait.revision > goal.revision
+                    or not any(
+                        snapshot.aliases.get(target.name, target.name) == canonical
+                        and target.created_at == created_at
+                        for target in wait.targets
+                    )
+                    or any(
+                        GoalWaits.target_has_active_turn(target, snapshot)
+                        for target in wait.targets
+                    )
+                ):
+                    continue
+                owner_aliases = frozenset(
+                    {
+                        owner.name,
+                        *(
+                            alias
+                            for alias, target in snapshot.aliases.items()
+                            if target == owner.name
+                        ),
+                    }
+                )
+
+                def qualifies_direct_reply(
+                    message: Message,
+                    *,
+                    aliases: frozenset[str] = owner_aliases,
+                    owner_name: str = owner.name,
+                    current_wait: GoalWait = wait,
+                ) -> bool:
+                    return (
+                        message.target in aliases
+                        and message.starts_turn_for(owner_name, aliases=snapshot.aliases)
+                        and current_wait.matches(message, snapshot)
+                    )
+
+                reply = self.bus._history_page(
+                    qualifies_direct_reply,
+                    before=None,
+                    after=wait.after_seq,
+                    limit=1,
+                    max_bytes=256 * 1024,
+                    targets=owner_aliases,
+                )
+                if reply.messages:
+                    continue
+                diagnostic = (
+                    f"Declared dependency @{canonical} finished without a qualifying direct "
+                    "reply, and no declared dependency has an active turn. "
+                    "Goal paused: inspect messages and UNKNOWN inputs before explicitly "
+                    "resuming or redelegating. No model turn or claim was admitted."
+                )
+                progress = f"{goal.progress}\n\n{diagnostic}" if goal.progress else diagnostic
+                # The entire owner/incarnation/goal check and transition is
+                # protected by the wire lock. Persist the non-runnable goal
+                # FIRST: a crash before wait-clear leaves an orphan wait that
+                # cannot launch while the goal is paused.
+                paused_goal = replace(
+                    goal, status="paused", progress=progress, revision=goal.revision + 1
+                )
+                self.registry.register(
+                    replace(owner, goal=paused_goal), snapshot.statuses[owner.name]
+                )
+                GoalWaits(self.root / "goal_waits.json").clear(goal.id, wait_id=wait.wait_id)
+                GoalPauseEvents(self.root / "goal_pause_events.json").record(
+                    GoalPauseEvent(goal.id, paused_goal.revision, GoalPauseSource.RUNTIME)
+                )
+                paused.append(owner.name)
+            return tuple(paused)
+
     def goal_execution(self, name: str) -> GoalExecution | None:
         return self._goal_snapshot(name)[1]
 
@@ -2581,6 +2675,21 @@ class Comms:
                         "for a later reply. Do not pass excluded owner or other dependency inputs. "
                         "This does not mark them STARTED or replay them."
                     )
+                snapshot = self.registry.snapshot()
+                if not any(
+                    GoalWaits.target_has_active_turn(target, snapshot)
+                    and self._process_alive(
+                        snapshot.threads[snapshot.aliases.get(target.name, target.name)].pid
+                    )
+                    for target in wait_targets
+                ):
+                    names = ", ".join(f"@{target.name}" for target in wait_targets)
+                    raise ValueError(
+                        f"No declared dependency has an active turn ({names}). "
+                        "A running/ready process or queued input does not prove active work. "
+                        "Message or restart the responsible agent, inspect its status, "
+                        "then declare standby only while a target is actually working."
+                    )
             elif wait_for or reviewed_inputs:
                 raise ValueError("wait_for and reviewed_inputs are only valid for standby.")
             report_turn = thread.active_turn.id if thread.active_turn is not None else ""
@@ -2678,7 +2787,12 @@ class Comms:
                 # progress update must leave this same goal waiting, not runnable.
                 waits.record(
                     GoalWait(
-                        goal.id, uuid4().hex, goal.revision, self.message_high_water(), wait_targets
+                        goal.id,
+                        uuid4().hex,
+                        goal.revision,
+                        self.message_high_water(),
+                        wait_targets,
+                        owner_created_at=thread.created_at,
                     )
                 )
             self.registry.register(

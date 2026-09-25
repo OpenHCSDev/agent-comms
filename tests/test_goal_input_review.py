@@ -1,5 +1,7 @@
 """Explicit inspection decisions unblock waiting without inventing native receipts."""
 
+import os
+
 import pytest
 
 from agent_comms import Thread, wire
@@ -13,7 +15,8 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _: None)
     await agent.new_session(str(tmp_path / "worker"))
-    comms.register(Thread("parent", frozenset(), str(tmp_path)))
+    comms.register(Thread("parent", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.begin_turn("parent", "parent-delegation-in-flight")
     comms.register(Thread("other", frozenset(), str(tmp_path)))
     goal = comms.update_goal(
         "worker", "set", text="Delegate and wait", owner_store=agent._open_goal_store()

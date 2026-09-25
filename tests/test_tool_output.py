@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import stat
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -173,6 +174,8 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(inbox_comms
     full_review = json.loads(Path(result["result_file"]).read_text())["standby_review"]
     assert full_review == review
     assert full_review["messages"][0]["text"] == messages[0].body
+    comms.registry.register(replace(comms.registry.require("a"), pid=os.getpid()))
+    comms.begin_turn("a", "next-a-result-in-flight")
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": full_review["reviewed_inputs"]})
     assert comms.goal_wait("b") is not None
     assert all(dispositions.status(f"bus:{message.seq}") == "unknown" for message in messages)

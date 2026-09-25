@@ -822,6 +822,7 @@ class CommsAgent:
                 )
             else:
                 turn_id = uuid4().hex
+                source_created_at = self._comms.registry.require(thread_name).created_at
                 self._comms.begin_turn(thread_name, turn_id, "Waiting for replies")
                 self._active_turns[session_id] = turn_id
                 try:
@@ -831,7 +832,14 @@ class CommsAgent:
                 finally:
                     self._active_turns.pop(session_id, None)
                     self._comms.finish_turn(thread_name, turn_id)
-                    await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
+                    try:
+                        await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
+                    finally:
+                        # Relay output, if any, is committed before the waiter
+                        # observes that this dependency finished silently.
+                        self._comms.pause_waits_after_terminal_turn(
+                            thread_name, created_at=source_created_at
+                        )
             self._debug_log("prompt:returning")
             return PromptResponse(stop_reason="end_turn")
         except asyncio.CancelledError:
@@ -2642,7 +2650,18 @@ class CommsAgent:
             if not settled:
                 self._comms.finish_turn(thread_name, turn_id)
                 self._active_turns.pop(session_id, None)
-                await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
+                try:
+                    await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
+                finally:
+                    self._comms.pause_waits_after_terminal_turn(
+                        thread_name, created_at=thread.created_at
+                    )
+            else:
+                # `settled` precedes terminal `done` in native RPC. Reconcile
+                # only after the terminal reply or failure notice was published.
+                self._comms.pause_waits_after_terminal_turn(
+                    thread_name, created_at=thread.created_at
+                )
 
     def _started_event(self, thread_name: str, turn_id: str) -> dict[str, Any]:
         """Project one owner-authored turn without inventing presentation timestamps."""

@@ -25,6 +25,7 @@ class GoalWait:
     revision: int
     after_seq: int
     targets: tuple[GoalWaitTarget, ...]
+    owner_created_at: float | None = None
 
     def matches(self, message: Message, snapshot: RegistrySnapshot) -> bool:
         sender = snapshot.threads.get(snapshot.aliases.get(message.sender, message.sender))
@@ -97,6 +98,7 @@ class GoalWaits:
                 revision=row["revision"],
                 after_seq=row["after_seq"],
                 targets=tuple(GoalWaitTarget(**target) for target in row["targets"]),
+                owner_created_at=row.get("owner_created_at"),
             )
             for key, row in data.items()
         }
@@ -131,6 +133,19 @@ class GoalWaits:
         return rows.get(goal.id)
 
     @staticmethod
+    def target_has_active_turn(target: GoalWaitTarget, snapshot: RegistrySnapshot) -> bool:
+        canonical = snapshot.aliases.get(target.name, target.name)
+        thread = snapshot.threads.get(canonical)
+        status = snapshot.statuses.get(canonical)
+        return bool(
+            thread is not None
+            and thread.created_at == target.created_at
+            and status is not None
+            and status.running
+            and thread.active_turn is not None
+        )
+
+    @staticmethod
     def execution(
         goal: Goal | None, rows: dict[str, GoalWait], snapshot: RegistrySnapshot
     ) -> GoalExecution | None:
@@ -141,7 +156,12 @@ class GoalWaits:
                 replace(target, name=snapshot.aliases.get(target.name, target.name))
                 for target in wait.targets
             )
-            return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets)
+            inactive = tuple(
+                target
+                for target in targets
+                if not GoalWaits.target_has_active_turn(target, snapshot)
+            )
+            return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets, inactive)
         return GoalExecution(
             GoalExecutionState.RUNNABLE if goal.active else GoalExecutionState(goal.status), goal.id
         )

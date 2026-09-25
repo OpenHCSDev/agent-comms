@@ -820,11 +820,14 @@ class GoalExecution:
     state: GoalExecutionState
     goal_id: str
     wait_for: tuple[GoalWaitTarget, ...] = ()
+    inactive_wait_for: tuple[GoalWaitTarget, ...] = ()
 
     def presentation(self, title: str) -> ThreadPresentation:
         if self.state is GoalExecutionState.STANDBY:
             names = ", ".join(f"@{target.name}" for target in self.wait_for)
-            return ThreadPresentation(title, "◌", f"Standby · waiting for {names}")
+            idle = ", ".join(f"@{target.name}" for target in self.inactive_wait_for)
+            suffix = f"; no active turn: {idle}" if idle else ""
+            return ThreadPresentation(title, "◌", f"Standby · waiting for {names}{suffix}")
         return ThreadPresentation(title, "✓", self.state.value.title())
 
     @classmethod
@@ -833,6 +836,7 @@ class GoalExecution:
             GoalExecutionState(data["state"]),
             str(data["goal_id"]),
             tuple(GoalWaitTarget(**target) for target in data.get("wait_for", ())),
+            tuple(GoalWaitTarget(**target) for target in data.get("inactive_wait_for", ())),
         )
 
 
