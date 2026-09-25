@@ -1590,6 +1590,29 @@ class CommsAgent:
         await self._sync_thread_config(session_id)
         return edited
 
+    async def update_goal(
+        self, session_id: str, status: str, goal_id: str, expected_revision: int
+    ) -> Goal | None:
+        """Apply an explicit UI pause, resume, or clear through the current owner."""
+        if status not in {"active", "paused", "clear"}:
+            raise ValueError("Goal updates support only active, paused, or clear.")
+        name = self._require_session(session_id)
+        goal = self._comms.registry.require(name).goal
+        if goal is None or goal.id != goal_id or goal.revision != expected_revision:
+            raise ValueError("The goal changed; refresh its state before updating.")
+        updated = self._comms.update_goal(
+            name,
+            status,
+            goal_id=goal_id,
+            expected_goal=goal,
+            expected_owner_pid=os.getpid(),
+            owner_action=True,
+        )
+        if status == "active":
+            self._schedule_goal(session_id)
+        await self._sync_thread_config(session_id)
+        return updated
+
     async def retry_goal(self, session_id: str, goal_id: str, expected_revision: int) -> Goal:
         """Record an explicit UI retry in the executing owner's private ledger."""
         if session_id in self._backend_inboxes or session_id in self._active_turns:
