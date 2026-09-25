@@ -185,6 +185,47 @@ def test_live_receipt_rejects_stale_input_malformed_and_ambiguous_claims():
     assert backend._pi_mcp_live_receipt(wire_claim(json.dumps(valid)), input_id) is None
 
 
+async def test_package_live_receipt_after_settlement_is_not_reprojected(tmp_path):
+    input_receipt = {
+        "version": 1,
+        "source": "pi-mcp-client",
+        "state": "running",
+        "lifetime": "turn",
+        "servers": [],
+    }
+    program = stub(
+        tmp_path,
+        f"""
+import json, sys
+send = lambda row: print(json.dumps(row), flush=True)
+preflight = json.loads(sys.stdin.readline())
+send({{"id":preflight["id"],"type":"response","command":"get_state","success":True,
+      "data":{{"nativeInputProofCapability":{json.dumps(backend.NATIVE_INPUT_CAPABILITY)},
+              "sessionId":"fixture-session"}}}})
+prompt = json.loads(sys.stdin.readline())
+send({{"id":prompt["id"],"type":"response","command":"prompt","success":True}})
+send({{"type":"message_start","message":{{"role":"user","content":prompt["message"],
+      "inputId":prompt["inputId"]}}}})
+send({{"type":"message_end","message":{{"role":"assistant","stopReason":"stop"}}}})
+send({{"type":"agent_settled"}})
+receipt = {input_receipt!r}
+receipt["inputId"] = prompt["inputId"]
+send({{"type":"extension_ui_request","id":"late","method":"setStatus",
+      "statusKey":"pi-mcp/live-v1","statusText":json.dumps(receipt)}})
+""",
+    )
+    # A supplied, not-yet-set finish_event leaves stats_requested false at the
+    # settled yield: this used to admit a late status after ACP TurnSettled.
+    events = [
+        event
+        async for event in backend.stream_agent_events(
+            program, [], "fixture", str(tmp_path), finish_event=asyncio.Event()
+        )
+    ]
+    assert any(event["type"] == "settled" for event in events)
+    assert not any(event["type"] == "mcp_live_status" for event in events)
+
+
 async def test_explicit_owner_cancellation_is_not_swallowed_by_socket_permission():
     class Writer:
         def write(self, data):

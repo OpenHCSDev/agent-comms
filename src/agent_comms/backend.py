@@ -1560,6 +1560,7 @@ async def _stream_agent_events(
             if payload.get("method") == "setStatus":
                 if (
                     not live_status_seen
+                    and not agent_settled_seen
                     and not stats_requested
                     and require_input_id
                     and native_capability_confirmed
