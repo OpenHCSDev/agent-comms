@@ -159,6 +159,17 @@ class InputDispositions:
             row = self._read().get(key)
             return dict(row) if row is not None else None
 
+    @staticmethod
+    def public(row: dict[str, Any]) -> dict[str, Any]:
+        """Public delivery projection; native receipt authority stays private."""
+        return {
+            "inputId": row["key"].removeprefix("acp:"),
+            "sequence": row["sequence"],
+            "target": row["target"],
+            "text": row["source_text"],
+            "status": row["status"],
+        }
+
     def unknown(self, owners: frozenset[str]) -> list[dict[str, Any]]:
         with _store_lock(self.path):
             rows = (
