@@ -7,7 +7,7 @@ fced5349c36bc329acf9ed5fe1d8ba63fe29e455e23ac3926a96bd025a9d999c  dist/core/agen
 41f7ac2e6d204e295d635542db513f0d1f1d85228beabae3bb8d08b05e1b1f00  dist/core/session-manager.d.ts
 c6e90c36ed4567e30e2318cd1a8d11984b7dd4d1760335be34b6cbd492438fe5  dist/modes/rpc/rpc-types.d.ts
 93ed16306399765e79c11f78897f575252d7174b85b81a01cdebb2a479e0e57f  node_modules/@earendil-works/pi-agent-core/dist/agent.js
-7469aebae3badc125087c55843130fe44c2ea3b68ea1b757c884469dd355d5f4  node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
+e6003ded7cd11fc8bfd01e4f48cd3d5a19338b64c2e1febe81d0659c31013c11  node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
 794a5d2a97aec537387ea05700a65b7da52c78ccd850c5acd4157037c73fe34f  node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts
 6900f15b09fa7c7ed06a2a04c8f16e9c0bfe61c4889a2bc4d22d8120a78137ec  node_modules/@earendil-works/pi-agent-core/dist/types.d.ts
 ae6d784ad8a63299720ecd3628a8c162becee22791208f569723994d709475c5  node_modules/@earendil-works/pi-ai/dist/types.d.ts

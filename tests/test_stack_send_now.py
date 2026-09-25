@@ -21,10 +21,15 @@ from agent_comms import backend
     [
         "backend",
         "backend_duplicate",
+        "backend_terminal",
+        "backend_terminal_queue",
+        "backend_terminal_cancel",
         "priority",
         "revoked",
         "oversized",
         "acp",
+        "acp_terminal",
+        "acp_terminal_goal",
         "acp_stopped",
         "acp_goal_original",
         "toad",
@@ -47,6 +52,9 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
         cancelled = threading.Event()
         finish_followup = threading.Event()
         requests = []
+        terminal = "terminal" in surface
+        terminal_release = root / "release-terminal"
+        terminal_pid = root / "terminal-pid"
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
@@ -71,6 +79,48 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     self.wfile.flush()
 
                 try:
+                    if terminal and index == 1:
+                        command = (
+                            f'printf "%s" "$$" > {terminal_pid}; '
+                            "printf TERMINAL_RUNNING; "
+                            f"while [ ! -e {terminal_release} ]; do sleep 0.05; done; "
+                            "printf TERMINAL_FINISHED"
+                        )
+                        row = {
+                            "id": "terminal-call",
+                            "object": "chat.completion.chunk",
+                            "created": 1,
+                            "model": "z-ai/glm-5.3-flash",
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {
+                                        "tool_calls": [
+                                            {
+                                                "index": 0,
+                                                "id": "terminal-tool",
+                                                "type": "function",
+                                                "function": {
+                                                    "name": "bash",
+                                                    "arguments": json.dumps(
+                                                        {
+                                                            "command": command,
+                                                            "timeout": 30,
+                                                        }
+                                                    ),
+                                                },
+                                            }
+                                        ]
+                                    },
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
+                        self.wfile.write(f"data: {json.dumps(row)}\n\n".encode())
+                        emit("", "tool_calls")
+                        self.wfile.write(b"data: [DONE]\n\n")
+                        self.wfile.flush()
+                        return
                     emit("OLD_PARTIAL" if index == 1 else "NEW_FINAL")
                     if index == 1:
                         while not release.wait(0.05):
@@ -128,6 +178,9 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             "--thinking",
             "off",
         ]
+        if terminal:
+            native_args.remove("--no-tools")
+            native_args.extend(["--tools", "bash"])
         child_env = {
             "PI_CODING_AGENT_DIR": str(agent),
             "OPENROUTER_API_KEY": "local-only",
@@ -180,7 +233,11 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 async def session_update(self, session_id, update):
                     row = update.model_dump(by_alias=True, exclude_none=True)
                     events.append(row)
-                    if "OLD_PARTIAL" in row.get("content", {}).get("text", ""):
+                    if isinstance(row.get("content"), dict) and "OLD_PARTIAL" in row["content"].get(
+                        "text", ""
+                    ):
+                        first_chunk.set()
+                    if terminal and row.get("sessionUpdate") == "tool_call":
                         first_chunk.set()
                     if (
                         row.get("_meta", {})
@@ -195,7 +252,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             await owner.new_session(str(root / "project"))
             owner._drain_tasks["project"].cancel()
             await asyncio.gather(owner._drain_tasks["project"], return_exceptions=True)
-            if surface == "acp_goal_original":
+            if surface in {"acp_goal_original", "acp_terminal_goal"}:
                 owner._comms.update_goal(
                     "project",
                     "set",
@@ -227,12 +284,18 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 events.append(event)
                 if event.get("type") == "chunk" and "OLD_PARTIAL" in event.get("text", ""):
                     first_chunk.set()
+                if terminal and event.get("type") == "tool_start":
+                    first_chunk.set()
                 if event.get("type") == "input_started" and event.get("id") == "urgent":
                     started.set()
 
         task = asyncio.create_task(collect())
         try:
             await asyncio.wait_for(first_chunk.wait(), 15)
+            if terminal:
+                async with asyncio.timeout(3):
+                    while not terminal_pid.exists():
+                        await asyncio.sleep(0.01)
             command = {
                 "type": "prompt",
                 "message": "x" * 800000 if surface == "oversized" else "URGENT_INPUT",
@@ -257,10 +320,22 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     agentComms={"deferDisplay": True},
                 )
             await asyncio.sleep(0.2)
-            assert len(requests) == 1 and not started.is_set(), "Queue waits for a boundary"
+            assert len(requests) == 1 and not started.is_set(), (
+                "Queue waits for a boundary",
+                events,
+            )
+            if surface == "backend_terminal_cancel":
+                await queue.put({"type": "abort"})
+                await asyncio.wait_for(task, 10)
+                assert len(requests) == 1
+                assert not started.is_set(), "Cancel must not consume the queued input"
+                assert not Path(f"/proc/{terminal_pid.read_text()}").exists()
+                return
             if surface == "acp_stopped":
                 owner._comms.registry.unregister("project")
-            if owner is None:
+            if surface == "backend_terminal_queue":
+                terminal_release.touch()
+            elif owner is None:
                 await queue.put({"type": "interrupt_steering", "_input_ids": ["urgent"]})
                 if surface == "backend_duplicate":
                     await queue.put({"type": "interrupt_steering", "_input_ids": ["urgent"]})
@@ -288,7 +363,38 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             await asyncio.wait_for(started.wait(), 3)
             await asyncio.wait_for(task, 10)
             assert not release.is_set(), "Send now must work while original response is unfinished"
-            assert await asyncio.to_thread(cancelled.wait, 2), "Original request was not cancelled"
+            if terminal:
+                assert not Path(f"/proc/{terminal_pid.read_text()}").exists()
+                if surface != "backend_terminal_queue":
+                    assert not terminal_release.exists()
+                if owner is None:
+                    assert any(
+                        e.get("type") == "tool_end"
+                        and e.get("ok") is (surface == "backend_terminal_queue")
+                        for e in events
+                    )
+                else:
+                    assert any(
+                        e.get("sessionUpdate") == "tool_call_update" and e.get("status") == "failed"
+                        for e in events
+                    )
+                    assert (
+                        sum(
+                            e.get("_meta", {})
+                            .get("agentComms", {})
+                            .get("inputStarted", {})
+                            .get("text")
+                            == "URGENT_INPUT"
+                            for e in events
+                        )
+                        == 1
+                    )
+                if surface == "acp_terminal_goal":
+                    assert owner._comms.registry.require("project").goal.status == "active"
+            else:
+                assert await asyncio.to_thread(
+                    cancelled.wait, 2
+                ), "Original request was not cancelled"
             assert len(requests) == (
                 3 if surface == "priority" else 2
             ), "No retry or duplicate prompt after explicit interruption"
@@ -317,9 +423,12 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     row["status"] == "started" for row in owner._dispositions._read().values()
                 )
                 assert not any(
-                    "[agent error]" in row.get("content", {}).get("text", "") for row in events
+                    isinstance(row.get("content"), dict)
+                    and "[agent error]" in row["content"].get("text", "")
+                    for row in events
                 )
         finally:
+            terminal_release.touch()
             release.set()
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
