@@ -21,6 +21,7 @@ from agent_comms import backend
     [
         "backend",
         "backend_duplicate",
+        "priority",
         "revoked",
         "oversized",
         "acp",
@@ -217,6 +218,15 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 "_input_id": "urgent",
             }
             if owner is None:
+                if surface == "priority":
+                    await queue.put(
+                        {
+                            "type": "prompt",
+                            "message": "NORMAL_INPUT",
+                            "streamingBehavior": "steer",
+                            "_input_id": "normal",
+                        }
+                    )
                 await queue.put(command)
             else:
                 await owner.prompt(
@@ -257,7 +267,16 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             await asyncio.wait_for(task, 10)
             assert not release.is_set(), "Send now must work while original response is unfinished"
             assert await asyncio.to_thread(cancelled.wait, 2), "Original request was not cancelled"
-            assert len(requests) == 2, "No retry or duplicate prompt after explicit interruption"
+            assert len(requests) == (
+                3 if surface == "priority" else 2
+            ), "No retry or duplicate prompt after explicit interruption"
+            if surface == "priority":
+                assert [e.get("id") for e in events if e.get("type") == "input_started"] == [
+                    None,
+                    "urgent",
+                    "normal",
+                ]
+                assert "NORMAL_INPUT" not in json.dumps(requests[1]["messages"])
             if owner is None:
                 assert (
                     sum(
@@ -266,7 +285,9 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     == 1
                 )
                 assert events[-1]["ok"] is True, events
-                assert events[-1]["text"] == "NEW_FINAL", events
+                assert events[-1]["text"] == "NEW_FINAL" * (
+                    2 if surface == "priority" else 1
+                ), events
                 assert not any(e.get("type") == "error" for e in events), events
             else:
                 assert not owner._queued_inputs.get("project")

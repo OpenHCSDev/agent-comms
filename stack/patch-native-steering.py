@@ -25,11 +25,14 @@ CONTINUE = """        // Only a new explicit Send now command permits this conti
         // Consume the existing queued native input, never replay the interrupted input.
         const interruptedIds = this._nativeInterruptIds;
         this._nativeInterruptIds = undefined;
-        if (interruptedIds && this.agent.steeringQueue.messages.some(message =>
-            interruptedIds.includes(message.inputId))) {
+        const selected = interruptedIds ? this.agent.steeringQueue.messages.filter(message =>
+            interruptedIds.includes(message.inputId)) : [];
+        if (selected.length) {
+            this.agent.steeringQueue.messages = this.agent.steeringQueue.messages.filter(message =>
+                !interruptedIds.includes(message.inputId));
             this._nativeRunHadTrackedInput = true;
             this._emit({ type: "steering_interrupt_completed" });
-            return true;
+            return selected;
         }
 """
 
@@ -56,6 +59,19 @@ def main(package):
         source,
         "    async abort() {\n",
         "    async abort() {\n        this._nativeInterruptIds = undefined;\n",
+    )
+    source = replace_once(
+        source,
+        "            while (await this._handlePostAgentRun()) {\n"
+        "                await this.agent.continue();\n"
+        "            }",
+        "            let continuation;\n"
+        "            while ((continuation = await this._handlePostAgentRun())) {\n"
+        "                if (Array.isArray(continuation))\n"
+        "                    await this.agent.runPromptMessages(continuation, "
+        "{ skipInitialSteeringPoll: true });\n"
+        "                else await this.agent.continue();\n"
+        "            }",
     )
     session.write_text(source)
     source = replace_once(
