@@ -15,7 +15,7 @@ from agent_comms import acp as acp_module
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.operations import wire
-from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy
+from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable stub")
 
@@ -124,6 +124,27 @@ async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path
         session_id, turn, controller, request
     ), timeout=1) is None
     await agent.shutdown()
+
+
+async def test_explicit_owner_cancellation_is_not_swallowed_by_socket_permission():
+    class Writer:
+        def write(self, data):
+            pass
+
+        async def drain(self):
+            pass
+
+    subscriber = SocketClient(Writer())
+    pending = asyncio.create_task(subscriber.permission({"toolCall": {}, "options": []}))
+    for _ in range(10):
+        if subscriber.pending:
+            break
+        await asyncio.sleep(0)
+    assert subscriber.pending
+    pending.cancel()  # Also exercise cancellation before the fast drain await settles.
+    with pytest.raises(asyncio.CancelledError):
+        await pending
+    assert not subscriber.pending
 
 
 async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp_path, monkeypatch):

@@ -45,13 +45,23 @@ class SocketClient:
         request_id = secrets.token_hex(16)
         future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
         self.pending[request_id] = future
+        task = asyncio.current_task()
         try:
             self.writer.write((json.dumps({"permissionRequest": {
                 "id": request_id, **payload,
             }}) + "\n").encode())
             await asyncio.wait_for(self.writer.drain(), timeout=2)
-            return await asyncio.wait_for(future, timeout=15)
-        except (OSError, ConnectionError, TimeoutError, asyncio.CancelledError):
+            # Cancellation can race wait_for's completion of a fast drain.
+            # A pending owner cancel must not become a 15-second dialog wait.
+            if task is not None and task.cancelling():
+                raise asyncio.CancelledError
+            reply = await asyncio.wait_for(future, timeout=15)
+            if task is not None and task.cancelling():
+                raise asyncio.CancelledError
+            return reply
+        except (OSError, ConnectionError, TimeoutError):
+            if task is not None and task.cancelling():
+                raise asyncio.CancelledError from None
             return None
         finally:
             self.pending.pop(request_id, None)
@@ -61,7 +71,9 @@ class SocketClient:
     def disconnected(self) -> None:
         for future in self.pending.values():
             if not future.done():
-                future.cancel()
+                # Connection loss is denial, not cancellation of the *owner*
+                # turn task. Explicit ACP cancellation must still propagate.
+                future.set_result({"outcome": "cancelled"})
         self.pending.clear()
 
     async def session_update(self, *, session_id: str, update: Any) -> None:
