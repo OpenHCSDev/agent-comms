@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+"""Explicit interruption for already queued native inputs; never retry the old input."""
+
+import hashlib
+import sys
+from pathlib import Path
+
+SESSION_SHA = "b3c6eb2cc5abdbe0b754ae958d12df30aeb12f99570fe8f00d634746537e1a9e"
+RPC_SHA = "6f5438c028032f3bc212b6270a1acf9d3e5d22ce5837b85ff5a6fea6c240c76a"
+METHOD = """    interruptSteering(inputIds) {
+        if (!Array.isArray(inputIds) || inputIds.some(id => !/^[0-9a-f]{32}$/.test(id)))
+            throw new Error("Invalid native steering input IDs");
+        if (this.isCompacting) throw new Error("Wait for compaction before Send now");
+        if (!this.isStreaming || this._nativeInterruptIds) return false;
+        const pending = this.agent.steeringQueue.messages.filter(message =>
+            inputIds.includes(message.inputId) && this._nativeInputClaims.has(message.inputId));
+        if (!pending.length) return false;
+        this._nativeInterruptIds = pending.map(message => message.inputId);
+        this._emit({ type: "steering_interrupt_started" });
+        this.agent.abort();
+        return true;
+    }
+"""
+CONTINUE = """        // Only a new explicit Send now command permits this continuation.
+        // Consume the existing queued native input, never replay the interrupted input.
+        const interruptedIds = this._nativeInterruptIds;
+        this._nativeInterruptIds = undefined;
+        const selected = interruptedIds ? this.agent.steeringQueue.messages.filter(message =>
+            interruptedIds.includes(message.inputId)) : [];
+        if (selected.length) {
+            this.agent.steeringQueue.messages = this.agent.steeringQueue.messages.filter(message =>
+                !interruptedIds.includes(message.inputId));
+            this._nativeRunHadTrackedInput = true;
+            this._emit({ type: "steering_interrupt_completed" });
+            return selected;
+        }
+"""
+
+
+def replace_once(source, anchor, replacement):
+    if source.count(anchor) != 1:
+        raise SystemExit(f"Native steering anchor changed: {anchor!r}")
+    return source.replace(anchor, replacement, 1)
+
+
+def main(package):
+    session = package / "dist/core/agent-session.js"
+    rpc = package / "dist/modes/rpc/rpc-mode.js"
+    for path, expected in ((session, SESSION_SHA), (rpc, RPC_SHA)):
+        if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            raise SystemExit("Native steering source does not match pinned build")
+    source = session.read_text()
+    source = replace_once(
+        source,
+        "    async _handlePostAgentRun() {\n",
+        METHOD + "    async _handlePostAgentRun() {\n" + CONTINUE,
+    )
+    source = replace_once(
+        source,
+        "    async abort() {\n",
+        "    async abort() {\n        this._nativeInterruptIds = undefined;\n",
+    )
+    source = replace_once(
+        source,
+        "            while (await this._handlePostAgentRun()) {\n"
+        "                await this.agent.continue();\n"
+        "            }",
+        "            let continuation;\n"
+        "            while ((continuation = await this._handlePostAgentRun())) {\n"
+        "                if (Array.isArray(continuation))\n"
+        "                    await this.agent.runPromptMessages(continuation, "
+        "{ skipInitialSteeringPoll: true });\n"
+        "                else await this.agent.continue();\n"
+        "            }",
+    )
+    session.write_text(source)
+    source = replace_once(
+        rpc.read_text(),
+        '            case "steer": {\n',
+        '            case "interrupt_steering": {\n'
+        '                return success(id, "interrupt_steering", '
+        "{ interrupted: session.interruptSteering(command.inputIds) });\n"
+        '            }\n            case "steer": {\n',
+    )
+    rpc.write_text(source)
+
+
+if __name__ == "__main__":
+    main(Path(sys.argv[1]))

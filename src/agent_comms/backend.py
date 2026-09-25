@@ -518,6 +518,9 @@ async def stream_agent_events(
     send_boundary: (
         Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
     ) = None,
+    interrupt_boundary: (
+        Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
+    ) = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run the backend and yield events. Always ends with a ``done`` event.
@@ -552,6 +555,7 @@ async def stream_agent_events(
                         require_input_id=require_input_id,
                         send_boundary=send_boundary,
                         native_start=native_start,
+                        interrupt_boundary=interrupt_boundary,
                     )
                 ) as events:
                     async for event in events:
@@ -595,6 +599,9 @@ async def _stream_agent_events(
     rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
     require_input_id: bool = True,
     send_boundary: (
+        Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
+    ) = None,
+    interrupt_boundary: (
         Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
     ) = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
@@ -728,6 +735,8 @@ async def _stream_agent_events(
     steering_task: asyncio.Task[None] | None = None
     pending_inputs: list[tuple[str | None, str, str | dict[str, Any], str]] = []
     accepted_forwarded: set[str] = set()
+    input_state_changed = asyncio.Event()
+    explicit_interrupt = False
     rejected_commands: list[dict[str, Any]] = []
     rejected_signal = asyncio.Event()
     session_identity_uncertain = False
@@ -744,7 +753,7 @@ async def _stream_agent_events(
             while True:
                 message = await steering_queue.get()
                 original = dict(message) if isinstance(message, dict) else message
-                command = (
+                command: dict[str, Any] = (
                     dict(original)
                     if isinstance(original, dict)
                     else {
@@ -753,6 +762,46 @@ async def _stream_agent_events(
                         "streamingBehavior": "steer",
                     }
                 )
+                if command.get("type") == "interrupt_steering":
+                    selected: list[str] = command.pop("_input_ids", [])
+                    while True:
+                        input_state_changed.clear()
+                        candidates = [item for item in pending_inputs if item[0] in selected]
+                        if not candidates or all(
+                            item[0] in accepted_forwarded for item in candidates
+                        ):
+                            break
+                        await input_state_changed.wait()
+                    if not candidates:
+                        continue
+                    public_id, sent_text, _, native_id = candidates[0]
+                    boundary = (
+                        interrupt_boundary(public_id, native_id, sent_text)
+                        if interrupt_boundary
+                        else nullcontext(True)
+                    )
+                    with boundary as authorized:
+                        if authorized:
+                            stdin.write(
+                                (
+                                    json.dumps(
+                                        {
+                                            "type": "interrupt_steering",
+                                            "inputIds": [item[3] for item in candidates],
+                                        }
+                                    )
+                                    + "\n"
+                                ).encode()
+                            )
+                    if not authorized:
+                        authority_revoked = True
+                        input_uncertain = True
+                        final_assistant_stop = False
+                        fail_reason = "Input authority changed before immediate steering."
+                        await _terminate_process(proc)
+                        return
+                    await stdin.drain()
+                    continue
                 if command.get("type") == "prompt":
                     public_input_id = command.pop("_input_id", None)
                     if public_input_id is None:
@@ -1265,6 +1314,21 @@ async def _stream_agent_events(
                 item[0] == queued_response_id for item in pending_inputs
             ):
                 accepted_forwarded.add(queued_response_id)
+            input_state_changed.set()
+        if kind == "steering_interrupt_started":
+            explicit_interrupt = True
+        elif kind == "steering_interrupt_completed":
+            explicit_interrupt = False
+            text_parts.clear()
+            error_message = None
+            final_assistant_stop = False
+            yield {"type": "steering_interrupted"}
+        elif (
+            kind == "response"
+            and command == "interrupt_steering"
+            and payload.get("success") is False
+        ):
+            yield {"type": "error", "text": str(payload.get("error") or "Send now was refused")}
         if retry_recovery_pending and retry_made_progress(payload):
             if kind in {"message_start", "message_end", "message_update"}:
                 output_started = True
@@ -1655,7 +1719,8 @@ async def _stream_agent_events(
                         else str(message.get("errorMessage") or "").strip()
                         or f"Model request {stop_reason}"
                     )
-                    yield {"type": "error", "text": error_message}
+                    if not (explicit_interrupt and stop_reason == "aborted"):
+                        yield {"type": "error", "text": error_message}
                 else:
                     error_message = None
                     tokens = positive_tokens(message.get("usage"))
