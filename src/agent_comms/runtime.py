@@ -150,6 +150,10 @@ class RuntimeServer:
                     result = await handler(session_id, request.get("instructions"))
                 writer.write((json.dumps({"result": result}) + "\n").encode())
                 await writer.drain()
+            elif action == "input_dispositions":
+                rows = self.agent._comms.unresolved_inputs(name)
+                writer.write((json.dumps({"result": {"inputs": rows}}) + "\n").encode())
+                await writer.drain()
             elif action == "goal_history":
                 from dataclasses import asdict
 
