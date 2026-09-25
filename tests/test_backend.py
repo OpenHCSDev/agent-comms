@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import backend
+from agent_comms.image_inputs import ImageInput
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="backend tests exec shell-script stubs; POSIX only"
@@ -2362,6 +2363,296 @@ if select.select([sys.stdin], [], [], 0.2)[0]:
         assert "native input-ID capability" in events[-1]["text"]
         assert events[-1]["reason_code"] == "pi_input_id_unavailable"
         assert not received.exists()
+
+    async def test_preflight_timeout_reports_phase_duration_and_session_size(
+        self, tmp_path, monkeypatch
+    ):
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_bytes(b"x" * 123)
+        received = tmp_path / "received-prompt"
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + f"""
+import json, select, sys, time
+state = json.loads(sys.stdin.readline())
+assert state["type"] == "get_state"
+time.sleep(0.3)
+if select.select([sys.stdin], [], [], 0)[0]:
+    line = sys.stdin.readline()
+    if line: open({str(received)!r}, "w").write(line)
+""",
+        )
+        monkeypatch.setattr(backend, "CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS", 0.05)
+        events = [
+            event
+            async for event in backend.stream_agent_events(
+                stub, [], "secret prompt", str(tmp_path), session_file=str(session_file)
+            )
+        ]
+        done = events[-1]
+        assert done["ok"] is False
+        assert done["reason_code"] == "pi_input_id_unavailable"
+        assert "phase=await_get_state" in done["text"]
+        assert "session_bytes=123" in done["text"]
+        assert "elapsed_ms=" in done["text"]
+        assert "wait_ms=" in done["text"]
+        assert "spawn_ms=" in done["text"]
+        assert "secret prompt" not in done["text"]
+        assert not received.exists()
+
+    async def test_persistent_pi_reuses_one_child_with_fresh_prompt_receipts(self, tmp_path):
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("session\n")
+        proof_file = tmp_path / "session.jsonl.input-proof"
+        proof_file.write_text("proof\n")
+        ids_file = tmp_path / "prompt-ids"
+        stats_marker = tmp_path / "stats-delayed"
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + f"""
+import json, os, sys, time
+send = lambda event: print(json.dumps(event), flush=True)
+delayed_stats = False
+for line in sys.stdin:
+    command = json.loads(line)
+    kind = command["type"]
+    if kind == "get_state":
+        send({{"type":"response","command":kind,"id":command.get("id"),
+               "success":True,"data":{{"nativeInputProofCapability":
+               "pi-native-input-v1-live-only","sessionId":"fixed-session",
+               "sessionFile":{str(session_file)!r}}}}})
+    elif kind == "prompt":
+        with open({str(ids_file)!r}, "a") as output:
+            output.write(command["id"] + " " + command["inputId"] + "\\n")
+        if command["message"] == "cancel":
+            time.sleep(5)
+            continue
+        if command.get("images"):
+            sys.stderr.write(command["images"][0]["data"] + "\\n")
+            sys.stderr.flush()
+        if command["message"] == "fail after image":
+            sys.stderr.write("nonimage failure\\n")
+            sys.stderr.flush()
+            sys.exit(1)
+        delayed_stats = command["message"] == "delayed stats"
+        send({{"type":"response","command":kind,"id":command["id"],"success":True}})
+        send({{"type":"message_start","message":{{"role":"user",
+               "content":command["message"],"inputId":command["inputId"]}}}})
+        send({{"type":"message_update","assistantMessageEvent":{{
+               "type":"text_delta","delta":"ok"}}}})
+        send({{"type":"message_end","message":{{"role":"assistant",
+               "stopReason":"stop"}}}})
+        send({{"type":"agent_settled"}})
+    elif kind == "get_session_stats":
+        if delayed_stats:
+            open({str(stats_marker)!r}, "w").write("waiting")
+            time.sleep(0.3)
+        send({{"type":"response","command":kind,"id":command.get("id"),
+               "success":True,"data":{{"contextUsage":{{"tokens":10}}}}}})
+""",
+        )
+        persistent = backend.PersistentPiSession()
+        try:
+            first = [
+                event
+                async for event in backend.stream_agent_events(
+                    stub,
+                    [],
+                    "first",
+                    str(tmp_path),
+                    session_file=str(session_file),
+                    persistent_session=persistent,
+                )
+            ]
+            first_proc = persistent.proc
+            second = [
+                event
+                async for event in backend.stream_agent_events(
+                    stub,
+                    [],
+                    "second",
+                    str(tmp_path),
+                    session_file=str(session_file),
+                    persistent_session=persistent,
+                )
+            ]
+            assert first[-1]["ok"] is True and second[-1]["ok"] is True
+            assert persistent.proc is first_proc and first_proc is not None
+            assert first_proc.returncode is None
+            ids = [line.split() for line in ids_file.read_text().splitlines()]
+            assert len(ids) == 2
+            assert ids[0][0] != ids[1][0] and ids[0][1] != ids[1][1]
+            session_file.write_text("outside writer changed the saved branch\n")
+            third = [
+                event
+                async for event in backend.stream_agent_events(
+                    stub,
+                    [],
+                    "third",
+                    str(tmp_path),
+                    session_file=str(session_file),
+                    persistent_session=persistent,
+                )
+            ]
+            assert third[-1]["ok"] is True
+            assert persistent.proc is not first_proc
+            assert first_proc.returncode is not None
+            third_proc = persistent.proc
+            proof_file.write_text("outside writer changed the proof\n")
+            proof_changed = [
+                event
+                async for event in backend.stream_agent_events(
+                    stub,
+                    [],
+                    "proof changed",
+                    str(tmp_path),
+                    session_file=str(session_file),
+                    persistent_session=persistent,
+                )
+            ]
+            assert proof_changed[-1]["ok"] is True
+            assert persistent.proc is not third_proc
+            assert third_proc is not None and third_proc.returncode is not None
+            fourth_proc = persistent.proc
+
+            async def cancelled_turn():
+                return [
+                    event
+                    async for event in backend.stream_agent_events(
+                        stub,
+                        [],
+                        "cancel",
+                        str(tmp_path),
+                        session_file=str(session_file),
+                        persistent_session=persistent,
+                    )
+                ]
+
+            cancelled_task = asyncio.create_task(cancelled_turn())
+            async with asyncio.timeout(2):
+                while len(ids_file.read_text().splitlines()) < 5:
+                    await asyncio.sleep(0.01)
+            cancelled_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await cancelled_task
+            assert fourth_proc is not None and fourth_proc.returncode is not None
+            after = [
+                event
+                async for event in backend.stream_agent_events(
+                    stub,
+                    [],
+                    "after",
+                    str(tmp_path),
+                    session_file=str(session_file),
+                    persistent_session=persistent,
+                )
+            ]
+            assert after[-1]["ok"] is True
+            assert len(ids_file.read_text().splitlines()) == 6
+
+            @contextmanager
+            def revoked_goal(public_id, native_id, text):
+                assert public_id is None and len(native_id) == 32 and text == "denied"
+                yield False
+
+            denied = [
+                event
+                async for event in backend.stream_agent_events(
+                    stub,
+                    [],
+                    "denied",
+                    str(tmp_path),
+                    session_file=str(session_file),
+                    persistent_session=persistent,
+                    send_boundary=revoked_goal,
+                )
+            ]
+            assert denied[-1]["ok"] is False
+            assert len(ids_file.read_text().splitlines()) == 6
+            revived = [
+                event
+                async for event in backend.stream_agent_events(
+                    stub,
+                    [],
+                    "revive",
+                    str(tmp_path),
+                    session_file=str(session_file),
+                    persistent_session=persistent,
+                )
+            ]
+            assert revived[-1]["ok"] is True
+            before_image_proc = persistent.proc
+            image = ImageInput("U0VDUkVUX0lNQUdFX0JZVEVT", "image/png")
+            image_turn = [
+                event
+                async for event in backend.stream_agent_events(
+                    stub,
+                    [],
+                    "image turn",
+                    str(tmp_path),
+                    session_file=str(session_file),
+                    persistent_session=persistent,
+                    images=(image,),
+                )
+            ]
+            assert image_turn[-1]["ok"] is True
+            assert persistent.proc is before_image_proc and before_image_proc is not None
+            failed = [
+                event
+                async for event in backend.stream_agent_events(
+                    stub,
+                    [],
+                    "fail after image",
+                    str(tmp_path),
+                    session_file=str(session_file),
+                    persistent_session=persistent,
+                )
+            ]
+            assert failed[-1]["ok"] is False
+            assert "diagnostics withheld" in failed[-1]["text"]
+            assert image.data not in failed[-1]["text"]
+            revived = [
+                event
+                async for event in backend.stream_agent_events(
+                    stub,
+                    [],
+                    "revive again",
+                    str(tmp_path),
+                    session_file=str(session_file),
+                    persistent_session=persistent,
+                )
+            ]
+            assert revived[-1]["ok"] is True
+            borrowed_proc = persistent.proc
+
+            async def delayed_turn():
+                return [
+                    event
+                    async for event in backend.stream_agent_events(
+                        stub,
+                        [],
+                        "delayed stats",
+                        str(tmp_path),
+                        session_file=str(session_file),
+                        persistent_session=persistent,
+                    )
+                ]
+
+            active = asyncio.create_task(delayed_turn())
+            async with asyncio.timeout(2):
+                while not stats_marker.exists():
+                    await asyncio.sleep(0.01)
+            closing = asyncio.create_task(persistent.close_idle())
+            await asyncio.sleep(0.02)
+            assert not closing.done() and borrowed_proc is not None
+            assert borrowed_proc.returncode is None
+            delayed = await active
+            assert delayed[-1]["ok"] is True
+            await closing
+            assert borrowed_proc.returncode is not None
+        finally:
+            await persistent.close()
+        assert first_proc is not None and first_proc.returncode is not None
 
     @pytest.mark.parametrize(
         ("case", "expected_ok"),

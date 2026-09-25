@@ -68,6 +68,29 @@ async def test_bridge_success_unknown_usage_and_one_explicit_request(tmp_path, m
         await owner.shutdown()
 
 
+async def test_bridge_closes_idle_pi_before_saved_session_writer(tmp_path, monkeypatch):
+    owner, _updates = await _owner(tmp_path)
+
+    class Retained:
+        closed = False
+
+        async def close_idle(self):
+            self.closed = True
+
+    retained = Retained()
+    owner._persistent_backends["project"] = retained
+
+    async def compact(*_args, **_kwargs):
+        assert retained.closed
+        return {"ok": True, "summary": "local summary"}
+
+    monkeypatch.setattr("agent_comms.manual_compaction.compact_session", compact)
+    try:
+        assert (await compact_context(owner, "project"))["ok"] is True
+    finally:
+        await owner.shutdown()
+
+
 async def test_bridge_uses_persisted_model_when_worker_has_no_base_args(tmp_path, monkeypatch):
     owner, _updates = await _owner(tmp_path)
     owner._comms.set_thread_model("project", "openai-codex/gpt-5.5")
