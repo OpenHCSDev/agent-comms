@@ -17,6 +17,7 @@ import re
 import select
 import shlex
 import signal
+import sqlite3
 import subprocess
 import sys
 import time
@@ -2478,14 +2479,21 @@ class Comms:
                         and current_wait.matches(message, snapshot)
                     )
 
-                reply = self.bus._history_page(
-                    qualifies_direct_reply,
-                    before=None,
-                    after=wait.after_seq,
-                    limit=1,
-                    max_bytes=256 * 1024,
-                    targets=owner_aliases,
-                )
+                try:
+                    reply = self.bus._history_page(
+                        qualifies_direct_reply,
+                        before=None,
+                        after=wait.after_seq,
+                        limit=1,
+                        max_bytes=256 * 1024,
+                        targets=owner_aliases,
+                    )
+                except (OSError, ValueError, sqlite3.DatabaseError):
+                    # The terminal turn has already committed. An unavailable
+                    # optional reply read cannot prove silence or pause this
+                    # owner; do not turn the completed ACP turn into a failure.
+                    # Registry/goal writes below remain outside this guard.
+                    continue
                 if reply.messages:
                     continue
                 diagnostic = (

@@ -71,6 +71,46 @@ def test_idle_target_refusal_is_side_effect_free(tmp_path):
     assert comms.goal_wait("owner") is None
 
 
+def test_optional_reply_read_failure_after_terminal_commit_never_pauses_or_fails(
+    tmp_path, monkeypatch
+):
+    comms, goal = _waiting(tmp_path)
+    fence = _finish(comms, "child", "child-turn")
+    assert fence is not None and comms.registry.require("child").active_turn is None
+    original = comms.bus._history_page
+
+    def unavailable(*_args, **_kwargs):
+        raise OSError("injected optional direct-reply read failure")
+
+    monkeypatch.setattr(comms.bus, "_history_page", unavailable)
+    assert comms.pause_waits_after_terminal_turn(fence) == ()
+    assert comms.registry.require("child").active_turn is None
+    assert comms.registry.require("owner").goal.active
+    assert comms.registry.require("owner").goal.id == goal.id
+    assert comms.goal_wait("owner") is not None
+    monkeypatch.setattr(comms.bus, "_history_page", original)
+    assert comms.pause_waits_after_terminal_turn(fence) == ("owner",)
+
+
+def test_authoritative_goal_write_errors_are_not_swallowed_by_optional_read_guard(
+    tmp_path, monkeypatch
+):
+    comms, _goal = _waiting(tmp_path)
+    fence = _finish(comms, "child", "child-turn")
+    original_register = comms.registry.register
+
+    def denied(*_args, **_kwargs):
+        raise OSError("injected authoritative goal write failure")
+
+    monkeypatch.setattr(comms.registry, "register", denied)
+    with pytest.raises(OSError, match="authoritative goal write failure"):
+        comms.pause_waits_after_terminal_turn(fence)
+    assert comms.registry.require("owner").goal.active
+    assert comms.goal_wait("owner") is not None
+    monkeypatch.setattr(comms.registry, "register", original_register)
+    assert comms.pause_waits_after_terminal_turn(fence) == ("owner",)
+
+
 def test_mixed_targets_project_idle_without_suppressing_active_alternative(tmp_path):
     comms, goal = _waiting(tmp_path, second=True)
     other_fence = _finish(comms, "other", "other-turn")
@@ -304,6 +344,52 @@ def test_legacy_wait_without_turn_generation_cannot_infer_terminal_authority(tmp
     fence = _finish(comms, "child", "child-turn")
     assert comms.pause_waits_after_terminal_turn(fence) == ()
     assert comms.registry.require("owner").goal.active
+
+
+async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    comms = wire(tmp_path / "wire")
+    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    child = (await agent.new_session(str(tmp_path / "child"))).session_id
+    _thread(comms, "owner", tmp_path)
+    goal = comms.update_goal("owner", "set", text="Await child")
+    assert goal is not None
+    terminal = []
+    original_emit = agent._emit_event
+
+    async def capture_emit(session_id, event):
+        if event.get("type") == "settled":
+            terminal.append("settled")
+        await original_emit(session_id, event)
+
+    async def events(*_args, **_kwargs):
+        comms.update_goal("owner", "standby", goal_id=goal.id, wait_for=[child])
+        yield {"type": "settled"}
+        yield {"type": "done", "ok": True, "text": ""}
+
+    original_history_page = comms.bus._history_page
+
+    def unavailable(*args, **kwargs):
+        if not terminal:
+            return original_history_page(*args, **kwargs)
+        assert terminal == ["settled"]
+        assert comms.registry.require(child).active_turn is None
+        raise OSError("injected optional direct-reply read failure")
+
+    monkeypatch.setattr(agent, "_emit_event", capture_emit)
+    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr(comms.bus, "_history_page", unavailable)
+    try:
+        await agent._run_agent_turn(child, child, "Finish work")
+        assert terminal == ["settled"]
+        assert comms.registry.require("owner").goal.active
+        assert comms.goal_wait("owner") is not None
+        assert comms.registry.require(child).active_turn is None
+    finally:
+        await agent.shutdown()
 
 
 async def test_acp_delayed_old_callback_after_new_finish_before_reply(tmp_path, monkeypatch):
