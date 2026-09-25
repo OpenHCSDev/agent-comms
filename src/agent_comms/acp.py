@@ -71,6 +71,7 @@ from .declarations import (
     _store_lock,
     is_channel_target,
 )
+from .diagnostics import record_terminal_failure
 from .goal_attempts import (
     Generation,
     GoalAttemptError,
@@ -106,6 +107,16 @@ REPLY_QUIET = 1.5  # after the last reply, wait this long then end the turn
 REPLY_POLL = 0.25
 ACTIVITY_WINDOW = 60.0  # keep the turn open while a peer is thinking/working
 IDLE_GRACE = 1.0  # peers idle for this long -> drain and end the turn
+
+
+def _goal_attempt_unavailable() -> RequestError:
+    return RequestError.invalid_params(
+        {
+            "reason": "goal_attempt_unavailable",
+            "details": "The goal has no launchable attempt. Inspect its state and use "
+            "Retry for a failed attempt; no prompt was sent to Pi.",
+        }
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +165,8 @@ class CommsAgent:
         self._steering_origins: dict[str, dict[str, Message]] = {}
         self._steering_goal_ids: dict[str, dict[str, str | None]] = {}
         self._turn_input_keys: dict[str, set[str]] = {}
+        self._turn_original_input_keys: dict[str, tuple[str, ...]] = {}
+        self._turn_input_text: dict[str, str] = {}
         self._dispositions = InputDispositions(comms.root)
         self._goal_store: GoalAttemptStore | None = None
         self._pending_goal_origins: dict[str, str] = {}
@@ -767,9 +780,24 @@ class CommsAgent:
 
     async def replay_unknown_inputs(self, session_id: str, client: Any = None) -> None:
         owner = self._require_session(session_id)
-        overview = self._comms.input_delivery(owner)
+        overview = self._comms.input_delivery(
+            owner, awaiting_keys=self.awaiting_input_keys(session_id)
+        )
         for disposition in overview["inputs"]:
             await self._emit_public_input_disposition(session_id, disposition, client=client)
+
+    def awaiting_input_keys(self, session_id: str) -> frozenset[str] | None:
+        """Derive delivery notices from existing owner queues; never create new authority."""
+        owner = self._comms.registry.require(self._require_session(session_id))
+        if owner.pid != os.getpid() or not self._comms.registry.status(owner.name).running:
+            return None
+        keys = set(self._turn_input_keys.get(session_id, ()))
+        keys.update(
+            self._dispositions.bus_key(turn.origin, owner)
+            for turn in self._pending_turns.get(session_id, ())
+            if turn.origin is not None
+        )
+        return frozenset(keys)
 
     async def emit_session_identity(self, session_id: str, name: str, client: Any = None) -> None:
         """Let a subscriber identify its owner before potentially long replay."""
@@ -1459,6 +1487,7 @@ class CommsAgent:
             )
         if pushed:
             self._comms.acknowledge_through(thread_name, self._inbox_cursors[session_id])
+            await self.emit_input_delivery_changed(session_id)
         self._schedule_wake(session_id)
         return pushed
 
@@ -1717,17 +1746,22 @@ class CommsAgent:
         goal = self._comms.registry.require(name).goal
         if goal is None or goal.id != goal_id or goal.revision != expected_revision:
             raise ValueError("The goal changed; refresh its state before updating.")
-        updated = self._comms.update_goal(
-            name,
-            status,
-            goal_id=goal_id,
-            expected_goal=goal,
-            expected_owner_pid=os.getpid(),
-            owner_action=True,
-        )
+        try:
+            updated = self._comms.update_goal(
+                name,
+                status,
+                goal_id=goal_id,
+                expected_goal=goal,
+                expected_owner_pid=os.getpid(),
+                owner_action=True,
+                owner_store=self._open_goal_store() if status == "active" else None,
+            )
+        finally:
+            # Resume can discover that a paused attempt failed. Publish the
+            # reconciled BLOCKED state even when the action returns an error.
+            await self._sync_thread_config(session_id)
         if status == "active":
             self._schedule_goal(session_id)
-        await self._sync_thread_config(session_id)
         return updated
 
     async def retry_goal(self, session_id: str, goal_id: str, expected_revision: int) -> Goal:
@@ -1890,14 +1924,14 @@ class CommsAgent:
             if store is None:
                 if autonomous_goal:
                     return
-                raise RequestError.invalid_params({"reason": "goal_attempt_unavailable"})
+                raise _goal_attempt_unavailable()
             admission = self._comms.registry.snapshot().admission_generations[thread_name]
             with _store_lock(self._comms._wire_lock_path):
                 generation = store.snapshot(goal.id)
                 if generation is None or generation.state != "ready":
                     if autonomous_goal:
                         return
-                    raise RequestError.invalid_params({"reason": "goal_attempt_unavailable"})
+                    raise _goal_attempt_unavailable()
                 try:
                     grant = self._ready_goal_grant_locked(thread, admission, store, generation)
                     reservation = store.reserve(goal.id, generation.number, ready_grant=grant)
@@ -1905,9 +1939,7 @@ class CommsAgent:
                 except GoalAttemptError as error:
                     if autonomous_goal:
                         return
-                    raise RequestError.invalid_params(
-                        {"reason": "goal_attempt_unavailable"}
-                    ) from error
+                    raise _goal_attempt_unavailable() from error
         self._sessions[session_id] = thread_name
         # Error-display deduplication belongs to one backend turn, not a session.
         self._emitted_errors.pop(session_id, None)
@@ -2239,6 +2271,7 @@ class CommsAgent:
             )
         reply_parts: list[str] = []
         terminal_ok: bool | None = None
+        terminal_failure: dict[str, Any] = {}
         successful_tool_observed = False
         goal_tool_ok = False
         goal_attempt_resolved = False
@@ -2263,8 +2296,12 @@ class CommsAgent:
         finish_event = asyncio.Event()
         self._backend_inboxes[session_id] = backend_inbox
         self._active_turns[session_id] = turn_id
+        if original_owner_input and original_keys:
+            self._turn_original_input_keys[session_id] = tuple(original_keys)
+            self._turn_input_text[session_id] = original_display or task
         try:
             await self._emit_event(session_id, self._started_event(thread_name, turn_id))
+            await self.emit_input_delivery_changed(session_id)
             await self._drain_inbox(session_id)
             # ACP delivery/ACK/UI updates above are not model context. This
             # bounded projection is prepared ONLY inside an already authorized
@@ -2346,6 +2383,7 @@ class CommsAgent:
                             # its persisted UNKNOWN row visible, but do not
                             # count it as an unstarted sent follow-up.
                             self._turn_input_keys.get(session_id, set()).discard(refused_key)
+                            await self.emit_input_delivery_changed(session_id)
                         if self._queued_inputs.get(session_id, {}).pop(input_id, None):
                             await self._emit_queue_state(session_id)
                 if kind == "provider_usage":
@@ -2395,6 +2433,7 @@ class CommsAgent:
                 if kind == "tool_end" and event.get("ok") is True:
                     successful_tool_observed = True
                 if kind == "done":
+                    terminal_failure = event
                     unknown_attempts = any(
                         self._dispositions.status(key) != "started"
                         for key in self._turn_input_keys.get(session_id, set())
@@ -2653,7 +2692,14 @@ class CommsAgent:
                 # result cannot turn them into a completed wire reply. Keep the
                 # failure notice non-waking, including for human reply targets.
                 # Backend text may include stderr, secrets, or content from an
-                # unrelated session. Only the local client gets that diagnostic.
+                # unrelated session. Persist only structural facts for headless owners.
+                diagnostic_path = record_terminal_failure(
+                    self._comms.root,
+                    turn_id=turn_id,
+                    thread=thread_name,
+                    event=terminal_failure,
+                    sequences=tuple(origin.seq for origin in origins),
+                )
                 notice_targets = tuple(
                     dict.fromkeys(
                         (*reply_targets,)
@@ -2669,7 +2715,8 @@ class CommsAgent:
                     self._comms.send(
                         thread_name,
                         target,
-                        f"{prefix}: backend turn did not complete; inspect local diagnostics.",
+                        f"{prefix}: backend turn did not complete. "
+                        f"[Open diagnostic]({diagnostic_path.as_uri()})",
                         MessageType.ALERT,
                         notice=True,
                     )
@@ -2778,10 +2825,13 @@ class CommsAgent:
             # Discard unresolved per-turn IDs without replay. Durable ACP input
             # disposition across owner crashes remains a separate integration.
             self._forwarded_inputs.pop(session_id, None)
+            self._turn_original_input_keys.pop(session_id, None)
+            self._turn_input_text.pop(session_id, None)
             self._steering_input_keys.pop(session_id, None)
             self._steering_origins.pop(session_id, None)
             self._steering_goal_ids.pop(session_id, None)
             self._turn_input_keys.pop(session_id, None)
+            await self.emit_input_delivery_changed(session_id)
             remaining = self._queued_inputs.pop(session_id, {})
             if remaining:
                 await self._emit_queue_state(
@@ -3082,14 +3132,34 @@ class CommsAgent:
         elif kind == "error":
             text = str(event.get("text") or "Backend failed")
             self._emitted_errors[session_id] = text
-            await self._emit_text(session_id, f"[agent error] {text}", client)
+            failed_input = None
+            input_text = self._turn_input_text.get(session_id)
+            if input_text and any(
+                self._dispositions.status(key) != "started"
+                for key in self._turn_original_input_keys.get(session_id, ())
+            ):
+                failed_input = {"text": input_text, "reason": text}
+            await client.session_update(
+                session_id=session_id,
+                update=AgentMessageChunk(
+                    session_update="agent_message_chunk",
+                    content=TextContentBlock(type="text", text=f"[agent error] {text}"),
+                    field_meta={
+                        "agentComms": {
+                            **({"inputFailed": failed_input} if failed_input else {}),
+                            "route": None,
+                        }
+                    },
+                ),
+            )
         elif kind == "done":
             prior_error = self._emitted_errors.pop(session_id, None)
             if not event.get("ok") and event.get("text"):
                 text = str(event["text"])
                 # An explicit error event in this turn already showed the failure.
                 if prior_error != text:
-                    await self._emit_text(session_id, f"[agent error] {text}", client)
+                    await self._emit_event(session_id, {"type": "error", "text": text}, client)
+                    self._emitted_errors.pop(session_id, None)
 
     @staticmethod
     def _sanitized_compaction_summary(value: Any) -> str:

@@ -1090,13 +1090,14 @@ for line in sys.stdin:
         )
         assert "B-secret" not in json.dumps(events)
         assert [e["type"] for e in events].count("done") == 1
+        assert process is not None and process.returncode is not None
         assert events[-1] == {
             "type": "done",
             "ok": False,
             "text": "Pi session identity changed during this turn.",
             "reason_code": "session_identity_uncertain",
+            "diagnostic": {"exit_code": process.returncode},
         }
-        assert process is not None and process.returncode is not None
         assert owner not in backend._ACTIVE_PROCESSES
         assert [e["type"] for e in events].count("input_started") == 0
         if abort_pipe_closed:
@@ -2394,6 +2395,9 @@ if select.select([sys.stdin], [], [], 0)[0]:
         assert done["reason_code"] == "pi_input_id_unavailable"
         assert "phase=await_get_state" in done["text"]
         assert "session_bytes=123" in done["text"]
+        assert done["diagnostic"]["reason"] == "native_preflight_timeout"
+        assert done["diagnostic"]["session_bytes"] == 123
+        assert done["diagnostic"]["wait_ms"] >= 0
         assert "elapsed_ms=" in done["text"]
         assert "wait_ms=" in done["text"]
         assert "spawn_ms=" in done["text"]

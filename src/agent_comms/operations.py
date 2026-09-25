@@ -18,6 +18,7 @@ import select
 import shlex
 import signal
 import sqlite3
+import stat
 import subprocess
 import sys
 import time
@@ -2077,7 +2078,15 @@ class Comms:
             if self.registry.name_reserved(name):
                 raise ValueError(f"Thread name {name!r} is already reserved.")
             self._require_available_new_tags(thread.tags)
-            session_path.parent.mkdir(parents=True, exist_ok=True)
+            session_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            if os.name == "posix":
+                # Do not follow a redirected legacy directory when repairing it.
+                info = session_path.parent.lstat()
+                if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid():
+                    raise ValueError("Imported session directory is not owner-controlled.")
+                # Native Pi requires a private session directory before it will
+                # attest input IDs. Also repair directories made by older imports.
+                session_path.parent.chmod(0o700)
             _atomic_write_text(session_path, snapshot.pi_session(project))
             try:
                 self.registry.register(thread, ThreadStatus.STOPPED)
@@ -2320,7 +2329,13 @@ class Comms:
             rows = InputDispositions(self.root).unknown(self.registry.aliases_for(name))
             return [InputDispositions.public(row) for row in rows]
 
-    def input_delivery(self, name: str, *, include_history: bool = False) -> dict[str, Any]:
+    def input_delivery(
+        self,
+        name: str,
+        *,
+        include_history: bool = False,
+        awaiting_keys: frozenset[str] | None = None,
+    ) -> dict[str, Any]:
         """Read current delivery notices and separately counted migration history."""
         from .input_disposition import AcpDeliveryCursors, InputDispositions
 
@@ -2329,10 +2344,12 @@ class Comms:
             aliases = self.registry.aliases_for(name)
             boundary = AcpDeliveryCursors(self.root).legacy_through(aliases)
             return InputDispositions(self.root).delivery_overview(
-                aliases, boundary, include_history=include_history
+                aliases, boundary, include_history=include_history, awaiting_keys=awaiting_keys
             )
 
-    def dismiss_historical_inputs(self, name: str) -> dict[str, Any]:
+    def dismiss_historical_inputs(
+        self, name: str, *, awaiting_keys: frozenset[str] | None = None
+    ) -> dict[str, Any]:
         """Clear only migration notices; UNKNOWN remains unresolved and unreplayable."""
         from .input_disposition import AcpDeliveryCursors, InputDispositions
 
@@ -2340,7 +2357,9 @@ class Comms:
             self.registry.require(name)
             aliases = self.registry.aliases_for(name)
             boundary = AcpDeliveryCursors(self.root).legacy_through(aliases)
-            return InputDispositions(self.root).dismiss_historical(aliases, boundary)
+            return InputDispositions(self.root).dismiss_historical(
+                aliases, boundary, awaiting_keys=awaiting_keys
+            )
 
     def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> dict:
         """Project exact review eligibility for one current goal and dependency set."""
@@ -2648,8 +2667,12 @@ class Comms:
                 thread.pid != expected_owner_pid or not self.registry.status(thread.name).running
             ):
                 raise ValueError("The goal owner changed; refresh its state.")
-            if owner_store is not None and action != "set":
-                raise ValueError("Owner goal authority applies only to goal creation.")
+            if (
+                owner_store is not None
+                and action != "set"
+                and not (action == "active" and owner_action and expected_owner_pid is not None)
+            ):
+                raise ValueError("Owner goal authority requires goal creation or explicit resume.")
             # The automatic turn-end pause/block must not overwrite progress
             # written by a separate tool process after ACP's precheck. Check
             # the entire immutable snapshot under the same lock as the write.
@@ -2804,6 +2827,28 @@ class Comms:
                     raise ValueError("Blocked goal requires an explicit retry through its owner.")
                 if goal.status == "completed" and action != "completed":
                     raise ValueError("A completed goal cannot be resumed; set a new goal.")
+                if action == "active" and owner_store is not None:
+                    generation = owner_store.snapshot(goal.id)
+                    if generation is None:
+                        raise ValueError(
+                            "Goal launch authority is missing; inspect it before Retry."
+                        )
+                    if generation.state == "blocked" and generation.attempt_id:
+                        # A failed/uncertain attempt needs the explicit Retry
+                        # decision, not a status-only Resume. Expose that state
+                        # immediately so the UI offers the correct control.
+                        blocked = replace(goal, status="blocked", revision=goal.revision + 1)
+                        self.registry.register(
+                            replace(thread, goal=blocked), self.registry.status(thread.name)
+                        )
+                        raise ValueError(
+                            "The interrupted goal attempt is unresolved. Inspect it, then use "
+                            "Retry to authorize a new attempt. Your messages can still be sent."
+                        )
+                    elif generation.state == "ready":
+                        pass
+                    elif not (generation.state == "reserved" and thread.active_turn is not None):
+                        raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
                 goal = replace(
                     goal,
                     status="active" if action == "standby" else action,
