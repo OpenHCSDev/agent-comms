@@ -1,6 +1,6 @@
 # Seamless channel notification, N/K wake, and resource ownership
 
-Status: **draft integration, not file-write authority**. The branch now has a versioned wake-admission field on claim rows and a read-only verifier that checks the committed N/K source, sealed selected receipt, current execution, owner admission generation, and exact turn. It does not publish a bound file claim or gate any write. The reviewed N/K session-metadata race fix is being landed separately in PR #38, then this branch will rebase onto it. This proposal remains separate from the merged sidebar route-count projection.
+Status: **draft integration, not file-write authority**. The branch now has a versioned wake-admission field on claim rows and a read-only verifier that checks the committed N/K source, sealed selected receipt, current execution, owner admission generation, and exact turn. It does not publish a bound file claim or gate any write. The N/K session-metadata race fix merged separately in PR #38 at `8c053ec47b41d263c4b4768138726707a43c4a5e`; this branch is rebased onto it. This proposal remains separate from the merged sidebar route-count projection.
 
 ## User-facing behavior
 
