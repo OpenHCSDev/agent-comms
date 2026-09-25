@@ -36,6 +36,7 @@ from agent_comms.coordination_store import (
 from agent_comms.declarations import MessageBus, Thread
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, NativeTurnResult
 from agent_comms.operations import Comms
+from agent_comms.wake_injection import render_selected_wake_frame
 
 
 @pytest.fixture
@@ -177,6 +178,11 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     )
     assert alpha is not None and alpha.disposition is ClaimDisposition.IGNORED
     assert len(alpha_calls) == 1
+    assert "── comms: 1 selected ──" in alpha_calls[0][1]
+    assert f'"source_seq":{initial.message.seq}' in alpha_calls[0][1]
+    assert "engage only if this concerns your assigned task" in alpha_calls[0][1]
+    assert "No response obligation exists until triage engages" in alpha_calls[0][1]
+    assert "you owe a response" not in alpha_calls[0][1]
     assert len(comms.channel_history("#team")) == 1
     second, beta_calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", second)
@@ -186,6 +192,11 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert beta is not None and beta.disposition is ClaimDisposition.COMPLETED
     assert beta.exact_target == "#team" and beta.response_message_id
     assert len(beta_calls) == 2
+    assert "engage only if this concerns your assigned task" in beta_calls[0][1]
+    assert "expected: this is yours" in beta_calls[1][1]
+    assert '"target":"#team"' in beta_calls[1][1]
+    assert f'"source_seq":{initial.message.seq}' in beta_calls[1][1]
+    assert "This frame is a read-only projection, not file-write permission" in beta_calls[1][1]
     response = comms.channel_history("#team")[-1]
     assert response.body == "42" and response.sender == "beta"
     assert "_agent_comms_private_v1" not in response.to_wire()
@@ -229,7 +240,7 @@ async def test_initial_no_wake_observer_never_enters_model_or_claim_page(
         )
         is None
     )
-    assert not calls
+    assert not calls  # No-wake has no prompt frame or model invocation.
     assert len(comms.channel_history("#team")) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
@@ -238,6 +249,37 @@ async def test_initial_no_wake_observer_never_enters_model_or_claim_page(
             ).fetchone()[0]
             == 1
         )
+
+
+def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -> None:
+    root, _root_id, comms, initial, people = _root(tmp_path, mentioned=True)
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        alpha_lookup = stable_thread_lookup(people[1].created_at)
+        beta_lookup = stable_thread_lookup(people[2].created_at)
+        assert sealed_cohort_claims(store, alpha_lookup) == ()
+        selected = sealed_cohort_claims(store, beta_lookup)[0]
+    # A pending FULL claim has no response obligation, and no frame may grant one.
+    with pytest.raises(IdentityConflict, match="response obligation"):
+        render_selected_wake_frame(initial, selected, people[2], phase="full")
+    with pytest.raises(IdentityConflict, match="bounded triage"):
+        render_selected_wake_frame(initial, selected, people[2], phase="triage")
+    forged = replace(selected, recipient="alpha", recipient_lookup=alpha_lookup)
+    with pytest.raises(IdentityConflict, match="selected N/K"):
+        render_selected_wake_frame(initial, forged, people[1], phase="full")
+    assert len(comms.channel_history("#team")) == 1  # Framing never publishes a row.
+
+
+def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: Path) -> None:
+    root, _root_id, comms, initial, people = _root(tmp_path)
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        lookup = stable_thread_lookup(people[1].created_at)
+        claim = sealed_cohort_claims(store, lookup)[0]
+    frame = render_selected_wake_frame(initial, claim, people[1], phase="triage")
+    assert f'"source_seq":{initial.message.seq}' in frame
+    assert '"wake_mode":"bounded_triage"' in frame
+    assert initial.message.body not in frame
+    assert "No response obligation exists until triage engages" in frame
+    assert len(comms.channel_history("#team")) == 1
 
 
 async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, monkeypatch) -> None:
@@ -250,6 +292,10 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
     )
     assert outcome is not None and outcome.exact_target == "sender"
     assert len(calls) == 1  # direct FULL, no separate triage invocation
+    assert "expected: this is yours" in calls[0][1]
+    assert '"audience":"direct"' in calls[0][1]
+    assert '"target":"sender"' in calls[0][1]
+    assert "you owe a response" in calls[0][1]
     assert comms.bus.dm_history("sender", "beta")[-1].target == "sender"
 
 
