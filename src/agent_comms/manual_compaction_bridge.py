@@ -23,7 +23,7 @@ async def _emit_compaction(agent: Any, session_id: str, phase: str, summary: str
         "contextState": "unknown",
         "willRetry": False,
     }
-    if phase == "end" and summary:
+    if phase in {"end", "abort"} and summary:
         detail["summary"] = summary
     text = {
         "start": "",
@@ -32,6 +32,8 @@ async def _emit_compaction(agent: Any, session_id: str, phase: str, summary: str
     }[phase]
     if phase == "end" and summary:
         text += f" Summary: {summary}"
+    elif phase == "abort" and summary:
+        text += f" {summary}"
     await agent._runtime.session_update(
         session_id=session_id,
         update=AgentMessageChunk(
@@ -110,7 +112,7 @@ async def compact_context(
                 agent,
                 session_id,
                 "end" if success else "abort",
-                result.get("summary", "") if success else "",
+                result.get("summary", "") if success else result.get("error", ""),
             )
             if success:
                 await agent._runtime.session_update(
