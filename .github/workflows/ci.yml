@@ -43,6 +43,12 @@ jobs:
           node stack/test-native-compaction.mjs
           node stack/test-native-auto-compaction.mjs
 
+      - name: Check native RPC compaction against localhost provider
+        run: |
+          uv pip install --python stack/.venv/bin/python pytest pytest-asyncio pytest-cov
+          PYTHONPATH="$PWD/src" AC_NATIVE_STACK_BIN="$PWD/stack/bin/pi-native" \
+            stack/.venv/bin/python -m pytest tests/test_stack_native_compaction.py --no-cov -q
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:
