@@ -2,9 +2,12 @@
 """LOCAL-ONLY experiment: guarded native compaction append in a disposable pinned Pi copy.
 
 Not wired into prepare-pi-native, the installed package, ACP, or PR48 runtime.
-The caller-controlled ownerRequired switch only denies a test case; it is NOT owner proof.
-PR48 adaptive use must stay disabled until a canonical Python owner/goal/correction gate
-and send/commit coordination exist. PR48_PROBE_FAIL_AFTER_WRITE is a test fault hook.
+The caller-controlled ownerRequired switch now requires a Python-issued
+OwnerCompactionAttestation (blocker-1 registry recheck output) bound to the
+witness fence; JS cannot recheck the registry after handoff, so Python must
+re-attest at commit time. This is NOT yet a full live bridge and grants no
+send/commit coordination.
+PR48_PROBE_FAIL_AFTER_WRITE is a test fault hook.
 """
 
 # ruff: noqa: E501  # Exact pinned JS anchors and generated source lines.
@@ -211,11 +214,37 @@ CAS_METHODS = """    /** Native-only observation; never a registry/goal/correcti
         return Object.freeze({ sessionId: this.sessionId, sessionFile: this.sessionFile,
             leafId: this.leafId, firstKeptEntryId, revision });
     }
-    /** Prototype only: fail closed on owner-scoped work until Python owner gate exists. */
+    /** Prototype only: owner attestation is Python-issued evidence, not self-asserted. */
     appendCompactionIfCurrent(witness, summary, tokensBefore, details, usage, options = {}) {
-        if (options.ownerRequired === true)
-            throw new Error("Canonical Python owner commit attestation unavailable");
-        if (Object.keys(options).some(key => key !== "ownerRequired") ||
+        // Blocker-2 bridge: `options.attestation` must be a Python
+        // OwnerCompactionAttestation from ThreadRegistry.attest_owner_compaction.
+        // JS binds it to this witness's session fence at handoff. JS cannot
+        // recheck the registry after handoff; Python must re-attest at commit
+        // time (blocker-1 recheck design). This check NEVER proves registry
+        // currency by itself and never bypasses the writer CAS below.
+        if (options.ownerRequired === true) {
+            const denial = "Canonical Python owner commit attestation unavailable";
+            const attestation = options.attestation;
+            if (!attestation || typeof attestation !== "object" || Array.isArray(attestation))
+                throw new Error(denial);
+            const valid =
+                typeof attestation.thread === "string" && attestation.thread.length > 0 &&
+                Number.isInteger(attestation.owner_epoch) && attestation.owner_epoch >= 1 &&
+                typeof attestation.turn_id === "string" && attestation.turn_id.length > 0 &&
+                typeof attestation.goal_id === "string" && attestation.goal_id.length > 0 &&
+                Number.isInteger(attestation.goal_revision) && attestation.goal_revision >= 0 &&
+                Number.isInteger(attestation.correction_revision) &&
+                attestation.correction_revision >= 0 &&
+                attestation.session_file === witness.sessionFile &&
+                attestation.session_leaf === witness.leafId &&
+                attestation.session_revision === witness.revision &&
+                (attestation.registry_revision === null ||
+                    (Array.isArray(attestation.registry_revision) &&
+                        attestation.registry_revision.length === 4 &&
+                        attestation.registry_revision.every(Number.isInteger)));
+            if (!valid) throw new Error(denial);
+        }
+        if (Object.keys(options).some(key => key !== "ownerRequired" && key !== "attestation") ||
             !this.persist || !this.flushed || !this.sessionFile ||
             !witness || witness.sessionId !== this.sessionId ||
             witness.sessionFile !== this.sessionFile || witness.leafId !== this.leafId ||

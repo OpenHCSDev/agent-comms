@@ -37,10 +37,21 @@ if (mode === 'hold-lock') {
   if (!sessionFile) throw new Error('A persisted native session file is required');
   const witness = manager.captureCompactionWitness?.(firstKeptEntryId);
   console.log(JSON.stringify({ phase: 'captured', capturedLeaf, sessionFile,
-    branchLength: capturedBranch.length, firstKeptEntryId, guarded: Boolean(witness) }));
+    branchLength: capturedBranch.length, firstKeptEntryId, guarded: Boolean(witness),
+    sessionRevision: witness ? witness.revision : null }));
   const readline = createInterface({ input: process.stdin, crlfDelay: Infinity });
-  const [action] = await (async () => { for await (const line of readline) return [line]; return []; })();
+  const lines = [];
+  for await (const line of readline) {
+    lines.push(line);
+    if (lines.length === 2) break;
+  }
   readline.close();
+  const [action, attestationLine] = lines;
+  let attestation;
+  if (attestationLine !== undefined) {
+    try { attestation = JSON.parse(attestationLine); }
+    catch { attestation = { malformed: true }; }
+  }
   if (action === 'append-local') manager.appendMessage(message('later local input'));
   else if (action !== 'continue' && action !== 'continue-owner-goal' &&
       action !== 'probe-unknown-write') throw new Error('Unexpected barrier action');
@@ -48,11 +59,15 @@ if (mode === 'hold-lock') {
   let commitId = null;
   let commitError = null;
   try {
-    // Stock Pi has no CAS. The isolated prototype accepts an explicit native
-    // witness; owner-scoped requests fail closed pending a real Python bridge.
+    // Stock Pi has no CAS. The isolated prototype requires an explicit native
+    // witness plus, for owner-scoped work, a Python-issued attestation whose
+    // fence must match this witness; Python still rechecks at commit time.
     commitId = witness
       ? manager.appendCompactionIfCurrent(witness, 'STALE CANDIDATE', 42,
-          undefined, undefined, { ownerRequired: action === 'continue-owner-goal' })
+          undefined, undefined,
+          action === 'continue-owner-goal'
+            ? { ownerRequired: true, attestation }
+            : {})
       : manager.appendCompaction('STALE CANDIDATE', firstKeptEntryId, 42);
   } catch (error) {
     commitError = String(error);

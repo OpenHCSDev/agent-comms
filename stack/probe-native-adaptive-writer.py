@@ -16,16 +16,21 @@ import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
-from agent_comms.declarations import Goal, Thread, ThreadRegistry  # noqa: E402
+from agent_comms.declarations import (  # noqa: E402
+    Goal,
+    RelationViolationError,
+    Thread,
+    ThreadRegistry,
+)
 
 SCRIPT = Path(__file__).with_suffix(".mjs")
 MANIFEST = Path(__file__).with_name("pi-native.sha256")
-PROTOTYPE_SHA = "6cfeed6722f8f6de9d820c05941ecadcb88425b8856ad8696518de16496be05c"
+PROTOTYPE_SHA = "d9f0e3b3e6ff8975a13d6a5f07cb88b13e399003d8725c409829edd4425afbe6"
 
 
 def saved_entries(session_file: str) -> list[dict[str, object]]:
@@ -111,7 +116,7 @@ def run_case(case: str, package: Path, *, prototype: bool) -> None:
         registry = None
         claimed = None
         claimed_epoch = None
-        if case in {"owner-goal", "owner-stop"}:
+        if case in {"owner-goal", "owner-stop", "positive"}:
             registry = ThreadRegistry(root / "registry.json")
             registry.register(
                 Thread(
@@ -152,6 +157,7 @@ def run_case(case: str, package: Path, *, prototype: bool) -> None:
             assert captured["branchLength"] >= 2
 
             invalidation: dict[str, object] = {}
+            attestation: dict[str, object] | None = None
             if case == "local-leaf":
                 action = "append-local"
             elif case == "other-writer":
@@ -169,28 +175,58 @@ def run_case(case: str, package: Path, *, prototype: bool) -> None:
                 assert saved[-1]["id"] == appended["appendedId"]
                 invalidation = {"externalWriterEntry": appended["appendedId"]}
                 action = "continue"
-            elif case == "owner-goal":
-                # The registry, not JS labels, owns the goal and claimed turn.
-                assert registry is not None and claimed is not None and claimed_epoch is not None
-                registry.register(
-                    replace(registry.require("owner"), goal=Goal("new task", "goal-new"))
-                )
-                assert registry.require("owner").goal.id == "goal-new"
-                current_epoch = registry.snapshot().owner_epochs["owner"]
-                assert current_epoch != claimed_epoch
-                invalidation = {
-                    "goalBefore": claimed.goal.id if claimed.goal else None,
-                    "goalAfter": registry.require("owner").goal.id,
-                    "ownerEpochBefore": claimed_epoch,
-                    "ownerEpochAfter": current_epoch,
-                }
+            elif case in {"owner-goal", "owner-stop", "positive"}:
+                if case == "owner-goal":
+                    # The registry, not JS labels, owns the goal and claimed turn.
+                    assert (
+                        registry is not None and claimed is not None and claimed_epoch is not None
+                    )
+                    registry.register(
+                        replace(registry.require("owner"), goal=Goal("new task", "goal-new"))
+                    )
+                    assert registry.require("owner").goal.id == "goal-new"
+                    current_epoch = registry.snapshot().owner_epochs["owner"]
+                    assert current_epoch != claimed_epoch
+                    invalidation = {
+                        "goalBefore": claimed.goal.id if claimed.goal else None,
+                        "goalAfter": registry.require("owner").goal.id,
+                        "ownerEpochBefore": claimed_epoch,
+                        "ownerEpochAfter": current_epoch,
+                    }
+                elif case == "owner-stop":
+                    assert registry is not None and claimed_epoch is not None
+                    registry.unregister("owner")
+                    assert not registry.status("owner").active
+                    invalidation = {"ownerEpochBefore": claimed_epoch, "statusAfter": "stopped"}
+                else:
+                    assert (
+                        registry is not None and claimed is not None and claimed_epoch is not None
+                    )
                 action = "continue-owner-goal"
-            elif case == "owner-stop":
-                assert registry is not None and claimed_epoch is not None
-                registry.unregister("owner")
-                assert not registry.status("owner").active
-                invalidation = {"ownerEpochBefore": claimed_epoch, "statusAfter": "stopped"}
-                action = "continue-owner-goal"
+                # Commit-time Python re-attestation (blocker-1 design): the
+                # recheck fails closed for owner-goal/owner-stop, so no valid
+                # attestation can reach the native bridge for these cases.
+                try:
+                    receipt = registry.attest_owner_compaction(
+                        claimed,
+                        claimed_epoch,
+                        claimed.active_turn.id if claimed.active_turn else "",
+                        expected_goal_id=claimed.goal.id if claimed.goal else "",
+                        expected_goal_revision=claimed.goal.revision if claimed.goal else -1,
+                        correction_revision=7,
+                        session_file=str(captured["sessionFile"]),
+                        session_leaf=str(captured["capturedLeaf"]),
+                        session_revision=str(captured["sessionRevision"]),
+                    )
+                    attestation = asdict(receipt)
+                except RelationViolationError:
+                    attestation = None
+                if case == "owner-goal":
+                    assert attestation is None, "Mutated goal must not re-attest"
+                if case == "owner-stop":
+                    assert attestation is None, "Stopped owner must not re-attest"
+                if case == "positive":
+                    assert attestation is not None, "Live owner must re-attest"
             elif case == "crash-lock":
                 holder = subprocess.Popen(
                     ["node", str(SCRIPT), "hold-lock", captured["sessionFile"]],
@@ -216,6 +252,8 @@ def run_case(case: str, package: Path, *, prototype: bool) -> None:
                 raise ValueError("Unknown negative case")
 
             proc.stdin.write(action + "\n")
+            if attestation is not None:
+                proc.stdin.write(json.dumps(attestation) + "\n")
             proc.stdin.flush()
             stdout, stderr = proc.communicate(timeout=20)
             if proc.returncode != 0:
