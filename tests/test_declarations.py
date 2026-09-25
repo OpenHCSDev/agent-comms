@@ -839,6 +839,36 @@ class TestMessageBus:
         assert newer.has_older
         assert newer.has_newer
 
+    @pytest.mark.parametrize("route", ["channel", "dm", "incoming"])
+    @pytest.mark.parametrize("middle_bytes", [180_000, 300_000])
+    def test_forward_page_never_skips_large_message_before_smaller_message(
+        self, tmp_path: Path, route: str, middle_bytes: int
+    ):
+        bus = self._bus(tmp_path)
+        target = "b" if route == "dm" else "#all"
+        for body in ("a" * 120_000, "b" * middle_bytes, "small"):
+            bus.send(Message(sender="a", target=target, body=body, type=MessageType.INFO))
+
+        def page(after):
+            if route == "channel":
+                return bus.channel_history_page("#all", after=after)
+            if route == "dm":
+                return bus.dm_history_page("a", "b", after=after)
+            return bus.incoming_page("b", after=after)
+
+        first = page(0)
+        # A later small row must not advance the cursor past the omitted row.
+        assert [message.seq for message in first.messages] == [1]
+        assert first.has_newer
+        delivered = list(first.messages)
+        current = first
+        while current.has_newer:
+            current = page(current.newest_seq)
+            assert current.messages
+            delivered.extend(current.messages)
+        assert [message.seq for message in delivered] == [1, 2, 3]
+        assert not page(delivered[-1].seq).messages
+
     def test_private_sideband_does_not_change_public_history_page_budget(self, tmp_path: Path):
         bus = self._bus(tmp_path)
         for body in ("first", "second", "third"):

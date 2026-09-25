@@ -4050,7 +4050,10 @@ class MessageBus:
             if after is not None:
                 if len(page) >= limit or (page and page_bytes + encoded_size > max_bytes):
                     has_newer = True
-                    continue
+                    # Forward cursors must never jump over an eligible row.
+                    # Leave this row for the next page, even if a later,
+                    # smaller row would fit in the remaining byte budget.
+                    break
                 page.append((message, encoded_size))
                 page_bytes += encoded_size
                 continue
