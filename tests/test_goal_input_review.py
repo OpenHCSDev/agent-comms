@@ -51,6 +51,16 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
         assert [row["sequence"] for row in review["messages"]] == [m.seq for m in messages]
         assert review["excluded_inputs"][0]["reason"] == "owner_input_without_bus_sequence"
         keys = review["reviewed_inputs"]
+        with pytest.raises(ValueError, match="recipient"):
+            report.invoke(
+                comms,
+                {
+                    **args,
+                    "reviewed_inputs": [row["inputId"] for row in result["unresolved_inputs"]],
+                },
+            )
+        assert all(not agent._dispositions.get(key).get("goal_reviews") for key in keys)
+        assert not agent._dispositions.get("acp:owner-input").get("goal_reviews")
         with pytest.raises(ValueError, match="pending or UNKNOWN"):
             report.invoke(comms, {**args, "reviewed_inputs": keys[1:]})
         assert all(not agent._dispositions.get(key).get("goal_reviews") for key in keys)
