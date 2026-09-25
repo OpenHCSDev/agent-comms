@@ -30,6 +30,32 @@ def test_codex_model_arguments_are_safe_for_explicit_compaction():
     assert compact._safe_args(["--provider", "openai-codex", "--model", "gpt-5.5"])
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (
+            "Summarization failed: 503 Service Unavailable; private prompt",
+            "Compaction provider returned HTTP 503.",
+        ),
+        (
+            "Summarization failed: generation hit the token cap and the summary is incomplete",
+            "Compaction summary hit the model output limit.",
+        ),
+        (
+            "Summarization failed: maximum context length exceeded; private prompt",
+            "Compaction summary exceeded the model context limit.",
+        ),
+        (
+            "Summarization failed: unexpected private prompt",
+            "Pi compaction failed; inspect local diagnostics.",
+        ),
+    ],
+)
+def test_pi_failure_exposes_only_a_safe_category(raw, expected):
+    assert compact._public_pi_compaction_error(raw) == expected
+    assert "private prompt" not in expected
+
+
 def test_private_compaction_profile_carries_codex_auth_without_exposing_it(tmp_path):
     source = tmp_path / "auth.json"
     source.write_text('{"openai-codex":{"type":"oauth","access":"local-fixture"}}')
@@ -289,6 +315,7 @@ async def test_real_pi_compacts_exact_saved_session(tmp_path, monkeypatch, statu
             assert json.loads(session.read_bytes().splitlines()[-1])["type"] == "compaction"
         else:
             assert result["ok"] is False
+            assert result["error"] == "Compaction provider returned HTTP 503."
             assert session.read_bytes().startswith(before)
             assert all(
                 json.loads(row)["type"] != "compaction" for row in session.read_bytes().splitlines()

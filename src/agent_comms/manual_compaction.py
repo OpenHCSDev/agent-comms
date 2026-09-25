@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import shutil
 import signal
 import stat
@@ -408,6 +409,20 @@ def _count(value: Any) -> int | None:
     return value if type(value) is int and value >= 0 else None
 
 
+def _public_pi_compaction_error(value: Any) -> str:
+    """Classify a Pi failure without copying provider text or prompt data to ACP."""
+    raw = value if isinstance(value, str) else ""
+    lower = raw.lower()
+    if "generation hit the token cap" in lower or "summary is incomplete" in lower:
+        return "Compaction summary hit the model output limit."
+    if "maximum context length" in lower or "context length exceeded" in lower:
+        return "Compaction summary exceeded the model context limit."
+    status = re.search(r"\b([45]\d\d)\b", raw)
+    if status:
+        return f"Compaction provider returned HTTP {status.group(1)}."
+    return "Pi compaction failed; inspect local diagnostics."
+
+
 async def compact_session(
     agent_bin: str,
     agent_args: Sequence[str],
@@ -591,7 +606,7 @@ async def _compact_session_under_fence(
                 if payload["success"] is not True:
                     result = {
                         "ok": False,
-                        "error": "Pi compaction failed (local diagnostics only).",
+                        "error": _public_pi_compaction_error(payload.get("error")),
                     }
                     break
                 data = payload.get("data")

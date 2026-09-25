@@ -458,7 +458,7 @@ class CommsAgent:
                 reason = (
                     result.get("error") if isinstance(result, dict) else None
                 ) or "Compaction failed or is uncertain; not retried."
-                raise RequestError.internal_error({"reason": str(reason)})
+                raise RequestError(-32603, str(reason), {"reason": str(reason)})
             return PromptResponse(
                 stop_reason="end_turn",
                 field_meta={"agentComms": {"compaction": result}},
