@@ -1628,6 +1628,7 @@ class CommsAgent:
                 admitted_goals = self._steering_goal_ids.get(session_id, {})
                 owner_followup = public_id is not None and public_id in admitted_goals
                 if owner_followup:
+                    assert public_id is not None
                     admitted_goal_id = admitted_goals[public_id]
                     current_goal_id = (
                         current_goal.id
