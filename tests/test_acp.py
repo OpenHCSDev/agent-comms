@@ -855,7 +855,7 @@ class TestAgentTurn:
             await cancelled
         assert "proj" not in agent._emitted_errors
 
-    async def test_successful_turn_without_a_goal_report_blocks_for_explicit_retry(
+    async def test_successful_turn_without_a_goal_report_authorizes_next_attempt(
         self, wired, tmp_path, monkeypatch
     ):
         from agent_comms.goal_attempts import GoalAttemptStore
@@ -880,13 +880,11 @@ class TestAgentTurn:
 
         current = wired.registry.require("proj").goal
         assert current is not None and current.id == goal.id
-        assert current.status == "blocked" and current.toggle_action == "retry"
-        assert "without a goal progress update" in current.progress
+        assert current.status == "active"
+        assert current.progress == ""
         generation = GoalAttemptStore(wired.root / "goal-private").snapshot(goal.id)
-        assert generation is not None and generation.state == "blocked"
-        resumed = await agent.retry_goal("proj", goal.id, current.revision)
-        assert resumed.status == "active"
-        assert GoalAttemptStore(wired.root / "goal-private").snapshot(goal.id).state == "ready"
+        assert generation is not None and generation.state == "ready"
+        assert generation.number == 2
 
     async def test_empty_successful_continuation_blocks_instead_of_false_no_progress_pause(
         self, wired, tmp_path, monkeypatch
@@ -919,7 +917,7 @@ class TestAgentTurn:
         agent._schedule_goal("proj")
         assert not agent._pending_turns.get("proj")
 
-    @pytest.mark.parametrize("outcome", ["success", "failed", "missing_done"])
+    @pytest.mark.parametrize("outcome", ["failed", "missing_done"])
     async def test_goal_auto_transition_cannot_overwrite_concurrent_progress(
         self, wired, tmp_path, monkeypatch, outcome
     ):
