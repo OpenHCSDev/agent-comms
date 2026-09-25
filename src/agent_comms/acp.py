@@ -2501,13 +2501,13 @@ class CommsAgent:
 
     @staticmethod
     def _sanitized_compaction_summary(value: Any) -> str:
-        """Keep one bounded display line; never forward raw Pi details or stderr."""
+        """Preserve the saved Markdown summary, excluding terminal control codes."""
         if not isinstance(value, str):
             return ""
-        safe = "".join(
-            " " if unicodedata.category(char).startswith("C") else char for char in value
+        return "".join(
+            char if char in "\n\t" or not unicodedata.category(char).startswith("C") else " "
+            for char in value.replace("\r\n", "\n")
         )
-        return " ".join(safe.split())[:400]
 
     @staticmethod
     def _prompt_text(prompt: list[Any]) -> str:
