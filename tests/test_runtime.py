@@ -116,6 +116,11 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
     try:
         await proxy.subscribe()
         await until(lambda: ("worker", {"owner": "old"}) in updates)
+        # Session metadata may be filled in after initial owner attachment.
+        comms.registry.register(
+            replace(comms.registry.require("worker"), session_file=str(tmp_path / "session.jsonl"))
+        )
+        assert await proxy.request("cancel") == {"owner": "old"}
         comms.registry.rename("worker", "renamed")
         comms.registry.register(replace(comms.registry.require("renamed"), pid=new_pid))
         old_server.close()
@@ -131,7 +136,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
         await until(lambda: ("worker", {"owner": "new"}) in updates)
         assert ("new", "subscribe", "worker") in calls
         assert ("new", "cancel", "worker") in calls
-        assert ("old", "cancel", "worker") not in calls
+        assert calls.count(("old", "cancel", "worker")) == 1
 
         # A later thread with the same former name is a distinct incarnation.
         comms.registry.unregister("renamed")

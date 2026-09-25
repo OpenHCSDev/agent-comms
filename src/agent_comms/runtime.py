@@ -252,9 +252,9 @@ class RuntimeProxy:
         try:
             thread = comms.registry.require(session_id)
         except ValueError:
-            self._identity: tuple[float, str | None] | None = None
+            self._identity: float | None = None
         else:
-            self._identity = (thread.created_at, thread.session_file)
+            self._identity = thread.created_at
 
     def _owner_path(self) -> Path:
         snapshot = self._comms.registry.snapshot()
@@ -262,7 +262,7 @@ class RuntimeProxy:
         thread = snapshot.threads.get(canonical)
         if thread is None:
             raise RuntimeError(f"Thread {self.session_id!r} is not registered.")
-        identity = (thread.created_at, thread.session_file)
+        identity = thread.created_at
         if self._identity is None:
             self._identity = identity
         elif identity != self._identity:
@@ -342,18 +342,20 @@ class RuntimeProxy:
             try:
                 while line := await reader.readline():
                     await self.update(json.loads(line))
-                if self.writer is not None:
-                    self.writer.close()
-                while not self._closed:
-                    try:
-                        reader, _metadata = await self._subscribe_once()
-                        break
-                    except OwnerIdentityChanged:
-                        return
-                    except (OSError, RuntimeError):
-                        await asyncio.sleep(0.1)
-            except (ValueError, json.JSONDecodeError):
+            except (OSError, ConnectionError):
+                pass  # A reset subscription is safe to establish again.
+            except ValueError:
                 return
+            if self.writer is not None:
+                self.writer.close()
+            while not self._closed:
+                try:
+                    reader, _metadata = await self._subscribe_once()
+                    break
+                except OwnerIdentityChanged:
+                    return
+                except (OSError, RuntimeError):
+                    await asyncio.sleep(0.1)
 
     async def request(self, action: str, **kwargs: Any) -> dict[str, Any]:
         reader, writer = await self._connect_current()
