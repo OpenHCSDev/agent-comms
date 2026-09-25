@@ -95,22 +95,18 @@ async def test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation(tmp_p
     before = comms.unresolved_inputs(session)
     try:
         await owner.replay_unknown_inputs(session, client=Client())
-        assert [u.field_meta["agentComms"]["inputDisposition"]["inputId"] for u in updates] == [
-            "bus:2",
-            "bus:8",
-            "ui",
-        ]
+        assert updates == [], "An idle owner has no currently awaiting inputs to replay"
         snapshot = await proxy.request("input_dispositions")
-        assert snapshot["historicalCount"] == 2
+        assert snapshot["historicalCount"] == 5
         assert snapshot["historicalInputs"] == []
         with pytest.raises(RuntimeError, match="boolean"):
             await proxy.request("input_dispositions", include_history="yes")
         cleared = await proxy.request("dismiss_historical_inputs")
-        assert cleared["historicalCount"] == 0 and len(cleared["inputs"]) == 3
+        assert cleared["historicalCount"] == 0 and cleared["inputs"] == []
         assert updates[-1].field_meta["agentComms"]["inputDeliveryChanged"] is True
         assert await proxy.request("input_dispositions") == cleared
         detailed = await proxy.request("input_dispositions", include_history=True)
-        assert len(detailed["historicalInputs"]) == 2
+        assert len(detailed["historicalInputs"]) == 5
         assert comms.unresolved_inputs(session) == before
         assert not owner._pending_turns and not owner._wake_tasks
     finally:

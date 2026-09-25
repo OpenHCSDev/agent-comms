@@ -226,6 +226,18 @@ class InputDispositions:
         )
 
     @classmethod
+    def _earlier(
+        cls, row: dict[str, Any], legacy_through: int, awaiting_keys: frozenset[str] | None
+    ) -> bool:
+        # Missing owner context preserves the legacy projection. Only the live
+        # owner can identify which durable inputs its existing queues still await.
+        return (
+            row["key"] not in awaiting_keys
+            if awaiting_keys is not None
+            else cls._historical(row, legacy_through)
+        )
+
+    @classmethod
     def _delivery_overview(
         cls,
         rows: dict[str, dict[str, Any]],
@@ -233,6 +245,7 @@ class InputDispositions:
         legacy_through: int,
         *,
         include_history: bool = False,
+        awaiting_keys: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         current = []
         historical = []
@@ -243,7 +256,7 @@ class InputDispositions:
             key=lambda row: (row["sequence"] is None, row["sequence"] or 0),
         )
         for row in ordered:
-            if cls._historical(row, legacy_through):
+            if cls._earlier(row, legacy_through, awaiting_keys):
                 notice_dismissed = row.get("notice_dismissed", False)
                 dismissed += int(notice_dismissed)
                 historical_count += int(not notice_dismissed)
@@ -256,19 +269,35 @@ class InputDispositions:
             "historicalCount": historical_count,
             "dismissedHistoricalCount": dismissed,
             "historicalInputs": historical,
+            **({"currentScope": "owner_queue"} if awaiting_keys is not None else {}),
         }
 
     def delivery_overview(
-        self, owners: frozenset[str], legacy_through: int, *, include_history: bool = False
+        self,
+        owners: frozenset[str],
+        legacy_through: int,
+        *,
+        include_history: bool = False,
+        awaiting_keys: frozenset[str] | None = None,
     ) -> dict[str, Any]:
-        """Project migration history separately; historical bodies are opt-in."""
+        """Project earlier notices separately; their bodies are opt-in."""
         with _store_lock(self.path):
             return self._delivery_overview(
-                self._read(), owners, legacy_through, include_history=include_history
+                self._read(),
+                owners,
+                legacy_through,
+                include_history=include_history,
+                awaiting_keys=awaiting_keys,
             )
 
-    def dismiss_historical(self, owners: frozenset[str], legacy_through: int) -> dict[str, Any]:
-        """Dismiss migration notices, leaving delivery and goal authority intact."""
+    def dismiss_historical(
+        self,
+        owners: frozenset[str],
+        legacy_through: int,
+        *,
+        awaiting_keys: frozenset[str] | None = None,
+    ) -> dict[str, Any]:
+        """Dismiss earlier notices, leaving delivery and goal authority intact."""
         with _store_lock(self.path):
             rows = self._read()
             changed = False
@@ -276,14 +305,16 @@ class InputDispositions:
                 if (
                     row["owner"] in owners
                     and row["status"] == "unknown"
-                    and self._historical(row, legacy_through)
+                    and self._earlier(row, legacy_through, awaiting_keys)
                     and not row.get("notice_dismissed", False)
                 ):
                     row["notice_dismissed"] = True
                     changed = True
             if changed:
                 self._write(rows)
-            return self._delivery_overview(rows, owners, legacy_through)
+            return self._delivery_overview(
+                rows, owners, legacy_through, awaiting_keys=awaiting_keys
+            )
 
     def unknown(self, owners: frozenset[str]) -> list[dict[str, Any]]:
         with _store_lock(self.path):

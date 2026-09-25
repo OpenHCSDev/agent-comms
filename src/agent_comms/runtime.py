@@ -154,11 +154,17 @@ class RuntimeServer:
                 include_history = request.get("include_history", False)
                 if type(include_history) is not bool:
                     raise ValueError("include_history must be a boolean.")
-                result = self.agent._comms.input_delivery(name, include_history=include_history)
+                result = self.agent._comms.input_delivery(
+                    name,
+                    include_history=include_history,
+                    awaiting_keys=self.agent.awaiting_input_keys(session_id),
+                )
                 writer.write((json.dumps({"result": result}) + "\n").encode())
                 await writer.drain()
             elif action == "dismiss_historical_inputs":
-                result = self.agent._comms.dismiss_historical_inputs(name)
+                result = self.agent._comms.dismiss_historical_inputs(
+                    name, awaiting_keys=self.agent.awaiting_input_keys(session_id)
+                )
                 await self.agent.emit_input_delivery_changed(session_id)
                 writer.write((json.dumps({"result": result}) + "\n").encode())
                 await writer.drain()
