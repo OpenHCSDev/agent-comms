@@ -2494,8 +2494,12 @@ class Comms:
                 thread.pid != expected_owner_pid or not self.registry.status(thread.name).running
             ):
                 raise ValueError("The goal owner changed; refresh its state.")
-            if owner_store is not None and action != "set":
-                raise ValueError("Owner goal authority applies only to goal creation.")
+            if (
+                owner_store is not None
+                and action != "set"
+                and not (action == "active" and owner_action and expected_owner_pid is not None)
+            ):
+                raise ValueError("Owner goal authority requires goal creation or explicit resume.")
             # The automatic turn-end pause/block must not overwrite progress
             # written by a separate tool process after ACP's precheck. Check
             # the entire immutable snapshot under the same lock as the write.
@@ -2611,6 +2615,28 @@ class Comms:
                     raise ValueError("Blocked goal requires an explicit retry through its owner.")
                 if goal.status == "completed" and action != "completed":
                     raise ValueError("A completed goal cannot be resumed; set a new goal.")
+                if action == "active" and owner_store is not None:
+                    generation = owner_store.snapshot(goal.id)
+                    if generation is None:
+                        raise ValueError(
+                            "Goal launch authority is missing; inspect it before Retry."
+                        )
+                    if generation.state == "blocked" and generation.attempt_id:
+                        # A failed/uncertain attempt needs the explicit Retry
+                        # decision, not a status-only Resume. Expose that state
+                        # immediately so the UI offers the correct control.
+                        blocked = replace(goal, status="blocked", revision=goal.revision + 1)
+                        self.registry.register(
+                            replace(thread, goal=blocked), self.registry.status(thread.name)
+                        )
+                        raise ValueError(
+                            "The interrupted goal attempt is unresolved. Inspect it, then use "
+                            "Retry to authorize a new attempt. Your messages can still be sent."
+                        )
+                    elif generation.state == "ready":
+                        pass
+                    elif not (generation.state == "reserved" and thread.active_turn is not None):
+                        raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
                 goal = replace(
                     goal,
                     status="active" if action == "standby" else action,
