@@ -1181,8 +1181,9 @@ class TestAgentTurn:
         assert GoalAttemptStore(private).provider_usage_total(goal.id).responses == 1
         await agent.shutdown()
 
+    @pytest.mark.parametrize("owner_paused", [False, True])
     async def test_goal_tool_hands_private_ready_grant_to_owner_after_final_stop(
-        self, wired, tmp_path, monkeypatch
+        self, wired, tmp_path, monkeypatch, owner_paused
     ):
         from agent_comms.goal_attempts import GoalAttemptStore
 
@@ -1210,6 +1211,8 @@ class TestAgentTurn:
                 "response_id": "2",
                 "usage": {"input": 2, "output": 2, "totalTokens": 4, "cost": {"total": 0.02}},
             }
+            if owner_paused:
+                wired.update_goal("proj", "paused", owner_action=True)
             yield {"type": "settled"}
             yield {"type": "done", "ok": True, "text": "Goal set"}
 
@@ -1217,6 +1220,11 @@ class TestAgentTurn:
         await agent._run_agent_turn("proj", "proj", "Set a goal")
 
         goal = wired.registry.require("proj").goal
+        if owner_paused:
+            assert goal.status == "paused"
+            assert wired.goal_pause("proj").source == "owner"
+            agent._schedule_goal("proj")
+            assert not agent._pending_turns.get("proj")
         store = GoalAttemptStore(wired.root / "goal-private")
         assert store.snapshot(goal.id).state == "ready"
         assert store.snapshot(goal.id).number == 2

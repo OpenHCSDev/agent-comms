@@ -276,6 +276,13 @@ def _resume_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
         # A blocked goal may have an unresolved paid attempt. Only the
         # authenticated human-recovery path can decide that disposition.
         raise ValueError("This goal cannot be resumed; refresh its state.")
+    pause = comms.goal_pause(name)
+    if pause is None:
+        raise ValueError(
+            "Pause source is unavailable; the owner must resume through the goal controls."
+        )
+    if pause.owner_instruction is not None:
+        raise ValueError(pause.owner_instruction)
     progress = str(arguments["progress"])
     goal = comms.update_goal(
         name,

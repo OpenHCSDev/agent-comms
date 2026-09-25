@@ -5,7 +5,7 @@ import hashlib
 import sys
 from pathlib import Path
 
-SESSION_SHA = "b3c6eb2cc5abdbe0b754ae958d12df30aeb12f99570fe8f00d634746537e1a9e"
+SESSION_SHA = "ce22dba7fa5fd27a6a07f2ff7a873b18a112d3e9a4c6ec8346d85f49bc32bfb5"
 RPC_SHA = "6f5438c028032f3bc212b6270a1acf9d3e5d22ce5837b85ff5a6fea6c240c76a"
 METHOD = """    interruptSteering(inputIds) {
         if (!Array.isArray(inputIds) || inputIds.some(id => !/^[0-9a-f]{32}$/.test(id)))

@@ -146,6 +146,7 @@ class CommsAgent:
         # including non-displayed steers, needs its own identified user start.
         self._forwarded_inputs: dict[str, set[str]] = {}
         self._steering_input_keys: dict[str, dict[str, str]] = {}
+        self._steering_goal_ids: dict[str, dict[str, str | None]] = {}
         self._turn_input_keys: dict[str, set[str]] = {}
         self._dispositions = InputDispositions(comms.root)
         self._goal_store: GoalAttemptStore | None = None
@@ -540,6 +541,10 @@ class CommsAgent:
                     self._require_session(session_id), self._require_session(session_id)
                 )
                 admission = snapshot.admission_generations[owner]
+                admitted_goal = snapshot.threads[owner].goal
+                self._steering_goal_ids.setdefault(session_id, {})[input_id] = (
+                    admitted_goal.id if admitted_goal is not None and admitted_goal.active else None
+                )
                 self._dispositions.record(
                     key,
                     seq=None,
@@ -818,6 +823,10 @@ class CommsAgent:
         with _store_lock(self._comms._wire_lock_path):
             snapshot = self._comms.registry.snapshot()
             canonical = snapshot.aliases.get(thread_name, thread_name)
+            admitted_goal = snapshot.threads[canonical].goal
+            original_goal_id = (
+                admitted_goal.id if admitted_goal is not None and admitted_goal.active else None
+            )
             self._dispositions.record(
                 key,
                 seq=None,
@@ -836,6 +845,8 @@ class CommsAgent:
             images=images,
             original_keys=(key,),
             initial_display_text=display_text,
+            original_owner_input=True,
+            original_goal_id=original_goal_id,
         )
 
     def _debug_log(self, message: str) -> None:
@@ -895,7 +906,7 @@ class CommsAgent:
             return
         name = self._sessions.get(session_id)
         if name and (goal := self._comms.registry.require(name).goal) and goal.active:
-            self._comms.update_goal(name, "paused", goal_id=goal.id)
+            self._comms.update_goal(name, "paused", goal_id=goal.id, owner_action=True)
         task = self._turn_tasks.get(session_id)
         if task is not None:
             task.cancel()
@@ -1522,8 +1533,11 @@ class CommsAgent:
         original_keys: tuple[str, ...] = (),
         initial_display_text: str | None = None,
         autonomous_goal: bool = False,
+        original_owner_input: bool = False,
+        original_goal_id: str | None = None,
     ) -> None:
         """Stream a real coding agent's reply: events to the client, status to the wire."""
+        original_display = None if autonomous_goal else (initial_display_text or task)
         owner_task = asyncio.current_task()
         assert owner_task is not None
         thread = self._comms.registry.require(thread_name)
@@ -1536,6 +1550,10 @@ class CommsAgent:
             # must not run for a direct whose UNKNOWN row needs that proof.
             return
         goal = thread.goal
+        if original_owner_input and original_goal_id != (
+            goal.id if goal is not None and goal.active else None
+        ):
+            raise RequestError.invalid_params({"reason": "input_authority_changed"})
         goal_permit: LaunchPermit | None = None
         if autonomous_goal and (goal is None or not goal.active):
             return
@@ -1597,6 +1615,7 @@ class CommsAgent:
                     original_keys = (*original_keys, key)
         self._turn_input_keys[session_id] = set(original_keys)
         self._steering_input_keys[session_id] = {}
+        self._steering_goal_ids[session_id] = {}
 
         @contextmanager
         def send_boundary(
@@ -1617,6 +1636,26 @@ class CommsAgent:
                     )
                 else:
                     goal_ok = current_goal is None or not current_goal.active
+                input_permit = goal_permit
+                admitted_goals = self._steering_goal_ids.get(session_id, {})
+                owner_followup = public_id is not None and public_id in admitted_goals
+                if owner_followup:
+                    assert public_id is not None
+                    admitted_goal_id = admitted_goals[public_id]
+                    current_goal_id = (
+                        current_goal.id
+                        if current_goal is not None and current_goal.active
+                        else None
+                    )
+                    goal_ok = admitted_goal_id == current_goal_id
+                    input_permit = (
+                        goal_permit
+                        if goal_permit is not None
+                        and goal_permit.reservation.goal_id == admitted_goal_id
+                        else originated_attempts.get(admitted_goal_id or "")
+                    )
+                    if current_goal_id is not None and input_permit is None:
+                        goal_ok = False
                 keys = (
                     original_keys
                     if public_id is None
@@ -1649,10 +1688,16 @@ class CommsAgent:
                 allowed = (
                     owner_ok
                     and goal_ok
-                    and not (keys and current_goal is not None and current_goal.active)
+                    and not (
+                        keys
+                        and current_goal is not None
+                        and current_goal.active
+                        and not owner_followup
+                        and not (public_id is None and original_owner_input)
+                    )
                 )
-                if allowed and goal_permit is not None:
-                    attempt = goal_permit.reservation
+                if allowed and input_permit is not None:
+                    attempt = input_permit.reservation
                     assert self._goal_store is not None
                     allowed = self._goal_store._is_attempt(
                         attempt,
@@ -1687,6 +1732,13 @@ class CommsAgent:
                         ):
                             allowed = False
                             break
+                if allowed:
+                    if public_id is None:
+                        display = original_display
+                    else:
+                        row = self._dispositions.get(keys[0]) if keys else None
+                        display = row["source_text"] if row is not None else sent_text
+                    self._comms.record_input_display(native_id, display)
                 yield True if allowed else None if defer_for_goal else False
 
         def native_start(public_id: str | None, native_id: str, sent_text: str) -> bool:
@@ -2073,7 +2125,9 @@ class CommsAgent:
                         witness = f"registry-revision:{current_goal.revision}"
                         self._goal_store.record_verified_completion(goal_permit, witness)
                         goal_attempt_resolved = True
-                    elif current_goal.active:
+                    elif current_goal.active or current_goal.status == "paused":
+                        # A successful in-flight turn may finish after owner pause.
+                        # Preserve success; the scheduler will not launch while paused.
                         self._goal_store.record_verified_progress(goal_permit, witness)
                         goal_attempt_resolved = True
                 if not goal_attempt_resolved:
@@ -2153,12 +2207,16 @@ class CommsAgent:
                     terminal_ok is True
                     and current is not None
                     and current.id == originated_id
-                    and (current.active or current.status == "completed")
+                    and current.status in {"active", "paused", "completed"}
                 )
                 assert self._goal_store is not None
                 resolved_origin_permit = originated_attempts.get(originated_id)
                 if resolved_origin_permit is not None:
-                    if valid_origin and current is not None and current.active:
+                    if (
+                        valid_origin
+                        and current is not None
+                        and current.status in {"active", "paused"}
+                    ):
                         self._goal_store.record_verified_progress(
                             resolved_origin_permit, f"origin-final:{turn_id}"
                         )
@@ -2222,6 +2280,7 @@ class CommsAgent:
             # disposition across owner crashes remains a separate integration.
             self._forwarded_inputs.pop(session_id, None)
             self._steering_input_keys.pop(session_id, None)
+            self._steering_goal_ids.pop(session_id, None)
             self._turn_input_keys.pop(session_id, None)
             remaining = self._queued_inputs.pop(session_id, {})
             if remaining:
@@ -2407,7 +2466,10 @@ class CommsAgent:
                 )
         elif kind == "compaction_progress":
             chunk_index = event.get("chunk_index")
-            if type(chunk_index) is int and chunk_index > 0:
+            done = event.get("source_bytes_done")
+            total = event.get("source_bytes_total")
+            measured = type(done) is int and type(total) is int and 0 <= done <= total and total > 0
+            if type(chunk_index) is int and (chunk_index > 0 or chunk_index == 0 and measured):
                 await client.session_update(
                     session_id=session_id,
                     update=AgentMessageChunk(
@@ -2419,6 +2481,17 @@ class CommsAgent:
                                     "phase": "progress",
                                     "status": "running",
                                     "chunkIndex": chunk_index,
+                                    **(
+                                        {"sourceBytesDone": done, "sourceBytesTotal": total}
+                                        if measured
+                                        else {}
+                                    ),
+                                    **(
+                                        {"summaryPhase": event["summary_phase"]}
+                                        if isinstance(event.get("summary_phase"), str)
+                                        and event["summary_phase"]
+                                        else {}
+                                    ),
                                 }
                             }
                         },

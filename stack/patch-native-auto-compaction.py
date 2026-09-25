@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Keep native compaction bounded and report progress on the pinned Pi copy."""
 
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import hashlib
@@ -45,23 +47,26 @@ METHOD = """    _installNativeCompactionBeforeProvider() {
     }
 """
 COMPACTION_CALL = (
-    '        return compact(preparation, requestModel, apiKey, headers, customInstructions, '
-    'signal, this.thinkingLevel, this.agent.streamFunction, env, '
-    'this.settingsManager.getRetrySettings(), '
+    "        return compact(preparation, requestModel, apiKey, headers, customInstructions, "
+    "signal, this.thinkingLevel, this.agent.streamFunction, env, "
+    "this.settingsManager.getRetrySettings(), "
     'this._summarizationRetryCallbacks({ source: "compaction", reason }), undefined);'
 )
 BOUNDED_COMPACTION_CALL = (
-    '        let responseIndex = 0;\n'
-    '        // Summary work uses low reasoning even when the user turn requests high reasoning.\n'
+    "        let responseIndex = 0;\n"
+    "        // Summary work uses low reasoning even when the user turn requests high reasoning.\n"
     '        const callbacks = { ...this._summarizationRetryCallbacks({ source: "compaction", reason }), '
-    'onSummaryResponse: (usage) => this._emit({ type: "compaction_progress", reason, '
-    'chunkIndex: ++responseIndex, usage }) };\n'
-    '        return compact(preparation, requestModel, apiKey, headers, customInstructions, '
+    'onSummaryStart: (progress) => this._emit({ type: "compaction_progress", reason, chunkIndex: responseIndex, ...progress }), '
+    'onSummaryResponse: (usage, progress) => this._emit({ type: "compaction_progress", reason, '
+    "chunkIndex: ++responseIndex, usage, ...progress }) };\n"
+    "        return compact(preparation, requestModel, apiKey, headers, customInstructions, "
     'signal, "low", this.agent.streamFunction, env, '
-    '{ enabled: false, maxRetries: 0, provider: { maxRetries: 0 } }, callbacks, undefined);'
+    "{ enabled: false, maxRetries: 0, provider: { maxRetries: 0 } }, callbacks, undefined);"
 )
-BRANCH_RETRY = '                    retry: this.settingsManager.getRetrySettings(),\n'
-NO_RETRY = '                    retry: { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } },\n'
+BRANCH_RETRY = "                    retry: this.settingsManager.getRetrySettings(),\n"
+NO_RETRY = (
+    "                    retry: { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } },\n"
+)
 
 
 def main(path: Path) -> None:

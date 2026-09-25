@@ -1458,8 +1458,16 @@ async def _stream_agent_events(
                     "response_id": str(provider_response_index),
                     "usage": usage,
                 }
-            if type(chunk_index) is int and chunk_index > 0:
-                yield {"type": "compaction_progress", "chunk_index": chunk_index}
+            done = payload.get("sourceBytesDone")
+            total = payload.get("sourceBytesTotal")
+            measured = type(done) is int and type(total) is int and 0 <= done <= total and total > 0
+            if type(chunk_index) is int and (chunk_index > 0 or chunk_index == 0 and measured):
+                progress = {"type": "compaction_progress", "chunk_index": chunk_index}
+                if measured:
+                    progress.update(source_bytes_done=done, source_bytes_total=total)
+                if isinstance(payload.get("summaryPhase"), str) and payload["summaryPhase"]:
+                    progress["summary_phase"] = payload["summaryPhase"]
+                yield progress
         elif kind == "compaction_end":
             last_model_progress = now
             phase = "model_wait"
