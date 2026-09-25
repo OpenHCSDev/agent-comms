@@ -1,0 +1,65 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
+import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
+import { writeNativeServer } from '../src/config-write.mjs';
+
+const cli = fileURLToPath(new URL('../bin/pi-mcp.mjs', import.meta.url));
+
+test('CLI redacts literal env values, reports saved trust, refuses unattended writes', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mcp-cli-'));
+  const agentDir = join(root, 'agent');
+  const projectRoot = join(root, 'project');
+  const marker = join(root, 'unexpected-launch');
+  await mkdir(projectRoot);
+  const call = (...args) => spawnSync(process.execPath, [cli, ...args], {
+    cwd: projectRoot, env: { ...process.env, PI_CODING_AGENT_DIR: agentDir },
+    input: 'fixture:0123456789ab\n', encoding: 'utf8', timeout: 5000,
+  });
+  try {
+    const addArgs = ['add', '--scope', 'project', '--id', 'fixture',
+      '--command', process.execPath, '--arg', '-e', '--arg',
+      `require('fs').writeFileSync(${JSON.stringify(marker)}, 'launched')`,
+      '--env', 'API_TOKEN=do-not-display-secret', '--env-from', 'PASS_THROUGH=SYSTEM_TOKEN'];
+    const preview = call(...addArgs, '--dry-run');
+    assert.equal(preview.status, 0, preview.stderr);
+    assert.equal(JSON.parse(preview.stdout).applied, false);
+    assert.doesNotMatch(preview.stdout, /do-not-display-secret/);
+    const denied = call(...addArgs);
+    assert.equal(denied.status, 1);
+    assert.match(denied.stderr, /interactive local TTY/);
+    assert.equal(existsSync(join(projectRoot, '.pi', 'mcp.json')), false);
+    const declaration = { id: 'fixture', enabled: true, instructionsPolicy: 'status-only',
+      transport: { type: 'stdio', command: process.execPath, args: [], cwd: 'project' } };
+    await writeNativeServer({ agentDir, projectRoot, configDirName: '.pi', scope: 'project', declaration });
+    let status = call('status', '--json');
+    assert.equal(status.status, 0, status.stderr);
+    let json = JSON.parse(status.stdout);
+    assert.equal(json.projectTrustedSaved, false);
+    assert.equal(json.projectConfigSkipped, true);
+    assert.deepEqual(json.servers, []);
+    await writeNativeServer({ agentDir, projectRoot, configDirName: '.pi', scope: 'user', declaration });
+    status = call('status', '--json');
+    assert.equal(status.status, 0, status.stderr);
+    json = JSON.parse(status.stdout);
+    assert.equal(json.servers[0].status, 'approved');
+    assert.equal(json.servers[0].scope, 'user');
+    new ProjectTrustStore(agentDir).set(projectRoot, true);
+    status = call('status', '--json');
+    assert.equal(status.status, 0, status.stderr);
+    json = JSON.parse(status.stdout);
+    assert.equal(json.projectTrustedSaved, true);
+    assert.equal(json.servers.length, 1);
+    assert.equal(json.servers[0].scope, 'project');
+    assert.equal(json.servers[0].status, 'trust_required');
+    assert.equal(existsSync(marker), false);
+    assert.doesNotMatch(await readFile(join(agentDir, 'mcp.json'), 'utf8'), /do-not-display-secret/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -14,7 +14,25 @@ otherwise headless calls fail without attempting a dialog.
 cd extensions/pi-mcp-client
 npm ci --ignore-scripts
 npm test
+# Install the package in Pi (use your absolute package path):
+pi install /absolute/path/to/extensions/pi-mcp-client
+# When installed as a local directory, run the package-owned CLI from that directory:
+node /absolute/path/to/extensions/pi-mcp-client/bin/pi-mcp.mjs status --json
 ```
+
+The package-owned `pi-mcp` CLI provides a **static**, redacted JSON status
+snapshot (`pi-mcp status --json [--project PATH]`) for thin frontends. It reports
+saved Pi project trust, not temporary Pi session overrides, and never opens a
+transport. `pi-mcp add --scope user|project --id fixture --command /absolute/executable
+--arg some-argument [--env-from CHILD=HOST]` creates a native stdio declaration
+only after an interactive local TTY acknowledges its ID and digest; `--dry-run`
+emits an inert redacted JSON receipt, and `--replace` explicitly replaces a
+whole existing declaration. Non-TTY writes are refused. A TTY can be simulated
+by another same-user process: this convenience check is **not** human
+attestation or an OS security boundary. This action does **not** grant Pi
+project trust, project-server approval, or autonomous call permission;
+those gates remain independent. Use `envFrom` for secrets: literal `--env` values
+are saved in `mcp.json` and may be committed with a project file.
 
 The native config is `{"version":1,"servers":[...]}` with unique server IDs.
 Each entry requires `id`, `enabled`, `instructionsPolicy:"status-only"`, and
@@ -46,5 +64,6 @@ cancellation and cleanup against a generic fixture. It also runs an isolated
 real Pi RPC process with `--no-approve` and `--approve`: untrusted files are not
 read, absent/stale digests cause zero spawns, and an approved generic fixture
 initializes/discovers and exits on shutdown. No provider call is made. PR #77
-remains draft; headless tool-call approval, agent-comms/ACP projection, Toad
-controls and independent review are still outstanding.
+remains draft; ACP extension-UI projection, Toad controls, HTTP transport,
+explicit foreign config import and final independent exact-byte review remain
+outstanding.
