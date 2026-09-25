@@ -136,9 +136,9 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
         comms.registry.rename("worker", "renamed")
         comms.registry.register(replace(comms.registry.require("renamed"), pid=new_pid))
         old_server.close()
-        await old_server.wait_closed()
         for writer in connections:
             writer.close()
+        await old_server.wait_closed()
 
         # A request made before the replacement socket starts is still unsent.
         request = asyncio.create_task(proxy.request("cancel"))
@@ -172,12 +172,13 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
         await proxy.close()
         await client.shutdown()
         old_server.close()
-        await old_server.wait_closed()
         if new_server is not None:
             new_server.close()
-            await new_server.wait_closed()
         for writer in connections:
             writer.close()
+        await old_server.wait_closed()
+        if new_server is not None:
+            await new_server.wait_closed()
         old_path.unlink(missing_ok=True)
         new_path.unlink(missing_ok=True)
 
