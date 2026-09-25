@@ -19,7 +19,10 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_mounted_owner_pause_preserves_success_and_explains_late_report(monkeypatch):
+@pytest.mark.parametrize("model_origin", [False, True])
+async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
+    monkeypatch, model_origin
+):
     empty_response = False
     native = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native or not os.environ.get("AC_TOAD_NATIVE_PILOT"):
@@ -62,6 +65,29 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(mo
                         ],
                         "usage": {"prompt_tokens": 20, "completion_tokens": 5, "total_tokens": 25},
                     }
+                    if model_origin and index == 1:
+                        assert any(
+                            tool.get("function", {}).get("name") == "comms_set_goal"
+                            for tool in requests[0]["tools"]
+                        )
+                        chunk["choices"][0] = {
+                            "index": 0,
+                            "delta": {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "set_goal",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "comms_set_goal",
+                                            "arguments": json.dumps({"text": "Read fifty files"}),
+                                        },
+                                    }
+                                ],
+                            },
+                            "finish_reason": "tool_calls",
+                        }
                     self.wfile.write(f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
                     self.wfile.flush()
                 except (BrokenPipeError, ConnectionResetError):
@@ -89,6 +115,17 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(mo
             "--thinking",
             "off",
         ]
+        if model_origin:
+            native_args.remove("--no-tools")
+            native_args.extend(
+                [
+                    "--extension",
+                    str(Path(__file__).resolve().parents[1] / "extensions/pi-agent-comms/index.ts"),
+                ]
+            )
+            monkeypatch.setenv(
+                "PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"]
+            )
         for key, value in {
             "XDG_CONFIG_HOME": str(root / "config"),
             "XDG_DATA_HOME": str(root / "data"),
@@ -158,12 +195,16 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(mo
                     )
                 )
                 view = app.screen.conversation
-                view.prompt.text = "/goal List one useful testing practice each turn until I pause."
+                view.prompt.text = (
+                    "Set a persistent goal to read fifty files."
+                    if model_origin
+                    else "/goal List one useful testing practice each turn until I pause."
+                )
                 view.prompt.focus()
                 await pilot.press("enter")
                 await until(
                     lambda: (
-                        len(attempts()) >= 2
+                        len(attempts()) >= (1 if model_origin else 2)
                         or (
                             comms.registry.require("project").goal is not None
                             and comms.registry.require("project").goal.status == "blocked"
@@ -179,8 +220,11 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(mo
                     return
                 assert state.status == "active", state.progress
                 rows = attempts()
-                assert rows[0][1] == "succeeded" and rows[0][2].startswith("native-terminal:")
-                assert rows[1][0] == 2
+                if model_origin:
+                    assert rows[0][1] == "claimed"
+                else:
+                    assert rows[0][1] == "succeeded" and rows[0][2].startswith("native-terminal:")
+                    assert rows[1][0] == 2
                 if not live:
                     await until(lambda: len(requests) == 2)
                 else:
@@ -211,8 +255,17 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(mo
                 await asyncio.sleep(0.4)
                 preserved = wire(root / "wire").registry.require("project").goal
                 assert preserved == paused
-                assert attempts()[1][1] == "succeeded"
-                assert len(attempts()) == 2 and len(requests) == 2
+                assert attempts()[-1][1] == "succeeded"
+                assert len(attempts()) == (1 if model_origin else 2) and len(requests) == 2
+                if model_origin:
+                    session = Path(comms.registry.require("project").session_file)
+                    native_rows = [json.loads(line) for line in session.read_text().splitlines()]
+                    result = next(
+                        row["message"]
+                        for row in native_rows
+                        if row.get("message", {}).get("toolCallId") == "set_goal"
+                    )
+                    assert result["toolName"] == "comms_set_goal" and not result["isError"]
                 await view.slash_command("/goal clear")
                 assert comms.registry.require("project").goal is None
                 assert app._exception is None

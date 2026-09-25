@@ -2207,12 +2207,16 @@ class CommsAgent:
                     terminal_ok is True
                     and current is not None
                     and current.id == originated_id
-                    and (current.active or current.status == "completed")
+                    and current.status in {"active", "paused", "completed"}
                 )
                 assert self._goal_store is not None
                 resolved_origin_permit = originated_attempts.get(originated_id)
                 if resolved_origin_permit is not None:
-                    if valid_origin and current is not None and current.active:
+                    if (
+                        valid_origin
+                        and current is not None
+                        and current.status in {"active", "paused"}
+                    ):
                         self._goal_store.record_verified_progress(
                             resolved_origin_permit, f"origin-final:{turn_id}"
                         )
