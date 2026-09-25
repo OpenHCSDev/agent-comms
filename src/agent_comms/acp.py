@@ -747,7 +747,6 @@ class CommsAgent:
         if owner.pid != os.getpid() or not self._comms.registry.status(owner.name).running:
             return None
         keys = set(self._turn_input_keys.get(session_id, ()))
-        keys.update(self._steering_input_keys.get(session_id, {}).values())
         keys.update(
             self._dispositions.bus_key(turn.origin, owner)
             for turn in self._pending_turns.get(session_id, ())
@@ -2136,6 +2135,7 @@ class CommsAgent:
                             # its persisted UNKNOWN row visible, but do not
                             # count it as an unstarted sent follow-up.
                             self._turn_input_keys.get(session_id, set()).discard(refused_key)
+                            await self.emit_input_delivery_changed(session_id)
                         if self._queued_inputs.get(session_id, {}).pop(input_id, None):
                             await self._emit_queue_state(session_id)
                 if kind == "provider_usage":
