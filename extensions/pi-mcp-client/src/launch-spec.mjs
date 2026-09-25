@@ -3,8 +3,11 @@ import { DEFAULT_INHERITED_ENV_VARS } from '@modelcontextprotocol/sdk/client/std
 
 /** Turn an eligible source snapshot into inert SDK stdio parameters. No process starts here. */
 export async function prepareStdioParameters(entry, ctx, hostEnv = process.env) {
-  if (entry.status !== 'approved' || (entry.scope === 'project' && !ctx.isProjectTrusted())) {
+  if (entry.status !== 'approved' || !ctx.isProjectTrusted()) {
     throw new Error('MCP launch is not authorized');
+  }
+  if (entry.scope === 'project' && Object.keys(entry.declaration.transport.env).length) {
+    throw new Error('Project MCP literal environment is not supported; use envFrom');
   }
   const projectRoot = await realpath(ctx.cwd);
   if (entry.projectRoot !== projectRoot || !(await stat(projectRoot)).isDirectory()) {

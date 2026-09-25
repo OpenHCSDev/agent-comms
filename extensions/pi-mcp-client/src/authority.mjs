@@ -1,6 +1,7 @@
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { declarationDigest } from './config.mjs';
+import { parseUniqueJson } from './strict-json.mjs';
 
 const approval = z.strictObject({
   projectRoot: z.string().min(1),
@@ -46,9 +47,10 @@ export function parseTrustLedger(text) {
   }
   let raw;
   try {
-    raw = JSON.parse(text);
-  } catch {
-    throw new Error('Invalid MCP trust ledger: JSON syntax');
+    raw = parseUniqueJson(text);
+  } catch (error) {
+    throw new Error(error.message === 'Duplicate JSON key'
+      ? 'Invalid MCP trust ledger: duplicate key' : 'Invalid MCP trust ledger: JSON syntax');
   }
   const result = ledgerSchema.safeParse(raw);
   if (!result.success) throw new Error('Invalid MCP trust ledger: schema');
@@ -79,7 +81,12 @@ export function effectiveDeclarations({ user, project, projectTrusted, projectRo
       row.projectRoot === projectRoot && row.scope === 'project' &&
       row.serverId === declaration.id && row.digest === digest
     )?.decision;
+    // Every stdio child uses the current project as cwd, including user-scope
+    // declarations. Relative executables/args can execute project-controlled
+    // code, so Pi project trust is required even for owner-trusted user config.
     const status = !declaration.enabled ? 'disabled'
+      : !projectTrusted ? 'trust_required'
+      : scope === 'project' && Object.keys(declaration.transport.env).length ? 'unsupported_env'
       : scope === 'user' || decision === 'approve' ? 'approved'
       : decision === 'deny' ? 'denied' : 'trust_required';
     return { projectRoot, scope, declaration, digest, status };

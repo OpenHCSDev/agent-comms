@@ -67,6 +67,9 @@ async function add(opts, agentDir) {
     },
   }] }));
   const declaration = document.servers[0];
+  if (opts.scope === 'project' && Object.keys(declaration.transport.env).length) {
+    throw new Error('Project MCP literal environment is not supported; use envFrom');
+  }
   const digest = declarationDigest(declaration);
   const receipt = { version: 1, scope: opts.scope, projectRoot, id: declaration.id,
     digest, command: declaration.transport.command, args: declaration.transport.args,

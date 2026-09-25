@@ -27,6 +27,11 @@ test('native config writer adds/replaces whole declarations without launch or se
     assert.equal(existsSync(join(projectRoot, '.pi', 'mcp.json')), false);
     await mkdir(agentDir, { recursive: true });
     new ProjectTrustStore(agentDir).set(projectRoot, true);
+    for (const configDirName of ['.', '..']) {
+      await assert.rejects(writeNativeServer({ ...opts, configDirName,
+        declaration: input }), /Invalid MCP config destination/);
+    }
+    assert.equal(existsSync(join(root, 'mcp.json')), false);
     const added = await writeNativeServer({ ...opts, declaration: input });
     assert.equal(added.id, 'fixture');
     assert.equal(existsSync(marker), false);

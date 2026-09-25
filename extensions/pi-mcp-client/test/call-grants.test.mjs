@@ -19,13 +19,13 @@ test('separate TUI call grant enables and revokes headless calls only for the ex
   await mkdir(agentDir); await mkdir(project);
   const path = join(agentDir, 'mcp.json');
   await writeFile(path, config(declaration));
-  const runtime = new McpRuntime({ ctx: { cwd: project, isProjectTrusted: () => false },
+  const runtime = new McpRuntime({ ctx: { cwd: project, isProjectTrusted: () => true },
     agentDir, configDirName: '.pi' });
   const registered = [];
   const pi = { registerTool: (tool) => registered.push(tool), getAllTools: () => [] };
   let confirmations = 0;
   let prompt = '';
-  const tui = { mode: 'tui', cwd: project, isProjectTrusted: () => false,
+  const tui = { mode: 'tui', cwd: project, isProjectTrusted: () => true,
     ui: { confirm: async (title, body) => { confirmations++; prompt = title + body; return true; } } };
   const headless = { ...tui, mode: 'rpc' };
   const options = { agentDir, configDirName: '.pi', id: 'fixture' };

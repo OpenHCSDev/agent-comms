@@ -22,7 +22,7 @@ test('CLI redacts literal env values, reports saved trust, refuses unattended wr
     input: 'fixture:0123456789ab\n', encoding: 'utf8', timeout: 5000,
   });
   try {
-    const addArgs = ['add', '--scope', 'project', '--id', 'fixture',
+    const addArgs = ['add', '--scope', 'user', '--id', 'fixture',
       '--command', process.execPath, '--arg', '-e', '--arg',
       `require('fs').writeFileSync(${JSON.stringify(marker)}, 'launched')`,
       '--env', 'API_TOKEN=do-not-display-secret', '--env-from', 'PASS_THROUGH=SYSTEM_TOKEN'];
@@ -30,6 +30,9 @@ test('CLI redacts literal env values, reports saved trust, refuses unattended wr
     assert.equal(preview.status, 0, preview.stderr);
     assert.equal(JSON.parse(preview.stdout).applied, false);
     assert.doesNotMatch(preview.stdout, /do-not-display-secret/);
+    const projectLiteral = call(...addArgs.map((value) => value === 'user' ? 'project' : value), '--dry-run');
+    assert.equal(projectLiteral.status, 1);
+    assert.match(projectLiteral.stderr, /literal environment is not supported/);
     const denied = call(...addArgs);
     assert.equal(denied.status, 1);
     assert.match(denied.stderr, /interactive local TTY/);
@@ -49,7 +52,7 @@ test('CLI redacts literal env values, reports saved trust, refuses unattended wr
     status = call('status', '--json');
     assert.equal(status.status, 0, status.stderr);
     json = JSON.parse(status.stdout);
-    assert.equal(json.servers[0].status, 'approved');
+    assert.equal(json.servers[0].status, 'trust_required');
     assert.equal(json.servers[0].scope, 'user');
     new ProjectTrustStore(agentDir).set(projectRoot, true);
     status = call('status', '--json');

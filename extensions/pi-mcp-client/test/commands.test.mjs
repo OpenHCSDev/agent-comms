@@ -9,7 +9,7 @@ import { loadEffectiveDeclarations } from '../src/sources.mjs';
 
 const declaration = (command) => ({ id: 'one', enabled: true, instructionsPolicy: 'status-only',
   transport: { type: 'stdio', command, args: ['--safe'], cwd: 'project',
-    env: { PRIVATE: 'literal-secret-never-display' }, envFrom: { TOKEN: 'MCP_TOKEN' } } });
+    env: {}, envFrom: { TOKEN: 'MCP_TOKEN' } } });
 const config = (entry) => JSON.stringify({ version: 1, servers: [entry] });
 
 test('only a Pi-trusted local TUI can explicitly approve exact currently displayed project bytes', async () => {
@@ -20,7 +20,10 @@ test('only a Pi-trusted local TUI can explicitly approve exact currently display
   const ledger = join(agentDir, 'mcp-trust.json');
   await mkdir(agentDir);
   await mkdir(join(project, '.pi'), { recursive: true });
-  await writeFile(file, config(declaration('fixture-command')));
+  await writeFile(file, config({ ...declaration('fixture-command'), transport: {
+    ...declaration('fixture-command').transport,
+    env: { NODE_OPTIONS: '--require ./literal-secret-never-display' },
+  } }));
   let trusted = false;
   let confirmations = 0;
   let prompt = '';
@@ -34,6 +37,9 @@ test('only a Pi-trusted local TUI can explicitly approve exact currently display
     await assert.rejects(decideProjectServer(ctx, options), /Pi project trust/);
     assert.equal(confirmations, 0);
     trusted = true;
+    await assert.rejects(decideProjectServer(ctx, options), /literal environment is not supported/);
+    assert.equal(confirmations, 0);
+    await writeFile(file, config(declaration('fixture-command')));
     assert.equal(await decideProjectServer(ctx, options), false);
     assert.equal(existsSync(ledger), false);
     assert.equal(prompt.includes('literal-secret-never-display'), false);

@@ -31,14 +31,19 @@ whole existing declaration. Non-TTY writes are refused. A TTY can be simulated
 by another same-user process: this convenience check is **not** human
 attestation or an OS security boundary. This action does **not** grant Pi
 project trust, project-server approval, or autonomous call permission;
-those gates remain independent. Use `envFrom` for secrets: literal `--env` values
-are saved in `mcp.json` and may be committed with a project file.
+those gates remain independent. Saved Pi project trust is required before the
+CLI writes project configuration. Every child uses project cwd, so **no scope**
+launches until Pi trusts the project: relative user-command arguments could
+otherwise execute untrusted project code. Project-scope literal `env` is refused
+(hidden executable overrides are unsafe); use `envFrom`. User-scope literal
+`--env` values are saved in the owner-controlled `mcp.json`.
 
 The native config is `{"version":1,"servers":[...]}` with unique server IDs.
 Each entry requires `id`, `enabled`, `instructionsPolicy:"status-only"`, and
 `transport:{"type":"stdio","command":"...","args":[],"cwd":"project"}`.
-Optional `env` supplies literal values; `envFrom` maps child variables to host
-variable names. Unknown fields/transports fail. User config is
+Optional user-scope `env` supplies literal values; `envFrom` maps child
+variables to host variable names. Project-scope literal `env` is ineligible;
+use `envFrom` for owner-controlled values. Unknown fields/transports fail. User config is
 `getAgentDir()/mcp.json`; project config is `<cwd>/<CONFIG_DIR_NAME>/mcp.json`.
 The project file is not read until Pi project trust is active. The package-owned
 `getAgentDir()/mcp-trust.json` separately approves the *exact* canonical

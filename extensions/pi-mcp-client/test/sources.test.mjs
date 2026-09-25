@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { declarationDigest, parseNativeConfig } from '../src/config.mjs';
-import { loadEffectiveDeclarations } from '../src/sources.mjs';
+import { loadEffectiveDeclarations, readOptional } from '../src/sources.mjs';
 
 const config = (servers) => JSON.stringify({ version: 1, servers });
 const server = (command) => ({ id: 'local', enabled: true, instructionsPolicy: 'status-only',
@@ -28,7 +28,7 @@ test('Pi project trust gates reading; exact external digest gates eligibility; n
     const load = (trusted) => loadEffectiveDeclarations({
       ctx: { cwd: project, isProjectTrusted: () => trusted }, agentDir, configDirName: '.pi',
     });
-    assert.deepEqual((await load(false)).map(({ scope, status }) => [scope, status]), [['user', 'approved']]);
+    assert.deepEqual((await load(false)).map(({ scope, status }) => [scope, status]), [['user', 'trust_required']]);
     await assert.rejects(load(true), /Invalid MCP config: JSON syntax/);
     await writeFile(projectPath, config([projectServer]));
     assert.deepEqual((await load(true)).map(({ scope, status }) => [scope, status]), [['project', 'trust_required']]);
@@ -45,7 +45,19 @@ test('Pi project trust gates reading; exact external digest gates eligibility; n
   }
 });
 
-test('user declarations cannot be symlinked to project-controlled config', async () => {
+test('open-descriptor source reads refuse files larger than the bounded parser input', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mcp-bounded-read-'));
+  const path = join(root, 'oversized.json');
+  try {
+    await writeFile(path, 'x'.repeat(120_001));
+    await assert.rejects(readOptional(path), /Invalid MCP config file/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('user declarations cannot be symlinked to project-controlled config',
+  { skip: process.platform === 'win32' && 'Windows symlink privilege is not assured' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'mcp-sources-'));
   const agentDir = join(root, 'agent');
   const project = join(root, 'project');

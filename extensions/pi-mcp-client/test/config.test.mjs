@@ -53,6 +53,16 @@ test('declaration digests are stable by JSON key order and change with executabl
   ]) assert.notEqual(declarationDigest(parsed), declarationDigest(candidate));
 });
 
+test('duplicate JSON keys at any depth, including escaped aliases, fail closed', () => {
+  for (const text of [
+    '{"version":1,"version":1,"servers":[]}',
+    '{"version":1,"servers":[{"id":"first","id":"second","enabled":true,"instructionsPolicy":"status-only","transport":{"type":"stdio","command":"first","args":[],"cwd":"project"}}]}',
+    '{"version":1,"servers":[{"id":"first","enabled":true,"instructionsPolicy":"status-only","transport":{"type":"stdio","command":"first","\\u0063ommand":"second","args":[],"cwd":"project"}}]}',
+  ]) {
+    assert.throws(() => parseNativeConfig(text), /Invalid MCP config: duplicate key/);
+  }
+});
+
 test('size and malformed declarations fail without exposing literal secrets', () => {
   for (const text of [
     '{"version":1,"servers":[{"secret":"never-expose-me"}',

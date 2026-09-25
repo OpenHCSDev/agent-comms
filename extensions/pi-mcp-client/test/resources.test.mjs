@@ -20,12 +20,12 @@ test('MCP resources and prompts are discoverable and usable as Pi tools with cal
   await mkdir(project);
   const path = join(agentDir, 'mcp.json');
   await writeFile(path, config(declaration));
-  const runtime = new McpRuntime({ ctx: { cwd: project, isProjectTrusted: () => false },
+  const runtime = new McpRuntime({ ctx: { cwd: project, isProjectTrusted: () => true },
     agentDir, configDirName: '.pi' });
   const registered = new Map();
   const pi = { getAllTools: () => [], registerTool: (tool) => registered.set(tool.name, tool) };
   let approvals = 0;
-  const ctx = { mode: 'tui', cwd: project, isProjectTrusted: () => false,
+  const ctx = { mode: 'tui', cwd: project, isProjectTrusted: () => true,
     ui: { confirm: async () => { approvals++; return true; } } };
   try {
     await runtime.start();

@@ -13,7 +13,7 @@ test('launch specification resolves only after approval and Pi trust, with safe 
   const alternate = await mkdtemp(`${tmpdir()}/mcp-launch-alt-`);
   try {
     const projectRoot = await realpath(project);
-    const entry = { projectRoot, scope: 'project', status: 'trust_required', declaration };
+    const entry = { projectRoot, scope: 'user', status: 'trust_required', declaration };
     const host = { PATH: '/bin', HOME: '/home/fixture', APP_MCP_TOKEN: 'secret-token',
       AMBIENT_SECRET: 'must-not-leak' };
     const ctx = { cwd: project, isProjectTrusted: () => false };
@@ -36,8 +36,13 @@ test('launch specification resolves only after approval and Pi trust, with safe 
     assert.equal(Object.hasOwn(params.env, 'AMBIENT_SECRET'), false);
     assert.equal(params.maxBufferSize, 2_097_152);
     await assert.rejects(prepareStdioParameters(entry, ctx, { PATH: '/bin' }), /Missing MCP host environment variable APP_MCP_TOKEN/);
+    await assert.rejects(prepareStdioParameters({ ...entry, scope: 'user' },
+      { cwd: project, isProjectTrusted: () => false }, host), /not authorized/);
     assert.deepEqual((await prepareStdioParameters({ ...entry, scope: 'user' },
-      { cwd: project, isProjectTrusted: () => false }, host)).env.TOKEN, 'secret-token');
+      { cwd: project, isProjectTrusted: () => true }, host)).env.TOKEN, 'secret-token');
+    await assert.rejects(prepareStdioParameters({ ...entry, scope: 'project', declaration: {
+      ...declaration, transport: { ...declaration.transport, env: { NODE_OPTIONS: '--require ./payload.js' } },
+    } }, ctx, host), /literal environment is not supported/);
   } finally {
     await rm(project, { recursive: true });
     await rm(alternate, { recursive: true });

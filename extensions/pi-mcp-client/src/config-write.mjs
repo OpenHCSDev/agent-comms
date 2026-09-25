@@ -10,7 +10,7 @@ const EMPTY_CONFIG = '{"version":1,"servers":[]}';
 export async function writeNativeServer({ agentDir, projectRoot, configDirName, scope,
   declaration, replace = false }) {
   if (!isAbsolute(agentDir) || !['user', 'project'].includes(scope) ||
-      !/^[.a-zA-Z0-9_-]+$/.test(configDirName)) {
+      !/^[.a-zA-Z0-9_-]+$/.test(configDirName) || ['.', '..'].includes(configDirName)) {
     throw new Error('Invalid MCP config destination');
   }
   const canonicalRoot = await realpath(projectRoot);
@@ -18,6 +18,9 @@ export async function writeNativeServer({ agentDir, projectRoot, configDirName, 
     throw new Error('Saved Pi project trust required before editing project MCP config');
   }
   const server = parseNativeConfig(JSON.stringify({ version: 1, servers: [declaration] })).servers[0];
+  if (scope === 'project' && Object.keys(server.transport.env).length) {
+    throw new Error('Project MCP literal environment is not supported; use envFrom');
+  }
   const directory = scope === 'user' ? agentDir : join(canonicalRoot, configDirName);
   await mkdir(directory, { recursive: true, mode: scope === 'user' ? 0o700 : 0o755 });
   if ((await lstat(directory)).isSymbolicLink()) throw new Error('MCP config directory symlink refused');

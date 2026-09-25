@@ -52,6 +52,9 @@ export async function decideProjectServer(ctx, { agentDir, configDirName, id, de
   const eligible = (await loadEffectiveDeclarations(options)).find((entry) =>
     entry.scope === 'project' && entry.declaration.id === id);
   if (!eligible || !eligible.declaration.enabled) throw new Error('Enabled project MCP declaration not found');
+  if (Object.keys(eligible.declaration.transport.env).length) {
+    throw new Error('Project MCP literal environment is not supported; use envFrom');
+  }
   const projectRoot = await realpath(ctx.cwd);
   const prompt = approvalDisplay(eligible, decision, projectRoot);
   if (!await ctx.ui.confirm(`${decision === 'approve' ? 'Approve' : 'Deny'} MCP project server?`, prompt)) {

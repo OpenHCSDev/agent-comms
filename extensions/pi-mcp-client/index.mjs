@@ -11,9 +11,15 @@ export default function (pi) {
   const options = (ctx) => ({ ctx, agentDir: getAgentDir(), configDirName: CONFIG_DIR_NAME });
   pi.on('session_start', async (_event, ctx) => {
     runtime = new McpRuntime(options(ctx));
-    await runtime.start();
-    registerReadyTools(pi, runtime);
-    registerResourceTools(pi, runtime);
+    try {
+      await runtime.start();
+      registerReadyTools(pi, runtime);
+      registerResourceTools(pi, runtime);
+    } catch (error) {
+      await runtime.stop();
+      runtime = undefined;
+      throw error;
+    }
   });
   pi.on('session_shutdown', async () => {
     await runtime?.stop();

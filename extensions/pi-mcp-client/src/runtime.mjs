@@ -14,8 +14,12 @@ export class McpRuntime {
   #started = false;
   #stopped = false;
   #starting;
+  #prepare;
 
-  constructor(options) { this.#options = options; }
+  constructor(options, { prepare = prepareStdioParameters } = {}) {
+    this.#options = options;
+    this.#prepare = prepare;
+  }
 
   async start() {
     if (this.#started) throw new Error('MCP runtime already started');
@@ -34,8 +38,21 @@ export class McpRuntime {
       let transport;
       let client;
       try {
-        const parameters = await prepareStdioParameters(record.entry, this.#options.ctx);
+        const parameters = await this.#prepare(record.entry, this.#options.ctx);
         if (this.#stopped) return;
+        // Preparation awaits filesystem/credential resolution. A declaration or
+        // approval can change during that gap: re-read authority immediately
+        // before handing the parameters to the SDK's spawn boundary.
+        const current = (await loadEffectiveDeclarations(this.#options)).find((entry) =>
+          entry.declaration.id === record.entry.declaration.id);
+        if (this.#stopped) return;
+        if (!current || current.status !== 'approved' ||
+            current.scope !== record.entry.scope || current.digest !== record.entry.digest ||
+            current.projectRoot !== record.entry.projectRoot) {
+          record.state = current?.status === 'approved' ? 'stale_restart_required'
+            : current?.status ?? 'trust_required';
+          continue;
+        }
         transport = new StdioClientTransport(parameters);
         client = new Client({ name: 'pi-mcp-client', version: '0.1.0' });
         this.#connections.set(record.entry.declaration.id, { client, transport, record });

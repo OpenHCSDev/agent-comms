@@ -21,7 +21,17 @@ export async function readOptional(path) {
   try {
     const stat = await file.stat();
     if (!stat.isFile() || stat.size > 120_000) throw new Error('Invalid MCP config file');
-    return await file.readFile({ encoding: 'utf8' });
+    // A project file can grow after fstat; never let readFile allocate without
+    // a bound on the already-open descriptor.
+    const buffer = Buffer.alloc(120_001);
+    let length = 0;
+    while (length < buffer.length) {
+      const { bytesRead } = await file.read(buffer, length, buffer.length - length, null);
+      if (bytesRead === 0) break;
+      length += bytesRead;
+    }
+    if (length > 120_000) throw new Error('Invalid MCP config file');
+    return buffer.toString('utf8', 0, length);
   } finally {
     await file.close();
   }

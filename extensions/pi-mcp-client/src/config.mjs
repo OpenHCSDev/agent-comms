@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import { parseUniqueJson } from './strict-json.mjs';
 
 const name = z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/);
 const variable = z.string().regex(/^[A-Z_][A-Z0-9_]*$/);
@@ -52,10 +53,11 @@ export function parseNativeConfig(text) {
   }
   let raw;
   try {
-    raw = JSON.parse(text);
-  } catch {
+    raw = parseUniqueJson(text);
+  } catch (error) {
     // Never include raw config or parser excerpts: declarations can contain secrets.
-    throw new Error('Invalid MCP config: JSON syntax');
+    throw new Error(error.message === 'Duplicate JSON key'
+      ? 'Invalid MCP config: duplicate key' : 'Invalid MCP config: JSON syntax');
   }
   const result = document.safeParse(raw);
   if (!result.success) {

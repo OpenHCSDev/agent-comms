@@ -19,12 +19,12 @@ test('Pi tools preserve discovered input schemas and require a human plus fresh 
   await mkdir(project);
   const file = join(agentDir, 'mcp.json');
   await writeFile(file, config(declaration));
-  const runtime = new McpRuntime({ ctx: { cwd: project, isProjectTrusted: () => false },
+  const runtime = new McpRuntime({ ctx: { cwd: project, isProjectTrusted: () => true },
     agentDir, configDirName: '.pi' });
   const registered = [];
   const pi = { registerTool: (tool) => registered.push(tool), getAllTools: () => [] };
   let confirms = 0;
-  const ctx = { mode: 'tui', cwd: project, isProjectTrusted: () => false,
+  const ctx = { mode: 'tui', cwd: project, isProjectTrusted: () => true,
     ui: { confirm: async () => { confirms++; return true; } } };
   try {
     await runtime.start();
