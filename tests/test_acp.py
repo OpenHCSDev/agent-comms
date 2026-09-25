@@ -791,6 +791,49 @@ class TestAgentTurn:
         assert message not in goal.progress
         assert not wired.registry.require("proj").executing
 
+    @pytest.mark.parametrize("event_type", ["error", "done"])
+    async def test_unstarted_user_input_failure_carries_exact_text_for_restore(
+        self, wired, tmp_path, event_type
+    ):
+        agent = self._agent_with_stub(tmp_path, wired)
+        sent: list = []
+
+        class FakeClient:
+            async def session_update(self, session_id=None, update=None, **kw):
+                sent.append(update)
+
+        key = "acp:preflight"
+        agent._dispositions.record(
+            key,
+            seq=None,
+            owner="proj",
+            admission=1,
+            target="proj",
+            text="lost prompt",
+        )
+        agent._turn_original_input_keys["proj"] = (key,)
+        agent._turn_input_text["proj"] = "lost prompt"
+        await agent._emit_event(
+            "proj",
+            {"type": event_type, "ok": False, "text": "Pi preflight ended before attestation"},
+            FakeClient(),
+        )
+
+        update = sent[-1]
+        assert update.field_meta["agentComms"]["inputFailed"] == {
+            "text": "lost prompt",
+            "reason": "Pi preflight ended before attestation",
+        }
+        assert agent._dispositions.status(key) == "unknown"
+        agent._dispositions.bind(
+            key, admission=1, turn_id="turn", native_id="a" * 32, text="lost prompt"
+        )
+        agent._dispositions.started(key, turn_id="turn", native_id="a" * 32, text="lost prompt")
+        await agent._emit_event(
+            "proj", {"type": "error", "text": "later steering failure"}, FakeClient()
+        )
+        assert "inputFailed" not in sent[-1].field_meta["agentComms"]
+
     @pytest.mark.parametrize("completed_in_turn", [False, True])
     async def test_missing_terminal_blocks_only_still_active_goal(
         self, wired, tmp_path, monkeypatch, completed_in_turn
