@@ -153,6 +153,15 @@ class RuntimeServer:
                 goal = await self.agent.retry_goal(session_id, goal_id, revision)
                 writer.write((json.dumps({"result": {"goal": asdict(goal)}}) + "\n").encode())
                 await writer.drain()
+            elif action == "set_goal":
+                text = request.get("text")
+                if not isinstance(text, str) or not text.strip():
+                    raise ValueError("A goal requires text.")
+                from dataclasses import asdict
+
+                goal = await self.agent.set_goal(session_id, text)
+                writer.write((json.dumps({"result": {"goal": asdict(goal)}}) + "\n").encode())
+                await writer.drain()
         except (Exception, asyncio.CancelledError) as error:
             if not isinstance(error, asyncio.CancelledError):
                 try:
