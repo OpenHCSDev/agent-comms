@@ -6,11 +6,18 @@ from agent_comms import ThreadRole, wire
 from agent_comms.acp import CommsAgent
 
 
+def _native_receipt(args, kwargs):
+    native_id = "a" * 32
+    with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
+        assert allowed is True
+    assert kwargs["native_start"](None, native_id, args[2])
+
+
 async def test_user_channel_wakes_members_and_returns_answers_without_feedback(
     tmp_path, monkeypatch
 ):
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    agent = CommsAgent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True)
     await agent.new_session(str(tmp_path / "first"))
     await agent.new_session(str(tmp_path / "second"))
     for name in ("first", "second"):
@@ -18,6 +25,7 @@ async def test_user_channel_wakes_members_and_returns_answers_without_feedback(
     calls = []
 
     async def events(*args, **kwargs):
+        _native_receipt(args, kwargs)
         name = args[4]["AGENT_COMMS_THREAD"]
         calls.append(name)
         yield {"type": "chunk", "text": f"{name} received it"}
@@ -61,11 +69,12 @@ async def test_user_channel_wakes_members_and_returns_answers_without_feedback(
 
 async def test_channel_requests_keep_their_reply_destinations(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    agent = CommsAgent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True)
     await agent.new_session(str(tmp_path / "worker"))
     comms.update_tags("worker", add=frozenset({"first", "second"}))
 
     async def events(*args, **kwargs):
+        _native_receipt(args, kwargs)
         yield {"type": "chunk", "text": "Reply: " + args[2].splitlines()[-1]}
         yield {"type": "settled"}
         yield {"type": "done", "ok": True}
@@ -84,7 +93,7 @@ async def test_channel_requests_keep_their_reply_destinations(tmp_path, monkeypa
 
 async def test_human_channel_mention_wakes_only_named_member(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    agent = CommsAgent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True)
     await agent.new_session(str(tmp_path / "alpha"))
     await agent.new_session(str(tmp_path / "beta"))
     for name in ("alpha", "beta"):
@@ -92,6 +101,7 @@ async def test_human_channel_mention_wakes_only_named_member(tmp_path, monkeypat
     calls: list[str] = []
 
     async def events(*args, **kwargs):
+        _native_receipt(args, kwargs)
         calls.append(args[4]["AGENT_COMMS_THREAD"])
         yield {"type": "settled"}
         yield {"type": "done", "ok": True}
@@ -110,7 +120,7 @@ async def test_human_channel_mention_wakes_only_named_member(tmp_path, monkeypat
 
 async def test_agent_channel_mention_wakes_only_named_member(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    agent = CommsAgent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True)
     await agent.new_session(str(tmp_path / "alpha"))
     await agent.new_session(str(tmp_path / "beta"))
     for name in ("alpha", "beta"):
@@ -118,6 +128,7 @@ async def test_agent_channel_mention_wakes_only_named_member(tmp_path, monkeypat
     calls: list[tuple[str, str]] = []
 
     async def events(*args, **kwargs):
+        _native_receipt(args, kwargs)
         calls.append((args[4]["AGENT_COMMS_THREAD"], args[2]))
         yield {"type": "settled"}
         yield {"type": "done", "ok": True}

@@ -1,6 +1,6 @@
 """Durable ACP input attempts and its transport cursor.
 
-An UNKNOWN row is never a request to retry. It records that a direct input
+An UNKNOWN row is never a request to retry. It records that a model input
 may have reached Pi. Only Pi's matching native user start can change it.
 """
 
@@ -11,7 +11,14 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .declarations import RelationViolationError, _atomic_write_text, _store_lock
+from .declarations import (
+    Message,
+    RelationViolationError,
+    ResponsePolicy,
+    Thread,
+    _atomic_write_text,
+    _store_lock,
+)
 
 _NATIVE_ID = re.compile(r"[0-9a-f]{32}\Z")
 
@@ -19,6 +26,16 @@ _NATIVE_ID = re.compile(r"[0-9a-f]{32}\Z")
 class InputDispositions:
     def __init__(self, root: Path) -> None:
         self.path = root / "input_dispositions.json"
+
+    @staticmethod
+    def bus_key(message: Message, owner: Thread) -> str:
+        """A channel sequence has one attempt per stable recipient incarnation."""
+        suffix = (
+            ""
+            if message.response_policy is ResponsePolicy.DIRECT
+            else f":owner:{float(owner.created_at).hex()}"
+        )
+        return f"bus:{message.seq}{suffix}"
 
     def _read(self) -> dict[str, dict[str, Any]]:
         try:
@@ -70,8 +87,10 @@ class InputDispositions:
     ) -> bool:
         """Persist UNKNOWN before cursor advance or any Pi prompt write."""
         if not key or not owner or not target or not text or admission <= 0:
-            raise ValueError("Invalid ACP direct input identity")
-        if seq is not None and (seq <= 0 or key != f"bus:{seq}"):
+            raise ValueError("Invalid ACP input identity")
+        if seq is not None and (
+            seq <= 0 or (key != f"bus:{seq}" and not key.startswith(f"bus:{seq}:owner:"))
+        ):
             raise ValueError("Bus input key and sequence disagree")
         with _store_lock(self.path):
             rows = self._read()
