@@ -718,6 +718,34 @@ class TestThreadOps:
         assert wired.registry.status("restart-b").active
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_restart_refuses_turn_started_during_owner_proof(self, wired, monkeypatch):
+        from dataclasses import replace
+
+        from agent_comms.declarations import ActiveTurn
+
+        wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        signals = []
+
+        def start_turn(self, thread, *, wait=True):
+            if wait:
+                current = self.registry.require(thread.name)
+                self.registry.register(
+                    replace(current, active_turn=ActiveTurn("new-turn", current.pid))
+                )
+            return True
+
+        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", start_turn)
+        monkeypatch.setattr(
+            "agent_comms.operations.Comms._signal_local_owner",
+            lambda *args: signals.append(args),
+        )
+        with pytest.raises(RelationViolationError, match="became busy"):
+            wired.restart_owners(["owner"])
+        assert signals == []
+        assert wired.registry.require("owner").active_turn.id == "new-turn"
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_restart_rejects_post_signal_same_pid_lifecycle_aba(self, wired, monkeypatch):
         wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
         launches = []

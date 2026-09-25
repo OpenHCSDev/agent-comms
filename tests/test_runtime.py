@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 from contextlib import suppress
+from dataclasses import replace
 
 import pytest
 
@@ -70,6 +71,161 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path):
         await proxy.close()
         await owner.shutdown()
     assert not path.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
+async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp_path):
+    comms = wire(tmp_path / "wire")
+    old_pid, new_pid = 901001, 901002
+    comms.register(Thread("worker", frozenset(), str(tmp_path), pid=old_pid))
+    client = CommsAgent(comms)
+    updates = []
+
+    class Client:
+        async def session_update(self, *, session_id, update):
+            updates.append((session_id, update))
+
+    client.on_connect(Client())
+    old_path = socket_path(comms.root, old_pid)
+    new_path = socket_path(comms.root, new_pid)
+    old_path.parent.mkdir(parents=True, exist_ok=True)
+    connections = []
+    calls = []
+
+    def handler(owner):
+        async def receive(reader, writer):
+            request = json.loads(await reader.readline())
+            calls.append((owner, request["action"], request["thread"]))
+            if request["action"] == "subscribe":
+                connections.append(writer)
+                writer.write(
+                    (
+                        json.dumps(
+                            {
+                                "ready": {
+                                    "agentComms": {"imagePrompts": owner == "new"},
+                                    "configOptions": [{"id": "model", "currentValue": owner}],
+                                }
+                            }
+                        )
+                        + "\n"
+                    ).encode()
+                )
+                writer.write((json.dumps({"update": {"owner": owner}}) + "\n").encode())
+                await writer.drain()
+                await reader.read()
+            else:
+                writer.write((json.dumps({"result": {"owner": owner}}) + "\n").encode())
+                await writer.drain()
+            writer.close()
+
+        return receive
+
+    old_server = await asyncio.start_unix_server(handler("old"), path=old_path)
+    new_server = None
+    proxy = RuntimeProxy(client, "worker", old_path)
+    try:
+        await proxy.subscribe()
+        await until(lambda: ("worker", {"owner": "old"}) in updates)
+        # Session metadata may be filled in after initial owner attachment.
+        comms.registry.register(
+            replace(comms.registry.require("worker"), session_file=str(tmp_path / "session.jsonl"))
+        )
+        assert await proxy.request("cancel") == {"owner": "old"}
+        comms.registry.rename("worker", "renamed")
+        comms.registry.register(replace(comms.registry.require("renamed"), pid=new_pid))
+        old_server.close()
+        await old_server.wait_closed()
+        for writer in connections:
+            writer.close()
+
+        # A request made before the replacement socket starts is still unsent.
+        request = asyncio.create_task(proxy.request("cancel"))
+        await asyncio.sleep(0.15)
+        new_server = await asyncio.start_unix_server(handler("new"), path=new_path)
+        assert await asyncio.wait_for(request, 3) == {"owner": "new"}
+        await until(lambda: ("worker", {"owner": "new"}) in updates)
+        await until(
+            lambda: (
+                "worker",
+                {
+                    "sessionUpdate": "config_option_update",
+                    "configOptions": [{"id": "model", "currentValue": "new"}],
+                },
+            )
+            in updates
+        )
+        assert client._proxy_image_support["worker"] is True
+        assert ("new", "subscribe", "worker") in calls
+        assert ("new", "cancel", "worker") in calls
+        assert calls.count(("old", "cancel", "worker")) == 1
+
+        # A later thread with the same former name is a distinct incarnation.
+        comms.registry.unregister("renamed")
+        comms.registry.begin_delete("renamed")
+        comms.registry.remove("renamed")
+        comms.register(Thread("worker", frozenset(), str(tmp_path), pid=901003))
+        with pytest.raises(RuntimeError, match="identity changed"):
+            await proxy.request("cancel")
+    finally:
+        await proxy.close()
+        await client.shutdown()
+        old_server.close()
+        await old_server.wait_closed()
+        if new_server is not None:
+            new_server.close()
+            await new_server.wait_closed()
+        for writer in connections:
+            writer.close()
+        old_path.unlink(missing_ok=True)
+        new_path.unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
+async def test_request_only_proxy_never_replays_after_request_was_received(tmp_path):
+    comms = wire(tmp_path / "wire")
+    old_pid, new_pid = 902001, 902002
+    comms.register(Thread("worker", frozenset(), str(tmp_path), pid=old_pid))
+    old_path = socket_path(comms.root, old_pid)
+    new_path = socket_path(comms.root, new_pid)
+    old_path.parent.mkdir(parents=True, exist_ok=True)
+    received = []
+
+    async def old_owner(reader, writer):
+        request = json.loads(await reader.readline())
+        received.append(("old", request["action"]))
+        comms.registry.register(replace(comms.registry.require("worker"), pid=new_pid))
+        writer.close()  # The action may have happened; its result was lost.
+
+    async def new_owner(reader, writer):
+        request = json.loads(await reader.readline())
+        received.append(("new", request["action"]))
+        writer.write(b'{"result": {"ok": true}}\n')
+        await writer.drain()
+        writer.close()
+
+    class ToadLike:
+        _coordination_root = str(comms.root)
+
+    old_server = await asyncio.start_unix_server(old_owner, path=old_path)
+    new_server = await asyncio.start_unix_server(new_owner, path=new_path)
+    proxy = RuntimeProxy(ToadLike(), "worker", old_path)
+    try:
+        with pytest.raises(RuntimeError, match="outcome unknown"):
+            await proxy.request("set_goal", text="one")
+        assert received == [("old", "set_goal")]
+        assert await proxy.request("cancel") == {"ok": True}
+        assert received == [("old", "set_goal"), ("new", "cancel")]
+    finally:
+        await proxy.close()
+        old_server.close()
+        new_server.close()
+        await old_server.wait_closed()
+        await new_server.wait_closed()
+        old_path.unlink(missing_ok=True)
+        new_path.unlink(missing_ok=True)
 
 
 @pytest.mark.asyncio

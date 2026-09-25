@@ -2703,6 +2703,11 @@ class Comms:
                 ):
                     raise RelationViolationError("Owner epochs changed before restart.")
                 if any(
+                    fresh.threads[thread.name].active_turn is not None
+                    for thread, _epoch in captured
+                ):
+                    raise RelationViolationError("Owner became busy before restart.")
+                if any(
                     not self._process_alive(thread.pid)
                     or not self._is_local_participant(thread, wait=False)
                     for thread, _epoch in captured

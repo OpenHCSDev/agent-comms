@@ -37,6 +37,10 @@ class SocketClient:
         await self.writer.drain()
 
 
+class OwnerIdentityChanged(RuntimeError):
+    """A saved attachment must not follow a reused thread name."""
+
+
 class RuntimeServer:
     def __init__(self, agent: Any):
         self.agent = agent
@@ -66,7 +70,10 @@ class RuntimeServer:
         session_id = None
         try:
             request = json.loads(await reader.readline())
-            name = self.agent._comms.registry.require(request["thread"]).name
+            owner = self.agent._comms.registry.require(request["thread"])
+            name = owner.name
+            if owner.pid != os.getpid() or not self.agent._comms.registry.status(name).running:
+                raise RuntimeError("This process no longer owns the thread.")
             session_id = next(
                 key
                 for key, value in self.agent._sessions.items()
@@ -230,46 +237,99 @@ class RuntimeProxy:
         self.agent = agent
         self.session_id = session_id
         self.path = path
+        comms = getattr(agent, "_comms", None)
+        if comms is None:
+            root = getattr(agent, "_coordination_root", None)
+            if root is None:
+                raise ValueError("Runtime proxy needs a coordination root.")
+            from .operations import wire
+
+            comms = wire(root)
+        self._comms = comms
         self.writer: asyncio.StreamWriter | None = None
         self.task: asyncio.Task[None] | None = None
+        self._closed = False
+        try:
+            thread = comms.registry.require(session_id)
+        except ValueError:
+            self._identity: float | None = None
+        else:
+            self._identity = thread.created_at
 
-    async def subscribe(self) -> dict[str, Any]:
-        # The registry ownership change precedes socket startup by a few event
-        # loop ticks. Retry attachment, never claim a second owner in that gap.
-        deadline = asyncio.get_running_loop().time() + 2
+    def _owner_path(self) -> Path:
+        snapshot = self._comms.registry.snapshot()
+        canonical = snapshot.aliases.get(self.session_id, self.session_id)
+        thread = snapshot.threads.get(canonical)
+        if thread is None:
+            raise RuntimeError(f"Thread {self.session_id!r} is not registered.")
+        identity = thread.created_at
+        if self._identity is None:
+            self._identity = identity
+        elif identity != self._identity:
+            raise OwnerIdentityChanged("Thread identity changed; open a new attachment.")
+        if thread.pid <= 0 or not snapshot.statuses[canonical].running:
+            raise ConnectionError(f"Thread {self.session_id!r} has no running owner.")
+        return socket_path(self._comms.root, thread.pid)
+
+    async def _connect_current(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        # A failed connect has sent no request bytes. Resolve again because a
+        # replacement owner may have registered while its socket was starting.
+        deadline = asyncio.get_running_loop().time() + 5
         while True:
             try:
-                reader, self.writer = await asyncio.open_unix_connection(
-                    self.path, limit=8 * 1024 * 1024
-                )
-                break
-            except (FileNotFoundError, ConnectionRefusedError):
+                path = self._owner_path()
+                reader, writer = await asyncio.open_unix_connection(path, limit=8 * 1024 * 1024)
+            except (FileNotFoundError, ConnectionRefusedError, ConnectionError):
                 if asyncio.get_running_loop().time() >= deadline:
                     raise
                 await asyncio.sleep(0.05)
-        self.writer.write(
-            (
-                json.dumps(
-                    {
-                        "action": "subscribe",
-                        "thread": self.session_id,
-                        "transcriptSnapshots": self.agent._transcript_snapshots,
-                        "transcriptDiffs": self.agent._transcript_diffs,
-                    }
-                )
-                + "\n"
-            ).encode()
-        )
-        await self.writer.drain()
-        while line := await reader.readline():
-            data = json.loads(line)
-            if "error" in data:
-                raise RuntimeError(data["error"])
-            if "ready" in data:
-                self.task = asyncio.create_task(self.forward(reader))
-                return cast(dict[str, Any], data["ready"])
-            await self.update(data)
-        raise RuntimeError("Thread owner disconnected during attachment")
+                continue
+            try:
+                if self._owner_path() == path:
+                    self.path = path
+                    return reader, writer
+            except BaseException:
+                writer.close()
+                raise
+            writer.close()
+            if asyncio.get_running_loop().time() >= deadline:
+                raise ConnectionError("Thread owner changed before attachment.")
+            await asyncio.sleep(0.05)
+
+    async def subscribe(self) -> dict[str, Any]:
+        reader, metadata = await self._subscribe_once()
+        self.task = asyncio.create_task(self.forward(reader))
+        return metadata
+
+    async def _subscribe_once(self) -> tuple[asyncio.StreamReader, dict[str, Any]]:
+        reader, writer = await self._connect_current()
+        self.writer = writer
+        try:
+            writer.write(
+                (
+                    json.dumps(
+                        {
+                            "action": "subscribe",
+                            "thread": self.session_id,
+                            "transcriptSnapshots": self.agent._transcript_snapshots,
+                            "transcriptDiffs": self.agent._transcript_diffs,
+                        }
+                    )
+                    + "\n"
+                ).encode()
+            )
+            await writer.drain()
+            while line := await reader.readline():
+                data = json.loads(line)
+                if "error" in data:
+                    raise RuntimeError(data["error"])
+                if "ready" in data:
+                    return reader, cast(dict[str, Any], data["ready"])
+                await self.update(data)
+            raise RuntimeError("Thread owner disconnected during attachment")
+        except BaseException:
+            writer.close()
+            raise
 
     async def update(self, data: dict[str, Any]) -> None:
         if "update" in data and self.agent._client is not None:
@@ -278,11 +338,40 @@ class RuntimeProxy:
             )
 
     async def forward(self, reader: asyncio.StreamReader) -> None:
-        while line := await reader.readline():
-            await self.update(json.loads(line))
+        while not self._closed:
+            try:
+                while line := await reader.readline():
+                    await self.update(json.loads(line))
+            except (OSError, ConnectionError):
+                pass  # A reset subscription is safe to establish again.
+            except ValueError:
+                return
+            if self.writer is not None:
+                self.writer.close()
+            while not self._closed:
+                try:
+                    reader, metadata = await self._subscribe_once()
+                    image_support = getattr(self.agent, "_proxy_image_support", None)
+                    if isinstance(image_support, dict):
+                        image_support[self.session_id] = (
+                            metadata.get("agentComms", {}).get("imagePrompts") is True
+                        )
+                    if "configOptions" in metadata and self.agent._client is not None:
+                        await self.agent._client.session_update(
+                            session_id=self.session_id,
+                            update={
+                                "sessionUpdate": "config_option_update",
+                                "configOptions": metadata["configOptions"],
+                            },
+                        )
+                    break
+                except OwnerIdentityChanged:
+                    return
+                except (OSError, RuntimeError):
+                    await asyncio.sleep(0.1)
 
     async def request(self, action: str, **kwargs: Any) -> dict[str, Any]:
-        reader, writer = await asyncio.open_unix_connection(self.path, limit=8 * 1024 * 1024)
+        reader, writer = await self._connect_current()
         try:
             writer.write(
                 (
@@ -290,7 +379,10 @@ class RuntimeProxy:
                 ).encode()
             )
             await writer.drain()
-            data = json.loads(await reader.readline())
+            line = await reader.readline()
+            if not line:
+                raise RuntimeError("Thread owner disconnected after request; outcome unknown.")
+            data = json.loads(line)
             if "error" in data:
                 raise RuntimeError(data["error"])
             return cast(dict[str, Any], data["result"])
@@ -298,6 +390,7 @@ class RuntimeProxy:
             writer.close()
 
     async def close(self) -> None:
+        self._closed = True
         if self.writer is not None:
             self.writer.close()
         if self.task is not None:
