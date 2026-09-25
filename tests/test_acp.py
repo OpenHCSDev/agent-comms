@@ -793,11 +793,14 @@ class TestAgentTurn:
         result = wired.registry.require("proj").goal
         assert result is not None
         assert result.status == "blocked"
-        assert result.progress == (
-            "Goal turn ended without verified terminal progress."
-            if completed_in_turn
-            else "Backend turn ended without a result; inspect local diagnostics."
-        )
+        if completed_in_turn:
+            assert result.progress == (
+                "Verified complete\n\nGoal turn ended without verified terminal progress."
+            )
+        else:
+            assert (
+                result.progress == "Backend turn ended without a result; inspect local diagnostics."
+            )
         assert secret not in result.progress
         assert "proj" not in agent._emitted_errors
         agent._schedule_goal("proj")
@@ -847,9 +850,11 @@ class TestAgentTurn:
             await cancelled
         assert "proj" not in agent._emitted_errors
 
-    async def test_successful_turn_without_a_goal_update_pauses_instead_of_blocking(
+    async def test_successful_turn_without_a_goal_report_blocks_for_explicit_retry(
         self, wired, tmp_path, monkeypatch
     ):
+        from agent_comms.goal_attempts import GoalAttemptStore
+
         agent = self._agent_with_stub(tmp_path, wired)
 
         class FakeClient:
@@ -863,13 +868,20 @@ class TestAgentTurn:
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         agent._client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        goal = wired.update_goal("proj", "set", text="Ship the release")
-        self._authorize_test_goal(agent, wired, goal)
+        agent._agent_bin = "pi"
+        monkeypatch.setattr(agent, "_schedule_goal", lambda _session: None)
+        goal = await agent.set_goal("proj", "Ship the release")
         await agent._run_agent_turn("proj", "proj", "work")
 
-        goal = wired.registry.require("proj").goal
-        assert goal is not None and goal.status == "paused"
-        assert "paused to avoid a continuation loop" in goal.progress
+        current = wired.registry.require("proj").goal
+        assert current is not None and current.id == goal.id
+        assert current.status == "blocked" and current.toggle_action == "retry"
+        assert "without a goal progress update" in current.progress
+        generation = GoalAttemptStore(wired.root / "goal-private").snapshot(goal.id)
+        assert generation is not None and generation.state == "blocked"
+        resumed = await agent.retry_goal("proj", goal.id, current.revision)
+        assert resumed.status == "active"
+        assert GoalAttemptStore(wired.root / "goal-private").snapshot(goal.id).state == "ready"
 
     async def test_empty_successful_continuation_blocks_instead_of_false_no_progress_pause(
         self, wired, tmp_path, monkeypatch
@@ -991,23 +1003,35 @@ class TestAgentTurn:
 
         def interpose(name, **kwargs):
             nonlocal superseding
-            superseding = wire(wired.root).update_goal(
-                name,
-                transition,
-                **(
-                    {"text": "New objective"}
-                    if transition == "set"
-                    else {"goal_id": original.id, "progress": "explicit decision"}
-                ),
-            )
+            if superseding is None:
+                superseding = wire(wired.root).update_goal(
+                    name,
+                    transition,
+                    **(
+                        {"text": "New objective"}
+                        if transition == "set"
+                        else {"goal_id": original.id, "progress": "explicit decision"}
+                    ),
+                )
             return original_block(name, **kwargs)
 
         monkeypatch.setattr(wired, "block_goal_after_failed_turn", interpose)
         await agent._run_agent_turn("proj", "proj", "work")
         current = wired.registry.require("proj").goal
-        assert superseding is not None and current == superseding
-        assert current.status == ("active" if transition == "set" else transition)
-        assert "Backend turn failed" not in current.progress
+        assert superseding is not None and current is not None
+        if transition == "set":
+            assert current == superseding and current.status == "active"
+            assert "Backend turn failed" not in current.progress
+        else:
+            assert current.id == superseding.id and current.status == "blocked"
+            assert current.toggle_action == "retry"
+            assert current.progress.startswith("explicit decision\n\n")
+            from agent_comms.goal_attempts import GoalAttemptStore
+
+            assert (
+                GoalAttemptStore(wired.root / "goal-private").snapshot(original.id).state
+                == "blocked"
+            )
 
     @pytest.mark.parametrize("outcome", ["failed", "missing_done"])
     async def test_failed_goal_turn_retains_verified_progress_without_auto_retry(

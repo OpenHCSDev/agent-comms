@@ -1924,21 +1924,19 @@ class CommsAgent:
                                 ),
                             )
                         else:
-                            try:
-                                self._comms.update_goal(
-                                    thread_name,
-                                    "paused",
-                                    goal_id=goal.id,
-                                    expected_goal=current_goal,
-                                    progress="Turn ended without a goal progress update; "
-                                    "paused to avoid a continuation loop. Resume to continue.",
-                                )
-                            except ValueError as error:
-                                # A concurrent goal edit won the revision CAS.
-                                # Do not overwrite verified progress or relabel
-                                # this successful provider turn as a failure.
-                                if str(error) != "Goal changed during resume; refresh its state.":
-                                    raise
+                            # The provider turn finished, but no comms_goal
+                            # report can attest progress for its reserved
+                            # attempt. The ledger will block it below; show
+                            # the same disposition in the registry so the UI
+                            # offers explicit Retry rather than an unusable
+                            # Resume action.
+                            self._comms.block_goal_after_failed_turn(
+                                thread_name,
+                                started_goal=goal,
+                                expected_worktree=thread.worktree,
+                                diagnostic="Goal turn ended without a goal progress update; "
+                                "inspect the attempt before Retry.",
+                            )
                 if kind == "model_changed":
                     future = self._model_requests.get(event.get("id", ""))
                     if future is not None and not future.done():
@@ -2079,23 +2077,12 @@ class CommsAgent:
                     goal_attempt_resolved = True
                     if current_goal is not None and current_goal.id == goal.id:
                         diagnostic = "Goal turn ended without verified terminal progress."
-                        if current_goal.active:
-                            self._comms.block_goal_after_failed_turn(
-                                thread_name,
-                                started_goal=goal,
-                                expected_worktree=thread.worktree,
-                                diagnostic=diagnostic,
-                            )
-                        elif (
-                            current_goal.status == "completed"
-                            and current_goal.reported_turn == turn_id
-                        ):
-                            self._comms.block_unverified_goal_completion(
-                                thread_name,
-                                expected_goal=current_goal,
-                                expected_worktree=thread.worktree,
-                                diagnostic=diagnostic,
-                            )
+                        self._comms.block_goal_after_failed_turn(
+                            thread_name,
+                            started_goal=goal,
+                            expected_worktree=thread.worktree,
+                            diagnostic=diagnostic,
+                        )
             if origins and settled and terminal_ok is True:
                 await asyncio.to_thread(
                     self._comms.record_turn_routing, thread_name, checkpoint, routing

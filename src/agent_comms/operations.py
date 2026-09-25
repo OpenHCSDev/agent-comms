@@ -2250,7 +2250,7 @@ class Comms:
         expected_worktree: str,
         diagnostic: str,
     ) -> Goal | None:
-        """Stop autonomous retries after failure without discarding newer goal progress."""
+        """Make an unresolved same-ID attempt visible without losing newer progress."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             current = thread.goal
@@ -2258,7 +2258,7 @@ class Comms:
                 thread.worktree != expected_worktree
                 or current is None
                 or current.id != started_goal.id
-                or not current.active
+                or current.status not in {"active", "paused", "completed"}
             ):
                 return current
             progress = (
