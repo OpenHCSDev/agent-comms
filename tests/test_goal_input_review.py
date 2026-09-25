@@ -33,11 +33,24 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
         await agent._drain_inbox("worker")
         with pytest.raises(ValueError, match="pending or UNKNOWN"):
             report.invoke(comms, args)
-        result = inbox.invoke(comms, {"thread": "worker"})
+        admission = comms.registry.snapshot().admission_generations["worker"]
+        agent._dispositions.record(
+            "acp:owner-input",
+            seq=None,
+            owner="worker",
+            admission=admission,
+            target="worker",
+            text="An uncertain user follow-up",
+        )
+        result = inbox.invoke(
+            comms, {"thread": "worker", "goal_id": goal.id, "wait_for": ["parent"]}
+        )
         assert result["messages"] == []
-        inputs = result["unresolved_inputs"]
-        assert [row["sequence"] for row in inputs] == [m.seq for m in messages]
-        keys = [row["inputId"] for row in inputs]
+        assert len(result["unresolved_inputs"]) == 3
+        review = result["standby_review"]
+        assert [row["sequence"] for row in review["messages"]] == [m.seq for m in messages]
+        assert review["excluded_inputs"][0]["reason"] == "owner_input_without_bus_sequence"
+        keys = review["reviewed_inputs"]
         with pytest.raises(ValueError, match="pending or UNKNOWN"):
             report.invoke(comms, {**args, "reviewed_inputs": keys[1:]})
         assert all(not agent._dispositions.get(key).get("goal_reviews") for key in keys)
@@ -45,6 +58,9 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
             report.invoke(comms, {**args, "reviewed_inputs": ["bus:999999"]})
         unrelated = comms.send_message("other", "worker", "Not a declared dependency")
         await agent._drain_inbox("worker")
+        scoped = comms.goal_input_review("worker", goal.id, ["parent"])
+        assert scoped["reviewed_inputs"] == keys
+        assert len(scoped["excluded_inputs"]) == 2
         with pytest.raises(ValueError, match="declared dependencies"):
             report.invoke(comms, {**args, "reviewed_inputs": [*keys, f"bus:{unrelated.seq}"]})
         assert (
@@ -53,6 +69,9 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
         )
         agent._schedule_goal("worker")
         assert not agent._pending_turns.get("worker")
+        again = comms.goal_input_review("worker", goal.id, ["parent"])
+        assert again["reviewed_inputs"] == []
+        assert [row["inputId"] for row in again["already_reviewed_inputs"]] == keys
         for key in keys:
             row = agent._dispositions.get(key)
             assert row["status"] == "unknown" and row["native_id"] is None

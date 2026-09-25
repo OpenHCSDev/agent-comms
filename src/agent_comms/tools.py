@@ -142,12 +142,21 @@ def _send(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 
 def _inbox(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     thread = str(arguments["thread"])
+    goal_id = arguments.get("goal_id")
+    wait_for = arguments.get("wait_for")
+    assert wait_for is None or isinstance(wait_for, list)
+    if bool(goal_id) != bool(wait_for):
+        raise ValueError("Provide goal_id and wait_for together for standby review.")
+    review = (
+        comms.goal_input_review(thread, str(goal_id), wait_for) if goal_id and wait_for else None
+    )
     messages = [message.to_wire() for message in comms.inbox(thread)]
     acknowledged = comms.acknowledge(thread) if arguments["ack"] else 0
     return {
         "messages": messages,
         "acknowledged": acknowledged,
         "unresolved_inputs": comms.unresolved_inputs(thread),
+        **({"standby_review": review} if review is not None else {}),
     }
 
 
@@ -667,8 +676,8 @@ TOOLS = (
         "The goal remains active, but only a direct message from a named dependency or a user "
         "follow-up starts its next turn. Do not repeatedly announce waiting "
         "or return empty output. If existing dependency replies block standby, inspect "
-        "comms_inbox unresolved_inputs and explicitly include their inputId keys "
-        "in reviewed_inputs; "
+        "comms_inbox with this goal_id and wait_for. Read standby_review.messages and "
+        "copy only standby_review.reviewed_inputs into reviewed_inputs; "
         "this records your decision to wait for a later reply without replaying uncertain inputs.",
         (
             ToolParameter("goal_id", "string", "Goal identity provided in the turn context"),
@@ -800,11 +809,18 @@ TOOLS = (
         "Comms Inbox",
         "Fetch undelivered messages and unresolved native input attempts for a thread. "
         "Optional ACK changes only the inbox marker; unresolved_inputs remain UNKNOWN. "
-        "After inspecting dependencies, comms_goal reviewed_inputs records a wait decision.",
+        "For standby, supply goal_id and wait_for to get standby_review: exact eligible keys "
+        "and messages, already reviewed entries, and excluded owner/other-dependency inputs.",
         (
             ToolParameter("thread", "string", "Thread name"),
             ToolParameter(
                 "ack", "boolean", "Mark delivered after reading", required=False, default=True
+            ),
+            ToolParameter(
+                "goal_id", "string", "Current goal for scoped standby review", required=False
+            ),
+            ToolParameter(
+                "wait_for", "array", "Declared dependencies for standby review", required=False
             ),
         ),
         _inbox,
