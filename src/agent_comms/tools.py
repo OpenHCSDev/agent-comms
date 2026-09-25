@@ -18,6 +18,7 @@ from .declarations import (
     is_channel_target,
 )
 from .operations import Comms, ForkSpec, TagAction
+from .tool_output import MAX_INLINE_OUTPUT_BYTES, materialize_oversized_output
 
 JsonObject = dict[str, object]
 ToolHandler = Callable[[Comms, Mapping[str, object]], JsonObject]
@@ -151,13 +152,47 @@ def _inbox(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
         comms.goal_input_review(thread, str(goal_id), wait_for) if goal_id and wait_for else None
     )
     messages = [message.to_wire() for message in comms.inbox(thread)]
-    acknowledged = comms.acknowledge(thread) if arguments["ack"] else 0
-    return {
+    unresolved = comms.unresolved_inputs(thread)
+    response: JsonObject = {
         "messages": messages,
-        "acknowledged": acknowledged,
-        "unresolved_inputs": comms.unresolved_inputs(thread),
+        "acknowledged": 0,
+        "unresolved_inputs": unresolved,
         **({"standby_review": review} if review is not None else {}),
     }
+    # Reserve room for the eventual ACK count before performing that mutation.
+    # Omitted messages must remain unread even if artifact publication fails.
+    result_file = materialize_oversized_output(
+        comms.root, response, inline_limit=MAX_INLINE_OUTPUT_BYTES - 64
+    )
+    if result_file is not None:
+        bounded: JsonObject = {
+            "messages": [],
+            "acknowledged": 0,
+            "unresolved_inputs": [],
+            "complete": False,
+            "ackDeferred": bool(arguments["ack"]),
+            "counts": {"messages": len(messages), "unresolved_inputs": len(unresolved)},
+            "result_file": str(result_file),
+            "instruction": (
+                "Payload arrays are omitted, not empty. The file is a complete public result "
+                "snapshot, not current authority. Read it selectively with read offset/limit "
+                "or a JSON query; do not "
+                "dump the whole file into context. No messages were acknowledged. UNKNOWN "
+                "inputs are unchanged. Review full relevant messages before using any "
+                "standby reviewed_inputs from the file."
+            ),
+        }
+        if review is not None:
+            bounded["standby_review"] = {
+                "complete": False,
+                "counts": {
+                    key: len(review[key])
+                    for key in ("messages", "already_reviewed_inputs", "excluded_inputs")
+                },
+            }
+        return bounded
+    response["acknowledged"] = comms.acknowledge(thread) if arguments["ack"] else 0
+    return response
 
 
 def _fork(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
@@ -809,6 +844,8 @@ TOOLS = (
         "Comms Inbox",
         "Fetch undelivered messages and unresolved native input attempts for a thread. "
         "Optional ACK changes only the inbox marker; unresolved_inputs remain UNKNOWN. "
+        "Oversized results return complete=false, counts, and a complete result_file; "
+        "ACK is deferred. Read that file selectively, never dump it into context. "
         "For standby, supply goal_id and wait_for to get standby_review: exact eligible keys "
         "and messages, already reviewed entries, and excluded owner/other-dependency inputs.",
         (
