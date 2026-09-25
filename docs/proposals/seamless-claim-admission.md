@@ -1,6 +1,6 @@
 # Seamless channel notification, N/K wake, and resource ownership
 
-Status: **draft contract, not an implementation or authorization to launch models**. Rebased onto `OpenHCSDev/agent-comms` `main` at `c48d2dd2f2d90870cf0c754c12026c06cf3f5f77` after the packaged stack and goal fixes. This proposal remains separate from the merged sidebar route-count projection. The first implementation must be a focused follow-up commit on a freshly checked head.
+Status: **draft contract, not an implementation or authorization to launch models**. Rebased onto `OpenHCSDev/agent-comms` `main` at `0cf28939ca820f34639e1b62f8a2ea4b62666bab` after the packaged stack and goal fixes. This proposal remains separate from the merged sidebar route-count projection. The first implementation must be a focused follow-up commit on a freshly checked head.
 
 ## User-facing behavior
 
