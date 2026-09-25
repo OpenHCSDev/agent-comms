@@ -31,6 +31,8 @@ from uuid import uuid4
 
 from .channels import ChannelCatalog
 from .goal_pauses import GoalPauseEvent, GoalPauseEvents
+from .goal_history import GoalHistoryEntry
+from .goal_waits import GoalWait, GoalWaits
 
 if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore
@@ -49,7 +51,9 @@ from .declarations import (
     CoordinationSnapshot,
     DMDisplayBasis,
     Goal,
+    GoalExecution,
     GoalPauseSource,
+    GoalWaitTarget,
     MembershipChange,
     Message,
     MessageBus,
@@ -1065,6 +1069,7 @@ class Comms:
         runtime = self.runtime_info.all()
         active = frozenset(t.name for t in snapshot.threads.values() if t.executing)
         activities = self.activity.all_current(active=active)
+        waits = GoalWaits(self.root / "goal_waits.json").snapshot()
         return tuple(
             ThreadView(
                 thread,
@@ -1072,6 +1077,7 @@ class Comms:
                 activities.get(name, Activity(name, ActivityState.IDLE, timestamp=0)),
                 runtime.get(name),
                 snapshot.last_seen.get(name, 0),
+                GoalWaits.execution(thread.goal, waits, snapshot),
             )
             for name, thread in snapshot.threads.items()
             if snapshot.statuses[name].in_view(
@@ -1324,6 +1330,7 @@ class Comms:
                     self.activity._path,
                     self.runtime_info._path,
                     self.root / "read_markers.json",
+                    self.root / "goal_waits.json",
                     self.transcript_reads.path,
                 )
             ),
@@ -2138,6 +2145,44 @@ class Comms:
         events = GoalPauseEvents(self.root / "goal_pause_events.json")
         return events.for_goal(self.registry.require(name).goal, events.snapshot())
 
+    def goal_history(
+        self, name: str, *, goal_id: str | None = None
+    ) -> tuple[GoalHistoryEntry, ...]:
+        """Read durable revisions for one thread incarnation and optional goal ID."""
+        with _store_lock(self._wire_lock_path):
+            return self.registry.goal_history(name, goal_id=goal_id)
+
+    def goal_wait(self, name: str) -> GoalWait | None:
+        waits = GoalWaits(self.root / "goal_waits.json")
+        return waits.for_goal(self.registry.require(name).goal, waits.snapshot())
+
+    def goal_execution(self, name: str) -> GoalExecution | None:
+        return self._goal_snapshot(name)[1]
+
+    def goal_snapshot(self, name: str) -> tuple[Goal | None, GoalExecution | None]:
+        """Read current goal and its scheduling projection as one owner snapshot."""
+        with _store_lock(self._wire_lock_path):
+            return self._goal_snapshot(name)
+
+    def _goal_snapshot(self, name: str) -> tuple[Goal | None, GoalExecution | None]:
+        snapshot = self.registry.snapshot()
+        canonical = snapshot.aliases.get(name, name)
+        goal = snapshot.threads[canonical].goal
+        return goal, GoalWaits.execution(
+            goal,
+            GoalWaits(self.root / "goal_waits.json").snapshot(),
+            snapshot,
+        )
+
+    def consume_goal_wait(self, name: str, wait_id: str) -> bool:
+        """Called under the send-boundary wire lock after reserving an attempt."""
+        goal = self.registry.require(name).goal
+        return bool(
+            goal is not None
+            and goal.active
+            and GoalWaits(self.root / "goal_waits.json").clear(goal.id, wait_id=wait_id)
+        )
+
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
         """Summarize threads with status and pending counts."""
         snapshot = self.registry.snapshot()
@@ -2149,6 +2194,7 @@ class Comms:
         activities = self.activity.all_current()
         pending = self.bus.pending_counts_all(tuple(threads))
         pause_events = GoalPauseEvents(self.root / "goal_pause_events.json").snapshot()
+        waits = GoalWaits(self.root / "goal_waits.json").snapshot()
         return [
             {
                 **t.to_wire(),
@@ -2160,6 +2206,11 @@ class Comms:
                     if (pause := GoalPauseEvents.for_goal(t.goal, pause_events))
                     else None
                 ),
+                "goal_execution": (
+                    asdict(execution)
+                    if (execution := GoalWaits.execution(t.goal, waits, snapshot))
+                    else None
+                ),
                 "activity": activities[name].state.value if name in activities else "idle",
                 "activity_detail": activities[name].detail if name in activities else "",
             }
@@ -2169,6 +2220,8 @@ class Comms:
     def thread_detail(self, name: str, *, include_pending: bool = True) -> Mapping[str, object]:
         t = self.registry.require(name)
         detail = {**t.to_wire(), "status": self.registry.status(name).value, "is_fork": t.is_fork}
+        execution = self.goal_execution(name)
+        detail["goal_execution"] = asdict(execution) if execution else None
         if include_pending:
             detail["pending"] = self.pending_count(name)
         return detail
@@ -2220,11 +2273,58 @@ class Comms:
         owner_action: bool = False,
         owner_store: GoalAttemptStore | None = None,
         expected_owner_pid: int | None = None,
+        wait_for: Sequence[str] = (),
     ) -> Goal | None:
         """Apply a goal transition; automated callers may compare a captured goal atomically."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             goal = thread.goal
+            original_goal = goal
+            edited_pause = self.goal_pause(name) if action == "edit" else None
+            wait_targets = ()
+            if action == "standby":
+                if not wait_for:
+                    raise ValueError("Standby requires explicit wait_for thread names.")
+                resolved = tuple(
+                    self.registry.require(target.removeprefix("@")) for target in wait_for
+                )
+                if any(target.created_at == thread.created_at for target in resolved):
+                    raise ValueError("A goal cannot wait for its own thread.")
+                wait_targets = tuple(
+                    dict.fromkeys(
+                        GoalWaitTarget(target.name, target.created_at) for target in resolved
+                    )
+                )
+                from .input_disposition import AcpDeliveryCursors, InputDispositions
+
+                aliases = self.registry.aliases_for(thread.name)
+                cursor = AcpDeliveryCursors(self.root).cursor(aliases)
+                unresolved = {
+                    row["sequence"]
+                    for row in InputDispositions(self.root).unknown(aliases)
+                    if row["sequence"] is not None
+                }
+                senders = frozenset(
+                    alias for target in resolved for alias in self.registry.aliases_for(target.name)
+                )
+                pending = self.bus._history_page(
+                    lambda message: message.target in aliases
+                    and message.sender in senders
+                    and (message.seq > cursor or message.seq in unresolved),
+                    before=None,
+                    after=None,
+                    limit=1,
+                    max_bytes=256 * 1024,
+                )
+                if pending.messages:
+                    sequence = pending.messages[0].seq
+                    raise ValueError(
+                        f"Dependency reply {sequence} is already pending or UNKNOWN. "
+                        "Inspect that message during this turn before entering standby; "
+                        "it will not be replayed automatically."
+                    )
+            elif wait_for:
+                raise ValueError("wait_for is only valid for standby.")
             if expected_owner_pid is not None and (
                 thread.pid != expected_owner_pid or not self.registry.status(thread.name).running
             ):
@@ -2278,7 +2378,13 @@ class Comms:
                 goal = new_goal
             elif action == "clear":
                 goal = None
-            elif action in {"active", "paused", "blocked", "completed"}:
+            elif action == "edit":
+                if goal is None:
+                    raise ValueError("No goal is set for this thread.")
+                if not text.strip():
+                    raise ValueError("A goal requires text.")
+                goal = replace(goal, text=text.strip(), revision=goal.revision + 1)
+            elif action in {"active", "standby", "paused", "blocked", "completed"}:
                 if goal is None:
                     raise ValueError("No goal is set for this thread.")
                 if goal.status == "blocked" and action != "blocked":
@@ -2287,13 +2393,23 @@ class Comms:
                     raise ValueError("A completed goal cannot be resumed; set a new goal.")
                 goal = replace(
                     goal,
-                    status=action,
+                    status="active" if action == "standby" else action,
                     progress=goal.progress if progress is None else progress,
                     revision=goal.revision + 1,
                     reported_turn=report_turn if model_report else goal.reported_turn,
                 )
             else:
                 raise ValueError(f"Unknown goal action: {action}")
+            waits = GoalWaits(self.root / "goal_waits.json")
+            if action == "standby":
+                assert goal is not None
+                # Commit scheduling authority first. A crash before the registry
+                # progress update must leave this same goal waiting, not runnable.
+                waits.record(
+                    GoalWait(
+                        goal.id, uuid4().hex, goal.revision, self.message_high_water(), wait_targets
+                    )
+                )
             self.registry.register(
                 replace(
                     thread,
@@ -2304,6 +2420,12 @@ class Comms:
                 ),
                 self.registry.status(thread.name),
             )
+            if action != "standby" and action != "edit" and original_goal is not None:
+                waits.clear(original_goal.id)
+            if action == "edit" and edited_pause is not None and goal is not None:
+                GoalPauseEvents(self.root / "goal_pause_events.json").record(
+                    GoalPauseEvent(goal.id, goal.revision, edited_pause.source)
+                )
             if action == "paused" and goal is not None:
                 # The registry transition precedes attribution. A crash in between
                 # leaves an unknown actor, never attributes a later pause falsely.

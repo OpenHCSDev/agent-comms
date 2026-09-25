@@ -52,6 +52,7 @@ from .bus_route_counts import BusRouteCounts
 
 if TYPE_CHECKING:
     from .coordination import PublicationIntent
+    from .goal_history import GoalHistoryEntry
     from .private_registry_guard import PrivateRegistryGuard
 from .envelope_claim_transitions import (
     ClaimProjection,
@@ -795,6 +796,41 @@ class GoalPauseSource(StrEnum):
     RUNTIME = "runtime"
 
 
+class GoalExecutionState(StrEnum):
+    RUNNABLE = "runnable"
+    STANDBY = "standby"
+    PAUSED = "paused"
+    BLOCKED = "blocked"
+    COMPLETED = "completed"
+
+
+@dataclass(frozen=True, slots=True)
+class GoalWaitTarget:
+    name: str
+    created_at: float
+
+
+@dataclass(frozen=True, slots=True)
+class GoalExecution:
+    state: GoalExecutionState
+    goal_id: str
+    wait_for: tuple[GoalWaitTarget, ...] = ()
+
+    def presentation(self, title: str) -> ThreadPresentation:
+        if self.state is GoalExecutionState.STANDBY:
+            names = ", ".join(f"@{target.name}" for target in self.wait_for)
+            return ThreadPresentation(title, "◌", f"Standby · waiting for {names}")
+        return ThreadPresentation(title, "✓", self.state.value.title())
+
+    @classmethod
+    def from_wire(cls, data: Mapping) -> GoalExecution:
+        return cls(
+            GoalExecutionState(data["state"]),
+            str(data["goal_id"]),
+            tuple(GoalWaitTarget(**target) for target in data.get("wait_for", ())),
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class Goal:
     """One durable objective shared by its executing owner and all clients."""
@@ -1178,10 +1214,18 @@ class ThreadView:
     activity: Activity
     runtime: AgentRuntimeInfo | None
     last_seen: float
+    goal_execution: GoalExecution | None = None
 
     @property
     def presentation(self) -> ThreadPresentation:
         """One declaration-owned interpretation for every thread view."""
+        if (
+            self.status.active
+            and not self.activity.state.busy
+            and self.goal_execution is not None
+            and self.goal_execution.state is GoalExecutionState.STANDBY
+        ):
+            return self.goal_execution.presentation(self.thread.title or self.thread.name)
         return self.status.presentation(self.thread.title or self.thread.name, self.activity)
 
     def to_wire(self) -> dict[str, object]:
@@ -1194,6 +1238,7 @@ class ThreadView:
             "last_activity": self.activity.timestamp,
             "activity": self.activity.state.value,
             "activity_detail": self.activity.detail,
+            "goal_execution": asdict(self.goal_execution) if self.goal_execution else None,
             "model": self.runtime.model if self.runtime else self.thread.model,
             "session_name": self.runtime.session_name if self.runtime else None,
             "context_used": self.runtime.context_used if self.runtime else None,
@@ -1596,6 +1641,7 @@ class ScheduledTurn:
     prompt: str
     origin: Message | None = None
     goal_id: str | None = None
+    goal_wait_id: str | None = None
 
     @property
     def reply_target(self) -> str | None:
@@ -2126,6 +2172,14 @@ class ThreadRegistry:
                 if not math.isfinite(candidate):
                     raise RelationViolationError("Registry creation identities collide.")
                 thread = replace(thread, created_at=candidate)
+            history = None
+            intent = None
+            before_goal = previous.goal if previous is not None else None
+            if before_goal != thread.goal:
+                from .goal_history import GoalHistoryStore
+
+                history = GoalHistoryStore(self._path)
+                intent = history.begin(thread.created_at, before_goal, thread.goal)
             self._threads[thread.name] = thread
             self._statuses[thread.name] = status
             self._last_seen[thread.name] = time.time()
@@ -2139,6 +2193,8 @@ class ThreadRegistry:
                 self._bump_admission_unlocked(thread.name)
             self._bump_owner_epoch_unlocked(thread.name)
             self._save_unlocked()
+            if history is not None and intent is not None:
+                history.commit(intent)
 
     def live_owner_with_epoch(self, name: str) -> tuple[Thread, int]:
         """Capture an active owner and its persistent incarnation under one lock.
@@ -2352,6 +2408,22 @@ class ThreadRegistry:
         return frozenset(
             {canonical, *(alias for alias, target in self._aliases.items() if target == canonical)}
         )
+
+    def goal_history(
+        self, name: str, *, goal_id: str | None = None
+    ) -> tuple[GoalHistoryEntry, ...]:
+        """Read this owner's recorded transitions, reconciling crash cuts first."""
+        from .goal_history import GoalHistoryStore
+
+        with _store_lock(self._path):
+            self._load_unlocked()
+            canonical = self._aliases.get(name, name)
+            thread = self._threads.get(canonical)
+            if thread is None:
+                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+            return GoalHistoryStore(self._path).history(
+                thread.created_at, thread.goal, goal_id=goal_id
+            )
 
     def name_reserved(self, name: str) -> bool:
         """Return whether a canonical name or permanent alias occupies text."""

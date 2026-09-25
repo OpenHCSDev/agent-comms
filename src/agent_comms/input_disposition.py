@@ -215,3 +215,11 @@ class AcpDeliveryCursors:
             if through > row["cursor"]:
                 row["cursor"] = through
                 self._write(rows)
+
+    def cursor(self, aliases: frozenset[str]) -> int:
+        """Read the scheduling boundary without creating or advancing it."""
+        with _store_lock(self.path):
+            rows = [row for name, row in self._read().items() if name in aliases]
+            if len(rows) > 1:
+                raise RelationViolationError("Ambiguous ACP delivery cursor after rename")
+            return rows[0]["cursor"] if rows else 0

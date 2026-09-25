@@ -60,6 +60,7 @@ from . import backend
 from .declarations import (
     ActivityState,
     Goal,
+    GoalExecution,
     Message,
     MessageRoute,
     MessageType,
@@ -75,6 +76,7 @@ from .goal_attempts import (
     GoalAttemptStore,
     LaunchPermit,
     StaleAttempt,
+    UnresolvedAttempt,
 )
 from .input_disposition import AcpDeliveryCursors, InputDispositions
 from .operations import OBSERVATION_INTERVAL, Comms, wire
@@ -176,6 +178,7 @@ class CommsAgent:
         self._catalog_generation = 0
         self._session_catalog_generation: dict[str, int] = {}
         self._session_config_signature: dict[str, tuple[str | None, str | None]] = {}
+        self._goal_execution_signatures: dict[str, tuple[Goal | None, GoalExecution | None]] = {}
         self._transcript_snapshots = False
         self._transcript_diffs = False
         self._model_requests: dict[str, asyncio.Future[None]] = {}
@@ -1012,6 +1015,7 @@ class CommsAgent:
 
     def _session_metadata(self, thread_name: str) -> dict[str, Any]:
         thread = self._comms.registry.require(thread_name)
+        goal, execution = self._comms.goal_snapshot(thread_name)
         info = self._comms.agent_info_of(thread_name)
         usage = (
             {"used": info.context_used, "size": info.context_size, "source": "last_response"}
@@ -1021,6 +1025,8 @@ class CommsAgent:
         return {
             "agentComms": {
                 "thread": thread_name,
+                "goal": asdict(goal) if goal else None,
+                "goalExecution": asdict(execution) if execution else None,
                 "wireRoot": str(self._comms.root.resolve()),
                 "persistence": "shared on-disk wire",
                 "transport": "per-session stdio ACP",
@@ -1216,6 +1222,7 @@ class CommsAgent:
         switcher keeps showing the previous selection.
         """
         thread_name = await self._sync_session_identity(session_id)
+        await self._sync_goal_execution(session_id, thread_name)
         thread = self._comms.registry.require(thread_name)
         signature = (thread.model, thread.thinking_level)
         if self._session_config_signature.get(session_id) == signature:
@@ -1230,6 +1237,26 @@ class CommsAgent:
                 session_update="config_option_update", config_options=options
             ),
         )
+
+    async def _sync_goal_execution(self, session_id: str, thread_name: str) -> None:
+        goal, execution = self._comms.goal_snapshot(thread_name)
+        signature = (goal, execution)
+        previous = self._goal_execution_signatures
+        if session_id in previous and previous[session_id] == signature:
+            return
+        await self._runtime.session_update(
+            session_id=session_id,
+            update=SessionInfoUpdate(
+                session_update="session_info_update",
+                field_meta={
+                    "agentComms": {
+                        "goal": asdict(goal) if goal else None,
+                        "goalExecution": asdict(execution) if execution else None,
+                    }
+                },
+            ),
+        )
+        previous[session_id] = signature
 
     async def _drain_owned_inbox(self, session_id: str) -> int:
         thread_name = await self._sync_session_identity(session_id)
@@ -1249,6 +1276,7 @@ class CommsAgent:
             aliases = self._comms.registry.aliases_for(thread_name)
             direct = starts_turn and message.target in aliases
             admitted = True
+            dependency_wait = None
             row: dict[str, Any] | None = None
             with _store_lock(self._comms._wire_lock_path):
                 snapshot = self._comms.registry.snapshot()
@@ -1256,6 +1284,12 @@ class CommsAgent:
                 current = snapshot.threads[current_name]
                 status = snapshot.statuses[current_name]
                 if direct:
+                    wait = self._comms.goal_wait(current_name)
+                    if wait is not None and wait.matches(message, snapshot):
+                        dependency_wait = wait
+                        incoming = replace(
+                            incoming, goal_id=wait.goal_id, goal_wait_id=wait.wait_id
+                        )
                     key = f"bus:{message.seq}"
                     admitted = self._dispositions.record(
                         key,
@@ -1270,7 +1304,11 @@ class CommsAgent:
                         admitted
                         and message.seq > self._legacy_through.get(session_id, 0)
                         and status.running
-                        and (current.goal is None or not current.goal.active)
+                        and (
+                            current.goal is None
+                            or not current.goal.active
+                            or dependency_wait is not None
+                        )
                         and backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
                     )
                 self._delivery_cursors.advance(aliases, message.seq)
@@ -1279,6 +1317,7 @@ class CommsAgent:
                 await self._emit_input_disposition(session_id, row)
             if (
                 admitted
+                and dependency_wait is None
                 and backend_inbox is not None
                 and starts_turn
                 and incoming.reply_target is None
@@ -1376,9 +1415,25 @@ class CommsAgent:
                                 turn.origin for turn in pending if turn.origin is not None
                             ),
                             autonomous_goal=bool(
-                                len(pending) == 1 and pending[0].goal_id is not None
+                                len(pending) == 1
+                                and pending[0].goal_id is not None
+                                and pending[0].origin is None
+                            ),
+                            dependency_wait_id=pending[0].goal_wait_id,
+                        )
+                    except RequestError:
+                        if pending[0].goal_wait_id is None or goal is None:
+                            raise
+                        self._comms.block_goal_after_failed_turn(
+                            owner.name,
+                            started_goal=goal,
+                            expected_worktree=owner.worktree,
+                            diagnostic=(
+                                "Standby wake launch authority unavailable; inspect the UNKNOWN "
+                                "input before explicit Retry. No input was replayed."
                             ),
                         )
+                        await self._sync_goal_execution(session_id, owner.name)
                     finally:
                         self._turn_tasks.pop(session_id, None)
 
@@ -1401,6 +1456,8 @@ class CommsAgent:
             return
         goal = thread.goal
         if goal is not None and goal.active:
+            if self._comms.goal_wait(thread.name) is not None:
+                return
             if self._pending_goal_origins.get(thread.name) == goal.id:
                 return
             store = self._goal_store
@@ -1427,7 +1484,11 @@ class CommsAgent:
                         diagnostic="Goal attempt unresolved; inspect diagnostics before Retry.",
                     )
                     return
-                store.ready_grant(goal.id, generation.number)
+                admission = self._comms.registry.snapshot().admission_generations[thread.name]
+                with _store_lock(self._comms._wire_lock_path):
+                    self._ready_goal_grant_locked(thread, admission, store, generation)
+            except StaleAttempt:
+                return
             except GoalAttemptError:
                 self._comms.block_goal_after_failed_turn(
                     thread.name,
@@ -1448,6 +1509,32 @@ class CommsAgent:
             self._goal_store = GoalAttemptStore.initialize(private)
         return self._goal_store
 
+    def _ready_goal_grant_locked(
+        self, owner: Thread, admission: int, store: GoalAttemptStore, generation: Generation
+    ) -> str:
+        """Caller holds the wire lock; READY recovery never authorizes an old owner."""
+        snapshot = self._comms.registry.snapshot()
+        name = snapshot.aliases.get(owner.name, owner.name)
+        current = snapshot.threads.get(name)
+        if (
+            current is None
+            or current.pid != os.getpid()
+            or current.pid != owner.pid
+            or current.created_at != owner.created_at
+            or current.worktree != owner.worktree
+            or not snapshot.statuses[name].running
+            or snapshot.admission_generations[name] != admission
+            or current.goal is None
+            or not current.goal.active
+            or current.goal.id != generation.goal_id
+        ):
+            raise StaleAttempt("The executing goal owner changed before READY recovery.")
+        try:
+            return store.ready_grant(generation.goal_id, generation.number)
+        except UnresolvedAttempt:
+            store.recover_unreserved_ready(generation.goal_id, generation.number)
+            return store.ready_grant(generation.goal_id, generation.number)
+
     async def set_goal(self, session_id: str, text: str) -> Goal:
         """Commit a UI goal through its executing owner and private launch ledger."""
         if not isinstance(text, str) or not text.strip():
@@ -1465,6 +1552,28 @@ class CommsAgent:
         assert goal is not None
         self._schedule_goal(session_id)
         return goal
+
+    async def edit_goal(
+        self, session_id: str, goal_id: str, expected_revision: int, text: str
+    ) -> Goal:
+        """Edit the current objective without replacing its identity or execution state."""
+        name = self._require_session(session_id)
+        goal = self._comms.registry.require(name).goal
+        if goal is None or goal.id != goal_id or goal.revision != expected_revision:
+            raise ValueError("The goal changed; refresh its state before editing.")
+        # update_goal owns the wire lock and atomically rechecks both this
+        # snapshot and the executing owner. Do not acquire its lock twice.
+        edited = self._comms.update_goal(
+            name,
+            "edit",
+            text=text,
+            goal_id=goal_id,
+            expected_goal=goal,
+            expected_owner_pid=os.getpid(),
+        )
+        assert edited is not None
+        await self._sync_thread_config(session_id)
+        return edited
 
     async def retry_goal(self, session_id: str, goal_id: str, expected_revision: int) -> Goal:
         """Record an explicit UI retry in the executing owner's private ledger."""
@@ -1535,6 +1644,7 @@ class CommsAgent:
         autonomous_goal: bool = False,
         original_owner_input: bool = False,
         original_goal_id: str | None = None,
+        dependency_wait_id: str | None = None,
     ) -> None:
         """Stream a real coding agent's reply: events to the client, status to the wire."""
         original_display = None if autonomous_goal else (initial_display_text or task)
@@ -1550,6 +1660,11 @@ class CommsAgent:
             # must not run for a direct whose UNKNOWN row needs that proof.
             return
         goal = thread.goal
+        wait = self._comms.goal_wait(thread_name)
+        if wait is not None and not original_owner_input and wait.wait_id != dependency_wait_id:
+            return
+        if dependency_wait_id is not None and (wait is None or wait.wait_id != dependency_wait_id):
+            return
         if original_owner_input and original_goal_id != (
             goal.id if goal is not None and goal.active else None
         ):
@@ -1563,10 +1678,16 @@ class CommsAgent:
                     return
                 raise RequestError.invalid_params({"reason": "goal_requires_native_pi"})
             store = self._goal_store
+            if (
+                store is None
+                and (self._comms.root / "goal-private" / "goal_attempts.sqlite3").exists()
+            ):
+                store = self._open_goal_store()
             if store is None:
                 if autonomous_goal:
                     return
                 raise RequestError.invalid_params({"reason": "goal_attempt_unavailable"})
+            admission = self._comms.registry.snapshot().admission_generations[thread_name]
             with _store_lock(self._comms._wire_lock_path):
                 generation = store.snapshot(goal.id)
                 if generation is None or generation.state != "ready":
@@ -1574,7 +1695,7 @@ class CommsAgent:
                         return
                     raise RequestError.invalid_params({"reason": "goal_attempt_unavailable"})
                 try:
-                    grant = store.ready_grant(goal.id, generation.number)
+                    grant = self._ready_goal_grant_locked(thread, admission, store, generation)
                     reservation = store.reserve(goal.id, generation.number, ready_grant=grant)
                     goal_permit = store.claim_launch(reservation)
                 except GoalAttemptError as error:
@@ -1628,6 +1749,7 @@ class CommsAgent:
                 canonical = snapshot.aliases.get(thread_name, thread_name)
                 current = snapshot.threads.get(canonical)
                 current_goal = current.goal if current is not None else None
+                current_wait = self._comms.goal_wait(canonical) if current is not None else None
                 if goal is not None and goal.active:
                     goal_ok = (
                         current_goal is not None
@@ -1688,12 +1810,32 @@ class CommsAgent:
                 allowed = (
                     owner_ok
                     and goal_ok
+                    and (
+                        current_wait is None
+                        or owner_followup
+                        or (public_id is None and original_owner_input)
+                        or (
+                            public_id is None
+                            and current_wait.wait_id == dependency_wait_id
+                            and any(
+                                current_wait.matches(origin, snapshot) for origin in direct_origins
+                            )
+                        )
+                    )
+                    and not (
+                        dependency_wait_id is not None
+                        and public_id is None
+                        and (current_wait is None or current_wait.wait_id != dependency_wait_id)
+                    )
                     and not (
                         keys
                         and current_goal is not None
                         and current_goal.active
                         and not owner_followup
-                        and not (public_id is None and original_owner_input)
+                        and not (
+                            public_id is None
+                            and (original_owner_input or dependency_wait_id is not None)
+                        )
                     )
                 )
                 if allowed and input_permit is not None:
@@ -1732,6 +1874,8 @@ class CommsAgent:
                         ):
                             allowed = False
                             break
+                if allowed and current_wait is not None:
+                    allowed = self._comms.consume_goal_wait(canonical, current_wait.wait_id)
                 if allowed:
                     if public_id is None:
                         display = original_display
@@ -1793,7 +1937,12 @@ class CommsAgent:
                 "Work toward this goal while respecting follow-up instructions. "
                 "Use comms_goal with this goal_id to record useful progress. Set status completed "
                 "only after verifying success, blocked when you need user input, or active "
-                "to continue in another turn. Do not wait or poll; "
+                "to continue useful work in another turn. When waiting for delegated work, "
+                "set status standby with explicit wait_for thread names and explain what you need. "
+                "The goal stays active without polling; a direct message from a named dependency "
+                "or an explicit user follow-up starts the next goal turn. "
+                "Do not return empty output "
+                "or repeatedly announce waiting. Do not wait or poll; "
                 "the owner schedules continuation.\n\n" + task
             )
         if thread.auto_title_pending:
@@ -2098,6 +2247,7 @@ class CommsAgent:
                     session_id, {**event, "turn_id": turn_id, "route": routing.reply}
                 )
                 if kind == "tool_end":
+                    await self._sync_goal_execution(session_id, thread_name)
                     sent = await asyncio.to_thread(
                         self._comms.sent_tool_message,
                         event.get("name", ""),
@@ -2113,6 +2263,8 @@ class CommsAgent:
                                 "route": MessageRoute(sent.sender, (sent.target,)),
                             },
                         )
+                if kind in {"input_started", "done", "settled"}:
+                    await self._sync_goal_execution(session_id, thread_name)
             if terminal_ok is None and goal is not None and goal.active:
                 # An EOF without a done event is a failed turn, not a signal to
                 # schedule the still-active goal again on the next live drain.
