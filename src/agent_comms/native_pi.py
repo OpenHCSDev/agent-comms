@@ -14,6 +14,7 @@ import os
 import re
 import signal
 import stat
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -616,6 +617,12 @@ async def run_native_pi_turn(
                     os.killpg(process.pid, signal.SIGTERM)
                 else:
                     process.terminate()
+            except PermissionError:
+                # A just-exited child may no longer own its process group on
+                # macOS while asyncio has not observed its return code yet.
+                # Signal the exact child as a fallback, then reap it below.
+                with suppress(ProcessLookupError):
+                    process.terminate()
             except ProcessLookupError:
                 pass
         try:
@@ -626,6 +633,9 @@ async def run_native_pi_turn(
                     if os.name == "posix":
                         os.killpg(process.pid, signal.SIGKILL)
                     else:
+                        process.kill()
+                except PermissionError:
+                    with suppress(ProcessLookupError):
                         process.kill()
                 except ProcessLookupError:
                     pass
