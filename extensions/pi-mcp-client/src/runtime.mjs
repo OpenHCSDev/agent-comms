@@ -1,0 +1,85 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { discover } from './discover.mjs';
+import { prepareStdioParameters } from './launch-spec.mjs';
+import { loadEffectiveDeclarations } from './sources.mjs';
+
+/** One Pi-session owner for all approved MCP connections; no retries of calls. */
+export class McpRuntime {
+  #options;
+  #connections = new Map();
+  #entries = [];
+  #started = false;
+  #stopped = false;
+  #starting;
+
+  constructor(options) { this.#options = options; }
+
+  async start() {
+    if (this.#started) throw new Error('MCP runtime already started');
+    this.#started = true;
+    this.#starting = this.#connectAll();
+    await this.#starting;
+  }
+
+  async #connectAll() {
+    const entries = await loadEffectiveDeclarations(this.#options);
+    this.#entries = entries.map((entry) => ({ entry, state: entry.status,
+      catalog: undefined, stderrBytes: 0 }));
+    for (const record of this.#entries) {
+      if (this.#stopped) return;
+      if (record.state !== 'approved') continue;
+      let transport;
+      let client;
+      try {
+        const parameters = await prepareStdioParameters(record.entry, this.#options.ctx);
+        if (this.#stopped) return;
+        transport = new StdioClientTransport(parameters);
+        client = new Client({ name: 'pi-mcp-client', version: '0.1.0' });
+        this.#connections.set(record.entry.declaration.id, { client, transport, record });
+        transport.stderr?.on('data', (chunk) => {
+          // Drain without writing untrusted child bytes into Pi RPC, logs, or the model.
+          record.stderrBytes += chunk.length;
+        });
+        record.state = 'connecting';
+        await client.connect(transport, { timeout: 15_000 });
+        if (this.#stopped) return;
+        record.catalog = await discover(client);
+        if (this.#stopped) return;
+        record.state = 'ready';
+      } catch {
+        record.state = 'error'; // No raw SDK/child error text can contain server secrets.
+        this.#connections.delete(record.entry.declaration.id);
+        await client?.close().catch(() => {});
+        await transport?.close().catch(() => {});
+      }
+    }
+  }
+
+  snapshot() {
+    return this.#entries.map(({ entry, state, catalog, stderrBytes }) => ({
+      id: entry.declaration.id, scope: entry.scope, status: state,
+      server: catalog?.server.name, tools: catalog?.tools.length ?? 0,
+      resources: catalog?.resources.length ?? 0, prompts: catalog?.prompts.length ?? 0,
+      stderrBytes,
+    }));
+  }
+
+  /** Package-owned lookup for the later Pi tool/resource/prompt projection. */
+  ready(id) {
+    const connection = this.#connections.get(id);
+    if (!connection || connection.record.state !== 'ready' || this.#stopped) return undefined;
+    return { client: connection.client, catalog: connection.record.catalog };
+  }
+
+  async stop() {
+    if (this.#stopped) return;
+    this.#stopped = true;
+    const connections = [...this.#connections.values()];
+    this.#connections.clear();
+    await Promise.allSettled(connections.map(async ({ client, transport }) => {
+      try { await client.close(); } finally { await transport.close(); }
+    }));
+    await this.#starting?.catch(() => {});
+  }
+}

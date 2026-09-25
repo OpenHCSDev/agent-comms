@@ -1,8 +1,10 @@
 # Pi MCP client (draft)
 
 The Pi package manifest loads `index.mjs` **by default when the package is installed**.
-It currently provides `/mcp-status`, `/mcp-approve <id>`, and `/mcp-deny <id>`;
-actual server connections and Pi model tools are the next implementation slice.
+It connects approved stdio servers when a Pi session starts, discovers tools,
+resources and prompts, and closes children on session shutdown. It provides
+`/mcp-status`, `/mcp-approve <id>`, and `/mcp-deny <id>`. Pi model-tool
+exposure is the next implementation slice.
 
 ```sh
 cd extensions/pi-mcp-client
@@ -24,15 +26,17 @@ need a new approval; project overlays never fall back to user commands.
 Approval shows the complete command, arguments, root and digest in a local Pi
 TUI confirmation without exposing literal environment values. RPC/headless
 approval is refused until a correlated human-controller bridge exists. The
-inert launch-spec builder rejects unapproved/mismatched project contexts and
+launch-spec builder rejects unapproved/mismatched project contexts and
 constructs a narrow SDK environment with explicit `envFrom`, canonical cwd and
-piped stderr. No transport is constructed or server launched by this builder.
+piped stderr. The package-owned Pi session uses the official SDK, drains child
+stderr without exposing it, and does not retry ambiguous calls. An approval
+written during a session takes effect on its next start.
 
 The offline suite tests the official SDK's real stdio handshake, capability-
 gated bounded tools/resources/prompts discovery, operations, progress,
 cancellation and cleanup against a generic fixture. It also runs an isolated
 real Pi RPC process with `--no-approve` and `--approve`: untrusted files are not
-read, absent/stale digests cannot authorize a declaration, and no declared
-server starts. No provider call is made. PR #77 remains draft; session lifecycle,
-Pi tool exposure, agent-comms/ACP projection, Toad controls and their
-independent review are still outstanding.
+read, absent/stale digests cause zero spawns, and an approved generic fixture
+initializes/discovers and exits on shutdown. No provider call is made. PR #77
+remains draft; Pi tool exposure, agent-comms/ACP projection, Toad controls and
+their independent review are still outstanding.

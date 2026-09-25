@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 import { CONFIG_DIR_NAME } from '@earendil-works/pi-coding-agent';
 import { declarationDigest, parseNativeConfig } from '../src/config.mjs';
@@ -63,25 +63,30 @@ async function rpc({ project, agentDir, trust }) {
   return { child, closed, request, events, stderr: () => stderr };
 }
 
-test('real isolated Pi RPC trusts project only by Pi policy and never starts declared servers', async () => {
+test('real isolated Pi RPC starts only approved project fixture and closes it', async () => {
   const root = await mkdtemp(join(tmpdir(), 'mcp-pi-rpc-'));
   const project = join(root, 'project');
   const agentDir = join(root, 'agent');
-  const marker = join(root, 'unexpected-launch');
+  const marker = join(root, 'approved-launch');
+  const exitMarker = join(root, 'approved-exit');
+  const wrapper = join(root, 'fixture.mjs');
   const projectFile = join(project, CONFIG_DIR_NAME, 'mcp.json');
   await mkdir(dirname(projectFile), { recursive: true });
   await mkdir(agentDir);
+  await writeFile(wrapper, `import { writeFileSync } from 'node:fs';\n` +
+    `writeFileSync(${JSON.stringify(marker)}, String(process.pid));\n` +
+    `process.on('exit', () => writeFileSync(${JSON.stringify(exitMarker)}, 'closed'));\n` +
+    `process.on('SIGTERM', () => process.exit(0));\n` +
+    `await import(${JSON.stringify(pathToFileURL(join(packageDir, 'test', 'fixture-server.mjs')).href)});\n`);
   const declaration = { id: 'fixture', enabled: true, instructionsPolicy: 'status-only',
-    transport: { type: 'stdio', command: process.execPath,
-      args: ['-e', `require('fs').writeFileSync(${JSON.stringify(marker)},'spawned')`],
-      cwd: 'project' } };
+    transport: { type: 'stdio', command: process.execPath, args: [wrapper], cwd: 'project' } };
   const document = JSON.stringify({ version: 1, servers: [declaration] });
   await writeFile(projectFile, document);
   try {
     for (const [trusted, approval, expected] of [
       [false, false, 'No MCP declarations'],
       [true, false, 'trust_required'],
-      [true, true, 'approved'],
+      [true, true, 'ready'],
     ]) {
       // A malformed untrusted project file must not even be parsed by Pi's command.
       await writeFile(projectFile, trusted ? document : '{bad');
@@ -106,12 +111,13 @@ test('real isolated Pi RPC trusts project only by Pi policy and never starts dec
           catch (error) { assert.match(error.message, /local interactive TUI|success.*false/); }
           assert.equal(existsSync(join(agentDir, 'mcp-trust.json')), false);
         }
-        assert.equal(existsSync(marker), false);
+        assert.equal(existsSync(marker), approval);
       } finally {
         client.child.stdin.end();
-        client.child.kill();
-        await client.closed;
+        const forced = setTimeout(() => client.child.kill(), 5_000);
+        try { await client.closed; } finally { clearTimeout(forced); }
       }
+      if (approval) assert.equal(existsSync(exitMarker), true);
     }
   } finally {
     await rm(root, { recursive: true, force: true });
