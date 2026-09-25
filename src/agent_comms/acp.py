@@ -1738,7 +1738,7 @@ class CommsAgent:
             )
         reply_parts: list[str] = []
         terminal_ok: bool | None = None
-        backend_work_observed = False
+        successful_tool_observed = False
         goal_tool_ok = False
         goal_attempt_resolved = False
         originated_goal_ids: set[str] = set()
@@ -1824,8 +1824,8 @@ class CommsAgent:
                     )
                 if reply_targets and kind == "chunk":
                     reply_parts.append(str(event.get("text") or ""))
-                if kind in {"chunk", "thinking", "tool_start", "tool_end"}:
-                    backend_work_observed = True
+                if kind == "tool_end" and event.get("ok") is True:
+                    successful_tool_observed = True
                 if kind == "done":
                     unknown_attempts = any(
                         self._dispositions.status(key) != "started"
@@ -1896,7 +1896,7 @@ class CommsAgent:
                     # activity. This is not a productive goal turn.
                     empty_success = (
                         not failed
-                        and not backend_work_observed
+                        and not successful_tool_observed
                         and not str(event.get("text") or "").strip()
                     )
                     if (

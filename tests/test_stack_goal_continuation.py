@@ -19,7 +19,8 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_mounted_goal_continues_without_progress_tool(monkeypatch):
+@pytest.mark.parametrize("empty_response", [False, True])
+async def test_mounted_goal_continues_without_progress_tool(monkeypatch, empty_response):
     native = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native or not os.environ.get("AC_TOAD_NATIVE_PILOT"):
         pytest.skip("Requires prepared native Pi and mounted Toad pilot dependencies")
@@ -28,6 +29,8 @@ async def test_mounted_goal_continues_without_progress_tool(monkeypatch):
     from agent_comms import wire
 
     live = bool(os.environ.get("AC_GOAL_LIVE_PROVIDER"))
+    if live and empty_response:
+        pytest.skip("Only localhost provider can force the empty-response control")
     with TemporaryDirectory(prefix="ac-goal-continuation-", dir="/var/tmp") as raw:
         root = Path(raw)
         release = threading.Event()
@@ -51,7 +54,9 @@ async def test_mounted_goal_continues_without_progress_tool(monkeypatch):
                         "choices": [
                             {
                                 "index": 0,
-                                "delta": {"content": "One useful step."},
+                                "delta": {
+                                    "content": " \n\t" if empty_response else "One useful step."
+                                },
                                 "finish_reason": "stop",
                             }
                         ],
@@ -162,6 +167,12 @@ async def test_mounted_goal_continues_without_progress_tool(monkeypatch):
                     )
                 )
                 state = comms.registry.require("project").goal
+                if empty_response:
+                    assert state.status == "blocked", state.progress
+                    assert len(attempts()) == 1 and attempts()[0][1] == "failed"
+                    await asyncio.sleep(0.4)
+                    assert len(requests) == 1
+                    return
                 assert state.status == "active", state.progress
                 rows = attempts()
                 assert rows[0][1] == "succeeded" and rows[0][2].startswith("native-terminal:")

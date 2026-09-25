@@ -886,8 +886,9 @@ class TestAgentTurn:
         assert generation is not None and generation.state == "ready"
         assert generation.number == 2
 
+    @pytest.mark.parametrize("empty_kind", ["none", "whitespace", "thinking", "unfinished_tool"])
     async def test_empty_successful_continuation_blocks_instead_of_false_no_progress_pause(
-        self, wired, tmp_path, monkeypatch
+        self, wired, tmp_path, monkeypatch, empty_kind
     ):
         agent = self._agent_with_stub(tmp_path, wired)
 
@@ -898,6 +899,12 @@ class TestAgentTurn:
         async def events(*args, **kwargs):
             # Real RPC may accept the user prompt, emit agent_settled and
             # stats, then exit 0 without any assistant/provider work.
+            if empty_kind == "whitespace":
+                yield {"type": "chunk", "text": " \n\t"}
+            elif empty_kind == "thinking":
+                yield {"type": "thinking", "text": "Consider the task"}
+            elif empty_kind == "unfinished_tool":
+                yield {"type": "tool_start", "id": "unfinished", "name": "read"}
             yield {"type": "settled"}
             yield {"type": "agent_info", "context_used": None, "context_size": 1000}
             yield {"type": "done", "ok": True, "text": ""}
