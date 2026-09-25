@@ -53,7 +53,11 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
         if paged
         else reopened.thread_transcript("worker")
     )
-    assert [(event.kind, event.text) for event in events] == [
+    assert [event.text for event in events if event.kind == "context"] == [
+        GOAL_PROMPT,
+        "User follow-up:\nPlease inspect this image\nthen continue.",
+    ]
+    assert [(event.kind, event.text) for event in events if event.kind != "context"] == [
         ("user", "Please inspect this image\nthen continue."),
         ("user", "[Image attachment: image/png]"),
         ("user", GOAL_PROMPT),
@@ -103,7 +107,13 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
     try:
         await agent._replay_transcript("worker", "worker", client=Client())
         events = updates[0].field_meta["agentComms"]["transcript"]
-        assert [(event["kind"], event["text"]) for event in events] == [
+        assert [event["text"] for event in events if event["kind"] == "context"] == [
+            GOAL_PROMPT,
+            "User follow-up:\ntest2",
+        ]
+        assert [
+            (event["kind"], event["text"]) for event in events if event["kind"] != "context"
+        ] == [
             ("user", "test2"),
             ("assistant", "Done reading"),
         ]

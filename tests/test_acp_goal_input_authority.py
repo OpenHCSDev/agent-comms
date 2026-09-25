@@ -74,7 +74,11 @@ async def replay(agent):
             updates.append(update)
 
     await agent._replay_transcript("project", "project", client=Client())
-    return [item["text"] for item in updates[0].field_meta["agentComms"]["transcript"]]
+    return [
+        item["text"]
+        for item in updates[0].field_meta["agentComms"]["transcript"]
+        if item["kind"] != "context"
+    ]
 
 
 @pytest.mark.asyncio

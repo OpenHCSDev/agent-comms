@@ -1738,8 +1738,6 @@ class Comms:
         input_display: InputDisplay | None = None,
     ) -> list[TranscriptEvent]:
         role = message.get("role")
-        if role == "user" and input_display is not None and input_display.text is None:
-            return []
         if role == "user" and routing is not None and routing.requests:
             return [
                 TranscriptEvent("user", request.body, routing=TurnRouting((request,), None))
@@ -1757,7 +1755,17 @@ class Comms:
         else:
             return []
 
+        context_events: list[TranscriptEvent] = []
         if role == "user" and input_display is not None:
+            raw_text = "\n".join(
+                str(part.get("text") or "")
+                for part in parts
+                if isinstance(part, dict) and part.get("type") == "text"
+            )
+            if raw_text and raw_text != input_display.text:
+                context_events.append(TranscriptEvent("context", raw_text))
+            if input_display.text is None:
+                return context_events
             # The owner records the user's original text before adding model-only
             # instructions. Preserve attachments while replacing just that text.
             parts = (
@@ -1765,7 +1773,7 @@ class Comms:
                 *(part for part in parts if isinstance(part, dict) and part.get("type") != "text"),
             )
 
-        events: list[TranscriptEvent] = []
+        events: list[TranscriptEvent] = context_events
         for part in parts:
             if not isinstance(part, dict):
                 continue
