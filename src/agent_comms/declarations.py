@@ -28,7 +28,7 @@ import uuid
 from bisect import bisect_left
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import contextmanager, suppress
+from contextlib import closing, contextmanager, suppress
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from enum import Enum, StrEnum
@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, BinaryIO, Self
 
 from .bus_activity_index import BusActivityIndex
 from .bus_display_index import BusDisplayIndex
+from .bus_page_index import BusPageIndex, StaleBusPageIndex
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     CommittedInitial,
@@ -1549,7 +1550,9 @@ class Message:
             return ResponsePolicy.COLLECTIVE
         return ResponsePolicy.INFORMATIONAL
 
-    def response_eligibility(self, audience: Sequence[str]) -> ResponseEligibility:
+    def response_eligibility(
+        self, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
+    ) -> ResponseEligibility:
         """Resolve channel responders from canonical audience identities.
 
         Mention identities were canonicalized when the message was committed.
@@ -1560,7 +1563,10 @@ class Message:
         if policy is ResponsePolicy.COLLECTIVE:
             recipients = tuple(dict.fromkeys(audience))
         elif policy is ResponsePolicy.MENTIONED_ONLY:
-            selected = frozenset(mention.thread for mention in self.mentions)
+            aliases = aliases or {}
+            selected = frozenset(
+                aliases.get(mention.thread, mention.thread) for mention in self.mentions
+            )
             recipients = tuple(name for name in dict.fromkeys(audience) if name in selected)
         else:
             recipients = ()
@@ -1571,17 +1577,12 @@ class Message:
         """Whether every delivered recipient may start a turn."""
         return self.response_policy in {ResponsePolicy.DIRECT, ResponsePolicy.COLLECTIVE}
 
-    def starts_turn_for(self, name: str) -> bool:
+    def starts_turn_for(self, name: str, *, aliases: Mapping[str, str] | None = None) -> bool:
         """Whether this message enters one canonical recipient's model context."""
         channel = is_channel_target(self.target) or self.target in BROADCAST_ALIASES
         if not channel:
             return self.starts_turn
-        policy = self.response_policy
-        if policy is ResponsePolicy.COLLECTIVE:
-            return True
-        if policy is ResponsePolicy.MENTIONED_ONLY:
-            return any(mention.thread == name for mention in self.mentions)
-        return False
+        return name in self.response_eligibility((name,), aliases=aliases).recipients
 
     @property
     def reply_target(self) -> str | None:
@@ -1648,12 +1649,20 @@ class ScheduledTurn:
         return self.origin.reply_target if self.origin else None
 
     @classmethod
-    def incoming(cls, message: Message) -> ScheduledTurn:
+    def incoming(
+        cls, message: Message, *, aliases: Mapping[str, str] | None = None
+    ) -> ScheduledTurn:
         policy = message.response_policy
         if policy is ResponsePolicy.COLLECTIVE:
             guidance = "collective; channel members may respond"
         elif policy is ResponsePolicy.MENTIONED_ONLY:
-            names = ", ".join(dict.fromkeys(f"@{mention.thread}" for mention in message.mentions))
+            aliases = aliases or {}
+            names = ", ".join(
+                dict.fromkeys(
+                    f"@{aliases.get(mention.thread, mention.thread)}"
+                    for mention in message.mentions
+                )
+            )
             guidance = (
                 f"mentioned_only; only resolved mentioned identities may respond: {names}; "
                 "unmentioned observers dismiss quietly"
@@ -3980,6 +3989,7 @@ class MessageBus:
             after=after,
             limit=limit,
             max_bytes=256 * 1024,
+            targets=frozenset(delivery.channels | self._registry.aliases_for(delivery.actor)),
         )
 
     def dm_history_page(
@@ -4004,6 +4014,7 @@ class MessageBus:
             after=after,
             limit=limit,
             max_bytes=max_bytes,
+            targets=a_names | b_names,
         )
 
     def channel_history_page(
@@ -4025,6 +4036,7 @@ class MessageBus:
             after=after,
             limit=limit,
             max_bytes=max_bytes,
+            targets=targets,
         )
 
     def channel_display_page(
@@ -4072,8 +4084,25 @@ class MessageBus:
         after: int | None,
         limit: int,
         max_bytes: int,
+        targets: frozenset[str] | None = None,
     ) -> MessagePage:
         with _store_lock(self._path):
+            try:
+                with BusPageIndex(self._path) as index:
+                    if index.sync():
+                        return self._indexed_history_page(
+                            index,
+                            matches,
+                            before=before,
+                            after=after,
+                            limit=limit,
+                            max_bytes=max_bytes,
+                            targets=targets,
+                        )
+            except (OSError, sqlite3.DatabaseError, StaleBusPageIndex):
+                # The JSONL bus remains authoritative if the disposable
+                # index is unavailable or its selected offsets disagree.
+                pass
             return self._collect_history_page(
                 (
                     self._public_page_record(record, size)
@@ -4085,6 +4114,69 @@ class MessageBus:
                 limit=limit,
                 max_bytes=max_bytes,
             )
+
+    def _indexed_history_page(
+        self,
+        index: BusPageIndex,
+        matches: Callable[[Message], bool],
+        *,
+        before: int | None,
+        after: int | None,
+        limit: int,
+        max_bytes: int,
+        targets: frozenset[str] | None,
+    ) -> MessagePage:
+        if before is not None and after is not None:
+            raise ValueError("History pages accept either before or after, not both.")
+        if (before is not None and before < 0) or (after is not None and after < 0):
+            raise ValueError("History cursors cannot be negative.")
+        if limit <= 0:
+            raise ValueError("History page limit must be positive.")
+        if max_bytes <= 0:
+            raise ValueError("History page byte budget must be positive.")
+        page: deque[tuple[Message, int]] = deque()
+        page_bytes = 0
+        with self._path.open("rb") as stream:
+
+            def has_match(*, lower: int | None, upper: int | None) -> bool:
+                with closing(
+                    index.offsets(lower=lower, upper=upper, descending=True, targets=targets)
+                ) as rows:
+                    for row in rows:
+                        message, _ = self._public_page_record(*index.record(stream, row))
+                        if matches(message):
+                            return True
+                return False
+
+            if after is not None:
+                has_older = has_match(lower=None, upper=after + 1)
+                has_newer = False
+                rows = index.offsets(lower=after, upper=None, descending=False, targets=targets)
+            else:
+                has_older = False
+                has_newer = has_match(lower=before - 1, upper=None) if before is not None else False
+                rows = index.offsets(lower=None, upper=before, descending=True, targets=targets)
+            with closing(rows):
+                for row in rows:
+                    message, encoded_size = self._public_page_record(*index.record(stream, row))
+                    if not matches(message):
+                        continue
+                    if len(page) >= limit or (page and page_bytes + encoded_size > max_bytes):
+                        if after is not None:
+                            has_newer = True
+                        else:
+                            has_older = True
+                        break
+                    if after is not None:
+                        page.append((message, encoded_size))
+                    else:
+                        page.appendleft((message, encoded_size))
+                    page_bytes += encoded_size
+        return MessagePage(
+            messages=tuple(message for message, _ in page),
+            has_older=has_older,
+            has_newer=has_newer,
+        )
 
     @staticmethod
     def _public_page_record(record: Mapping, raw_size: int) -> tuple[Message, int]:
