@@ -3,6 +3,7 @@
 import json
 import os
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -50,6 +51,41 @@ def _fake_events(captured, *, ok=True, abort=False):
 
 def _broken_advisory_write(*_args, **_kwargs):
     raise OSError("injected advisory ledger fsync failure")
+
+
+@pytest.mark.parametrize("via_register", [False, True])
+async def test_tag_commit_survives_optional_advisory_stat_failure(
+    tmp_path, monkeypatch, via_register
+):
+    comms, agent, owner = await _agent(tmp_path, monkeypatch)
+    try:
+        ledger = comms.root / "acp_passive_channel_awareness.json"
+        before = ledger.read_bytes()
+        original_exists = Path.exists
+
+        def broken_advisory_stat(path):
+            if path == ledger:
+                raise OSError("injected advisory ledger stat failure")
+            return original_exists(path)
+
+        with monkeypatch.context() as scoped:
+            scoped.setattr(Path, "exists", broken_advisory_stat)
+            if via_register:
+                current = comms.registry.require(owner)
+                comms.register(replace(current, tags=frozenset({"acp"})))
+            else:
+                comms.update_tags(owner, remove=frozenset({"comms"}))
+        assert comms.registry.require(owner).tags == frozenset({"acp"})
+        assert ledger.read_bytes() == before
+        current = comms.registry.require(owner)
+        assert (
+            agent._passive_awareness.frame(
+                current, comms.registry.snapshot(), comms.channel_catalog.targets_for(current.tags)
+            )
+            == ""
+        )
+    finally:
+        await agent.shutdown()
 
 
 async def test_tag_commit_survives_optional_advisory_write_failure(tmp_path, monkeypatch):

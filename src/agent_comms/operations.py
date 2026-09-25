@@ -1360,7 +1360,12 @@ class Comms:
         from .passive_channel_awareness import PassiveChannelAwareness
 
         awareness = PassiveChannelAwareness(self.root)
-        if not awareness.path.exists():
+        # Even checking for an optional ledger can fail after the membership
+        # commit. A failed probe skips the advisory; owner reads stay strict.
+        try:
+            if not awareness.path.exists():
+                return
+        except (OSError, TypeError, ValueError):
             return
         owner = self.registry.require(name)
         snapshot = self.registry.snapshot()
