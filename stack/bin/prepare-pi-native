@@ -46,8 +46,12 @@ cp -- "$stock/$bedrock" "$stage/node_modules/@earendil-works/pi-coding-agent/$be
 compaction=dist/core/compaction/compaction.js
 python3 "$stack_root/patch-native-compaction.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$compaction"
+session=dist/core/agent-session.js
+python3 "$stack_root/patch-native-auto-compaction.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
 verify "$stage"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$compaction"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
 mv -- "$stage" "$target"
 printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
