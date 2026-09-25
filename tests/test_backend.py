@@ -1539,6 +1539,96 @@ time.sleep(60)
         assert all(event["retryable"] is False for event in states)
         assert all(event["side_effects_possible"] is True for event in states)
 
+    async def test_prestart_compaction_outlives_prompt_start_wait(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(backend, "PROMPT_START_TIMEOUT_SECONDS", 0.1)
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + """\
+import json, sys, time
+def emit(value):
+    print(json.dumps(value), flush=True)
+state = json.loads(sys.stdin.readline())
+emit({"id": state["id"], "type": "response", "command": "get_state", "success": True,
+      "data": {"nativeInputProofCapability": "pi-native-input-v1-live-only"}})
+prompt = json.loads(sys.stdin.readline())
+emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
+emit({"type": "compaction_start", "reason": "threshold"})
+time.sleep(0.25)
+emit({"type": "compaction_progress", "reason": "threshold", "chunkIndex": 1,
+      "usage": {"totalTokens": 10}})
+emit({"type": "compaction_progress", "reason": "threshold", "chunkIndex": 2,
+      "usage": {"totalTokens": 11}})
+emit({"type": "compaction_end", "reason": "threshold", "result": {"summary": "saved",
+      "usage": {"totalTokens": 21}},
+      "aborted": False, "willRetry": False})
+emit({"type": "message_start", "message": {"role": "user", "content": prompt["message"],
+      "inputId": prompt["inputId"]}})
+emit({"type": "message_update", "assistantMessageEvent": {"type": "text_delta", "delta": "ok"}})
+emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop"}})
+emit({"type": "agent_settled"})
+emit({"type": "response", "command": "get_session_stats", "success": True,
+      "data": {"contextUsage": {}}})
+""",
+        )
+        events = [
+            event
+            async for event in backend.stream_agent_events(
+                stub,
+                [],
+                "task",
+                str(tmp_path),
+                model_wait_timeout=0.5,
+                require_input_id=True,
+            )
+        ]
+        assert [e["type"] for e in events if e["type"].startswith("compaction_")] == [
+            "compaction_start",
+            "compaction_progress",
+            "compaction_progress",
+            "compaction_end",
+        ]
+        assert [e["usage"]["totalTokens"] for e in events if e["type"] == "provider_usage"] == [
+            10,
+            11,
+        ]
+        assert events[-1] == {"type": "done", "ok": True, "text": "ok"}
+
+    async def test_prestart_compaction_failure_refuses_prompt(self, tmp_path):
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + """\
+import json, sys
+def emit(value):
+    print(json.dumps(value), flush=True)
+state = json.loads(sys.stdin.readline())
+emit({"id": state["id"], "type": "response", "command": "get_state", "success": True,
+      "data": {"nativeInputProofCapability": "pi-native-input-v1-live-only"}})
+prompt = json.loads(sys.stdin.readline())
+emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
+emit({"type": "compaction_start", "reason": "threshold"})
+emit({"type": "compaction_end", "reason": "threshold", "result": None,
+      "aborted": False, "willRetry": False,
+      "errorMessage": "Auto-compaction failed: context budget exceeded"})
+emit({"type": "message_start", "message": {"role": "user", "content": prompt["message"],
+      "inputId": prompt["inputId"]}})
+emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop"}})
+emit({"type": "agent_settled"})
+""",
+        )
+        events = [
+            event
+            async for event in backend.stream_agent_events(
+                stub,
+                [],
+                "task",
+                str(tmp_path),
+                require_input_id=True,
+            )
+        ]
+        assert not [event for event in events if event["type"] == "input_started"]
+        assert events[-1]["ok"] is False
+        assert events[-1]["reason_code"] == "prestart_compaction_failed"
+
     async def test_summarization_retry_stall_is_bounded_and_non_replayable(self, tmp_path):
         stub = _stub(
             tmp_path,

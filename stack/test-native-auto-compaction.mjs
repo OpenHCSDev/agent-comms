@@ -1,4 +1,4 @@
-// Offline proof that a tracked next prompt compacts a successful near-full session first.
+// Offline proof that a failed tracked compaction never forwards the next prompt.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
@@ -47,7 +47,7 @@ try {
       const message = {
         role: 'assistant', content: [{ type: 'text', text: 'OK' }],
         api: model.api, provider: model.provider, model: model.id,
-        usage, stopReason: responses === 3 ? 'error' : 'stop', timestamp: Date.now(),
+        usage, stopReason: 'stop', timestamp: Date.now(),
       };
       return {
         async *[Symbol.asyncIterator]() { yield { type: 'done', message }; },
@@ -61,17 +61,9 @@ try {
     await session.prompt('first', { inputId: id('a') });
     assert.deepEqual(order, ['provider-1']);
     await session.prompt('second', { inputId: id('b') });
-    assert.deepEqual(order, ['provider-1', 'compact-threshold-false', 'provider-2']);
-    await session.prompt('third', { inputId: id('c') });
     assert.deepEqual(order, [
-      'provider-1', 'compact-threshold-false', 'provider-2',
-      'compact-threshold-false', 'provider-3',
-    ]);
-    await session.prompt('fourth', { inputId: id('d') });
-    assert.deepEqual(order, [
-      'provider-1', 'compact-threshold-false', 'provider-2',
-      'compact-threshold-false', 'provider-3', 'provider-4',
-    ], 'a failed tracked attempt must not trigger automatic compaction or replay');
+      'provider-1', 'compact-threshold-false',
+    ], 'a failed tracked compaction must not send or replay the next prompt');
   } finally {
     session.dispose();
   }
