@@ -244,3 +244,14 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             with pytest.raises(IdentityConflict):
                 publish_selected_resource_claim(comms, store, admission, "Alice", resource)
             assert len(comms.full_history()) == 5
+            # Crash-partial append at the guarded private bus's pre-read lock
+            # validation must deny, not leak an exception or resurrect an old
+            # complete selected claim as a current ownership observation.
+            with (root / "bus.jsonl").open("ab", buffering=0) as stream:
+                stream.write(b'{"seq":999,')
+                os.fsync(stream.fileno())
+            torn = observe_selected_resource_claim(comms, store, admission, "Alice", resource)
+            assert not torn.observed and torn.claim_seq is None and torn.generation is None
+            assert f"source #{message.seq}" in torn.message()
+            assert "guarded bus or registry unavailable" in torn.message()
+            assert resource.read_text() == "value = 1\n"

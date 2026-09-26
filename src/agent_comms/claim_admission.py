@@ -74,6 +74,44 @@ def observe_selected_resource_claim(
     *,
     max_check_seconds: float = 0.25,
 ) -> SelectedClaimObservation:
+    """Read-only observation; known pre-yield lock/read failures deny, never grant."""
+    # Keep invalid caller types/programming errors visible. Only the expected
+    # guarded filesystem/registry availability faults are converted to a
+    # source-cited denial, including _store_lock's pre-yield bus validation.
+    if type(admission) is not WakeAdmission:
+        raise IdentityConflict("Claim observation needs typed selected wake identity")
+    started = time.perf_counter()
+    try:
+        return _observe_selected_resource_claim_locked(
+            comms,
+            store,
+            admission,
+            owner_name,
+            resource_path,
+            max_check_seconds=max_check_seconds,
+        )
+    except (RelationViolationError, OSError):
+        elapsed = (time.perf_counter() - started) * 1000
+        return SelectedClaimObservation(
+            admission.source_seq,
+            admission.wake_claim_id,
+            str(resource_path),
+            owner_name,
+            False,
+            "guarded bus or registry unavailable",
+            elapsed_ms=elapsed,
+        )
+
+
+def _observe_selected_resource_claim_locked(
+    comms: Comms,
+    store: MutationStore,
+    admission: WakeAdmission,
+    owner_name: str,
+    resource_path: str | Path,
+    *,
+    max_check_seconds: float,
+) -> SelectedClaimObservation:
     """Inspect a selected wake and a complete durable claim projection, read-only.
 
     Holds wire→bus→registry→SQL while observing. The elapsed budget rejects
@@ -193,14 +231,10 @@ def observe_selected_resource_claim(
                     existing=existing,
                     owned=True,
                 )
-        except (
-            IdentityConflict,
-            ClaimTransitionError,
-            RelationViolationError,
-            OSError,
-            ValueError,
-        ) as error:
-            return observation(str(resource_path), f"authority unavailable or stale ({error})")
+        except (IdentityConflict, ClaimTransitionError):
+            return observation(str(resource_path), "selected wake or resource identity stale")
+        except (RelationViolationError, OSError):
+            return observation(str(resource_path), "guarded bus or registry unavailable")
 
 
 def verify_selected_wake(
