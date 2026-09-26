@@ -602,7 +602,6 @@ class TestThreadOps:
         from agent_comms.operations import _store_lock
 
         wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
-        wired.registry.unregister("starting")
         obtained = threading.Event()
 
         def prove_owner(self, thread, *, wait=True):
@@ -627,12 +626,11 @@ class TestThreadOps:
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner socket proof")
     def test_start_rejects_same_pid_new_epoch(self, wired, monkeypatch):
         wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
-        wired.registry.unregister("starting")
         before = wired.registry.snapshot().owner_epochs["starting"]
 
         def epoch_changed(self, thread, *, wait=True):
             if wait:
-                self.registry.register(thread)  # Same PID, later owner incarnation.
+                self.registry.register(thread, new_owner=True)  # Same PID, later owner incarnation.
             return True
 
         monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
@@ -647,7 +645,6 @@ class TestThreadOps:
         from dataclasses import replace
 
         wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
-        wired.registry.unregister("starting")
 
         def replace_owner(self, thread, *, wait=True):
             if wait:
