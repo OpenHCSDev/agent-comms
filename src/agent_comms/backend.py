@@ -85,6 +85,9 @@ MODEL_WAIT_TIMEOUT_SECONDS = 360.0
 assert MODEL_WAIT_TIMEOUT_SECONDS > _PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS
 RPC_ABORT_GRACE_SECONDS = 2.0
 CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS = NATIVE_STARTUP_POLICY.readiness_seconds
+# Advisory uses bytes. Pinned Pi checks decoded JS text length (or a missing
+# newline) after reading the proof journal; byte size alone is not the cause.
+_NATIVE_PROOF_JOURNAL_WARN_BYTES = 96 * 1024 * 1024
 PROMPT_START_TIMEOUT_SECONDS = 180.0
 _SESSION_MUTATING_COMMANDS = frozenset({"new_session", "switch_session", "fork", "clone"})
 _IDENTITY_FAILURE_TEXT = "Pi session identity changed during this turn."
@@ -931,9 +934,12 @@ async def _stream_agent_events(
         await startup.acquire(finish_event)
     launch_started_at = loop.time()
     session_bytes: int | None = None
+    proof_journal_bytes: int | None = None
     if session_file:
         with suppress(OSError):
             session_bytes = Path(session_file).stat().st_size
+        with suppress(OSError):
+            proof_journal_bytes = Path(f"{session_file}.input-proof").stat().st_size
     if reused:
         assert persistent_session is not None and persistent_session.proc is not None
         proc = persistent_session.proc
@@ -1613,6 +1619,19 @@ async def _stream_agent_events(
             native_capability_confirmed = True
             if startup is not None:
                 startup.release()
+            if (
+                proof_journal_bytes is not None
+                and proof_journal_bytes >= _NATIVE_PROOF_JOURNAL_WARN_BYTES
+            ):
+                yield {
+                    "type": "notice",
+                    "text": (
+                        "[agent-comms warning] Pi native input proof journal measures at least "
+                        "96 MiB. Pi checks decoded content against a 128 MiB startup limit; "
+                        "byte size is only an advisory. Preserve the session and journal; "
+                        "arrange a reviewed checkpoint or upgrade before further growth."
+                    ),
+                }
             prompt_start_deadline = loop.time() + PROMPT_START_TIMEOUT_SECONDS
             assert proc.stdin is not None
             try:
@@ -2339,6 +2358,21 @@ async def _stream_agent_events(
     if owner is not None:
         _ACTIVE_PROCESSES.pop(owner, None)
     error_text = "" if retained else await stderr_task
+    if (
+        preflight_failure == FailureReason.PREFLIGHT_EXIT
+        and proof_journal_bytes is not None
+        and "Truncated or oversized native input proof journal" in error_text
+    ):
+        # Only classify this exact local Pi startup failure. Never publish raw
+        # stderr, journal content, session paths, or a replay instruction.
+        preflight_failure = FailureReason.PROOF_JOURNAL_REJECTED
+        diagnostic["proof_journal_bytes"] = proof_journal_bytes
+        fail_reason = (
+            "Pi rejected its native input proof journal before this prompt was sent "
+            f"(measured {proof_journal_bytes} bytes; decoded-content limit or incomplete "
+            "final row). Preserve the session and journal; arrange a reviewed recovery. "
+            "Uncertain inputs must not be replayed."
+        )
     if owner is not None:
         _ACTIVE_STDERR_TASKS.pop(owner, None)
     if not retained and reused and persistent_session is not None:

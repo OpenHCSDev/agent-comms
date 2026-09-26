@@ -74,7 +74,7 @@ from .declarations import (
     _store_lock,
     is_channel_target,
 )
-from .diagnostics import record_terminal_failure
+from .diagnostics import record_terminal_failure, terminal_failure_reason
 from .goal_attempts import (
     Generation,
     GoalAttemptError,
@@ -83,6 +83,7 @@ from .goal_attempts import (
     StaleAttempt,
     UnresolvedAttempt,
 )
+from .goal_failure_observation import FailedTurnObservation
 from .input_disposition import AcpDeliveryCursors, InputDispositions
 from .operations import OBSERVATION_INTERVAL, Comms, wire
 from .passive_channel_awareness import PassiveChannelAwareness
@@ -111,6 +112,7 @@ DEFAULT_AGENT_ARGS = [
 ]
 LIVE_DRAIN_INTERVAL = OBSERVATION_INTERVAL
 WATCH_FALLBACK_INTERVAL = 1.0
+GOAL_WAIT_RECHECK_INTERVAL = 60.0
 NO_REPLY_WINDOW = 2.5  # silence: end the turn after this long with nothing
 REPLY_WINDOW = 8.0  # once replies flow, keep collecting at most this long
 REPLY_QUIET = 1.5  # after the last reply, wait this long then end the turn
@@ -908,7 +910,7 @@ class CommsAgent:
                     finally:
                         # Relay output, if any, is committed before the waiter
                         # observes that this dependency finished silently.
-                        self._comms.pause_waits_after_terminal_turn(terminal_fence)
+                        self._comms.release_waits_after_terminal_turn(terminal_fence)
             self._debug_log("prompt:returning")
             return PromptResponse(stop_reason="end_turn")
         except asyncio.CancelledError:
@@ -1304,6 +1306,7 @@ class CommsAgent:
 
         async def loop() -> None:
             watcher = open_wire_watcher(self._comms.root)
+            next_goal_wait_check = 0.0
             try:
                 while True:
                     if watcher is None:
@@ -1313,6 +1316,9 @@ class CommsAgent:
                     try:
                         await self._drain_inbox(session_id)
                         await self._sync_thread_config(session_id)
+                        if time.monotonic() >= next_goal_wait_check:
+                            self._comms.recover_closed_goal_wait(session_id)
+                            next_goal_wait_check = time.monotonic() + GOAL_WAIT_RECHECK_INTERVAL
                         self._schedule_goal(session_id)
                         await self._refresh_auth_models()
                     except asyncio.CancelledError:
@@ -2216,6 +2222,17 @@ class CommsAgent:
                     )
                 else:
                     goal_ok = current_goal is None or not current_goal.active
+                # A parked-goal DM owns no goal attempt. A fresh owner input
+                # may join that SAME interruption, not borrow or retry the goal.
+                interrupt_scope_current = (
+                    direct_interrupt
+                    and current_goal is not None
+                    and current_goal.active
+                    and current_goal.id == direct_interrupt_goal_id
+                    and current_goal.revision == direct_interrupt_goal_revision
+                    and (current_wait.wait_id if current_wait else None) == direct_interrupt_wait_id
+                )
+                owner_interrupt_followup = False
                 input_permit = goal_permit
                 admitted_goals = self._steering_goal_ids.get(session_id, {})
                 owner_followup = public_id is not None and public_id in admitted_goals
@@ -2235,7 +2252,8 @@ class CommsAgent:
                         else originated_attempts.get(admitted_goal_id or "")
                     )
                     if current_goal_id is not None and input_permit is None:
-                        goal_ok = False
+                        owner_interrupt_followup = interrupt_scope_current and goal_ok
+                        goal_ok = owner_interrupt_followup
                 keys = (
                     original_keys
                     if public_id is None
@@ -2245,14 +2263,14 @@ class CommsAgent:
                         else ()
                     )
                 )
+                if owner_interrupt_followup:
+                    # The permitless exception requires this exact fresh ACP
+                    # admission; an absent/foreign mapping cannot skip binding.
+                    owner_interrupt_followup = keys == (f"acp:{public_id}",)
+                    goal_ok = owner_interrupt_followup
                 interrupt_ok = (
-                    direct_interrupt
+                    interrupt_scope_current
                     and public_id is None
-                    and current_goal is not None
-                    and current_goal.active
-                    and current_goal.id == direct_interrupt_goal_id
-                    and current_goal.revision == direct_interrupt_goal_revision
-                    and (current_wait.wait_id if current_wait else None) == direct_interrupt_wait_id
                     and len(direct_origins) == 1
                     and len(keys) == 1
                     and current is not None
@@ -2371,7 +2389,10 @@ class CommsAgent:
                         ):
                             allowed = False
                             break
-                if allowed and current_wait is not None and not interrupt_ok:
+                if (
+                    allowed and current_wait is not None
+                    and not interrupt_ok and not owner_interrupt_followup
+                ):
                     allowed = self._comms.consume_goal_wait(canonical, current_wait.wait_id)
                 if allowed:
                     if public_id is None:
@@ -2895,10 +2916,28 @@ class CommsAgent:
                         self._goal_store.record_verified_progress(goal_permit, witness)
                         goal_attempt_resolved = True
                 if not goal_attempt_resolved:
+                    terminal_snapshot = self._comms.registry.snapshot()
                     with suppress(StaleAttempt):
                         self._goal_store.record_failed(
                             goal_permit.reservation,
                             "Goal turn ended without verified terminal progress.",
+                            observation=(
+                                FailedTurnObservation.from_terminal(
+                                    goal_permit.reservation,
+                                    owner=thread,
+                                    goal=goal,
+                                    claim=turn_claim,
+                                    turn_id=turn_id,
+                                    admission=turn_admission,
+                                    current_owner=terminal_snapshot.threads.get(thread_name),
+                                    current_admission=terminal_snapshot.admission_generations.get(
+                                        thread_name
+                                    ),
+                                    reason=terminal_failure_reason(terminal_failure),
+                                )
+                                if terminal_ok is not True
+                                else None
+                            ),
                         )
                     goal_attempt_resolved = True
                     if current_goal is not None and current_goal.id == goal.id:
@@ -3083,11 +3122,11 @@ class CommsAgent:
                 try:
                     await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
                 finally:
-                    self._comms.pause_waits_after_terminal_turn(terminal_fence)
+                    self._comms.release_waits_after_terminal_turn(terminal_fence)
             else:
                 # `settled` precedes terminal `done` in native RPC. Reconcile
                 # only after the terminal reply or failure notice was published.
-                self._comms.pause_waits_after_terminal_turn(terminal_fence)
+                self._comms.release_waits_after_terminal_turn(terminal_fence)
 
     def _started_event(self, thread_name: str, turn_id: str) -> dict[str, Any]:
         """Project one owner-authored turn without inventing presentation timestamps."""

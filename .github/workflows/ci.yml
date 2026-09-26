@@ -46,7 +46,7 @@ jobs:
 
       - name: Check native RPC compaction against localhost provider
         run: |
-          uv pip install --python stack/.venv/bin/python pytest pytest-asyncio pytest-cov
+          uv pip install --python stack/.venv/bin/python pytest pytest-asyncio pytest-cov 'pytest-xdist>=3.6'
           PYTHONPATH="$PWD/src" AC_NATIVE_STACK_BIN="$PWD/stack/bin/pi-native" \
             stack/.venv/bin/python -m pytest tests/test_stack_native_compaction.py tests/test_stack_send_now.py --no-cov -q
 
@@ -85,6 +85,11 @@ jobs:
         shell: bash
         run: |
           npm install -g --prefix "$HOME/.local/pi-npm" --ignore-scripts --no-audit --no-fund @earendil-works/pi-coding-agent@0.85.1
+
+      - name: Install locked MCP SDK fixture dependencies
+        if: matrix.os != 'windows-latest'
+        working-directory: extensions/pi-mcp-client
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Run tests with coverage (85% enforced on Linux)
         if: matrix.os == 'ubuntu-latest'

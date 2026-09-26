@@ -2435,8 +2435,74 @@ class Comms:
         waits = GoalWaits(self.root / "goal_waits.json")
         return waits.for_goal(self.registry.require(name).goal, waits.snapshot())
 
-    def pause_waits_after_terminal_turn(self, fence: FinishedTurnFence | None) -> tuple[str, ...]:
-        """Pause only for the latest exact, still-idle, completed child turn.
+    def recover_closed_goal_wait(self, name: str) -> tuple[str, ...]:
+        """Release one stranded standby without replaying a dependency input.
+
+        This is an owner-side liveness check, not an agent turn. A subsequent
+        scheduler pass may continue the still-active goal only if its private
+        attempt ledger has a fresh READY grant.
+        """
+        with _store_lock(self._wire_lock_path):
+            snapshot = self.registry.snapshot()
+            canonical = snapshot.aliases.get(name, name)
+            owner = snapshot.threads.get(canonical)
+            if owner is None or owner.active_turn is not None:
+                return ()
+            goal = owner.goal
+            if goal is None or not goal.active:
+                return ()
+            waits = GoalWaits(self.root / "goal_waits.json")
+            rows = waits.snapshot()
+            wait = rows.get(goal.id)
+            if (
+                wait is None
+                or wait.owner_created_at not in (None, owner.created_at)
+                or wait.revision > goal.revision
+            ):
+                return ()
+            closed = GoalWaits.closed_wait_group(
+                canonical, wait.targets, rows, snapshot, self._process_alive
+            )
+            if not closed:
+                return ()
+            owner_aliases = frozenset(
+                {
+                    canonical,
+                    *(alias for alias, target in snapshot.aliases.items() if target == canonical),
+                }
+            )
+            try:
+                reply = self.bus._history_page(
+                    lambda message: message.target in owner_aliases
+                    and message.starts_turn_for(canonical, aliases=snapshot.aliases)
+                    and wait.matches(message, snapshot),
+                    before=None,
+                    after=wait.after_seq,
+                    limit=1,
+                    max_bytes=256 * 1024,
+                    targets=owner_aliases,
+                )
+            except (OSError, ValueError, sqlite3.DatabaseError):
+                # An unavailable read cannot prove that no reply was delivered.
+                return ()
+            if reply.messages:
+                return ()
+            names = ", ".join(f"@{member}" for member in closed)
+            note = (
+                f"Dependency wait group ({names}) has no independent worker. "
+                "Standby was released; inspect dependencies and continue useful work."
+            )
+            progress = f"{goal.progress}\n\n{note}" if goal.progress else note
+            self.registry.register(
+                replace(owner, goal=replace(goal, progress=progress, revision=goal.revision + 1)),
+                snapshot.statuses[canonical],
+            )
+            if not waits.clear(goal.id, wait_id=wait.wait_id):
+                return ()
+            return closed
+
+    def release_waits_after_terminal_turn(self, fence: FinishedTurnFence | None) -> tuple[str, ...]:
+        """Release waits after the latest exact, still-idle child turn.
 
         ACP invokes this after terminal publication, never at the earlier UI
         `settled` event. A later turn (even already finished) invalidates the
@@ -2459,7 +2525,7 @@ class Comms:
             ):
                 return ()
             waits = GoalWaits(self.root / "goal_waits.json").snapshot()
-            paused: list[str] = []
+            released: list[str] = []
             for owner in snapshot.threads.values():
                 goal = owner.goal
                 if goal is None or not goal.active:
@@ -2519,7 +2585,7 @@ class Comms:
                     )
                 except (OSError, ValueError, sqlite3.DatabaseError):
                     # The terminal turn has already committed. An unavailable
-                    # optional reply read cannot prove silence or pause this
+                    # optional reply read cannot prove silence or release this
                     # owner; do not turn the completed ACP turn into a failure.
                     # Registry/goal writes below remain outside this guard.
                     continue
@@ -2528,26 +2594,20 @@ class Comms:
                 diagnostic = (
                     f"Declared dependency @{canonical} finished without a qualifying direct "
                     "reply, and no declared dependency has an active turn. "
-                    "Goal paused: inspect messages and UNKNOWN inputs before explicitly "
-                    "resuming or redelegating. No model turn or claim was admitted."
+                    "Standby was released; inspect messages and UNKNOWN inputs, then "
+                    "continue independent work or redelegate. No input was replayed."
                 )
                 progress = f"{goal.progress}\n\n{diagnostic}" if goal.progress else diagnostic
-                # The entire owner/incarnation/goal check and transition is
-                # protected by the wire lock. Persist the non-runnable goal
-                # FIRST: a crash before wait-clear leaves an orphan wait that
-                # cannot launch while the goal is paused.
-                paused_goal = replace(
-                    goal, status="paused", progress=progress, revision=goal.revision + 1
-                )
+                # Persist the explanation before clearing the wait. A crash
+                # between these writes leaves the active goal in standby;
+                # the periodic closed-wait check can release it later.
+                continued_goal = replace(goal, progress=progress, revision=goal.revision + 1)
                 self.registry.register(
-                    replace(owner, goal=paused_goal), snapshot.statuses[owner.name]
+                    replace(owner, goal=continued_goal), snapshot.statuses[owner.name]
                 )
                 GoalWaits(self.root / "goal_waits.json").clear(goal.id, wait_id=wait.wait_id)
-                GoalPauseEvents(self.root / "goal_pause_events.json").record(
-                    GoalPauseEvent(goal.id, paused_goal.revision, GoalPauseSource.RUNTIME)
-                )
-                paused.append(owner.name)
-            return tuple(paused)
+                released.append(owner.name)
+            return tuple(released)
 
     def goal_execution(self, name: str) -> GoalExecution | None:
         return self._goal_snapshot(name)[1]
@@ -2764,6 +2824,20 @@ class Comms:
                         "Message or restart the responsible agent, inspect its status, "
                         "then declare standby only while a target is actually working."
                     )
+                closed = GoalWaits.closed_wait_group(
+                    thread.name,
+                    wait_targets,
+                    GoalWaits(self.root / "goal_waits.json").snapshot(),
+                    snapshot,
+                    self._process_alive,
+                )
+                if closed:
+                    names = ", ".join(f"@{name}" for name in closed)
+                    raise ValueError(
+                        f"Standby would close a dependency wait group ({names}). "
+                        "At least one agent must remain able to work or reply. "
+                        "Continue independent work or change the dependencies."
+                    )
             elif wait_for or reviewed_inputs:
                 raise ValueError("wait_for and reviewed_inputs are only valid for standby.")
             report_turn = thread.active_turn.id if thread.active_turn is not None else ""
@@ -2908,6 +2982,10 @@ class Comms:
                         self.message_high_water(),
                         wait_targets,
                         owner_created_at=thread.created_at,
+                        report_turn_id=thread.active_turn.id if thread.active_turn else None,
+                        report_turn_generation=(
+                            thread.turn_generation if thread.active_turn else None
+                        ),
                         target_turn_generations=tuple(
                             (
                                 snapshot.threads[

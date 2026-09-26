@@ -15,6 +15,7 @@ class FailureReason(StrEnum):
     BACKEND_FAILED = "backend_failed"
     PREFLIGHT_TIMEOUT = "native_preflight_timeout"
     PREFLIGHT_EXIT = "native_preflight_exit"
+    PROOF_JOURNAL_REJECTED = "native_proof_journal_rejected"
     INPUT_ID_UNAVAILABLE = "pi_input_id_unavailable"
     COMPACTION_FAILED = "prestart_compaction_failed"
     IDENTITY_UNCERTAIN = "session_identity_uncertain"
@@ -23,6 +24,18 @@ class FailureReason(StrEnum):
     INPUT_MISSING = "current_prompt_input_missing"
     FINAL_STOP_MISSING = "assistant_final_stop_missing"
     QUEUED_INPUT_MISSING = "queued_input_start_missing"
+
+
+def terminal_failure_reason(event: dict) -> FailureReason:
+    """Allowlisted backend terminal classification; never diagnostic prose."""
+    measurements = event.get("diagnostic", {})
+    if not isinstance(measurements, dict):
+        measurements = {}
+    try:
+        value = measurements.get("reason") or event.get("reason_code")
+        return FailureReason(value) if isinstance(value, str) else FailureReason.BACKEND_FAILED
+    except (ValueError, TypeError):
+        return FailureReason.BACKEND_FAILED
 
 
 def record_terminal_failure(
@@ -34,14 +47,17 @@ def record_terminal_failure(
     measurements = event.get("diagnostic", {})
     if not isinstance(measurements, dict):
         measurements = {}
-    try:
-        value = measurements.get("reason") or event.get("reason_code")
-        reason = FailureReason(value) if isinstance(value, str) else FailureReason.BACKEND_FAILED
-    except (ValueError, TypeError):
-        reason = FailureReason.BACKEND_FAILED
+    reason = terminal_failure_reason(event)
     safe = {
         key: value
-        for key in ("elapsed_ms", "wait_ms", "spawn_ms", "session_bytes", "exit_code")
+        for key in (
+            "elapsed_ms",
+            "wait_ms",
+            "spawn_ms",
+            "session_bytes",
+            "proof_journal_bytes",
+            "exit_code",
+        )
         if type(value := measurements.get(key)) is int
     }
     document = {
