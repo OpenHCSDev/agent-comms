@@ -16,11 +16,16 @@ owner turn now projects them to its existing local session **before any next
 provider input send**, only if owner PID, canonical thread, session file and an
 attached transport agree. If no listener exists, nothing is ACKed. After a
 matching local metadata update returns, `observe_publication` marks local
-delivery attempted; it is not proof that a remote UI displayed it. If delivery
-or marking is uncertain, the same commit-ID-keyed metadata remains pending and
-may be repeated. The client must deduplicate by exact ID; this is not a summary
-broadcast or a message to a guessed bus recipient. It never publishes an
-`intent`, `unknown` or malformed/tampered row.
+delivery attempted; it is not proof that a remote UI displayed it. If local
+transport delivery fails before marking, the exact commit-ID row remains
+pending and may be projected again. If `observe_publication` raises on
+post-COMMIT parent-directory fsync, its committed update may already be
+**observed** despite the exception; a fresh exact-ID database read may instead
+find it pending. Do not assume rollback, undo, or native retry from this error:
+reconcile the exact row state. Reprojection is allowed only for a pending row,
+and the client must deduplicate by exact ID. This is not a summary broadcast or
+a message to a guessed bus recipient. It never publishes an `intent`, `unknown`
+or malformed/tampered row.
 
 Provider-free tests cover intent/UNKNOWN suppression, native positive commit,
 lost result followed by exact-ID reconciliation without resend, process reopen

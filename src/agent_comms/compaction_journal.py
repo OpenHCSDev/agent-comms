@@ -221,8 +221,11 @@ class CompactionJournal:
     def observe_publication(self, commit_id: str, metadata_json: str) -> None:
         """ACK only the exact metadata seen by the local ACP projection.
 
-        An uncertain delivery remains pending. Reprojection may repeat the same
-        commit ID, so consumers must deduplicate by ID, never by summary text.
+        Delivery must return before this call. A failure before marking leaves
+        the row pending. A post-COMMIT fsync error may leave it *observed* even
+        though this call raises UNKNOWN; reconcile the exact row, never infer
+        native retry authority. Reprojection may repeat a pending commit ID, so
+        consumers must deduplicate by ID, never by summary text.
         """
         with self._transaction() as db:
             row = db.execute(

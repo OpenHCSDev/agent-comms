@@ -29,6 +29,7 @@ from .declarations import (
 from .input_disposition import InputDispositions
 from .native_package import COMPACTION_HELPER, verify_native_package
 from .owner_compaction_gate import OwnerCompactionAttestation
+from .owner_compaction_prepare import NativePreparation, prepare_native_source
 from .owner_compaction_process import (
     CompactionTransportUnknownError,
     require_deadline_support,
@@ -191,6 +192,25 @@ class OwnerCompactionCommit:
                     "Unresolved native commit; reconcile before preparation"
                 )
             return self._source(receipt, witness)
+
+    def prepare_source(
+        self, owner: Thread, epoch: int, *, keep_recent_tokens: int | None = None
+    ) -> tuple[NativePreparation, CompactionSource] | None:
+        """Read Pi's saved cut point, then capture owner/ingress source before summarizing.
+
+        The bounded recent-window override is for isolated tests. Preparation
+        never invokes a provider or mutates a session, and does not grant a
+        commit: the writer must still CAS against the saved native witness.
+        """
+        if owner.session_file is None:
+            raise ValueError("Canonical saved session required")
+        prepared = prepare_native_source(
+            self.package_dir, owner.session_file, keep_recent_tokens=keep_recent_tokens
+        )
+        if prepared is None:
+            return None
+        source = self.capture_source(owner, epoch, prepared.witness)
+        return prepared, source
 
     def _call(
         self, fd: int, request: dict, timeout: float, retained_fds: tuple[int, ...] = ()

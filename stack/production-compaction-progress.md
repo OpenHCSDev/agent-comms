@@ -3,6 +3,26 @@
 Base: merged PR48 `d0ced47fbec39ac4d110c9f7395442524363871d`.
 This is **not deployment approval**. The adaptive trigger remains disabled.
 
+## Owner preparation and outbox fsync-uncertainty successor (combined review pending)
+
+Read-only disposable pinned Pi in-memory loader derives the actual
+`prepareCompaction` cut point and native disk witness; canonical owner/ingress
+source is captured before any summary request. Internal
+`compact_owner_once` accepts a trusted injected summary strategy, retires the
+idle persistent child before the native writer and leaves strict fresh reopen
+required even if the source recheck refuses mutation. Real provider-free native
+tests cover correction invalidation and three sequential commits with distinct
+IDs; they prove structural transitions, not provider summary quality. It has
+**no production ACP caller/model strategy/automatic trigger**, so adaptive
+behavior is not activated. Exact `2107c055` independent outbox review was
+NON-CLEAN in documentation scope: post-COMMIT directory fsync denial on
+`observe_publication` may raise UNKNOWN while the row is already `observed`,
+not unconditionally pending. This successor clarifies pending-or-observed
+exact-ID reconciliation and adds a real fault regression. The old bytes remain
+NON-CLEAN; no verdict transfers to `12050b1` ACP projection. Bounded focus:
+261 passed; full isolated source suite: 1703 passed/61 skipped; offline
+extracted wheel: 75 passed. No general OS subprocess sandbox is claimed. See `compaction-runtime-reopen-correction.md`.
+
 ## ACP native-commit send/outbox/reopen slices (combined review pending)
 
 A committed exact-ID native outcome now atomically enqueues only metadata in
@@ -16,14 +36,14 @@ attempt strictly validates v3 saved disk through the pinned read-only loader,
 then compares fresh RPC state identity before any provider send. Canonical
 legacy `/compact` fails closed rather than using separately installed Pi as
 an alternate unjournaled writer. Provider-free focused 344 ACP/backend/journal/
-reopen tests pass; full isolated source suite before local projection 1690/61skip;
-updated full rerun and owner adaptive call site are still required. See
+reopen tests pass; full isolated source suite after local projection
+1694 passed/61 skipped. Production owner adaptive call site is still required. See
 `compaction-publication-outbox.md` and `compaction-runtime-reopen-correction.md`.
 This is not adaptive activation or combined clearance.
 
-## Package-subprocess corrective successor (review pending)
+## Package-subprocess corrective successor (both designated scoped reviews CLEAN)
 
-Both reviewers retain NON-CLEAN for `8c6ce7` package admission: update checks
+Both reviewers retain NON-CLEAN for the **old** `8c6ce7` package admission: update checks
 could invoke npm/git for already-installed unapproved sources. New candidate
 admits the whole source set before dedup/probes and forbids all three actual
 package-manager subprocess sinks, including direct metadata/global-root APIs.
@@ -31,8 +51,10 @@ Approved manifest-local install/discovery/check/update remains usable.
 Tree `628b68df…`, build `e9f19aa7add2a71c`; 36 provider-free package-process cases,
 actual canonical PR77 RPC/ancestor controls, source243/1skip, wheel54 and native/
 adaptive contracts pass. See `native-package-subprocess-correction.md`.
-Prior narrow import positives and both3585 manager-retirement CLEAN verdicts do
-not clear this successor. Runtime/ACP/outbox/recovery/final review remain OPEN.
+Both designated independent reviewers subsequently cleared the exact
+`8704c64` corrective package-manager source/subprocess slice **narrowly**
+(preflight own copy and sink original-finding continuity). Their verdicts do
+not clear runtime/ACP/outbox/recovery/final combined review, which remain OPEN.
 
 ## Earlier 8c6ce7 import integration (package slice NON-CLEAN)
 

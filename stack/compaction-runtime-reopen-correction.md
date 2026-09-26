@@ -25,9 +25,9 @@ The earlier manual `/compact` bridge uses a separately installed legacy Pi
 package and lets that Pi child commit directly. The canonical `pi-native`
 launcher therefore refuses this legacy route rather than creating an unjournaled
 alternate writer; other historical/manual fixtures remain unchanged. Owner
-journal-backed adaptive summarization and its caller of
-`discard_for_external_write` are **not yet wired**, and that manual refusal is
-not a complete replacement. No installed or live session was touched.
+journal-backed production adaptive summarization and its ACP call site are
+**not yet wired**, and that manual refusal is not a complete replacement. No
+installed or live session was touched.
 
 Provider-free evidence: disposable pinned-package strict valid/reopen byte
 identity; ambient preload cannot execute; five invalid cases (torn tail,
@@ -39,9 +39,27 @@ fails closed. Logs `/var/tmp/pr95-reopen-*.log`. The ACP final send gate in
 `compaction_send_admission.py` independently refuses unresolved commit intents
 and UNKNOWN before input bind, including correction and direct paths.
 
-Remaining: integrate an owner-only adaptive preparation/summarization/commit
-call site, execute this retirement **before** its native external write, and
-prove real provider-free end-to-end multi-round recovery. Exact local ACP
-metadata projection is separately wired in `compaction_publication.py`; it
-remains distinct from a bus broadcast or inferred recipient. Neither runtime activation nor
-merge clearance follows from this bounded slice.
+`owner_compaction_prepare.py` now reads the strict v3 file through the exact
+pinned native loader **in memory** (no persistent manager/implicit repair), uses
+Pi's `prepareCompaction` cut point and declared default recent window, and
+emits only witness/token metadata. `OwnerCompactionCommit.prepare_source` then
+captures canonical owner + bus + input revisions **before** summary generation;
+the existing writer rechecks that exact source and its native revision at
+commit. Tests use a bounded recent-window override and provider-free synthetic
+summaries to exercise a correction that invalidates the source, and three
+sequential native commits with exact distinct IDs. The internal
+`compact_owner_once` sequencing helper also uses an injected provider-free
+summary callback to prove retirement **before** the native writer, including a
+late correction that refuses mutation and leaves reopen validation required.
+It has no production ACP caller or model strategy yet. This demonstrates
+structural source/admission recovery, **not** summary quality, provider routing, cache
+behavior, or semantic memory retention. There is no general OS subprocess
+sandbox; pinned-package import/process checks are scoped to audited native
+package-manager and helper entrypoints.
+
+Remaining: integrate a bounded owner-only provider summarizer and runtime/ACP
+trigger/call site, then prove multi-round provider-free end-to-end behavior
+through that actual call site. Exact
+local ACP metadata projection is separately wired in
+`compaction_publication.py`; it is not a bus broadcast or inferred recipient.
+Neither runtime activation nor merge clearance follows from this bounded slice.

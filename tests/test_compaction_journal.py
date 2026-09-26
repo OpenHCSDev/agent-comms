@@ -173,6 +173,38 @@ def test_metadata_only_outbox_is_commit_id_keyed_and_atomic(journal, tmp_path):
     assert [event.commit_id for event in journal.pending_publications(session)] == [second]
 
 
+def test_observe_postcommit_parent_fsync_unknown_can_already_be_observed(journal, monkeypatch):
+    journal, session = journal
+    commit_id = journal.begin(session, {})
+    journal.resolve(
+        commit_id,
+        "committed",
+        {"status": "committed", "entryId": "native", "revision": "r", "leafId": "leaf"},
+        publication=True,
+    )
+    pending = journal.pending_publications(session)
+    assert len(pending) == 1
+    original_fsync = os.fsync
+
+    def deny_directory(fd):
+        assert stat.S_ISDIR(os.fstat(fd).st_mode)
+        raise OSError("post-commit directory sync fault")
+
+    monkeypatch.setattr(os, "fsync", deny_directory)
+    with pytest.raises(CompactionJournalUnknownError, match="UNKNOWN"):
+        journal.observe_publication(commit_id, pending[0].metadata_json)
+    monkeypatch.setattr(os, "fsync", original_fsync)
+    # No rollback is promised once SQLite COMMIT returns. Reconcile exact ID
+    # without sending the native operation or projection a second time.
+    reopened = CompactionJournal(journal.path)
+    assert reopened.pending_publications(session) == ()
+    with sqlite3.connect(journal.path) as db:
+        assert db.execute(
+            "SELECT status FROM publications WHERE commit_id = ?", (commit_id,)
+        ).fetchone() == ("observed",)
+    assert reopened.get(commit_id).status == "committed"
+
+
 def test_changed_publication_metadata_refuses_local_projection(journal):
     journal, session = journal
     commit_id = journal.begin(session, {})
