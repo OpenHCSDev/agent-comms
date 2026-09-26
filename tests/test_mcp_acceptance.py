@@ -303,6 +303,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
     if case != "revoke_midturn":
         release_final.set()
     attachment_settled = asyncio.Event()
+    attachment_turn = None
     updates, permissions = [], []
     entered, release = asyncio.Event(), asyncio.Event()
     task = proxy = owner = None
@@ -363,10 +364,19 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
 
             class Attachment:
                 async def session_update(self, session_id, update):
+                    nonlocal attachment_turn
                     if observer:
                         await observer.session_update(session_id=session_id, update=update)
                     meta = update.get("_meta", {}).get("agentComms", {})
-                    if meta.get("turnSettled"):
+                    if meta.get("turnStarted") and meta.get("turnId"):
+                        attachment_turn = meta["turnId"]
+                    if (
+                        meta.get("turnSettled")
+                        and attachment_turn
+                        and meta.get("turnId") == attachment_turn
+                    ):
+                        # Ignore the initial idle replay during subscribe. Only
+                        # the actual prompt's UI drain permits attachment close.
                         attachment_settled.set()
 
                 async def request_permission(self, **kwargs):
@@ -391,6 +401,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                 )
                 proxy = RuntimeProxy(attached, "project", owner._runtime.path)
                 await proxy.subscribe()
+                assert not attachment_settled.is_set()  # Initial idle replay is not this turn.
                 if case == "no_controller":
                     context = owner._runtime.controller.set(None)
                     try:
