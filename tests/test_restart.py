@@ -10,7 +10,7 @@ import pytest
 
 from agent_comms import Thread, wire
 from agent_comms.cli import main
-from agent_comms.declarations import ActiveTurn
+from agent_comms.declarations import ActiveTurn, RelationViolationError, ThreadStatus
 
 
 def setup_owners(tmp_path, monkeypatch):
@@ -55,6 +55,118 @@ def test_bulk_restart_preserves_state_and_does_not_revive_stopped(tmp_path, monk
     assert results[0].previous_pid == old.pid
     assert comms.registry.require("one") == replace(old, pid=old.pid + 1000)
     assert comms.registry.status("stopped").value == "stopped"
+
+
+def test_restart_requires_exact_queued_owner_incarnation(tmp_path, monkeypatch):
+    comms, stopped = setup_owners(tmp_path, monkeypatch)
+    live = {10001, 10002}
+    monkeypatch.setattr(comms, "_process_alive", lambda pid: pid in live)
+    original_signal = comms._signal_local_owner
+
+    def signal_and_exit(pid, sig):
+        original_signal(pid, sig)
+        live.discard(pid)
+
+    monkeypatch.setattr(comms, "_signal_local_owner", signal_and_exit)
+    original_launch = comms._launch_owner_unlocked
+
+    def launch_and_live(thread, agent_bin, agent_args):
+        updated = original_launch(thread, agent_bin, agent_args)
+        live.add(updated.pid)
+        return updated
+
+    monkeypatch.setattr(comms, "_launch_owner_unlocked", launch_and_live)
+    snapshot = comms.registry.snapshot()
+    owner = snapshot.threads["one"]
+    expected = (owner.pid, owner.created_at, snapshot.admission_generations["one"])
+    with pytest.raises(ValueError, match="Queued owner incarnation changed"):
+        comms.restart_owners(
+            ["one"], expected_incarnations={"one": (expected[0], expected[1], expected[2] - 1)}
+        )
+    assert stopped == []
+    (result,) = comms.restart_owners(["one"], expected_incarnations={"one": expected})
+    assert result.previous_pid == expected[0]
+    assert stopped == ["one"]
+    with pytest.raises(ValueError, match="Queued owner incarnation changed"):
+        comms.restart_owners(["one"], expected_incarnations={"one": expected})
+    assert stopped == ["one"]
+
+
+def test_guarded_restart_fences_post_signal_wake_before_exit(tmp_path, monkeypatch):
+    comms, _ = setup_owners(tmp_path, monkeypatch)
+    snapshot = comms.registry.snapshot()
+    original = snapshot.threads["one"]
+    expected = (original.pid, original.created_at, snapshot.admission_generations["one"])
+    live = {original.pid}
+    monkeypatch.setattr(comms, "_process_alive", lambda pid: pid in live)
+    monkeypatch.setattr(comms, "_signal_local_owner", lambda pid, signal: live.discard(pid))
+    observed = []
+
+    def wait_after_signal(pid, timeout):
+        # Simulate the old process receiving a wake immediately after signal
+        # and before owner exit; it must fail the persisted admission gate.
+        assert comms.registry.status("one") is ThreadStatus.STOPPED
+        with monkeypatch.context() as patch:
+            patch.setattr("agent_comms.declarations.os.getpid", lambda: original.pid)
+            with pytest.raises(RelationViolationError, match="stopped or unavailable"):
+                comms.registry.claim_local_turn("one", "post-signal-wake")
+        observed.append(comms.registry.require("one").active_turn)
+        return True
+
+    monkeypatch.setattr(comms, "_wait_for_owner_exit", wait_after_signal)
+    (result,) = comms.restart_owners(["one"], expected_incarnations={"one": expected})
+    assert result.previous_pid == original.pid
+    assert observed == [None]
+
+
+def test_direct_claim_racing_final_preflight_is_not_erased_or_signaled(tmp_path, monkeypatch):
+    comms, stopped = setup_owners(tmp_path, monkeypatch)
+    snapshot = comms.registry.snapshot()
+    original = snapshot.threads["one"]
+    expected = (original.pid, original.created_at, snapshot.admission_generations["one"])
+    real_fence = comms.registry.fence_idle_owner
+
+    def racing_fence(thread, *, expected_epoch):
+        current = comms.registry.require("one")
+        comms.registry.register(replace(current, active_turn=ActiveTurn("raced", current.pid)))
+        return real_fence(thread, expected_epoch=expected_epoch)
+
+    monkeypatch.setattr(comms.registry, "fence_idle_owner", racing_fence)
+    with pytest.raises(RelationViolationError, match="Idle owner changed before restart fence"):
+        comms.restart_owners(["one"], expected_incarnations={"one": expected})
+    assert stopped == []
+    assert comms.registry.require("one").active_turn.id == "raced"
+
+
+def test_explicit_start_cannot_reopen_stopped_live_restart_fence(tmp_path, monkeypatch):
+    comms, stopped = setup_owners(tmp_path, monkeypatch)
+    original = comms.registry.require("one")
+    snapshot = comms.registry.snapshot()
+    comms.registry.fence_idle_owner(original, expected_epoch=snapshot.admission_generations["one"])
+    with pytest.raises(RelationViolationError, match="Cannot reactivate a stopped incarnation"):
+        comms.start("one")
+    assert comms.registry.status("one") is ThreadStatus.STOPPED
+    assert comms.registry.require("one").pid == original.pid
+    assert stopped == []
+
+
+def test_start_racing_fence_after_proof_cannot_reopen_admission(tmp_path, monkeypatch):
+    comms, stopped = setup_owners(tmp_path, monkeypatch)
+    original = comms.registry.require("one")
+    snapshot = comms.registry.snapshot()
+    expected_epoch = snapshot.admission_generations["one"]
+
+    def proof_and_fence(thread, wait=True):
+        if wait:
+            comms.registry.fence_idle_owner(original, expected_epoch=expected_epoch)
+        return True
+
+    monkeypatch.setattr(comms, "_is_local_participant", proof_and_fence)
+    with pytest.raises(RelationViolationError):
+        comms.start("one")
+    assert comms.registry.status("one") is ThreadStatus.STOPPED
+    assert comms.registry.require("one").active_turn is None
+    assert stopped == []
 
 
 def test_bulk_preflight_refuses_busy_before_stopping_any_owner(tmp_path, monkeypatch):
