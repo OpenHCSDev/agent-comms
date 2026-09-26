@@ -64,6 +64,24 @@ barrier additionally checks that wire, bus, input, registry and executor locks
 all remain excluded after parent death until native child exit. Independent
 review and full runtime call-graph integration are still required.
 
+## Native writer findings still blocking deployment
+
+These are source-audit findings against the disposable `8ec0b8f1…` artifact,
+not closed tests or production clearance. The dormant claim that every native
+mutation already shares the writer boundary is insufficient.
+
+| Entry path | Identified gap | Required adversarial control (pending) |
+| --- | --- | --- |
+| `loadEntriesFromFile` | Load-time missing-newline repair calls `appendFileSync` outside the native writer lock. | Hold the native lock while loading a missing-newline/torn-tail file; prove no bytes change. Require explicit safe recovery or strict refusal, never silent repair. |
+| `SessionManager.forkFrom` | Destination header and copied entries are written directly outside the common writer lock. | Block source/destination writers at deterministic barriers; prove complete durable destination or typed refusal, no partial accepted fork, and unchanged source. |
+| `SessionManager` constructor | The patch refreshes `_pr48LoadedRevision` after loading entries. A writer between parse and that stat can bless stale memory with a fresh disk revision. | Interpose a real external append after parsing but before constructor completion; prove refusal or coherent reload, never stale-tree append. Include persisted preloaded-entry input. |
+| `setSessionFile` / `_setSessionFile` | The same post-load refresh can bind a stale loaded tree to a newer disk revision. | Repeat the parse/stat race during file switching; ensure loaded revision belongs to the exact parsed snapshot, and stale mutation leaves disk unchanged. |
+
+The first two require mutation coverage beyond `_appendEntry`, `_rewriteFile`,
+`flushInputDurably`, and guarded compaction. The latter two require correct
+snapshot provenance, not merely a final current stat. These controls must become
+executable and pass before integrating the writer patch into preparation.
+
 ## Open gates
 
 - Integrate the now-executable `capture_source`/`CompactionSource` API into actual
