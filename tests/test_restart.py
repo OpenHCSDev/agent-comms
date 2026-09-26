@@ -57,6 +57,22 @@ def test_bulk_restart_preserves_state_and_does_not_revive_stopped(tmp_path, monk
     assert comms.registry.status("stopped").value == "stopped"
 
 
+def test_restart_requires_exact_queued_owner_incarnation(tmp_path, monkeypatch):
+    comms, stopped = setup_owners(tmp_path, monkeypatch)
+    snapshot = comms.registry.snapshot()
+    owner = snapshot.threads["one"]
+    expected = (owner.pid, owner.created_at, snapshot.admission_generations["one"])
+    with pytest.raises(ValueError, match="Queued owner incarnation changed"):
+        comms.restart_owners(["one"], expected_incarnations={"one": (expected[0], expected[1], expected[2] - 1)})
+    assert stopped == []
+    result, = comms.restart_owners(["one"], expected_incarnations={"one": expected})
+    assert result.previous_pid == expected[0]
+    assert stopped == ["one"]
+    with pytest.raises(ValueError, match="Queued owner incarnation changed"):
+        comms.restart_owners(["one"], expected_incarnations={"one": expected})
+    assert stopped == ["one"]
+
+
 def test_bulk_preflight_refuses_busy_before_stopping_any_owner(tmp_path, monkeypatch):
     comms, stopped = setup_owners(tmp_path, monkeypatch)
     busy = comms.registry.require("two")

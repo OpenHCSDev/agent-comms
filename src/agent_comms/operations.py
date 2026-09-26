@@ -3219,6 +3219,7 @@ class Comms:
         *,
         agent_bin: str = "pi",
         agent_args: Sequence[str] | None = None,
+        expected_incarnations: Mapping[str, tuple[int, float, int]] | None = None,
     ) -> tuple[OwnerRestartResult, ...]:
         """Preflight all owners together; release the wire lock for proof and exit.
 
@@ -3253,8 +3254,17 @@ class Comms:
                 if selection is not None and identities != selection:
                     raise RelationViolationError("Owner selection changed before restart.")
                 selection = identities
+                if expected_incarnations is not None and set(expected_incarnations) != {
+                    thread.name for thread in threads
+                }:
+                    raise RelationViolationError("Restart selection differs from queued owners.")
                 captured = []
                 for thread in threads:
+                    epoch = snapshot.admission_generations.get(thread.name)
+                    if expected_incarnations is not None and expected_incarnations[thread.name] != (
+                        thread.pid, thread.created_at, epoch
+                    ):
+                        raise RelationViolationError("Queued owner incarnation changed before restart.")
                     if (
                         not thread.role.executable
                         or not snapshot.statuses[thread.name].active
@@ -3268,7 +3278,6 @@ class Comms:
                         raise ValueError(
                             f"Thread {thread.name!r} has an active turn; wait until idle."
                         )
-                    epoch = snapshot.admission_generations.get(thread.name)
                     if epoch is None:
                         raise RelationViolationError(
                             "Cannot restart an owner without an incarnation."
