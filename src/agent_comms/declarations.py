@@ -1797,14 +1797,17 @@ class ScheduledTurn:
     direct_interrupt_input_key: str | None = None
     direct_interrupt_ticket: str | None = None
 
-    def still_current_interrupt(self, goal: Goal | None, wait_id: str | None) -> bool:
-        """A queued direct DM never survives goal/wait replacement or an ABA revision."""
+    def still_current_interrupt(self, goal: Goal | None) -> bool:
+        """A NEW queued DM survives benign same-goal revision bumps.
+
+        Ordinary goal progress or a standby report bumps the revision without
+        changing the goal identity; that must not strand an unattempted input.
+        Only a goal replacement (a different, fresh goal ID) or an inactive
+        goal invalidates the queue entry. Dispatch-time admission separately
+        rechecks the unattempted disposition row before any native start.
+        """
         return self.direct_interrupt_goal_id is None or (
-            goal is not None
-            and goal.active
-            and goal.id == self.direct_interrupt_goal_id
-            and goal.revision == self.direct_interrupt_goal_revision
-            and wait_id == self.direct_interrupt_wait_id
+            goal is not None and goal.active and goal.id == self.direct_interrupt_goal_id
         )
 
     @property

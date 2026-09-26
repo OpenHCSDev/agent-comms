@@ -1,6 +1,5 @@
 """Explicit inspection decisions unblock waiting without inventing native receipts."""
 
-import asyncio
 import os
 
 import pytest
@@ -81,13 +80,20 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
             report.invoke(comms, {**args, "reviewed_inputs": keys})["goal_execution"]["state"]
             == "standby"
         )
-        # Previously queued ordinary turns have an older goal revision and
-        # no wait witness. They must be dropped before any backend start, not
-        # replayed as dependency replies after the new standby decision.
-        if wake := agent._wake_tasks.get("worker"):
-            await asyncio.wait_for(wake, timeout=2)
+        # A benign standby transition must not strand unattempted NEW direct
+        # DMs: they remain typed ordinary interrupts (proven fresh by their
+        # unattempted dispositions) and dispatch later, never as replayed
+        # dependency replies.
+        pending = agent._pending_turns.get("worker", [])
+        assert pending and all(turn.direct_interrupt_goal_id == goal.id for turn in pending)
+        assert all(turn.goal_wait_id is None for turn in pending)
+        for turn in pending:
+            row = agent._dispositions.get(turn.direct_interrupt_input_key)
+            assert row is not None and row["status"] == "unknown" and row["native_id"] is None
         agent._schedule_goal("worker")
-        assert not agent._pending_turns.get("worker")
+        # The standby wait still defers any goal turn; the ordinary interrupts
+        # stay queued and unattempted.
+        assert agent._pending_turns.get("worker")
         again = comms.goal_input_review("worker", goal.id, ["parent"])
         assert again["reviewed_inputs"] == []
         assert [row["inputId"] for row in again["already_reviewed_inputs"]] == keys
@@ -103,7 +109,17 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
         monkeypatch.setattr(agent, "_schedule_wake", lambda _: None)
         await agent._drain_inbox("worker")
         pending = agent._pending_turns["worker"]
-        assert len(pending) == 1 and pending[0].origin.seq == fresh.seq
+        fresh_entries = [turn for turn in pending if turn.origin.seq == fresh.seq]
+        assert len(fresh_entries) == 1
+        # After standby the same sender is a declared dependency: this fresh
+        # DM is a typed goal-wake continuation, NOT an ordinary interrupt.
+        assert fresh_entries[0].goal_wait_id is not None
+        assert fresh_entries[0].direct_interrupt_goal_id is None
+        assert all(
+            turn.direct_interrupt_goal_id == goal.id
+            for turn in pending
+            if turn.origin.seq != fresh.seq
+        )
         # The current owner pause cannot be bypassed by an inspection argument.
         comms.update_goal("worker", "paused", goal_id=goal.id, owner_action=True)
         with pytest.raises(ValueError, match="paused by the owner"):

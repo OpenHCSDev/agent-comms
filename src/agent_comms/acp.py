@@ -1521,18 +1521,42 @@ class CommsAgent:
                             self._forget_direct_interrupt(session_id, turn)
                         continue
                     goal = owner.goal
-                    wait = self._comms.goal_wait(owner.name)
-                    wait_id = wait.wait_id if wait else None
                     old_pending = pending
                     if goal is not None and goal.active:
                         pending = [
                             turn
                             for turn in pending
                             if (turn.goal_id == goal.id or turn.direct_interrupt_goal_id == goal.id)
-                            and turn.still_current_interrupt(goal, wait_id)
+                            and turn.still_current_interrupt(goal)
+                            # Fresh admission at dispatch: only a provably
+                            # unattempted disposition may still launch. An
+                            # attempted/historical input is dropped, never
+                            # replayed, and its ticket is discarded.
+                            and (
+                                turn.direct_interrupt_goal_id is None
+                                or (
+                                    (
+                                        row := self._dispositions.get(
+                                            turn.direct_interrupt_input_key or ""
+                                        )
+                                    )
+                                    is not None
+                                    and row["status"] == "unknown"
+                                    and row["native_id"] is None
+                                )
+                            )
                         ]
                     else:
-                        pending = [turn for turn in pending if turn.goal_id is None]
+                        # No active goal: ordinary interrupts are invalid now
+                        # (their goal is gone/cleared); discard them and their
+                        # tickets instead of dispatching parked-goal framing.
+                        active_pending = [
+                            turn for turn in pending if turn.direct_interrupt_goal_id is None
+                        ]
+                        for turn in pending:
+                            if turn not in active_pending:
+                                self._forget_direct_interrupt(session_id, turn)
+                        pending = active_pending
                     for turn in old_pending:
                         if turn not in pending:
                             self._forget_direct_interrupt(session_id, turn)
@@ -1541,6 +1565,21 @@ class CommsAgent:
                     pending, remaining = ScheduledTurn.take_batch(pending)
                     if remaining:
                         self._pending_turns[session_id] = remaining
+                    if pending[0].direct_interrupt_goal_id is not None:
+                        # Rebind fresh expectations AT DISPATCH: the queue may
+                        # have survived benign same-goal bumps, but the turn
+                        # must then pin the CURRENT goal revision and wait ID
+                        # and hold them exactly through the native send lock.
+                        # Any change after dispatch denies without retry.
+                        current_wait = self._comms.goal_wait(owner.name)
+                        assert goal is not None  # filtered above: goal active
+                        pending[0] = replace(
+                            pending[0],
+                            direct_interrupt_goal_revision=goal.revision,
+                            direct_interrupt_wait_id=(
+                                current_wait.wait_id if current_wait else None
+                            ),
+                        )
                     self._turn_tasks[session_id] = asyncio.current_task()  # type: ignore[assignment]
                     try:
                         await self._run_agent_turn(
@@ -1600,11 +1639,19 @@ class CommsAgent:
             return
         thread = self._comms.registry.require(self._require_session(session_id))
         if pending := self._pending_turns.get(session_id):
-            wait = self._comms.goal_wait(thread.name)
             fresh = [
                 turn
                 for turn in pending
-                if turn.still_current_interrupt(thread.goal, wait.wait_id if wait else None)
+                if turn.still_current_interrupt(thread.goal)
+                and (
+                    turn.direct_interrupt_goal_id is None
+                    or (
+                        (row := self._dispositions.get(turn.direct_interrupt_input_key or ""))
+                        is not None
+                        and row["status"] == "unknown"
+                        and row["native_id"] is None
+                    )
+                )
             ]
             for turn in pending:
                 if turn not in fresh:
@@ -1866,8 +1913,10 @@ class CommsAgent:
             ):
                 return
             tickets.pop(direct_interrupt_input_key, None)  # one admission, one turn at most
-            # A typed interruption must be one NEW exact direct input. No
-            # standby wait may be replaced/cleared between admission and start.
+            # A typed interruption must be one NEW exact direct input whose
+            # goal revision and wait ID were captured AT DISPATCH; any change
+            # after dispatch denies without retry. Benign bumps before
+            # dispatch are handled by the dispatcher's fresh rebind.
             aliases = self._comms.registry.aliases_for(thread_name)
             if (
                 autonomous_goal
