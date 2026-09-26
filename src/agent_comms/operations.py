@@ -2857,14 +2857,23 @@ class Comms:
                         # A failed/uncertain attempt needs the explicit Retry
                         # decision, not a status-only Resume. Expose that state
                         # immediately so the UI offers the correct control.
-                        blocked = replace(goal, status="blocked", revision=goal.revision + 1)
-                        self.registry.register(
-                            replace(thread, goal=blocked), self.registry.status(thread.name)
-                        )
-                        raise ValueError(
+                        # Persist the bounded refusal explanation so a reload
+                        # never shows 'reason unavailable' on a fresh row.
+                        refusal = _required_block_reason(
                             "The interrupted goal attempt is unresolved. Inspect it, then use "
                             "Retry to authorize a new attempt. Your messages can still be sent."
                         )
+                        blocked = replace(
+                            goal,
+                            status="blocked",
+                            progress=goal.progress,
+                            block_reason=refusal,
+                            revision=goal.revision + 1,
+                        )
+                        self.registry.register(
+                            replace(thread, goal=blocked), self.registry.status(thread.name)
+                        )
+                        raise ValueError(refusal)
                     elif generation.state == "ready":
                         pass
                     elif not (generation.state == "reserved" and thread.active_turn is not None):

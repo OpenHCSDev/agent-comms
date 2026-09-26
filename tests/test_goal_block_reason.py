@@ -1,5 +1,6 @@
 """Blocking is explicit and inspectable; old rows are not assigned invented reasons."""
 
+import os
 from dataclasses import replace
 
 import pytest
@@ -108,3 +109,41 @@ def test_legacy_blocked_row_is_labeled_unavailable_not_inferred_from_progress(tm
     assert observed.block_reason is None
     assert observed.presentation("worker").summary == "Blocked · reason unavailable"
     assert "Unrelated old progress" not in observed.presentation("worker").summary
+
+
+def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_path):
+    from agent_comms.goal_attempts import GoalAttemptStore
+
+    comms, original = _owner(tmp_path)
+    comms.register(replace(comms.registry.require("worker"), pid=os.getpid()))
+    progressed = comms.update_goal("worker", "paused", progress="Half verified by the owner")
+    assert progressed is not None
+    private = tmp_path / "goal-private"
+    private.mkdir(mode=0o700)
+    store = GoalAttemptStore.initialize(private)
+    store.create_goal(original.id)
+    reservation = store.reserve(original.id, 1)
+    store.record_failed(reservation, "Previous goal attempt failed")
+
+    refusal = (
+        "The interrupted goal attempt is unresolved. Inspect it, then use "
+        "Retry to authorize a new attempt. Your messages can still be sent."
+    )
+    with pytest.raises(ValueError, match="interrupted goal attempt is unresolved"):
+        comms.update_goal(
+            "worker",
+            "active",
+            goal_id=original.id,
+            owner_action=True,
+            owner_store=store,
+            expected_owner_pid=os.getpid(),
+        )
+    reloaded = wire(tmp_path).registry.require("worker").goal
+    assert reloaded is not None and reloaded.status == "blocked"
+    # Prior progress is retained; the refusal is stored separately as the reason.
+    assert reloaded.progress == "Half verified by the owner"
+    assert reloaded.block_reason == refusal
+    execution = comms.goal_execution("worker")
+    assert execution is not None and execution.block_reason == refusal
+    assert "Blocked · The interrupted goal attempt" in execution.presentation("worker").summary
+    assert comms.goal_history("worker", goal_id=original.id)[-1].after == reloaded
