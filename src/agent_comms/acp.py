@@ -1556,6 +1556,21 @@ class CommsAgent:
                     pending, remaining = ScheduledTurn.take_batch(pending)
                     if remaining:
                         self._pending_turns[session_id] = remaining
+                    if pending[0].direct_interrupt_goal_id is not None:
+                        # Rebind fresh expectations AT DISPATCH: the queue may
+                        # have survived benign same-goal bumps, but the turn
+                        # must then pin the CURRENT goal revision and wait ID
+                        # and hold them exactly through the native send lock.
+                        # Any change after dispatch denies without retry.
+                        current_wait = self._comms.goal_wait(owner.name)
+                        assert goal is not None  # filtered above: goal active
+                        pending[0] = replace(
+                            pending[0],
+                            direct_interrupt_goal_revision=goal.revision,
+                            direct_interrupt_wait_id=(
+                                current_wait.wait_id if current_wait else None
+                            ),
+                        )
                     self._turn_tasks[session_id] = asyncio.current_task()  # type: ignore[assignment]
                     try:
                         await self._run_agent_turn(
@@ -1889,10 +1904,10 @@ class CommsAgent:
             ):
                 return
             tickets.pop(direct_interrupt_input_key, None)  # one admission, one turn at most
-            # A typed interruption must be one NEW exact direct input. A
-            # benign same-goal revision bump (progress or a standby report)
-            # does not invalidate it; the ticket + unattempted disposition
-            # prove that. Only a goal replacement (different ID) does.
+            # A typed interruption must be one NEW exact direct input whose
+            # goal revision and wait ID were captured AT DISPATCH; any change
+            # after dispatch denies without retry. Benign bumps before
+            # dispatch are handled by the dispatcher's fresh rebind.
             aliases = self._comms.registry.aliases_for(thread_name)
             if (
                 autonomous_goal
@@ -1901,6 +1916,8 @@ class CommsAgent:
                 or goal is None
                 or not goal.active
                 or goal.id != direct_interrupt_goal_id
+                or goal.revision != direct_interrupt_goal_revision
+                or (wait.wait_id if wait else None) != direct_interrupt_wait_id
                 or len(origins) != 1
                 or origins[0].seq <= 0
                 or origins[0].target not in aliases
@@ -2077,6 +2094,8 @@ class CommsAgent:
                     and current_goal is not None
                     and current_goal.active
                     and current_goal.id == direct_interrupt_goal_id
+                    and current_goal.revision == direct_interrupt_goal_revision
+                    and (current_wait.wait_id if current_wait else None) == direct_interrupt_wait_id
                     and len(direct_origins) == 1
                     and len(keys) == 1
                     and current is not None

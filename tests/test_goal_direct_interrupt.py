@@ -160,15 +160,18 @@ async def test_benign_wait_replacement_does_not_strand_queued_interrupt(tmp_path
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         pending = agent._pending_turns.pop(session)[0]
+        current_goal = comms.registry.require(session).goal
+        # The dispatcher would rebind at dispatch; mirror that fresh capture
+        # exactly, then hold it through the send boundary.
         await agent._run_agent_turn(
             session,
             session,
             pending.prompt,
             origins=(pending.origin,),
             reply_targets=(pending.reply_target,) if pending.reply_target else (),
-            direct_interrupt_goal_id=pending.direct_interrupt_goal_id,
-            direct_interrupt_goal_revision=pending.direct_interrupt_goal_revision,
-            direct_interrupt_wait_id=pending.direct_interrupt_wait_id,
+            direct_interrupt_goal_id=current_goal.id,
+            direct_interrupt_goal_revision=current_goal.revision,
+            direct_interrupt_wait_id=new_wait.wait_id,
             direct_interrupt_input_key=pending.direct_interrupt_input_key,
             direct_interrupt_ticket=pending.direct_interrupt_ticket,
         )
@@ -308,5 +311,92 @@ async def test_channel_post_does_not_gain_direct_interrupt_authority(tmp_path, m
         assert not agent._pending_turns.get(session)
         assert comms.registry.require(session).goal == goal
         assert channel.target == "#ci"
+    finally:
+        await agent.shutdown()
+
+
+async def test_queue_survives_progress_bump_and_rebinds_at_dispatch(tmp_path, monkeypatch):
+    """Queued unattempted DMs survive benign bumps; expectations rebind at dispatch."""
+    comms, agent, session, goal = await _owner(tmp_path, monkeypatch)
+    original_goal = comms.registry.require(session).goal
+    message = comms.send_message("outsider", session, "Question during progress")
+    original_schedule = agent._schedule_wake
+    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    try:
+        await agent._drain_owned_inbox(session)
+        queued = agent._pending_turns[session][0]
+        assert queued.direct_interrupt_goal_revision == original_goal.revision
+        # Benign same-goal progress bump before dispatch must NOT strand it.
+        comms.update_goal(session, "active", goal_id=goal.id, progress="normal progress")
+        bumped = comms.registry.require(session).goal
+        assert bumped.id == goal.id and bumped.revision == original_goal.revision + 1
+
+        async def events(*args, **kwargs):
+            task = args[2]
+            native = "f" * 32
+            with kwargs["send_boundary"](None, native, task) as allowed:
+                assert allowed is True
+            row = agent._dispositions.get(f"bus:{message.seq}")
+            assert agent._dispositions.started(
+                row["key"], turn_id=row["turn_id"], native_id=native, text=task
+            )
+            yield {"type": "input_started", "id": None}
+            yield {"type": "chunk", "text": "Answer after the bump"}
+            yield {"type": "settled"}
+            yield {"type": "done", "ok": True, "text": "Answer after the bump"}
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr(agent, "_schedule_wake", original_schedule)
+        agent._schedule_wake(session)
+        await asyncio.wait_for(agent._wake_tasks[session], timeout=3)
+        # The turn dispatched once with the FRESH revision and stayed started.
+        row = agent._dispositions.get(f"bus:{message.seq}")
+        assert row is not None and row["status"] == "started"
+        assert not agent._pending_turns.get(session)
+    finally:
+        await agent.shutdown()
+
+
+@pytest.mark.parametrize("mutate", ["revision", "wait"])
+async def test_change_after_dispatch_denies_without_retry(tmp_path, monkeypatch, mutate):
+    """A revision bump or wait replacement AFTER dispatch denies at the boundary."""
+    comms, agent, session, goal = await _owner(tmp_path, monkeypatch, standby=True)
+    original_wait = comms.goal_wait(session)
+    message = comms.send_message("outsider", session, "Question during standby")
+    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    try:
+        await agent._drain_owned_inbox(session)
+        pending = agent._pending_turns.pop(session)[0]
+        current_goal = comms.registry.require(session).goal
+        seen = []
+
+        async def events(*args, **kwargs):
+            task = args[2]
+            # The change happens after dispatch, immediately before the send.
+            if mutate == "revision":
+                comms.update_goal(session, "active", goal_id=goal.id, progress="post-dispatch bump")
+            else:
+                comms.update_goal(session, "standby", goal_id=goal.id, wait_for=["dependency"])
+            with kwargs["send_boundary"](None, "e" * 32, task) as allowed:
+                seen.append(allowed)
+            yield {"type": "settled"}
+            yield {"type": "done", "ok": False, "text": "not started"}
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        await agent._run_agent_turn(
+            session,
+            session,
+            pending.prompt,
+            origins=(pending.origin,),
+            direct_interrupt_goal_id=current_goal.id,
+            direct_interrupt_goal_revision=current_goal.revision,
+            direct_interrupt_wait_id=original_wait.wait_id,
+            direct_interrupt_input_key=pending.direct_interrupt_input_key,
+            direct_interrupt_ticket=pending.direct_interrupt_ticket,
+        )
+        # Deny the stale expectation once; no retry, no replay.
+        assert seen == [False]
+        row = agent._dispositions.get(f"bus:{message.seq}")
+        assert row["status"] == "unknown" and row["native_id"] is None
     finally:
         await agent.shutdown()
