@@ -301,7 +301,12 @@ class OwnerCompactionCommit:
                 # Includes launch/protocol errors: conservative even where no
                 # write probably occurred. Cancellation leaves durable intent.
                 evidence = dict(status="unknown", reason=str(error)[:1024])
-            self.journal.resolve(commit_id, evidence["status"], evidence)
+            self.journal.resolve(
+                commit_id,
+                evidence["status"],
+                evidence,
+                publication=evidence["status"] == "committed",
+            )
             return self.journal.get(commit_id)
 
     def reconcile(
@@ -329,5 +334,10 @@ class OwnerCompactionCommit:
                 evidence = self._call(fd, request, timeout, retained)
             except Exception as error:
                 evidence = dict(status="unknown", reason=str(error)[:1024])
-            self.journal.resolve(commit_id, evidence["status"], evidence)
+            self.journal.resolve(
+                commit_id,
+                evidence["status"],
+                evidence,
+                publication=evidence["status"] == "committed",
+            )
             return self.journal.get(commit_id)

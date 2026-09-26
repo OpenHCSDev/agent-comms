@@ -200,6 +200,10 @@ def test_positive_owner_validated_native_commit(native):
     assert entry["summary"] == "retained summary"
     assert entry["details"]["agentCommsCommit"]["commitId"] == operation.commit_id
     assert json.loads(operation.evidence_json)["entryId"] == entry["id"]
+    pending = bridge.journal.pending_publications(witness["sessionFile"])
+    assert len(pending) == 1 and pending[0].commit_id == operation.commit_id
+    assert json.loads(pending[0].metadata_json)["entryId"] == entry["id"]
+    assert "retained summary" not in pending[0].metadata_json
 
 
 @pytest.mark.parametrize("mutation", ["stop", "heartbeat", "goal", "bus", "input", "send"])
@@ -305,6 +309,9 @@ def test_lost_native_result_never_replays_and_reconciles_exact_id(native, monkey
     assert resolved.status == "committed"
     assert Path(witness["sessionFile"]).read_bytes() == before
     assert len([entry for entry in entries(witness) if entry["type"] == "compaction"]) == 1
+    assert [
+        item.commit_id for item in bridge.journal.pending_publications(witness["sessionFile"])
+    ] == [operation.commit_id]
 
 
 def test_postcommit_directory_fsync_fault_is_unknown_and_never_dispatches(native, monkeypatch):
@@ -330,7 +337,7 @@ def test_outcome_persistence_failure_keeps_intent_and_requires_reconciliation(na
     bridge, owner, epoch, witness = native
     resolve = bridge.journal.resolve
 
-    def fail_outcome(*args):
+    def fail_outcome(*args, **kwargs):
         raise OSError("outcome fsync unavailable")
 
     monkeypatch.setattr(bridge.journal, "resolve", fail_outcome)

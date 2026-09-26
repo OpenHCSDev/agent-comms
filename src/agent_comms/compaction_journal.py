@@ -39,6 +39,16 @@ class CompactionOperation:
     evidence_json: str | None
 
 
+@dataclass(frozen=True)
+class CompactionPublication:
+    """Local metadata-only projection, keyed by native commit ID; no recipient."""
+
+    commit_id: str
+    session_file: str
+    metadata_json: str
+    status: str
+
+
 class CompactionJournal:
     """One durable journal per wire; at most one unresolved op per session.
 
@@ -73,6 +83,12 @@ class CompactionJournal:
                 )""")
             db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS unresolved_session
                 ON operations(session_file) WHERE status IN ('intent','unknown')""")
+            db.execute("""CREATE TABLE IF NOT EXISTS publications (
+                    commit_id TEXT PRIMARY KEY REFERENCES operations(commit_id),
+                    session_file TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN ('pending','observed'))
+                )""")
         parent = path.parent.resolve(strict=True)
         for directory in (parent, *parent.parents):
             parent_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
@@ -153,7 +169,40 @@ class CompactionJournal:
             ).fetchall()
         return tuple(CompactionOperation(*row) for row in rows)
 
-    def resolve(self, commit_id: str, outcome: Outcome, evidence: dict) -> None:
+    def pending_publications(self, session_file: str) -> tuple[CompactionPublication, ...]:
+        """Read exact-ID metadata; an unknown commit cannot be projected."""
+        canonical = str(Path(session_file).resolve(strict=True))
+        with self._transaction() as db:
+            rows = db.execute(
+                "SELECT p.commit_id, p.session_file, p.metadata_json, p.status "
+                "FROM publications p JOIN operations o ON o.commit_id = p.commit_id "
+                "WHERE p.session_file = ? AND p.status = 'pending' AND o.status = 'committed' "
+                "ORDER BY p.rowid",
+                (canonical,),
+            ).fetchall()
+        return tuple(CompactionPublication(*row) for row in rows)
+
+    def observe_publication(self, commit_id: str, metadata_json: str) -> None:
+        """ACK only the exact metadata seen by the local ACP projection.
+
+        An uncertain delivery remains pending. Reprojection may repeat the same
+        commit ID, so consumers must deduplicate by ID, never by summary text.
+        """
+        with self._transaction() as db:
+            row = db.execute(
+                "SELECT metadata_json, status FROM publications WHERE commit_id = ?", (commit_id,)
+            ).fetchone()
+            if row is None or row[0] != metadata_json:
+                raise CompactionJournalError("Unknown or changed publication metadata")
+            if row[1] == "pending":
+                db.execute(
+                    "UPDATE publications SET status = 'observed' WHERE commit_id = ?",
+                    (commit_id,),
+                )
+
+    def resolve(
+        self, commit_id: str, outcome: Outcome, evidence: dict, *, publication: bool = False
+    ) -> None:
         """Persist bridge-validated native evidence; this does not verify it.
 
         Unknown/intent remains blocking. A terminal outcome is immutable.
@@ -163,12 +212,22 @@ class CompactionJournal:
         """
         if outcome not in _TERMINAL | {"unknown"}:
             raise ValueError("Invalid compaction outcome")
+        if publication and (
+            outcome != "committed"
+            or set(evidence) != {"status", "entryId", "revision", "leafId"}
+            or evidence.get("status") != "committed"
+            or any(
+                type(evidence[key]) is not str or not evidence[key]
+                for key in ("entryId", "revision", "leafId")
+            )
+        ):
+            raise CompactionJournalError("Exact committed native metadata required")
         payload = json.dumps(evidence, sort_keys=True, separators=(",", ":"), allow_nan=False)
         if len(payload.encode()) > 65536:
             raise ValueError("Compaction outcome exceeds bound")
         with self._transaction() as db:
             row = db.execute(
-                "SELECT status FROM operations WHERE commit_id = ?", (commit_id,)
+                "SELECT status, session_file FROM operations WHERE commit_id = ?", (commit_id,)
             ).fetchone()
             if row is None or row[0] in _TERMINAL or (row[0] == "unknown" and outcome == "refused"):
                 raise CompactionJournalError("Compaction outcome transition forbidden")
@@ -176,3 +235,19 @@ class CompactionJournal:
                 "UPDATE operations SET status = ?, evidence_json = ? WHERE commit_id = ?",
                 (outcome, payload, commit_id),
             )
+            if publication:
+                metadata = json.dumps(
+                    {
+                        "commitId": commit_id,
+                        "entryId": evidence["entryId"],
+                        "revision": evidence["revision"],
+                        "leafId": evidence["leafId"],
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                )
+                db.execute(
+                    "INSERT INTO publications VALUES (?, ?, ?, 'pending')",
+                    (commit_id, row[1], metadata),
+                )

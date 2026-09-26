@@ -138,6 +138,53 @@ def test_unknown_requires_reconciliation_not_refusal(journal):
     assert journal.get(commit_id).status == "committed"
 
 
+def test_metadata_only_outbox_is_commit_id_keyed_and_atomic(journal, tmp_path):
+    journal, session = journal
+    commit_id = journal.begin(session, {"summary": "secret never published"})
+    assert journal.pending_publications(session) == ()
+    journal.resolve(commit_id, "unknown", {"status": "unknown", "reason": "deadline"})
+    assert journal.pending_publications(session) == ()
+    metadata = {"status": "committed", "entryId": "entry-1", "revision": "r1", "leafId": "leaf"}
+    journal.resolve(commit_id, "committed", metadata, publication=True)
+    reopened = CompactionJournal(journal.path)
+    pending = reopened.pending_publications(session)
+    assert len(pending) == 1 and pending[0].commit_id == commit_id
+    assert json.loads(pending[0].metadata_json) == {
+        "commitId": commit_id,
+        "entryId": "entry-1",
+        "revision": "r1",
+        "leafId": "leaf",
+    }
+    assert "secret" not in pending[0].metadata_json
+    assert not hasattr(pending[0], "recipient")
+    with pytest.raises(CompactionJournalError, match="changed publication"):
+        reopened.observe_publication(commit_id, "{}")
+    assert len(reopened.pending_publications(session)) == 1
+    reopened.observe_publication(commit_id, pending[0].metadata_json)
+    reopened.observe_publication(commit_id, pending[0].metadata_json)
+    assert CompactionJournal(journal.path).pending_publications(session) == ()
+    second = journal.begin(session, {})
+    journal.resolve(
+        second,
+        "committed",
+        {"status": "committed", "entryId": "entry-2", "revision": "r2", "leafId": "leaf-2"},
+        publication=True,
+    )
+    assert [event.commit_id for event in journal.pending_publications(session)] == [second]
+
+
+def test_no_publication_without_exact_committed_native_evidence(journal):
+    journal, session = journal
+    commit_id = journal.begin(session, {})
+    with pytest.raises(CompactionJournalError, match="Exact committed"):
+        journal.resolve(
+            commit_id, "committed", {"status": "committed", "entryId": "x"}, publication=True
+        )
+    assert journal.get(commit_id).status == "intent"
+    journal.resolve(commit_id, "aborted-no-write", {"status": "aborted-no-write"})
+    assert journal.pending_publications(session) == ()
+
+
 def test_session_alias_cannot_bypass_unresolved_intent(journal, tmp_path):
     journal, session = journal
     alias = tmp_path / "alias.jsonl"
