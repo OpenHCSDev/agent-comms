@@ -54,6 +54,7 @@ from .bus_route_counts import BusRouteCounts
 if TYPE_CHECKING:
     from .coordination import PublicationIntent
     from .goal_history import GoalHistoryEntry
+    from .owner_compaction_gate import OwnerCompactionAttestation
     from .private_registry_guard import PrivateRegistryGuard
 from .envelope_claim_transitions import (
     ClaimProjection,
@@ -2524,6 +2525,90 @@ class ThreadRegistry:
             ):
                 raise RelationViolationError("live owner stopped or changed before turn claim")
             return self._claim_turn_unlocked(current, turn_id, routing)
+
+    def attest_owner_compaction(
+        self,
+        expected: Thread,
+        expected_epoch: int,
+        turn_id: str,
+        *,
+        expected_goal_id: str,
+        expected_goal_revision: int,
+        correction_revision: int,
+        session_file: str,
+        session_leaf: str,
+        session_revision: str,
+    ) -> OwnerCompactionAttestation:
+        """Recheck canonical owner authority for one compaction commit, atomically.
+
+        This is NOT a bearer token: the same check must run again at commit
+        time under this lock. Anything that moved since the caller captured
+        its expectations — owner epoch, active turn, goal id/revision/status,
+        or liveness — fails closed here. The native session fence (file, leaf,
+        disk revision) is echoed unverified; the native writer CAS is the only
+        authority for those values.
+        """
+        if (
+            type(expected) is not Thread
+            or type(expected_epoch) is not int
+            or expected_epoch < 1
+            or type(turn_id) is not str
+            or not 0 < len(turn_id) <= 128
+            or type(expected_goal_id) is not str
+            or not expected_goal_id
+            or type(expected_goal_revision) is not int
+            or expected_goal_revision < 0
+            or type(correction_revision) is not int
+            or correction_revision < 0
+            or type(session_file) is not str
+            or not session_file
+            or type(session_leaf) is not str
+            or not session_leaf
+            or type(session_revision) is not str
+            or not session_revision
+        ):
+            raise ValueError("owner compaction attestation requires bounded exact expectations")
+        with _store_lock(self._path):
+            self._load_unlocked()
+            canonical = self._aliases.get(expected.name, expected.name)
+            owner = self._threads.get(canonical)
+            status = self._statuses.get(canonical)
+            epoch = self._owner_epochs.get(canonical)
+            goal = owner.goal if owner is not None else None
+            if (
+                not self._epoch_metadata_present
+                or owner is None
+                or status is None
+                or not status.active
+                or owner != expected
+                or epoch != expected_epoch
+                or owner.pid != os.getpid()
+                or not owner.role.executable
+                or owner.active_turn is None
+                or owner.active_turn.id != turn_id
+                or self._turn_epochs.get(canonical) != epoch
+                or goal is None
+                or not goal.active
+                or goal.id != expected_goal_id
+                or goal.revision != expected_goal_revision
+            ):
+                raise RelationViolationError(
+                    "canonical owner attestation unavailable for compaction commit"
+                )
+            from .owner_compaction_gate import OwnerCompactionAttestation
+
+            return OwnerCompactionAttestation(
+                thread=owner.name,
+                owner_epoch=epoch,
+                turn_id=turn_id,
+                goal_id=goal.id,
+                goal_revision=goal.revision,
+                correction_revision=correction_revision,
+                session_file=session_file,
+                session_leaf=session_leaf,
+                session_revision=session_revision,
+                registry_revision=file_revision(self._path),
+            )
 
     def _claim_turn_unlocked(
         self, current: Thread, turn_id: str, routing: TurnRouting | None
