@@ -3,6 +3,31 @@
 Base: merged PR48 `d0ced47fbec39ac4d110c9f7395442524363871d`.
 This is **not deployment approval**. The adaptive trigger remains disabled.
 
+## Current blocking independent findings
+
+The `9c7445e` writer-coverage review is **NON-CLEAN**, and the same manager
+`41a94b37…` is still used by `8cf666c` and its main-integrated descendants:
+
+1. A denied `createBranchedSession` destination lock leaves changed manager
+   state pointing to a nonexistent destination. Catching the error and then
+   appending can report success while creating headerless JSONL.
+2. A malformed `setSessionFile` target throws after binding its path/revision,
+   retaining the old tree and flushed state. Catching the error and appending
+   can write a stale-tree row onto the corrupt target.
+
+These take priority over the remaining import-closure/runtime work. Required
+correction: atomic state publication or an unusable manager after failure,
+with caught-error continuation negatives across subsequent mutators—not just
+asserting the first exception. A new manager/tree pin and exact corrective
+freeze must go to `pr1-goal-p15-sink-independent-review`. Packaging positives
+and existing passing controls do not clear these findings.
+
+Independent report:
+`/var/tmp/ac-pr48-writer-coverage-independent-review-9c7445e-20260926.md`.
+The prior journal/watchdog narrow CLEAN is unchanged. Main `fc417934` (PR77)
+was normally merged at `98b8770`; its integration run was **240 passed, 1 skipped**,
+which does not include corrected versions of these two still-open negatives.
+
 ## Executable authority/lifetime foundation
 
 - `ThreadRegistry.guard_owner_compaction` uses the existing attestation
