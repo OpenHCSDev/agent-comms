@@ -17,6 +17,8 @@ import re
 import select
 import shlex
 import signal
+import sqlite3
+import stat
 import subprocess
 import sys
 import time
@@ -31,6 +33,7 @@ from uuid import uuid4
 
 from .channels import ChannelCatalog
 from .goal_history import GoalHistoryEntry
+from .goal_mentions import bind_goal_mentions
 from .goal_pauses import GoalPauseEvent, GoalPauseEvents
 from .goal_waits import GoalInputReview, GoalWait, GoalWaits
 
@@ -50,6 +53,7 @@ from .declarations import (
     ChannelView,
     CoordinationSnapshot,
     DMDisplayBasis,
+    FinishedTurnFence,
     Goal,
     GoalExecution,
     GoalPauseSource,
@@ -72,6 +76,7 @@ from .declarations import (
     ThreadSort,
     ThreadStatus,
     ThreadView,
+    TurnClaimFence,
     TurnRouting,
     UnregisteredThreadError,
     WireRevision,
@@ -924,7 +929,7 @@ class Comms:
 
     def begin_turn(
         self, name: str, turn_id: str, detail: str = "", routing: TurnRouting | None = None
-    ) -> None:
+    ) -> TurnClaimFence:
         with _store_lock(self._wire_lock_path):
             claimed, _ = self.registry.claim_local_turn(name, turn_id, routing=routing)
             try:
@@ -932,14 +937,25 @@ class Comms:
             except BaseException:
                 self.registry.finish_claimed_turn(claimed.name, turn_id)
                 raise
+            assert claimed.active_turn is not None
+            admission = claimed.active_turn.admission_generation
+            assert type(admission) is int
+            return TurnClaimFence(
+                claimed.name, claimed.created_at, turn_id, claimed.turn_generation, admission
+            )
 
-    def finish_turn(self, name: str, turn_id: str) -> None:
+    def finish_turn(
+        self, name: str, turn_id: str, *, expected: TurnClaimFence | None = None
+    ) -> FinishedTurnFence | None:
+        """Persist exact terminal identity; ID-only legacy release cannot attest a fence."""
         with _store_lock(self._wire_lock_path):
-            thread = self.registry.require(name)
-            if thread.active_turn is None or thread.active_turn.id != turn_id:
-                return
-            self.registry.register(replace(thread, active_turn=None), self.registry.status(name))
-            self.activity.emit(Activity(thread.name, ActivityState.IDLE))
+            released, fence = self.registry.finish_claimed_turn_with_fence(
+                name, turn_id, expected=expected
+            )
+            if not released:
+                return None
+            self.activity.emit(Activity(self.registry.canonical_name(name), ActivityState.IDLE))
+            return fence
 
     def set_agent_info(
         self,
@@ -1354,6 +1370,30 @@ class Comms:
             self.channel_catalog.write(tags | {tag.name}, channels)
         return tag
 
+    def _rebase_passive_channel_scope(self, name: str) -> None:
+        """Membership changes cut off former scope without claiming input delivery."""
+        from .passive_channel_awareness import PassiveChannelAwareness
+
+        awareness = PassiveChannelAwareness(self.root)
+        # Even checking for an optional ledger can fail after the membership
+        # commit. A failed probe skips the advisory; owner reads stay strict.
+        try:
+            if not awareness.path.exists():
+                return
+        except (OSError, TypeError, ValueError):
+            return
+        owner = self.registry.require(name)
+        snapshot = self.registry.snapshot()
+        # The membership write already committed. Advisory storage is
+        # optional; a stale scope row suppresses its next-turn frame.
+        with suppress(OSError, TypeError, ValueError):
+            awareness.scope_changed(
+                owner,
+                admission=snapshot.admission_generations[owner.name],
+                high_water=self.message_high_water(),
+                channels=self.channel_catalog.targets_for(owner.tags),
+            )
+
     def update_tags(
         self, name: str, *, add: frozenset[str] = frozenset(), remove: frozenset[str] = frozenset()
     ) -> Thread:
@@ -1365,6 +1405,7 @@ class Comms:
             previous_channels = self.channel_catalog.views()
             updated = replace(thread, tags=(thread.tags | add) - remove)
             self.registry.register(updated, self.registry.status(thread.name))
+            updated = self.registry.require(thread.name)
             self.channel_catalog.remember_tags(add, time.time())
             if thread.role.executable and thread.tags != updated.tags:
                 channels = {**previous_channels, **self.channel_catalog.views()}
@@ -1381,6 +1422,8 @@ class Comms:
                                 membership=change,
                             )
                         )
+            if thread.tags != updated.tags:
+                self._rebase_passive_channel_scope(updated.name)
             return updated
 
     def set_channel(self, name: str, tags: frozenset[str]) -> Channel:
@@ -2035,7 +2078,15 @@ class Comms:
             if self.registry.name_reserved(name):
                 raise ValueError(f"Thread name {name!r} is already reserved.")
             self._require_available_new_tags(thread.tags)
-            session_path.parent.mkdir(parents=True, exist_ok=True)
+            session_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            if os.name == "posix":
+                # Do not follow a redirected legacy directory when repairing it.
+                info = session_path.parent.lstat()
+                if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid():
+                    raise ValueError("Imported session directory is not owner-controlled.")
+                # Native Pi requires a private session directory before it will
+                # attest input IDs. Also repair directories made by older imports.
+                session_path.parent.chmod(0o700)
             _atomic_write_text(session_path, snapshot.pi_session(project))
             try:
                 self.registry.register(thread, ThreadStatus.STOPPED)
@@ -2073,7 +2124,13 @@ class Comms:
                     raise RelationViolationError(
                         "Cannot replace an executor during its active turn."
                     )
-                thread = replace(thread, pid=existing.pid, active_turn=existing.active_turn)
+                thread = replace(
+                    thread,
+                    pid=existing.pid,
+                    active_turn=existing.active_turn,
+                    turn_generation=existing.turn_generation,
+                    last_finished_turn_id=existing.last_finished_turn_id,
+                )
             tags = thread.tags
             session_file = thread.session_file
             model = thread.model
@@ -2135,6 +2192,8 @@ class Comms:
             self.registry.register(thread, new_owner=new_owner)
 
             self.channel_catalog.remember_tags(thread.tags, thread.created_at)
+            if existing is not None and existing.tags != thread.tags:
+                self._rebase_passive_channel_scope(thread.name)
 
     def claim_thread(
         self,
@@ -2270,7 +2329,13 @@ class Comms:
             rows = InputDispositions(self.root).unknown(self.registry.aliases_for(name))
             return [InputDispositions.public(row) for row in rows]
 
-    def input_delivery(self, name: str, *, include_history: bool = False) -> dict[str, Any]:
+    def input_delivery(
+        self,
+        name: str,
+        *,
+        include_history: bool = False,
+        awaiting_keys: frozenset[str] | None = None,
+    ) -> dict[str, Any]:
         """Read current delivery notices and separately counted migration history."""
         from .input_disposition import AcpDeliveryCursors, InputDispositions
 
@@ -2279,10 +2344,12 @@ class Comms:
             aliases = self.registry.aliases_for(name)
             boundary = AcpDeliveryCursors(self.root).legacy_through(aliases)
             return InputDispositions(self.root).delivery_overview(
-                aliases, boundary, include_history=include_history
+                aliases, boundary, include_history=include_history, awaiting_keys=awaiting_keys
             )
 
-    def dismiss_historical_inputs(self, name: str) -> dict[str, Any]:
+    def dismiss_historical_inputs(
+        self, name: str, *, awaiting_keys: frozenset[str] | None = None
+    ) -> dict[str, Any]:
         """Clear only migration notices; UNKNOWN remains unresolved and unreplayable."""
         from .input_disposition import AcpDeliveryCursors, InputDispositions
 
@@ -2290,7 +2357,9 @@ class Comms:
             self.registry.require(name)
             aliases = self.registry.aliases_for(name)
             boundary = AcpDeliveryCursors(self.root).legacy_through(aliases)
-            return InputDispositions(self.root).dismiss_historical(aliases, boundary)
+            return InputDispositions(self.root).dismiss_historical(
+                aliases, boundary, awaiting_keys=awaiting_keys
+            )
 
     def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> dict:
         """Project exact review eligibility for one current goal and dependency set."""
@@ -2355,6 +2424,120 @@ class Comms:
     def goal_wait(self, name: str) -> GoalWait | None:
         waits = GoalWaits(self.root / "goal_waits.json")
         return waits.for_goal(self.registry.require(name).goal, waits.snapshot())
+
+    def pause_waits_after_terminal_turn(self, fence: FinishedTurnFence | None) -> tuple[str, ...]:
+        """Pause only for the latest exact, still-idle, completed child turn.
+
+        ACP invokes this after terminal publication, never at the earlier UI
+        `settled` event. A later turn (even already finished) invalidates the
+        old fence; a rename or unrelated metadata edit does not.
+        """
+        if type(fence) is not FinishedTurnFence:
+            return ()
+        with _store_lock(self._wire_lock_path):
+            snapshot = self.registry.snapshot()
+            canonical = snapshot.aliases.get(fence.name, fence.name)
+            source = snapshot.threads.get(canonical)
+            if (
+                source is None
+                or source.created_at != fence.created_at
+                or source.active_turn is not None
+                or source.turn_generation != fence.turn_generation
+                or source.last_finished_turn_id != fence.turn_id
+                or snapshot.admission_generations.get(canonical) != fence.admission_generation
+                or not snapshot.statuses[canonical].active
+            ):
+                return ()
+            waits = GoalWaits(self.root / "goal_waits.json").snapshot()
+            paused: list[str] = []
+            for owner in snapshot.threads.values():
+                goal = owner.goal
+                if goal is None or not goal.active:
+                    continue
+                wait = waits.get(goal.id)
+                if (
+                    wait is None
+                    or wait.owner_created_at != owner.created_at
+                    or wait.revision > goal.revision
+                    or len(wait.target_turn_generations) != len(wait.targets)
+                    or not any(
+                        snapshot.aliases.get(target.name, target.name) == canonical
+                        and target.created_at == fence.created_at
+                        and (generation := wait.target_turn_generations[index]) is not None
+                        and type(generation) is int
+                        and 0 < generation <= fence.turn_generation
+                        for index, target in enumerate(wait.targets)
+                    )
+                    or any(
+                        GoalWaits.target_has_active_turn(target, snapshot)
+                        for target in wait.targets
+                    )
+                ):
+                    continue
+                owner_aliases = frozenset(
+                    {
+                        owner.name,
+                        *(
+                            alias
+                            for alias, target in snapshot.aliases.items()
+                            if target == owner.name
+                        ),
+                    }
+                )
+
+                def qualifies_direct_reply(
+                    message: Message,
+                    *,
+                    aliases: frozenset[str] = owner_aliases,
+                    owner_name: str = owner.name,
+                    current_wait: GoalWait = wait,
+                ) -> bool:
+                    return (
+                        message.target in aliases
+                        and message.starts_turn_for(owner_name, aliases=snapshot.aliases)
+                        and current_wait.matches(message, snapshot)
+                    )
+
+                try:
+                    reply = self.bus._history_page(
+                        qualifies_direct_reply,
+                        before=None,
+                        after=wait.after_seq,
+                        limit=1,
+                        max_bytes=256 * 1024,
+                        targets=owner_aliases,
+                    )
+                except (OSError, ValueError, sqlite3.DatabaseError):
+                    # The terminal turn has already committed. An unavailable
+                    # optional reply read cannot prove silence or pause this
+                    # owner; do not turn the completed ACP turn into a failure.
+                    # Registry/goal writes below remain outside this guard.
+                    continue
+                if reply.messages:
+                    continue
+                diagnostic = (
+                    f"Declared dependency @{canonical} finished without a qualifying direct "
+                    "reply, and no declared dependency has an active turn. "
+                    "Goal paused: inspect messages and UNKNOWN inputs before explicitly "
+                    "resuming or redelegating. No model turn or claim was admitted."
+                )
+                progress = f"{goal.progress}\n\n{diagnostic}" if goal.progress else diagnostic
+                # The entire owner/incarnation/goal check and transition is
+                # protected by the wire lock. Persist the non-runnable goal
+                # FIRST: a crash before wait-clear leaves an orphan wait that
+                # cannot launch while the goal is paused.
+                paused_goal = replace(
+                    goal, status="paused", progress=progress, revision=goal.revision + 1
+                )
+                self.registry.register(
+                    replace(owner, goal=paused_goal), snapshot.statuses[owner.name]
+                )
+                GoalWaits(self.root / "goal_waits.json").clear(goal.id, wait_id=wait.wait_id)
+                GoalPauseEvents(self.root / "goal_pause_events.json").record(
+                    GoalPauseEvent(goal.id, paused_goal.revision, GoalPauseSource.RUNTIME)
+                )
+                paused.append(owner.name)
+            return tuple(paused)
 
     def goal_execution(self, name: str) -> GoalExecution | None:
         return self._goal_snapshot(name)[1]
@@ -2484,8 +2667,12 @@ class Comms:
                 thread.pid != expected_owner_pid or not self.registry.status(thread.name).running
             ):
                 raise ValueError("The goal owner changed; refresh its state.")
-            if owner_store is not None and action != "set":
-                raise ValueError("Owner goal authority applies only to goal creation.")
+            if (
+                owner_store is not None
+                and action != "set"
+                and not (action == "active" and owner_action and expected_owner_pid is not None)
+            ):
+                raise ValueError("Owner goal authority requires goal creation or explicit resume.")
             # The automatic turn-end pause/block must not overwrite progress
             # written by a separate tool process after ACP's precheck. Check
             # the entire immutable snapshot under the same lock as the write.
@@ -2551,6 +2738,21 @@ class Comms:
                         "for a later reply. Do not pass excluded owner or other dependency inputs. "
                         "This does not mark them STARTED or replay them."
                     )
+                snapshot = self.registry.snapshot()
+                if not any(
+                    GoalWaits.target_has_active_turn(target, snapshot)
+                    and self._process_alive(
+                        snapshot.threads[snapshot.aliases.get(target.name, target.name)].pid
+                    )
+                    for target in wait_targets
+                ):
+                    names = ", ".join(f"@{target.name}" for target in wait_targets)
+                    raise ValueError(
+                        f"No declared dependency has an active turn ({names}). "
+                        "A running/ready process or queued input does not prove active work. "
+                        "Message or restart the responsible agent, inspect its status, "
+                        "then declare standby only while a target is actually working."
+                    )
             elif wait_for or reviewed_inputs:
                 raise ValueError("wait_for and reviewed_inputs are only valid for standby.")
             report_turn = thread.active_turn.id if thread.active_turn is not None else ""
@@ -2559,6 +2761,17 @@ class Comms:
             new_goal = (
                 Goal(text=text.strip(), id=uuid4().hex, revision=1) if action == "set" else None
             )
+            if new_goal is not None:
+                new_goal = replace(
+                    new_goal,
+                    mention_source=bind_goal_mentions(
+                        new_goal.text,
+                        new_goal.id,
+                        new_goal.revision,
+                        thread,
+                        self.registry.snapshot(),
+                    ),
+                )
             if owner_store is not None and new_goal is not None:
                 # The private grant exists before the visible active goal. A
                 # crash in between leaves only an unreachable ledger row.
@@ -2593,7 +2806,20 @@ class Comms:
                     raise ValueError("No goal is set for this thread.")
                 if not text.strip():
                     raise ValueError("A goal requires text.")
-                goal = replace(goal, text=text.strip(), revision=goal.revision + 1)
+                edited_text = text.strip()
+                edited_revision = goal.revision + 1
+                goal = replace(
+                    goal,
+                    text=edited_text,
+                    revision=edited_revision,
+                    mention_source=bind_goal_mentions(
+                        edited_text,
+                        goal.id,
+                        edited_revision,
+                        thread,
+                        self.registry.snapshot(),
+                    ),
+                )
             elif action in {"active", "standby", "paused", "blocked", "completed"}:
                 if goal is None:
                     raise ValueError("No goal is set for this thread.")
@@ -2601,6 +2827,28 @@ class Comms:
                     raise ValueError("Blocked goal requires an explicit retry through its owner.")
                 if goal.status == "completed" and action != "completed":
                     raise ValueError("A completed goal cannot be resumed; set a new goal.")
+                if action == "active" and owner_store is not None:
+                    generation = owner_store.snapshot(goal.id)
+                    if generation is None:
+                        raise ValueError(
+                            "Goal launch authority is missing; inspect it before Retry."
+                        )
+                    if generation.state == "blocked" and generation.attempt_id:
+                        # A failed/uncertain attempt needs the explicit Retry
+                        # decision, not a status-only Resume. Expose that state
+                        # immediately so the UI offers the correct control.
+                        blocked = replace(goal, status="blocked", revision=goal.revision + 1)
+                        self.registry.register(
+                            replace(thread, goal=blocked), self.registry.status(thread.name)
+                        )
+                        raise ValueError(
+                            "The interrupted goal attempt is unresolved. Inspect it, then use "
+                            "Retry to authorize a new attempt. Your messages can still be sent."
+                        )
+                    elif generation.state == "ready":
+                        pass
+                    elif not (generation.state == "reserved" and thread.active_turn is not None):
+                        raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
                 goal = replace(
                     goal,
                     status="active" if action == "standby" else action,
@@ -2624,7 +2872,22 @@ class Comms:
                 # progress update must leave this same goal waiting, not runnable.
                 waits.record(
                     GoalWait(
-                        goal.id, uuid4().hex, goal.revision, self.message_high_water(), wait_targets
+                        goal.id,
+                        uuid4().hex,
+                        goal.revision,
+                        self.message_high_water(),
+                        wait_targets,
+                        owner_created_at=thread.created_at,
+                        target_turn_generations=tuple(
+                            (
+                                snapshot.threads[
+                                    snapshot.aliases.get(target.name, target.name)
+                                ].turn_generation
+                                if GoalWaits.target_has_active_turn(target, snapshot)
+                                else None
+                            )
+                            for target in wait_targets
+                        ),
                     )
                 )
             self.registry.register(

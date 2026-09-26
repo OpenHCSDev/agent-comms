@@ -64,6 +64,7 @@ async def test_preflight_failure_keeps_its_reason_visible(tmp_path, monkeypatch)
         await agent.shutdown()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 @pytest.mark.asyncio
 async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
@@ -90,7 +91,32 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
         command = kwargs["steering_queue"].get_nowait()
         with kwargs["send_boundary"](command["_input_id"], "a" * 32, command["message"]) as allowed:
             assert allowed is None
-        yield {"type": "input_refused", "id": "bus-1"}
+        proxy = RuntimeProxy(agent, "project", socket_path(comms.root, os.getpid()))
+        try:
+            pending = await proxy.request("input_dispositions")
+            assert [row["inputId"] for row in pending["inputs"]] == ["bus:1"]
+            updates.clear()
+            yield {"type": "input_refused", "id": "bus-1"}
+            # Inspect before the turn finishes: refusal removes this input from
+            # awaiting authority, even though the steering lookup remains.
+            assert "project" in agent._active_turns
+            assert agent._steering_input_keys["project"] == {"bus-1": "bus:1"}
+            refused = await proxy.request("input_dispositions")
+            assert refused["inputs"] == []
+            assert refused["historicalCount"] == 1
+            assert any(
+                update.model_dump(by_alias=True)
+                .get("_meta", {})
+                .get("agentComms", {})
+                .get("inputDeliveryChanged")
+                for update in updates
+            )
+            before = agent._dispositions.get("bus:1")
+            cleared = await proxy.request("dismiss_historical_inputs")
+            assert cleared["dismissedHistoricalCount"] == 1
+            assert agent._dispositions.get("bus:1") == {**before, "notice_dismissed": True}
+        finally:
+            await proxy.close()
         yield {"type": "settled"}
         yield {"type": "done", "ok": True, "text": "Goal set"}
 

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from dataclasses import replace
 
 import pytest
@@ -24,7 +25,8 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "parent"))
-    comms.register(Thread("child", frozenset(), str(tmp_path)))
+    comms.register(Thread("child", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.begin_turn("child", "child-review-in-flight")
     comms.register(Thread("other", frozenset(), str(tmp_path)))
     store = agent._open_goal_store()
     goal = comms.update_goal("parent", "set", text="Review @child work", owner_store=store)
@@ -101,10 +103,8 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
         )
         assert edited.id == goal.id and edited.revision == current.revision + 1
         assert comms.goal_wait("parent") == wait
-        unrelated = comms.send_message("other", "parent", "Unrelated message")
-        await agent._drain_inbox("parent")
-        assert not agent._wake_tasks.get("parent")
-        assert agent._dispositions.status(f"bus:{unrelated.seq}") == "unknown"
+        # Ordinary nondependency direct DMs now have their own no-goal-permit
+        # interrupt route; the tests in test_goal_direct_interrupt cover it.
         assert store.snapshot(goal.id).number == 2
 
         if wake == "owner":
@@ -188,6 +188,14 @@ async def test_standby_refuses_reply_that_arrived_before_wait(
             comms.update_goal("parent", "standby", goal_id=goal.id, wait_for=["child"])
         assert comms.goal_wait("parent") is None
         assert comms.registry.require("parent").goal == goal
-        assert not agent._pending_turns.get("parent")
+        if already_drained:
+            # It is still a fresh ordinary direct DM. That does not turn a
+            # pre-wait reply into a qualifying declared dependency receipt.
+            pending = agent._pending_turns.get("parent", [])
+            assert len(pending) == 1
+            assert pending[0].direct_interrupt_goal_id == goal.id
+            assert pending[0].goal_wait_id is None
+        else:
+            assert not agent._pending_turns.get("parent")
     finally:
         await agent.shutdown()

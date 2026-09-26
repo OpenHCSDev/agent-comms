@@ -791,6 +791,49 @@ class TestAgentTurn:
         assert message not in goal.progress
         assert not wired.registry.require("proj").executing
 
+    @pytest.mark.parametrize("event_type", ["error", "done"])
+    async def test_unstarted_user_input_failure_carries_exact_text_for_restore(
+        self, wired, tmp_path, event_type
+    ):
+        agent = self._agent_with_stub(tmp_path, wired)
+        sent: list = []
+
+        class FakeClient:
+            async def session_update(self, session_id=None, update=None, **kw):
+                sent.append(update)
+
+        key = "acp:preflight"
+        agent._dispositions.record(
+            key,
+            seq=None,
+            owner="proj",
+            admission=1,
+            target="proj",
+            text="lost prompt",
+        )
+        agent._turn_original_input_keys["proj"] = (key,)
+        agent._turn_input_text["proj"] = "lost prompt"
+        await agent._emit_event(
+            "proj",
+            {"type": event_type, "ok": False, "text": "Pi preflight ended before attestation"},
+            FakeClient(),
+        )
+
+        update = sent[-1]
+        assert update.field_meta["agentComms"]["inputFailed"] == {
+            "text": "lost prompt",
+            "reason": "Pi preflight ended before attestation",
+        }
+        assert agent._dispositions.status(key) == "unknown"
+        agent._dispositions.bind(
+            key, admission=1, turn_id="turn", native_id="a" * 32, text="lost prompt"
+        )
+        agent._dispositions.started(key, turn_id="turn", native_id="a" * 32, text="lost prompt")
+        await agent._emit_event(
+            "proj", {"type": "error", "text": "later steering failure"}, FakeClient()
+        )
+        assert "inputFailed" not in sent[-1].field_meta["agentComms"]
+
     @pytest.mark.parametrize("completed_in_turn", [False, True])
     async def test_missing_terminal_blocks_only_still_active_goal(
         self, wired, tmp_path, monkeypatch, completed_in_turn
@@ -1387,6 +1430,54 @@ class TestAgentTurn:
             generation = agent._goal_store.snapshot(goal.id)
             assert (generation.number, generation.state) == (3, "ready")
             assert agent._goal_store.ready_grant(goal.id, 3)
+        finally:
+            await agent.shutdown()
+
+    @pytest.mark.parametrize("failed", [False, True])
+    async def test_owner_resume_checks_attempt_before_publishing_active(
+        self, wired, tmp_path, monkeypatch, failed
+    ):
+        agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+        monkeypatch.setattr(agent, "_schedule_goal", lambda _session: None)
+        updates = []
+
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+
+        agent._client = Client()
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        goal = await agent.set_goal("proj", "Keep working")
+        store = agent._goal_store
+        assert store is not None
+        if failed:
+            reservation = store.reserve(goal.id, 1)
+            store.claim_launch(reservation)
+            store.record_failed(reservation, "Interrupted by owner")
+        paused = await agent.update_goal("proj", "paused", goal.id, goal.revision)
+        updates.clear()
+        try:
+            if failed:
+                with pytest.raises(ValueError, match="use Retry"):
+                    await agent.update_goal("proj", "active", goal.id, paused.revision)
+                blocked = wired.registry.require("proj").goal
+                assert blocked.status == "blocked"
+                assert store.snapshot(goal.id).state == "blocked"
+                assert store.snapshot(goal.id).number == 1
+                assert any(
+                    (update.field_meta or {}).get("agentComms", {}).get("goal", {}).get("status")
+                    == "blocked"
+                    for update in updates
+                )
+                # Only the explicit Retry control creates fresh authority.
+                await agent.retry_goal("proj", goal.id, blocked.revision)
+                assert store.snapshot(goal.id).number == 2
+            else:
+                await agent.update_goal("proj", "active", goal.id, paused.revision)
+                assert store.snapshot(goal.id).number == 1
+            assert wired.registry.require("proj").goal.status == "active"
+            assert store.snapshot(goal.id).state == "ready"
         finally:
             await agent.shutdown()
 
@@ -2024,9 +2115,8 @@ class TestFailureFeedback:
         assert history, "failed agent delivery must be reported where the request came from"
         notice = history[-1]
         assert notice.notice is True
-        assert notice.body == (
-            "Delivery failed: backend turn did not complete; inspect local diagnostics."
-        )
+        assert notice.body.startswith("Delivery failed: backend turn did not complete. ")
+        assert "[Open diagnostic](file://" in notice.body
         assert message not in notice.body
         assert not notice.starts_turn
         assert len(history) == 1
@@ -2064,9 +2154,8 @@ class TestFailureFeedback:
         assert len(history) == 1
         assert history[0].notice is True
         assert history[0].type is MessageType.ALERT
-        assert history[0].body == (
-            "Request failed: backend turn did not complete; inspect local diagnostics."
-        )
+        assert history[0].body.startswith("Request failed: backend turn did not complete. ")
+        assert "[Open diagnostic](file://" in history[0].body
         assert "SECRET_PRIVATE_938" not in history[0].body
         assert not history[0].starts_turn
         assert not routed
@@ -2094,9 +2183,8 @@ class TestFailureFeedback:
         history = wired.dm_history("proj", human.name)
         assert len(history) == 1
         assert history[0].notice is True
-        assert history[0].body == (
-            "Request failed: backend turn did not complete; inspect local diagnostics."
-        )
+        assert history[0].body.startswith("Request failed: backend turn did not complete. ")
+        assert "[Open diagnostic](file://" in history[0].body
         assert not routed
 
     async def test_successful_terminal_sends_complete_reply_and_records_route(
@@ -2214,7 +2302,8 @@ class TestLiveConfigSync:
             goal = wired.update_goal("proj", "set", text="Handle assigned work")
             await assert_snapshot_update()
 
-            wired.register(Thread("child", frozenset(), str(tmp_path)))
+            wired.register(Thread("child", frozenset(), str(tmp_path), pid=os.getpid()))
+            wired.begin_turn("child", "child-metadata-work")
             wired.update_goal("proj", "standby", goal_id=goal.id, wait_for=["child"])
             await assert_snapshot_update()
 

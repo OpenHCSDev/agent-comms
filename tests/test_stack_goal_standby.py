@@ -185,7 +185,8 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             project = root / "parent"
             project.mkdir()
             await agent.new_session(str(project))
-            comms.register(Thread("child", frozenset(), str(project)))
+            comms.register(Thread("child", frozenset(), str(project), pid=os.getpid()))
+            comms.begin_turn("child", "child-report-in-flight")
             goal = comms.update_goal(
                 "parent", "set", text="Review @child report", owner_store=agent._open_goal_store()
             )
