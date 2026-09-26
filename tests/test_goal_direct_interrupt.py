@@ -130,9 +130,8 @@ async def test_failed_direct_turn_leaves_goal_and_standby_wait_untouched(tmp_pat
         await agent.shutdown()
 
 
-async def test_wait_replacement_after_admission_denies_original_input_without_replay(
-    tmp_path, monkeypatch
-):
+async def test_benign_wait_replacement_does_not_strand_queued_interrupt(tmp_path, monkeypatch):
+    """A standby refresh must not strand a NEW unattempted DM (seq7248 defect)."""
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch, standby=True)
     old_wait = comms.goal_wait(session)
     message = comms.send_message("outsider", session, "Fresh direct")
@@ -141,30 +140,44 @@ async def test_wait_replacement_after_admission_denies_original_input_without_re
         await agent._drain_owned_inbox(session)
         assert agent._pending_turns[session][0].direct_interrupt_wait_id == old_wait.wait_id
         comms.update_goal(session, "standby", goal_id=goal.id, wait_for=["dependency"])
-        assert comms.goal_wait(session).wait_id != old_wait.wait_id
-        called = []
+        new_wait = comms.goal_wait(session)
+        assert new_wait.wait_id != old_wait.wait_id
+        outcome = []
 
-        async def forbidden_events(*args, **kwargs):
-            called.append(True)
-            yield {"type": "done", "ok": True, "text": "unexpected"}
+        async def events(*args, **kwargs):
+            task = args[2]
+            native = "d" * 32
+            with kwargs["send_boundary"](None, native, task) as allowed:
+                outcome.append(allowed)
+            row = agent._dispositions.get(f"bus:{message.seq}")
+            assert agent._dispositions.started(
+                row["key"], turn_id=row["turn_id"], native_id=native, text=task
+            )
+            yield {"type": "input_started", "id": None}
+            yield {"type": "chunk", "text": "Still answering"}
+            yield {"type": "settled"}
+            yield {"type": "done", "ok": True, "text": "Still answering"}
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", forbidden_events)
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         pending = agent._pending_turns.pop(session)[0]
         await agent._run_agent_turn(
             session,
             session,
             pending.prompt,
             origins=(pending.origin,),
-            reply_targets=(pending.reply_target,),
+            reply_targets=(pending.reply_target,) if pending.reply_target else (),
             direct_interrupt_goal_id=pending.direct_interrupt_goal_id,
             direct_interrupt_goal_revision=pending.direct_interrupt_goal_revision,
             direct_interrupt_wait_id=pending.direct_interrupt_wait_id,
             direct_interrupt_input_key=pending.direct_interrupt_input_key,
             direct_interrupt_ticket=pending.direct_interrupt_ticket,
         )
-        assert called == []
-        assert agent._dispositions.status(f"bus:{message.seq}") == "unknown"
-        assert comms.goal_wait(session) is not None
+        # The interrupt ran once under the SAME goal; the refreshed standby
+        # wait is preserved untouched, never consumed by this turn.
+        assert outcome == [True]
+        assert agent._dispositions.status(f"bus:{message.seq}") == "started"
+        assert comms.goal_wait(session) == new_wait
+        assert comms.registry.require(session).goal.id == goal.id
         assert comms.registry.require(session).goal.active
     finally:
         await agent.shutdown()
