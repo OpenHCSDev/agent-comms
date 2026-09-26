@@ -21,6 +21,12 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from .native_pi_retirement import (
+    RetiredNativeInputReceipt,
+    RetirementIdentity,
+    RetirementUnavailable,
+    spawn_retired_child,
+)
 from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
 
 CAPABILITY = "pi-native-input-v1-live-only"
@@ -76,6 +82,7 @@ class NativeContextProof:
 class NativeTurnResult:
     text: str
     context: NativeContextProof
+    retirement_receipt: RetiredNativeInputReceipt | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -510,6 +517,7 @@ async def run_native_pi_turn(
     model: str = "z-ai/glm-5.3-flash",
     timeout: float = 90.0,
     prompt_send_boundary: Callable[[], AbstractContextManager[None]] | None = None,
+    retirement_identity: RetirementIdentity | None = None,
 ) -> NativeTurnResult:
     """One tracked real Pi RPC prompt in an isolated, persisted session.
 
@@ -529,20 +537,32 @@ async def run_native_pi_turn(
         model=model,
     )
     session_dir, session_file = launch.session_dir, launch.session_file
-    process = await asyncio.create_subprocess_exec(
-        *launch.argv,
-        cwd=str(launch.cwd),
-        env=launch.env,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        limit=_MAX_LINE + 1,
-        start_new_session=True,
-    )
+    retired_child = None
+    if retirement_identity is None:
+        process = await asyncio.create_subprocess_exec(
+            *launch.argv,
+            cwd=str(launch.cwd),
+            env=launch.env,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            limit=_MAX_LINE + 1,
+            start_new_session=True,
+        )
+    else:
+        # Explicitly opted-in, fail-closed Linux-only prototype. No fallback to
+        # the old group-based launcher if namespace or session binding fails.
+        try:
+            retired_child = await spawn_retired_child(launch, retirement_identity, input_id, prompt)
+        except RetirementUnavailable as error:
+            raise NativePiUnavailable("Native Pi child isolation is unavailable") from error
+        process = retired_child.process
     stdin, stdout, stderr = process.stdin, process.stdout, process.stderr
     assert stdin is not None and stdout is not None and stderr is not None
     stderr_task = asyncio.create_task(stderr.read(_MAX_LINE))
     deadline = asyncio.get_running_loop().time() + timeout
+    terminal_result: NativeTurnResult | None = None
+    retirement_receipt: RetiredNativeInputReceipt | None = None
 
     async def next_event() -> dict[str, Any]:
         remaining = deadline - asyncio.get_running_loop().time()
@@ -665,7 +685,7 @@ async def run_native_pi_turn(
         ):
             raise NativePiUnavailable("Native Pi has no unique authoritative completed response")
         proof = _verify_context(actual_file, input_id, session_id, input_event, contexts[-1])
-        return NativeTurnResult(final_messages[0].strip(), proof)
+        terminal_result = NativeTurnResult(final_messages[0].strip(), proof)
     except PromptSendUnknown as error:
         raise NativePiUnavailable("Native Pi prompt send is UNKNOWN; no retry") from error
     except (TimeoutError, OSError) as error:
@@ -673,8 +693,18 @@ async def run_native_pi_turn(
     finally:
 
         async def cleanup() -> None:
+            nonlocal retirement_receipt
             stdin.close()
-            if process.returncode is None:
+            if retired_child is not None:
+                # The namespace PID 1 is killed by its verified pidfd; its
+                # kernel teardown includes independently setsid descendants.
+                retirement_receipt = await retired_child.retire(
+                    terminal_result.context if terminal_result is not None else None
+                )
+                if process.returncode is None:
+                    process.kill()
+                    await process.wait()
+            elif process.returncode is None:
                 try:
                     if os.name == "posix":
                         os.killpg(process.pid, signal.SIGTERM)
@@ -715,3 +745,5 @@ async def run_native_pi_turn(
         cleanup_task.result()
         if cancelled_during_cleanup:
             raise asyncio.CancelledError
+    assert terminal_result is not None
+    return NativeTurnResult(terminal_result.text, terminal_result.context, retirement_receipt)
