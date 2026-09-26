@@ -25,7 +25,9 @@ from agent_comms.declarations import Thread
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativePiUnavailable, read_tracked_input_digest
 from agent_comms.native_prompt_binding import (
+    binding_store_path,
     install_prompt_binding_schema,
+    native_request_digest,
     read_expected_prompt_binding,
 )
 from agent_comms.operations import Comms
@@ -86,7 +88,9 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
             ]
         generation = 1 + max((row["requestGeneration"] for row in proof_rows), default=0)
         entry_id = hashlib.sha256(input_id.encode()).hexdigest()[:16]
-        digest = digest_override or hashlib.sha256(prompt.encode()).hexdigest()
+        # Real pinned native semantics: the tracked digest covers the
+        # pi-input-request-v1 request envelope, not bare prompt bytes.
+        digest = digest_override or native_request_digest(prompt)
         entries.append(
             {
                 "type": "message",
@@ -148,8 +152,9 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
         assert binding.message_id == initial.message.message_id
         assert binding.stage == "triage" and binding.claim_id == evidence[0].claim_id
         assert binding.owner_thread == "alpha" and binding.wire_root_id == root_id
-        # The binding digest equals the exact prompt bytes sent to Pi.
-        assert binding.expected_prompt_digest == hashlib.sha256(calls[0][1].encode()).hexdigest()
+        # The binding digest is the pinned NATIVE request digest of the exact
+        # prompt bytes sent to Pi (not the bare text hash).
+        assert binding.expected_prompt_digest == native_request_digest(calls[0][1])
         session_file = evidence[0].context.session_file
         assert read_tracked_input_digest(session_file, evidence[0].input_id) == (
             binding.expected_prompt_digest
@@ -276,9 +281,54 @@ async def test_launch_failure_after_binding_leaves_input_unproven(tmp_path: Path
 
 
 def _all_bindings(store):
-    from agent_comms.native_prompt_binding import _connect, binding_store_path
+    import sqlite3
 
     path = binding_store_path(store)
-    with _connect(path) as db:
+    with sqlite3.connect(path) as db:
+        db.row_factory = sqlite3.Row
         rows = db.execute("SELECT input_id FROM prompt_bindings").fetchall()
     return [read_expected_prompt_binding(store, row["input_id"]) for row in rows]
+
+
+def test_native_request_digest_matches_real_pinned_module():
+    """Cross-check our digest against the REAL compiled _claimNativeInput."""
+    import shutil
+    import subprocess
+
+    module = None
+    for candidate in (
+        "/dev/shm/pr48-production-native-33YdZB/node_modules/@earendil-works/"
+        "pi-coding-agent/dist/core/agent-session.js",
+        "/home/ts/.local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent/"
+        "dist/core/agent-session.js",
+    ):
+        if Path(candidate).exists():
+            module = candidate
+            break
+    if module is None or shutil.which("node") is None:
+        pytest.skip("real pinned native module or node unavailable")
+    script = f"""
+import('{module}').then(m => {{
+  const fn = m.AgentSession.prototype._claimNativeInput;
+  const ctx = {{_nativeProofPath() {{}}, _nativeInputClaims: new Map()}};
+  fn.call(ctx, '{'a' * 32}', {{
+    kind: 'prompt',
+    text: {json.dumps("bound prompt reply exactly")},
+    images: null,
+    streamingBehavior: null,
+    expandPromptTemplates: true,
+    source: 'interactive',
+  }});
+  console.log([...ctx._nativeInputClaims.values()][0]);
+}}).catch(e => {{ console.error(e.message); process.exit(1); }});
+"""
+    real = subprocess.run(
+        ["node", "--input-type=module", "-e", script],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert real.returncode == 0, real.stderr
+    observed = real.stdout.strip()
+    assert len(observed) == 64
+    assert observed == native_request_digest("bound prompt reply exactly")

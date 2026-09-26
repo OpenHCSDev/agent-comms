@@ -134,7 +134,23 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
                 "message": {
                     "role": "user",
                     "inputId": input_id,
-                    "inputDigest": hashlib.sha256(prompt.encode()).hexdigest(),
+                    "inputDigest": hashlib.sha256(
+                        (
+                            "pi-input-request-v1\n"
+                            + json.dumps(
+                                {
+                                    "kind": "prompt",
+                                    "text": prompt,
+                                    "images": None,
+                                    "streamingBehavior": None,
+                                    "expandPromptTemplates": True,
+                                    "source": "interactive",
+                                },
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                            )
+                        ).encode()
+                    ).hexdigest(),
                 },
             }
         )
@@ -194,7 +210,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
         assert len(ignored) == 1 and ignored[0].stage == "triage"
         assert ignored[0].triage_result == "ignore"
         assert ignored[0].execution_id is None
-        # The prelaunch binding now joins the journal digest: equality is real.
+        # Fake journal contract checks the join only, not native acceptance.
         assert ignored[0].expected_prompt_equality_established
     assert len(comms.channel_history("#team")) == 1
     second, beta_calls = _fake_model(decision="FULL")

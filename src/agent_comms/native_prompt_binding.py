@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,6 +24,11 @@ from .native_pi import (
     _INPUT_ID,
     NativePiUnavailable,
     read_tracked_input_digest,
+)
+from .private_sidecar import (
+    create_sidecar_file,
+    native_request_digest,
+    sidecar_connection,
 )
 
 _DDL = (
@@ -115,37 +119,15 @@ class PromptBinding:
     bound_at_ms: int
 
 
-def _connect(path: Path) -> sqlite3.Connection:
-    connection = sqlite3.connect(path, timeout=5, isolation_level=None)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys=ON")
-    return connection
-
-
 def install_prompt_binding_schema(store: MutationStore) -> None:
     """Explicit fresh-root install; ordinary callers may rely on _ensure."""
     _ensure_binding_schema(store)
 
 
 def _ensure_binding_schema(store: MutationStore) -> None:
-    """Self-initialize the sidecar like GoalHistoryStore; then verify version.
-
-    First use creates the store; later use only accepts the exact v1 schema.
-    """
-    path = binding_store_path(store)
-    with _connect(path) as db:
-        exists = db.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='prompt_binding_meta'"
-        ).fetchone()
-        if exists is None:
-            for _, statement in _DDL:
-                db.execute(statement)
-            db.execute("INSERT INTO prompt_binding_meta VALUES(1,1,?)", (_DDL_DIGEST,))
-        row = db.execute(
-            "SELECT version,ddl_digest FROM prompt_binding_meta WHERE singleton=1"
-        ).fetchone()
-        if row is None or tuple(row) != (1, _DDL_DIGEST):
-            raise IdentityConflict("prompt binding schema version differs")
+    """Self-initialize the sidecar like GoalHistoryStore; then verify the
+    actual schema objects, permissions, and durable creation."""
+    create_sidecar_file(binding_store_path(store), _DDL, _DDL_DIGEST)
 
 
 def bind_expected_prompt(
@@ -160,11 +142,18 @@ def bind_expected_prompt(
     execution_id: str | None = None,
     attempt_ordinal: int | None = None,
 ) -> str:
-    """Commit the exact prelaunch prompt digest under a live owner recheck.
+    """Commit the prelaunch native-request digest under a serialized fence.
 
-    Must run after the input reservation and before Pi launches. A crash in
-    between leaves a reserved input without a binding: equality stays
-    unestablishable, and nothing may advance on that input.
+    The coordination store WRITE transaction is held from the live owner
+    recheck through the sidecar insert, so an owner-generation advance cannot
+    interleave between validation and the durable binding (no
+    precheck/write/postcheck window). Must run after the input reservation and
+    before Pi launches; a crash in between leaves a reserved input without a
+    binding and nothing may advance on that input.
+
+    The digest covers the pinned native ``pi-input-request-v1`` request
+    envelope exactly as ``AgentSession._claimNativeInput`` computes it — NOT
+    the bare prompt bytes.
     """
     if (
         type(store) is not MutationStore
@@ -181,18 +170,17 @@ def bind_expected_prompt(
         or (stage == "full" and (execution_id is None or attempt_ordinal is None))
     ):
         raise ValueError("prompt binding requires bounded exact prelaunch identities")
-    if type(prompt) is not str or len(prompt.encode("utf-8")) == 0:
-        raise ValueError("prompt binding requires nonempty prompt bytes")
-    digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-    # The live owner recheck runs under the coordination store lock so an
-    # owner generation change between reservation and binding refuses here.
-    with store._read_transaction():
-        assert_native_runtime_schema(store._connection)
-        assert_cohort_schema(store._connection)
-        from .coordinated_runtime import _require_owner
+    digest = native_request_digest(prompt)
+    from .coordinated_runtime import _require_owner
 
+    # Hold the coordination store WRITE transaction across validation and the
+    # sidecar write: registry writers (goal transitions, owner generation
+    # advance, stop) serialize behind us, closing the TOCTOU window.
+    with store._transaction() as db:
+        assert_native_runtime_schema(db)
+        assert_cohort_schema(db)
         _require_owner(store, claim.recipient_lookup, owner, generation)
-        reserved = store._connection.execute(
+        reserved = db.execute(
             "SELECT stage,claim_id,execution_id,attempt_ordinal,owner_lookup,owner_thread,"
             "owner_generation FROM native_runtime_inputs WHERE input_id=?",
             (input_id,),
@@ -209,19 +197,25 @@ def bind_expected_prompt(
             or reserved["owner_generation"] != generation
         ):
             raise IdentityConflict("prompt binding identity differs from its reservation")
-    _ensure_binding_schema(store)
-    path = binding_store_path(store)
-    with _connect(path) as db:
-        existing = db.execute(
-            "SELECT 1 FROM prompt_bindings WHERE input_id=?", (input_id,)
+        root_row = db.execute(
+            "SELECT r.wire_root_id FROM claim_batch_members m "
+            "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
+            "AND r.wire_seq=m.wire_seq AND r.message_id=? AND r.sealed=1 "
+            "WHERE m.claim_id=? AND m.recipient_lookup=?",
+            (claim.message_id, claim.claim_id, claim.recipient_lookup),
         ).fetchone()
-        if existing is not None:
-            raise IdentityConflict("this input already has a prelaunch prompt binding")
-        db.execute(
-            "BEGIN IMMEDIATE",
-        )
-        try:
-            db.execute(
+        if root_row is None:
+            raise IdentityConflict("prompt binding requires a sealed claim receipt")
+        wire_root_id = str(root_row["wire_root_id"])
+        _ensure_binding_schema(store)
+        path = binding_store_path(store)
+        with sidecar_connection(path, _DDL, _DDL_DIGEST) as sidecar:
+            existing = sidecar.execute(
+                "SELECT 1 FROM prompt_bindings WHERE input_id=?", (input_id,)
+            ).fetchone()
+            if existing is not None:
+                raise IdentityConflict("this input already has a prelaunch prompt binding")
+            sidecar.execute(
                 "INSERT INTO prompt_bindings"
                 "(input_id,binding_version,stage,claim_id,execution_id,attempt_ordinal,"
                 "owner_lookup,owner_thread,owner_generation,wire_root_id,source_seq,"
@@ -236,18 +230,13 @@ def bind_expected_prompt(
                     claim.recipient_lookup,
                     owner.name,
                     generation,
-                    # wire_root_id is supplied by the caller's trusted context.
-                    _binding_wire_root(store, claim),
+                    wire_root_id,
                     claim.wire_seq,
                     claim.message_id,
                     digest,
                     store._now(0),
                 ),
             )
-        except BaseException:
-            db.execute("ROLLBACK")
-            raise
-        db.execute("COMMIT")
     return digest
 
 
@@ -274,12 +263,7 @@ def read_expected_prompt_binding(store: MutationStore, input_id: str) -> PromptB
     path = binding_store_path(store)
     if not path.exists():
         return None
-    with _connect(path) as db:
-        row = db.execute(
-            "SELECT version,ddl_digest FROM prompt_binding_meta WHERE singleton=1"
-        ).fetchone()
-        if row is None or tuple(row) != (1, _DDL_DIGEST):
-            raise IdentityConflict("prompt binding schema version differs")
+    with sidecar_connection(path, _DDL, _DDL_DIGEST) as db:
         binding = db.execute(
             "SELECT * FROM prompt_bindings WHERE input_id=?", (input_id,)
         ).fetchone()

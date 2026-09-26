@@ -18,18 +18,29 @@ that was inspected. Nothing here claims live provider/model acceptance.
 | Ordinary direct-DM wake into an active goal (no goal permit/wait consume) | merged `fbeab39` slices |
 | Goal-block reason contract (mandatory reason, refusal persistence, retry clears) | PR #91 (`1cd1211`,`3d755dd`,`fa1cda0`) |
 
-## This slice closes (was an explicit gap)
+## Unaccepted checkpoint: corrections in progress
+
+The original `9e89a91` checkpoint failed parent review: its bare-text digest
+was incompatible with native Pi and its owner check did not span launch.
+The following is partial implementation evidence, not closure or approval.
 
 | Gap | Now provided |
 | --- | --- |
-| "No versioned prelaunch source/claim/stage/input/prompt digest binding exists yet" | `native_prompt_binding.py`: versioned sidecar store writes `expected_prompt_digest` (sha256 of exact prompt bytes) bound to source seq/message, sealed claim, stage, input ID, and owner incarnation **before Pi launch**, under a live owner recheck |
+| "No versioned prelaunch source/claim/stage/input/prompt digest binding exists yet" | `native_prompt_binding.py`: versioned sidecar store writes `expected_prompt_digest` (sha256 of the native `pi-input-request-v1` JSON request envelope) bound to source seq/message, sealed claim, stage, input ID, and owner incarnation **before Pi launch**. Digest is cross-checked against a compiled native method. Binding insertion now holds the coordination transaction; it still does **not** protect the actual send |
 | Crash/UNKNOWN ordering untested for that binding | Binding commits after reservation and before launch; crash anywhere before launch leaves the input unprovable; tests cover owner-change between reserve and bind, launch failure after bind, digest mismatch, and immutable bindings |
 | Historical evidence could not establish expected-prompt equality | `read_historical_native_inputs` joins the immutable binding to the private journal's durable `inputDigest` and sets `expected_prompt_equality_established` only on exact match; identity mismatch fails closed |
 
 ## Still open (unchanged by this slice)
 
-- **Ordinary `comms_send` → private N/K bridge.** Ordinary sends still never
-  enter the private cohort/claim stores; the selected runner only sees
+- **Owner/generation fence through actual native send.** Parent owner-race
+  regression remains an acceptance gate; prelaunch transaction alone is insufficient.
+- **Private sidecar safety/durability.** Path replacement, full schema/trigger
+  validation, serialized installation, and per-commit sync/UNKNOWN handling need
+  adversarial coverage and fixes. Current helper is not a hardened boundary.
+- **Ordinary `comms_send` → private N/K bridge.** A record-only candidate
+  prototype exists, with three focused tests. It is not integrated into sends,
+  does not establish authoritative bus-root/audience identity, and grants no
+  claim, wake, cursor or write authority. The selected runner still only sees
   `send_initial_cohort` originals.
 - **Injected-message cursor.** No per-recipient proven-injected cursor exists;
   binding equality is necessary but not sufficient for a cursor (canonical

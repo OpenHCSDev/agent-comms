@@ -125,7 +125,8 @@ def read_historical_native_inputs(
             # A binding must name exactly this reserved input; anything else is
             # corruption, not a failed equality join.
             if (
-                binding.stage != row["stage"]
+                binding.wire_root_id != wire_root_id
+                or binding.stage != row["stage"]
                 or binding.claim_id != row["claim_id"]
                 or binding.execution_id != row["execution_id"]
                 or binding.attempt_ordinal != row["attempt_ordinal"]
