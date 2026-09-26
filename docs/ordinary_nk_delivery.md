@@ -113,8 +113,9 @@ a new send epoch from a journal. Independent exact review remains open.
 
 Append-driven/indexed refresh, old-alias-target sends, full human/global-write
 coverage and scaling/deadline acceptance remain open. A bounded cooperative
-selected-file pre-write API exists, but it is not an ambient filesystem fence.
-The foreground consumer
-remains one-shot; no production ACP environment was activated and no legacy
+selected-file pre-write API now has an explicitly invoked one-shot foreground
+native entry for an existing file and bounded operator source; it is not an
+ambient Pi tool or filesystem fence. The foreground consumer remains one-shot;
+no production ACP environment was activated and no legacy
 historical input replay occurred. Shell/child and ordinary human ACP coding
 writes remain unenforced by this selected-message path.

@@ -2,11 +2,21 @@
 
 `claim_admission.write_selected_claimed_file` is an **explicit** API for one
 existing singly-linked regular file under a selected FULL or engaged triage
-N/K attempt. It is not installed as a general Pi tool hook. A prior
+N/K attempt. The opt-in one-shot `cohort_foreground` entry accepts both
+`--selected-write-resource` (an existing file under that owner's worktree)
+and `--selected-write-source` (a bounded regular no-symlink file to read before
+owner registration); it invokes claim publication and this API **once** after
+a verified selected FULL native response, before attempt settlement/reply.
+The root must already have its private claim protocol initialized. No selected
+claim, an ignored triage, or any failed/uncertain native result never invokes
+it. This is an explicitly requested operator action, not an instruction from
+the original untrusted message or model text. It is not installed as a general
+Pi tool hook or ordinary ACP session tool. A prior
 `verify_selected_wake` or published claim alone is not authorization to write:
 each invocation rechecks the exact private root, committed selected source,
-active owner admission and turn, coordinator generation/attempt, and current
-resource claim under wire → bus → registry → SQLite exclusions. A fail-fast
+active owner admission and turn, coordinator generation/attempt, pending
+owner-rename intent refusal, and current resource claim under wire → bus →
+registry → SQLite exclusions. A fail-fast
 SQLite write transaction remains held through open, truncate, bounded write,
 and `fsync`. A stopped/re-admitted owner, settled attempt, different resource
 claim or symlink/hardlink alias fails closed before mutation. `O_NOFOLLOW` and

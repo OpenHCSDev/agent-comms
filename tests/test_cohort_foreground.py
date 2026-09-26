@@ -144,6 +144,177 @@ async def test_foreground_registers_own_pid_and_seals_one_selected_direct(
             )
 
 
+async def test_foreground_explicit_selected_existing_file_entry_mutates_under_claim(
+    tmp_path: Path, monkeypatch
+) -> None:
+    with TemporaryDirectory(prefix="ac-selected-write-", dir="/var/tmp") as dirname:
+        base = Path(dirname)
+        base.chmod(0o700)
+        resource = base / "module.py"
+        resource.write_bytes(b"before\n")
+        root, root_id, comms = _wire(base)
+        comms.initialize_private_claim_protocol()
+        calls: list[str] = []
+        monkeypatch.setattr(foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(runtime, "run_native_pi_turn", _fake_pi(calls))
+
+        def ready(thread: Thread) -> None:
+            assert resource.read_bytes() == b"before\n"
+            comms.send_initial_cohort("sender", "beta", "Compute 17+25")
+
+        result = await foreground.run_foreground_once(
+            root,
+            wire_root_id=root_id,
+            name="beta",
+            worktree=base,
+            tags=frozenset(),
+            native_package=tmp_path,
+            opt_in=True,
+            wait_seconds=0,
+            ready=ready,
+            selected_existing_file_write=runtime.SelectedExistingFileWrite(
+                resource, b"after selected claim\n"
+            ),
+        )
+        assert result is not None and result.response_message_id
+        assert len(calls) == 1 and resource.read_bytes() == b"after selected claim\n"
+        claimed = Comms(root).claim_projection()[str(resource)]
+        assert claimed.admission is not None and claimed.admission.wake_claim_id == result.claim_id
+        assert comms.dm_history("sender", "beta")[-1].body == "42"
+
+
+async def test_foreground_selected_write_preflight_refuses_uninitialized_or_external_resource(
+    tmp_path: Path, monkeypatch
+) -> None:
+    with TemporaryDirectory(prefix="ac-selected-preflight-", dir="/var/tmp") as dirname:
+        base = Path(dirname)
+        base.chmod(0o700)
+        resource = base / "module.py"
+        resource.write_bytes(b"before\n")
+        root, root_id, comms = _wire(base)
+        monkeypatch.setattr(foreground, "_trusted_package", lambda _: None)
+        plan = runtime.SelectedExistingFileWrite(resource, b"forbidden\n")
+        with pytest.raises(PublicationActivationBlocked, match="private claim protocol"):
+            await foreground.run_foreground_once(
+                root,
+                wire_root_id=root_id,
+                name="alpha",
+                worktree=base,
+                tags=frozenset(),
+                native_package=tmp_path,
+                selected_existing_file_write=plan,
+            )
+        assert "alpha" not in comms.registry and resource.read_bytes() == b"before\n"
+        comms.initialize_private_claim_protocol()
+        external = tmp_path / "external.py"
+        external.write_bytes(b"external\n")
+        with pytest.raises(ValueError, match="inside the worktree"):
+            await foreground.run_foreground_once(
+                root,
+                wire_root_id=root_id,
+                name="alpha",
+                worktree=base,
+                tags=frozenset(),
+                native_package=tmp_path,
+                selected_existing_file_write=runtime.SelectedExistingFileWrite(
+                    external, b"forbidden\n"
+                ),
+            )
+        assert "alpha" not in comms.registry and external.read_bytes() == b"external\n"
+
+
+def test_foreground_cli_passes_bounded_source_to_explicit_selected_write_entry(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    with TemporaryDirectory(prefix="ac-selected-cli-", dir="/var/tmp") as dirname:
+        base = Path(dirname)
+        base.chmod(0o700)
+        resource = base / "module.py"
+        source = base / "replacement.txt"
+        resource.write_bytes(b"before\n")
+        source.write_bytes(b"operator bytes\n")
+        root, root_id, _comms = _wire(base)
+        observed = []
+        monkeypatch.setattr(foreground, "_trusted_package", lambda _: None)
+
+        async def capture(*args, **kwargs):
+            observed.append(kwargs["selected_existing_file_write"])
+            return None
+
+        monkeypatch.setattr(foreground, "run_foreground_once", capture)
+        argv = [
+            "--root",
+            str(root),
+            "--wire-root-id",
+            root_id,
+            "--name",
+            "beta",
+            "--worktree",
+            str(base),
+            "--native-package",
+            str(tmp_path),
+            "--selected-write-resource",
+            str(resource),
+            "--selected-write-source",
+            str(source),
+        ]
+        assert foreground.main(argv) == 0
+        assert observed == [runtime.SelectedExistingFileWrite(resource, b"operator bytes\n")]
+        assert resource.read_bytes() == b"before\n"  # Parser alone never writes.
+        assert "NO_SELECTED_CLAIM" in capsys.readouterr().out
+        observed.clear()
+        alias = base / "source-alias"
+        alias.symlink_to(source)
+        argv[-1] = str(alias)
+        assert foreground.main(argv) == 1
+        assert observed == []
+
+
+async def test_foreground_explicit_selected_write_never_mutates_no_wake(
+    tmp_path: Path, monkeypatch
+) -> None:
+    with TemporaryDirectory(prefix="ac-selected-no-wake-", dir="/var/tmp") as dirname:
+        base = Path(dirname)
+        base.chmod(0o700)
+        resource = base / "module.py"
+        resource.write_bytes(b"unchanged\n")
+        root, root_id, comms = _wire(base)
+        comms.initialize_private_claim_protocol()
+        comms.register(Thread("beta", frozenset({"team"}), str(base), pid=os.getpid()))
+        calls: list[str] = []
+        monkeypatch.setattr(foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(runtime, "run_native_pi_turn", _fake_pi(calls))
+
+        def ready(thread: Thread) -> None:
+            with MutationStore(str(root / "coordination.sqlite3")) as store:
+                store.register_participant(
+                    stable_thread_lookup(comms.registry.require("beta").created_at),
+                    "beta",
+                    "beta",
+                    committed=True,
+                )
+            comms.send_initial_cohort("sender", "#team", "@beta only")
+
+        result = await foreground.run_foreground_once(
+            root,
+            wire_root_id=root_id,
+            name="alpha",
+            worktree=base,
+            tags=frozenset({"team"}),
+            native_package=tmp_path,
+            wait_seconds=0,
+            ready=ready,
+            selected_existing_file_write=runtime.SelectedExistingFileWrite(
+                resource, b"forbidden\n"
+            ),
+        )
+        assert isinstance(result, foreground.NoWakeReceipt)
+        assert calls == [] and resource.read_bytes() == b"unchanged\n"
+        assert Comms(root).claim_projection().get(str(resource)) is None
+
+
 async def test_foreground_two_recipients_one_no_wake_and_no_model(
     tmp_path: Path, monkeypatch
 ) -> None:

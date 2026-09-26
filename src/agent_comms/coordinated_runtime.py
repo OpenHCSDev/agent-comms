@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
+from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination import (
     AttemptPhase,
@@ -54,6 +55,7 @@ from .declarations import (
     _require_no_private_owner_rename,
     _store_lock,
 )
+from .envelope_claim_transitions import WakeAdmission
 from .native_pi import (
     NativeContextProof,
     NativeTurnResult,
@@ -84,6 +86,20 @@ class CoordinatedTurn:
     response_message_id: str | None
     exact_target: str | None
     cursor_status: str = "unavailable"  # never an ACK, work-skip or provider permit
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedExistingFileWrite:
+    """Explicit trusted one-shot file replacement, never a Pi tool interceptor."""
+
+    resource: Path
+    contents: bytes
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.resource, Path) or type(self.contents) is not bytes:
+            raise TypeError("selected write needs a concrete path and bytes")
+        if len(self.contents) > 1024 * 1024:
+            raise ValueError("selected write exceeds 1 MiB")
 
 
 def _token_digest(token: str) -> str:
@@ -744,6 +760,7 @@ async def run_one_sealed_claim(
     opt_in: bool = True,
     after_seq: int = 0,
     session_file: Path | None = None,
+    selected_existing_file_write: SelectedExistingFileWrite | None = None,
 ) -> CoordinatedTurn | None:
     """Run at most one original selected claim in a disposable private root.
 
@@ -755,6 +772,11 @@ async def run_one_sealed_claim(
         raise PublicationActivationBlocked("coordinated runtime requires a private /var/tmp root")
     _private_session_dir(root)
     _trusted_package(native_package)  # fail BEFORE any claim is reserved
+    if (
+        selected_existing_file_write is not None
+        and type(selected_existing_file_write) is not SelectedExistingFileWrite
+    ):
+        raise TypeError("selected write requires an explicit trusted plan")
     comms = Comms(root)
     bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
     with _store_lock(bus._path):
@@ -1020,6 +1042,33 @@ async def run_one_sealed_claim(
         _require_registry_owner(comms, owner, owner_epoch)
         if not result.text:
             raise IdentityConflict("successful model produced no publishable response")
+        if selected_existing_file_write is not None:
+            # This is an explicitly requested foreground action, not a model
+            # instruction. Both the claim append and actual mutation recheck
+            # current owner/attempt/resource authority under canonical locks.
+            turn = owner.active_turn
+            if turn is None:
+                raise StaleFence("selected file write lost its owner turn")
+            admission = WakeAdmission(
+                wire_root_id=wire_root_id,
+                source_seq=pending.wire_seq,
+                source_message_id=pending.message_id,
+                wake_claim_id=pending.claim_id,
+                wake_revision=selected_claims[0].revision,
+                recipient_lookup=lookup,
+                execution_id=execution_id,
+                operation_id=secrets.token_hex(16),
+                owner_admission_generation=owner_epoch,
+                turn_id=turn.id,
+                participant_generation=person.generation,
+                attempt_ordinal=fence.attempt_ordinal,
+            )
+            claimed = publish_selected_resource_claim(
+                comms, store, admission, owner.name, selected_existing_file_write.resource
+            )
+            write_selected_claimed_file(
+                comms, store, admission, owner.name, claimed, selected_existing_file_write.contents
+            )
         _record_full(store, pending, owner, person.generation, fence, input_id, result)
         pointer_revision = started.snapshot.pointer_revision
         for phase in (AttemptPhase.PROMPT_ACCEPTED, AttemptPhase.MODEL_RUNNING):

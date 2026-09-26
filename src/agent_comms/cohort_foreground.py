@@ -18,6 +18,7 @@ import asyncio
 import json
 import math
 import os
+import stat
 import sys
 import time
 from collections.abc import Callable, Sequence
@@ -26,7 +27,11 @@ from pathlib import Path
 
 from .bus_publication import stable_thread_lookup
 from .cohort_schema import install_private_cohort_schema
-from .coordinated_runtime import CoordinatedTurn, run_one_sealed_claim
+from .coordinated_runtime import (
+    CoordinatedTurn,
+    SelectedExistingFileWrite,
+    run_one_sealed_claim,
+)
 from .coordinated_runtime_schema import install_native_runtime_schema
 from .coordination_cohort import accept_initial_cohort
 from .coordination_response import install_private_response_schema
@@ -38,6 +43,7 @@ from .declarations import (
     _require_no_private_owner_rename,
     _store_lock,
 )
+from .envelope_claim_transitions import normalize_existing_file
 from .native_pi import _private_session_dir, _trusted_package
 from .native_prompt_binding import install_prompt_binding_schema
 from .operations import Comms
@@ -116,6 +122,7 @@ async def run_foreground_once(
     opt_in: bool = True,
     wait_seconds: float = 60.0,
     ready: Callable[[Thread], None] | None = None,
+    selected_existing_file_write: SelectedExistingFileWrite | None = None,
 ) -> CoordinatedTurn | NoWakeReceipt | None:
     """Register THIS PID as a new recipient; wait boundedly for one claim.
 
@@ -133,7 +140,20 @@ async def run_foreground_once(
     ):
         raise ValueError("wait must be in [0,300] and worktree must exist")
     _preflight(root, wire_root_id, native_package, opt_in)
+    if (
+        selected_existing_file_write is not None
+        and type(selected_existing_file_write) is not SelectedExistingFileWrite
+    ):
+        raise TypeError("foreground selected write needs a trusted explicit plan")
     comms = Comms(root)
+    if selected_existing_file_write is not None:
+        # Refuse an uninitialized claim protocol or permanently invalid
+        # resource before owner registration or an irreversible native send.
+        with _store_lock(comms.bus._path):
+            marker = comms.bus._private_marker_unlocked()
+        if marker.get("claim_envelopes_version") != 1:
+            raise PublicationActivationBlocked("selected file write needs a private claim protocol")
+        normalize_existing_file(worktree, selected_existing_file_write.resource)
     thread = Thread(name, tags, str(worktree), pid=os.getpid())
     # The registry name reservation and registration must be ONE wire-locked
     # operation; `claim_thread` silently chooses a suffix on a collision.
@@ -168,6 +188,7 @@ async def run_foreground_once(
                     owner_name=name,
                     native_package=native_package,
                     opt_in=True,
+                    selected_existing_file_write=selected_existing_file_write,
                 )
                 if result is not None:
                     return result
@@ -199,6 +220,23 @@ async def run_foreground_once(
                     comms.registry.unregister(name)
 
 
+def _read_selected_write_source(path: Path) -> bytes:
+    """Read explicit operator input before reserving an owner or native input."""
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise ValueError("selected source requires no-follow descriptors")
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > 1024 * 1024:
+            raise ValueError("selected source must be a bounded regular file")
+        contents = os.read(fd, 1024 * 1024 + 1)
+        if len(contents) > 1024 * 1024:
+            raise ValueError("selected source exceeds 1 MiB")
+        return contents
+    finally:
+        os.close(fd)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
@@ -208,6 +246,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--tags", default="", help="Comma-separated recipient tags")
     parser.add_argument("--native-package", type=Path, required=True)
     parser.add_argument("--wait-seconds", type=float, default=60.0)
+    parser.add_argument(
+        "--selected-write-resource",
+        type=Path,
+        help="Existing file under the selected owner's worktree; requires --selected-write-source",
+    )
+    parser.add_argument(
+        "--selected-write-source",
+        type=Path,
+        help="Bounded regular source of bytes for a successful selected FULL file replacement",
+    )
     parser.add_argument("--opt-in", action="store_true", default=True, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
@@ -215,6 +263,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps({"ready": True, "name": thread.name, "pid": os.getpid()}), flush=True)
 
     try:
+        if (args.selected_write_resource is None) != (args.selected_write_source is None):
+            raise ValueError("selected write requires both resource and source")
+        if args.selected_write_resource is not None:
+            _preflight(
+                Path(args.root).absolute(), args.wire_root_id, args.native_package, args.opt_in
+            )
+        selected_write = (
+            SelectedExistingFileWrite(
+                args.selected_write_resource,
+                _read_selected_write_source(args.selected_write_source),
+            )
+            if args.selected_write_resource is not None
+            else None
+        )
         result = asyncio.run(
             run_foreground_once(
                 args.root,
@@ -226,6 +288,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 opt_in=args.opt_in,
                 wait_seconds=args.wait_seconds,
                 ready=ready,
+                selected_existing_file_write=selected_write,
             )
         )
     except Exception as error:
