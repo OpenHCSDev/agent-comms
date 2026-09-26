@@ -41,10 +41,12 @@ def _fixture(tmp_path, monkeypatch):
         name="owner", pid=401, created_at=100.5, worktree=str(root), active_turn=object()
     )
     state = SimpleNamespace(active=True)
+
     def snapshot():
         return SimpleNamespace(
             threads={"owner": owner}, statuses={"owner": state}, admission_generations={"owner": 7}
         )
+
     calls = []
 
     def restart(names, **kwargs):

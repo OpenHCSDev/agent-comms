@@ -3271,7 +3271,9 @@ class Comms:
                 for thread in threads:
                     epoch = snapshot.admission_generations.get(thread.name)
                     if expected_incarnations is not None and expected_incarnations[thread.name] != (
-                        thread.pid, thread.created_at, epoch
+                        thread.pid,
+                        thread.created_at,
+                        epoch,
                     ):
                         raise RelationViolationError(
                             "Queued owner incarnation changed before restart."
@@ -3363,14 +3365,14 @@ class Comms:
             with _store_lock(self._wire_lock_path):
                 for thread, epoch in alive:
                     if expected_incarnations is not None:
-                        current = self.registry.snapshot()
-                        existing = current.threads.get(thread.name)
+                        stop_snapshot = self.registry.snapshot()
+                        existing = stop_snapshot.threads.get(thread.name)
                         if (
                             existing is None
                             or (existing.pid, existing.created_at)
                             != (thread.pid, thread.created_at)
-                            or current.statuses.get(thread.name) is not ThreadStatus.STOPPED
-                            or current.admission_generations.get(thread.name)
+                            or stop_snapshot.statuses.get(thread.name) is not ThreadStatus.STOPPED
+                            or stop_snapshot.admission_generations.get(thread.name)
                             != stop_epochs[thread.name]
                         ):
                             raise RelationViolationError("Fenced owner changed after signal.")
@@ -3395,11 +3397,12 @@ class Comms:
         with _store_lock(self._wire_lock_path):
             final = self.registry.snapshot()
             for thread, epoch in captured:
-                current = final.threads.get(thread.name)
+                final_owner = final.threads.get(thread.name)
                 if expected_incarnations is not None:
                     if (
-                        current is None
-                        or (current.pid, current.created_at) != (thread.pid, thread.created_at)
+                        final_owner is None
+                        or (final_owner.pid, final_owner.created_at)
+                        != (thread.pid, thread.created_at)
                         or final.statuses.get(thread.name) is not ThreadStatus.STOPPED
                         or final.admission_generations.get(thread.name) != stop_epochs[thread.name]
                         or self._process_alive(thread.pid)
@@ -3415,8 +3418,8 @@ class Comms:
                         self.registry.unregister(thread.name)
             results = []
             for thread, _epoch in captured:
-                current = self.registry.require(thread.name)
-                owner = self._launch_owner_unlocked(current, agent_bin, agent_args)
+                ready_owner = self.registry.require(thread.name)
+                owner = self._launch_owner_unlocked(ready_owner, agent_bin, agent_args)
                 results.append(OwnerRestartResult(thread.name, thread.pid, owner.pid))
             return tuple(results)
 
