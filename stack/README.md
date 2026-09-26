@@ -29,6 +29,18 @@ required native user-start receipt. Existing Pi session directories and files
 must be private (0700 directory, 0600 file) before a tracked prompt; the native
 preflight refuses unsafe sessions rather than changing their permissions.
 
+The native proof journal's decoded-content startup limit is temporarily
+128 MiB (raised from 16 MiB after a long-lived owner exceeded that limit).
+`patch-native-proof-headroom.py` requires the exact prior pinned Pi source
+hash and verifies the exact resulting hash; the complete journal is still
+validated and never truncated or skipped. Pi currently reads the file before
+checking the limit, so this is emergency headroom, not a memory bound or
+compaction. ACP reports byte size as an advisory warning from 96 MiB; Pi's
+limit is decoded text length, not byte size. If Pi rejects a journal during
+preflight as oversized *or* incomplete, ACP gives a safe, specific rejection
+without claiming which cause occurred. An independently reviewed crash-atomic
+checkpoint/segment design is needed before further growth.
+
 All three packages are installed from immutable Git commits. Toad also pins
 agent-comms in its own manifest, so both agent-comms pins must agree. Update
 their revisions in `pyproject.toml`, run `uv lock --project stack`, and commit

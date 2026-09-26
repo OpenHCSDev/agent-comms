@@ -1,5 +1,5 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
-d8184d801d79e167eedaf69b43fb8df614656a4030bf458e2da52486ab51cdae  dist/core/agent-session.js
+b8b3deeffad82771762808c435617d03f4701c3ac14a9620f5e313545a8d6875  dist/core/agent-session.js
 4489eb330033f16d3f37a248b8e421154978153e148fbb0b14073e5ac96eeb9d  dist/core/compaction/compaction.js
 dd75fef58eaa5458a91cff9fe1cf70556ebc720afd98720eae3dcb6572cb63ca  dist/core/session-manager.js
 bd6dfca7b14cad4023c5ab56a7fc91bef3db9670c96b6ad7625df16353b42e5a  dist/modes/rpc/rpc-mode.js

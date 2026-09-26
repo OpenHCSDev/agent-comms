@@ -55,6 +55,8 @@ python3 "$stack_root/patch-native-steering.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 python3 "$stack_root/patch-native-input-recovery.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
+python3 "$stack_root/patch-native-proof-headroom.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent"
 verify "$stage"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$compaction"
