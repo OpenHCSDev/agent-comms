@@ -847,11 +847,15 @@ class CommsAgent:
 
         items = current(self._queued_inputs.get(session_id, {}))
         restored = current(self._restored_inputs.get(session_id, {}))
-        if (
-            len(items) + len(restored) > 32
-            or any(len(row["text"].encode("utf-8")) > 4096 for row in items + restored)
-            or sum(len(row["text"].encode("utf-8")) for row in items + restored) > 65536
-        ):
+        if len(items) + len(restored) > 32:
+            return binding, None
+        try:
+            sizes = [len(row["text"].encode("utf-8")) for row in items + restored]
+        except UnicodeError:
+            # JSON permits lone surrogates. They remain exact queued/UNKNOWN
+            # inputs, but cannot be advertised as a valid UTF-8 queue row.
+            return binding, None
+        if any(size > 4096 for size in sizes) or sum(sizes) > 65536:
             return binding, None
         return binding, {
             "version": 1,

@@ -68,7 +68,9 @@ A malformed or oversized prebind buffer is unavailable until a later explicit
 trusted load initiated after the uncertainty; do not infer empty queue or
 retry. Back-end snapshot bounds are 32 displayed
 entries across `items`+`restored`, 4096 UTF-8 bytes per text, and 65536 total
-bytes. Overflow preserves underlying queue/disposition IDs and reports null.
+bytes. Overflow or text without valid UTF-8 encoding (including JSON-valid
+lone surrogates) preserves underlying queue/disposition IDs and reports null;
+a trusted load remains attachable. This is not a retry or dismissal of UNKNOWN.
 
 Canonical producer and reducer-order example:
 `tests/fixtures/acp_exact_id_queue_v1.json`. It is synthetic provider-free

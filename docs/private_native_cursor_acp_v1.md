@@ -43,9 +43,13 @@ Do not sort timestamps. Once bound, a same-logical-key authenticated callback
 with the same `ownerCreatedAt` and strictly greater `ownerEpoch` **quarantines
 and hides** the incumbent, even if the callback says `none`; it does not bind
 the new epoch. Different `ownerCreatedAt` or same-epoch conflicting PID on the
-same logical key is ambiguous and also quarantines. A null scope for the
-receiving private session cannot sustain an incumbent proof and hides it.
-Unrelated logical attachments and lower-epoch callbacks are ignored. While
+same logical key is ambiguous and also quarantines. An authenticated null scope for the receiving private session means the
+owner cannot be established: it hides an incumbent **or a delayed trusted
+result still in flight**. Buffer this nullable event without indexing its
+scope. Since it has no comparable epoch, only an explicit trusted new/load
+initiated *after* the null observation clears the unknown-owner quarantine;
+a previously initiated response cannot. Unrelated logical attachments and
+lower-epoch callbacks are ignored. While
 quarantined, ignore *all* callbacks (including old-scope higher revisions)
 until an explicit trusted new/load result whose epoch is at least the observed
 higher-epoch floor. **Callbacks arriving before a delayed trusted result also
@@ -88,7 +92,9 @@ new epoch-4 `none` callback revision 3, quarantine, delayed old callback,
 explicit trusted epoch-4 `none` load, delayed old callback rejected, and
 same-epoch unavailable/equal-revision conflict. It also exercises a newer
 callback delivered *before* a delayed older trusted response, which must stay
-hidden until a later trusted new-epoch load, plus a bounded prebind overflow.
+hidden until a later trusted new-epoch load; it also tests a stopped owner's
+null-scope `unavailable` callback before a delayed old `proven` result, and a
+bounded prebind overflow.
 `autoReconnectReadyForwardedToClient` is false. The delayed callback is an
 adversarial sink-order control, not a claim
 that one same-process producer allocates revisions out of order. The provider-

@@ -159,5 +159,34 @@
     "expectedAfterSubsequentLoad": {"status": "none", "quarantined": false, "ownerEpoch": 4},
     "bufferBound": 32,
     "overflow": {"received": 33, "status": "unavailable", "clearOnlyAfter": "subsequent_explicit_load_initiated_after_overflow"}
+  },
+  "nullScopePrebind": {
+    "callbackBeforeTrustedResult": {"version": 1, "scope": null, "revision": 4, "status": "unavailable"},
+    "delayedTrustedLoad": {
+      "version": 1,
+      "scope": {"sessionId": "beta", "wireRootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerPid": 1234, "ownerEpoch": 2},
+      "revision": 3,
+      "status": "proven",
+      "wire_root_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "recipient_lookup": "recipient-opaque",
+      "owner_thread": "beta",
+      "owner_generation": 1,
+      "owner_admission_epoch": 2,
+      "covered_seq": 1,
+      "injected_seq": 1,
+      "input_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "claim_id": "claim-opaque",
+      "stage": "triage",
+      "session_id": "native-session-opaque",
+      "request_generation": 1
+    },
+    "expectedAfterDelayedLoad": {"status": "unavailable", "quarantined": true, "reason": "unknown_owner"},
+    "subsequentExplicitLoadInitiatedAfterCallback": {
+      "version": 1,
+      "scope": {"sessionId": "beta", "wireRootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerPid": 1234, "ownerEpoch": 4},
+      "revision": 5,
+      "status": "none"
+    },
+    "expectedAfterSubsequentLoad": {"status": "none", "quarantined": false, "ownerEpoch": 4}
   }
 }

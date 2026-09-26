@@ -128,7 +128,8 @@ def test_cursor_v1_prebind_newer_callback_poison_floor():
     matching = [
         update
         for update in pending
-        if all(
+        if isinstance(update.get("scope"), dict)
+        and all(
             update["scope"][key] == old["scope"][key]
             for key in ("sessionId", "wireRootId", "ownerThread", "ownerCreatedAt")
         )
@@ -155,6 +156,41 @@ def test_cursor_v1_prebind_newer_callback_poison_floor():
     assert race["overflow"]["clearOnlyAfter"] == (
         "subsequent_explicit_load_initiated_after_overflow"
     )
+
+
+def test_cursor_v1_null_scope_prebind_hides_delayed_old_proof():
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "private_native_cursor_v1.json").read_text()
+    )
+    race = fixture["nullScopePrebind"]
+    pending = [race["callbackBeforeTrustedResult"]]
+    assert pending[0]["scope"] is None and pending[0]["status"] == "unavailable"
+    old = race["delayedTrustedLoad"]
+    assert old["status"] == "proven" and old["revision"] < pending[0]["revision"]
+    # Unknown owner is a receiving-attachment poison, not a comparable epoch.
+    # Never dereference scope before checking it is a typed object.
+    unknown_owner = any(update.get("scope") is None for update in pending)
+    matching = [
+        update
+        for update in pending
+        if isinstance(update.get("scope"), dict)
+        and update["scope"]["sessionId"] == old["scope"]["sessionId"]
+    ]
+    assert matching == [] and unknown_owner
+    visible = None if unknown_owner else old
+    assert visible is None and race["expectedAfterDelayedLoad"] == {
+        "status": "unavailable",
+        "quarantined": True,
+        "reason": "unknown_owner",
+    }
+    # This is a separately initiated explicit load *after* the null event.
+    fresh = race["subsequentExplicitLoadInitiatedAfterCallback"]
+    assert fresh["scope"]["ownerEpoch"] > old["scope"]["ownerEpoch"]
+    assert (fresh["status"], fresh["scope"]["ownerEpoch"]) == (
+        race["expectedAfterSubsequentLoad"]["status"],
+        race["expectedAfterSubsequentLoad"]["ownerEpoch"],
+    )
+    assert race["expectedAfterSubsequentLoad"]["quarantined"] is False
 
 
 async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, monkeypatch):

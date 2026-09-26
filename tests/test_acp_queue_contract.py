@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -76,6 +77,25 @@ async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, m
     assert new_binding["ownerEpoch"] > epoch
     assert new_state["items"] == new_state["restored"] == []
     assert second in agent._restored_inputs["beta"]
+
+
+async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp_path):
+    _, agent, _, _ = _owner(tmp_path)
+    agent._active_turns["beta"] = "fake-active"
+    inbox = agent._backend_inboxes["beta"] = asyncio.Queue()
+    response = await agent.prompt(
+        "beta",
+        [{"type": "text", "text": "valid model task"}],
+        agentComms={"delivery": "queue", "deferDisplay": True, "userText": "\ud800"},
+    )
+    exact = inbox.get_nowait()["_input_id"]
+    assert response.field_meta["agentComms"]["inputDisposition"]["inputId"] == exact
+    assert exact in agent._queued_inputs["beta"]
+    assert agent._dispositions.get("acp:" + exact)["status"] == "unknown"
+    meta = agent._session_metadata("beta", session_id="beta")["agentComms"]
+    assert meta["queueBinding"]["ownerThread"] == "beta"
+    assert meta["queueState"] is None
+    assert exact in agent._queued_inputs["beta"]  # no drop, skip, or replay
 
 
 async def test_queue_overflow_unavailable_without_dropping_ids(tmp_path):
