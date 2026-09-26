@@ -35,7 +35,7 @@ from .owner_compaction_process import (
 )
 from .session_fence import idle_session_writer_fence
 
-NATIVE_MANAGER_SHA256 = "8ec0b8f1b62ee6abe3ba3c98e2f64b1efea549b7e27f561fad2516f955b7c49c"
+NATIVE_MANAGER_SHA256 = "41a94b3777ac0ec322f649e3e234836893b8de86085f55a927ce29216205c28f"
 
 
 @dataclass(frozen=True)

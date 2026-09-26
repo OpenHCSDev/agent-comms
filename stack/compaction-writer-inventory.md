@@ -66,11 +66,13 @@ review and full runtime call-graph integration are still required.
 
 ## Native writer findings still blocking deployment
 
-These are source-audit findings against the disposable `8ec0b8f1…` artifact,
-not closed tests or production clearance. The dormant claim that every native
-mutation already shares the writer boundary is insufficient.
+These are source-audit findings against the disposable `8ec0b8f1…` artifact.
+The successor `patch-native-writer-coverage.py` addresses them in an isolated
+`41a94b37…` artifact; this is not deployment or independent-review clearance.
+The dormant claim that every native mutation already shares the writer boundary
+was insufficient.
 
-| Entry path | Identified gap | Required adversarial control (pending) |
+| Entry path | Identified gap | Adversarial control |
 | --- | --- | --- |
 | `loadEntriesFromFile` | Load-time missing-newline repair calls `appendFileSync` outside the native writer lock. | Hold the native lock while loading a missing-newline/torn-tail file; prove no bytes change. Require explicit safe recovery or strict refusal, never silent repair. |
 | `SessionManager.forkFrom` | Destination header and copied entries are written directly outside the common writer lock. | Block source/destination writers at deterministic barriers; prove complete durable destination or typed refusal, no partial accepted fork, and unchanged source. |
@@ -79,8 +81,26 @@ mutation already shares the writer boundary is insufficient.
 
 The first two require mutation coverage beyond `_appendEntry`, `_rewriteFile`,
 `flushInputDurably`, and guarded compaction. The latter two require correct
-snapshot provenance, not merely a final current stat. These controls must become
-executable and pass before integrating the writer patch into preparation.
+snapshot provenance, not merely a final current stat. The new patch rereads
+persisted preloaded arrays, checks the captured revision before indexing and at
+constructor/switch completion, and preserves the original empty-file revision
+through initialization. It refuses malformed, incomplete, invalid UTF-8, legacy,
+and invalid-ancestry input without repair. Legacy migration needs explicit
+recovery; it is no longer a load-time side effect.
+
+The audit also found `createBranchedSession` could branch from stale memory or
+adopt a destination revision as overwrite permission. It now holds the source
+writer lock, validates the loaded snapshot and expects a nonexistent destination.
+`forkFrom` holds source and destination locks, uses exclusive creation and syncs
+the file and parent ancestry before returning. Partial writes or sync failures
+return UNKNOWN, without automatic replay or deletion of their evidence.
+
+`test-native-writer-coverage.mjs` passes **19 isolated controls**, including real
+external appends at load barriers, source/destination lock refusal, partial fork
+write and directory-sync denial, and positive durable fork/branch cases. Ten
+controls first failed on the old artifact with assertions (logs under
+`/var/tmp/pr48-writer-old-*.log`). Canonical preparation integration, independent
+review, and persistent runtime manager error/reopen semantics remain open.
 
 ## Open gates
 

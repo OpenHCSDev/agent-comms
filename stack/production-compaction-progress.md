@@ -67,10 +67,15 @@ python stack/patch-native-session-writer-prototype.py --production \
   "$PI_NATIVE_PACKAGE_DIR/dist/core/session-manager.js"
 python stack/patch-native-compaction-journal.py \
   "$PI_NATIVE_PACKAGE_DIR/dist/core/session-manager.js"
+python stack/patch-native-writer-coverage.py \
+  "$PI_NATIVE_PACKAGE_DIR/dist/core/session-manager.js"
 ```
 
-Resulting manager SHA256:
-`8ec0b8f1b62ee6abe3ba3c98e2f64b1efea549b7e27f561fad2516f955b7c49c`.
+Current resulting manager SHA256:
+`41a94b3777ac0ec322f649e3e234836893b8de86085f55a927ce29216205c28f`.
+The prior `8ec0b8f1…` journal-only artifact remains unchanged for the independent
+`5f50fe7` durability/watchdog correction review; it is the exact input to the
+new writer-coverage patch.
 No production fault hook was added. The helper rejects receipt fields and
 requires an inherited FD with matching stat identity and parent PID. **These
 lineage checks do not independently prove a flock is held**; correctness relies
@@ -127,6 +132,31 @@ native-process race/crash cases passed three repeated runs. No provider calls
 were used; the installed package remains unchanged. Subsequent independent-review
 journal/deadline corrections raise the focused total to **186 passed, 1 skipped**
 (see the dedicated corrections record).
+
+## Native writer coverage successor (disposable only)
+
+The next patch removes load-time newline repair and implicit legacy migration,
+rejects corrupt/partial/invalid-ancestry persisted data, prevents post-load stat
+refresh from blessing stale memory, and rereads unbound preloaded arrays. Empty
+file initialization retains its pre-read revision through the guarded rewrite.
+Fork and branch paths now hold their source lock; fork destination creation is
+writer-fenced, exclusive, and file/ancestor-synced. The bridge pin now requires
+this new artifact, not the earlier journal-only manager.
+
+`stack/test-native-writer-coverage.mjs`: **19 passing controls**, with ten
+reproduced assertion failures on the old artifact before passing on the new one.
+Tests include actual external-process appends during constructor/switch loading,
+held source/destination locks, stale branch refusal, fork partial-write and
+parent-sync UNKNOWN denial, and coherent positive fork/branch paths. Fault hooks
+are test-only Node builtin/prototype interception, not production package code.
+
+On the same new artifact, native journal, writer exclusivity, hard-context,
+manual/parallel compaction, input recovery and adaptive-contract scripts pass.
+The two older summary fixtures now accept `PI_NATIVE_PACKAGE_DIR`, avoiding any
+need to populate an installed/canonical package path for tests. Main-integrated
+Python authority/journal/ingress regression suite: **200 passed, 1 skipped**.
+Logs: `/var/tmp/pr48-allwriter-*.log`. Full-package provenance/preparation and
+runtime integration are still unfinished; no installed package was changed.
 
 ## Still required before activation
 
