@@ -41,15 +41,71 @@ Result: **148 passed, 1 skipped** on Linux/Python 3.11.
 Unsetting `AGENT_COMMS_THREAD` isolates a legacy test which only clears
 `PI_AGENT_ID`; it does not affect the new authority tests.
 
-## Still required before the first complete native commit slice
+## Executable native commit/journal checkpoint
 
-1. Durable unique-operation intent BEFORE dispatch, outcome handling and
-   exact-ID reconciliation under native writer fence. Crash-ambiguous intents
-   must prohibit retry; stale lock removal must not resolve them.
-2. Trusted native bridge origin, retained FD protocol, native CAS integration,
-   session/correction currency, and actual native crash/race tests.
-3. Exhaustive conflicting-writer inventory, particularly send/publication
-   coupling (the authority lock alone does not make split transactions atomic).
+`OwnerCompactionCommit` now couples the retained registry guard to a single-shot
+non-forking Node helper in a **disposable** pinned package. The Python API checks
+canonical owner/epoch/turn/goal and canonical saved-session path. It journals a
+unique intent BEFORE dispatch, retains authority until child exit and outcome
+persistence, and never dispatches a used ID. SQLite FULL synchronous commits,
+parent/ancestor fsync and a unique unresolved-session index preserve uncertainty
+across crashes. A terminal outcome is immutable; unresolved intents block new
+bridge commits to that session.
+
+The native successor patch adds exact operation-ID/digest stamps, strict JSONL
+reads and writer-locked reconciliation. A matching unique entry is fsynced before
+reporting committed; absence only proves no-write if the exact captured disk
+revision remains unchanged. Changed/duplicate/malformed/mismatched evidence stays
+unknown. Removing a stale native lock is never itself reconciliation.
+
+Patch a NEW disposable package only:
+
+```sh
+python stack/patch-native-session-writer-prototype.py --production \
+  "$PI_NATIVE_PACKAGE_DIR/dist/core/session-manager.js"
+python stack/patch-native-compaction-journal.py \
+  "$PI_NATIVE_PACKAGE_DIR/dist/core/session-manager.js"
+```
+
+Resulting manager SHA256:
+`8ec0b8f1b62ee6abe3ba3c98e2f64b1efea549b7e27f561fad2516f955b7c49c`.
+No production fault hook was added. The helper rejects receipt fields and
+requires an inherited FD with matching stat identity and parent PID. **These
+lineage checks do not independently prove a flock is held**; correctness relies
+on the trusted Python launch path. They are not a new public RPC authorization
+protocol or proof against arbitrary same-UID code execution. The bridge pins
+SessionManager bytes, not yet the entire transitive package/deployment manifest.
+
+Additional provider-free reproduction:
+
+```sh
+PI_COMPACTION_TEST_PACKAGE="$PI_NATIVE_PACKAGE_DIR" \
+  TMPDIR=/var/tmp PYTHONPATH=src python -m pytest -n0 --no-cov -q \
+  tests/test_compaction_journal.py tests/test_owner_compaction_commit.py
+TMPDIR=/var/tmp node stack/test-native-compaction-journal.mjs
+TMPDIR=/var/tmp node stack/test-native-writer-exclusivity.mjs
+TMPDIR=/var/tmp node stack/test-native-auto-compaction.mjs
+node stack/test-adaptive-compaction-contracts.mjs
+```
+
+Integration tests exercise actual native commit while stop/heartbeat/goal
+registry writers are excluded, stale owner/goal refusal, lost result without
+resend, no-write reconciliation, outcome-persistence failure, stale-lock
+recovery, and real owner SIGKILL after native durability but before journal
+outcome. This last test does **not** prove the distinct stdin-write/result-read
+crash cut with a still-running native child; inherited-FD tests currently prove
+that lifetime primitive with Python children.
+
+## Still required before activation
+
+1. Independent review of the combined authority/journal/native slice; actual
+   native in-flight-child crash barriers and exhaustive conflicting-writer
+   inventory.
+2. Canonical correction/ingress currency, including in-flight steer/send refusal;
+   caller-supplied correction counters remain non-authoritative.
+3. Verified full deployment and trusted bridge origin at every actual runtime
+   entrypoint, plus send/publication coupling (the authority lock alone does
+   not make split transactions atomic).
 
 Then canonical all-writer deployment, operator recovery, real adaptive/ACP
 integration, and isolated end-to-end tests remain. The independent hard-context
