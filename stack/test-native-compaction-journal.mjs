@@ -38,8 +38,10 @@ function append(f) {
     const refreshed = reopened.captureCompactionWitness(f.witness.firstKeptEntryId);
     assert.throws(() => reopened.appendCompactionIfCurrent(refreshed, f.summary, 42,
         { agentCommsCommit: f.commit }), /already present/);
-    reopened.appendMessage({ role: 'user', content: 'later', timestamp: 3 });
-    assert.equal(reopened.reconcileCompactionCommit(f.commit, f.witness).entryId, entryId);
+    assert.throws(() => reopened.appendMessage({ role: 'user', content: 'blocked', timestamp: 3 }), /manager unusable/);
+    const fresh = SessionManager.open(f.witness.sessionFile);
+    fresh.appendMessage({ role: 'user', content: 'later', timestamp: 3 });
+    assert.equal(fresh.reconcileCompactionCommit(f.commit, f.witness).entryId, entryId);
 }
 {
     const f = fixture();
@@ -84,6 +86,8 @@ function append(f) {
     writeFileSync(lock, 'operator-verified-dead-holder\n', { flag: 'wx' });
     assert.throws(() => f.manager.reconcileCompactionCommit(f.commit, f.witness), /lock unavailable/);
     unlinkSync(lock);
-    assert.equal(f.manager.reconcileCompactionCommit(f.commit, f.witness).status, 'committed');
+    assert.throws(() => f.manager.reconcileCompactionCommit(f.commit, f.witness), /manager unusable/);
+    const fresh = SessionManager.open(f.witness.sessionFile);
+    assert.equal(fresh.reconcileCompactionCommit(f.commit, f.witness).status, 'committed');
 }
 console.log(JSON.stringify({ ok: true, cases: 7, root }));

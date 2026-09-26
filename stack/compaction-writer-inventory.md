@@ -68,7 +68,8 @@ review and full runtime call-graph integration are still required.
 
 These are source-audit findings against the disposable `8ec0b8f1…` artifact.
 The successor `patch-native-writer-coverage.py` addresses them in an isolated
-`41a94b37…` artifact; this is not deployment or independent-review clearance.
+`41a94b37…` artifact; independent review then found the caught-error continuation
+defects below, so this was not deployment clearance.
 The dormant claim that every native mutation already shares the writer boundary
 was insufficient.
 
@@ -99,8 +100,19 @@ return UNKNOWN, without automatic replay or deletion of their evidence.
 external appends at load barriers, source/destination lock refusal, partial fork
 write and directory-sync denial, and positive durable fork/branch cases. Ten
 controls first failed on the old artifact with assertions (logs under
-`/var/tmp/pr48-writer-old-*.log`). Canonical preparation integration, independent
-review, and persistent runtime manager error/reopen semantics remain open.
+`/var/tmp/pr48-writer-old-*.log`). Canonical preparation is integrated, but
+independent review and persistent runtime manager error/reopen semantics remain
+open.
+
+The independent review found failed branch destination locking and malformed
+session switching left partially rebound, still-writable manager state. The
+`10ac30c1…` corrective candidate adds private irreversible poison-on-mutation-error
+and guards all subsequent mutators/history reads. Its 13 failure scenarios × 38
+continuations check unchanged memory and disk; fresh validated instances can
+perform explicit recovery, including exact-ID reconciliation without resend.
+See `compaction-writer-failure-state-corrections.md` for both pin sets, preserved
+old negatives and limits. The findings remain uncleared pending independent
+review of these exact successor bytes.
 
 ## Open gates
 

@@ -5,8 +5,8 @@ This is **not deployment approval**. The adaptive trigger remains disabled.
 
 ## Current blocking independent findings
 
-The `9c7445e` writer-coverage review is **NON-CLEAN**, and the same manager
-`41a94b37…` is still used by `8cf666c` and its main-integrated descendants:
+The `9c7445e` writer-coverage review is **NON-CLEAN**. Manager `41a94b37…`
+remained affected through `8cf666c` and the main integrations at `98b8770`:
 
 1. A denied `createBranchedSession` destination lock leaves changed manager
    state pointing to a nonexistent destination. Catching the error and then
@@ -15,12 +15,16 @@ The `9c7445e` writer-coverage review is **NON-CLEAN**, and the same manager
    retaining the old tree and flushed state. Catching the error and appending
    can write a stale-tree row onto the corrupt target.
 
-These take priority over the remaining import-closure/runtime work. Required
-correction: atomic state publication or an unusable manager after failure,
-with caught-error continuation negatives across subsequent mutators—not just
-asserting the first exception. A new manager/tree pin and exact corrective
-freeze must go to `pr1-goal-p15-sink-independent-review`. Packaging positives
-and existing passing controls do not clear these findings.
+The corrective candidate now irreversibly poisons a failed manager, covering
+all subsequent mutators and history/witness reads rather than just the first
+exception. New manager `10ac30c1…`, tree `7d16eb01…`, build `1684f7d9f014feb8`:
+**494 continuation controls pass** on a fresh canonical build; both original
+counterexamples reproduce on the preserved old artifact. This is owner evidence,
+not independent clearance. Exact corrective review must go to both
+`pr1-goal-p15-sink-independent-review` and
+`pr1-native-goal-preflight-independent-review`. See
+`compaction-writer-failure-state-corrections.md`; import closure and runtime
+integration remain open.
 
 Independent report:
 `/var/tmp/ac-pr48-writer-coverage-independent-review-9c7445e-20260926.md`.
@@ -187,11 +191,13 @@ package was changed.
 
 ## Complete-package preparation and packaged bridge resources
 
-Canonical preparation code now applies all three native successor patches and
-verifies the entire dependency tree. The CLI wrapper verifies it again before
+At the prior provenance checkpoint, canonical preparation applied three native
+successor patches (the failure-state correction now adds the fourth) and
+verified the entire dependency tree. The CLI wrapper verifies it again before
 launch; the bridge checks before journal creation and before each native call.
 A single full-tree commitment in `pi-native.sha256` replaces the manager-only
-bridge pin. Build identity is `d45562f846a0afa3`, tree SHA `4a688172…`.
+bridge pin. That checkpoint's build was `d45562f846a0afa3`, tree SHA `4a688172…`;
+the current corrective pins are listed above.
 Preparation materializes only internal regular-file npm aliases as independent
 copies, preventing symlink/hardlink patch escape into stock. Node ambient loader
 options are removed; the managed-project bootstrap is preserved inside the

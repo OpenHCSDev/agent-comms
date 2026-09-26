@@ -1,7 +1,7 @@
 # Native package provenance checkpoint (not activation approval)
 
-The canonical preparation **code** now applies the production writer, journal
-and writer-coverage patches in that order. Only disposable builds were made for
+The canonical preparation **code** now applies the production writer, journal,
+writer-coverage and writer-failure-state patches in that order. Only disposable builds were made for
 this checkpoint; no installed package, running owner or user session was changed.
 Adaptive runtime entrypoints and publication coupling remain unfinished.
 
@@ -11,9 +11,13 @@ Adaptive runtime entrypoints and publication coupling remain unfinished.
 `# agent-comms-native-tree-v1 <digest>` commitment. Its complete bytes still
 select the build directory, so changing the tree pin changes the build identity.
 The current tree digest is
-`4a688172768342c219b48681587b3c8f20eb80db6732aa2fcea0fe5ed858c27d`;
-build directory suffix is `d45562f846a0afa3`. The SessionManager remains
-`41a94b3777ac0ec322f649e3e234836893b8de86085f55a927ce29216205c28f`.
+`7d16eb0199d7fc7ef119d75251b26be7eded8fd0672efdec96ba3a34299670ff`;
+build directory suffix is `1684f7d9f014feb8`. The SessionManager is
+`10ac30c15dd1b47b86fef4121c01d4b52b4a114cb9fcba6a909c04a3f5f88a7d`.
+These corrective bytes supersede the `8cf666c` checkpoint's `4a688172…` tree /
+`41a94b37…` manager and require fresh review. See
+`compaction-writer-failure-state-corrections.md`; narrow prior packaging CLEAN is
+not independent clearance of the new artifact or of import-resolution closure.
 
 `src/agent_comms/native_package.py` hashes a deterministic preorder of sorted
 paths. Each UTF-8 JSON record plus newline binds node type, relative path and

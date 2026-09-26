@@ -127,7 +127,7 @@ const cases = {
         try { assert.throws(() => manager.setSessionFile(file), /changed during load/); }
         finally { SessionManager.prototype._loadEntries = load; }
         const raw = fs.readFileSync(file);
-        assert.throws(() => manager.appendMessage(user('must not attach stale sibling')), /writer changed/);
+        assert.throws(() => manager.appendMessage(user('must not attach stale sibling')), /manager unusable/);
         assert.deepEqual(fs.readFileSync(file), raw);
     },
     'preloaded-stale': () => {
