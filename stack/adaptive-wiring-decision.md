@@ -63,3 +63,8 @@ same critical section as) the native commit call — a re-run of
 writer-locked `appendCompactionIfCurrent`, with no replayable bearer token
 in between. Until that same-process/locked handshake exists, owner-scoped
 commits must continue to fail closed.
+
+MANDATORY for future production review: the lock must span owner validation
+through native mutation (a single critical section covering the registry
+recheck and the writer-locked commit). An "adjacent" pre-call check without
+that span is INSUFFICIENT and cannot relax this gate.
