@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -57,6 +58,14 @@ async def compact_context(
     async with lock:
         if session_id in agent._active_turns:
             return {"ok": False, "error": "Wait for the current response before compacting."}
+        # The legacy /compact helper hashes the separately installed Pi and
+        # makes Pi commit its own summary. It cannot be an alternate writer of
+        # the canonical PR95 root or bypass the owner journal/outbox.
+        if Path(agent._agent_bin).name == "pi-native":
+            return {
+                "ok": False,
+                "error": "Canonical native compaction requires the owner journal bridge.",
+            }
         thread = agent._comms.registry.require(thread_name)
         if not thread.session_file:
             return {"ok": False, "error": "This thread has no saved session to compact."}

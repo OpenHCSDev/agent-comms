@@ -173,6 +173,24 @@ def test_metadata_only_outbox_is_commit_id_keyed_and_atomic(journal, tmp_path):
     assert [event.commit_id for event in journal.pending_publications(session)] == [second]
 
 
+def test_changed_publication_metadata_refuses_local_projection(journal):
+    journal, session = journal
+    commit_id = journal.begin(session, {})
+    journal.resolve(
+        commit_id,
+        "committed",
+        {"status": "committed", "entryId": "native", "revision": "r", "leafId": "leaf"},
+        publication=True,
+    )
+    with sqlite3.connect(journal.path) as db:
+        db.execute(
+            "UPDATE publications SET metadata_json = ? WHERE commit_id = ?",
+            (json.dumps({"commitId": commit_id, "summary": "forged leak"}), commit_id),
+        )
+    with pytest.raises(CompactionJournalError, match="metadata changed"):
+        journal.pending_publications(session)
+
+
 def test_no_publication_without_exact_committed_native_evidence(journal):
     journal, session = journal
     commit_id = journal.begin(session, {})

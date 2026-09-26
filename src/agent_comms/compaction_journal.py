@@ -49,6 +49,29 @@ class CompactionPublication:
     status: str
 
 
+def _publication_metadata(commit_id: str, evidence: dict) -> str:
+    if (
+        set(evidence) != {"status", "entryId", "revision", "leafId"}
+        or evidence.get("status") != "committed"
+        or any(
+            type(evidence[key]) is not str or not evidence[key]
+            for key in ("entryId", "revision", "leafId")
+        )
+    ):
+        raise CompactionJournalError("Exact committed native metadata required")
+    return json.dumps(
+        {
+            "commitId": commit_id,
+            "entryId": evidence["entryId"],
+            "revision": evidence["revision"],
+            "leafId": evidence["leafId"],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+
+
 class CompactionJournal:
     """One durable journal per wire; at most one unresolved op per session.
 
@@ -174,13 +197,26 @@ class CompactionJournal:
         canonical = str(Path(session_file).resolve(strict=True))
         with self._transaction() as db:
             rows = db.execute(
-                "SELECT p.commit_id, p.session_file, p.metadata_json, p.status "
+                "SELECT p.commit_id, p.session_file, p.metadata_json, p.status, "
+                "o.evidence_json, o.session_file "
                 "FROM publications p JOIN operations o ON o.commit_id = p.commit_id "
                 "WHERE p.session_file = ? AND p.status = 'pending' AND o.status = 'committed' "
-                "ORDER BY p.rowid",
+                "ORDER BY p.rowid LIMIT 32",
                 (canonical,),
             ).fetchall()
-        return tuple(CompactionPublication(*row) for row in rows)
+        publications = []
+        for commit_id, file, metadata, status, evidence_json, owner_file in rows:
+            try:
+                if (
+                    file != owner_file
+                    or len(metadata.encode()) > 4096
+                    or metadata != _publication_metadata(commit_id, json.loads(evidence_json))
+                ):
+                    raise ValueError("Changed publication")
+            except (ValueError, TypeError, KeyError, AttributeError) as error:
+                raise CompactionJournalError("Compaction publication metadata changed") from error
+            publications.append(CompactionPublication(commit_id, file, metadata, status))
+        return tuple(publications)
 
     def observe_publication(self, commit_id: str, metadata_json: str) -> None:
         """ACK only the exact metadata seen by the local ACP projection.
@@ -212,15 +248,8 @@ class CompactionJournal:
         """
         if outcome not in _TERMINAL | {"unknown"}:
             raise ValueError("Invalid compaction outcome")
-        if publication and (
-            outcome != "committed"
-            or set(evidence) != {"status", "entryId", "revision", "leafId"}
-            or evidence.get("status") != "committed"
-            or any(
-                type(evidence[key]) is not str or not evidence[key]
-                for key in ("entryId", "revision", "leafId")
-            )
-        ):
+        metadata = _publication_metadata(commit_id, evidence) if publication else None
+        if publication and outcome != "committed":
             raise CompactionJournalError("Exact committed native metadata required")
         payload = json.dumps(evidence, sort_keys=True, separators=(",", ":"), allow_nan=False)
         if len(payload.encode()) > 65536:
@@ -235,18 +264,7 @@ class CompactionJournal:
                 "UPDATE operations SET status = ?, evidence_json = ? WHERE commit_id = ?",
                 (outcome, payload, commit_id),
             )
-            if publication:
-                metadata = json.dumps(
-                    {
-                        "commitId": commit_id,
-                        "entryId": evidence["entryId"],
-                        "revision": evidence["revision"],
-                        "leafId": evidence["leafId"],
-                    },
-                    sort_keys=True,
-                    separators=(",", ":"),
-                    allow_nan=False,
-                )
+            if metadata is not None:
                 db.execute(
                     "INSERT INTO publications VALUES (?, ?, ?, 'pending')",
                     (commit_id, row[1], metadata),

@@ -3,6 +3,24 @@
 Base: merged PR48 `d0ced47fbec39ac4d110c9f7395442524363871d`.
 This is **not deployment approval**. The adaptive trigger remains disabled.
 
+## ACP native-commit send/outbox/reopen slices (combined review pending)
+
+A committed exact-ID native outcome now atomically enqueues only metadata in
+its durable journal; an existing local ACP owner session projects pending
+metadata before the next native send, ACKing locally only after a transport
+returns. No listener or uncertain send leaves it pending; exact ID dedups
+reprojection. ACP final send boundary refuses any unresolved native intent or
+UNKNOWN before binding input, including correction/follow-up paths. Idle native
+Pi manager has an irreversible discard-before-external-write method; its next
+attempt strictly validates v3 saved disk through the pinned read-only loader,
+then compares fresh RPC state identity before any provider send. Canonical
+legacy `/compact` fails closed rather than using separately installed Pi as
+an alternate unjournaled writer. Provider-free focused 344 ACP/backend/journal/
+reopen tests pass; full isolated source suite before local projection 1690/61skip;
+updated full rerun and owner adaptive call site are still required. See
+`compaction-publication-outbox.md` and `compaction-runtime-reopen-correction.md`.
+This is not adaptive activation or combined clearance.
+
 ## Package-subprocess corrective successor (review pending)
 
 Both reviewers retain NON-CLEAN for `8c6ce7` package admission: update checks

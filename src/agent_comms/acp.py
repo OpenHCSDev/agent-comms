@@ -2326,6 +2326,15 @@ class CommsAgent:
                         )
                     )
                 )
+                if allowed:
+                    from .compaction_send_admission import native_input_admitted
+
+                    # Under the same wire lock as the owner commit. Do not
+                    # bind/START an input or consume a goal wait while an
+                    # intent/UNKNOWN native write requires reconciliation.
+                    allowed = current is not None and native_input_admitted(
+                        self._comms.root, current.session_file
+                    )
                 if allowed and input_permit is not None:
                     attempt = input_permit.reservation
                     assert self._goal_store is not None
@@ -2507,6 +2516,11 @@ class CommsAgent:
             await self._emit_event(session_id, self._started_event(thread_name, turn_id))
             await self.emit_input_delivery_changed(session_id)
             await self._drain_inbox(session_id)
+            from .compaction_publication import publish_pending_local
+
+            # Existing local ACP owner session only. If delivery is uncertain,
+            # the keyed metadata remains pending; never invent a bus recipient.
+            await publish_pending_local(self, session_id, thread_name)
             # ACP delivery/ACK/UI updates above are not model context. This
             # bounded projection is prepared ONLY inside an already authorized
             # natural turn, from a separate owner-bound source cursor. It never

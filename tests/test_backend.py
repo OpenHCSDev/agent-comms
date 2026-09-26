@@ -2509,7 +2509,9 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
             for lease in leases:
                 lease.release()
 
-    async def test_persistent_pi_reuses_one_child_with_fresh_prompt_receipts(self, tmp_path):
+    async def test_persistent_pi_reuses_one_child_with_fresh_prompt_receipts(
+        self, tmp_path, monkeypatch
+    ):
         session_file = tmp_path / "session.jsonl"
         session_file.write_text("session\n")
         proof_file = tmp_path / "session.jsonl.input-proof"
@@ -2732,6 +2734,38 @@ for line in sys.stdin:
                 )
             ]
             assert revived[-1]["ok"] is True
+            # The real pinned strict validator is exercised separately against
+            # a valid native JSONL. This stub tests the transport lifecycle:
+            # discard injected manager; a different process and matching
+            # get_state identity precede a distinct new input's provider work.
+            from agent_comms import native_session_reopen
+
+            calls = []
+
+            def validated(_launcher, file, *, expected_session_id):
+                calls.append((file, expected_session_id))
+                return "fixed-session"
+
+            monkeypatch.setattr(native_session_reopen, "validate_native_reopen", validated)
+            retired = persistent.proc
+            await persistent.discard_for_external_write(str(session_file))
+            assert retired is not None and retired.returncode is not None
+            assert persistent.proc is None and persistent.reopen_session_id == "fixed-session"
+            reopened = [
+                event
+                async for event in backend.stream_agent_events(
+                    stub,
+                    [],
+                    "fresh after discarded manager",
+                    str(tmp_path),
+                    session_file=str(session_file),
+                    persistent_session=persistent,
+                )
+            ]
+            assert reopened[-1]["ok"] is True
+            assert calls == [(str(session_file), "fixed-session")]
+            assert persistent.proc is not None and persistent.proc is not retired
+            assert persistent.reopen_required is None
             borrowed_proc = persistent.proc
 
             async def delayed_turn():

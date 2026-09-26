@@ -10,14 +10,17 @@ or `aborted-no-write` cannot create a publication. Failed validation rolls back
 both outcome and publication; post-COMMIT directory-fsync uncertainty remains
 UNKNOWN and cannot authorize a new native dispatch.
 
-`pending_publications(session_file)` reads committed pending rows. Local ACP
-projection may call `observe_publication(commit_id, metadata_json)` **only after**
-a matching local metadata update returns. This marks local delivery attempted;
-it is not proof that a remote UI displayed it. If delivery or marking is
-uncertain, the same commit-ID-keyed metadata remains pending and may be repeated.
-The client must deduplicate by exact ID; this is not a summary broadcast or a
-message to a guessed bus recipient. No automated consumer is wired yet, so all
-new rows intentionally remain pending and runtime/ACP publication is **OPEN**.
+`pending_publications(session_file)` reads at most 32 committed pending rows,
+revalidating their exact metadata against the durable native evidence. The ACP
+owner turn now projects them to its existing local session **before any next
+provider input send**, only if owner PID, canonical thread, session file and an
+attached transport agree. If no listener exists, nothing is ACKed. After a
+matching local metadata update returns, `observe_publication` marks local
+delivery attempted; it is not proof that a remote UI displayed it. If delivery
+or marking is uncertain, the same commit-ID-keyed metadata remains pending and
+may be repeated. The client must deduplicate by exact ID; this is not a summary
+broadcast or a message to a guessed bus recipient. It never publishes an
+`intent`, `unknown` or malformed/tampered row.
 
 Provider-free tests cover intent/UNKNOWN suppression, native positive commit,
 lost result followed by exact-ID reconciliation without resend, process reopen
@@ -27,7 +30,23 @@ recipient fields. Focused owner/journal tests: **74 passed** on pinned disposabl
 native package (log `/var/tmp/pr95-outbox-owner-tests.log`). The old manager,
 installed package, live sessions and provider routes were not modified.
 
-Next integration must bind the publication to an existing local owner ACP session
-with an explicit canonical session identity and retain it pending on uncertain
-ACP delivery, while blocking fresh sends behind unresolved native commits. This
-foundation does not itself activate adaptive compaction or authorize a merge.
+The subsequent ACP send-admission slice checks that saved session's journal
+inside the existing wire-lock-protected final send boundary, before input bind,
+native-start credit or goal-wait consumption. Missing journal before any commit
+is normal; malformed/unreadable journal or unresolved intent/UNKNOWN refuses.
+This covers original ACP input and the same boundary used by queued/steered
+corrections; no unknown input is replayed automatically. Provider-free ACP,
+channel, goal/correction, journal and real-native tests: **66 passed**
+(`/var/tmp/pr95-send-admission-focused.log`). A separate dangling-journal-link
+negative refuses without repair. The idle manager still needs explicit disposal
+and validated fresh reopen; no provider-free test may silently 'recover' a
+failed native manager instance.
+
+The local ACP projection is now wired; provider-free tests prove no-listener
+retention, exact ID/non-summary output, failure-before-ACK then exact duplicate
+reprojection, tampered evidence refusal, and projection before the next ACP
+send. The current send gate blocks unresolved native work. What remains OPEN is
+an owner-only adaptive summary preparation/call site that discards the idle
+manager before external native mutation, plus multi-round E2E and operator
+recovery. This incomplete runtime slice does not activate adaptive compaction
+or authorize a merge.

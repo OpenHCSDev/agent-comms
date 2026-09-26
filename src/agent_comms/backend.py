@@ -244,10 +244,13 @@ class PersistentPiSession:
         self.session_id: str | None = None
         self.revision: tuple[_FileRevision, _FileRevision | None] | None = None
         self.sensitive_diagnostics = False
+        self.reopen_required: str | None = None
+        self.reopen_session_id: str | None = None
 
     def reusable(self, launch_key: tuple[Any, ...], session_file: str | None) -> bool:
         return (
-            self.proc is not None
+            self.reopen_required is None
+            and self.proc is not None
             and self.proc.returncode is None
             and self.reader is not None
             and self.stderr_task is not None
@@ -277,6 +280,18 @@ class PersistentPiSession:
         """Wait for a borrowed turn's stats/cleanup before closing its child."""
         async with self.lock:
             await self.close()
+
+    async def discard_for_external_write(self, session_file: str) -> None:
+        """Retire the injected in-memory manager; require strict disk validation.
+
+        The old child must die BEFORE another process can rewrite its session.
+        A public field assignment or fresh attempt cannot revive that child.
+        """
+        async with self.lock:
+            expected = self.session_id if self.session_file == session_file else None
+            await self.close()
+            self.reopen_required = session_file
+            self.reopen_session_id = expected
 
 
 @dataclass(frozen=True, slots=True)
@@ -862,6 +877,33 @@ async def _stream_agent_events(
         if not reused:
             await persistent_session.close()
     loop = asyncio.get_running_loop()
+    validated_session_id: str | None = None
+    if persistent_session is not None and persistent_session.reopen_required is not None:
+        if session_file != persistent_session.reopen_required or not require_input_id:
+            yield {
+                "type": "done",
+                "text": "Saved native session requires explicit validated reopen.",
+                "ok": False,
+                "reason_code": "compaction_reopen_invalid",
+            }
+            return
+        try:
+            from .native_session_reopen import validate_native_reopen
+
+            validated_session_id = await asyncio.to_thread(
+                validate_native_reopen,
+                agent_bin,
+                session_file,
+                expected_session_id=persistent_session.reopen_session_id,
+            )
+        except ValueError:
+            yield {
+                "type": "done",
+                "text": "Saved native session failed strict reopen validation.",
+                "ok": False,
+                "reason_code": "compaction_reopen_invalid",
+            }
+            return
     if not reused and rpc_args is not None and require_input_id and startup is not None:
         await startup.acquire(finish_event)
     launch_started_at = loop.time()
@@ -1532,6 +1574,12 @@ async def _stream_agent_events(
                 and (
                     state.get("sessionId") != persistent_session.session_id
                     or state.get("sessionFile") != persistent_session.session_file
+                )
+            ) or (
+                validated_session_id is not None
+                and (
+                    state.get("sessionId") != validated_session_id
+                    or state.get("sessionFile") != session_file
                 )
             ):
                 session_identity_uncertain = True
@@ -2224,6 +2272,9 @@ async def _stream_agent_events(
         persistent_session.session_id = initial_session_id
         persistent_session.revision = revision
         persistent_session.sensitive_diagnostics = image_input_sent or inherited_image_sensitive
+        if validated_session_id is not None:
+            persistent_session.reopen_required = None
+            persistent_session.reopen_session_id = None
     else:
         _close_child_stdin(proc)
         try:
