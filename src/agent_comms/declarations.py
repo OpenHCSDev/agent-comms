@@ -3297,6 +3297,27 @@ class MessageBus:
             _append_jsonl(self._path, stored.to_wire())
         return stored
 
+    def publish_ordinary(self, message: Message) -> Message:
+        """Ordinary Comms send on either a legacy or explicitly marked private root.
+
+        A private marker is never installed here and an old public row is never
+        retroactively assigned an audience. Only the new private-aware writer
+        uses this entry point: direct legacy ``publish`` still refuses cutover.
+        The caller retains the ordinary Comms wire lock throughout publication.
+        """
+        with _store_lock(self._path):
+            meta = self._path.parent / "bus_meta.json"
+            metadata = json.loads(meta.read_text()) if meta.exists() else {}
+            if not isinstance(metadata, dict):
+                raise RelationViolationError("Invalid ordinary delivery metadata.")
+            if "writer_protocol_version" in metadata:
+                # Exact marker/root/private-registry validation and frozen N/K
+                # decisions remain owned by the existing private publisher.
+                return self.publish_initial_cohort(message, _bus_locked=True)
+        # Legacy publish rechecks its barrier under its own lock: if a fresh-root
+        # cutover raced the dispatch, it refuses rather than appending a legacy row.
+        return self.publish(message)
+
     def _assert_private_directory(self) -> None:
         """Require a nonredirectable, owned ancestry (root sticky /tmp permitted)."""
         if os.name != "posix":
@@ -3684,7 +3705,9 @@ class MessageBus:
         finally:
             os.close(directory_fd)
 
-    def publish_initial_cohort(self, message: Message, *, control: str = "ordinary") -> Message:
+    def publish_initial_cohort(
+        self, message: Message, *, control: str = "ordinary", _bus_locked: bool = False
+    ) -> Message:
         """Commit public envelope and FULL N private decisions in the SAME fsynced row.
 
         This private path assumes cooperating Comms writers hold the global
@@ -3700,7 +3723,7 @@ class MessageBus:
         classification = ControlClassification(control)
         if classification is not ControlClassification.ORDINARY:
             raise RelationViolationError("System-control initial issuer is not available.")
-        with _store_lock(self._path):
+        with nullcontext() if _bus_locked else _store_lock(self._path):
             metadata = self._private_marker_unlocked()
             previous_sequence = 0
             for previous, _, _ in self._verified_private_rows_unlocked(metadata):

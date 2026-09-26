@@ -66,11 +66,16 @@ The following is partial implementation evidence, not closure or approval.
   changed commit; not a scalable append database. All cooperating writers must
   use this protocol; arbitrary same-uid code and shell/child writes are not an
   OS-enforced sandbox. Capacity/performance remains an explicit integration gate.
-- **Ordinary `comms_send` → private N/K bridge.** A record-only candidate
-  prototype exists, with three focused tests. It is not integrated into sends,
-  does not establish authoritative bus-root/audience identity, and grants no
-  claim, wake, cursor or write authority. The selected runner still only sees
-  `send_initial_cohort` originals.
+- **Ordinary `comms_send` → private N/K bridge: partial integration.** On an
+  explicitly marked private root, ordinary tool sends now reach the existing
+  full-N/K publisher, and the existing foreground consumer seals and executes
+  selected sources (direct/channel FULL, triage IGNORE/engage, no-wake).
+  Unmarked public roots are unchanged; no historical audience is inferred.
+  Seven new pipeline cases plus adjacent suites: 212 passed, provider-free.
+  See `docs/ordinary_nk_delivery.md`. Proven cursor, normal ACP/session wake
+  wiring, mediated writes, alias/human paths and scale acceptance remain open.
+  The earlier record-only candidate prototype is still non-authoritative and
+  is not used to admit these ordinary sends.
 - **Injected-message cursor.** No per-recipient proven-injected cursor exists;
   binding equality is necessary but not sufficient for a cursor (canonical
   assembled-context acceptance semantics are still pending upstream proof).

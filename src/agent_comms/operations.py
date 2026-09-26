@@ -418,7 +418,7 @@ class Comms:
                     claims=claims,
                     releases=releases,
                 )
-            return self.bus.publish(message)
+            return self.bus.publish_ordinary(message)
 
     def initialize_private_initial_protocol(self) -> str:
         """Initialize the private protocol on a fresh owner-only root."""
