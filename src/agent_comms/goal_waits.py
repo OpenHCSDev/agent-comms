@@ -29,6 +29,10 @@ class GoalWait:
     owner_created_at: float | None = None
     # Positional with targets. Legacy waits cannot attest a terminal callback.
     target_turn_generations: tuple[int | None, ...] = ()
+    # The exact owner turn that reported this wait. Older unbound rows cannot
+    # prove that a later active turn is merely continuing the wait report.
+    report_turn_id: str | None = None
+    report_turn_generation: int | None = None
 
     def matches(self, message: Message, snapshot: RegistrySnapshot) -> bool:
         sender = snapshot.threads.get(snapshot.aliases.get(message.sender, message.sender))
@@ -103,6 +107,8 @@ class GoalWaits:
                 targets=tuple(GoalWaitTarget(**target) for target in row["targets"]),
                 owner_created_at=row.get("owner_created_at"),
                 target_turn_generations=tuple(row.get("target_turn_generations", ())),
+                report_turn_id=row.get("report_turn_id"),
+                report_turn_generation=row.get("report_turn_generation"),
             )
             for key, row in data.items()
         }
@@ -207,13 +213,20 @@ class GoalWaits:
                     or peer_wait.revision > peer_goal.revision
                 ):
                     peer_wait = None
-                if peer_wait is None:
-                    if GoalWaits.target_has_active_turn(target, snapshot) and process_alive(
-                        peer.pid
+                if GoalWaits.target_has_active_turn(target, snapshot) and process_alive(peer.pid):
+                    # A persisted wait does not make a *new* live owner turn
+                    # part of the old wait graph. It may send the reply before
+                    # its turn finishes. Legacy unbound waits remain open here.
+                    current_turn = peer.active_turn
+                    if (
+                        peer_wait is None
+                        or current_turn is None
+                        or peer_wait.report_turn_id != current_turn.id
+                        or peer_wait.report_turn_generation != peer.turn_generation
                     ):
                         return ()
-                    continue
-                pending.append(canonical)
+                if peer_wait is not None:
+                    pending.append(canonical)
         return tuple(sorted(seen))
 
     @staticmethod

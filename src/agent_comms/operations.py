@@ -2982,6 +2982,10 @@ class Comms:
                         self.message_high_water(),
                         wait_targets,
                         owner_created_at=thread.created_at,
+                        report_turn_id=thread.active_turn.id if thread.active_turn else None,
+                        report_turn_generation=(
+                            thread.turn_generation if thread.active_turn else None
+                        ),
                         target_turn_generations=tuple(
                             (
                                 snapshot.threads[

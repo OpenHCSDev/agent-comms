@@ -179,6 +179,10 @@ def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path)
     assert alice is not None and bob is not None
 
     comms.update_goal("alice", "standby", goal_id=alice.id, wait_for=["bob"])
+    alice_wait = comms.goal_wait("alice")
+    assert alice_wait is not None
+    assert alice_wait.report_turn_id == "alice-turn"
+    assert alice_wait.report_turn_generation == comms.registry.require("alice").turn_generation
     with pytest.raises(ValueError, match="dependency wait group.*@alice.*@bob"):
         comms.update_goal("bob", "standby", goal_id=bob.id, wait_for=["alice"])
 
@@ -287,6 +291,42 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
     assert comms.goal_execution("alice").state is GoalExecutionState.RUNNABLE
     assert "Standby was released" in comms.registry.require("alice").goal.progress
     assert comms.recover_closed_goal_wait("alice") == ()
+
+
+@pytest.mark.parametrize("bound_old_turn", [False, True])
+def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_turn):
+    comms = wire(tmp_path)
+    for name in ("alice", "bob"):
+        comms.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.begin_turn(name, f"{name}-first")
+    alice = comms.update_goal("alice", "set", text="Wait for Bob")
+    bob = comms.update_goal("bob", "set", text="Wait for Alice")
+    assert alice is not None and bob is not None
+    comms.update_goal("alice", "standby", goal_id=alice.id, wait_for=["bob"])
+    owner = comms.registry.require("bob")
+    peer = comms.registry.require("alice")
+    GoalWaits(tmp_path / "goal_waits.json").record(
+        GoalWait(
+            bob.id,
+            "older-bob-wait",
+            bob.revision,
+            0,
+            (GoalWaitTarget("alice", peer.created_at),),
+            owner_created_at=owner.created_at,
+            report_turn_id="bob-first" if bound_old_turn else None,
+            report_turn_generation=owner.turn_generation if bound_old_turn else None,
+        )
+    )
+    comms.finish_turn("alice", "alice-first")
+    comms.finish_turn("bob", "bob-first")
+    comms.begin_turn("bob", "bob-independent-new")
+    wait = comms.goal_wait("alice")
+    assert wait is not None
+    assert comms.recover_closed_goal_wait("alice") == ()
+    assert comms.goal_wait("alice") == wait
+    assert comms.goal_execution("alice").state is GoalExecutionState.STANDBY
+    comms.finish_turn("bob", "bob-independent-new")
+    assert comms.recover_closed_goal_wait("alice") == ("alice", "bob")
 
 
 def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeypatch):
