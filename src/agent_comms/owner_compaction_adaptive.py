@@ -17,7 +17,7 @@ from .compaction_journal import CompactionJournalError
 from .declarations import AgentRuntimeInfo, RelationViolationError, ThreadRegistry
 from .native_session_reopen import package_for_launcher
 from .owner_compaction_commit import OwnerCompactionCommit
-from .owner_compaction_provider import NativeSummary, summarize_native
+from .owner_compaction_provider import NativeSummary
 from .owner_compaction_runtime import PreparedOwnerSummary, compact_owner_once
 from .owner_compaction_settings import (
     PiCompactionDecision,
@@ -35,7 +35,9 @@ async def maybe_compact_owner_turn(
     original_input_key: str,
     persistent: PersistentPiSession,
     *,
-    summary_strategy: Callable[[PreparedOwnerSummary], Awaitable[str]] | None = None,
+    summary_strategy: (
+        Callable[[PreparedOwnerSummary], Awaitable[str | NativeSummary]] | None
+    ) = None,
 ) -> bool:
     """Return False only for a clean trigger skip; errors never dispatch input.
 
@@ -113,6 +115,12 @@ async def maybe_compact_owner_turn(
     settings = await decision()
     if not settings.enabled or not settings.trigger:
         return False
+    # A second Node process cannot attest the idle selected Pi child's
+    # credential/baseURL, extension/CLI or project-trust route. Do not pay for
+    # a detached summary or dispatch the original input after selection until
+    # an in-process read-only seam is independently reviewed and bound.
+    if summary_strategy is None:
+        raise PiSettingsEvidenceError("Selected live Pi summarization route is unbound")
     bridge = await asyncio.to_thread(OwnerCompactionCommit, registry._path, package)
 
     async def summarize(prepared: PreparedOwnerSummary) -> str | NativeSummary:
@@ -121,19 +129,7 @@ async def maybe_compact_owner_turn(
         current, current_epoch = registry.live_owner_with_epoch(thread_name)
         if current != owner or current_epoch != epoch or await decision() != settings:
             raise RelationViolationError("Adaptive model, owner or settings changed")
-        text: str | NativeSummary
-        if summary_strategy is None:
-            text = await summarize_native(
-                package,
-                prepared.preparation,
-                provider=provider,
-                model_id=model_id,
-                context_window=context_window,
-                reserve_tokens=settings.reserve_tokens,
-                keep_recent_tokens=settings.keep_recent_tokens,
-            )
-        else:
-            text = await summary_strategy(prepared)
+        text = await summary_strategy(prepared)
         current, current_epoch = registry.live_owner_with_epoch(thread_name)
         if current != owner or current_epoch != epoch or await decision() != settings:
             raise RelationViolationError("Adaptive source changed after summary")

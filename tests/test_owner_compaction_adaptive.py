@@ -29,7 +29,7 @@ from agent_comms.owner_compaction_provider import (
     NativeSummaryError,
     summarize_native,
 )
-from agent_comms.owner_compaction_settings import PiCompactionDecision
+from agent_comms.owner_compaction_settings import PiCompactionDecision, PiSettingsEvidenceError
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(
@@ -101,6 +101,23 @@ console.log(manager.getSessionFile());
         context_size=1000,
     )
     return registry, session, info
+
+
+async def test_selected_default_strategy_refuses_detached_provider_before_commit(admitted):
+    registry, session, info = admitted
+    before = session.read_bytes()
+    with pytest.raises(PiSettingsEvidenceError, match="selected live Pi|Selected live Pi"):
+        await maybe_compact_owner_turn(
+            registry,
+            "unused-launcher",
+            "owner",
+            "turn",
+            info,
+            "acp:original",
+            PersistentPiSession(),
+        )
+    assert session.read_bytes() == before
+    assert InputDispositions(session.parent.parent).get("acp:original")["native_id"] is None
 
 
 async def test_adaptive_owner_one_original_input_native_commit_without_provider(admitted):

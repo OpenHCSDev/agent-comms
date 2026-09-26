@@ -14,9 +14,11 @@ input send. The direct original remains UNKNOWN/unbound until its own matching
 native start; a correction or changed settings/model/source refuses the commit
 without replay. Pending outbox and strict fresh reopen remain unchanged. A
 native split-turn cut is skipped because this writer has not separately proved
-its retention semantics. A provider strategy is implemented but **never
-exercised against a provider** here; one child is time/output bounded, disables
-provider retries, and admits at most four Pi-native requests. Explicit
+its retention semantics. A detached provider strategy exists but was **never
+exercised against a provider** here; it is now refused by the default adaptive
+owner-turn route until live selected-process parity is established. Its code
+remains time/output bounded, disables provider retries and admits at most four
+Pi-native requests, but those limits do not substitute for route proof. Explicit
 constructor opt-in defaults OFF; no launcher or live deployment enables it.
 
 Current provider-free tests include actual ACP claimed-turn → synthetic
@@ -89,8 +91,17 @@ serial focus had **36 passed, three destructive cases deselected, one Node
 fixture startup timeout after five seconds** during severe host memory/IO
 pressure; an earlier full focus timed out and is **not** a passing run. The
 fixture startup ceiling is being increased for later resource-safe rerun.
-No metadata successor has successful full combined clearance or independent
-exact-head clearance. Remaining blockers: bind the actual live model/auth/
+Fresh independent exact `06dc706` review is **scoped CLEAN for metadata
+binding only** (`/dev/shm/pr95-06dc-metadata-independent-review-20260926.md`,
+SHA256 `65022a984348997d40d43d600e1f91cdce323dda9bee27992dad7218b1e5d944`).
+Its separately failed reviewer attempt produced no verdict and grants nothing.
+There is still no successful full combined source/wheel clearance. A later
+uncommitted fail-closed trigger correction refuses the default detached paid
+summarizer on selected turns because it cannot bind the selected live Pi
+model/auth/baseURL/extension/project route. Synthetic injected summaries remain
+provider-free test seams; worker and stdio entrypoints remain default-OFF.
+`adaptive-activation-parity.md` records the disjoint in-process proof design.
+Remaining blockers: bind the actual live model/auth/
 extension/CLI route and project-trust parity, implement reviewed human/operator
 opt-in only after clearance, demonstrate provider semantics, and run fresh
 resource-safe full source/wheel suites and combined review. No activation.
