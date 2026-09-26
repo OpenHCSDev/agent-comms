@@ -8,6 +8,18 @@ from agent_comms import Thread
 from agent_comms.operations import Comms
 
 
+@pytest.fixture(autouse=True)
+def _deferred_candidate_scheduler_is_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep optional background WAL workers out of unrelated test temp cleanup.
+
+    tests/test_candidate_maintenance.py opts back in for the production hook.
+    This does not affect fresh subprocess processes used by integration tests.
+    """
+    monkeypatch.setattr(
+        "agent_comms.operations.schedule_private_candidate_after_commit", lambda *_: None
+    )
+
+
 @pytest.fixture
 def root(tmp_path: Path) -> Path:
     return tmp_path / "comms"

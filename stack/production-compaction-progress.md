@@ -157,7 +157,12 @@ Provider-free fault/fake ACP tests cover both reviewer counterexamples,
 owner/source mismatch, fork/process death, one-use and post-bind uncertainty:
 focused selected admission/journal/send-gate **45 passed** and adjacent native
 journal/dry-run/ACP input+goal **71 passed**, serial/local; Black/Ruff/mypy/diff
-checks pass. Fresh exact-head independent review still required. No production ACP producer
+checks pass. Independent exact `a6b6974` review is **SCOPED CLEAN** for this
+corrective Python admission and fake guardian seam
+(`/dev/shm/pr95-a6b-independent-4pXfAC/REVIEW.md`, SHA256
+`b6ef26cd50804d2e86b093d55b0b55b57c1171ca718e4545ce7b50a0b90d0d8e`;
+56 own provider-free tests and linked/decline post-COMMIT fsync UNKNOWN probes).
+It does not transfer to this subsequent PR94 merge head. No production ACP producer
 exists and persisted linked/declined rows never grant input by status.
 Pi phase-2 candidates through `764b69d` remain NON-CLEAN P1 for custom
 EventStream terminal/slot authority. A separately reviewed Linux dedicated
@@ -173,7 +178,17 @@ serial/provider-free (`/var/tmp/pr95-selected-guardian-combined-python.log`,
 SHA256 `34a9661cace1a171ffb9cb16342cd5a705cd77cfd86391876ab19734bb12081a`). No 90-second hard SLA,
 SDK route/auth parity, provider terminal receipt, live selected Pi, semantic
 retention, operator opt-in or production clearance is inferred; fresh exact
-combined review and full source/wheel testing remain mandatory. No selected provider operation has been started.
+PR94-merged review and full source/wheel testing remain mandatory. The normal
+main `1273f0f` merge resolves ACP's disjoint adaptive/N-K constructor kwargs
+and combines `_store_lock` bounded-read options with inherited child descriptor
+semantics. Initial serial provider-free PR94 ACP/private-bus and PR95 admission/
+guardian integration: **326 passed, 1 skipped**
+(`/var/tmp/pr95-pr94-merge-focused.log`, SHA256
+`ef1f85449d615ac902c5886655b3616b4a18619720d49d4a4f31058aa134c052`);
+adjacent PR94 native-send/disposition/runtime/backend + PR95 authority:
+**263 passed** (`/var/tmp/pr95-pr94-merge-adjacent.log`, SHA256
+`8370a1f1febb6088310e93e61fab5dbb4a93b91446607f4a8e9ff4966cb67abb`).
+No selected provider operation has been started.
 
 ## Normal PR104/105 main integration and socket incarnation (combined review pending)
 

@@ -11,7 +11,35 @@ import pytest
 from agent_comms import ForkSpec, Thread
 from agent_comms.acp import CommsAgent
 from agent_comms.operations import wire
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy, _present_cursor_session, socket_path
+
+
+def test_owner_cursor_scope_rebases_only_attachment_session_alias():
+    scope = {
+        "sessionId": "canonical",
+        "wireRootId": "a" * 32,
+        "ownerThread": "canonical",
+        "ownerCreatedAt": 1000.0,
+        "ownerPid": 1234,
+        "ownerEpoch": 3,
+    }
+    for field in ("agentComms", "_meta"):
+        cursor = {"version": 1, "scope": dict(scope), "revision": 7, "status": "none"}
+        metadata = (
+            {"agentComms": {"privateNativeCursor": cursor}}
+            if field == "agentComms"
+            else {"_meta": {"agentComms": {"privateNativeCursor": cursor}}}
+        )
+        assert _present_cursor_session(metadata, "old-alias") is metadata
+        assert cursor == {
+            "version": 1,
+            "scope": {**scope, "sessionId": "old-alias"},
+            "revision": 7,
+            "status": "none",
+        }
+    unsupported = {"agentComms": {"privateNativeCursor": {"version": 2, "scope": dict(scope)}}}
+    _present_cursor_session(unsupported, "old-alias")
+    assert unsupported["agentComms"]["privateNativeCursor"]["scope"] == scope
 
 
 async def until(predicate, timeout=10):

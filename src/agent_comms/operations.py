@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import select
@@ -31,6 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
+from .candidate_maintenance import schedule_private_candidate_after_commit
 from .channels import ChannelCatalog
 from .goal_history import GoalHistoryEntry
 from .goal_mentions import bind_goal_mentions
@@ -41,6 +43,7 @@ if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore
     from .relationships import ThreadRelationships
 from .declarations import (
+    PRIVATE_OWNER_RENAME_PENDING,
     Activity,
     ActivityLog,
     ActivityState,
@@ -81,6 +84,7 @@ from .declarations import (
     UnregisteredThreadError,
     WireRevision,
     _atomic_write_text,
+    _require_no_private_owner_rename,
     _store_lock,
     current_thread,
     file_revision,
@@ -101,6 +105,7 @@ from .tool_results import ToolDiff
 from .transcript_routes import InputDisplay, TranscriptRoutes
 
 OBSERVATION_INTERVAL = 0.05
+_LOG = logging.getLogger(__name__)
 
 
 def _required_block_reason(reason: str | None) -> str:
@@ -360,8 +365,32 @@ class Comms:
         self.runtime_info = RuntimeInfoStore(self.root / "runtime_info.json")
         self.transcript_reads = transcript_read_state(self.root / "thread_read_markers.json")
         self._wire_lock_path = self.root / "wire"
+        self._private_nk_launch: tuple[Path, str, Path] | None = None
         self._sent_times_signature: tuple[int, int, int] | None = None
         self._sent_times: dict[str, float] = {}
+
+    def pin_private_nk_launch(
+        self, validated_root: Path, wire_root_id: str, native_package: Path
+    ) -> None:
+        """Bind an already preflighted ACP/worker launch to future owner handoffs.
+
+        Public Comms instances never opt in from a marker or ambient env.
+        Recheck the root marker before retaining the exact lexical absolute
+        path; child env is generated from this pin, not a later cwd/env read.
+        """
+        if (
+            not isinstance(validated_root, Path)
+            or not validated_root.is_absolute()
+            or validated_root != self.root
+            or not isinstance(native_package, Path)
+            or not native_package.is_absolute()
+        ):
+            raise ValueError("private owner launch requires the validated absolute root/package")
+        with _store_lock(self.bus._path):
+            marker = self.bus._private_marker_unlocked()
+            if marker["wire_root_id"] != wire_root_id:
+                raise RelationViolationError("private owner launch root ID changed")
+        self._private_nk_launch = (validated_root, wire_root_id, native_package)
 
     # ─── Messaging ────────────────────────────────────────────────────────────
 
@@ -411,14 +440,25 @@ class Comms:
                 ]
                 if len(set(incarnations)) != len(incarnations):
                     raise RelationViolationError("Registry creation identities collide.")
-                return self.bus.publish_claim_envelope(
+                committed = self.bus.publish_claim_envelope(
                     message,
                     worktree=Path(owner.worktree),
                     incarnation=str(owner.created_at),
                     claims=claims,
                     releases=releases,
                 )
-            return self.bus.publish(message)
+            else:
+                committed = self.bus.publish_ordinary(message)
+        # Pure memory notification and daemon scheduling occur only AFTER the
+        # canonical wire/bus publication locks are released. Projection errors
+        # can never turn a committed original into an apparent failed send.
+        try:
+            schedule_private_candidate_after_commit(self.bus, committed.seq)
+        except Exception as error:
+            _LOG.warning(
+                "Candidate notification omitted after committed send (%s)", error.__class__.__name__
+            )
+        return committed
 
     def initialize_private_initial_protocol(self) -> str:
         """Initialize the private protocol on a fresh owner-only root."""
@@ -447,9 +487,17 @@ class Comms:
         with _store_lock(self._wire_lock_path):
             if sender not in self.registry or not self.registry.require(sender).role.executable:
                 raise RelationViolationError("Initial sender must be a registered executable.")
-            return self.bus.publish_initial_cohort(
+            committed = self.bus.publish_initial_cohort(
                 Message(sender=sender, target=target, body=body, type=type, notice=notice)
             )
+        try:
+            schedule_private_candidate_after_commit(self.bus, committed.seq)
+        except Exception as error:
+            _LOG.warning(
+                "Candidate notification omitted after committed initial (%s)",
+                error.__class__.__name__,
+            )
+        return committed
 
     def sent_tool_message(self, name: str, output: str, ok: bool) -> Message | None:
         """Resolve a successful send receipt, including older ID-only tool results."""
@@ -2249,7 +2297,7 @@ class Comms:
                 len(new_name) > 48 or len(re.split(r"[-_]+", new_name)) > 6
             ):
                 raise ValueError("Choose a concise topic title: at most 6 words and 48 characters.")
-            return self._rename_thread(
+            return self._rename_thread_unlocked(
                 caller, new_name, title=new_name.replace("-", " ").replace("_", " ")
             )
 
@@ -2301,15 +2349,121 @@ class Comms:
             suffix = 2
             while self.registry.name_reserved(new_name):
                 if self.registry.canonical_name(new_name) == thread.name:
-                    return self._rename_thread(thread.name, new_name, title=display_name)
+                    return self._rename_thread_unlocked(thread.name, new_name, title=display_name)
                 new_name = f"{base_name}-{suffix}"
                 suffix += 1
-            return self._rename_thread(thread.name, new_name, title=display_name)
+            return self._rename_thread_unlocked(thread.name, new_name, title=display_name)
 
     def _rename_thread(
         self, name: str, new_name: str, *, title: str | None = None
     ) -> RenameThreadResult:
-        previous, current = self.registry.rename(name, new_name)
+        # Keep direct callers under the same wire lock as public self/managed
+        # rename. Private owner migration and ordinary publication share it.
+        with _store_lock(self._wire_lock_path):
+            return self._rename_thread_unlocked(name, new_name, title=title)
+
+    def _rename_thread_unlocked(
+        self, name: str, new_name: str, *, title: str | None = None
+    ) -> RenameThreadResult:
+        from .bus_publication import stable_thread_lookup
+        from .coordination import MAX_IDENTIFIER_CHARS
+        from .coordination_store import IdentityConflict, MutationStore
+
+        before = self.registry.require(name)
+        private_meta = self.root / "bus_meta.json"
+        if private_meta.is_symlink():
+            raise RelationViolationError("Private/legacy bus metadata cannot be a symlink.")
+        private = False
+        if private_meta.exists():
+            with _store_lock(self.bus._path):
+                try:
+                    metadata = json.loads(private_meta.read_text())
+                except (OSError, ValueError, UnicodeError) as error:
+                    raise RelationViolationError("Invalid bus protocol metadata.") from error
+                if type(metadata) is not dict:
+                    raise RelationViolationError("Invalid bus protocol metadata.")
+                if "writer_protocol_version" in metadata:
+                    self.bus._private_marker_unlocked()
+                    private = True
+        if private:
+            _require_no_private_owner_rename(self.root)
+        coordinator = self.root / "coordination.sqlite3"
+        intent = self.root / PRIVATE_OWNER_RENAME_PENDING
+        intent_created = False
+        if not private or not coordinator.exists() or before.name == new_name:
+            previous, current = self.registry.rename(name, new_name)
+        else:
+            # Validate every deterministic registry/SQL name refusal *before*
+            # advancing a committed private owner's generation. The wire lock
+            # excludes cooperating sends until both authorities agree.
+            if not self.registry.status(before.name).running:
+                raise RelationViolationError("Only a running thread can rename itself.")
+            if (
+                self.registry.name_reserved(new_name)
+                and self.registry.canonical_name(new_name) != before.name
+            ):
+                raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
+            replace(before, name=new_name)
+            if len(new_name) > MAX_IDENTIFIER_CHARS:
+                raise ValueError("Private coordinator owner name exceeds its bound.")
+            with MutationStore(str(coordinator)) as store:
+                try:
+                    person = store.participant(stable_thread_lookup(before.created_at))
+                except IdentityConflict as error:
+                    if str(error) != "participant aggregate is not registered":
+                        raise
+                    previous, current = self.registry.rename(name, new_name)
+                else:
+                    if not person.committed or person.owner_thread != before.name:
+                        raise RelationViolationError(
+                            "Private coordinator owner differs from the registered owner."
+                        )
+                    # Persist a fail-closed cross-store intent before SQL or
+                    # registry changes. A crash leaves private publication and
+                    # selected execution unavailable until manual inspection;
+                    # it cannot silently turn an old attempt into a new send.
+                    _atomic_write_text(
+                        intent,
+                        json.dumps(
+                            {
+                                "version": 1,
+                                "lookup": person.lookup,
+                                "old": before.name,
+                                "new": new_name,
+                                "generation": person.generation,
+                                "wireRootId": metadata["wire_root_id"],
+                            },
+                            sort_keys=True,
+                        ),
+                        fsync_parent=True,
+                    )
+                    intent_created = True
+                    store.advance_owner_generation(
+                        person.lookup, new_name, expected_generation=person.generation
+                    )
+                    # An old selected attempt stays fenced in its old generation;
+                    # never retry or reassign it after this ownership change.
+                    try:
+                        previous, current = self.registry.rename(name, new_name)
+                    except BaseException as error:
+                        # Registry persistence can fail after the SQL CAS. If
+                        # its atomic snapshot still names the old owner, make
+                        # a NEW generation for that owner instead of leaving
+                        # a committed coordinator pointing at the new name.
+                        # Neither generation may inherit an old native input.
+                        try:
+                            actual = self.registry.require(before.name).name
+                            if actual == before.name:
+                                store.advance_owner_generation(
+                                    person.lookup,
+                                    before.name,
+                                    expected_generation=person.generation + 1,
+                                )
+                        except BaseException:
+                            pass  # ambiguous dual-store failure needs manual inspection
+                        raise RelationViolationError(
+                            "Private owner rename is uncertain; inspect both authorities."
+                        ) from error
         thread = self.registry.require(current)
         if thread.auto_title_pending or title is not None:
             self.registry.register(
@@ -2323,6 +2477,22 @@ class Comms:
         self.runtime_info.rename_thread(previous, current)
         self.ledger.rename_thread(previous, current)
         self.channel_catalog.rename_thread(previous, current)
+        if intent_created:
+            # Persist completion only after both authorities and ancillary
+            # stores agree. If the subsequent unlink/fsync is uncertain, the
+            # previous durable record already proves a finished transition;
+            # an extant file still blocks all new private sends.
+            completed_intent = json.loads(intent.read_text())
+            completed_intent["completed"] = True
+            _atomic_write_text(
+                intent, json.dumps(completed_intent, sort_keys=True), fsync_parent=True
+            )
+            intent.unlink()
+            directory_fd = os.open(self.root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
         return RenameThreadResult(previous, current, True)
 
     def goal_pause(self, name: str) -> GoalPauseEvent | None:
@@ -3182,6 +3352,10 @@ class Comms:
                         agent_args,
                     )
                     return OwnerStartResult(owner.name, owner.pid, True)
+                if not snapshot.statuses[canonical].active:
+                    raise RelationViolationError(
+                        "Cannot reactivate a stopped incarnation before its owner exits."
+                    )
                 if epoch is None:
                     raise RelationViolationError("Cannot start an owner without an incarnation.")
                 original_epoch = epoch
@@ -3207,7 +3381,9 @@ class Comms:
                 ):
                     continue
                 if not current.statuses[canonical].active:
-                    self.registry.register(fresh)
+                    raise RelationViolationError(
+                        "Cannot reactivate a stopped incarnation before its owner exits."
+                    )
                 return OwnerStartResult(canonical, fresh.pid, False)
         raise RelationViolationError(
             f"Owner changed or became unverifiable while starting {name!r}."
@@ -3219,6 +3395,7 @@ class Comms:
         *,
         agent_bin: str = "pi",
         agent_args: Sequence[str] | None = None,
+        expected_incarnations: Mapping[str, tuple[int, float, int]] | None = None,
     ) -> tuple[OwnerRestartResult, ...]:
         """Preflight all owners together; release the wire lock for proof and exit.
 
@@ -3253,8 +3430,24 @@ class Comms:
                 if selection is not None and identities != selection:
                     raise RelationViolationError("Owner selection changed before restart.")
                 selection = identities
+                if expected_incarnations is not None and (
+                    len(threads) != 1
+                    or set(expected_incarnations) != {thread.name for thread in threads}
+                ):
+                    raise RelationViolationError(
+                        "Guarded restart requires exactly one queued owner."
+                    )
                 captured = []
                 for thread in threads:
+                    epoch = snapshot.admission_generations.get(thread.name)
+                    if expected_incarnations is not None and expected_incarnations[thread.name] != (
+                        thread.pid,
+                        thread.created_at,
+                        epoch,
+                    ):
+                        raise RelationViolationError(
+                            "Queued owner incarnation changed before restart."
+                        )
                     if (
                         not thread.role.executable
                         or not snapshot.statuses[thread.name].active
@@ -3268,7 +3461,6 @@ class Comms:
                         raise ValueError(
                             f"Thread {thread.name!r} has an active turn; wait until idle."
                         )
-                    epoch = snapshot.admission_generations.get(thread.name)
                     if epoch is None:
                         raise RelationViolationError(
                             "Cannot restart an owner without an incarnation."
@@ -3318,6 +3510,15 @@ class Comms:
                     for thread, _epoch in captured
                 ):
                     continue
+                if expected_incarnations is not None:
+                    # Persist the admission fence BEFORE signaling. An owner
+                    # receiving a wake after this lock releases cannot claim
+                    # a turn while SIGTERM is pending: claim_local_turn rejects
+                    # STOPPED. Never undo this fence on an uncertain signal.
+                    stop_epochs = {
+                        thread.name: self.registry.fence_idle_owner(thread, expected_epoch=epoch)
+                        for thread, epoch in captured
+                    }
                 for thread, _epoch in captured:
                     with suppress(ProcessLookupError):
                         self._signal_local_owner(thread.pid, signal.SIGTERM)
@@ -3333,7 +3534,20 @@ class Comms:
         if alive:
             with _store_lock(self._wire_lock_path):
                 for thread, epoch in alive:
-                    self._require_same_stop_owner(thread, epoch)
+                    if expected_incarnations is not None:
+                        stop_snapshot = self.registry.snapshot()
+                        existing = stop_snapshot.threads.get(thread.name)
+                        if (
+                            existing is None
+                            or (existing.pid, existing.created_at)
+                            != (thread.pid, thread.created_at)
+                            or stop_snapshot.statuses.get(thread.name) is not ThreadStatus.STOPPED
+                            or stop_snapshot.admission_generations.get(thread.name)
+                            != stop_epochs[thread.name]
+                        ):
+                            raise RelationViolationError("Fenced owner changed after signal.")
+                    else:
+                        self._require_same_stop_owner(thread, epoch)
                     if not self._is_local_participant(thread, wait=False):
                         raise RelationViolationError(
                             f"Refusing to signal unverifiable process {thread.pid}."
@@ -3353,17 +3567,29 @@ class Comms:
         with _store_lock(self._wire_lock_path):
             final = self.registry.snapshot()
             for thread, epoch in captured:
-                current = final.threads.get(thread.name)
-                if self._released_same_owner(final, thread, epoch):
-                    continue
-                self._require_same_stop_owner(thread, epoch)
-            for thread, _epoch in captured:
-                if self.registry.status(thread.name).active:
-                    self.registry.unregister(thread.name)
+                final_owner = final.threads.get(thread.name)
+                if expected_incarnations is not None:
+                    if (
+                        final_owner is None
+                        or (final_owner.pid, final_owner.created_at)
+                        != (thread.pid, thread.created_at)
+                        or final.statuses.get(thread.name) is not ThreadStatus.STOPPED
+                        or final.admission_generations.get(thread.name) != stop_epochs[thread.name]
+                        or self._process_alive(thread.pid)
+                    ):
+                        raise RelationViolationError(
+                            "Fenced owner changed or survived after signal."
+                        )
+                elif not self._released_same_owner(final, thread, epoch):
+                    self._require_same_stop_owner(thread, epoch)
+            if expected_incarnations is None:
+                for thread, _epoch in captured:
+                    if self.registry.status(thread.name).active:
+                        self.registry.unregister(thread.name)
             results = []
             for thread, _epoch in captured:
-                current = self.registry.require(thread.name)
-                owner = self._launch_owner_unlocked(current, agent_bin, agent_args)
+                ready_owner = self.registry.require(thread.name)
+                owner = self._launch_owner_unlocked(ready_owner, agent_bin, agent_args)
                 results.append(OwnerRestartResult(thread.name, thread.pid, owner.pid))
             return tuple(results)
 
@@ -3378,6 +3604,7 @@ class Comms:
         env = os.environ.copy()
         for key in ("PI_PROMPT", "PI_PARENT_ID", "PI_TASK", "AGENT_COMMS_RESERVATION_FD"):
             env.pop(key, None)
+        private_launch = self._private_nk_launch
         env.update(
             {
                 "PI_AGENT_ID": thread.name,
@@ -3385,10 +3612,18 @@ class Comms:
                 "PI_AGENT_TAGS": ",".join(sorted(thread.tags)),
                 "AGENT_COMMS_TAGS": ",".join(sorted(thread.tags)),
                 "PI_WORKTREE": thread.worktree,
-                "AGENT_COMMS_ROOT": str(self.root.resolve()),
+                # Preserve the preflight pin ONLY on explicit private launch.
+                # Ordinary/public roots keep their canonical child path, even
+                # when their original spelling was an absolute symlink.
+                "AGENT_COMMS_ROOT": str(
+                    private_launch[0] if private_launch is not None else self.root.resolve()
+                ),
                 "AGENT_COMMS_AGENT_BIN": agent_bin,
             }
         )
+        if private_launch is not None:
+            env["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"] = private_launch[1]
+            env["AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE"] = str(private_launch[2])
         if thread.parent is not None:
             env["PI_PARENT_ID"] = thread.parent
         if thread.task is not None:

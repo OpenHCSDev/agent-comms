@@ -104,9 +104,14 @@ adjacent native journal, dry-run and ACP input/goal regressions **71 passed**
 (`/var/tmp/pr95-selected-ack-correction-adjacent.log`, SHA256
 `21138219005db534f435fcbbc33300f915bdea864816a026e612321c245e096b`);
 Black/Ruff/mypy/diff checks pass (Black under Python 3.11 warns it cannot
-AST-verify configured 3.13 grammar). This candidate
-requires independent exact review; no live selected producer, Pi terminal
-attestation or user original-input success was tested.
+AST-verify configured 3.13 grammar). Independent exact `a6b6974` review is
+**SCOPED CLEAN** for the correction and default-OFF fake guardian integration
+(`/dev/shm/pr95-a6b-independent-4pXfAC/REVIEW.md`, SHA256
+`b6ef26cd50804d2e86b093d55b0b55b57c1171ca718e4545ce7b50a0b90d0d8e`).
+It separately reproduced linked/decline fsync UNKNOWN, wrong original and
+one-use success. This verdict does not transfer to the subsequent PR94 merge
+or establish live selected producer, Pi terminal attestation or original-input
+success.
 
 Before activating a provider path, the owner must call reserve under current
 owner/turn/ingress authority, serialize the **same** exact source/model/settings
@@ -132,5 +137,10 @@ must precede any live producer minting the positive capability. Current
 linked/declined rows still block absent a returned ACK and one-use binding. Native CAS, local metadata, child retirement and reopened-source evidence
 must bind the same operation ID. Source/correction/settings/goal changes refuse
 the handoff; no UNKNOWN input is replayed. Full provider-free ACP E2E,
-wheel/source suites, operator recovery and independent exact combined review
-are still required.
+wheel/source suites, operator recovery and independent exact PR94-merged
+review are still required. The normal merge of main `1273f0f` reconciles ACP
+adaptive/N-K constructor kwargs and `_store_lock` bounded-read options with
+the inherited child descriptor; focused provider-free serial PR94+PR95 cases
+passed **326 with 1 skipped** (`/var/tmp/pr95-pr94-merge-focused.log`),
+and adjacent PR94 native-send/disposition/runtime/backend plus PR95 authority
+**263 passed** (`/var/tmp/pr95-pr94-merge-adjacent.log`).

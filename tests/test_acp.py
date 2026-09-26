@@ -2282,6 +2282,54 @@ class TestFailureFeedback:
             ("Done", False),
         ]
 
+    async def test_foreign_tool_use_before_input_start_never_notifies_channel(
+        self, wired, tmp_path, monkeypatch
+    ):
+        from agent_comms import backend
+        from agent_comms.declarations import Message, MessageType, Thread
+        from test_backend import _stub
+
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n"
+            "import json, sys\n"
+            "def emit(row): print(json.dumps(row), flush=True)\n"
+            "state=json.loads(sys.stdin.readline())\n"
+            "emit({'type':'response','command':'get_state','id':state['id'],"
+            "'success':True,'data':{'nativeInputProofCapability':'pi-native-input-v1-live-only'}})\n"
+            "prompt=json.loads(sys.stdin.readline())\n"
+            "emit({'type':'response','command':'prompt','id':prompt['id'],'success':True})\n"
+            "emit({'type':'message_start','message':{'role':'assistant'}})\n"
+            "emit({'type':'message_update','assistantMessageEvent':"
+            "{'type':'text_delta','delta':'foreign earlier turn'}})\n"
+            "emit({'type':'message_end','message':{'role':'assistant',"
+            "'stopReason':'toolUse','content':[{'type':'text',"
+            "'text':'foreign earlier turn'}]}})\n"
+            "emit({'type':'message_start','message':{'role':'user',"
+            "'content':'foreign later turn','inputId':'foreign'}})\n",
+        )
+        agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        human = wired.user_identity(str(tmp_path / "proj"))
+        wired.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
+        origin = Message(human.name, "#team", "please help", MessageType.INFO)
+        original = backend.stream_agent_events
+
+        async def events(*args, **kwargs):
+            async for event in original(stub, [], args[2], args[3]):
+                yield event
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        await asyncio.wait_for(
+            agent._run_agent_turn(
+                "proj", "proj", "answer", reply_targets=("#team",), origins=(origin,)
+            ),
+            timeout=9,
+        )
+        assert all(
+            "foreign earlier turn" not in message.body for message in wired.channel_history("#team")
+        )
+
     async def test_failed_turn_notices_unique_reply_and_origin_targets(
         self, wired, tmp_path, monkeypatch
     ):
