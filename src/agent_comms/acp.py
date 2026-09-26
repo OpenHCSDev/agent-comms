@@ -2237,7 +2237,11 @@ class CommsAgent:
                     "interruption. This is NOT a goal attempt or declared dependency reply. "
                     "Respond to this message first; do not call comms_goal merely to finish "
                     "the DM, report goal progress, clear its standby wait, or retry an UNKNOWN "
-                    "input. The goal remains separately scheduled.\n\n" + task
+                    "input. The goal remains separately scheduled. Current goal state for "
+                    "answering questions about it only (verify live project state before "
+                    "reporting current PR status):\n"
+                    f"Goal status: {goal.status}; revision: {goal.revision}\n"
+                    f"Objective: {goal.text}\nProgress: {goal.progress}\n\n" + task
                 )
             else:
                 task = (

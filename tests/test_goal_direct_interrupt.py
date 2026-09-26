@@ -42,6 +42,10 @@ async def test_new_nondependency_direct_dm_interrupts_active_goal_without_attemp
         seen.append(task)
         assert "ordinary direct-message interruption" in task
         assert f"Persistent goal {goal.id} is parked" in task
+        assert f"Goal status: {original_goal.status}; revision: {original_goal.revision}" in task
+        assert f"Objective: {original_goal.text}" in task
+        assert f"Progress: {original_goal.progress}" in task
+        assert "verify live project state before reporting current PR status" in task
         assert "Use comms_goal with this goal_id" not in task
         assert "A separate question" in task
         native = "a" * 32
