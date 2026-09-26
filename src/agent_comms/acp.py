@@ -2395,29 +2395,38 @@ class CommsAgent:
                         selected_admission.invalidate()
                         allowed = False
                     else:
-                        digest = hashlib.sha256(sent_text.encode()).hexdigest()
-                        identity = SelectedAdmissionIdentity(
-                            owner_name=canonical,
-                            owner_pid=current.pid,
-                            owner_created_at=float(current.created_at).hex(),
-                            turn_id=turn_id,
-                            ingress_key=keys[0],
-                            admission_generation=snapshot.admission_generations[canonical],
-                            correction_witness=(
-                                f"{snapshot.admission_generations[canonical]}:{digest}"
-                            ),
-                            input_sha256=digest,
-                            reserved_revision=selected_admission._identity.reserved_revision,
-                            session_revision=revision,
-                        )
-                        allowed = selected_admission.consume_bound_original(
-                            wire_root=self._comms.root,
-                            session_file=current.session_file,
-                            identity=identity,
-                            native_id=native_id,
-                            sent_text=sent_text,
-                            dispositions=self._dispositions,
-                        )
+                        original = self._dispositions.get(keys[0])
+                        if original is None or type(original["source_text"]) is not str:
+                            selected_admission.invalidate()
+                            allowed = False
+                        else:
+                            digest = hashlib.sha256(sent_text.encode()).hexdigest()
+                            original_digest = hashlib.sha256(
+                                original["source_text"].encode()
+                            ).hexdigest()
+                            identity = SelectedAdmissionIdentity(
+                                owner_name=canonical,
+                                owner_pid=current.pid,
+                                owner_created_at=float(current.created_at).hex(),
+                                turn_id=turn_id,
+                                ingress_key=keys[0],
+                                admission_generation=snapshot.admission_generations[canonical],
+                                correction_witness=(
+                                    f"{snapshot.admission_generations[canonical]}:{digest}"
+                                ),
+                                input_sha256=digest,
+                                original_sha256=original_digest,
+                                reserved_revision=selected_admission._identity.reserved_revision,
+                                session_revision=revision,
+                            )
+                            allowed = selected_admission.consume_bound_original(
+                                wire_root=self._comms.root,
+                                session_file=current.session_file,
+                                identity=identity,
+                                native_id=native_id,
+                                sent_text=sent_text,
+                                dispositions=self._dispositions,
+                            )
                 elif allowed:
                     for key in keys:
                         row = self._dispositions.get(key)

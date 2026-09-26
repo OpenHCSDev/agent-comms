@@ -23,13 +23,28 @@ from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.declarations import _store_lock
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import wire
-from agent_comms.selected_summary_admission import SelectedAdmissionIdentity
+from agent_comms.selected_summary_admission import (
+    SelectedAdmissionIdentity,
+    SelectedSummaryAdmission,
+)
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX journal and native input bind")
 
 
-def _identity(session: str, *, text: str, key: str, turn: str, owner: str = "project", admission=1):
+def _identity(
+    session: str,
+    *,
+    text: str,
+    key: str,
+    turn: str,
+    owner: str = "project",
+    admission=1,
+    original_text: str | None = None,
+):
     digest = hashlib.sha256(text.encode()).hexdigest()
+    original_digest = hashlib.sha256(
+        (original_text if original_text is not None else text).encode()
+    ).hexdigest()
     return SelectedAdmissionIdentity(
         owner_name=owner,
         owner_pid=os.getpid(),
@@ -39,6 +54,7 @@ def _identity(session: str, *, text: str, key: str, turn: str, owner: str = "pro
         admission_generation=admission,
         correction_witness=f"{admission}:{digest}",
         input_sha256=digest,
+        original_sha256=original_digest,
         reserved_revision=backend._session_revision(session),
         session_revision=backend._session_revision(session),
     )
@@ -55,6 +71,7 @@ def _source(identity):
             "admissionGeneration": identity.admission_generation,
             "correctionWitness": identity.correction_witness,
             "inputSha256": identity.input_sha256,
+            "originalSha256": identity.original_sha256,
             "reservedRevision": json.loads(json.dumps(identity.reserved_revision)),
         },
         "selected": {"provider": "fake", "modelId": "fake"},
@@ -145,6 +162,7 @@ def test_returned_ack_only_one_bound_original_and_no_status_bypass(case, termina
         {"admission_generation": 2},
         {"correction_witness": "changed"},
         {"input_sha256": "f" * 64},
+        {"original_sha256": "f" * 64},
     ],
 )
 def test_mismatch_consumes_token_without_binding_or_recovery(case, change):
@@ -169,6 +187,27 @@ def test_reserve_rejects_changed_saved_source_witness(tmp_path):
     with pytest.raises(ValueError, match="revision changed"):
         journal.reserve_selected_summary(str(session), _source(identity))
     assert journal.blocking_selected_summary(str(session)) == ()
+
+
+def test_reserve_refuses_wrong_durable_original(case):
+    comms, session, journal, operation_id, dispositions, identity, text = case
+    # A new session/input cannot replace the source text retained at admission.
+    other = journal.path.parent / "other.jsonl"
+    other.write_text("{}\n")
+    key = "acp:" + "e" * 32
+    assert dispositions.record(
+        key, seq=None, owner="project", admission=1, target="project", text="actual original"
+    )
+    forged = _identity(
+        str(other),
+        text="injected replacement",
+        key=key,
+        turn="turn",
+        original_text="injected replacement",
+    )
+    with pytest.raises(ValueError, match="durable original"):
+        journal.reserve_selected_summary(str(other), _source(forged))
+    assert not journal.blocking_selected_summary(str(other))
 
 
 def test_link_cannot_mint_without_committed_native_source_digest(case):
@@ -213,6 +252,22 @@ def test_forked_other_process_cannot_use_inherited_ack(case):
     assert os.read(read_fd, 1) == b"0"
     os.close(read_fd)
     assert os.waitpid(child, 0)[1] == 17 << 8
+    assert dispositions.get(identity.ingress_key)["native_id"] is None
+    assert not native_input_admitted(comms.root, session)
+
+
+def test_changed_durable_original_after_reservation_refuses_burn(case):
+    comms, session, journal, operation_id, dispositions, identity, text = case
+    token = journal.decline_selected_summary_prestart(
+        operation_id, "split_turn", admission=identity
+    )
+    assert token is not None
+    with _store_lock(dispositions.path):
+        rows = dispositions._read()
+        rows[identity.ingress_key]["source_text"] = "different original"
+        dispositions._write(rows)
+    assert not _claim(case, token)
+    assert not _claim(case, token)
     assert dispositions.get(identity.ingress_key)["native_id"] is None
     assert not native_input_admitted(comms.root, session)
 
@@ -275,9 +330,39 @@ def test_terminal_postcommit_fsync_fault_never_mints_ack(case, monkeypatch, term
                 operation_id, "split_turn", admission=identity
             )
     monkeypatch.undo()
-    assert journal.selected_summary(operation_id).status == terminal
+    saved = journal.selected_summary(operation_id)
+    assert saved.status == terminal
+    with pytest.raises(CompactionJournalError, match="returned terminal fsync ACK"):
+        SelectedSummaryAdmission._from_returned_ack(
+            None,
+            journal.path,
+            session,
+            operation_id,
+            terminal,
+            commit_id if terminal == "linked" else None,
+            saved.source_json,
+            identity,
+        )
     assert not native_input_admitted(comms.root, session)
     assert dispositions.get(identity.ingress_key)["native_id"] is None
+
+
+def test_success_without_admission_does_not_create_later_receipt(case):
+    comms, session, journal, operation_id, dispositions, identity, text = case
+    assert journal.decline_selected_summary_prestart(operation_id, "split_turn") is None
+    saved = journal.selected_summary(operation_id)
+    with pytest.raises(CompactionJournalError, match="returned terminal fsync ACK"):
+        SelectedSummaryAdmission._from_returned_ack(
+            None,
+            journal.path,
+            session,
+            operation_id,
+            "declined-prestart",
+            None,
+            saved.source_json,
+            identity,
+        )
+    assert not native_input_admitted(comms.root, session)
 
 
 @pytest.mark.parametrize("send", [False, True])
@@ -300,17 +385,17 @@ from agent_comms.selected_summary_admission import SelectedAdmissionIdentity
 root=Path(sys.argv[1]); session=sys.argv[2]; op=sys.argv[3]; key=sys.argv[4]; text=sys.argv[5]
 digest=hashlib.sha256(text.encode()).hexdigest()
 identity=SelectedAdmissionIdentity('project',os.getpid(),1.0.hex(),'turn',key,1,
-    f'1:{digest}',digest,backend._session_revision(session),backend._session_revision(session))
+    f'1:{digest}',digest,digest,backend._session_revision(session),backend._session_revision(session))
 source={'source':{'ownerName':identity.owner_name,'ownerPid':identity.owner_pid,
     'ownerCreatedAt':identity.owner_created_at,'turnId':identity.turn_id,
     'ingressKey':identity.ingress_key,'admissionGeneration':1,
     'correctionWitness':identity.correction_witness,'inputSha256':digest,
-    'reservedRevision':json.loads(json.dumps(identity.reserved_revision))},
+    'originalSha256':digest,'reservedRevision':json.loads(json.dumps(identity.reserved_revision))},
     'selected':{'provider':'fake'},'settings':{'reserveTokens':100}}
 j=CompactionJournal(root/'compaction-commits.sqlite3')
-assert j.reserve_selected_summary(session,source,operation_id=op)==op
 d=InputDispositions(root)
 assert d.record(key,seq=None,owner='project',admission=1,target='project',text=text)
+assert j.reserve_selected_summary(session,source,operation_id=op)==op
 token=j.decline_selected_summary_prestart(op,'split_turn',admission=identity)
 assert token is not None
 if sys.argv[6]=='1':
@@ -373,6 +458,7 @@ async def test_acp_final_boundary_consumes_exact_ack_at_native_id_bind(tmp_path,
             comms.registry.snapshot().admission_generations["project"],
             f"{comms.registry.snapshot().admission_generations['project']}:{digest}",
             digest,
+            hashlib.sha256(agent._dispositions.get(key)["source_text"].encode()).hexdigest(),
             backend._session_revision(str(session)),
             backend._session_revision(str(session)),
         )

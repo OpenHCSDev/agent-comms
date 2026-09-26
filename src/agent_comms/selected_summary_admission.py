@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 from .backend import _session_revision
-from .compaction_journal import CompactionJournal, CompactionJournalError
+from .compaction_journal import CompactionJournal, CompactionJournalError, _consume_selected_ack
 
 if TYPE_CHECKING:
     from .input_disposition import InputDispositions
@@ -35,6 +35,7 @@ _SOURCE_FIELDS = {
     "admissionGeneration",
     "correctionWitness",
     "inputSha256",
+    "originalSha256",
     "reservedRevision",
 }
 _MINT = object()
@@ -50,6 +51,7 @@ class SelectedAdmissionIdentity:
     admission_generation: int
     correction_witness: str
     input_sha256: str
+    original_sha256: str
     # The durable reservation witnesses the pre-result saved session bytes.
     reserved_revision: tuple[tuple[int, int, int, int, int], tuple[int, int, int, int, int] | None]
     # This is the *post-result* native session revision, or the unchanged
@@ -71,6 +73,7 @@ class SelectedAdmissionIdentity:
                 "admissionGeneration": self.admission_generation,
                 "correctionWitness": self.correction_witness,
                 "inputSha256": self.input_sha256,
+                "originalSha256": self.original_sha256,
                 "reservedRevision": json.loads(json.dumps(self.reserved_revision)),
             }
             and type(self.owner_name) is str
@@ -89,6 +92,8 @@ class SelectedAdmissionIdentity:
             and bool(self.correction_witness)
             and type(self.input_sha256) is str
             and _HEX.fullmatch(self.input_sha256) is not None
+            and type(self.original_sha256) is str
+            and _HEX.fullmatch(self.original_sha256) is not None
             and self.reserved_revision is not None
         )
 
@@ -138,8 +143,9 @@ class SelectedSummaryAdmission:
         raise TypeError("Selected admission cannot cross a process boundary")
 
     @classmethod
-    def _after_ack(
+    def _from_returned_ack(
         cls,
+        receipt: object,
         path: Path,
         session: str,
         operation_id: str,
@@ -148,6 +154,9 @@ class SelectedSummaryAdmission:
         source_json: str,
         identity: SelectedAdmissionIdentity,
     ) -> SelectedSummaryAdmission:
+        scope = (str(path), session, operation_id, status, commit_id, source_json)
+        if not _consume_selected_ack(receipt, scope):
+            raise CompactionJournalError("Exact returned terminal fsync ACK required")
         try:
             source = json.loads(source_json)
             valid = (
@@ -236,6 +245,9 @@ class SelectedSummaryAdmission:
                 or row["owner"] != identity.owner_name
                 or row["admission"] != identity.admission_generation
                 or row["native_id"] is not None
+                or type(row["source_text"]) is not str
+                or hashlib.sha256(row["source_text"].encode()).hexdigest()
+                != identity.original_sha256
             ):
                 return False
             return dispositions.bind(

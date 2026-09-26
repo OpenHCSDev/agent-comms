@@ -70,28 +70,39 @@ independent review remains mandatory. Exact `6598755` subsequently received
 `0aeb5d25f9587607cb5ab44cef13dbc40114ea805937d427f3e3330ff7610518`).
 This is a *safety backstop*, not an operationally complete selected summary.
 
-The next separate default-OFF candidate adds a process-local, one-use positive
-admission after a terminal journal transaction **returns** with parent-fsync
-ACK. It binds the exact operation/session, owner PID+incarnation, turn, one
-original ingress key, admission/correction witness, original-text digest,
-reserved-source revision and fresh native session revision. A linked token also
-requires the committed native intent to carry the exact reserved-source JSON
-digest. ACP's existing final wire-locked send boundary
+Exact `749a4c3` positive admission was independently **NON-CLEAN**: a private
+mint helper accepted a persisted terminal row after a post-COMMIT fsync UNKNOWN,
+and the transformed sent-text digest did not bind the durable original ingress
+`InputDispositions.source_text`. See
+`/dev/shm/pr95-749-independent-NqCZ15/REVIEW.md`. The corrective default-OFF
+candidate issues a one-use exact terminal ACK receipt **inside the same SQLite
+transaction only after its parent fsync returns**; it checks that the selected
+row changed from reserved to the exact terminal status in that transaction.
+The private mint consumes this non-reconstructible process-local receipt,
+never just a row or source JSON. Reservation persists and checks the digest of
+the durable original ingress source text separately from the transformed
+sent-text digest, and ACP rechecks both at the wire-locked bind. Identity also
+binds exact operation/session, owner PID+incarnation, turn, one ingress key,
+admission/correction witness, reserved-source revision and fresh native session
+revision. A linked token additionally requires the committed native intent to
+carry the exact reserved-source JSON digest. ACP's existing final wire-locked send boundary
 consumes it at the durable `InputDispositions.bind()` of one native input ID,
 before stdin.write. A failed bind, owner/source change, crash or restart loses
 it; the journal row remains a general blocker. No ACP producer installs it,
 and no token comes from a persisted terminal row or an untrusted Pi summary.
 Provider-free fake tests cover successful exact linked/clean-decline ACK,
-post-COMMIT fsync UNKNOWN on both terminals, mismatched owner/turn/ingress,
-correction/text/source drift, committed native source digest, a forked process,
-one-use/ABA, post-bind fault, and crash before/after a local fake stdin write.
+post-COMMIT fsync UNKNOWN on both terminals with direct row-only mint refusal,
+durable original-text mismatch at reservation and after it, mismatched
+owner/turn/ingress, correction/text/source drift, committed native source
+digest, a forked process, one-use/ABA, post-bind fault, and crash before/after
+a local fake stdin write.
 Existing ordinary native input remains available without selected attempts.
-Bounded serial provider-free checks: new selected admission plus journal and
-send gate **41 passed** (`/var/tmp/pr95-selected-positive-admission-focused.log`,
-SHA256 `64daa96d63922efeca4ec9dddb345441b9ff751ec620977ef93914e3eaa66e19`);
+Bounded serial provider-free corrective checks: selected admission, journal
+and send gate **45 passed** (`/var/tmp/pr95-selected-ack-correction-focused.log`,
+SHA256 `25a0d94958ba6e522f9727906080fb09fb429d045b7e2b8bb16dac1a8a3c0e23`);
 adjacent native journal, dry-run and ACP input/goal regressions **71 passed**
-(`/var/tmp/pr95-selected-positive-admission-adjacent.log`, SHA256
-`578b8d83eb88c94a97f323ba70460aa0b66899387d5a2ffbb0098cfea9eee326`);
+(`/var/tmp/pr95-selected-ack-correction-adjacent.log`, SHA256
+`21138219005db534f435fcbbc33300f915bdea864816a026e612321c245e096b`);
 Black/Ruff/mypy/diff checks pass (Black under Python 3.11 warns it cannot
 AST-verify configured 3.13 grammar). This candidate
 requires independent exact review; no live selected producer, Pi terminal
