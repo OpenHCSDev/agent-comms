@@ -18,7 +18,12 @@ attached transport agree. If no listener exists, nothing is ACKed. After a
 matching local metadata update returns, `observe_publication` marks local
 delivery attempted; it is not proof that a remote UI displayed it. If local
 transport delivery fails before marking, the exact commit-ID row remains
-pending and may be projected again. If `observe_publication` raises on
+pending and may be projected again. A separate nonblocking publication handoff
+fence protects canonical owner/session identity during local transport I/O;
+identity mutation is refused before the actual handoff, and a fresh exact
+owner/session/ACP binding check runs before marking observed. This does not
+hold the registry/wire lock across arbitrary client awaits or assert that a
+remote UI displayed the chunk. If `observe_publication` raises on
 post-COMMIT parent-directory fsync, its committed update may already be
 **observed** despite the exception; a fresh exact-ID database read may instead
 find it pending. Do not assume rollback, undo, or native retry from this error:

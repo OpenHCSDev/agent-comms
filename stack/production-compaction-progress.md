@@ -3,6 +3,25 @@
 Base: merged PR48 `d0ced47fbec39ac4d110c9f7395442524363871d`.
 This is **not deployment approval**. The adaptive trigger remains disabled.
 
+## Runtime/ACP exact 12050b1 NON-CLEAN corrective candidate (review pending)
+
+Independent reviewers found (1) cancellation before the old manager's
+`reopen_required` marker with a live SIGTERM-ignoring child and a fake-RPC
+strict-validation bypass; (2) canonical session rebind during awaited local
+ACP publication before actual handoff, causing wrong-session metadata delivery
+and premature observed mark; (3) a renamed symlink to verified `pi-native`
+entering the legacy `/compact` route. Their exact old bytes are NON-CLEAN;
+no pinned Pi/provider execution or native mutation was inferred from the fake
+controls. This candidate sets the marker before cleanup await, retains a
+shielded reap task awaited by every next borrower, resolves launcher aliases,
+and protects actual metadata handoff/mark with a separate nonblocking identity
+fence plus before/after owner-session checks (not a registry lock over client
+I/O). Real-child cancellation/invalid reopen, alias refusal, cross-process
+identity and prehandoff tests pass; isolated full suite **1707 passed/61
+skipped**, extracted wheel **79 passed**, Black/Ruff/mypy clean. See
+`compaction-runtime-review-corrections.md`. Exact correction review, final
+combined review and activation remain OPEN.
+
 ## Owner preparation and outbox fsync-uncertainty successor (combined review pending)
 
 Read-only disposable pinned Pi in-memory loader derives the actual

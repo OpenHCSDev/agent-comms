@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import signal
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -45,6 +47,83 @@ console.log(JSON.stringify({id:manager.getSessionId(),file:manager.getSessionFil
     launcher = Path(PACKAGE).parents[3] / "bin/pi-native"
     assert launcher.is_file(), launcher
     return launcher, Path(item["file"]), item["id"]
+
+
+@pytest.mark.asyncio
+async def test_cancelled_retirement_keeps_marker_and_reaps_before_next_input(
+    saved, tmp_path, monkeypatch
+):
+    launcher, file, identity = saved
+    child = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-u",
+        "-c",
+        "import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);"
+        "print('ready',flush=True);time.sleep(30)",
+        start_new_session=True,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    persistent = backend.PersistentPiSession()
+    try:
+        assert child.stdout is not None
+        assert await asyncio.wait_for(child.stdout.readline(), 2) == b"ready\n"
+        persistent.proc = child
+        persistent.session_file = str(file)
+        persistent.session_id = identity
+        retiring = asyncio.create_task(persistent.discard_for_external_write(str(file)))
+        deadline = asyncio.get_running_loop().time() + 2
+        while child.stdin is not None and not child.stdin.is_closing():
+            assert asyncio.get_running_loop().time() < deadline
+            await asyncio.sleep(0.002)
+        assert child.returncode is None
+        retiring.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await retiring
+        assert persistent.reopen_required == str(file)
+        assert persistent.reopen_session_id == identity
+        assert persistent._close_task is not None
+        # An attempted second borrow cannot escape the in-flight cleanup.
+        await persistent.close_idle()
+        assert child.returncode is not None
+        assert persistent._close_task is None
+        assert persistent.reopen_required == str(file)
+        corrupt = file.read_bytes().rstrip(b"\n")
+        file.write_bytes(corrupt)
+        calls = []
+        original = native_session_reopen.validate_native_reopen
+
+        def checked(_launcher, session_file, *, expected_session_id):
+            calls.append((session_file, expected_session_id))
+            return original(str(launcher), session_file, expected_session_id=expected_session_id)
+
+        monkeypatch.setattr(native_session_reopen, "validate_native_reopen", checked)
+        spawned = []
+
+        async def forbidden_spawn(*args, **kwargs):
+            spawned.append(args)
+            raise AssertionError("Invalid saved disk must not launch an RPC child")
+
+        monkeypatch.setattr(backend.asyncio, "create_subprocess_exec", forbidden_spawn)
+        events = [
+            event
+            async for event in backend.stream_agent_events(
+                str(launcher),
+                [],
+                "not a retry",
+                str(tmp_path),
+                session_file=str(file),
+                persistent_session=persistent,
+            )
+        ]
+        assert events[-1]["reason_code"] == "compaction_reopen_invalid"
+        assert calls == [(str(file), identity)] and not spawned
+        assert file.read_bytes() == corrupt
+    finally:
+        if child.returncode is None:
+            os.killpg(child.pid, signal.SIGKILL)
+            await child.wait()
 
 
 def test_strict_native_reopen_preserves_bytes_and_strips_preload(saved, tmp_path, monkeypatch):
@@ -103,6 +182,34 @@ async def test_canonical_manual_route_cannot_use_installed_legacy_compaction(tmp
 
     async def forbidden(*args, **kwargs):
         raise AssertionError("legacy installed Pi route must not launch")
+
+    monkeypatch.setattr(manual_compaction_bridge.manual_compaction, "compact_session", forbidden)
+    result = await manual_compaction_bridge.compact_context(Owner(), "owner")
+    assert result == {
+        "ok": False,
+        "error": "Canonical native compaction requires the owner journal bridge.",
+    }
+
+
+@pytest.mark.asyncio
+async def test_renamed_symlink_to_verified_native_cannot_use_legacy_manual_route(
+    saved, tmp_path, monkeypatch
+):
+    launcher, _file, _identity = saved
+    alias = tmp_path / "renamed-native"
+    alias.symlink_to(launcher)
+    assert native_session_reopen.package_for_launcher(str(alias)) == Path(PACKAGE)
+
+    class Owner:
+        _agent_bin = str(alias)
+        _turn_locks = {}
+        _active_turns = {}
+
+        async def _sync_session_identity(self, session_id):
+            return session_id
+
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("Verified canonical native alias must not reach legacy writer")
 
     monkeypatch.setattr(manual_compaction_bridge.manual_compaction, "compact_session", forbidden)
     result = await manual_compaction_bridge.compact_context(Owner(), "owner")

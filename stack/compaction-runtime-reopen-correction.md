@@ -1,10 +1,17 @@
-# PR95 idle native manager retirement and strict fresh reopen — bounded slice
+# PR95 idle native manager retirement and strict fresh reopen — historical bounded slice
+
+The exact `12050b1` implementation had an independently demonstrated
+cancellation/reap and native-launcher-alias gap. Preserve that NON-CLEAN review;
+see `compaction-runtime-review-corrections.md` for the successor's repair and
+provider-free fault evidence. This document's original happy-path evidence is
+not a clearance of the old bytes.
 
 A persistent Pi RPC child holds its injected `SessionManager` reference and
 cannot safely be rebound by assigning a public manager field after another
 process rewrites its saved session. `PersistentPiSession.discard_for_external_write`
-now terminates the idle child under its borrow lock, preserves the expected
-canonical file/session ID, and marks the session for strict validation. It does
+attempted to terminate the idle child under its borrow lock, preserve the
+expected canonical file/session ID, and mark strict validation; the old
+ordering was cancellable before the marker and is corrected separately. It does
 not transparently retry the failed or uncertain input.
 
 Before the next input can launch a fresh Pi child, backend transport invokes

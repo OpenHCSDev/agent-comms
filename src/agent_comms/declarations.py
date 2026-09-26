@@ -28,7 +28,7 @@ import uuid
 from bisect import bisect_left
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import closing, contextmanager, nullcontext, suppress
+from contextlib import AbstractContextManager, closing, contextmanager, nullcontext, suppress
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from enum import Enum, StrEnum
@@ -2378,29 +2378,45 @@ class ThreadRegistry:
                 if not math.isfinite(candidate):
                     raise RelationViolationError("Registry creation identities collide.")
                 thread = replace(thread, created_at=candidate)
-            history = None
-            intent = None
-            before_goal = previous.goal if previous is not None else None
-            if before_goal != thread.goal:
-                from .goal_history import GoalHistoryStore
-
-                history = GoalHistoryStore(self._path)
-                intent = history.begin(thread.created_at, before_goal, thread.goal)
-            self._threads[thread.name] = thread
-            self._statuses[thread.name] = status
-            self._last_seen[thread.name] = time.time()
-            if (
-                previous is None
-                or new_owner
+            identity_changed = previous is not None and (
+                previous.created_at != thread.created_at
                 or previous.pid != thread.pid
+                or previous.session_file != thread.session_file
+                or previous.worktree != thread.worktree
                 or previous.role != thread.role
                 or (previous_status is not None and previous_status.active != status.active)
-            ):
-                self._bump_admission_unlocked(thread.name)
-            self._bump_owner_epoch_unlocked(thread.name)
-            self._save_unlocked()
-            if history is not None and intent is not None:
-                history.commit(intent)
+            )
+            identity_scope: AbstractContextManager[None]
+            if identity_changed:
+                from .compaction_publication_lease import publication_identity_fence
+
+                identity_scope = publication_identity_fence(self._path.parent, nonblocking=True)
+            else:
+                identity_scope = nullcontext()
+            with identity_scope:
+                history = None
+                intent = None
+                before_goal = previous.goal if previous is not None else None
+                if before_goal != thread.goal:
+                    from .goal_history import GoalHistoryStore
+
+                    history = GoalHistoryStore(self._path)
+                    intent = history.begin(thread.created_at, before_goal, thread.goal)
+                self._threads[thread.name] = thread
+                self._statuses[thread.name] = status
+                self._last_seen[thread.name] = time.time()
+                if (
+                    previous is None
+                    or new_owner
+                    or previous.pid != thread.pid
+                    or previous.role != thread.role
+                    or (previous_status is not None and previous_status.active != status.active)
+                ):
+                    self._bump_admission_unlocked(thread.name)
+                self._bump_owner_epoch_unlocked(thread.name)
+                self._save_unlocked()
+                if history is not None and intent is not None:
+                    history.commit(intent)
 
     def live_owner_with_epoch(self, name: str) -> tuple[Thread, int]:
         """Capture an active owner and its persistent incarnation under one lock.
@@ -2798,7 +2814,12 @@ class ThreadRegistry:
 
     def rename(self, name: str, new_name: str) -> tuple[str, str]:
         """Rename one running thread while retaining old names as aliases."""
-        with _store_lock(self._path):
+        from .compaction_publication_lease import publication_identity_fence
+
+        with (
+            publication_identity_fence(self._path.parent, nonblocking=True),
+            _store_lock(self._path),
+        ):
             self._load_unlocked()
             canonical = self._aliases.get(name, name)
             if canonical not in self._threads:
@@ -2840,7 +2861,12 @@ class ThreadRegistry:
             return canonical, new_name
 
     def unregister(self, name: str) -> None:
-        with _store_lock(self._path):
+        from .compaction_publication_lease import publication_identity_fence
+
+        with (
+            publication_identity_fence(self._path.parent, nonblocking=True),
+            _store_lock(self._path),
+        ):
             self._load_unlocked()
             name = self._aliases.get(name, name)
             if name not in self._threads:
@@ -2852,7 +2878,12 @@ class ThreadRegistry:
             self._save_unlocked()
 
     def archive(self, name: str) -> None:
-        with _store_lock(self._path):
+        from .compaction_publication_lease import publication_identity_fence
+
+        with (
+            publication_identity_fence(self._path.parent, nonblocking=True),
+            _store_lock(self._path),
+        ):
             self._load_unlocked()
             name = self._aliases.get(name, name)
             if name not in self._threads:
@@ -2863,7 +2894,12 @@ class ThreadRegistry:
             self._save_unlocked()
 
     def begin_delete(self, name: str) -> None:
-        with _store_lock(self._path):
+        from .compaction_publication_lease import publication_identity_fence
+
+        with (
+            publication_identity_fence(self._path.parent, nonblocking=True),
+            _store_lock(self._path),
+        ):
             self._load_unlocked()
             name = self._aliases.get(name, name)
             if name not in self._threads:
@@ -2880,7 +2916,12 @@ class ThreadRegistry:
 
     def remove(self, name: str) -> tuple[str, ...]:
         """Remove a declaration and atomically detach its surviving children."""
-        with _store_lock(self._path):
+        from .compaction_publication_lease import publication_identity_fence
+
+        with (
+            publication_identity_fence(self._path.parent, nonblocking=True),
+            _store_lock(self._path),
+        ):
             self._load_unlocked()
             name = self._aliases.get(name, name)
             if name not in self._threads:
