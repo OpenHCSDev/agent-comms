@@ -1374,7 +1374,9 @@ class TestAgentTurn:
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
         store.record_failed(reservation, "The previous turn failed")
-        blocked = wired.update_goal("proj", "blocked", goal_id=goal.id)
+        blocked = wired.update_goal(
+            "proj", "blocked", goal_id=goal.id, block_reason="The previous turn failed"
+        )
 
         try:
             with pytest.raises(ValueError, match="explicit retry"):
@@ -1385,7 +1387,7 @@ class TestAgentTurn:
             )
             resumed = wired.registry.require("proj").goal
             assert result["goal"]["id"] == resumed.id == goal.id
-            assert resumed.status == "active"
+            assert resumed.status == "active" and resumed.block_reason is None
             generation = GoalAttemptStore(wired.root / "goal-private").snapshot(goal.id)
             assert (generation.number, generation.state) == (2, "ready")
             assert store.ready_grant(goal.id, 2)
@@ -1412,7 +1414,9 @@ class TestAgentTurn:
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
         store.record_failed(reservation, "Previous turn failed")
-        blocked = wired.update_goal("proj", "blocked", goal_id=goal.id)
+        blocked = wired.update_goal(
+            "proj", "blocked", goal_id=goal.id, block_reason="Previous turn failed"
+        )
         store.authorize_retry(
             goal.id,
             expected_generation=1,

@@ -40,7 +40,9 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
     reservation = store.reserve(goal.id, 1)
     store.claim_launch(reservation)
     store.record_failed(reservation, "Previous goal attempt failed")
-    blocked = comms.update_goal(session, "blocked", goal_id=goal.id)
+    blocked = comms.update_goal(
+        session, "blocked", goal_id=goal.id, block_reason="Previous goal attempt failed"
+    )
     owner._dispositions.record(
         "acp:old-unknown",
         seq=None,
@@ -171,7 +173,9 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, mo
         store.claim_launch(reservation)
     if fence in {"owner", "origin"}:
         store.record_failed(reservation, "Known failed attempt")
-    blocked = comms.update_goal(session, "blocked", goal_id=goal.id)
+    blocked = comms.update_goal(
+        session, "blocked", goal_id=goal.id, block_reason="Owner input required before retry"
+    )
     generation = store.snapshot(goal.id)
     owner._active_turns[session] = "unrelated-turn"
     owner._backend_inboxes[session] = asyncio.Queue()

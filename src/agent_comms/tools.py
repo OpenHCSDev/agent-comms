@@ -355,6 +355,7 @@ def _goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
         goal_id=str(arguments["goal_id"]),
         expected_status="active",
         progress=str(arguments["progress"]),
+        block_reason=(str(arguments["progress"]) if arguments["status"] == "blocked" else None),
         model_report=True,
         wait_for=wait_for or (),
         reviewed_inputs=reviewed_inputs or (),
@@ -769,7 +770,11 @@ TOOLS = (
                 "Goal state",
                 choices=("active", "standby", "completed", "blocked"),
             ),
-            ToolParameter("progress", "string", "Progress summary or reason input is needed"),
+            ToolParameter(
+                "progress",
+                "string",
+                "Progress summary; blocked requires a nonempty explicit reason",
+            ),
             ToolParameter(
                 "wait_for",
                 "array",
