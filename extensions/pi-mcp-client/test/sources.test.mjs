@@ -1,0 +1,99 @@
+import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
+import { declarationDigest, parseNativeConfig } from '../src/config.mjs';
+import { loadEffectiveDeclarations, readOptional } from '../src/sources.mjs';
+
+const config = (servers) => JSON.stringify({ version: 1, servers });
+const server = (command) => ({ id: 'local', enabled: true, instructionsPolicy: 'status-only',
+  transport: { type: 'stdio', command, args: [], cwd: 'project' } });
+
+test('Pi project trust gates reading; exact external digest gates eligibility; neither starts a child', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mcp-sources-'));
+  const project = join(root, 'project');
+  const agentDir = join(root, 'agent');
+  const marker = join(root, 'unexpected-launch');
+  await mkdir(join(project, '.pi'), { recursive: true });
+  await mkdir(agentDir);
+  try {
+    const user = server('user-server');
+    const projectServer = server(process.execPath);
+    projectServer.transport.args = ['-e', `require('fs').writeFileSync(${JSON.stringify(marker)},'spawned')`];
+    await writeFile(join(agentDir, 'mcp.json'), config([user]));
+    const projectPath = join(project, '.pi', 'mcp.json');
+    await writeFile(projectPath, '{bad');
+    const load = (trusted) => loadEffectiveDeclarations({
+      ctx: { cwd: project, isProjectTrusted: () => trusted }, agentDir, configDirName: '.pi',
+    });
+    assert.deepEqual((await load(false)).map(({ scope, status }) => [scope, status]), [['user', 'trust_required']]);
+    assert.deepEqual((await load(true)).map(({ scope, status }) => [scope, status]),
+      [['user', 'trust_required']]); // Pi auto-trust alone must not parse MCP project config.
+    new ProjectTrustStore(agentDir).set(project, true);
+    await assert.rejects(load(true), /Invalid MCP config: JSON syntax/);
+    await writeFile(projectPath, config([projectServer]));
+    assert.deepEqual((await load(true)).map(({ scope, status }) => [scope, status]), [['project', 'trust_required']]);
+    const digest = declarationDigest(parseNativeConfig(config([projectServer])).servers[0]);
+    await writeFile(join(agentDir, 'mcp-trust.json'), JSON.stringify({ version: 1, decisions: [
+      { projectRoot: await realpath(project), scope: 'project', serverId: 'local', digest, decision: 'approve' },
+    ] }));
+    assert.deepEqual((await load(true)).map(({ scope, status }) => [scope, status]), [['project', 'approved']]);
+    await writeFile(projectPath, config([{ ...projectServer, transport: { ...projectServer.transport, args: ['changed'] } }]));
+    assert.equal((await load(true))[0].status, 'trust_required');
+    assert.equal(existsSync(marker), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('Pi implicit auto-trust cannot authorize a user server in project cwd', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mcp-user-auto-trust-'));
+  const project = join(root, 'project');
+  const agentDir = join(root, 'agent');
+  await mkdir(project); await mkdir(agentDir);
+  try {
+    await writeFile(join(agentDir, 'mcp.json'), config([server('node')]));
+    const load = () => loadEffectiveDeclarations({
+      ctx: { cwd: project, isProjectTrusted: () => true }, agentDir, configDirName: '.pi',
+    });
+    assert.equal((await load())[0].status, 'trust_required');
+    new ProjectTrustStore(agentDir).set(project, true);
+    assert.equal((await load())[0].status, 'approved');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('open-descriptor source reads refuse files larger than the bounded parser input', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mcp-bounded-read-'));
+  const path = join(root, 'oversized.json');
+  try {
+    await writeFile(path, 'x'.repeat(120_001));
+    await assert.rejects(readOptional(path), /Invalid MCP config file/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('user declarations cannot be symlinked to project-controlled config',
+  { skip: process.platform === 'win32' && 'Windows symlink privilege is not assured' }, async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mcp-sources-'));
+  const agentDir = join(root, 'agent');
+  const project = join(root, 'project');
+  await mkdir(agentDir);
+  await mkdir(project);
+  try {
+    const external = join(project, 'injected.json');
+    await writeFile(external, config([server('project-injected')]));
+    await symlink(external, join(agentDir, 'mcp.json'));
+    await assert.rejects(loadEffectiveDeclarations({
+      ctx: { cwd: project, isProjectTrusted: () => false }, agentDir, configDirName: '.pi',
+    }), /symlink refused/);
+    assert.equal((await readFile(external, 'utf8')).includes('project-injected'), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

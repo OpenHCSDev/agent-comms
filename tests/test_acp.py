@@ -14,9 +14,10 @@ from dataclasses import asdict
 from pathlib import Path
 
 import pytest
+from acp import RequestError
 from acp.schema import ConfigOptionUpdate, SessionInfoUpdate
 
-from agent_comms.acp import CommsAgent
+from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.backend import NATIVE_INPUT_CAPABILITY
 from agent_comms.declarations import ActivityState, UnregisteredThreadError
 from agent_comms.operations import wire
@@ -58,6 +59,27 @@ class TestHandlers:
         thread = agent._comms.registry.require("my-project")
         assert thread.worktree == "/home/me/my-project"
         assert thread.tags == frozenset({"acp"})
+
+    @pytest.mark.parametrize("agent_type", [CommsAgent, CommsClient])
+    async def test_foreign_mcp_declarations_rejected_before_thread_or_owner(
+        self, tmp_path, agent_type, monkeypatch
+    ):
+        agent = agent_type(wire(tmp_path / "wire"))
+
+        def no_owner(*args, **kwargs):
+            raise AssertionError("foreign ACP declaration reached owner acquisition")
+
+        monkeypatch.setattr(agent._comms, "ensure_owner", no_owner)
+        for supplied in [[{"name": "untrusted", "command": "bad"}], {"bad": "shape"}]:
+            with pytest.raises(RequestError) as new_error:
+                await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=supplied)
+            assert "mcpServers are unsupported" in new_error.value.data["reason"]
+            with pytest.raises(RequestError) as load_error:
+                await agent.load_session(
+                    cwd=str(tmp_path / "project"), session_id="nonexistent", mcp_servers=supplied
+                )
+            assert "mcpServers are unsupported" in load_error.value.data["reason"]
+        assert len(agent._comms.registry.snapshot().threads) == 0
 
     async def test_session_model_config_is_persisted_and_selectable(self, tmp_path, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/one,anthropic/two")
