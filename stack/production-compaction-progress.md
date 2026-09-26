@@ -3,6 +3,42 @@
 Base: merged PR48 `d0ced47fbec39ac4d110c9f7395442524363871d`.
 This is **not deployment approval**. The adaptive trigger remains disabled.
 
+## Default-off ACP adaptive candidate (combined review and acceptance pending)
+
+The opt-in `CommsAgent` path now admits only one *fresh direct original*
+`acp:` input on an active claimed goal turn. It reads selected-model usage and
+Pi's effective trigger, captures the owner/native/ingress source before a
+bounded Pi-native summary request, then retires the idle manager, journal-CAS
+commits once and projects exact-ID local metadata before the ordinary native
+input send. The direct original remains UNKNOWN/unbound until its own matching
+native start; a correction or changed settings/model/source refuses the commit
+without replay. Pending outbox and strict fresh reopen remain unchanged. A
+native split-turn cut is skipped because this writer has not separately proved
+its retention semantics. A provider strategy is implemented but **never
+exercised against a provider** here; one child is time/output bounded, disables
+provider retries, and admits at most four Pi-native requests. Explicit
+constructor opt-in defaults OFF; no launcher or live deployment enables it.
+
+Current provider-free tests include actual ACP claimed-turn → synthetic
+summary → pinned native CAS → metadata → one original input bind/start, and a
+correction/no-dispatch counterpart. The post-main focused source suite passed
+**155** in a clean identity environment before the final settings/model-source
+hardening; final hardening's owner/commit/runtime/publication suite passed
+**66** on real `/var/tmp`. Black/Ruff/mypy and diff checks pass. The attempted
+uncleared run with inherited live agent identity failed six tests including
+unrelated ACP baseline controls; clean-identity rerun of those six passed.
+**No fresh full combined source/wheel run or independent exact-head clearance.**
+
+Adversarial read-only audit identified live project-trust, custom-model/auth,
+file-operation metadata and settings-race gaps. This candidate refuses adaptive
+payment if project settings or global/project custom model declarations exist;
+source capture and commit compare bounded global/project settings and model-file
+revisions. Remaining activation blockers: establish the *actual* live selected
+model/auth/extension route (including stored credentials or CLI overrides) and
+Pi project-trust parity; preserve native `details.readFiles/modifiedFiles`
+across subsequent compactions; demonstrate provider semantic retention and a
+fresh combined review. The ordinary native hard-context guard is never disabled.
+
 ## Normal PR104/105 main integration and socket incarnation (combined review pending)
 
 After clean `dadb7c4`, normally merged main `a6b43fec` (including PR104/105)

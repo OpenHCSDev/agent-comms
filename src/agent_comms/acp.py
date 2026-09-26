@@ -154,8 +154,14 @@ class CommsAgent:
         reply_quiet: float | None = None,
         runtime_enabled: bool = False,
         auto_wake: bool = True,
+        adaptive_compaction_enabled: bool = False,
+        adaptive_summary_strategy: Any = None,
     ):
         self._comms = comms
+        # Explicit construction-only opt-in; no inherited environment or
+        # model/tool content may enable paid compaction on a running owner.
+        self._adaptive_compaction_enabled = adaptive_compaction_enabled
+        self._adaptive_summary_strategy = adaptive_summary_strategy
         self._sessions: dict[str, str] = {}
         self._client: Any = None
         self._agent_bin = agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", DEFAULT_AGENT_BIN)
@@ -2390,8 +2396,10 @@ class CommsAgent:
                             allowed = False
                             break
                 if (
-                    allowed and current_wait is not None
-                    and not interrupt_ok and not owner_interrupt_followup
+                    allowed
+                    and current_wait is not None
+                    and not interrupt_ok
+                    and not owner_interrupt_followup
                 ):
                     allowed = self._comms.consume_goal_wait(canonical, current_wait.wait_id)
                 if allowed:
@@ -2542,6 +2550,46 @@ class CommsAgent:
             # Existing local ACP owner session only. If delivery is uncertain,
             # the keyed metadata remains pending; never invent a bus recipient.
             await publish_pending_local(self, session_id, thread_name)
+            if (
+                self._adaptive_compaction_enabled
+                and original_owner_input
+                and len(original_keys) == 1
+                and thread.session_file is not None
+                and backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
+            ):
+                from .owner_compaction_adaptive import maybe_compact_owner_turn
+
+                try:
+                    committed = await maybe_compact_owner_turn(
+                        self._comms.registry,
+                        self._agent_bin,
+                        thread_name,
+                        turn_id,
+                        self._comms.agent_info_of(thread_name),
+                        original_keys[0],
+                        self._persistent_backends.setdefault(
+                            session_id, backend.PersistentPiSession()
+                        ),
+                        summary_strategy=self._adaptive_summary_strategy,
+                    )
+                except Exception:
+                    # A selected adaptive operation may already have paid or
+                    # written. Do not turn a fault into ordinary input fallback.
+                    if goal is not None and goal.active:
+                        self._comms.block_goal_after_failed_turn(
+                            thread_name,
+                            started_goal=goal,
+                            expected_worktree=thread.worktree,
+                            diagnostic=(
+                                "Adaptive native compaction did not establish a "
+                                "safe outcome; inspect the exact commit journal."
+                            ),
+                        )
+                    raise
+                if committed:
+                    # Local metadata-only outbox; uncertain subscriber delivery
+                    # leaves its exact row pending, never broadcasts a summary.
+                    await publish_pending_local(self, session_id, thread_name)
             # ACP delivery/ACK/UI updates above are not model context. This
             # bounded projection is prepared ONLY inside an already authorized
             # natural turn, from a separate owner-bound source cursor. It never

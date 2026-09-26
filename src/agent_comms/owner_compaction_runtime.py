@@ -1,9 +1,6 @@
-"""Owner-only pre-summary/commit sequencing; no autonomous provider trigger.
+"""Owner-only pre-summary/commit sequencing under a validated ACP turn lock.
 
-A trusted caller must already own the ACP turn lock, canonical claimed goal
-turn, and exact persistent session. The callback is an owner-selected summary
-strategy; tool/model JSON cannot supply it. Nothing invokes this module from a
-production turn until a bounded provider strategy and trigger are integrated.
+The native session stays authoritative; a callback cannot grant commit authority.
 """
 
 from __future__ import annotations
@@ -27,6 +24,7 @@ class PreparedOwnerSummary:
     tokens_before: int
     is_split_turn: bool
     session_id: str
+    preparation: NativePreparation
 
 
 async def compact_owner_once(
@@ -37,6 +35,9 @@ async def compact_owner_once(
     summarize: Callable[[PreparedOwnerSummary], Awaitable[str]],
     *,
     keep_recent_tokens: int | None = None,
+    pending_input_key: str | None = None,
+    settings_paths: tuple[str, ...] | None = None,
+    allow_split_turn: bool = True,
 ) -> CompactionOperation | None:
     """Exactly one native writer attempt, without input or summary replay.
 
@@ -46,14 +47,25 @@ async def compact_owner_once(
     The caller may not hide a COMMIT UNKNOWN or trigger a second summary/write.
     """
     prepared_source = await asyncio.to_thread(
-        bridge.prepare_source, owner, epoch, keep_recent_tokens=keep_recent_tokens
+        bridge.prepare_source,
+        owner,
+        epoch,
+        keep_recent_tokens=keep_recent_tokens,
+        pending_input_key=pending_input_key,
+        settings_paths=settings_paths,
     )
     if prepared_source is None:
         return None
     prepared, source = prepared_source
     assert isinstance(prepared, NativePreparation)
+    if prepared.is_split_turn and not allow_split_turn:
+        # The current native writer persists one summary but no separate turn
+        # prefix summary. Never discard a split turn's unsummarized prefix.
+        return None
     summary = await summarize(
-        PreparedOwnerSummary(prepared.tokens_before, prepared.is_split_turn, prepared.session_id)
+        PreparedOwnerSummary(
+            prepared.tokens_before, prepared.is_split_turn, prepared.session_id, prepared
+        )
     )
     if type(summary) is not str or not summary:
         raise ValueError("Bounded owner summary required")

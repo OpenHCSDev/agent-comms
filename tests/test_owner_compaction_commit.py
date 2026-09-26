@@ -164,6 +164,86 @@ def test_unsettled_input_refuses_preparation_and_commit_without_touching_unknown
     assert entries(witness)[-1]["type"] == "message"
 
 
+def test_only_exact_unattempted_original_input_can_cross_source_and_commit(native):
+    bridge, owner, epoch, witness = native
+    inputs = InputDispositions(bridge.root)
+    admission = owner.active_turn.admission_generation
+    assert admission is not None
+    inputs.record(
+        "acp:original",
+        seq=None,
+        owner=owner.name,
+        admission=admission,
+        target=owner.name,
+        text="next input, not yet dispatched",
+    )
+    with pytest.raises(RelationViolationError, match="Unsettled"):
+        bridge.capture_source(owner, epoch, witness)
+    source = bridge.capture_source(owner, epoch, witness, pending_input_key="acp:original")
+    assert source.pending_input_key == "acp:original"
+    result = OwnerCompactionCommit.commit(
+        bridge, owner, epoch, witness, "summary", 42, source=source
+    )
+    assert result.status == "committed"
+    assert inputs.status("acp:original") == "unknown"
+    assert inputs.get("acp:original")["native_id"] is None
+
+
+def test_original_input_exception_refuses_other_unknown_or_bound_original(native):
+    bridge, owner, epoch, witness = native
+    inputs = InputDispositions(bridge.root)
+    admission = owner.active_turn.admission_generation
+    assert admission is not None
+    inputs.record(
+        "acp:original",
+        seq=None,
+        owner=owner.name,
+        admission=admission,
+        target=owner.name,
+        text="original",
+    )
+    source = bridge.capture_source(owner, epoch, witness, pending_input_key="acp:original")
+    inputs.record(
+        "acp:correction",
+        seq=None,
+        owner=owner.name,
+        admission=admission,
+        target=owner.name,
+        text="correction",
+    )
+    with pytest.raises(RelationViolationError, match="Unsettled"):
+        OwnerCompactionCommit.commit(
+            bridge, owner, epoch, witness, "stale summary", 42, source=source
+        )
+    assert bridge.journal.unresolved(witness["sessionFile"]) == ()
+    assert inputs.bind(
+        "acp:original",
+        admission=admission,
+        turn_id=owner.active_turn.id,
+        native_id="a" * 32,
+        text="original",
+    )
+    with pytest.raises(RelationViolationError, match="already attempted"):
+        bridge.capture_source(owner, epoch, witness, pending_input_key="acp:original")
+    assert entries(witness)[-1]["type"] == "message"
+
+
+def test_bus_unknown_cannot_borrow_direct_original_exception(native):
+    bridge, owner, epoch, witness = native
+    assert owner.active_turn is not None
+    InputDispositions(bridge.root).record(
+        "bus:1",
+        seq=1,
+        owner=owner.name,
+        admission=owner.active_turn.admission_generation,
+        target=owner.name,
+        text="single bus original",
+    )
+    with pytest.raises(RelationViolationError, match="already attempted"):
+        bridge.capture_source(owner, epoch, witness, pending_input_key="bus:1")
+    assert entries(witness)[-1]["type"] == "message"
+
+
 def test_changed_started_input_still_invalidates_pre_summary_source(native):
     bridge, owner, epoch, witness = native
     inputs = InputDispositions(bridge.root)
