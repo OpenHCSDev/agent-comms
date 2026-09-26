@@ -16,6 +16,10 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _assert_schema as assert_cohort_schema
 from .coordination_store import IdentityConflict, MutationStore
 from .native_pi import NativeContextProof, NativePiUnavailable, _read_native_context_evidence
+from .native_prompt_binding import (
+    expected_prompt_matches_journal,
+    read_expected_prompt_binding,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +37,9 @@ class HistoricalNativeInput:
     attempt_ordinal: int | None
     triage_result: str | None  # 'ignore' or 'full'; FULL stage has no triage verdict.
     context: NativeContextProof
+    # Prelaunch binding facts: None means no binding was durably written
+    # before launch (crash ordering), so equality cannot be established.
+    expected_prompt_digest: str | None = None
     expected_prompt_equality_established: bool = False
 
 
@@ -113,6 +120,25 @@ def read_historical_native_inputs(
             raise IdentityConflict("historical native context evidence is unavailable") from error
         if observed != recorded:
             raise IdentityConflict("historical native context differs from live-recorded proof")
+        binding = read_expected_prompt_binding(store, row["input_id"])
+        if binding is not None:
+            # A binding must name exactly this reserved input; anything else is
+            # corruption, not a failed equality join.
+            if (
+                binding.stage != row["stage"]
+                or binding.claim_id != row["claim_id"]
+                or binding.execution_id != row["execution_id"]
+                or binding.attempt_ordinal != row["attempt_ordinal"]
+                or binding.owner_lookup != row["owner_lookup"]
+                or binding.owner_thread != row["owner_thread"]
+                or binding.owner_generation != row["owner_generation"]
+                or binding.source_seq != row["wire_seq"]
+                or binding.message_id != row["message_id"]
+            ):
+                raise IdentityConflict("prelaunch binding does not match this live proof")
+            equality = expected_prompt_matches_journal(session_file, binding)
+        else:
+            equality = False
         evidence.append(
             HistoricalNativeInput(
                 wire_root_id,
@@ -128,6 +154,8 @@ def read_historical_native_inputs(
                 row["attempt_ordinal"],
                 row["verdict"],
                 recorded,
+                binding.expected_prompt_digest if binding is not None else None,
+                equality,
             )
         )
     return tuple(evidence)

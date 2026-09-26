@@ -50,6 +50,9 @@ from .native_pi import (
     _trusted_package,
     run_native_pi_turn,
 )
+from .native_prompt_binding import (
+    bind_expected_prompt,
+)
 from .operations import Comms
 from .wake import WakeDecision, derive_exact_reply_target
 from .wake_injection import render_selected_wake_frame
@@ -547,6 +550,16 @@ async def run_one_sealed_claim(
             if len(triage_prompt.encode("utf-8")) > _MAX_PROMPT_BYTES:
                 raise IdentityConflict("triage prompt exceeds the bounded model context")
             input_id, token = _reserve_triage(store, pending, owner, person.generation)
+            # Prelaunch binding: exact expected prompt bytes before Pi starts.
+            bind_expected_prompt(
+                store,
+                input_id=input_id,
+                stage="triage",
+                claim=pending,
+                owner=owner,
+                generation=person.generation,
+                prompt=triage_prompt,
+            )
             result = await run_native_pi_turn(
                 native_package,
                 input_id=input_id,
@@ -616,6 +629,17 @@ async def run_one_sealed_claim(
         )
         if len(prompt.encode("utf-8")) > _MAX_PROMPT_BYTES:
             raise IdentityConflict("full prompt exceeds the bounded model context")
+        bind_expected_prompt(
+            store,
+            input_id=input_id,
+            stage="full",
+            claim=pending,
+            owner=owner,
+            generation=person.generation,
+            prompt=prompt,
+            execution_id=execution_id,
+            attempt_ordinal=fence.attempt_ordinal,
+        )
         result = await run_native_pi_turn(
             native_package,
             input_id=input_id,

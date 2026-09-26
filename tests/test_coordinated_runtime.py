@@ -194,7 +194,8 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
         assert len(ignored) == 1 and ignored[0].stage == "triage"
         assert ignored[0].triage_result == "ignore"
         assert ignored[0].execution_id is None
-        assert not ignored[0].expected_prompt_equality_established
+        # The prelaunch binding now joins the journal digest: equality is real.
+        assert ignored[0].expected_prompt_equality_established
     assert len(comms.channel_history("#team")) == 1
     second, beta_calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", second)
@@ -366,7 +367,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
         assert rows[1].triage_result is None
         assert rows[0].owner_lookup == rows[1].owner_lookup
         assert rows[0].owner_generation == rows[1].owner_generation == 1
-        assert all(not row.expected_prompt_equality_established for row in rows)
+        assert all(row.expected_prompt_equality_established for row in rows)
         assert all(row.context.session_id == "isolated-session" for row in rows)
         assert (
             read_historical_native_inputs(

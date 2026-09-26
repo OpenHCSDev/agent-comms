@@ -256,6 +256,48 @@ def _session_location(directory: Path, candidate: str) -> Path:
     return path
 
 
+def read_tracked_input_digest(session_file: Path, input_id: str) -> str:
+    """Return the durable journal digest for one tracked user input.
+
+    Corroboration only: this never proves the journal row fsynced, so callers
+    must join it to an independently recorded live proof before trusting it.
+    """
+    if type(input_id) is not str or _INPUT_ID.fullmatch(input_id) is None:
+        raise ValueError("A tracked input digest lookup requires a 128-bit input ID")
+    session_file = Path(session_file).absolute()
+    _private_session_dir(session_file.parent)
+    entries = _read_private_file(session_file)
+    if (
+        not entries
+        or entries[0].get("type") != "session"
+        or type(entries[0].get("id")) is not str
+        or not entries[0]["id"]
+    ):
+        raise NativePiUnavailable("Native Pi session header is invalid")
+    observed: dict[str, str] = {}
+    for entry in entries:
+        message = entry.get("message")
+        if entry.get("type") != "message" or not isinstance(message, dict):
+            continue
+        tracked_id = message.get("inputId")
+        if tracked_id is None:
+            continue
+        digest = message.get("inputDigest")
+        if (
+            message.get("role") != "user"
+            or type(tracked_id) is not str
+            or _INPUT_ID.fullmatch(tracked_id) is None
+            or type(digest) is not str
+            or _DIGEST.fullmatch(digest) is None
+            or tracked_id in observed
+        ):
+            raise NativePiUnavailable("Native Pi session has ambiguous tracked user input")
+        observed[tracked_id] = digest
+    if input_id not in observed:
+        raise NativePiUnavailable("The specified input was never durably committed")
+    return observed[input_id]
+
+
 def _read_native_context_evidence(session_file: Path, input_id: str) -> NativeContextProof:
     """Parse a private journal only as corroboration of a live, emitted Pi event.
 
