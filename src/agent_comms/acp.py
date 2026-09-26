@@ -146,6 +146,8 @@ def _goal_attempt_unavailable() -> RequestError:
 class QueuedInput:
     text: str
     echo: bool
+    owner_created_at: float
+    admission: int
 
 
 class CommsAgent:
@@ -191,6 +193,8 @@ class CommsAgent:
         self._backend_inboxes: dict[str, asyncio.Queue[str | dict[str, Any]]] = {}
         self._persistent_backends: dict[str, backend.PersistentPiSession] = {}
         self._queued_inputs: dict[str, dict[str, QueuedInput]] = {}
+        self._restored_inputs: dict[str, dict[str, QueuedInput]] = {}
+        self._queue_revisions: dict[str, int] = {}
         # ACK/queue insertion is not model-read. Every accepted follow-up,
         # including non-displayed steers, needs its own identified user start.
         self._forwarded_inputs: dict[str, set[str]] = {}
@@ -668,12 +672,13 @@ class CommsAgent:
                 )
             self._steering_input_keys.setdefault(session_id, {})[input_id] = key
             self._turn_input_keys.setdefault(session_id, set()).add(key)
+            enqueued = False
             try:
                 if delivery == "queue":
+                    owner_row = snapshot.threads[owner]
                     self._queued_inputs.setdefault(session_id, {})[input_id] = QueuedInput(
-                        display_text, defer_display
+                        display_text, defer_display, owner_row.created_at, admission
                     )
-                    await self._emit_queue_state(session_id)
                 inbox.put_nowait(
                     {
                         "type": "prompt",
@@ -685,10 +690,16 @@ class CommsAgent:
                         **({"images": [image.to_rpc() for image in images]} if images else {}),
                     }
                 )
+                enqueued = True
                 if delivery == "steer":
                     inbox.put_nowait({"type": "interrupt_steering", "_input_ids": [input_id]})
+                if delivery == "queue":
+                    await self._emit_queue_state(session_id)
             except BaseException:
-                self._queued_inputs.get(session_id, {}).pop(input_id, None)
+                if not enqueued:
+                    self._queued_inputs.get(session_id, {}).pop(input_id, None)
+                # A failure after put_nowait is UNKNOWN, not permission to
+                # discard the queue row or replay the exact input.
                 raise
             # ACP receipt is only local acceptance. The matching inputStarted
             # update, not this end_turn, is the model-read boundary.
@@ -782,6 +793,7 @@ class CommsAgent:
         if inbox is not None:
             inbox.put_nowait({"type": "clear_queue"})
         self._queued_inputs.pop(session_id, None)
+        self._restored_inputs.pop(session_id, None)
         await self._emit_queue_state(session_id)
 
     async def compact_context(
@@ -792,9 +804,65 @@ class CommsAgent:
 
         return await compact_context(self, session_id, instructions)
 
+    def _queue_binding(self, session_id: str) -> dict[str, Any] | None:
+        try:
+            owner, admission = self._comms.registry.live_owner_with_admission(
+                self._sessions.get(session_id, session_id)
+            )
+        except (OSError, ValueError):
+            return None
+        return {
+            "version": 1,
+            "sessionId": session_id,
+            "ownerThread": owner.name,
+            "ownerCreatedAt": owner.created_at,
+            "ownerEpoch": admission,
+            "admissionGeneration": admission,
+        }
+
+    def _queue_state(self, session_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        """Bounded exact-ID presentation of this ACP owner's in-memory queue.
+
+        A changed owner admission never inherits old in-memory queue entries.
+        They and their durable input dispositions remain untouched/UNKNOWN.
+        An oversized projection is unavailable, not an empty queue or retry.
+        """
+        revision = self._queue_revisions.get(session_id, 0) + 1
+        self._queue_revisions[session_id] = revision
+        binding = self._queue_binding(session_id)
+        if binding is None:
+            return None, None
+        scope = {key: value for key, value in binding.items() if key != "version"}
+
+        def current(values: dict[str, QueuedInput]) -> list[dict[str, str]]:
+            return [
+                {"inputId": input_id, "text": item.text}
+                for input_id, item in values.items()
+                if item.echo
+                and item.owner_created_at == binding["ownerCreatedAt"]
+                and item.admission == binding["admissionGeneration"]
+            ]
+
+        items = current(self._queued_inputs.get(session_id, {}))
+        restored = current(self._restored_inputs.get(session_id, {}))
+        if (
+            len(items) + len(restored) > 32
+            or any(len(row["text"].encode("utf-8")) > 4096 for row in items + restored)
+            or sum(len(row["text"].encode("utf-8")) for row in items + restored) > 65536
+        ):
+            return binding, None
+        return binding, {
+            "version": 1,
+            "scope": scope,
+            "revision": revision,
+            "items": items,
+            "restored": restored,
+        }
+
     async def _emit_queue_state(
         self, session_id: str, *, restored: list[str] | None = None, client: Any = None
     ) -> None:
+        binding, state = self._queue_state(session_id)
         await (client or self._runtime).session_update(
             session_id=session_id,
             update=AgentMessageChunk(
@@ -802,21 +870,44 @@ class CommsAgent:
                 content=TextContentBlock(type="text", text=""),
                 field_meta={
                     "agentComms": {
-                        "queue": [
-                            item.text for item in self._queued_inputs.get(session_id, {}).values()
-                        ],
-                        "restored": restored or [],
+                        "queueBinding": binding,
+                        "queueState": state,
+                        # Legacy text-only projection is informational, never
+                        # authoritative for exact-ID queue matching.
+                        "queue": [row["text"] for row in state["items"]] if state else [],
+                        "restored": (
+                            [row["text"] for row in state["restored"]]
+                            if state is not None and restored is not None
+                            else []
+                        ),
                     }
                 },
             ),
         )
 
     async def _emit_input_started(
-        self, session_id: str, text: str | None, input_id: str | None = None
+        self,
+        session_id: str,
+        text: str | None,
+        input_id: str | None = None,
+        queued_item: QueuedInput | None = None,
     ) -> None:
         proof: dict[str, Any] = {"text": text}
         if input_id is not None:
             proof["inputId"] = input_id
+        if input_id is not None and queued_item is not None:
+            binding = self._queue_binding(session_id)
+            if binding is not None and (
+                binding["ownerCreatedAt"],
+                binding["admissionGeneration"],
+            ) == (queued_item.owner_created_at, queued_item.admission):
+                revision = self._queue_revisions.get(session_id, 0) + 1
+                self._queue_revisions[session_id] = revision
+                proof.update(
+                    version=1,
+                    scope={key: value for key, value in binding.items() if key != "version"},
+                    revision=revision,
+                )
         await self._runtime.session_update(
             session_id=session_id,
             update=AgentMessageChunk(
@@ -1278,6 +1369,7 @@ class CommsAgent:
         thread = self._comms.registry.require(thread_name)
         goal, execution = self._comms.goal_snapshot(thread_name)
         info = self._comms.agent_info_of(thread_name)
+        queue_binding, queue_state = self._queue_state(session_id or thread_name)
         usage = (
             {"used": info.context_used, "size": info.context_size, "source": "last_response"}
             if info is not None and info.context_used is not None and info.context_size
@@ -1294,6 +1386,8 @@ class CommsAgent:
                 "ownerPid": os.getpid(),
                 "contextUsage": usage,
                 "turnLifecycle": True,
+                "queueBinding": queue_binding,
+                "queueState": queue_state,
                 "model": thread.model,
                 "thinkingLevel": thread.thinking_level,
                 "worktree": thread.worktree,
@@ -2984,6 +3078,7 @@ class CommsAgent:
                             else initial_display_text if input_id is None else None
                         ),
                         input_id,
+                        queued_item=item,
                     )
                     await self._emit_queue_state(session_id)
                 if (
@@ -3330,6 +3425,9 @@ class CommsAgent:
             await self.emit_input_delivery_changed(session_id)
             remaining = self._queued_inputs.pop(session_id, {})
             if remaining:
+                self._restored_inputs.setdefault(session_id, {}).update(
+                    {input_id: item for input_id, item in remaining.items() if item.echo}
+                )
                 await self._emit_queue_state(
                     session_id,
                     restored=[item.text for item in remaining.values() if item.echo],

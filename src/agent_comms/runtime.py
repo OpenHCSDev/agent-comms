@@ -403,6 +403,15 @@ def _present_cursor_session(metadata: dict[str, Any], session_id: str) -> dict[s
             scope = cursor.get("scope")
             if isinstance(scope, dict) and isinstance(scope.get("sessionId"), str):
                 scope["sessionId"] = session_id
+        # A canonical owner socket also serves permanent aliases. Change only
+        # the attachment coordinate; leave exact IDs, epochs and revisions.
+        for key in ("queueBinding", "queueState", "inputStarted"):
+            value = agent_meta.get(key)
+            if not isinstance(value, dict) or value.get("version") != 1:
+                continue
+            scope = value if key == "queueBinding" else value.get("scope")
+            if isinstance(scope, dict) and isinstance(scope.get("sessionId"), str):
+                scope["sessionId"] = session_id
     return metadata
 
 
