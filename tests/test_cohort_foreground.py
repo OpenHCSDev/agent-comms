@@ -30,6 +30,7 @@ from agent_comms.coordination_store import (
 from agent_comms.declarations import Thread, ThreadStatus
 from agent_comms.native_pi import NativeContextProof, NativeTurnResult
 from agent_comms.operations import Comms
+from agent_comms.private_sidecar import native_request_digest
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux",
@@ -49,7 +50,14 @@ def _fake_pi(calls: list[str]):
     async def run(
         package, *, input_id, prompt, worktree, session_dir, session_file=None, **_kwargs
     ):
-        calls.append(input_id)
+        def admitted():
+            # The fake Pi must cross the same irreversible send-admission
+            # boundary before claiming a native context. Do not synthesize a
+            # receipt from a reservation that was never sent.
+            with _kwargs["prompt_send_boundary"]():
+                calls.append(input_id)
+
+        await asyncio.to_thread(admitted)
         assert session_file is None
         session_file = session_dir / "one.jsonl"
         entry_id = hashlib.sha256(input_id.encode()).hexdigest()[:16]
@@ -63,7 +71,7 @@ def _fake_pi(calls: list[str]):
                     "message": {
                         "role": "user",
                         "inputId": input_id,
-                        "inputDigest": hashlib.sha256(prompt.encode()).hexdigest(),
+                        "inputDigest": native_request_digest(prompt),
                     },
                 }
             )

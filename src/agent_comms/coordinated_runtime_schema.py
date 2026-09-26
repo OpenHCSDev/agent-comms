@@ -18,7 +18,7 @@ _DDL = (
         "native_runtime_schema_meta",
         """CREATE TABLE native_runtime_schema_meta (
             singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-            version INTEGER NOT NULL CHECK (version = 1),
+            version INTEGER NOT NULL CHECK (version = 3),
             ddl_digest TEXT NOT NULL CHECK (length(ddl_digest) = 64)
         ) STRICT""",
     ),
@@ -35,6 +35,7 @@ _DDL = (
             owner_thread TEXT NOT NULL,
             owner_generation INTEGER NOT NULL CHECK (owner_generation > 0),
             owner_token_digest TEXT NOT NULL CHECK (length(owner_token_digest) = 64),
+            sent_owner_admission_epoch INTEGER CHECK (sent_owner_admission_epoch > 0),
             session_id TEXT,
             session_file TEXT,
             session_entry_id TEXT,
@@ -58,6 +59,49 @@ _DDL = (
         ) STRICT, WITHOUT ROWID""",
     ),
     (
+        "native_runtime_source_cursors",
+        """CREATE TABLE native_runtime_source_cursors (
+            wire_root_id TEXT NOT NULL CHECK (
+                length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'),
+            recipient_lookup TEXT NOT NULL REFERENCES participants(participant_lookup),
+            owner_thread TEXT NOT NULL CHECK (owner_thread <> ''),
+            owner_generation INTEGER NOT NULL CHECK (owner_generation > 0),
+            owner_admission_epoch INTEGER NOT NULL CHECK (owner_admission_epoch > 0),
+            covered_seq INTEGER NOT NULL CHECK (covered_seq >= 0),
+            injected_seq INTEGER NOT NULL CHECK (injected_seq >= 0 AND injected_seq <= covered_seq),
+            input_id TEXT REFERENCES native_runtime_inputs(input_id),
+            claim_id TEXT,
+            stage TEXT CHECK (stage IN ('triage','full')),
+            session_id TEXT,
+            request_generation INTEGER,
+            CHECK ((injected_seq=0 AND input_id IS NULL AND claim_id IS NULL
+                AND stage IS NULL AND session_id IS NULL AND request_generation IS NULL)
+                OR (injected_seq>0 AND input_id IS NOT NULL AND claim_id IS NOT NULL
+                AND stage IS NOT NULL AND session_id IS NOT NULL AND request_generation>0)),
+            PRIMARY KEY(wire_root_id,recipient_lookup,owner_generation,owner_admission_epoch)
+        ) STRICT, WITHOUT ROWID""",
+    ),
+    (
+        "native_runtime_cursor_update_guard",
+        """CREATE TRIGGER native_runtime_cursor_update_guard
+        BEFORE UPDATE ON native_runtime_source_cursors
+        WHEN NEW.wire_root_id IS NOT OLD.wire_root_id
+            OR NEW.recipient_lookup IS NOT OLD.recipient_lookup
+            OR NEW.owner_thread IS NOT OLD.owner_thread
+            OR NEW.owner_generation IS NOT OLD.owner_generation
+            OR NEW.owner_admission_epoch IS NOT OLD.owner_admission_epoch
+            OR NEW.covered_seq < OLD.covered_seq
+            OR NEW.injected_seq < OLD.injected_seq
+            OR (NEW.injected_seq = OLD.injected_seq AND NEW.input_id IS NOT OLD.input_id)
+        BEGIN SELECT RAISE(ABORT,'native source cursor cannot regress'); END""",
+    ),
+    (
+        "native_runtime_cursor_delete_guard",
+        """CREATE TRIGGER native_runtime_cursor_delete_guard
+        BEFORE DELETE ON native_runtime_source_cursors
+        BEGIN SELECT RAISE(ABORT,'native source cursor cannot be deleted'); END""",
+    ),
+    (
         "native_runtime_input_identity_guard",
         """CREATE TRIGGER native_runtime_input_identity_guard
         BEFORE UPDATE ON native_runtime_inputs
@@ -69,8 +113,11 @@ _DDL = (
             OR NEW.owner_thread IS NOT OLD.owner_thread
             OR NEW.owner_generation IS NOT OLD.owner_generation
             OR NEW.owner_token_digest IS NOT OLD.owner_token_digest
+            OR (OLD.sent_owner_admission_epoch IS NOT NULL
+                AND NEW.sent_owner_admission_epoch IS NOT OLD.sent_owner_admission_epoch)
+            OR (NEW.sent_owner_admission_epoch IS NULL AND NEW.session_id IS NOT NULL)
             OR OLD.session_id IS NOT NULL
-            OR NEW.session_id IS NULL
+            OR (NEW.session_id IS NULL AND NEW.sent_owner_admission_epoch IS NULL)
         BEGIN SELECT RAISE(ABORT,'native runtime input identity is frozen'); END""",
     ),
     (
@@ -102,7 +149,7 @@ def assert_native_runtime_schema(db: sqlite3.Connection) -> None:
         ).fetchone()
     except sqlite3.OperationalError as error:
         raise PublicationActivationBlocked("native runtime schema is not installed") from error
-    if row is None or tuple(row) != (1, _DDL_DIGEST):
+    if row is None or tuple(row) != (3, _DDL_DIGEST):
         raise PublicationActivationBlocked("native runtime schema version differs")
     actual = {
         row["name"]: row["sql"]
@@ -127,5 +174,5 @@ def install_native_runtime_schema(store: MutationStore) -> None:
         if exists is None:
             for _, statement in _DDL:
                 db.execute(statement)
-            db.execute("INSERT INTO native_runtime_schema_meta VALUES(1,1,?)", (_DDL_DIGEST,))
+            db.execute("INSERT INTO native_runtime_schema_meta VALUES(1,3,?)", (_DDL_DIGEST,))
         assert_native_runtime_schema(db)

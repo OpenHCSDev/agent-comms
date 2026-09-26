@@ -7,6 +7,7 @@ write boundary must repeat current authority checks before touching the file.
 from __future__ import annotations
 
 import os
+import stat
 from pathlib import Path
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
@@ -219,3 +220,96 @@ def publish_selected_resource_claim(
                 committed.message_id,
                 admission,
             )
+
+
+def write_selected_claimed_file(
+    comms: Comms,
+    store: MutationStore,
+    admission: WakeAdmission,
+    owner_name: str,
+    claimed: ClaimOwner,
+    contents: bytes,
+) -> None:
+    """Mediate one bounded existing-file replacement under *current* authority.
+
+    This explicitly invoked API is not an interceptor for Pi shell/edit tools,
+    subprocesses, or human edits. Failure after truncation/write is UNKNOWN;
+    callers must inspect, never automatically retry this operation.
+    """
+    if type(comms) is not Comms or type(store) is not MutationStore:
+        raise TypeError("Selected write requires the actual wire and coordinator stores")
+    if (
+        type(admission) is not WakeAdmission
+        or type(owner_name) is not str
+        or type(claimed) is not ClaimOwner
+        or type(contents) is not bytes
+        or len(contents) > 1024 * 1024
+    ):
+        raise IdentityConflict("Selected write requires a bounded typed claim and bytes")
+    if store.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
+        raise IdentityConflict("Selected write coordinator belongs to another root")
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise IdentityConflict("Selected write requires no-follow file descriptors")
+    bus = comms.bus
+    with (
+        _store_lock(comms._wire_lock_path),
+        _store_lock(bus._path),
+        _store_lock(comms.registry._path),
+    ):
+        registry = comms.registry._snapshot_unlocked()
+        canonical = registry.aliases.get(owner_name, owner_name)
+        owner = registry.threads.get(canonical)
+        status = registry.statuses.get(canonical)
+        generation = registry.admission_generations.get(canonical)
+        if (
+            owner is None
+            or status is None
+            or not status.active
+            or owner.pid != os.getpid()
+            or not owner.role.executable
+            or generation is None
+            or generation != admission.owner_admission_generation
+        ):
+            raise IdentityConflict("Selected write owner stopped or changed")
+        marker = bus._private_marker_unlocked()
+        if marker["wire_root_id"] != admission.wire_root_id:
+            raise IdentityConflict("Selected write belongs to another private root")
+        initial = next(
+            (
+                row
+                for _message, _receipt, row in bus._verified_private_rows_unlocked(marker)
+                if row is not None and row.message.seq == admission.source_seq
+            ),
+            None,
+        )
+        if initial is None:
+            raise IdentityConflict("Selected write source is not committed")
+        # A separate fail-fast coordinator connection holds the transaction
+        # through fsync. A concurrently settling attempt must not slip between
+        # verification and irreversible file mutation.
+        with MutationStore(str(store.path), lock_timeout=0) as scoped, scoped._transaction():
+            _verify_selected_wake_state(initial, owner, generation, scoped, admission)
+            normalized = normalize_existing_file(Path(owner.worktree), claimed.resource)
+            projection, _ = bus._claim_projection_unlocked(marker)
+            if claimed.admission != admission or projection.get(normalized) != claimed:
+                raise IdentityConflict("Selected write has no current exact resource claim")
+            before = os.stat(normalized, follow_symlinks=False)
+            fd = os.open(normalized, os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+            try:
+                opened = os.fstat(fd)
+                if (
+                    not stat.S_ISREG(opened.st_mode)
+                    or opened.st_nlink != 1
+                    or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+                ):
+                    raise IdentityConflict("Selected write file changed before opening")
+                os.ftruncate(fd, 0)
+                view = memoryview(contents)
+                while view:
+                    written = os.write(fd, view)
+                    if written <= 0:
+                        raise OSError("Selected write made no progress; file outcome UNKNOWN")
+                    view = view[written:]
+                os.fsync(fd)
+            finally:
+                os.close(fd)

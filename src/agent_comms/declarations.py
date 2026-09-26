@@ -211,8 +211,12 @@ def _verify_claim_bus_before_read_unlocked(bus_path: Path) -> None:
 
 
 @contextmanager
-def _store_lock(store_path: Path) -> Iterator[None]:
-    """Hold an exclusive process lock associated with a wire store."""
+def _store_lock(
+    store_path: Path, *, blocking: bool = True, max_bus_bytes: int | None = None
+) -> Iterator[None]:
+    """Hold a canonical store lock; optionally cap bytes before its durability scan."""
+    if max_bus_bytes is not None and (type(max_bus_bytes) is not int or max_bus_bytes < 0):
+        raise ValueError("bus read cap must be a nonnegative integer")
     store_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = store_path.with_name(f".{store_path.name}.lock")
     with open(lock_path, "a+b") as lock_file:
@@ -229,14 +233,21 @@ def _store_lock(store_path: Path) -> Iterator[None]:
                     )
                     break
                 except OSError as error:
-                    if error.errno not in {errno.EACCES, errno.EDEADLK}:
+                    if not blocking or error.errno not in {errno.EACCES, errno.EDEADLK}:
                         raise
                     time.sleep(0.01)
         else:
             import fcntl
 
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
         try:
+            # The shared claim bus durability guard may parse the entire log.
+            # A bounded projection must refuse over-budget bytes *before* that
+            # guard starts; the flock excludes cooperating appends meanwhile.
+            if max_bus_bytes is not None and store_path.exists():
+                bus_info = store_path.lstat()
+                if not stat.S_ISREG(bus_info.st_mode) or bus_info.st_size > max_bus_bytes:
+                    raise RelationViolationError("Bus exceeds bounded read budget.")
             _verify_claim_bus_before_read_unlocked(store_path)
             yield
         finally:
@@ -2477,6 +2488,7 @@ class ThreadRegistry:
                 or current.pid != os.getpid()
                 or not current.role.executable
                 or current.active_turn is not None
+                or current.goal != expected.goal
                 or (current.name, current.created_at, current.pid, current.role, current.worktree)
                 != (
                     expected.name,
@@ -3297,6 +3309,27 @@ class MessageBus:
             _append_jsonl(self._path, stored.to_wire())
         return stored
 
+    def publish_ordinary(self, message: Message) -> Message:
+        """Ordinary Comms send on either a legacy or explicitly marked private root.
+
+        A private marker is never installed here and an old public row is never
+        retroactively assigned an audience. Only the new private-aware writer
+        uses this entry point: direct legacy ``publish`` still refuses cutover.
+        The caller retains the ordinary Comms wire lock throughout publication.
+        """
+        with _store_lock(self._path):
+            meta = self._path.parent / "bus_meta.json"
+            metadata = json.loads(meta.read_text()) if meta.exists() else {}
+            if not isinstance(metadata, dict):
+                raise RelationViolationError("Invalid ordinary delivery metadata.")
+            if "writer_protocol_version" in metadata:
+                # Exact marker/root/private-registry validation and frozen N/K
+                # decisions remain owned by the existing private publisher.
+                return self.publish_initial_cohort(message, _bus_locked=True)
+        # Legacy publish rechecks its barrier under its own lock: if a fresh-root
+        # cutover raced the dispatch, it refuses rather than appending a legacy row.
+        return self.publish(message)
+
     def _assert_private_directory(self) -> None:
         """Require a nonredirectable, owned ancestry (root sticky /tmp permitted)."""
         if os.name != "posix":
@@ -3684,7 +3717,9 @@ class MessageBus:
         finally:
             os.close(directory_fd)
 
-    def publish_initial_cohort(self, message: Message, *, control: str = "ordinary") -> Message:
+    def publish_initial_cohort(
+        self, message: Message, *, control: str = "ordinary", _bus_locked: bool = False
+    ) -> Message:
         """Commit public envelope and FULL N private decisions in the SAME fsynced row.
 
         This private path assumes cooperating Comms writers hold the global
@@ -3700,7 +3735,7 @@ class MessageBus:
         classification = ControlClassification(control)
         if classification is not ControlClassification.ORDINARY:
             raise RelationViolationError("System-control initial issuer is not available.")
-        with _store_lock(self._path):
+        with nullcontext() if _bus_locked else _store_lock(self._path):
             metadata = self._private_marker_unlocked()
             previous_sequence = 0
             for previous, _, _ in self._verified_private_rows_unlocked(metadata):

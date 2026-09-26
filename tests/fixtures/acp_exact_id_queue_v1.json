@@ -1,0 +1,59 @@
+{
+  "contract": "acp-exact-id-queue-v1",
+  "trustedLoad": {
+    "queueBinding": {"version": 1, "sessionId": "beta", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerEpoch": 2, "admissionGeneration": 2},
+    "queueState": {
+      "version": 1,
+      "scope": {"sessionId": "beta", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerEpoch": 2, "admissionGeneration": 2},
+      "revision": 2,
+      "items": [{"inputId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "text": "same text"}, {"inputId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "text": "same text"}],
+      "restored": []
+    }
+  },
+  "updates": [
+    {
+      "kind": "inputStarted",
+      "decision": "accept_exact_id",
+      "value": {"version": 1, "scope": {"sessionId": "beta", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerEpoch": 2, "admissionGeneration": 2}, "revision": 3, "inputId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "text": "same text"}
+    },
+    {
+      "kind": "queueState",
+      "decision": "accept",
+      "value": {"version": 1, "scope": {"sessionId": "beta", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerEpoch": 2, "admissionGeneration": 2}, "revision": 4, "items": [{"inputId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "text": "same text"}], "restored": []}
+    },
+    {
+      "kind": "inputStarted",
+      "decision": "reject_stale_revision",
+      "value": {"version": 1, "scope": {"sessionId": "beta", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerEpoch": 2, "admissionGeneration": 2}, "revision": 3, "inputId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "text": "same text"}
+    },
+    {
+      "kind": "queueState",
+      "decision": "accept",
+      "value": {"version": 1, "scope": {"sessionId": "beta", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerEpoch": 2, "admissionGeneration": 2}, "revision": 5, "items": [], "restored": [{"inputId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "text": "same text"}]}
+    }
+  ],
+  "expected": {"revision": 5, "items": [], "restoredInputIds": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]},
+  "nextTrustedLoad": {
+    "queueBinding": {"version": 1, "sessionId": "beta", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerEpoch": 4, "admissionGeneration": 4},
+    "queueState": {"version": 1, "scope": {"sessionId": "beta", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerEpoch": 4, "admissionGeneration": 4}, "revision": 6, "items": [], "restored": []}
+  },
+  "lateOldUpdate": {
+    "decision": "reject_stale_scope",
+    "value": {"version": 1, "scope": {"sessionId": "beta", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerEpoch": 2, "admissionGeneration": 2}, "revision": 5, "items": [], "restored": [{"inputId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "text": "same text"}]}
+  },
+  "overflow": {"limit": 32, "received": 33, "queueState": null, "underlyingInputsPreserved": true},
+  "autoReconnectReadyForwardedToClient": false,
+  "prebindRace": {
+    "callbackBeforeTrustedResult": {"version": 1, "scope": {"sessionId": "beta", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerEpoch": 4, "admissionGeneration": 4}, "revision": 5, "items": [], "restored": []},
+    "delayedTrustedLoad": {
+      "queueBinding": {"version": 1, "sessionId": "beta", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerEpoch": 2, "admissionGeneration": 2},
+      "queueState": {"version": 1, "scope": {"sessionId": "beta", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerEpoch": 2, "admissionGeneration": 2}, "revision": 4, "items": [{"inputId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "text": "same text"}], "restored": []}
+    },
+    "expectedAfterDelayedLoad": {"status": "unavailable", "ownerEpochFloor": 4},
+    "subsequentTrustedLoad": {
+      "queueBinding": {"version": 1, "sessionId": "beta", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerEpoch": 4, "admissionGeneration": 4},
+      "queueState": {"version": 1, "scope": {"sessionId": "beta", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerEpoch": 4, "admissionGeneration": 4}, "revision": 6, "items": [], "restored": []}
+    },
+    "expectedAfterSubsequentLoad": {"status": "available", "ownerEpoch": 4}
+  }
+}

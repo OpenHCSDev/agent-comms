@@ -33,6 +33,7 @@ from .coordination_response import install_private_response_schema
 from .coordination_store import IdentityConflict, MutationStore, PublicationActivationBlocked
 from .declarations import MessageBus, RelationViolationError, Thread, _store_lock
 from .native_pi import _private_session_dir, _trusted_package
+from .native_prompt_binding import install_prompt_binding_schema
 from .operations import Comms
 
 
@@ -126,6 +127,7 @@ async def run_foreground_once(
             install_private_cohort_schema(store)
             install_private_response_schema(store)
             install_native_runtime_schema(store)
+            install_prompt_binding_schema(store)
             lookup = stable_thread_lookup(comms.registry.require(name).created_at)
             store.register_participant(lookup, name, name, committed=True)
         if ready is not None:

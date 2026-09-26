@@ -1,10 +1,9 @@
 """Historical native input evidence, not an injected-message cursor.
 
-A SQL row recorded only after the live Pi result and its context evidence can
-be corroborated against the private session journal. This does NOT establish
-that the original source message's expected prompt bytes match the journal's
-inputDigest: no durable prelaunch expected-prompt digest exists yet. It grants
-no response, recovery, model replay, edit, or current-owner authority.
+A SQL row recorded only after a live Pi result can be corroborated against the
+private session journal and the durable prelaunch native-request binding.
+Missing or mismatched equality cannot grant source proof. This historical read
+grants no response, recovery, model replay, edit, or current-owner authority.
 """
 
 from __future__ import annotations
@@ -16,6 +15,10 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _assert_schema as assert_cohort_schema
 from .coordination_store import IdentityConflict, MutationStore
 from .native_pi import NativeContextProof, NativePiUnavailable, _read_native_context_evidence
+from .native_prompt_binding import (
+    expected_prompt_matches_journal,
+    read_expected_prompt_binding,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +36,9 @@ class HistoricalNativeInput:
     attempt_ordinal: int | None
     triage_result: str | None  # 'ignore' or 'full'; FULL stage has no triage verdict.
     context: NativeContextProof
+    # Prelaunch binding facts: None means no binding was durably written
+    # before launch (crash ordering), so equality cannot be established.
+    expected_prompt_digest: str | None = None
     expected_prompt_equality_established: bool = False
 
 
@@ -48,8 +54,10 @@ def read_historical_native_inputs(
     Caller-supplied identity must come from a trusted bus/owner snapshot, never
     from model arguments. This read does not look up a live owner or even assert
     that the original bus remains valid now. It cannot authorize work. In
-    particular, do NOT derive max-seq or a cursor from these exact rows: gaps
-    and PASSIVE/no-wake deliveries have different semantics.
+    particular, do NOT derive max-seq or a cursor from these rows alone: gaps
+    and PASSIVE/no-wake deliveries have different semantics. A separate
+    current-owner cursor additionally verifies the canonical bus prefix and
+    requires a just-settled input in the live admission epoch.
     """
     if (
         type(store) is not MutationStore
@@ -113,6 +121,26 @@ def read_historical_native_inputs(
             raise IdentityConflict("historical native context evidence is unavailable") from error
         if observed != recorded:
             raise IdentityConflict("historical native context differs from live-recorded proof")
+        binding = read_expected_prompt_binding(store, row["input_id"])
+        if binding is not None:
+            # A binding must name exactly this reserved input; anything else is
+            # corruption, not a failed equality join.
+            if (
+                binding.wire_root_id != wire_root_id
+                or binding.stage != row["stage"]
+                or binding.claim_id != row["claim_id"]
+                or binding.execution_id != row["execution_id"]
+                or binding.attempt_ordinal != row["attempt_ordinal"]
+                or binding.owner_lookup != row["owner_lookup"]
+                or binding.owner_thread != row["owner_thread"]
+                or binding.owner_generation != row["owner_generation"]
+                or binding.source_seq != row["wire_seq"]
+                or binding.message_id != row["message_id"]
+            ):
+                raise IdentityConflict("prelaunch binding does not match this live proof")
+            equality = expected_prompt_matches_journal(session_file, binding)
+        else:
+            equality = False
         evidence.append(
             HistoricalNativeInput(
                 wire_root_id,
@@ -128,6 +156,8 @@ def read_historical_native_inputs(
                 row["attempt_ordinal"],
                 row["verdict"],
                 recorded,
+                binding.expected_prompt_digest if binding is not None else None,
+                equality,
             )
         )
     return tuple(evidence)

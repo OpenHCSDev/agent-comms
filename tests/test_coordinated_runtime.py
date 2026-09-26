@@ -6,6 +6,7 @@ acceptance and final post-merge review; no fake can establish Pi model authority
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -33,7 +34,7 @@ from agent_comms.coordination_store import (
     PublicationActivationBlocked,
     StaleFence,
 )
-from agent_comms.declarations import MessageBus, Thread
+from agent_comms.declarations import MessageBus, Thread, ThreadRegistry
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, NativeTurnResult
 from agent_comms.operations import Comms
@@ -112,7 +113,12 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         session_file=None,
         **_kwargs,
     ):
-        calls.append((input_id, prompt))
+        # Model only admission in its dedicated thread, not native receipt.
+        def admitted():
+            with _kwargs["prompt_send_boundary"]():
+                calls.append((input_id, prompt))
+
+        await asyncio.to_thread(admitted)
         if fail_on == len(calls):
             raise NativePiUnavailable("fake backend process died")
         if session_file is None:
@@ -134,7 +140,23 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
                 "message": {
                     "role": "user",
                     "inputId": input_id,
-                    "inputDigest": hashlib.sha256(prompt.encode()).hexdigest(),
+                    "inputDigest": hashlib.sha256(
+                        (
+                            "pi-input-request-v1\n"
+                            + json.dumps(
+                                {
+                                    "kind": "prompt",
+                                    "text": prompt,
+                                    "images": None,
+                                    "streamingBehavior": None,
+                                    "expandPromptTemplates": True,
+                                    "source": "interactive",
+                                },
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                            )
+                        ).encode()
+                    ).hexdigest(),
                 },
             }
         )
@@ -194,7 +216,8 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
         assert len(ignored) == 1 and ignored[0].stage == "triage"
         assert ignored[0].triage_result == "ignore"
         assert ignored[0].execution_id is None
-        assert not ignored[0].expected_prompt_equality_established
+        # Fake journal contract checks the join only, not native acceptance.
+        assert ignored[0].expected_prompt_equality_established
     assert len(comms.channel_history("#team")) == 1
     second, beta_calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", second)
@@ -366,7 +389,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
         assert rows[1].triage_result is None
         assert rows[0].owner_lookup == rows[1].owner_lookup
         assert rows[0].owner_generation == rows[1].owner_generation == 1
-        assert all(not row.expected_prompt_equality_established for row in rows)
+        assert all(row.expected_prompt_equality_established for row in rows)
         assert all(row.context.session_id == "isolated-session" for row in rows)
         assert (
             read_historical_native_inputs(
@@ -629,15 +652,14 @@ async def test_stop_before_atomic_turn_claim_does_not_revive_or_prompt(
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
-    actual_selected = runtime._require_selected
+    original_claim = ThreadRegistry.claim_live_turn_with_admission
 
-    def stop_before_claim(*args, **kwargs):
-        initial = actual_selected(*args, **kwargs)
+    def stop_before_claim(self, *args, **kwargs):
         comms.registry.unregister("beta")
-        return initial
+        return original_claim(self, *args, **kwargs)
 
-    monkeypatch.setattr(runtime, "_require_selected", stop_before_claim)
-    with pytest.raises(StaleFence, match="stopped before native turn"):
+    monkeypatch.setattr(ThreadRegistry, "claim_live_turn_with_admission", stop_before_claim)
+    with pytest.raises(StaleFence, match="stopped or busy before native turn"):
         await run_one_sealed_claim(
             root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         )
@@ -660,22 +682,23 @@ async def test_owner_epoch_denies_revival_without_blocking_another_owner(
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
-    actual_selected = runtime._require_selected
+    original_claim = ThreadRegistry.claim_live_turn_with_admission
     expected = comms.registry.require("beta")
 
-    def change_registry_before_claim(*args, **kwargs):
-        initial = actual_selected(*args, **kwargs)
+    def change_registry_before_claim(self, *args, **kwargs):
         if mutation == "stop_then_heartbeat":
             comms.registry.unregister("beta")
             comms.registry.heartbeat("beta")
             assert comms.registry.require("beta") == expected
         else:
             comms.registry.heartbeat("alpha")
-        return initial
+        return original_claim(self, *args, **kwargs)
 
-    monkeypatch.setattr(runtime, "_require_selected", change_registry_before_claim)
+    monkeypatch.setattr(
+        ThreadRegistry, "claim_live_turn_with_admission", change_registry_before_claim
+    )
     if mutation == "stop_then_heartbeat":
-        with pytest.raises(StaleFence, match="stopped before native turn"):
+        with pytest.raises(StaleFence, match="stopped or busy before native turn"):
             await run_one_sealed_claim(
                 root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
             )
@@ -828,8 +851,6 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
     tmp_path: Path, monkeypatch, mutation: str, boundary: str
 ) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
-    if mutation == "finish_turn":
-        comms.begin_turn("beta", "existing-full-turn")
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
@@ -841,7 +862,9 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
 
     def revoke(*args, **kwargs):
         if mutation == "finish_turn":
-            comms.finish_turn("beta", "existing-full-turn")
+            active = comms.registry.require("beta").active_turn
+            assert active is not None
+            comms.finish_turn("beta", active.id)
         else:
             comms.registry.unregister("beta")
             comms.registry.heartbeat("beta")
@@ -978,20 +1001,36 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
         )
 
 
-async def test_existing_owner_turn_is_preserved_after_success(tmp_path: Path, monkeypatch) -> None:
+async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, monkeypatch) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
     comms.begin_turn("beta", "existing-real-turn")
     original = comms.registry.require("beta").active_turn
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
+    with pytest.raises(StaleFence, match="already has a current turn"):
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        )
+    assert calls == []
+    assert comms.registry.require("beta").active_turn == original
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        assert (
+            store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[0]
+            == 0
+        )
+        assert (
+            store._connection.execute(
+                "SELECT count(*) FROM wake_claims WHERE disposition='engaged'"
+            ).fetchone()[0]
+            == 0
+        )
+    comms.finish_turn("beta", "existing-real-turn")
     result = await run_one_sealed_claim(
         root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     )
     assert result is not None and result.disposition is ClaimDisposition.COMPLETED
     assert len(calls) == 1
-    assert comms.registry.require("beta").active_turn == original
-    comms.finish_turn("beta", "existing-real-turn")
 
 
 async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(
@@ -1037,6 +1076,26 @@ def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: 
             assert_native_runtime_schema(store._connection)
 
 
+def test_native_runtime_v2_is_not_implicitly_migrated(tmp_path: Path) -> None:
+    path = tmp_path / "old-runtime.sqlite3"
+    with MutationStore(str(path)) as store:
+        # The v2 metadata is enough to force an explicit, reviewed migration;
+        # never relabel historical native inputs with an inferred send epoch.
+        store._connection.execute(
+            "CREATE TABLE native_runtime_schema_meta (singleton INTEGER PRIMARY KEY,"
+            "version INTEGER NOT NULL,ddl_digest TEXT NOT NULL)"
+        )
+        store._connection.execute(
+            "INSERT INTO native_runtime_schema_meta VALUES (1,2,?)", ("0" * 64,)
+        )
+        with pytest.raises(PublicationActivationBlocked, match="version differs"):
+            install_native_runtime_schema(store)
+        version = store._connection.execute(
+            "SELECT version FROM native_runtime_schema_meta"
+        ).fetchone()[0]
+        assert version == 2
+
+
 async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, monkeypatch) -> None:
     """Page saturation is not an empty inbox; scaffolding is not model authority."""
     root, root_id, comms, _initial, people = _root(tmp_path)
@@ -1064,6 +1123,7 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
         root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     )
     assert outcome is not None and outcome.disposition is ClaimDisposition.IGNORED
+    assert outcome.cursor_status == "unavailable"  # bounded projection, not a retry
     assert len(calls) == 1
     assert not (root / "read_markers.json").exists()
 

@@ -9,10 +9,15 @@ journal, no legacy cursor ACK, no monitor/SILENT, no automatic resend.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
 import secrets
+import sqlite3
+import threading
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,6 +36,7 @@ from .coordination_cohort import _assert_schema, accept_initial_cohort, sealed_c
 from .coordination_response import (
     LiveResponseOwner,
     _assert_response_schema,
+    _response_boundary,
     prepare_fenced_response,
     publish_fenced_response,
 )
@@ -50,7 +56,14 @@ from .native_pi import (
     _trusted_package,
     run_native_pi_turn,
 )
+from .native_prompt_binding import (
+    bind_expected_prompt,
+    expected_prompt_matches_journal,
+    read_expected_prompt_binding,
+)
+from .native_source_cursor import advance_current_native_cursor
 from .operations import Comms
+from .private_sidecar import SidecarCommitUnknown, native_request_digest
 from .wake import WakeDecision, derive_exact_reply_target
 from .wake_injection import render_selected_wake_frame
 
@@ -64,6 +77,7 @@ class CoordinatedTurn:
     input_id: str
     response_message_id: str | None
     exact_target: str | None
+    cursor_status: str = "unavailable"  # never an ACK, work-skip or provider permit
 
 
 def _token_digest(token: str) -> str:
@@ -79,6 +93,7 @@ def _require_registry_owner(comms: Comms, owner: Thread, epoch: int) -> None:
     if (
         actual_epoch != epoch
         or actual.pid != os.getpid()
+        or actual.goal != owner.goal
         or (
             actual.name,
             actual.created_at,
@@ -110,6 +125,168 @@ def _require_owner(store: MutationStore, lookup: str, owner: Thread, generation:
         or not owner.role.executable
     ):
         raise StaleFence("cohort recipient is not this live registered owner generation")
+
+
+def _native_send_boundary(
+    store: MutationStore,
+    bus: MessageBus,
+    *,
+    owner: Thread,
+    epoch: int,
+    generation: int,
+    input_id: str,
+    prompt: str,
+    claim: WakeClaim,
+    wire_root_id: str,
+    token: str,
+    fence: OwnerFence | None = None,
+) -> Callable[[], AbstractContextManager[None]]:
+    """One-use final-send admission, with wire→bus→registry→SQL lock order.
+
+    Entered only by the native adapter's isolated raw-pipe writer (never an
+    event loop). The reservation already forbids recovery/retry; this closure additionally
+    forbids a second use within this process, including a failed admission.
+    """
+    once = threading.Lock()
+    store_path = store.path
+
+    @contextmanager
+    def boundary() -> Iterator[None]:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            raise IdentityConflict("native send admission requires the isolated raw writer")
+        if not once.acquire(blocking=False):
+            raise IdentityConflict("native send admission cannot be reused")
+        # Never share a SQLite connection across threads, and never wait for
+        # flock/SQLite/sidecar contention while an owner event loop may wait on us.
+        with (
+            MutationStore(str(store_path), lock_timeout=0) as store,
+            _response_boundary(bus, blocking=False) as registry,
+            store._transaction() as db,
+        ):
+            actual = registry.threads.get(owner.name)
+            status = registry.statuses.get(owner.name)
+            if (
+                actual is None
+                or status is None
+                or not status.active
+                or actual.goal != owner.goal
+                or registry.admission_generations.get(owner.name) != epoch
+                or actual.pid != os.getpid()
+                or (actual.created_at, actual.pid, actual.role, actual.worktree, actual.active_turn)
+                != (owner.created_at, owner.pid, owner.role, owner.worktree, owner.active_turn)
+            ):
+                raise StaleFence("recipient registry owner changed before native send")
+            assert_native_runtime_schema(db)
+            _require_owner(store, claim.recipient_lookup, owner, generation)
+            reserved = db.execute(
+                "SELECT * FROM native_runtime_inputs WHERE input_id=?", (input_id,)
+            ).fetchone()
+            stage = "triage" if fence is None else "full"
+            execution_id = None if fence is None else fence.execution_id
+            ordinal = None if fence is None else fence.attempt_ordinal
+            if reserved is None or (
+                reserved["stage"],
+                reserved["claim_id"],
+                reserved["owner_lookup"],
+                reserved["owner_thread"],
+                reserved["owner_generation"],
+                reserved["execution_id"],
+                reserved["attempt_ordinal"],
+                reserved["owner_token_digest"],
+                reserved["sent_owner_admission_epoch"],
+                reserved["session_id"],
+                reserved["verdict"],
+            ) != (
+                stage,
+                claim.claim_id,
+                claim.recipient_lookup,
+                owner.name,
+                generation,
+                execution_id,
+                ordinal,
+                _token_digest(token),
+                None,
+                None,
+                None,
+            ):
+                raise StaleFence("native reservation changed before send")
+            current = store.claim(claim.claim_id)
+            if (
+                current.recipient_lookup,
+                current.recipient,
+                current.wire_seq,
+                current.message_id,
+                current.wake_mode,
+            ) != (
+                claim.recipient_lookup,
+                claim.recipient,
+                claim.wire_seq,
+                claim.message_id,
+                claim.wake_mode,
+            ):
+                raise StaleFence("selected claim identity changed before native send")
+            if fence is None:
+                if (
+                    current.disposition is not ClaimDisposition.DEFERRED
+                    or current.revision != claim.revision + 1
+                ):
+                    raise StaleFence("triage claim changed before native send")
+            else:
+                snapshot, attempt = store._assert_fence(fence)
+                if (
+                    current.disposition is not ClaimDisposition.ENGAGED
+                    or snapshot.execution.status is not ExecutionStatus.ACTIVE
+                    or attempt.phase is not AttemptPhase.PROMPT_STARTING
+                    or attempt.backend_done
+                    or attempt.process_dead
+                ):
+                    raise StaleFence("full execution is not running before native send")
+            binding = read_expected_prompt_binding(store, input_id, blocking=False)
+            if binding is None or (
+                binding.stage,
+                binding.claim_id,
+                binding.owner_lookup,
+                binding.owner_thread,
+                binding.owner_generation,
+                binding.wire_root_id,
+                binding.source_seq,
+                binding.message_id,
+                binding.expected_prompt_digest,
+                binding.execution_id,
+                binding.attempt_ordinal,
+            ) != (
+                stage,
+                claim.claim_id,
+                claim.recipient_lookup,
+                owner.name,
+                generation,
+                wire_root_id,
+                claim.wire_seq,
+                claim.message_id,
+                native_request_digest(prompt),
+                execution_id,
+                ordinal,
+            ):
+                raise IdentityConflict("native send differs from its durable prompt binding")
+            # Bind the exact input ID to the owner admission in which Pi is
+            # actually sent the prompt, not to a later caller-provided epoch.
+            # The same transaction holds all exclusions through os.write;
+            # failure rolls back this proof and leaves the attempt uncertain.
+            updated = db.execute(
+                "UPDATE native_runtime_inputs SET sent_owner_admission_epoch=? "
+                "WHERE input_id=? AND sent_owner_admission_epoch IS NULL",
+                (epoch, input_id),
+            )
+            if updated.rowcount != 1:
+                raise StaleFence("native input admission was already bound")
+            # No event-loop transport buffer may own any of these prompt bytes.
+            yield
+
+    return boundary
 
 
 def _require_selected(
@@ -186,7 +363,20 @@ def _reserve_triage(
     return input_id, token
 
 
-def _verify_live_turn(result: NativeTurnResult, input_id: str, session_dir: Path) -> None:
+def _verify_live_turn(
+    store: MutationStore,
+    result: NativeTurnResult,
+    input_id: str,
+    session_dir: Path,
+    *,
+    expected_digest: str,
+    wire_root_id: str,
+    claim: WakeClaim,
+    stage: str,
+    owner: Thread,
+    generation: int,
+    fence: OwnerFence | None,
+) -> None:
     if (
         type(result) is not NativeTurnResult
         or type(result.text) is not str
@@ -205,6 +395,105 @@ def _verify_live_turn(result: NativeTurnResult, input_id: str, session_dir: Path
     # the on-disk read is only corroboration and is NOT recovery authority.
     if _read_native_context_evidence(result.context.session_file, input_id) != result.context:
         raise IdentityConflict("native Pi event differs from its private session evidence")
+    # A context event and journal row alone cannot assert the source's prompt
+    # bytes. Check the committed prelaunch binding against this exact native
+    # request digest before recording any live proof or settling the claim.
+    # Failure after launch is UNKNOWN: the reserved input is never replayed.
+    with store._read_transaction():
+        assert_native_runtime_schema(store._connection)
+        _require_owner(store, claim.recipient_lookup, owner, generation)
+        reserved = store._connection.execute(
+            "SELECT * FROM native_runtime_inputs WHERE input_id=?", (input_id,)
+        ).fetchone()
+        binding = read_expected_prompt_binding(store, input_id)
+        execution_id = None if fence is None else fence.execution_id
+        ordinal = None if fence is None else fence.attempt_ordinal
+        expected_identity = (
+            input_id,
+            stage,
+            claim.claim_id,
+            execution_id,
+            ordinal,
+            claim.recipient_lookup,
+            owner.name,
+            generation,
+        )
+        if (
+            reserved is None
+            or tuple(
+                reserved[field]
+                for field in (
+                    "input_id",
+                    "stage",
+                    "claim_id",
+                    "execution_id",
+                    "attempt_ordinal",
+                    "owner_lookup",
+                    "owner_thread",
+                    "owner_generation",
+                )
+            )
+            != expected_identity
+            or reserved["session_id"] is not None
+            or binding is None
+            or (
+                binding.input_id,
+                binding.stage,
+                binding.claim_id,
+                binding.execution_id,
+                binding.attempt_ordinal,
+                binding.owner_lookup,
+                binding.owner_thread,
+                binding.owner_generation,
+            )
+            != expected_identity
+            or binding.expected_prompt_digest != expected_digest
+            or binding.wire_root_id != wire_root_id
+            or binding.source_seq != claim.wire_seq
+            or binding.message_id != claim.message_id
+            or not expected_prompt_matches_journal(result.context.session_file, binding)
+        ):
+            raise IdentityConflict("live native input lacks exact bound source prompt equality")
+
+
+def _current_cursor_status(
+    bus: MessageBus,
+    store: MutationStore,
+    *,
+    wire_root_id: str,
+    owner: Thread,
+    epoch: int,
+    generation: int,
+    input_id: str,
+) -> str:
+    """Cursor failure cannot undo a terminal claim or replay a model input.
+
+    This auxiliary projection is independently unavailable when capacity,
+    contention, durability or corroboration fail. Never convert a successful
+    selected response into a retryable model result because its cursor failed.
+    """
+    try:
+        cursor = advance_current_native_cursor(
+            bus,
+            store,
+            wire_root_id=wire_root_id,
+            owner=owner,
+            owner_admission_epoch=epoch,
+            owner_generation=generation,
+            committed_input_id=input_id,
+        )
+    except (
+        OSError,
+        sqlite3.Error,
+        ValueError,
+        IdentityConflict,
+        StaleFence,
+        RelationViolationError,
+        PublicationActivationBlocked,
+        SidecarCommitUnknown,
+    ):
+        return "unavailable"
+    return "proven" if cursor is not None and cursor.input_id == input_id else "blocked_gap"
 
 
 def _proof_columns(result: NativeTurnResult) -> tuple[str, str, str, int, str]:
@@ -503,7 +792,6 @@ async def run_one_sealed_claim(
             raise IdentityConflict(
                 f"sealed claim scan exhausted; retry explicitly with after_seq={cursor}"
             )
-        initial = _require_selected(store, bus, wire_root_id, pending, owner, person.generation)
         # A PID and RUNNING bit can survive stop -> heartbeat in the same
         # process. Bind publication to this immutable turn; unregister and
         # finish_turn both clear it. CAS also compares the persistent per-owner
@@ -512,17 +800,25 @@ async def run_one_sealed_claim(
         # unrelated recipient's registry write must not invalidate this owner.
         # A stale owner epoch cannot reserve Pi input. Comms.begin_turn would
         # revive an owner stopped between preflight and registration calls.
-        if owner.active_turn is None:
-            owned_turn_id = secrets.token_hex(16)
-            try:
-                owner, owner_epoch = comms.registry.claim_live_turn_with_admission(
-                    owner, owned_turn_id, expected_generation=owner_epoch
-                )
-            except RelationViolationError as error:
-                raise StaleFence("selected owner stopped before native turn") from error
-            _require_registry_owner(comms, owner, owner_epoch)
+        # Never borrow another ACP instance's (or a human's) active turn:
+        # its local turn maps are not an owner-exclusive lease. Claim our own
+        # canonical turn *before* any selected source can be engaged.
+        if owner.active_turn is not None:
+            raise StaleFence("selected owner already has a current turn")
+        owned_turn_id = secrets.token_hex(16)
+        try:
+            owner, owner_epoch = comms.registry.claim_live_turn_with_admission(
+                owner,
+                owned_turn_id,
+                expected_generation=owner_epoch,
+            )
+        except RelationViolationError as error:
+            owned_turn_id = None
+            raise StaleFence("selected owner stopped or busy before native turn") from error
+        _require_registry_owner(comms, owner, owner_epoch)
         if owner.active_turn is None or owner.active_turn.owner_pid != owner.pid:
             raise StaleFence("selected recipient has no live owner-turn identity")
+        initial = _require_selected(store, bus, wire_root_id, pending, owner, person.generation)
         owner_witness = LiveResponseOwner(
             owner.name,
             lookup,
@@ -547,6 +843,16 @@ async def run_one_sealed_claim(
             if len(triage_prompt.encode("utf-8")) > _MAX_PROMPT_BYTES:
                 raise IdentityConflict("triage prompt exceeds the bounded model context")
             input_id, token = _reserve_triage(store, pending, owner, person.generation)
+            # Prelaunch binding: exact expected prompt bytes before Pi starts.
+            triage_digest = bind_expected_prompt(
+                store,
+                input_id=input_id,
+                stage="triage",
+                claim=pending,
+                owner=owner,
+                generation=person.generation,
+                prompt=triage_prompt,
+            )
             result = await run_native_pi_turn(
                 native_package,
                 input_id=input_id,
@@ -554,16 +860,54 @@ async def run_one_sealed_claim(
                 worktree=worktree,
                 session_dir=session_dir,
                 session_file=triage_session,
+                prompt_send_boundary=_native_send_boundary(
+                    store,
+                    bus,
+                    owner=owner,
+                    epoch=owner_epoch,
+                    generation=person.generation,
+                    input_id=input_id,
+                    prompt=triage_prompt,
+                    claim=pending,
+                    wire_root_id=wire_root_id,
+                    token=token,
+                ),
             )
-            _verify_live_turn(result, input_id, session_dir)
+            _verify_live_turn(
+                store,
+                result,
+                input_id,
+                session_dir,
+                expected_digest=triage_digest,
+                wire_root_id=wire_root_id,
+                claim=pending,
+                stage="triage",
+                owner=owner,
+                generation=person.generation,
+                fence=None,
+            )
             _require_registry_owner(comms, owner, owner_epoch)
             decision = _parse_triage(result.text)
             _record_triage(
                 store, pending, owner, person.generation, input_id, token, result, decision
             )
             if decision == "IGNORE":
+                cursor_status = _current_cursor_status(
+                    bus,
+                    store,
+                    wire_root_id=wire_root_id,
+                    owner=owner,
+                    epoch=owner_epoch,
+                    generation=person.generation,
+                    input_id=input_id,
+                )
                 return CoordinatedTurn(
-                    pending.claim_id, ClaimDisposition.IGNORED, input_id, None, None
+                    pending.claim_id,
+                    ClaimDisposition.IGNORED,
+                    input_id,
+                    None,
+                    None,
+                    cursor_status,
                 )
             triage_session = result.context.session_file
         else:
@@ -616,6 +960,17 @@ async def run_one_sealed_claim(
         )
         if len(prompt.encode("utf-8")) > _MAX_PROMPT_BYTES:
             raise IdentityConflict("full prompt exceeds the bounded model context")
+        full_digest = bind_expected_prompt(
+            store,
+            input_id=input_id,
+            stage="full",
+            claim=pending,
+            owner=owner,
+            generation=person.generation,
+            prompt=prompt,
+            execution_id=execution_id,
+            attempt_ordinal=fence.attempt_ordinal,
+        )
         result = await run_native_pi_turn(
             native_package,
             input_id=input_id,
@@ -623,8 +978,33 @@ async def run_one_sealed_claim(
             worktree=worktree,
             session_dir=session_dir,
             session_file=triage_session,
+            prompt_send_boundary=_native_send_boundary(
+                store,
+                bus,
+                owner=owner,
+                epoch=owner_epoch,
+                generation=person.generation,
+                input_id=input_id,
+                prompt=prompt,
+                claim=pending,
+                wire_root_id=wire_root_id,
+                token=token,
+                fence=fence,
+            ),
         )
-        _verify_live_turn(result, input_id, session_dir)
+        _verify_live_turn(
+            store,
+            result,
+            input_id,
+            session_dir,
+            expected_digest=full_digest,
+            wire_root_id=wire_root_id,
+            claim=pending,
+            stage="full",
+            owner=owner,
+            generation=person.generation,
+            fence=fence,
+        )
         _require_registry_owner(comms, owner, owner_epoch)
         if not result.text:
             raise IdentityConflict("successful model produced no publishable response")
@@ -650,12 +1030,22 @@ async def run_one_sealed_claim(
         ).value
         if published.publication_receipt is None:
             raise IdentityConflict("fenced response has no durable receipt")
+        cursor_status = _current_cursor_status(
+            bus,
+            store,
+            wire_root_id=wire_root_id,
+            owner=owner,
+            epoch=owner_epoch,
+            generation=person.generation,
+            input_id=input_id,
+        )
         return CoordinatedTurn(
             pending.claim_id,
             ClaimDisposition.COMPLETED,
             input_id,
             published.publication_receipt.message_id,
             published.execution.exact_target,
+            cursor_status,
         )
     finally:
         try:
