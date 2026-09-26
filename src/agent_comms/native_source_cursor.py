@@ -21,17 +21,21 @@ from .coordination_response import _response_boundary
 from .coordination_store import IdentityConflict, MutationStore, StaleFence
 from .declarations import MessageBus, Thread, _store_lock
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
+from .private_bus_checkpoint import PrefixWitness, verify_private_bus_checkpoint_unlocked
 from .proven_source_coverage import ProvenSourceCoverage, read_proven_source_coverage
 
-# The current canonical bus read still has an 8 MiB / 1,000-row ceiling.
-# Never turn this bound into a guessed max-sequence cursor or trust the
-# disposable candidate WAL as a substitute for canonical source proof.
-_MAX_COVERAGE_PAGES = 10
+# The old-root canonical bus read still has an 8 MiB / 1,000-row ceiling.
+# A checkpointed root pages complete addressed sources; neither its SQL
+# index nor its source sequence is native proof or an injected ACK.
+_MAX_COVERAGE_PAGES = 32  # 3,200 addressed initials per bounded owner pass.
 _MAX_SOURCE_BYTES = 8 * 1024 * 1024
 
 
-def _source_witness_unlocked(bus: MessageBus) -> tuple[int, int, int, str]:
-    """Fingerprint precisely the capped bus bytes covered by the canonical walk."""
+def _source_witness_unlocked(bus: MessageBus) -> PrefixWitness | tuple[int, int, int, str]:
+    """Recheck exact certified revision, or hash a bounded legacy bus."""
+    marker = bus._private_marker_unlocked()
+    if marker.get("checkpoint_version") == 1:
+        return verify_private_bus_checkpoint_unlocked(bus, marker)
     descriptor = os.open(bus._path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     try:
         info = os.fstat(descriptor)
@@ -46,8 +50,11 @@ def _source_witness_unlocked(bus: MessageBus) -> tuple[int, int, int, str]:
         os.close(descriptor)
 
 
-def _source_witness(bus: MessageBus) -> tuple[int, int, int, str]:
-    with _store_lock(bus._path, blocking=False, max_bus_bytes=_MAX_SOURCE_BYTES):
+def _source_witness(bus: MessageBus) -> PrefixWitness | tuple[int, int, int, str]:
+    certified = bus._path.with_name("private_bus_checkpoint.sqlite3").exists()
+    with _store_lock(
+        bus._path, blocking=False, max_bus_bytes=None if certified else _MAX_SOURCE_BYTES
+    ):
         return _source_witness_unlocked(bus)
 
 
@@ -69,6 +76,7 @@ def _bounded_coverage_pages(
     covered = 0
     injected: list[int] = []
     no_wake: list[int] = []
+    source_witness: PrefixWitness | None = None
     for _ in range(_MAX_COVERAGE_PAGES):
         page = read_proven_source_coverage(
             bus,
@@ -80,6 +88,12 @@ def _bounded_coverage_pages(
         )
         if page.covered_seq < covered:
             raise IdentityConflict("canonical source coverage regressed between pages")
+        if page.source_witness is not None:
+            if source_witness is not None and page.source_witness != source_witness:
+                raise IdentityConflict("certified source changed between coverage pages")
+            source_witness = page.source_witness
+        elif source_witness is not None:
+            raise IdentityConflict("certified source disappeared between coverage pages")
         covered = page.covered_seq
         injected.extend(page.injected_source_seqs)
         no_wake.extend(page.no_wake_seqs)
@@ -92,6 +106,7 @@ def _bounded_coverage_pages(
                 tuple(no_wake),
                 page.blocked_seq,
                 page.more_initials,
+                source_witness,
             )
         if page.blocked_seq is not None or not page.more_initials:
             return ProvenSourceCoverage(
@@ -102,6 +117,7 @@ def _bounded_coverage_pages(
                 tuple(no_wake),
                 page.blocked_seq,
                 page.more_initials,
+                source_witness,
             )
     raise IdentityConflict("source coverage exceeded bounded canonical page budget")
 

@@ -18,6 +18,7 @@ from .coordination_cohort import _assert_schema, _receipt_matches
 from .coordination_store import IdentityConflict, MutationStore
 from .declarations import MessageBus, _store_lock
 from .historical_native_inputs import read_historical_native_inputs
+from .private_bus_checkpoint import PrefixWitness, certified_initial_page_unlocked
 from .wake import NoWakeDecision, WakeDecision
 
 _MAX_BUS_BYTES = 8 * 1024 * 1024
@@ -34,6 +35,7 @@ class ProvenSourceCoverage:
     no_wake_seqs: tuple[int, ...]
     blocked_seq: int | None
     more_initials: bool = False
+    source_witness: PrefixWitness | None = None
 
 
 def read_proven_source_coverage(
@@ -62,6 +64,8 @@ def read_proven_source_coverage(
     *previously reverified* covered prefix. Every partial page still validates
     the entire bounded canonical bus, including rows after the page. The
     returned more_initials bit is not evidence that later sources were covered.
+    For certified roots an exhausted recipient page uses the sealed latest
+    *initial* sequence, never the global bus high-water (which includes replies).
     """
     if (
         type(bus) is not MessageBus
@@ -85,27 +89,53 @@ def read_proven_source_coverage(
     deadline = time.monotonic() + _MAX_SCAN_SECONDS
     initials: list[CommittedInitial] = []
     more_initials = False
-    with _store_lock(bus._path, blocking=False, max_bus_bytes=_MAX_BUS_BYTES):
+    source_witness: PrefixWitness | None = None
+    horizon = 0
+    # A certificate is a trusted append-writer-maintained *source* index,
+    # never SQL seal, selected claim, native input or injected ACK authority.
+    # Old roots retain the original complete bounded canonical bus parse.
+    with _store_lock(
+        bus._path,
+        blocking=False,
+        max_bus_bytes=(
+            None
+            if (bus._path.with_name("private_bus_checkpoint.sqlite3")).exists()
+            else _MAX_BUS_BYTES
+        ),
+    ):
         if time.monotonic() > deadline:
             raise IdentityConflict("source coverage exceeded its scan deadline")
         marker = bus._private_marker_unlocked()
         if marker["wire_root_id"] != wire_root_id:
             raise IdentityConflict("source coverage private wire root changed")
-        for row_count, (_, _, initial) in enumerate(
-            bus._verified_private_rows_unlocked(marker), start=1
-        ):
-            if row_count > _MAX_BUS_ROWS or time.monotonic() > deadline:
-                raise IdentityConflict("source coverage exceeded row or scan deadline budget")
-            if initial is not None and initial.message.seq > after_seq:
-                if len(initials) >= limit:
-                    if not partial:
-                        raise IdentityConflict(
-                            "source coverage exceeded its bounded private initial scan"
-                        )
-                    more_initials = True
-                    continue  # Validate the rest of the canonical bus, but never cover it.
-                initials.append(initial)
-    covered = 0
+        if marker.get("checkpoint_version") == 1:
+            source_witness, addressed, more_initials = certified_initial_page_unlocked(
+                bus, marker, recipient_lookup, after=after_seq, limit=limit
+            )
+            if after_seq > source_witness.latest_initial_seq:
+                raise IdentityConflict("source coverage prefix exceeds certified initials")
+            initials = list(addressed)
+            if more_initials and not partial:
+                raise IdentityConflict("source coverage exceeded its bounded private initial scan")
+            horizon = (
+                initials[-1].message.seq if more_initials else source_witness.latest_initial_seq
+            )
+        else:
+            for row_count, (_, _, initial) in enumerate(
+                bus._verified_private_rows_unlocked(marker), start=1
+            ):
+                if row_count > _MAX_BUS_ROWS or time.monotonic() > deadline:
+                    raise IdentityConflict("source coverage exceeded row or scan deadline budget")
+                if initial is not None and initial.message.seq > after_seq:
+                    if len(initials) >= limit:
+                        if not partial:
+                            raise IdentityConflict(
+                                "source coverage exceeded its bounded private initial scan"
+                            )
+                        more_initials = True
+                        continue  # Validate rest of canonical bus, never cover it.
+                    initials.append(initial)
+    covered = after_seq if partial else 0
     injected: list[int] = []
     no_wake: list[int] = []
     blocked: int | None = None
@@ -187,6 +217,10 @@ def read_proven_source_coverage(
             break
         injected.append(seq)
         covered = seq
+    if blocked is None and source_witness is not None:
+        # The certified addressed page is exhaustive to this source bound.
+        # Absent recipients are covered, but they are NEVER native injections.
+        covered = max(covered, horizon)
     return ProvenSourceCoverage(
         wire_root_id,
         recipient_lookup,
@@ -195,4 +229,5 @@ def read_proven_source_coverage(
         tuple(no_wake),
         blocked,
         more_initials,
+        source_witness,
     )
