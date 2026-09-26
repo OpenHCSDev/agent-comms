@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Apply only the reviewed bounded proof-journal startup headroom to a copied Pi package."""
+
 from __future__ import annotations
 
 import hashlib
@@ -20,7 +21,9 @@ def main(package: Path) -> None:
     source = package / "dist/core/agent-session.js"
     original = source.read_bytes()
     if digest(original) != ORIGINAL_SHA256 or original.count(OLD.encode()) != 1:
-        raise SystemExit("Refusing to patch: copied Pi source is not the reviewed pinned input build")
+        raise SystemExit(
+            "Refusing to patch: copied Pi source is not the reviewed pinned input build"
+        )
     updated = original.replace(OLD.encode(), NEW.encode(), 1)
     if digest(updated) != RECOVERY_SHA256:
         raise SystemExit("Refusing to patch: recovery bytes differ from reviewed artifact")

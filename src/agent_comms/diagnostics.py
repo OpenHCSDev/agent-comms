@@ -15,6 +15,7 @@ class FailureReason(StrEnum):
     BACKEND_FAILED = "backend_failed"
     PREFLIGHT_TIMEOUT = "native_preflight_timeout"
     PREFLIGHT_EXIT = "native_preflight_exit"
+    PROOF_JOURNAL_LIMIT = "native_proof_journal_limit"
     INPUT_ID_UNAVAILABLE = "pi_input_id_unavailable"
     COMPACTION_FAILED = "prestart_compaction_failed"
     IDENTITY_UNCERTAIN = "session_identity_uncertain"
@@ -49,7 +50,14 @@ def record_terminal_failure(
     reason = terminal_failure_reason(event)
     safe = {
         key: value
-        for key in ("elapsed_ms", "wait_ms", "spawn_ms", "session_bytes", "exit_code")
+        for key in (
+            "elapsed_ms",
+            "wait_ms",
+            "spawn_ms",
+            "session_bytes",
+            "proof_journal_bytes",
+            "exit_code",
+        )
         if type(value := measurements.get(key)) is int
     }
     document = {
