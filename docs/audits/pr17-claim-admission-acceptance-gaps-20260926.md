@@ -26,14 +26,22 @@ The following is partial implementation evidence, not closure or approval.
 
 | Gap | Now provided |
 | --- | --- |
-| "No versioned prelaunch source/claim/stage/input/prompt digest binding exists yet" | `native_prompt_binding.py`: versioned sidecar store writes `expected_prompt_digest` (sha256 of the native `pi-input-request-v1` JSON request envelope) bound to source seq/message, sealed claim, stage, input ID, and owner incarnation **before Pi launch**. Digest is cross-checked against a compiled native method. Binding insertion now holds the coordination transaction; it still does **not** protect the actual send |
+| "No versioned prelaunch source/claim/stage/input/prompt digest binding exists yet" | `native_prompt_binding.py`: versioned sidecar store writes `expected_prompt_digest` (sha256 of the native `pi-input-request-v1` JSON request envelope) bound to source seq/message, sealed claim, stage, input ID, and owner incarnation **before Pi launch**. Digest is cross-checked against a compiled native method. Binding insertion holds the coordination transaction. A separate one-use callback now holds wire/bus/registry/coordination exclusions at the adapter's actual prompt write/drain |
 | Crash/UNKNOWN ordering untested for that binding | Binding commits after reservation and before launch; crash anywhere before launch leaves the input unprovable; tests cover owner-change between reserve and bind, launch failure after bind, digest mismatch, and immutable bindings |
 | Historical evidence could not establish expected-prompt equality | `read_historical_native_inputs` joins the immutable binding to the private journal's durable `inputDigest` and sets `expected_prompt_equality_established` only on exact match; identity mismatch fails closed |
 
 ## Still open (unchanged by this slice)
 
-- **Owner/generation fence through actual native send.** Parent owner-race
-  regression remains an acceptance gate; prelaunch transaction alone is insufficient.
+- **Owner/generation fence through actual native send: implemented, review pending.**
+  The adapter invokes a one-use scope at prompt write/drain; it checks registry
+  incarnation/turn, SQL generation, reserved input identity/token, claim state,
+  full-attempt fence and exact binding. Scope uses existing wire→bus→registry→SQL
+  lock order. Deterministic subprocess lock probes verify all four exclusions
+  at both write and drain; revoked owners send no prompt bytes (triage and FULL).
+  Parent `test_parent_binding_owner_race.py` now passes unchanged. Focused
+  adapter/binding/runtime/foreground suite: 93 passed, 5 existing native-artifact
+  skips. No fake stream or lock probe establishes native acceptance or provider receipt.
+  Sidecar hardening below is still required for the combined boundary.
 - **Private sidecar safety/durability.** Path replacement, full schema/trigger
   validation, serialized installation, and per-commit sync/UNKNOWN handling need
   adversarial coverage and fixes. Current helper is not a hardened boundary.

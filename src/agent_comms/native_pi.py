@@ -14,7 +14,8 @@ import os
 import re
 import signal
 import stat
-from contextlib import suppress
+from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -506,6 +507,7 @@ async def run_native_pi_turn(
     provider: str = "openrouter",
     model: str = "z-ai/glm-5.3-flash",
     timeout: float = 90.0,
+    prompt_send_boundary: Callable[[], AbstractContextManager[None]] | None = None,
 ) -> NativeTurnResult:
     """One tracked real Pi RPC prompt in an isolated, persisted session.
 
@@ -582,9 +584,12 @@ async def run_native_pi_turn(
                 raise NativePiUnavailable("Native Pi rebound its session")
             session_id = data["sessionId"]
             break
-        await send(
-            {"type": "prompt", "id": "native-prompt", "inputId": input_id, "message": prompt}
-        )
+        # The admission scope spans the real stdin write AND drain, not an
+        # earlier preflight or a post-send check. Failure is never retried.
+        with prompt_send_boundary() if prompt_send_boundary is not None else nullcontext():
+            await send(
+                {"type": "prompt", "id": "native-prompt", "inputId": input_id, "message": prompt}
+            )
         accepted = False
         input_event: dict[str, Any] | None = None
         contexts: list[dict[str, Any]] = []

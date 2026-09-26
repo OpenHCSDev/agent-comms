@@ -13,6 +13,8 @@ import hashlib
 import json
 import os
 import secrets
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,6 +33,7 @@ from .coordination_cohort import _assert_schema, accept_initial_cohort, sealed_c
 from .coordination_response import (
     LiveResponseOwner,
     _assert_response_schema,
+    _response_boundary,
     prepare_fenced_response,
     publish_fenced_response,
 )
@@ -52,8 +55,10 @@ from .native_pi import (
 )
 from .native_prompt_binding import (
     bind_expected_prompt,
+    read_expected_prompt_binding,
 )
 from .operations import Comms
+from .private_sidecar import native_request_digest
 from .wake import WakeDecision, derive_exact_reply_target
 from .wake_injection import render_selected_wake_frame
 
@@ -113,6 +118,143 @@ def _require_owner(store: MutationStore, lookup: str, owner: Thread, generation:
         or not owner.role.executable
     ):
         raise StaleFence("cohort recipient is not this live registered owner generation")
+
+
+def _native_send_boundary(
+    store: MutationStore,
+    bus: MessageBus,
+    *,
+    owner: Thread,
+    epoch: int,
+    generation: int,
+    input_id: str,
+    prompt: str,
+    claim: WakeClaim,
+    wire_root_id: str,
+    token: str,
+    fence: OwnerFence | None = None,
+) -> Callable[[], AbstractContextManager[None]]:
+    """One-use final-send admission, with wire→bus→registry→SQL lock order.
+
+    Called by the native adapter only at its actual prompt write/drain. The
+    reservation already forbids recovery/retry; this closure additionally
+    forbids a second use within this process, including a failed admission.
+    """
+    attempted = False
+
+    @contextmanager
+    def boundary() -> Iterator[None]:
+        nonlocal attempted
+        if attempted:
+            raise IdentityConflict("native send admission cannot be reused")
+        attempted = True
+        with _response_boundary(bus) as registry, store._transaction() as db:
+            actual = registry.threads.get(owner.name)
+            status = registry.statuses.get(owner.name)
+            if (
+                actual is None
+                or status is None
+                or not status.active
+                or registry.admission_generations.get(owner.name) != epoch
+                or actual.pid != os.getpid()
+                or (actual.created_at, actual.pid, actual.role, actual.worktree, actual.active_turn)
+                != (owner.created_at, owner.pid, owner.role, owner.worktree, owner.active_turn)
+            ):
+                raise StaleFence("recipient registry owner changed before native send")
+            assert_native_runtime_schema(db)
+            _require_owner(store, claim.recipient_lookup, owner, generation)
+            reserved = db.execute(
+                "SELECT * FROM native_runtime_inputs WHERE input_id=?", (input_id,)
+            ).fetchone()
+            stage = "triage" if fence is None else "full"
+            execution_id = None if fence is None else fence.execution_id
+            ordinal = None if fence is None else fence.attempt_ordinal
+            if reserved is None or (
+                reserved["stage"],
+                reserved["claim_id"],
+                reserved["owner_lookup"],
+                reserved["owner_thread"],
+                reserved["owner_generation"],
+                reserved["execution_id"],
+                reserved["attempt_ordinal"],
+                reserved["owner_token_digest"],
+                reserved["session_id"],
+                reserved["verdict"],
+            ) != (
+                stage,
+                claim.claim_id,
+                claim.recipient_lookup,
+                owner.name,
+                generation,
+                execution_id,
+                ordinal,
+                _token_digest(token),
+                None,
+                None,
+            ):
+                raise StaleFence("native reservation changed before send")
+            current = store.claim(claim.claim_id)
+            if (
+                current.recipient_lookup,
+                current.recipient,
+                current.wire_seq,
+                current.message_id,
+                current.wake_mode,
+            ) != (
+                claim.recipient_lookup,
+                claim.recipient,
+                claim.wire_seq,
+                claim.message_id,
+                claim.wake_mode,
+            ):
+                raise StaleFence("selected claim identity changed before native send")
+            if fence is None:
+                if (
+                    current.disposition is not ClaimDisposition.DEFERRED
+                    or current.revision != claim.revision + 1
+                ):
+                    raise StaleFence("triage claim changed before native send")
+            else:
+                snapshot, attempt = store._assert_fence(fence)
+                if (
+                    current.disposition is not ClaimDisposition.ENGAGED
+                    or snapshot.execution.status is not ExecutionStatus.ACTIVE
+                    or attempt.phase is not AttemptPhase.PROMPT_STARTING
+                    or attempt.backend_done
+                    or attempt.process_dead
+                ):
+                    raise StaleFence("full execution is not running before native send")
+            binding = read_expected_prompt_binding(store, input_id)
+            if binding is None or (
+                binding.stage,
+                binding.claim_id,
+                binding.owner_lookup,
+                binding.owner_thread,
+                binding.owner_generation,
+                binding.wire_root_id,
+                binding.source_seq,
+                binding.message_id,
+                binding.expected_prompt_digest,
+                binding.execution_id,
+                binding.attempt_ordinal,
+            ) != (
+                stage,
+                claim.claim_id,
+                claim.recipient_lookup,
+                owner.name,
+                generation,
+                wire_root_id,
+                claim.wire_seq,
+                claim.message_id,
+                native_request_digest(prompt),
+                execution_id,
+                ordinal,
+            ):
+                raise IdentityConflict("native send differs from its durable prompt binding")
+            # All exclusions remain held until the adapter finishes its write/drain.
+            yield
+
+    return boundary
 
 
 def _require_selected(
@@ -567,6 +709,18 @@ async def run_one_sealed_claim(
                 worktree=worktree,
                 session_dir=session_dir,
                 session_file=triage_session,
+                prompt_send_boundary=_native_send_boundary(
+                    store,
+                    bus,
+                    owner=owner,
+                    epoch=owner_epoch,
+                    generation=person.generation,
+                    input_id=input_id,
+                    prompt=triage_prompt,
+                    claim=pending,
+                    wire_root_id=wire_root_id,
+                    token=token,
+                ),
             )
             _verify_live_turn(result, input_id, session_dir)
             _require_registry_owner(comms, owner, owner_epoch)
@@ -647,6 +801,19 @@ async def run_one_sealed_claim(
             worktree=worktree,
             session_dir=session_dir,
             session_file=triage_session,
+            prompt_send_boundary=_native_send_boundary(
+                store,
+                bus,
+                owner=owner,
+                epoch=owner_epoch,
+                generation=person.generation,
+                input_id=input_id,
+                prompt=prompt,
+                claim=pending,
+                wire_root_id=wire_root_id,
+                token=token,
+                fence=fence,
+            ),
         )
         _verify_live_turn(result, input_id, session_dir)
         _require_registry_owner(comms, owner, owner_epoch)

@@ -112,7 +112,10 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         session_file=None,
         **_kwargs,
     ):
-        calls.append((input_id, prompt))
+        # Fake boundary models only adapter scope; real write/drain coverage
+        # lives in native adapter tests.
+        with _kwargs["prompt_send_boundary"]():
+            calls.append((input_id, prompt))
         if fail_on == len(calls):
             raise NativePiUnavailable("fake backend process died")
         if session_file is None:

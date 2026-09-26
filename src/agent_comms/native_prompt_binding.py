@@ -173,9 +173,10 @@ def bind_expected_prompt(
     digest = native_request_digest(prompt)
     from .coordinated_runtime import _require_owner
 
-    # Hold the coordination store WRITE transaction across validation and the
-    # sidecar write: registry writers (goal transitions, owner generation
-    # advance, stop) serialize behind us, closing the TOCTOU window.
+    # Installation grants no owner authority. Recheck ownership after it, then
+    # hold SQL generation writers through insertion. Registry lifecycle writers
+    # are excluded separately by the final native-send boundary, not this SQL lock.
+    _ensure_binding_schema(store)
     with store._transaction() as db:
         assert_native_runtime_schema(db)
         assert_cohort_schema(db)
@@ -207,7 +208,6 @@ def bind_expected_prompt(
         if root_row is None:
             raise IdentityConflict("prompt binding requires a sealed claim receipt")
         wire_root_id = str(root_row["wire_root_id"])
-        _ensure_binding_schema(store)
         path = binding_store_path(store)
         with sidecar_connection(path, _DDL, _DDL_DIGEST) as sidecar:
             existing = sidecar.execute(

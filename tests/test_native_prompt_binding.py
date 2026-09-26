@@ -75,7 +75,8 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
     calls: list[tuple[str, str]] = []
 
     async def fake(package, *, input_id, prompt, worktree, session_dir, session_file=None, **_):
-        calls.append((input_id, prompt))
+        with _["prompt_send_boundary"]():
+            calls.append((input_id, prompt))
         if session_file is None:
             session_file = session_dir / "one.jsonl"
             entries = [{"type": "session", "id": "isolated-session"}]
