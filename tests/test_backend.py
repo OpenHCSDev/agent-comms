@@ -2150,10 +2150,11 @@ if case != "eof":
             f"#!{sys.executable}\n" + f"""
 import json, os, sys, time
 state = json.loads(sys.stdin.readline())
+# Fully write the PID before the refused preflight response can trigger reaping.
+open({str(pid_file)!r}, "w").write(str(os.getpid()))
 print(json.dumps({{"type": "response", "command": "get_state", "id": "foreign",
                   "success": True, "data": {{"nativeInputProofCapability":
                   "pi-native-input-v1-live-only"}}}}), flush=True)
-open({str(pid_file)!r}, "w").write(str(os.getpid()))
 while True: time.sleep(0.1)
 """,
         )

@@ -42,8 +42,10 @@ from acp.schema import (
     InitializeResponse,
     LoadSessionResponse,
     NewSessionResponse,
+    PermissionOption,
     PromptCapabilities,
     PromptResponse,
+    RequestPermissionResponse,
     SessionConfigOptionSelect,
     SessionConfigSelectOption,
     SessionInfoUpdate,
@@ -52,6 +54,7 @@ from acp.schema import (
     TextContentBlock,
     ToolCallProgress,
     ToolCallStart,
+    ToolCallUpdate,
     UsageUpdate,
     UserMessageChunk,
 )
@@ -83,7 +86,14 @@ from .goal_attempts import (
 from .input_disposition import AcpDeliveryCursors, InputDispositions
 from .operations import OBSERVATION_INTERVAL, Comms, wire
 from .passive_channel_awareness import PassiveChannelAwareness
-from .runtime import RuntimeProxy, RuntimeServer, socket_path
+from .runtime import (
+    ACP_PERMISSION_TIMEOUT_SECONDS,
+    UNBOUND_CONTROLLER,
+    RuntimeProxy,
+    RuntimeServer,
+    SocketClient,
+    socket_path,
+)
 from .tool_results import tool_result_content
 from .wire_watch import open_wire_watcher
 
@@ -292,9 +302,23 @@ class CommsAgent:
             auto_title_pending=backend.rpc_args_for(self._agent_bin, self._agent_args) is not None,
         )
 
+    @staticmethod
+    def _reject_foreign_mcp(mcp_servers: list[Any] | None) -> None:
+        # ACP declarations are not Pi package declarations. Silently accepting
+        # them would misrepresent both the effective config and launch policy.
+        if mcp_servers is not None and (type(mcp_servers) is not list or mcp_servers):
+            raise RequestError.invalid_params(
+                {
+                    "reason": (
+                        "ACP mcpServers are unsupported; use Pi's native MCP package configuration."
+                    )
+                }
+            )
+
     async def new_session(
         self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> NewSessionResponse:
+        self._reject_foreign_mcp(mcp_servers)
         thread = self._declare_thread(cwd, os.getpid())
         thread_name = thread.name
         session_id = thread_name
@@ -360,6 +384,7 @@ class CommsAgent:
         **kwargs: Any,
     ) -> LoadSessionResponse:
         """Reconnect an ACP client to its persistent wire thread."""
+        self._reject_foreign_mcp(mcp_servers)
         thread = self._validated_thread(cwd, session_id)
         thread = self._comms.acquire_thread(thread.name, owner_pid=os.getpid())
         if thread.pid != os.getpid():
@@ -642,9 +667,22 @@ class CommsAgent:
                 },
             )
         async with self._turn_locks.setdefault(session_id, asyncio.Lock()):
-            return await self._prompt_owned(
-                session_id, prompt, display_text=display_text if defer_display else None
+            # A direct ACP prompt owns this one controller. Owner-socket prompts
+            # already carry a private subscriber binding (including None when
+            # absent); never fall back to a passive ACP client in that case.
+            existing = self._runtime.controller.get()
+            context = (
+                self._runtime.controller.set(self._client)
+                if existing is UNBOUND_CONTROLLER
+                else None
             )
+            try:
+                return await self._prompt_owned(
+                    session_id, prompt, display_text=display_text if defer_display else None
+                )
+            finally:
+                if context is not None:
+                    self._runtime.controller.reset(context)
 
     @staticmethod
     def _prompt_images(prompt: list[Any]) -> tuple[Any, ...]:
@@ -1295,7 +1333,11 @@ class CommsAgent:
                 if watcher is not None:
                     watcher.close()
 
-        task = asyncio.create_task(loop())
+        context = self._runtime.controller.set(UNBOUND_CONTROLLER)
+        try:
+            task = asyncio.create_task(loop())
+        finally:
+            self._runtime.controller.reset(context)
         self._drain_tasks[session_id] = task
 
     async def _drain_inbox(self, session_id: str) -> int:
@@ -1624,7 +1666,13 @@ class CommsAgent:
                     finally:
                         self._turn_tasks.pop(session_id, None)
 
-        self._wake_tasks[session_id] = asyncio.create_task(wake())
+        # Background work must not inherit a human controller from the task
+        # that happened to schedule it. Only its own ACP prompt may bind one.
+        context = self._runtime.controller.set(UNBOUND_CONTROLLER)
+        try:
+            self._wake_tasks[session_id] = asyncio.create_task(wake())
+        finally:
+            self._runtime.controller.reset(context)
 
     def _schedule_goal(self, session_id: str) -> None:
         """Only the existing thread owner may schedule another goal turn."""
@@ -1867,6 +1915,106 @@ class CommsAgent:
 
     async def _drain_count(self, session_id: str) -> int:
         return await self._drain_inbox(session_id)
+
+    async def _extension_ui_permission(
+        self,
+        session_id: str,
+        turn_id: str,
+        controller: Any,
+        request: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Project one bounded Pi UI dialog to exactly the turn's ACP controller.
+
+        No ACP response updates package configuration, launch trust or call grants.
+        The backend revalidates this result before replying to the same Pi child.
+        """
+        if self._active_turns.get(session_id) != turn_id or controller is None:
+            return None
+        title, method = request.get("title"), request.get("method")
+        if type(title) is not str or not title or len(title) > 160:
+            return None
+        choices: dict[str, str] = {}
+        if method == "confirm":
+            body = request.get("message")
+            if type(body) is not str or len(body) > 8192:
+                return None
+            options = [
+                PermissionOption(option_id="allow-once", name="Allow once", kind="allow_once"),
+                PermissionOption(option_id="deny", name="Deny", kind="reject_once"),
+            ]
+        elif method == "select":
+            values = request.get("options")
+            if (
+                type(values) is not list
+                or not 1 <= len(values) <= 8
+                or any(type(item) is not str or not item or len(item) > 100 for item in values)
+            ):
+                return None
+            choices = {f"choice-{index}": value for index, value in enumerate(values)}
+            options = [
+                PermissionOption(option_id=key, name=f"Choose {value}", kind="allow_once")
+                for key, value in choices.items()
+            ]
+            options.append(PermissionOption(option_id="deny", name="Cancel", kind="reject_once"))
+            body = "Select one Pi extension option for this turn only."
+        else:
+            return None
+        tool_call = ToolCallUpdate(
+            tool_call_id=f"pi-ui-{turn_id}-{request['id']}",
+            kind="other",
+            title=title,
+            content=[
+                ContentToolCallContent(
+                    type="content", content=TextContentBlock(type="text", text=body)
+                )
+            ],
+        )
+        try:
+            if isinstance(controller, SocketClient):
+                reply = await self._runtime.request_permission(
+                    session_id,
+                    controller,
+                    {
+                        "toolCall": tool_call.model_dump(by_alias=True, exclude_none=True),
+                        "options": [
+                            option.model_dump(by_alias=True, exclude_none=True)
+                            for option in options
+                        ],
+                    },
+                )
+                if not isinstance(reply, dict):
+                    return None
+                outcome = reply
+            elif controller is self._client:
+                response = await asyncio.wait_for(
+                    controller.request_permission(
+                        session_id=session_id, tool_call=tool_call, options=options
+                    ),
+                    timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
+                )
+                outcome = RequestPermissionResponse.model_validate(response).outcome.model_dump(
+                    by_alias=True, exclude_none=True
+                )
+            else:
+                return None
+        except Exception:
+            # An ACP controller exception is denial, never a raw error in Pi
+            # RPC/model output or a reason to resend an uncertain MCP call.
+            return None
+        if self._active_turns.get(session_id) != turn_id:
+            return None
+        if isinstance(controller, SocketClient) and not self._runtime.is_controller(
+            session_id, controller
+        ):
+            return None
+        selected = outcome.get("optionId")
+        if outcome.get("outcome") != "selected" or type(selected) is not str:
+            return None
+        if method == "confirm":
+            return {"confirmed": selected == "allow-once"}
+        if selected in choices:
+            return {"value": choices[selected]}
+        return None
 
     async def _run_agent_turn(
         self,
@@ -2347,6 +2495,9 @@ class CommsAgent:
 
         backend_inbox: asyncio.Queue[str | dict[str, Any]] = asyncio.Queue()
         finish_event = asyncio.Event()
+        controller = self._runtime.controller.get()
+        if controller is UNBOUND_CONTROLLER:
+            controller = None  # Autonomous/channel/goal turns have no controller.
         self._backend_inboxes[session_id] = backend_inbox
         self._active_turns[session_id] = turn_id
         if original_owner_input and original_keys:
@@ -2421,6 +2572,9 @@ class CommsAgent:
                     self._persistent_backends.setdefault(session_id, backend.PersistentPiSession())
                     if backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
                     else None
+                ),
+                ui_request=lambda request: self._extension_ui_permission(
+                    session_id, turn_id, controller, request
                 ),
             ):
                 kind = event.get("type")
@@ -3066,6 +3220,21 @@ class CommsAgent:
                     content=TextContentBlock(type="text", text=event.get("text") or ""),
                 ),
             )
+        elif kind == "mcp_live_status":
+            # The native input ID belongs to Pi, not ACP. Carry the owning
+            # ACP turn separately so queued updates cannot attach to a later
+            # turn. session_update's session_id is the outer session fence.
+            turn_id = event.get("turn_id")
+            if not turn_id or self._active_turns.get(session_id) != turn_id:
+                return
+            await client.session_update(
+                session_id=session_id,
+                update=AgentMessageChunk(
+                    session_update="agent_message_chunk",
+                    content=TextContentBlock(type="text", text=""),
+                    field_meta={"agentComms": {"turnId": turn_id, "mcpClient": event["receipt"]}},
+                ),
+            )
         elif kind == "agent_info":
             used = event.get("context_used")
             size = event.get("context_size")
@@ -3236,6 +3405,7 @@ class CommsClient(CommsAgent):
     async def new_session(
         self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> NewSessionResponse:
+        self._reject_foreign_mcp(mcp_servers)
         thread = self._declare_thread(cwd, 0)
         loaded = await self.load_session(cwd, thread.name, mcp_servers, **kwargs)
         return NewSessionResponse(
@@ -3247,6 +3417,7 @@ class CommsClient(CommsAgent):
     async def load_session(
         self, cwd: str, session_id: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> LoadSessionResponse:
+        self._reject_foreign_mcp(mcp_servers)
         thread = self._validated_thread(cwd, session_id)
         owner = await asyncio.to_thread(
             self._comms.ensure_owner,
