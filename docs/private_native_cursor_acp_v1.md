@@ -47,10 +47,25 @@ same logical key is ambiguous and also quarantines. A null scope for the
 receiving private session cannot sustain an incumbent proof and hides it.
 Unrelated logical attachments and lower-epoch callbacks are ignored. While
 quarantined, ignore *all* callbacks (including old-scope higher revisions)
-until an explicit trusted new/load result. After that result, reject older
-scopes, lower revisions, and contradictory equal-revision payloads; identical
-equal-revision bytes are idempotent. Never rebind from a callback. Malformed,
-unsupported, or absent envelopes are unavailable/hidden, not proof of no work.
+until an explicit trusted new/load result whose epoch is at least the observed
+higher-epoch floor. **Callbacks arriving before a delayed trusted result also
+matter:** retain at most 32 validated v1 callback envelopes per receiving
+attachment while unbound, in delivery order. After the trusted result, match
+only the exact logical key; a matching callback with the same created-at and
+a greater epoch quarantines the result rather than rebinding from that callback.
+An older trusted result cannot clear the observed floor. A trusted result at
+or above that floor can bind; then apply matching same-incarnation buffered
+updates only in revision order, with equal-revision conflicts rejected. A
+same-logical-key different created-at or same-epoch PID conflict is ambiguous:
+keep unavailable until an explicit trusted new/load **initiated after** that
+conflict. Buffer overflow, malformed prebind metadata, or uncertain ordering
+is unavailable until a subsequent explicit trusted load initiated after the
+uncertainty, not an automatic retry. The buffer carries no text or private
+proof fields into display without a trusted binding. After binding, reject
+older scopes, lower revisions, and contradictory equal-revision payloads;
+identical equal-revision bytes are idempotent. Never rebind from a callback.
+Malformed, unsupported, or absent envelopes are unavailable/hidden, not proof
+of no work.
 Observed registry stop/re-admission with no selected input publishes an
 unavailable/null-scope or new-epoch `none` update; watcher delivery is not an
 instantaneous registry-change guarantee. `none` and `unavailable` carry owner
@@ -71,8 +86,11 @@ The provider-free event-order fixture is
 a supported mid-session admission bump: trusted epoch-2 `proven` revision 2,
 new epoch-4 `none` callback revision 3, quarantine, delayed old callback,
 explicit trusted epoch-4 `none` load, delayed old callback rejected, and
-same-epoch unavailable/equal-revision conflict. `autoReconnectReadyForwardedToClient`
-is false. The delayed callback is an adversarial sink-order control, not a claim
+same-epoch unavailable/equal-revision conflict. It also exercises a newer
+callback delivered *before* a delayed older trusted response, which must stay
+hidden until a later trusted new-epoch load, plus a bounded prebind overflow.
+`autoReconnectReadyForwardedToClient` is false. The delayed callback is an
+adversarial sink-order control, not a claim
 that one same-process producer allocates revisions out of order. The provider-
 free producer regression tests observed stop/heartbeat, new-epoch `none` and
 no replay of old-epoch native proof. This fixture is not a live ghost trace. Mounted-client acceptance requires an independent Toad

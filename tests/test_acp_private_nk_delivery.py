@@ -116,6 +116,47 @@ def test_cursor_v1_event_order_fixture_is_consistent():
     )
 
 
+def test_cursor_v1_prebind_newer_callback_poison_floor():
+    """A delayed trusted old response cannot erase earlier callback evidence."""
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "private_native_cursor_v1.json").read_text()
+    )
+    race = fixture["prebindRace"]
+    pending = [race["callbackBeforeTrustedResult"]]
+    assert len(pending) <= race["bufferBound"]
+    old = race["delayedTrustedLoad"]
+    matching = [
+        update
+        for update in pending
+        if all(
+            update["scope"][key] == old["scope"][key]
+            for key in ("sessionId", "wireRootId", "ownerThread", "ownerCreatedAt")
+        )
+    ]
+    floor = max(update["scope"]["ownerEpoch"] for update in matching)
+    visible = old if old["scope"]["ownerEpoch"] >= floor else None
+    assert visible is None and race["expectedAfterDelayedLoad"] == {
+        "status": "unavailable",
+        "quarantined": True,
+        "ownerEpochFloor": floor,
+    }
+    fresh = race["subsequentTrustedLoad"]
+    assert fresh["scope"]["ownerEpoch"] >= floor
+    visible = fresh
+    # The buffered same-epoch callback is older than the trusted revision;
+    # it cannot overwrite the subsequent trusted response.
+    assert matching[0]["revision"] < fresh["revision"]
+    assert (visible["status"], visible["scope"]["ownerEpoch"]) == (
+        race["expectedAfterSubsequentLoad"]["status"],
+        race["expectedAfterSubsequentLoad"]["ownerEpoch"],
+    )
+    assert race["overflow"]["received"] > race["bufferBound"]
+    assert race["overflow"]["status"] == "unavailable"
+    assert race["overflow"]["clearOnlyAfter"] == (
+        "subsequent_explicit_load_initiated_after_overflow"
+    )
+
+
 async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, monkeypatch):
     root = tmp_path / "wire"
     project = tmp_path / "proj"
