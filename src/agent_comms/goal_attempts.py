@@ -26,6 +26,12 @@ from pathlib import Path
 from typing import TypeVar
 from uuid import uuid4
 
+from .goal_failure_observation import (
+    FailedTurnObservation,
+    create_observation_table,
+    record_observation,
+)
+
 
 class GoalAttemptError(RuntimeError):
     """A goal attempt cannot proceed as requested."""
@@ -115,9 +121,9 @@ class GoalAttemptStore:
                 ).fetchone()
             except sqlite3.Error as error:
                 raise StorageUncertain("Incomplete goal attempt schema.") from error
-        if version in {("2",), ("3",)}:
+        if version in {("2",), ("3",), ("4",)}:
             self._migrate_schema(version[0])
-        elif version != ("4",):
+        elif version != ("5",):
             raise StorageUncertain("Unsupported goal attempt schema.")
 
     @staticmethod
@@ -144,7 +150,7 @@ class GoalAttemptStore:
         )
 
     def _migrate_schema(self, source_version: str) -> None:
-        """Atomically migrate older ledgers to the sole v4 schema."""
+        """Atomically add passive evidence; never backfill historical bindings."""
         with closing(self._connect()) as conn:
             try:
                 if source_version == "2":
@@ -153,7 +159,7 @@ class GoalAttemptStore:
                 version = conn.execute(
                     "SELECT value FROM metadata WHERE key='schema_version'"
                 ).fetchone()
-                if version == ("4",):
+                if version == ("5",):
                     conn.rollback()
                     return
                 if version != (source_version,):
@@ -166,8 +172,10 @@ class GoalAttemptStore:
                     )
                     conn.execute("DROP TABLE goals")
                     conn.execute("ALTER TABLE goals_v3 RENAME TO goals")
-                self._create_usage_table(conn)
-                conn.execute("UPDATE metadata SET value='4' WHERE key='schema_version'")
+                if source_version in {"2", "3"}:
+                    self._create_usage_table(conn)
+                create_observation_table(conn)
+                conn.execute("UPDATE metadata SET value='5' WHERE key='schema_version'")
                 conn.commit()
                 self._sync()
             except StorageUncertain:
@@ -231,7 +239,8 @@ class GoalAttemptStore:
                     "FOREIGN KEY(goal_id) REFERENCES goals(goal_id))"
                 )
                 cls._create_usage_table(conn)
-                conn.execute("INSERT INTO metadata(key,value) VALUES('schema_version','4')")
+                create_observation_table(conn)
+                conn.execute("INSERT INTO metadata(key,value) VALUES('schema_version','5')")
                 conn.commit()
             cls._sync_paths(path, directory)
         except (sqlite3.Error, OSError) as error:
@@ -606,7 +615,13 @@ class GoalAttemptStore:
         ):
             raise StaleAttempt("Attempt is no longer current or is already claimed.")
 
-    def record_failed(self, reservation: Reservation, diagnostic: str) -> Generation:
+    def record_failed(
+        self,
+        reservation: Reservation,
+        diagnostic: str,
+        *,
+        observation: FailedTurnObservation | None = None,
+    ) -> Generation:
         """Block even when the model outcome is uncertain; never auto-replay."""
         if not diagnostic.strip():
             raise ValueError("Failure diagnostic is required.")
@@ -635,6 +650,8 @@ class GoalAttemptStore:
                 "UPDATE goals SET state='blocked',ready_digest='' WHERE goal_id=?",
                 (reservation.goal_id,),
             )
+            if observation is not None and attempt[1] == "claimed":
+                record_observation(conn, reservation, observation)
             return Generation(
                 reservation.goal_id, reservation.generation, "blocked", reservation.attempt_id
             )

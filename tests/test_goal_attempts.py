@@ -602,7 +602,7 @@ def test_v2_claimed_attempt_migrates_without_regranting(tmp_path):
     assert migrated.snapshot("goal").state == "reserved"
     with sqlite3.connect(path) as conn:
         assert conn.execute("SELECT value FROM metadata WHERE key='schema_version'").fetchone() == (
-            "4",
+            "5",
         )
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
     with pytest.raises(ReservationConflict):
@@ -617,6 +617,7 @@ def test_v3_claimed_attempt_migrates_to_usage_schema_without_regranting(store):
     store.claim_launch(reservation)
     with sqlite3.connect(store.path) as conn:
         conn.execute("DROP TABLE provider_usage")
+        conn.execute("DROP TABLE failed_turn_observations")
         conn.execute("UPDATE metadata SET value='3' WHERE key='schema_version'")
 
     migrated = GoalAttemptStore(store.root)
