@@ -86,7 +86,7 @@ from .declarations import (
     _store_lock,
     is_channel_target,
 )
-from .diagnostics import record_terminal_failure
+from .diagnostics import record_terminal_failure, terminal_failure_reason
 from .goal_attempts import (
     Generation,
     GoalAttemptError,
@@ -95,6 +95,7 @@ from .goal_attempts import (
     StaleAttempt,
     UnresolvedAttempt,
 )
+from .goal_failure_observation import FailedTurnObservation
 from .input_disposition import AcpDeliveryCursors, InputDispositions
 from .native_source_cursor import advance_current_native_cursor, read_current_native_cursor
 from .operations import OBSERVATION_INTERVAL, Comms, wire
@@ -124,6 +125,7 @@ DEFAULT_AGENT_ARGS = [
 ]
 LIVE_DRAIN_INTERVAL = OBSERVATION_INTERVAL
 WATCH_FALLBACK_INTERVAL = 1.0
+GOAL_WAIT_RECHECK_INTERVAL = 60.0
 NO_REPLY_WINDOW = 2.5  # silence: end the turn after this long with nothing
 REPLY_WINDOW = 8.0  # once replies flow, keep collecting at most this long
 REPLY_QUIET = 1.5  # after the last reply, wait this long then end the turn
@@ -1037,7 +1039,7 @@ class CommsAgent:
                     finally:
                         # Relay output, if any, is committed before the waiter
                         # observes that this dependency finished silently.
-                        self._comms.pause_waits_after_terminal_turn(terminal_fence)
+                        self._comms.release_waits_after_terminal_turn(terminal_fence)
             self._debug_log("prompt:returning")
             return PromptResponse(stop_reason="end_turn")
         except asyncio.CancelledError:
@@ -1551,6 +1553,7 @@ class CommsAgent:
 
         async def loop() -> None:
             watcher = open_wire_watcher(self._comms.root)
+            next_goal_wait_check = 0.0
             try:
                 while True:
                     if watcher is None:
@@ -1560,6 +1563,9 @@ class CommsAgent:
                     try:
                         await self._drain_inbox(session_id)
                         await self._sync_thread_config(session_id)
+                        if time.monotonic() >= next_goal_wait_check:
+                            self._comms.recover_closed_goal_wait(session_id)
+                            next_goal_wait_check = time.monotonic() + GOAL_WAIT_RECHECK_INTERVAL
                         self._schedule_goal(session_id)
                         await self._refresh_auth_models()
                     except asyncio.CancelledError:
@@ -3256,10 +3262,28 @@ class CommsAgent:
                         self._goal_store.record_verified_progress(goal_permit, witness)
                         goal_attempt_resolved = True
                 if not goal_attempt_resolved:
+                    terminal_snapshot = self._comms.registry.snapshot()
                     with suppress(StaleAttempt):
                         self._goal_store.record_failed(
                             goal_permit.reservation,
                             "Goal turn ended without verified terminal progress.",
+                            observation=(
+                                FailedTurnObservation.from_terminal(
+                                    goal_permit.reservation,
+                                    owner=thread,
+                                    goal=goal,
+                                    claim=turn_claim,
+                                    turn_id=turn_id,
+                                    admission=turn_admission,
+                                    current_owner=terminal_snapshot.threads.get(thread_name),
+                                    current_admission=terminal_snapshot.admission_generations.get(
+                                        thread_name
+                                    ),
+                                    reason=terminal_failure_reason(terminal_failure),
+                                )
+                                if terminal_ok is not True
+                                else None
+                            ),
                         )
                     goal_attempt_resolved = True
                     if current_goal is not None and current_goal.id == goal.id:
@@ -3447,11 +3471,11 @@ class CommsAgent:
                 try:
                     await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
                 finally:
-                    self._comms.pause_waits_after_terminal_turn(terminal_fence)
+                    self._comms.release_waits_after_terminal_turn(terminal_fence)
             else:
                 # `settled` precedes terminal `done` in native RPC. Reconcile
                 # only after the terminal reply or failure notice was published.
-                self._comms.pause_waits_after_terminal_turn(terminal_fence)
+                self._comms.release_waits_after_terminal_turn(terminal_fence)
 
     def _started_event(self, thread_name: str, turn_id: str) -> dict[str, Any]:
         """Project one owner-authored turn without inventing presentation timestamps."""

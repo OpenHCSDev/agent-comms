@@ -25,6 +25,18 @@ class FailureReason(StrEnum):
     QUEUED_INPUT_MISSING = "queued_input_start_missing"
 
 
+def terminal_failure_reason(event: dict) -> FailureReason:
+    """Allowlisted backend terminal classification; never diagnostic prose."""
+    measurements = event.get("diagnostic", {})
+    if not isinstance(measurements, dict):
+        measurements = {}
+    try:
+        value = measurements.get("reason") or event.get("reason_code")
+        return FailureReason(value) if isinstance(value, str) else FailureReason.BACKEND_FAILED
+    except (ValueError, TypeError):
+        return FailureReason.BACKEND_FAILED
+
+
 def record_terminal_failure(
     root: Path, *, turn_id: str, thread: str, event: dict, sequences: tuple[int, ...]
 ) -> Path:
@@ -34,11 +46,7 @@ def record_terminal_failure(
     measurements = event.get("diagnostic", {})
     if not isinstance(measurements, dict):
         measurements = {}
-    try:
-        value = measurements.get("reason") or event.get("reason_code")
-        reason = FailureReason(value) if isinstance(value, str) else FailureReason.BACKEND_FAILED
-    except (ValueError, TypeError):
-        reason = FailureReason.BACKEND_FAILED
+    reason = terminal_failure_reason(event)
     safe = {
         key: value
         for key in ("elapsed_ms", "wait_ms", "spawn_ms", "session_bytes", "exit_code")
