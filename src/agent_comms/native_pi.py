@@ -509,7 +509,7 @@ async def run_native_pi_turn(
     provider: str = "openrouter",
     model: str = "z-ai/glm-5.3-flash",
     timeout: float = 90.0,
-    prompt_send_boundary: Callable[[], AbstractContextManager[None]] | None = None,
+    prompt_send_boundary: Callable[[Path], AbstractContextManager[None]] | None = None,
 ) -> NativeTurnResult:
     """One tracked real Pi RPC prompt in an isolated, persisted session.
 
@@ -599,7 +599,7 @@ async def run_native_pi_turn(
             await send_fenced_prompt(
                 stdin,
                 (json.dumps(command, separators=(",", ":")) + "\n").encode(),
-                prompt_send_boundary,
+                lambda: prompt_send_boundary(actual_file),
                 timeout=deadline - asyncio.get_running_loop().time(),
             )
         accepted = False

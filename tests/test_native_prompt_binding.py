@@ -144,13 +144,21 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
     calls: list[tuple[str, str]] = []
 
     async def fake(package, *, input_id, prompt, worktree, session_dir, session_file=None, **_):
+        fresh = session_file is None
+        if fresh:
+            session_file = session_dir / f"{input_id}.jsonl"
+            session_file.write_text(
+                json.dumps({"type": "session", "id": "isolated-session"}) + "\n"
+            )
+            session_file.chmod(0o600)
+        assert session_file is not None
+
         def admitted():
-            with _["prompt_send_boundary"]():
+            with _["prompt_send_boundary"](session_file):
                 calls.append((input_id, prompt))
 
         await asyncio.to_thread(admitted)
-        if session_file is None:
-            session_file = session_dir / f"{input_id}.jsonl"
+        if fresh:
             entries = [{"type": "session", "id": "isolated-session"}]
             proof_rows = []
         else:

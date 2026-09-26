@@ -5,6 +5,8 @@ import os
 import sqlite3
 import subprocess
 import sys
+import threading
+from pathlib import Path
 
 import pytest
 
@@ -50,6 +52,61 @@ def test_reservation_is_durable_unresolved_and_blocks_every_input(reserved):
     assert not native_input_admitted(journal.path.parent, session)
     with pytest.raises(CompactionJournalError, match="Exact committed"):
         reopened.link_selected_summary_commit(operation_id, "b" * 32)
+
+
+def test_raw_send_fence_blocks_every_same_session_status_not_unrelated(reserved):
+    journal, session, source = reserved
+    other = Path(session).with_name("other.jsonl")
+    other.write_text('{"type":"session","id":"other"}\n')
+    with journal.ordinary_input_send_fence(Path(session)):
+        pass
+    operation_id = journal.reserve_selected_summary(session, source)
+    for status in ("reserved", "unknown", "declined-prestart"):
+        if status == "unknown":
+            journal.mark_selected_summary_unknown(operation_id)
+        elif status == "declined-prestart":
+            # An apparent terminal row is still not ordinary send authority.
+            with journal._transaction() as db:
+                db.execute(
+                    "UPDATE selected_summary_attempts SET status = 'declined-prestart' "
+                    "WHERE operation_id = ?",
+                    (operation_id,),
+                )
+        with (
+            pytest.raises(CompactionJournalError, match="blocks native input"),
+            journal.ordinary_input_send_fence(Path(session)),
+        ):
+            raise AssertionError("same-session selected row must refuse prewrite")
+        with journal.ordinary_input_send_fence(other):
+            pass
+
+
+def test_raw_send_fence_serializes_concurrent_direct_reservation(reserved):
+    journal, session, source = reserved
+    started, finished = threading.Event(), threading.Event()
+    failures: list[BaseException] = []
+
+    def reserve() -> None:
+        started.set()
+        try:
+            journal.reserve_selected_summary(session, source)
+        except BaseException as error:
+            failures.append(error)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=reserve, daemon=True)
+    with journal.ordinary_input_send_fence(Path(session)):
+        worker.start()
+        assert started.wait(2)
+        assert not finished.wait(0.05), "reservation committed during raw-send exclusion"
+    worker.join(timeout=3)
+    assert finished.is_set() and not failures
+    with (
+        pytest.raises(CompactionJournalError, match="blocks native input"),
+        journal.ordinary_input_send_fence(Path(session)),
+    ):
+        pass
 
 
 def test_link_requires_exact_committed_native_intent_binding(reserved):

@@ -153,4 +153,19 @@ adaptive/N-K constructor kwargs and `_store_lock` bounded-read options with
 the inherited child descriptor; focused provider-free serial PR94+PR95 cases
 passed **326 with 1 skipped** (`/var/tmp/pr95-pr94-merge-focused.log`),
 and adjacent PR94 native-send/disposition/runtime/backend plus PR95 authority
-**263 passed** (`/var/tmp/pr95-pr94-merge-adjacent.log`).
+**263 passed** (`/var/tmp/pr95-pr94-merge-adjacent.log`). A later separate
+provider-free PR94 private raw-writer seam draft carries the exact Pi
+`get_state.sessionFile` into the isolated one-use writer and holds this selected
+journal's BEGIN IMMEDIATE through raw `os.write` under PR94 wire→bus→registry→
+store locks. Same-session selected reserved/UNKNOWN/terminal rows (even without
+a returned ACK) deny that write; other sessions proceed, and direct concurrent
+reservation is serialized. Exact-`6096df9` disposable baseline failed three
+same-session negative cases before this guard
+(`/var/tmp/pr95-private-crossroute-before.log`); corrective source/fake
+combined **167 passed, 1 pinned-Pi-import test deliberately deselected**
+(`/var/tmp/pr95-private-crossroute-focused.log`) and adjacent ACP/private bus
+**148 passed** (`/var/tmp/pr95-private-crossroute-adjacent.log`). This only
+closes raw-write AFTER an existing selected row. Selected reservation AFTER
+an unresolved PR94 private input is not yet barred by a durable cross-store
+proof and remains a **pre-opt-in blocker**, alongside actual Pi transport/route
+auth parity. No paid operation or activation is authorized.

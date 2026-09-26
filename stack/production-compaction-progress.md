@@ -206,6 +206,40 @@ adjacent PR94 native-send/disposition/runtime/backend + PR95 authority:
 `8370a1f1febb6088310e93e61fab5dbb4a93b91446607f4a8e9ff4966cb67abb`).
 No selected provider operation has been started.
 
+## PR94 private raw writer × selected-row exclusion (default-OFF draft)
+
+The exact `b2ae982` merge review independently scoped-cleaned conflict
+resolution but expressly left PR94's **distinct private N/K raw writer** outside
+the PR95 selected-row final-send gate. A disposable exact-`6096df9` baseline
+with the same provider-free selected-row test adapted to its old zero-argument
+boundary failed **all 3** reserved/UNKNOWN/terminal cases: the fake crossed
+the old raw-send boundary before raising its deliberately injected fake model
+error (`/var/tmp/pr95-private-crossroute-before.log`, SHA256
+`b026718bdeb446d57004ddc289e28132e8bfb7d21ea27d44dd80f1ccfc2bf811`).
+The corrective draft supplies the exact native `get_state.sessionFile` path to
+`_native_send_boundary`, retains its existing shared wire→bus→registry→store
+and one-use prompt exclusions, then holds the selected journal BEGIN IMMEDIATE
+through every raw `os.write`. **Any selected status**, including apparent
+linked/declined without returned ACK, or unresolved native compaction intent
+blocks the same saved file. A direct competing journal reservation cannot
+commit until that write scope ends; another session is not blocked. A resumed
+saved file renamed before send is refused, and ordinary owner/rename/cancel
+cases remain under PR94's prior exclusions. Fresh paths may not yet have a
+header at `get_state`; their canonical path is still fenced through write.
+Local serial provider-free PR94 native/selected/journal/fake combined **167
+passed, 1 deselected** (the pinned-Pi import test was deliberately excluded),
+`/var/tmp/pr95-private-crossroute-focused.log` SHA256
+`b5abb7d9a118cfe93885b71358a516c3f34600c8cda0459209c6def68fe45d8b`;
+adjacent ACP/private-bus/send admission **148 passed**,
+`/var/tmp/pr95-private-crossroute-adjacent.log` SHA256
+`df047da9e7fba7a88e7629d80f36d4db0da578cc8a7cfad1c4309d5b6c2f2a0c`.
+This is a one-way raw-after-selected safety fence, **not** a proof that a
+selected reservation AFTER an uncertain PR94 raw input is refused by the
+separate PR94 runtime store. That reverse-order cross-store gate and real Pi
+terminal/route parity remain explicit pre-opt-in blockers; no provider spend,
+live input or production activation occurred. Fresh exact-head adversarial
+review is mandatory.
+
 ## Normal PR104/105 main integration and socket incarnation (combined review pending)
 
 After clean `dadb7c4`, normally merged main `a6b43fec` (including PR104/105)

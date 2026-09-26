@@ -303,7 +303,8 @@ def _native_send_boundary(
     wire_root_id: str,
     token: str,
     fence: OwnerFence | None = None,
-) -> Callable[[], AbstractContextManager[None]]:
+    expected_session_file: Path | None = None,
+) -> Callable[[Path], AbstractContextManager[None]]:
     """One-use final-send admission, with wire→bus→registry→SQL lock order.
 
     Entered only by the native adapter's isolated raw-pipe writer (never an
@@ -312,9 +313,14 @@ def _native_send_boundary(
     """
     once = threading.Lock()
     store_path = store.path
+    from .compaction_journal import CompactionJournal
+
+    # Prepare durable journal schema before the deadline-constrained raw
+    # writer. A missing selected row must not mean a missing admission fence.
+    journal = CompactionJournal(bus._path.parent / "compaction-commits.sqlite3")
 
     @contextmanager
-    def boundary() -> Iterator[None]:
+    def boundary(actual_session_file: Path) -> Iterator[None]:
         try:
             asyncio.get_running_loop()
         except RuntimeError:
@@ -439,19 +445,54 @@ def _native_send_boundary(
                 ordinal,
             ):
                 raise IdentityConflict("native send differs from its durable prompt binding")
-            # Bind the exact input ID to the owner admission in which Pi is
-            # actually sent the prompt, not to a later caller-provided epoch.
-            # The same transaction holds all exclusions through os.write;
-            # failure rolls back this proof and leaves the attempt uncertain.
-            updated = db.execute(
-                "UPDATE native_runtime_inputs SET sent_owner_admission_epoch=? "
-                "WHERE input_id=? AND sent_owner_admission_epoch IS NULL",
-                (epoch, input_id),
-            )
-            if updated.rowcount != 1:
-                raise StaleFence("native input admission was already bound")
-            # No event-loop transport buffer may own any of these prompt bytes.
-            yield
+            # The real RPC get_state resolved this exact saved session file
+            # before creating a raw writer. Do not substitute a recipient-wide
+            # scan or post-send cursor: both admit a same-session selected row.
+            if (
+                not isinstance(actual_session_file, Path)
+                or actual_session_file.is_symlink()
+                or (
+                    expected_session_file is not None
+                    and (
+                        actual_session_file != expected_session_file
+                        or not actual_session_file.is_file()
+                    )
+                )
+            ):
+                raise IdentityConflict("native send requires an exact saved session file")
+            try:
+                # Pi may report a fresh path before writing its session header.
+                # This lexical canonical path still equals any later durable
+                # reservation; the journal lock below covers file creation.
+                saved = actual_session_file.resolve(strict=False)
+                expected_dir = (
+                    bus._path.parent / "native-sessions" / claim.recipient_lookup
+                ).resolve(strict=True)
+            except OSError as error:
+                raise IdentityConflict("native saved session unavailable before send") from error
+            if (
+                saved.parent != expected_dir
+                or saved.suffix != ".jsonl"
+                or (actual_session_file.exists() and not actual_session_file.is_file())
+            ):
+                raise IdentityConflict("native saved session changed before send")
+
+            # Hold the selected journal's BEGIN IMMEDIATE across the exact
+            # raw os.write, under the existing wire→bus→registry→store locks.
+            # This also serializes a direct reservation that missed the wire
+            # lock; every selected status and unresolved native intent denies.
+            with journal.ordinary_input_send_fence(saved):
+                # Bind the input ID to the owner admission in which Pi is sent
+                # the prompt, never a later caller-provided epoch.
+                updated = db.execute(
+                    "UPDATE native_runtime_inputs SET sent_owner_admission_epoch=? "
+                    "WHERE input_id=? AND sent_owner_admission_epoch IS NULL",
+                    (epoch, input_id),
+                )
+                if updated.rowcount != 1:
+                    raise StaleFence("native input admission was already bound")
+                # No event-loop transport buffer may own prompt bytes here.
+                yield
 
     return boundary
 
@@ -1049,6 +1090,7 @@ async def run_one_sealed_claim(
                     claim=pending,
                     wire_root_id=wire_root_id,
                     token=token,
+                    expected_session_file=triage_session,
                 ),
             )
             _verify_live_turn(
@@ -1186,6 +1228,7 @@ async def run_one_sealed_claim(
                 wire_root_id=wire_root_id,
                 token=token,
                 fence=fence,
+                expected_session_file=triage_session,
             ),
         )
         _verify_live_turn(

@@ -20,6 +20,7 @@ import pytest
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.compaction_journal import CompactionJournal, CompactionJournalError
 from agent_comms.coordinated_runtime import run_one_sealed_claim
 from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
@@ -115,16 +116,25 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         session_file=None,
         **_kwargs,
     ):
+        # The real Pi get_state returns a saved file BEFORE raw prompt send.
+        fresh = session_file is None
+        if fresh:
+            session_file = session_dir / "one.jsonl"
+            session_file.write_text(
+                json.dumps({"type": "session", "id": "isolated-session"}) + "\n"
+            )
+            session_file.chmod(0o600)
+        assert session_file is not None
+
         # Model only admission in its dedicated thread, not native receipt.
         def admitted():
-            with _kwargs["prompt_send_boundary"]():
+            with _kwargs["prompt_send_boundary"](session_file):
                 calls.append((input_id, prompt))
 
         await asyncio.to_thread(admitted)
         if fail_on == len(calls):
             raise NativePiUnavailable("fake backend process died")
-        if session_file is None:
-            session_file = session_dir / "one.jsonl"
+        if fresh:
             entries = [{"type": "session", "id": "isolated-session"}]
             proof_rows = []
         else:
@@ -595,6 +605,114 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
                 recipient_lookup=stable_thread_lookup(people[2].created_at),
                 source_seq=initial.message.seq,
             )
+
+
+@pytest.mark.parametrize("status", ["reserved", "unknown", "declined-prestart"])
+async def test_private_raw_send_refuses_same_session_selected_row_before_write(
+    tmp_path: Path, monkeypatch, status: str
+) -> None:
+    root, root_id, comms, initial, people = _root(tmp_path, direct=True)
+    lookup = stable_thread_lookup(people[2].created_at)
+    session_dir = root / "native-sessions" / lookup
+    session_dir.mkdir(parents=True, mode=0o700)
+    session_file = session_dir / "saved.jsonl"
+    original = json.dumps({"type": "session", "id": "isolated-session"}) + "\n"
+    session_file.write_text(original)
+    session_file.chmod(0o600)
+    journal = CompactionJournal(root / "compaction-commits.sqlite3")
+    operation_id = journal.reserve_selected_summary(
+        str(session_file),
+        {"source": {"witness": "fake"}, "selected": {"provider": "fake"}, "settings": {"limit": 1}},
+    )
+    if status == "unknown":
+        journal.mark_selected_summary_unknown(operation_id)
+    elif status == "declined-prestart":
+        assert journal.decline_selected_summary_prestart(operation_id, "unsupported") is None
+    assert journal.selected_summary(operation_id).status == status
+    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+    fake, calls = _fake_model()
+    monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", fake)
+    with pytest.raises(CompactionJournalError, match="blocks native input"):
+        await run_one_sealed_claim(
+            root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=tmp_path,
+            session_file=session_file,
+            opt_in=True,
+        )
+    assert calls == [] and session_file.read_text() == original
+    assert not Path(str(session_file) + ".input-proof").exists()
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        rows = store._connection.execute(
+            "SELECT sent_owner_admission_epoch, session_id FROM native_runtime_inputs"
+        ).fetchall()
+        assert len(rows) == 1 and tuple(rows[0]) == (None, None)
+        assert (
+            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="beta")
+            is None
+        )
+    assert (
+        await run_one_sealed_claim(
+            root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=tmp_path,
+            session_file=session_file,
+            opt_in=True,
+        )
+        is None
+    )
+    assert calls == []
+
+
+async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
+    tmp_path: Path, monkeypatch
+) -> None:
+    root, root_id, comms, initial, people = _root(tmp_path, direct=True)
+    lookup = stable_thread_lookup(people[2].created_at)
+    session_dir = root / "native-sessions" / lookup
+    session_dir.mkdir(parents=True, mode=0o700)
+    saved = session_dir / "saved.jsonl"
+    moved = session_dir / "moved.jsonl"
+    saved.write_text(json.dumps({"type": "session", "id": "isolated-session"}) + "\n")
+    saved.chmod(0o600)
+    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+    base, calls = _fake_model(fail_on=1)
+
+    async def renamed(*args, **kwargs):
+        saved.rename(moved)
+        journal = CompactionJournal(root / "compaction-commits.sqlite3")
+        journal.reserve_selected_summary(
+            str(moved),
+            {
+                "source": {"witness": "fake"},
+                "selected": {"provider": "fake"},
+                "settings": {"limit": 1},
+            },
+        )
+        return await base(*args, **kwargs)
+
+    monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", renamed)
+    with pytest.raises(IdentityConflict, match="exact saved session"):
+        await run_one_sealed_claim(
+            root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=tmp_path,
+            session_file=saved,
+            opt_in=True,
+        )
+    assert calls == [] and not saved.exists() and moved.exists()
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        row = store._connection.execute(
+            "SELECT sent_owner_admission_epoch,session_id FROM native_runtime_inputs"
+        ).fetchone()
+        assert row is not None and tuple(row) == (None, None)
+        assert (
+            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="beta")
+            is None
+        )
 
 
 async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(

@@ -385,6 +385,35 @@ class CompactionJournal:
             ).fetchall()
         return tuple(SelectedSummaryAttempt(*row) for row in rows)
 
+    @contextmanager
+    def ordinary_input_send_fence(self, session_file: Path) -> Iterator[None]:
+        """Exclude selected rows and unresolved commits through a raw stdin write.
+
+        The caller must already hold the authoritative shared wire lock. This
+        journal BEGIN IMMEDIATE serializes even a concurrent direct reservation
+        that did not take the wire lock; a selected row from any status denies
+        before bytes can enter the native pipe. The exact saved file, not a
+        recipient-wide prefix or a post-send cursor, is the exclusion key.
+        """
+        # A fresh Pi get_state may name its future .jsonl before writing a
+        # header. A reservation requires an existing file; the journal lock
+        # excludes a newly created/reserved file through the raw write too.
+        canonical = str(session_file.resolve(strict=False))
+        with self._transaction() as db:
+            if (
+                db.execute(
+                    "SELECT 1 FROM operations WHERE session_file = ? "
+                    "AND status IN ('intent','unknown') LIMIT 1",
+                    (canonical,),
+                ).fetchone()
+                or db.execute(
+                    "SELECT 1 FROM selected_summary_attempts WHERE session_file = ? LIMIT 1",
+                    (canonical,),
+                ).fetchone()
+            ):
+                raise CompactionJournalError("Selected or unresolved journal blocks native input")
+            yield
+
     def mark_selected_summary_unknown(self, operation_id: str) -> None:
         """Record transport uncertainty; never erase or retry the reservation."""
         with self._transaction() as db:
