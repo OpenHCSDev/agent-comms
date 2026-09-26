@@ -2263,6 +2263,11 @@ class CommsAgent:
                         else ()
                     )
                 )
+                if owner_interrupt_followup:
+                    # The permitless exception requires this exact fresh ACP
+                    # admission; an absent/foreign mapping cannot skip binding.
+                    owner_interrupt_followup = keys == (f"acp:{public_id}",)
+                    goal_ok = owner_interrupt_followup
                 interrupt_ok = (
                     interrupt_scope_current
                     and public_id is None

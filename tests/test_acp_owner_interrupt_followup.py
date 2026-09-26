@@ -23,6 +23,8 @@ from test_goal_direct_interrupt import _owner
         (True, "wait_cleared"),
         (True, "owner_replaced"),
         (True, "owner_stopped"),
+        (True, "missing_input_key"),
+        (True, "foreign_input_key"),
     ],
 )
 async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatch, standby, change):
@@ -81,6 +83,10 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
             )
         elif change == "owner_stopped":
             comms.registry.unregister(session)
+        elif change == "missing_input_key":
+            agent._steering_input_keys[session].pop(public_id)
+        elif change == "foreign_input_key":
+            agent._steering_input_keys[session][public_id] = old_key
         expected_state.update(
             goal=comms.registry.require(session).goal, wait=comms.goal_wait(session)
         )
