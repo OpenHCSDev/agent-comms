@@ -5,7 +5,7 @@ import json
 import os
 import signal
 import sys
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager, nullcontext, suppress
 from pathlib import Path
 
 import pytest
@@ -2404,6 +2404,75 @@ if select.select([sys.stdin], [], [], 0)[0]:
         assert "spawn_ms=" in done["text"]
         assert "secret prompt" not in done["text"]
         assert not received.exists()
+
+    async def test_large_saved_session_gets_only_bounded_preflight_budget(
+        self, tmp_path, monkeypatch
+    ):
+        from agent_comms.native_startup import NativeStartupAdmission, NativeStartupPolicy
+
+        policy = NativeStartupPolicy(
+            readiness_seconds=0.05,
+            readiness_step_bytes=64,
+            readiness_step_seconds=0.2,
+            readiness_max_seconds=0.4,
+        )
+        monkeypatch.setattr(backend, "NATIVE_STARTUP_POLICY", policy)
+        monkeypatch.setattr(backend, "CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS", 0.05)
+        received = tmp_path / "received-prompt"
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + f"""
+import json, select, sys, time
+state = json.loads(sys.stdin.readline())
+assert state["type"] == "get_state"
+time.sleep(0.12)
+print(json.dumps({{"type":"response", "command":"get_state", "id":state["id"],
+                  "success":True, "data":{{"nativeInputProofCapability":
+                  {backend.NATIVE_INPUT_CAPABILITY!r}}}}}), flush=True)
+if select.select([sys.stdin], [], [], 0.15)[0]:
+    line = sys.stdin.readline()
+    if line: open({str(received)!r}, "w").write(line)
+""",
+        )
+        session = tmp_path / "session.jsonl"
+        session.write_bytes(b"x" * 64)
+        small = [
+            event
+            async for event in backend.stream_agent_events(
+                stub,
+                [],
+                "secret prompt",
+                str(tmp_path),
+                session_file=str(session),
+                env_extra={"AGENT_COMMS_ROOT": str(tmp_path)},
+            )
+        ]
+        assert small[-1]["diagnostic"]["budget_ms"] == 50
+        assert small[-1]["diagnostic"]["reason"] == "native_preflight_timeout"
+        session.write_bytes(b"x" * 65)
+        large = [
+            event
+            async for event in backend.stream_agent_events(
+                stub,
+                [],
+                "secret prompt",
+                str(tmp_path),
+                session_file=str(session),
+                env_extra={"AGENT_COMMS_ROOT": str(tmp_path)},
+                send_boundary=lambda *_: nullcontext(False),
+            )
+        ]
+        assert large[-1]["ok"] is False
+        assert "Input authority changed before Pi prompt send" in large[-1]["text"]
+        assert not received.exists()
+        # A denied send and a timeout both release every real startup slot.
+        leases = [NativeStartupAdmission(tmp_path) for _ in range(4)]
+        try:
+            for lease in leases:
+                await asyncio.wait_for(lease.acquire(), 0.5)
+        finally:
+            for lease in leases:
+                lease.release()
 
     async def test_persistent_pi_reuses_one_child_with_fresh_prompt_receipts(self, tmp_path):
         session_file = tmp_path / "session.jsonl"
