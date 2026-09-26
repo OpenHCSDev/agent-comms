@@ -194,31 +194,112 @@ def test_cursor_v1_null_scope_prebind_hides_delayed_old_proof():
 
 
 def test_cursor_v1_distinct_key_saturation_is_attachment_sticky():
+    """Illustrative contract reducer; mounted Toad acceptance is separate."""
     fixture = json.loads(
         (Path(__file__).parent / "fixtures" / "private_native_cursor_v1.json").read_text()
     )
     race = fixture["distinctKeySaturation"]
+    scope_fields = (
+        "sessionId",
+        "wireRootId",
+        "ownerThread",
+        "ownerCreatedAt",
+        "ownerPid",
+        "ownerEpoch",
+    )
+
+    def validate(row):
+        assert row["version"] == 1 and type(row["revision"]) is int
+        assert row["revision"] > 0 and row["status"] in {"none", "proven"}
+        scope = row["scope"]
+        assert all(name in scope for name in scope_fields)
+        assert type(scope["ownerEpoch"]) is int and scope["ownerEpoch"] > 0
+        assert len(scope["wireRootId"]) == 32
+        assert all(c in "0123456789abcdef" for c in scope["wireRootId"])
+        if row["status"] == "proven":
+            required = (
+                "wire_root_id",
+                "recipient_lookup",
+                "owner_thread",
+                "owner_generation",
+                "owner_admission_epoch",
+                "covered_seq",
+                "injected_seq",
+                "input_id",
+                "claim_id",
+                "stage",
+                "session_id",
+                "request_generation",
+            )
+            assert all(name in row for name in required)
+            assert row["wire_root_id"] == scope["wireRootId"]
+            assert row["owner_thread"] == scope["ownerThread"]
+            assert row["owner_admission_epoch"] == scope["ownerEpoch"]
+        return row
+
+    class ReferenceAttachment:
+        def __init__(self):
+            self.floors = {}
+            self.evidence_loss = False
+            self.visible = None
+
+        def callback(self, row):
+            scope = validate(row)["scope"]
+            key = tuple(scope[name] for name in ("sessionId", "wireRootId", "ownerThread"))
+            if self.evidence_loss:
+                return
+            if key not in self.floors and len(self.floors) >= race["floorCapacity"]:
+                self.evidence_loss = True
+                self.visible = None
+                return
+            self.floors[key] = max(self.floors.get(key, 0), scope["ownerEpoch"])
+
+        def trusted_load(self, row):
+            scope = validate(row)["scope"]
+            if self.evidence_loss:
+                return  # Same-Agent explicit load cannot repair a discarded floor.
+            key = tuple(scope[name] for name in ("sessionId", "wireRootId", "ownerThread"))
+            self.visible = row if scope["ownerEpoch"] >= self.floors.get(key, 0) else None
+
+        def state(self):
+            if self.evidence_loss:
+                return {
+                    "status": "unavailable",
+                    "reason": "evidence_loss",
+                    "attachmentSticky": True,
+                }
+            return {"status": self.visible["status"]} if self.visible else {"status": "unavailable"}
+
+    attachment = ReferenceAttachment()
+    template = validate(race["foreignCallbackTemplate"])
     low, high = race["foreignWireRootIdRangeInclusive"]
-    floors = {}
-    for i in range(low, high + 1):
-        scope = {**race["foreignScopeFields"], "wireRootId": f"{i:032x}"}
-        key = (scope["sessionId"], scope["wireRootId"], scope["ownerThread"])
-        assert key not in floors
-        floors[key] = scope["ownerEpoch"]
-    assert len(floors) == race["floorCapacity"] == 32
-    real = race["realOwnerCallback33"]
-    old = race["subsequentTrustedOldLoad"]
-    assert real["scope"]["sessionId"] == old["scope"]["sessionId"]
-    assert real["scope"]["wireRootId"] == old["scope"]["wireRootId"]
+    callbacks = [
+        {
+            **template,
+            "scope": {**template["scope"], "wireRootId": f"{i:032x}"},
+            "revision": i,
+        }
+        for i in range(low, high + 1)
+    ]
+    for callback in callbacks:
+        attachment.callback(callback)
+    assert len(callbacks) == len(attachment.floors) == race["floorCapacity"] == 32
+    real = validate(race["realOwnerCallback33"])
+    old = validate(race["subsequentTrustedOldLoad"])
     assert real["scope"]["ownerEpoch"] > old["scope"]["ownerEpoch"]
-    key = tuple(real["scope"][name] for name in ("sessionId", "wireRootId", "ownerThread"))
-    assert key not in floors  # cannot evict a foreign key or discard the real floor
-    evidence_loss = len(floors) >= race["floorCapacity"]
-    assert evidence_loss and race["expectedAfter33rdAndSubsequentLoad"] == {
-        "status": "unavailable",
-        "reason": "evidence_loss",
-        "attachmentSticky": True,
-    }
+    assert callbacks[-1]["revision"] < real["revision"]
+    assert old["revision"] < real["revision"]
+    attachment.callback(real)  # 33rd distinct key; never evict a retained floor.
+    assert attachment.evidence_loss and len(attachment.floors) == 32
+    attachment.trusted_load(old)  # delayed valid old proof must not revive
+    assert attachment.state() == race["expectedAfter33rdAndSubsequentLoad"]
+    attachment.trusted_load(race["laterTrustedSameAgentLoad"])
+    assert attachment.state() == race["expectedAfter33rdAndSubsequentLoad"]
+    screen_remount = attachment  # still the same Agent trust boundary
+    assert screen_remount.state() == race["expectedAfter33rdAndSubsequentLoad"]
+    fresh_agent = ReferenceAttachment()
+    fresh_agent.trusted_load(race["freshAgentTrustedLoad"])
+    assert fresh_agent.state() == {"status": "none"}
     assert race["clearOnlyAfter"] == (
         "fresh_agent_attachment_not_same_agent_explicit_load_or_screen_remount"
     )

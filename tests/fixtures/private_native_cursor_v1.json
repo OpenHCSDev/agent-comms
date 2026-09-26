@@ -192,21 +192,47 @@
   "distinctKeySaturation": {
     "floorCapacity": 32,
     "foreignWireRootIdRangeInclusive": [1, 32],
-    "foreignScopeFields": {
-      "sessionId": "beta", "ownerThread": "foreign",
-      "ownerCreatedAt": 1000.0, "ownerPid": 1234, "ownerEpoch": 2
+    "foreignCallbackTemplate": {
+      "version": 1,
+      "scope": {"sessionId": "beta", "wireRootId": "00000000000000000000000000000001", "ownerThread": "foreign", "ownerCreatedAt": 1000.0, "ownerPid": 1234, "ownerEpoch": 2},
+      "revision": 1,
+      "status": "none"
     },
     "realOwnerCallback33": {
       "version": 1,
       "scope": {"sessionId": "beta", "wireRootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerPid": 1234, "ownerEpoch": 4},
-      "revision": 4,
+      "revision": 33,
       "status": "none"
     },
     "subsequentTrustedOldLoad": {
       "version": 1,
       "scope": {"sessionId": "beta", "wireRootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerPid": 1234, "ownerEpoch": 2},
-      "revision": 5,
-      "status": "proven"
+      "revision": 3,
+      "status": "proven",
+      "wire_root_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "recipient_lookup": "recipient-opaque",
+      "owner_thread": "beta",
+      "owner_generation": 1,
+      "owner_admission_epoch": 2,
+      "covered_seq": 1,
+      "injected_seq": 1,
+      "input_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "claim_id": "claim-opaque",
+      "stage": "triage",
+      "session_id": "native-session-opaque",
+      "request_generation": 1
+    },
+    "laterTrustedSameAgentLoad": {
+      "version": 1,
+      "scope": {"sessionId": "beta", "wireRootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerPid": 1234, "ownerEpoch": 4},
+      "revision": 34,
+      "status": "none"
+    },
+    "freshAgentTrustedLoad": {
+      "version": 1,
+      "scope": {"sessionId": "beta", "wireRootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerPid": 1234, "ownerEpoch": 4},
+      "revision": 1,
+      "status": "none"
     },
     "expectedAfter33rdAndSubsequentLoad": {"status": "unavailable", "reason": "evidence_loss", "attachmentSticky": true},
     "clearOnlyAfter": "fresh_agent_attachment_not_same_agent_explicit_load_or_screen_remount"
