@@ -1,10 +1,9 @@
 """Historical native input evidence, not an injected-message cursor.
 
-A SQL row recorded only after the live Pi result and its context evidence can
-be corroborated against the private session journal. This does NOT establish
-that the original source message's expected prompt bytes match the journal's
-inputDigest: no durable prelaunch expected-prompt digest exists yet. It grants
-no response, recovery, model replay, edit, or current-owner authority.
+A SQL row recorded only after a live Pi result can be corroborated against the
+private session journal and the durable prelaunch native-request binding.
+Missing or mismatched equality cannot grant source proof. This historical read
+grants no response, recovery, model replay, edit, or current-owner authority.
 """
 
 from __future__ import annotations

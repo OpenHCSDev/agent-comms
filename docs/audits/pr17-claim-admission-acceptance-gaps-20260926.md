@@ -76,9 +76,19 @@ The following is partial implementation evidence, not closure or approval.
   wiring, mediated writes, alias/human paths and scale acceptance remain open.
   The earlier record-only candidate prototype is still non-authoritative and
   is not used to admit these ordinary sends.
-- **Injected-message cursor.** No per-recipient proven-injected cursor exists;
-  binding equality is necessary but not sufficient for a cursor (canonical
-  assembled-context acceptance semantics are still pending upstream proof).
+- **Injected-message cursor: bounded historical coverage only.** The live
+  runner now checks the exact prelaunch binding against the native journal
+  digest *before* recording context evidence; a mismatch leaves the reserved
+  input unproven and never retries it. `proven_source_coverage.py` read-only
+  walks at most 100 canonical private initials, verifying sealed full-N/K
+  receipts and each selected source's live-recorded context/binding/journal
+  equality. It stops at the first unaccepted, UNKNOWN, PASSIVE or incomplete
+  selected source even if a later source has proof; it distinguishes sealed
+  no-wake receipts from injections. **Its `covered_seq` is not an ACK or a
+  current injected-message cursor** and cannot authorize skipping work,
+  provider receipt, writes, or responses. A durable current-owner/session
+  cursor and unbounded/scale path remain open. This delta has not inherited
+  either earlier independent review.
 - **Every-wake injection service, decision/obligation projections, supersession,
   task heads** (proposal §§3–4): not started.
 - **Mediated pre-write admission gate** (proposal §5): not started; legacy

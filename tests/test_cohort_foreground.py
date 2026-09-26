@@ -30,6 +30,7 @@ from agent_comms.coordination_store import (
 from agent_comms.declarations import Thread, ThreadStatus
 from agent_comms.native_pi import NativeContextProof, NativeTurnResult
 from agent_comms.operations import Comms
+from agent_comms.private_sidecar import native_request_digest
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux",
@@ -63,7 +64,7 @@ def _fake_pi(calls: list[str]):
                     "message": {
                         "role": "user",
                         "inputId": input_id,
-                        "inputDigest": hashlib.sha256(prompt.encode()).hexdigest(),
+                        "inputDigest": native_request_digest(prompt),
                     },
                 }
             )

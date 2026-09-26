@@ -57,6 +57,7 @@ from .native_pi import (
 )
 from .native_prompt_binding import (
     bind_expected_prompt,
+    expected_prompt_matches_journal,
     read_expected_prompt_binding,
 )
 from .operations import Comms
@@ -345,7 +346,17 @@ def _reserve_triage(
     return input_id, token
 
 
-def _verify_live_turn(result: NativeTurnResult, input_id: str, session_dir: Path) -> None:
+def _verify_live_turn(
+    store: MutationStore,
+    result: NativeTurnResult,
+    input_id: str,
+    session_dir: Path,
+    *,
+    expected_digest: str,
+    wire_root_id: str,
+    claim: WakeClaim,
+    stage: str,
+) -> None:
     if (
         type(result) is not NativeTurnResult
         or type(result.text) is not str
@@ -364,6 +375,23 @@ def _verify_live_turn(result: NativeTurnResult, input_id: str, session_dir: Path
     # the on-disk read is only corroboration and is NOT recovery authority.
     if _read_native_context_evidence(result.context.session_file, input_id) != result.context:
         raise IdentityConflict("native Pi event differs from its private session evidence")
+    # A context event and journal row alone cannot assert the source's prompt
+    # bytes. Check the committed prelaunch binding against this exact native
+    # request digest before recording any live proof or settling the claim.
+    # Failure after launch is UNKNOWN: the reserved input is never replayed.
+    binding = read_expected_prompt_binding(store, input_id)
+    if (
+        binding is None
+        or binding.input_id != input_id
+        or binding.expected_prompt_digest != expected_digest
+        or binding.wire_root_id != wire_root_id
+        or binding.claim_id != claim.claim_id
+        or binding.source_seq != claim.wire_seq
+        or binding.message_id != claim.message_id
+        or binding.stage != stage
+        or not expected_prompt_matches_journal(result.context.session_file, binding)
+    ):
+        raise IdentityConflict("live native input lacks exact bound source prompt equality")
 
 
 def _proof_columns(result: NativeTurnResult) -> tuple[str, str, str, int, str]:
@@ -707,7 +735,7 @@ async def run_one_sealed_claim(
                 raise IdentityConflict("triage prompt exceeds the bounded model context")
             input_id, token = _reserve_triage(store, pending, owner, person.generation)
             # Prelaunch binding: exact expected prompt bytes before Pi starts.
-            bind_expected_prompt(
+            triage_digest = bind_expected_prompt(
                 store,
                 input_id=input_id,
                 stage="triage",
@@ -736,7 +764,16 @@ async def run_one_sealed_claim(
                     token=token,
                 ),
             )
-            _verify_live_turn(result, input_id, session_dir)
+            _verify_live_turn(
+                store,
+                result,
+                input_id,
+                session_dir,
+                expected_digest=triage_digest,
+                wire_root_id=wire_root_id,
+                claim=pending,
+                stage="triage",
+            )
             _require_registry_owner(comms, owner, owner_epoch)
             decision = _parse_triage(result.text)
             _record_triage(
@@ -797,7 +834,7 @@ async def run_one_sealed_claim(
         )
         if len(prompt.encode("utf-8")) > _MAX_PROMPT_BYTES:
             raise IdentityConflict("full prompt exceeds the bounded model context")
-        bind_expected_prompt(
+        full_digest = bind_expected_prompt(
             store,
             input_id=input_id,
             stage="full",
@@ -829,7 +866,16 @@ async def run_one_sealed_claim(
                 fence=fence,
             ),
         )
-        _verify_live_turn(result, input_id, session_dir)
+        _verify_live_turn(
+            store,
+            result,
+            input_id,
+            session_dir,
+            expected_digest=full_digest,
+            wire_root_id=wire_root_id,
+            claim=pending,
+            stage="full",
+        )
         _require_registry_owner(comms, owner, owner_epoch)
         if not result.text:
             raise IdentityConflict("successful model produced no publishable response")
