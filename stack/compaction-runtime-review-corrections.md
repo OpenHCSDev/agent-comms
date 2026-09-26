@@ -44,7 +44,16 @@ post-COMMIT mark fsync fault may instead leave it observed (see
 control and a deterministic prehandoff ACP callback control prove no wrong
 session delivery/ACK for the reviewed first→second attack. A separate
 post-delivery ACP binding-change control leaves the original commit ID pending
-rather than marking observed. This lock is not a
+rather than marking observed. A later dedicated client-only correction (distinct
+from the independently reviewed `eedf799` bytes) pins the expected ACP
+client/thread at actual `RuntimeServer` transport entry: rebind after the
+publisher precheck but before the handoff sends to neither old nor new client
+and leaves the row pending. A separate after-delivery client swap confirms
+the first delivery **already happened** and cannot be undone; it only prevents
+an incorrect observed mark. The registry identity fence does not guard these
+ACP-local binding changes. Awaited client delivery still has no deadline,
+so identity-change liveness/operational recovery is an OPEN follow-up before
+activation; these binding tests do not clear it. This lock is not a
 remote UI receipt, recipient selection, global OS sandbox or native writer
 replay authority. A client that reports success before actual asynchronous
 transport delivery cannot itself establish remote display.

@@ -30,6 +30,7 @@ def socket_path(root: Path, pid: int) -> Path:
 
 
 UNBOUND_CONTROLLER = object()
+_UNBOUND_PUBLICATION_CLIENT = object()
 ACP_PERMISSION_TIMEOUT_SECONDS = 14.0
 
 
@@ -149,14 +150,44 @@ class RuntimeServer:
             self.handle, path=self.path, limit=8 * 1024 * 1024
         )
 
-    async def session_update(self, *, session_id: str, update: Any) -> None:
-        if self.agent._client is not None:
-            await self.agent._client.session_update(session_id=session_id, update=update)
-        for client in tuple(self.clients.get(session_id, ())):
+    async def session_update(
+        self,
+        *,
+        session_id: str,
+        update: Any,
+        _expected_client: Any = _UNBOUND_PUBLICATION_CLIENT,
+        _expected_thread: str | None = None,
+    ) -> bool:
+        """Return whether any local transport accepted the update.
+
+        Compaction passes a private bound client/thread snapshot. Recheck at
+        the transport entry and before each socket handoff; ACP-only binding
+        changes do not take the registry's kernel identity fence. A post-send
+        change cannot undo delivery and is checked by the outbox observer.
+        """
+
+        def bound() -> bool:
+            return _expected_client is _UNBOUND_PUBLICATION_CLIENT or (
+                self.agent._client is _expected_client
+                and self.agent._sessions.get(session_id) == _expected_thread
+            )
+
+        if not bound():
+            return False
+        delivered = False
+        client = self.agent._client
+        if client is not None:
+            await client.session_update(session_id=session_id, update=update)
+            delivered = True
+        for socket_client in tuple(self.clients.get(session_id, ())):
+            if not bound():
+                return delivered
             try:
-                await client.session_update(session_id=session_id, update=update)
+                await socket_client.session_update(session_id=session_id, update=update)
+                delivered = True
             except (ConnectionError, OSError):
-                self.clients[session_id].discard(client)
+                self.clients[session_id].discard(socket_client)
+        return delivered
 
     def is_controller(self, session_id: str, controller: SocketClient) -> bool:
         return controller in self.clients.get(session_id, ()) and not controller.writer.is_closing()

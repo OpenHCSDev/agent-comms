@@ -74,14 +74,20 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
                 break
             # Only exact outbox metadata, never intent/summary/recipient.
             metadata = json.loads(item.metadata_json)
-            await runtime.session_update(
+            delivered = await runtime.session_update(
                 session_id=session_id,
                 update=AgentMessageChunk(
                     session_update="agent_message_chunk",
                     content=TextContentBlock(type="text", text=""),
                     field_meta={"agentComms": {"compactionPublication": metadata}},
                 ),
+                _expected_client=client,
+                _expected_thread=owner.name,
             )
+            if not delivered:
+                # A client-only rebind after the outer check, or no surviving
+                # socket transport, does not mark this exact row observed.
+                break
             try:
                 current, current_epoch = agent._comms.registry.live_owner_with_epoch(thread_name)
             except (RelationViolationError, UnregisteredThreadError):
