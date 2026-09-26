@@ -2222,6 +2222,17 @@ class CommsAgent:
                     )
                 else:
                     goal_ok = current_goal is None or not current_goal.active
+                # A parked-goal DM owns no goal attempt. A fresh owner input
+                # may join that SAME interruption, not borrow or retry the goal.
+                interrupt_scope_current = (
+                    direct_interrupt
+                    and current_goal is not None
+                    and current_goal.active
+                    and current_goal.id == direct_interrupt_goal_id
+                    and current_goal.revision == direct_interrupt_goal_revision
+                    and (current_wait.wait_id if current_wait else None) == direct_interrupt_wait_id
+                )
+                owner_interrupt_followup = False
                 input_permit = goal_permit
                 admitted_goals = self._steering_goal_ids.get(session_id, {})
                 owner_followup = public_id is not None and public_id in admitted_goals
@@ -2241,7 +2252,8 @@ class CommsAgent:
                         else originated_attempts.get(admitted_goal_id or "")
                     )
                     if current_goal_id is not None and input_permit is None:
-                        goal_ok = False
+                        owner_interrupt_followup = interrupt_scope_current and goal_ok
+                        goal_ok = owner_interrupt_followup
                 keys = (
                     original_keys
                     if public_id is None
@@ -2251,14 +2263,14 @@ class CommsAgent:
                         else ()
                     )
                 )
+                if owner_interrupt_followup:
+                    # The permitless exception requires this exact fresh ACP
+                    # admission; an absent/foreign mapping cannot skip binding.
+                    owner_interrupt_followup = keys == (f"acp:{public_id}",)
+                    goal_ok = owner_interrupt_followup
                 interrupt_ok = (
-                    direct_interrupt
+                    interrupt_scope_current
                     and public_id is None
-                    and current_goal is not None
-                    and current_goal.active
-                    and current_goal.id == direct_interrupt_goal_id
-                    and current_goal.revision == direct_interrupt_goal_revision
-                    and (current_wait.wait_id if current_wait else None) == direct_interrupt_wait_id
                     and len(direct_origins) == 1
                     and len(keys) == 1
                     and current is not None
@@ -2368,7 +2380,10 @@ class CommsAgent:
                         ):
                             allowed = False
                             break
-                if allowed and current_wait is not None and not interrupt_ok:
+                if (
+                    allowed and current_wait is not None
+                    and not interrupt_ok and not owner_interrupt_followup
+                ):
                     allowed = self._comms.consume_goal_wait(canonical, current_wait.wait_id)
                 if allowed:
                     if public_id is None:
