@@ -21,6 +21,7 @@ PACKAGE_ENV = "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE"
 
 @dataclass(frozen=True, slots=True)
 class PrivateNkLaunch:
+    validated_root: Path
     wire_root_id: str
     native_package: Path
 
@@ -52,9 +53,10 @@ def private_nk_launch(root: Path, environment: Mapping[str, str]) -> PrivateNkLa
         raise PublicationActivationBlocked(
             "private N/K owner cannot start with an unbound legacy prompt"
         )
+    validated_root = Path(root).expanduser().absolute()  # capture cwd once
     native_package = Path(package)
-    _preflight(Path(root).absolute(), root_id, native_package, True)
-    return PrivateNkLaunch(root_id, native_package)
+    _preflight(validated_root, root_id, native_package, True)
+    return PrivateNkLaunch(validated_root, root_id, native_package)
 
 
 def private_nk_from_environment() -> PrivateNkLaunch | None:

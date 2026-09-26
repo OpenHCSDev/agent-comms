@@ -3298,7 +3298,12 @@ class Comms:
                 "PI_AGENT_TAGS": ",".join(sorted(thread.tags)),
                 "AGENT_COMMS_TAGS": ",".join(sorted(thread.tags)),
                 "PI_WORKTREE": thread.worktree,
-                "AGENT_COMMS_ROOT": str(self.root.resolve()),
+                # A private ACP launch already preflighted an absolute path.
+                # Preserve those exact path bytes across the worker handoff;
+                # resolving a symlink or re-evaluating cwd would change root.
+                "AGENT_COMMS_ROOT": str(
+                    self.root if self.root.is_absolute() else self.root.resolve()
+                ),
                 "AGENT_COMMS_AGENT_BIN": agent_bin,
             }
         )

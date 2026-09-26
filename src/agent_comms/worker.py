@@ -11,7 +11,7 @@ from .private_nk_entrypoint import private_nk_from_environment
 
 async def run() -> None:
     private_nk = private_nk_from_environment()  # fail before wire creation/attach
-    comms = wire()
+    comms = wire(private_nk.validated_root) if private_nk is not None else wire()
     name = os.environ["AGENT_COMMS_THREAD"]
     thread = comms.registry.require(name)
     agent = CommsAgent(

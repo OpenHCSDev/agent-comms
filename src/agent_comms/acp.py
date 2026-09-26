@@ -3571,8 +3571,8 @@ def main() -> int:
     # request an owner; the worker independently repeats the same preflight.
     from .private_nk_entrypoint import private_nk_from_environment
 
-    private_nk_from_environment()
-    comms = wire()
+    private_nk = private_nk_from_environment()
+    comms = wire(private_nk.validated_root) if private_nk is not None else wire()
 
     async def run() -> None:
         if os.environ.get("AGENT_COMMS_DEBUG_LOG"):

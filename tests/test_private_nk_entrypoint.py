@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import acp, cohort_foreground, private_nk_entrypoint, worker
+from agent_comms import acp, cohort_foreground, operations, private_nk_entrypoint, worker
 from agent_comms.coordination_store import IdentityConflict, PublicationActivationBlocked
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, private_nk_launch
 from test_native_prompt_binding import _root
@@ -33,6 +33,7 @@ def test_explicit_owner_entrypoint_requires_exact_root_and_package(tmp_path, mon
     exact = private_nk_launch(root, {ROOT_ID_ENV: root_id, PACKAGE_ENV: str(tmp_path)})
     assert exact is not None
     assert exact.wire_root_id == root_id and exact.native_package == tmp_path
+    assert exact.validated_root == root
     assert not (root / "native-sessions").exists()
 
 
@@ -86,4 +87,45 @@ def test_environment_launch_uses_selected_root_not_cwd(tmp_path, monkeypatch):
     selected = private_nk_entrypoint.private_nk_from_environment()
     assert selected is not None and selected.wire_root_id == root_id
     assert selected.native_package == tmp_path and seen == [tmp_path]
+    assert selected.validated_root == root
     assert os.environ["AGENT_COMMS_ROOT"] == str(root)
+
+
+@pytest.mark.parametrize("entrypoint", ["acp", "worker"])
+async def test_private_relative_root_pinned_across_cwd_change_before_wire(
+    tmp_path, monkeypatch, entrypoint
+):
+    """Both actual entrypoints must attach A despite a preflight callback moving cwd to B."""
+    root, root_id, _, _, _ = _root(tmp_path)
+    other = tmp_path / "other"
+    other.mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AGENT_COMMS_ROOT", "wire")
+    monkeypatch.setenv(ROOT_ID_ENV, root_id)
+    monkeypatch.setenv(PACKAGE_ENV, str(tmp_path))
+    monkeypatch.delenv("PI_PROMPT", raising=False)
+    monkeypatch.setattr(sys, "argv", ["agent_comms.acp"])
+    seen = []
+
+    def trust_and_switch(_package):
+        monkeypatch.chdir(other)
+
+    class StopBeforeOwnerAttachmentError(Exception):
+        pass
+
+    def capture_wire(pinned_root):
+        seen.append(pinned_root)
+        assert pinned_root == root
+        assert operations.wire(pinned_root).root == root
+        raise StopBeforeOwnerAttachmentError
+
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", trust_and_switch)
+    selected = acp if entrypoint == "acp" else worker
+    monkeypatch.setattr(selected, "wire", capture_wire)
+    with pytest.raises(StopBeforeOwnerAttachmentError):
+        if entrypoint == "acp":
+            acp.main()
+        else:
+            await worker.run()
+    assert seen == [root]
+    assert not (other / "wire").exists()
