@@ -60,12 +60,17 @@ from acp.schema import (
 )
 
 from . import backend
+from .bus_publication import stable_thread_lookup, unique_wire_object
+from .cohort_foreground import _accept_visible_initials, _preflight
+from .coordinated_runtime import run_one_sealed_claim
+from .coordination_store import IdentityConflict, MutationStore, PublicationActivationBlocked
 from .declarations import (
     ActivityState,
     FinishedTurnFence,
     Goal,
     GoalExecution,
     Message,
+    MessageBus,
     MessageRoute,
     MessageType,
     ScheduledTurn,
@@ -152,7 +157,13 @@ class CommsAgent:
         reply_quiet: float | None = None,
         runtime_enabled: bool = False,
         auto_wake: bool = True,
+        private_nk_native_package: Path | None = None,
+        private_nk_wire_root_id: str | None = None,
     ):
+        if (private_nk_native_package is None) != (private_nk_wire_root_id is None):
+            raise ValueError("private N/K ACP requires both reviewed Pi package and exact root")
+        self._private_nk_native_package = private_nk_native_package
+        self._private_nk_wire_root_id = private_nk_wire_root_id
         self._comms = comms
         self._sessions: dict[str, str] = {}
         self._client: Any = None
@@ -1389,7 +1400,86 @@ class CommsAgent:
         )
         previous[session_id] = signature
 
+    def _private_nk_marker(self) -> str | None:
+        """Distinguish exact legacy metadata from a guarded private marker.
+
+        Both protocols use bus_meta.json. A mere file-existence test would
+        reject ordinary public ACP roots; an ambiguous/damaged marker must not
+        fall back to their legacy ACK path.
+        """
+        marker_path = self._comms.root / "bus_meta.json"
+        with _store_lock(self._comms.bus._path):
+            if marker_path.is_symlink():
+                raise IdentityConflict("ACP bus marker is redirected")
+            if not marker_path.exists():
+                return None
+            try:
+                metadata = json.loads(marker_path.read_text(), object_pairs_hook=unique_wire_object)
+            except (OSError, ValueError, UnicodeError) as error:
+                raise IdentityConflict("ACP bus marker is invalid") from error
+            if type(metadata) is not dict:
+                raise IdentityConflict("ACP bus marker is not an object")
+            if "writer_protocol_version" in metadata:
+                guarded = self._comms.bus._private_marker_unlocked()
+                return str(guarded["wire_root_id"])
+            if (
+                set(metadata) != {"last_seq"}
+                or type(metadata["last_seq"]) is not int
+                or metadata["last_seq"] < 0
+            ):
+                raise IdentityConflict("ACP public bus marker has an unknown protocol")
+            return None
+
+    async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int:
+        """Selected private wake for this ACP session, never legacy inbox ACK.
+
+        This explicitly configured path reuses the reviewed one-shot native
+        reservation/send boundary. No schema/participant is installed here;
+        both must already belong to the same private root. A failing or
+        uncertain native turn propagates and cannot be replayed by a drain.
+        """
+        package = self._private_nk_native_package
+        if package is None or self._private_nk_wire_root_id != wire_root_id:
+            raise PublicationActivationBlocked(
+                "private N/K ACP requires an explicit matching root and native package"
+            )
+        if not self._auto_wake or not self._runtime_enabled:
+            return 0  # Explicitly disabled: no legacy path or ACK fallback.
+        if (
+            session_id in self._active_turns
+            or session_id in self._turn_tasks
+            or session_id in self._backend_inboxes
+        ):
+            return 0  # Never overlap the ACP owner session's running turn.
+        _preflight(self._comms.root, wire_root_id, package, True)
+        thread_name = await self._sync_session_identity(session_id)
+        if self._comms.registry.status(thread_name).stopped:
+            return 0
+        owner = self._comms.registry.require(thread_name)
+        if owner.pid != os.getpid():
+            raise IdentityConflict("private N/K ACP recipient is not this process owner")
+        bus = MessageBus(
+            self._comms.root / "bus.jsonl", self._comms.registry, private_response_writes=True
+        )
+        with MutationStore(str(self._comms.root / "coordination.sqlite3")) as store:
+            _accept_visible_initials(
+                bus, wire_root_id, store, stable_thread_lookup(owner.created_at), 0
+            )
+        result = await run_one_sealed_claim(
+            self._comms.root,
+            wire_root_id=wire_root_id,
+            owner_name=thread_name,
+            native_package=package,
+        )
+        return int(result is not None)
+
     async def _drain_owned_inbox(self, session_id: str) -> int:
+        # The legacy ACP display cursor/ACK/steer path is not a native input
+        # receipt. Never let it consume an explicitly cut-over private bus.
+        if private_root := self._private_nk_marker():
+            return await self._drain_private_nk(session_id, private_root)
+        if self._private_nk_native_package is not None:
+            raise PublicationActivationBlocked("configured private N/K ACP has no durable marker")
         thread_name = await self._sync_session_identity(session_id)
         if self._comms.registry.status(thread_name).stopped:
             return 0
@@ -1400,6 +1490,11 @@ class CommsAgent:
         after = self._inbox_cursors.get(session_id, 0)
         high_water = self._comms.message_high_water()
         page = self._comms.incoming_page(thread_name, after=after) if after < high_water else None
+        # A private cutover on a previously empty bus may have occurred after
+        # the first classification but before this page was read. Reclassify
+        # before touching delivery cursors, input dispositions or legacy ACK.
+        if private_root := self._private_nk_marker():
+            return await self._drain_private_nk(session_id, private_root)
         incoming_messages = page.messages if page else ()
         for message in incoming_messages:
             admitted = True

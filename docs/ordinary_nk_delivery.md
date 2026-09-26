@@ -22,6 +22,19 @@ already be committed to the same private coordination store. A send does not
 silently enroll a recipient, start an executor, activate a provider, or infer
 acceptance from an inbox ACK.
 
+An opt-in `CommsAgent` ACP session can now consume that same selected private
+source via its already registered process owner (`private_nk_wire_root_id` and
+`private_nk_native_package` must both be passed to the constructor). Its live
+drain verifies the private marker and reviewed native package, seals visible
+committed initials using the same N/K coordinator, then runs at most one
+selected native claim. It refuses to run alongside an ACP owner turn and never
+uses legacy inbox cursors, dispositions, steer, or ACK on a marked private root.
+An unconfigured ACP agent encountering a marked root fails closed instead of
+falling back to legacy delivery. Public ACP roots still use their original
+path. This is an explicit constructor-only pilot, **not** automatic enablement
+by the production ACP entry point; it neither creates participants/schema nor
+replays uncertain inputs. A bounded 100-initial scan remains a scale limit.
+
 ## Provider-free tests
 
 `tests/test_ordinary_nk_delivery.py` invokes the ordinary `comms_send` tool, then
@@ -40,8 +53,10 @@ acceptance. Fake responses cannot close real protocol acceptance gates.
 
 ## Still incomplete
 
-This is **not** completion of ordinary-delivery integration: proven injection
-cursor, current-owner ACP/session wake wiring, mediated pre-write admission,
-append-driven refresh, alias/human-path coverage, and scaling/deadline acceptance
-remain open. The foreground consumer is the existing one-shot private-root path,
-not a newly activated live daemon. No legacy historical input is replayed.
+This is **not** completion of ordinary-delivery integration: a durable current
+injection cursor, production ACP entry-point configuration and session-UI
+receipt/reconnect coverage, mediated pre-write admission, append-driven refresh,
+alias/human-path coverage, and scaling/deadline acceptance remain open. The
+foreground consumer remains one-shot; no production ACP activation or legacy
+historical input replay occurred. Shell/child and ordinary human ACP coding
+writes remain unenforced by this selected-message path.
