@@ -64,20 +64,50 @@ two-process reservation race and non-destructive migration. Bounded provider-fre
 serial suites: selected journal **19 passed**; native journal, ACP send barrier
 and selected dry-run **26 passed**; Black/Ruff/mypy/diff checks passed (Black
 on Python 3.11 warns it cannot AST-verify configured 3.13 grammar). Fresh exact
-independent review remains mandatory. This is a *safety backstop*,
-not an operationally complete selected summary.
+independent review remains mandatory. Exact `6598755` subsequently received
+**scoped CLEAN** for this Python-only migration and fail-closed barrier; see
+`/dev/shm/pr95-659-independent-BO57UF/REVIEW.md` (SHA256
+`0aeb5d25f9587607cb5ab44cef13dbc40114ea805937d427f3e3330ff7610518`).
+This is a *safety backstop*, not an operationally complete selected summary.
+
+The next separate default-OFF candidate adds a process-local, one-use positive
+admission after a terminal journal transaction **returns** with parent-fsync
+ACK. It binds the exact operation/session, owner PID+incarnation, turn, one
+original ingress key, admission/correction witness, original-text digest,
+reserved-source revision and fresh native session revision. A linked token also
+requires the committed native intent to carry the exact reserved-source JSON
+digest. ACP's existing final wire-locked send boundary
+consumes it at the durable `InputDispositions.bind()` of one native input ID,
+before stdin.write. A failed bind, owner/source change, crash or restart loses
+it; the journal row remains a general blocker. No ACP producer installs it,
+and no token comes from a persisted terminal row or an untrusted Pi summary.
+Provider-free fake tests cover successful exact linked/clean-decline ACK,
+post-COMMIT fsync UNKNOWN on both terminals, mismatched owner/turn/ingress,
+correction/text/source drift, committed native source digest, a forked process,
+one-use/ABA, post-bind fault, and crash before/after a local fake stdin write.
+Existing ordinary native input remains available without selected attempts.
+Bounded serial provider-free checks: new selected admission plus journal and
+send gate **41 passed** (`/var/tmp/pr95-selected-positive-admission-focused.log`,
+SHA256 `64daa96d63922efeca4ec9dddb345441b9ff751ec620977ef93914e3eaa66e19`);
+adjacent native journal, dry-run and ACP input/goal regressions **71 passed**
+(`/var/tmp/pr95-selected-positive-admission-adjacent.log`, SHA256
+`578b8d83eb88c94a97f323ba70460aa0b66899387d5a2ffbb0098cfea9eee326`);
+Black/Ruff/mypy/diff checks pass (Black under Python 3.11 warns it cannot
+AST-verify configured 3.13 grammar). This candidate
+requires independent exact review; no live selected producer, Pi terminal
+attestation or user original-input success was tested.
 
 Before activating a provider path, the owner must call reserve under current
 owner/turn/ingress authority, serialize the **same** exact source/model/settings
 into one bounded selected-child request, and never send without durable begin.
-The separately frozen Pi phase-2 candidate exact `85ef9e6` independently
-failed its claimed noncooperative stream deadline/output bounds, and may not
-be imported or repinned. A new separately reviewed hard selected-child
-retirement/watchdog and model/auth/baseURL/extension parity are required. A
-future owner-scoped, exact-ID durable recovery/positive acknowledgement must
-make terminal-link/decline transition safe before **any** automatic original
-input: current linked/declined rows remain blockers even after a successful
-call. Native CAS, local metadata, child retirement and reopened-source evidence
+Pi phase-2 candidates through `764b69d` independently failed custom
+EventStream terminal/slot authority or noncooperative deadline, and may not be
+imported or repinned. A separately reviewed exact-child namespace guardian
+and model/auth/baseURL/extension parity are required. The guardian prototype
+`b6d95af` is itself under review and cannot authorize original input. Native
+provider terminal, child+descendant retire/reap, exact CAS and strict reopen
+must precede any live producer minting the positive capability. Current
+linked/declined rows still block absent a returned ACK and one-use binding. Native CAS, local metadata, child retirement and reopened-source evidence
 must bind the same operation ID. Source/correction/settings/goal changes refuse
 the handoff; no UNKNOWN input is replayed. Full provider-free ACP E2E,
 wheel/source suites, operator recovery and independent exact combined review

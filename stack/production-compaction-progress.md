@@ -138,13 +138,28 @@ There is no ACP producer or imported Pi phase-2 bytes. Exact separate Pi
 candidate `85ef9e6` is independently NON-CLEAN P2 for noncooperative stream
 timeout and buffered output cap, and must not be imported or repinned.
 `selected-summary-operation-journal.md` records both exact failures and
-remaining gates. New focused two-process race, historical migration and
-terminal-fault checks pass: selected journal **19**, adjacent native journal,
-ACP send gate and selected dry-run **26**, serial and provider-free; Black,
-Ruff, mypy and diff checks pass. Fresh exact-head review, phase-2 route/auth
-parity, semantic retention, reviewed operator opt-in and full combined
-source/wheel testing remain mandatory. No selected provider operation has
-been started.
+remaining gates. Exact `6598755` independently **scoped CLEAN** Python-only
+migration and fail-closed selected exclusion: 45 serial provider-free tests
+plus real predecessor DB migration, two-process alias race and terminal-fsync
+fault probes (`/dev/shm/pr95-659-independent-BO57UF/REVIEW.md`, SHA256
+`0aeb5d25f9587607cb5ab44cef13dbc40114ea805937d427f3e3330ff7610518`).
+A separate default-OFF positive admission slice is in local development:
+process-local one-use owner/turn/ingress/source capability minted only after
+returned terminal journal fsync ACK and consumed under ACP wire lock at exact
+native input-ID bind before any original stdin write. The linked variant also
+requires exact reserved-source digest in the committed native intent. Provider-
+free fake ACP/local-stdin tests cover both terminal fsync faults, owner/source
+mismatch, fork/process death, one-use and post-bind uncertainty. Focused
+selected admission/journal/send-gate **41 passed** and adjacent native
+journal/dry-run/ACP input+goal regressions **71 passed** in bounded serial
+local runs; Black/Ruff/mypy/diff checks pass. No production ACP producer exists
+and persisted linked/declined rows never grant input by status.
+Pi phase-2 candidates through `764b69d` remain NON-CLEAN P1 for custom
+EventStream terminal/slot authority; dedicated namespace guardian prototype
+`b6d95af` is independently under review and unimported. Provider terminal,
+exact child+descendant retire/reap, route/auth parity, semantic retention,
+reviewed operator opt-in and full combined source/wheel testing remain
+mandatory. No selected provider operation has been started.
 
 ## Normal PR104/105 main integration and socket incarnation (combined review pending)
 

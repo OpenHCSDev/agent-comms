@@ -7,6 +7,7 @@ before calling ``resolve``. No method here dispatches or retries native work.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -15,8 +16,11 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 
 Outcome = Literal["committed", "refused", "aborted-no-write", "unknown"]
 _TERMINAL = frozenset({"committed", "refused", "aborted-no-write"})
@@ -271,6 +275,14 @@ class CompactionJournal:
         payload = json.dumps(source, sort_keys=True, separators=(",", ":"), allow_nan=False)
         if len(payload.encode()) > 65536:
             raise ValueError("Selected summary source exceeds bound")
+        if "reservedRevision" in source["source"]:
+            from .backend import _session_revision
+
+            revision = _session_revision(canonical)
+            if revision is None or source["source"]["reservedRevision"] != json.loads(
+                json.dumps(revision)
+            ):
+                raise ValueError("Selected summary saved source revision changed")
         try:
             with self._transaction() as db:
                 if db.execute(
@@ -345,7 +357,13 @@ class CompactionJournal:
                 (operation_id,),
             )
 
-    def decline_selected_summary_prestart(self, operation_id: str, reason: str) -> None:
+    def decline_selected_summary_prestart(
+        self,
+        operation_id: str,
+        reason: str,
+        *,
+        admission: SelectedAdmissionIdentity | None = None,
+    ) -> SelectedSummaryAdmission | None:
         """Settle only an exact, verified clean Pi response before any side effect.
 
         Only split-turn or explicitly unsupported cuts may be *recorded* as
@@ -361,18 +379,32 @@ class CompactionJournal:
             raise CompactionJournalError("Selected summary decline is not a clean skip")
         with self._transaction() as db:
             row = db.execute(
-                "SELECT status FROM selected_summary_attempts WHERE operation_id = ?",
+                "SELECT session_file, source_json, status FROM selected_summary_attempts "
+                "WHERE operation_id = ?",
                 (operation_id,),
             ).fetchone()
-            if row != ("reserved",):
+            if row is None or row[2] != "reserved":
                 raise CompactionJournalError("Selected summary prestart decline forbidden")
             db.execute(
                 "UPDATE selected_summary_attempts SET status = 'declined-prestart', "
                 "decline_reason = ? WHERE operation_id = ?",
                 (reason, operation_id),
             )
+        if admission is not None:
+            from .selected_summary_admission import SelectedSummaryAdmission
 
-    def link_selected_summary_commit(self, operation_id: str, commit_id: str) -> None:
+            return SelectedSummaryAdmission._after_ack(
+                self.path, row[0], operation_id, "declined-prestart", None, row[1], admission
+            )
+        return None
+
+    def link_selected_summary_commit(
+        self,
+        operation_id: str,
+        commit_id: str,
+        *,
+        admission: SelectedAdmissionIdentity | None = None,
+    ) -> SelectedSummaryAdmission | None:
         """Settle only a reserved attempt after its exact native commit is durable.
 
         This is NOT a provider receipt validator or an input admission grant.
@@ -384,7 +416,7 @@ class CompactionJournal:
         """
         with self._transaction() as db:
             row = db.execute(
-                "SELECT session_file, status FROM selected_summary_attempts "
+                "SELECT session_file, status, source_json FROM selected_summary_attempts "
                 "WHERE operation_id = ?",
                 (operation_id,),
             ).fetchone()
@@ -406,11 +438,24 @@ class CompactionJournal:
                 or not bound
             ):
                 raise CompactionJournalError("Exact committed native result required to link")
+            if (
+                admission is not None
+                and json.loads(commit[2]).get("selectedSummarySourceDigest")
+                != hashlib.sha256(row[2].encode()).hexdigest()
+            ):
+                raise CompactionJournalError("Selected native intent source digest required")
             db.execute(
                 "UPDATE selected_summary_attempts SET status = 'linked', commit_id = ? "
                 "WHERE operation_id = ?",
                 (commit_id, operation_id),
             )
+        if admission is not None:
+            from .selected_summary_admission import SelectedSummaryAdmission
+
+            return SelectedSummaryAdmission._after_ack(
+                self.path, row[0], operation_id, "linked", commit_id, row[2], admission
+            )
+        return None
 
     def pending_publications(self, session_file: str) -> tuple[CompactionPublication, ...]:
         """Read exact-ID metadata; an unknown commit cannot be projected."""

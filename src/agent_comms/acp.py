@@ -18,6 +18,7 @@ The explicit ``!agent`` prefix remains accepted for compatibility.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -95,6 +96,7 @@ from .runtime import (
     SocketClient,
     socket_path,
 )
+from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 from .tool_results import tool_result_content
 from .wire_watch import open_wire_watcher
 
@@ -184,6 +186,9 @@ class CommsAgent:
         self._steering_goal_ids: dict[str, dict[str, str | None]] = {}
         self._turn_input_keys: dict[str, set[str]] = {}
         self._turn_original_input_keys: dict[str, tuple[str, ...]] = {}
+        # No producer populates this default-OFF, process-local handoff map.
+        # A terminal journal row can never recreate an admission after restart.
+        self._selected_summary_admissions: dict[str, SelectedSummaryAdmission] = {}
         self._turn_input_text: dict[str, str] = {}
         self._dispositions = InputDispositions(comms.root)
         self._goal_store: GoalAttemptStore | None = None
@@ -2350,12 +2355,14 @@ class CommsAgent:
                         )
                     )
                 )
-                if allowed:
+                selected_admission = (
+                    self._selected_summary_admissions.get(session_id) if public_id is None else None
+                )
+                if allowed and selected_admission is None:
                     from .compaction_send_admission import native_input_admitted
 
-                    # Under the same wire lock as the owner commit. Do not
-                    # bind/START an input or consume a goal wait while an
-                    # intent/UNKNOWN native write requires reconciliation.
+                    # Under the same wire lock as the owner commit. A selected
+                    # row blocks this ordinary path regardless of its status.
                     allowed = current is not None and native_input_admitted(
                         self._comms.root, current.session_file
                     )
@@ -2372,7 +2379,46 @@ class CommsAgent:
                             attempt.attempt_id,
                         ),
                     )
-                if allowed:
+                if not allowed and selected_admission is not None:
+                    selected_admission.invalidate()  # No later owner/turn ABA can revive it.
+                if allowed and selected_admission is not None:
+                    # The only selected bypass is a post-fsync-ACK ephemeral
+                    # one-shot, consumed at this same durable native-ID bind
+                    # point under the wire lock, before any stdin.write. No
+                    # producer installs one yet; never infer it from SQLite.
+                    if (
+                        current is None
+                        or current.session_file is None
+                        or len(keys) != 1
+                        or already_bound
+                    ) or (revision := backend._session_revision(current.session_file)) is None:
+                        selected_admission.invalidate()
+                        allowed = False
+                    else:
+                        digest = hashlib.sha256(sent_text.encode()).hexdigest()
+                        identity = SelectedAdmissionIdentity(
+                            owner_name=canonical,
+                            owner_pid=current.pid,
+                            owner_created_at=float(current.created_at).hex(),
+                            turn_id=turn_id,
+                            ingress_key=keys[0],
+                            admission_generation=snapshot.admission_generations[canonical],
+                            correction_witness=(
+                                f"{snapshot.admission_generations[canonical]}:{digest}"
+                            ),
+                            input_sha256=digest,
+                            reserved_revision=selected_admission._identity.reserved_revision,
+                            session_revision=revision,
+                        )
+                        allowed = selected_admission.consume_bound_original(
+                            wire_root=self._comms.root,
+                            session_file=current.session_file,
+                            identity=identity,
+                            native_id=native_id,
+                            sent_text=sent_text,
+                            dispositions=self._dispositions,
+                        )
+                elif allowed:
                     for key in keys:
                         row = self._dispositions.get(key)
                         if (
@@ -3148,6 +3194,7 @@ class CommsAgent:
             self._steering_origins.pop(session_id, None)
             self._steering_goal_ids.pop(session_id, None)
             self._turn_input_keys.pop(session_id, None)
+            self._selected_summary_admissions.pop(session_id, None)
             await self.emit_input_delivery_changed(session_id)
             remaining = self._queued_inputs.pop(session_id, {})
             if remaining:
