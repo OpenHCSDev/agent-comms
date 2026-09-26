@@ -92,7 +92,9 @@ async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):
 async def test_goal_update_cannot_bypass_blocked_retry_or_replace_owner(goal_owner, monkeypatch):
     comms, owner, proxy, session, scheduled = goal_owner
     goal = comms.update_goal(session, "set", text="Needs review")
-    blocked = comms.update_goal(session, "blocked", goal_id=goal.id)
+    blocked = comms.update_goal(
+        session, "blocked", goal_id=goal.id, block_reason="Unknown prior attempt requires review"
+    )
     with pytest.raises(RuntimeError, match="explicit retry"):
         await proxy.request(
             "update_goal", status="active", goal_id=goal.id, expected_revision=blocked.revision

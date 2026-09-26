@@ -141,7 +141,12 @@ def test_terminal_goal_cannot_reactivate_through_pause(comms, monkeypatch, termi
         store.record_failed(reservation, "uncertain turn")
     else:
         store.record_verified_completion(store.claim_launch(reservation), "finished")
-    terminal_goal = comms.update_goal("owner", terminal, goal_id=started["id"])
+    terminal_goal = comms.update_goal(
+        "owner",
+        terminal,
+        goal_id=started["id"],
+        block_reason="Uncertain turn requires review" if terminal == "blocked" else None,
+    )
 
     with pytest.raises(ValueError, match="goal"):
         comms.update_goal("owner", "paused", goal_id=started["id"])

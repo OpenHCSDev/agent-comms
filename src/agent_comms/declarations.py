@@ -822,6 +822,7 @@ class GoalExecution:
     goal_id: str
     wait_for: tuple[GoalWaitTarget, ...] = ()
     inactive_wait_for: tuple[GoalWaitTarget, ...] = ()
+    block_reason: str | None = None
 
     def presentation(self, title: str) -> ThreadPresentation:
         if self.state is GoalExecutionState.STANDBY:
@@ -829,6 +830,12 @@ class GoalExecution:
             idle = ", ".join(f"@{target.name}" for target in self.inactive_wait_for)
             suffix = f"; no active turn: {idle}" if idle else ""
             return ThreadPresentation(title, "◌", f"Standby · waiting for {names}{suffix}")
+        if self.state is GoalExecutionState.BLOCKED:
+            reason = (
+                " ".join(self.block_reason.split()) if self.block_reason else "reason unavailable"
+            )
+            summary = reason[:157] + "…" if len(reason) > 160 else reason
+            return ThreadPresentation(title, "!", f"Blocked · {summary}")
         return ThreadPresentation(title, "✓", self.state.value.title())
 
     @classmethod
@@ -838,6 +845,7 @@ class GoalExecution:
             str(data["goal_id"]),
             tuple(GoalWaitTarget(**target) for target in data.get("wait_for", ())),
             tuple(GoalWaitTarget(**target) for target in data.get("inactive_wait_for", ())),
+            data.get("block_reason"),
         )
 
 
@@ -917,6 +925,8 @@ class Goal:
     revision: int = 0
     reported_turn: str | None = None
     mention_source: GoalMentionSource | None = None
+    # Legacy blocked rows omit this field; never invent their reason from progress.
+    block_reason: str | None = None
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:
@@ -927,6 +937,14 @@ class Goal:
             raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
         if self.reported_turn is not None and not isinstance(self.reported_turn, str):
             raise ValueError("Goal reported turn must be a string or null.")
+        if self.block_reason is not None and (
+            self.status != "blocked"
+            or type(self.block_reason) is not str
+            or not self.block_reason.strip()
+            or self.block_reason != self.block_reason.strip()
+            or len(self.block_reason) > 1024
+        ):
+            raise ValueError("A blocked goal requires a bounded explicit reason.")
         source = self.mention_source
         if isinstance(source, dict):
             source = GoalMentionSource(**source)
