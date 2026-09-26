@@ -15,14 +15,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from uuid import uuid4
 
-from .declarations import (
-    RelationViolationError,
-    _atomic_write_text,
-    _store_lock,
-    unique_wire_object,
-)
+from .declarations import RelationViolationError, _store_lock, unique_wire_object
 
 
 @dataclass(frozen=True)
@@ -34,7 +28,13 @@ class MaintenanceReceipt:
 
 
 class MaintenanceBarrier:
-    """One root's persistent CAS gate; the caller owns its admission locks."""
+    """One root's read-only admission gate; no in-process operator exists.
+
+    Ordinary workers, ACP adapters and tools import this package under the
+    same OS identity as the wire owner. A public in-package transition would
+    therefore grant any caller permanent host-wide denial authority. Only a
+    future separately protected control plane may write phase witnesses.
+    """
 
     def __init__(self, registry_path: Path):
         self.registry_path = Path(registry_path)
@@ -134,49 +134,3 @@ class MaintenanceBarrier:
         with _store_lock(self.wire_path):
             self.assert_open_unlocked()
             yield self.current_unlocked()
-
-    def _write_unlocked(self, receipt: MaintenanceReceipt) -> None:
-        root = str(self.registry_path.parent.resolve())
-        marker = {"version": 1, "root": root, "generation": receipt.generation}
-        state = {
-            **marker,
-            "operator": receipt.operator,
-            "nonce": receipt.nonce,
-            "phase": receipt.phase,
-        }
-        # Marker first: crash or fsync UNKNOWN leaves mismatched witnesses CLOSED.
-        _atomic_write_text(self.marker_path, json.dumps(marker, sort_keys=True), fsync_parent=True)
-        _atomic_write_text(self.state_path, json.dumps(state, sort_keys=True), fsync_parent=True)
-
-    def begin(self, operator: str) -> MaintenanceReceipt:
-        """Explicit control-plane transition. Never called by normal traffic.
-
-        This is not an OS operator ACL or proof that old imports are excluded.
-        A live controller must supply those controls before invoking begin.
-        """
-        if type(operator) is not str or not operator or len(operator) > 128:
-            raise ValueError("Maintenance operator must have bounded identity")
-        with _store_lock(self.wire_path), _store_lock(self.registry_path):
-            current = self.current_unlocked()
-            if current is not None and current.phase != "ready":
-                raise RelationViolationError("Maintenance already active or uncertain")
-            generation = current.generation + 1 if current is not None else 1
-            receipt = MaintenanceReceipt(generation, operator, uuid4().hex, "draining")
-            self._write_unlocked(receipt)
-            return receipt
-
-    def advance(self, expected: MaintenanceReceipt, phase: str) -> MaintenanceReceipt:
-        """CAS closed phases; reopening is intentionally unsupported until an
-        independently verified old-client exclusion/release capability exists.
-        """
-        transitions = {"draining": "paused", "paused": "installing"}
-        if type(expected) is not MaintenanceReceipt or transitions.get(expected.phase) != phase:
-            raise ValueError("Maintenance transition requires a closed expected phase")
-        with _store_lock(self.wire_path), _store_lock(self.registry_path):
-            if self.current_unlocked() != expected:
-                raise RelationViolationError("Maintenance epoch/operator changed")
-            receipt = MaintenanceReceipt(
-                expected.generation + 1, expected.operator, uuid4().hex, phase
-            )
-            self._write_unlocked(receipt)
-            return receipt

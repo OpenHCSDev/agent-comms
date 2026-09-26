@@ -12,6 +12,7 @@ from agent_comms import native_pi
 from agent_comms.coordination_store import MutationStore
 from agent_comms.declarations import RelationViolationError
 from agent_comms.operations import Comms
+from maintenance_control_fixture import FixtureMaintenanceControl
 from test_coordinated_runtime import _root
 
 
@@ -41,8 +42,9 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path)
             if response:
                 # The real coordinator's registry turn claim and get_state
                 # send already happened; pause ACK precedes raw prompt write.
-                first = comms.maintenance.begin("disposable-operator")
-                pause_receipts.append(comms.maintenance.advance(first, "paused"))
+                fixture = FixtureMaintenanceControl(comms.maintenance)
+                first = fixture.begin("disposable-operator")
+                pause_receipts.append(fixture.advance(first, "paused"))
             return response
 
         async def read(self, *_args) -> bytes:
