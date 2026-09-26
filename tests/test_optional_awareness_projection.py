@@ -194,6 +194,23 @@ def test_captured_owner_sql_generation_advance_omits(tmp_path: Path) -> None:
         store.close()
 
 
+def test_new_snapshot_after_same_name_generation_bump_omits_old_claim(
+    tmp_path: Path,
+) -> None:
+    comms, store, index, root_id = _root(tmp_path)
+    try:
+        initial, claim = _accepted(comms, store, root_id, "member000", "old pending")
+        store.advance_owner_generation(claim.recipient_lookup, "member000", expected_generation=1)
+        index.maintain(rebuild=True)
+        owner = _owner(comms, "member000")
+        # Even a newly captured SQL gen2+registry turn cannot assign a gen1
+        # frozen claim to gen2: no per-claim generation was sealed at accept.
+        result = _projection(index, store, owner, 0, initial.message.seq)(initial, claim, owner)
+        assert not result.mandatory_complete and result.text == ""
+    finally:
+        store.close()
+
+
 def test_owner_generation_advance_during_snapshot_omits_at_inclusion(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -205,10 +222,10 @@ def test_owner_generation_advance_during_snapshot_omits_at_inclusion(
         builder = _projection(index, store, owner, 0, initial.message.seq)
         original = OptionalAwarenessProjection._open_obligations
 
-        def race(self, db, lookup):
+        def race(self, db, lookup, owner_name):
             with MutationStore(str(index.bus._path.with_name("coordination.sqlite3"))) as other:
                 other.advance_owner_generation(lookup, owner.name, expected_generation=1)
-            return original(self, db, lookup)
+            return original(self, db, lookup, owner_name)
 
         monkeypatch.setattr(OptionalAwarenessProjection, "_open_obligations", race)
         stale = builder(initial, claim, owner)
@@ -240,6 +257,30 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         db.execute(trigger)
         stale = builder(initial, claim, owner)
         assert not stale.mandatory_complete and stale.text == ""
+    finally:
+        store.close()
+
+
+def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
+    tmp_path: Path,
+) -> None:
+    comms, store, index, root_id = _root(tmp_path)
+    try:
+        old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
+        comms._rename_thread("member000", "gamma")
+        current_message = comms.send_initial_cohort("sender", "gamma", "new selected")
+        current = comms.bus.read_initial_cohort(root_id, current_message.seq)
+        receipt = accept_initial_cohort(comms.bus, root_id, current_message.seq, store).value
+        assert len(receipt.claims) == 1
+        current_claim = receipt.claims[0]
+        index.maintain(rebuild=True)
+        owner = _owner(comms, "gamma")
+        result = _projection(index, store, owner, 0, current.message.seq)(
+            current, current_claim, owner
+        )
+        assert old_claim.recipient == "member000" and current_claim.recipient == "gamma"
+        assert old.message.seq < current.message.seq
+        assert not result.mandatory_complete and result.text == ""
     finally:
         store.close()
 

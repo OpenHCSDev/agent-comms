@@ -125,6 +125,13 @@ class OptionalAwarenessProjection:
         ):
             raise ProjectionUnavailableError("selected owner or source window changed")
         _require_no_private_owner_rename(self.index.bus._path.parent)
+        # Frozen older claims carry a stable recipient lookup and name, but no
+        # per-claim participant generation. After any generation transition,
+        # even one retaining the same name, a historical selected row cannot
+        # be distinguished from current work. Omit rather than silently rank
+        # it away or inject it into a successor owner.
+        if self.expected_participant_generation != 1:
+            raise ProjectionUnavailableError("older claims lack owner-generation provenance")
         root_id = initial.wire_root_id
         lookup = claim.recipient_lookup
         page = self.index.page(
@@ -147,7 +154,7 @@ class OptionalAwarenessProjection:
             db.execute("PRAGMA busy_timeout=50")
             db.execute("BEGIN")
             self._verify_schema_and_owner(db, initial, claim, owner)
-            decisions = self._selected_decisions(db, root_id, lookup, page.through_seq)
+            decisions = self._selected_decisions(db, root_id, lookup, owner.name, page.through_seq)
             candidates = tuple(
                 (row.source_seq, row.message_id, row.wake_mode, row.target) for row in page.entries
             )
@@ -157,7 +164,7 @@ class OptionalAwarenessProjection:
             )
             if candidates != accepted:
                 raise ProjectionUnavailableError("candidate rows differ from sealed decisions")
-            obligations = self._open_obligations(db, lookup)
+            obligations = self._open_obligations(db, lookup, owner.name)
 
         # The SQL read above is an immutable snapshot, not a live-owner lease.
         # Do not hold the SQL read lock while consulting the registry. A newer
@@ -280,7 +287,7 @@ class OptionalAwarenessProjection:
             raise ProjectionUnavailableError("current selected claim lost its sealed receipt")
 
     def _selected_decisions(
-        self, db: sqlite3.Connection, root_id: str, lookup: str, through_seq: int
+        self, db: sqlite3.Connection, root_id: str, lookup: str, owner_name: str, through_seq: int
     ) -> list[sqlite3.Row]:
         rows = db.execute(
             "SELECT c.claim_id,c.recipient,c.wire_seq,c.message_id,c.wake_mode,"
@@ -304,19 +311,25 @@ class OptionalAwarenessProjection:
             or row["delivery_claim"] != row["claim_id"]
             or row["kind"] != "selected"
             or row["canonical_thread"] != row["recipient"]
+            # A stable lookup survives a normal rename, but an old frozen
+            # selected owner is NOT current gamma's input. Omit the entire
+            # supplement rather than hiding a binding row or injecting it.
+            or row["recipient"] != owner_name
             for row in rows
         ):
             raise ProjectionUnavailableError("binding decisions are unsealed or over budget")
         return rows
 
-    def _open_obligations(self, db: sqlite3.Connection, lookup: str) -> list[sqlite3.Row]:
+    def _open_obligations(
+        self, db: sqlite3.Connection, lookup: str, owner_name: str
+    ) -> list[sqlite3.Row]:
         rows = db.execute(
-            "SELECT o.execution_id,o.exact_target,o.state "
+            "SELECT o.execution_id,o.exact_target,o.state,e.owner_thread "
             "FROM obligations o JOIN executions e ON e.execution_id=o.execution_id "
             "WHERE e.owner_lookup=? AND o.state IN ('pending','publishing','deferred') "
             "ORDER BY o.created_at_ms,o.execution_id LIMIT ?",
             (lookup, self.max_rows + 1),
         ).fetchall()
-        if len(rows) > self.max_rows:
-            raise ProjectionUnavailableError("open obligations exceed the row budget")
+        if len(rows) > self.max_rows or any(row["owner_thread"] != owner_name for row in rows):
+            raise ProjectionUnavailableError("open obligations have old owner or exceed budget")
         return rows
