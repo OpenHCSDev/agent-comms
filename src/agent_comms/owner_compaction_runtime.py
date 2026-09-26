@@ -59,12 +59,34 @@ async def compact_owner_once(
     # No native write can begin until this returns; closing under the borrow
     # lock makes an old RPC manager unusable even if commit is later refused.
     await persistent.discard_for_external_write(prepared.witness["sessionFile"])
-    return await asyncio.to_thread(
-        bridge.commit,
-        owner,
-        epoch,
-        prepared.witness,
-        summary,
-        prepared.tokens_before,
-        source=source,
+    committing = asyncio.create_task(
+        asyncio.to_thread(
+            bridge.commit,
+            owner,
+            epoch,
+            prepared.witness,
+            summary,
+            prepared.tokens_before,
+            source=source,
+        ),
+        name="owner-native-compaction-commit",
     )
+    try:
+        return await asyncio.shield(committing)
+    except asyncio.CancelledError:
+        # Shielding alone is insufficient: it would let the caller release its
+        # ACP turn lock while the Python worker/native child still mutates.
+        # Join the exact worker before cancellation can escape. A repeated
+        # cancellation still cannot turn an in-flight write into no-write.
+        while not committing.done():
+            try:
+                await asyncio.shield(committing)
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                break
+        if committing.done() and not committing.cancelled():
+            # Consume a worker exception without substituting an abort verdict.
+            # Its durable intent/outcome remains the authority for recovery.
+            committing.exception()
+        raise

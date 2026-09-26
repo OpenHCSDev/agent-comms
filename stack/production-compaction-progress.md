@@ -3,6 +3,22 @@
 Base: merged PR48 `d0ced47fbec39ac4d110c9f7395442524363871d`.
 This is **not deployment approval**. The adaptive trigger remains disabled.
 
+## Owner native commit cancellation join (future ACP caller still open)
+
+Exact `37796d5` independent review cleared only the read-only pre-summary
+source and corrected outbox mark semantics, while identifying a forward
+integration hazard: unshielded `asyncio.to_thread(bridge.commit)` could outlive
+owner cancellation and release the outer ACP turn lock before native mutation
+settled. The successor now retains/shields and **joins** the exact worker even
+under repeated cancellation. A provider-free actual pinned-native test holds
+the native call after durable intent, cancels twice, proves the outer turn lock
+and intent remain until one exact native commit settles, then corrupts saved
+disk and proves no fresh fake RPC launch before strict reopen. Cancellation is
+never interpreted as aborted-no-write or replay authority. Normal integration of main `0887b811…` (including PR100) passed isolated full
+suite **1719 passed/62 skipped**, extracted wheel **81 passed**, and focused
+Black/Ruff/mypy. No production ACP caller/model strategy exists yet; this test
+alone is not full runtime clearance.
+
 ## Runtime/ACP exact 12050b1 NON-CLEAN corrective candidate (review pending)
 
 Independent reviewers found (1) cancellation before the old manager's
@@ -17,8 +33,9 @@ shielded reap task awaited by every next borrower, resolves launcher aliases,
 and protects actual metadata handoff/mark with a separate nonblocking identity
 fence plus before/after owner-session checks (not a registry lock over client
 I/O). Real-child cancellation/invalid reopen, alias refusal, cross-process
-identity and prehandoff tests pass; isolated full suite **1707 passed/61
-skipped**, extracted wheel **79 passed**, Black/Ruff/mypy clean. See
+identity and prehandoff tests pass; isolated full suite at frozen `eedf799`
+**1707 passed/61 skipped**, extracted wheel **79 passed**, Black/Ruff/mypy clean.
+The newer cancellation/post-delivery successor requires a fresh full rerun. See
 `compaction-runtime-review-corrections.md`. Exact correction review, final
 combined review and activation remain OPEN.
 

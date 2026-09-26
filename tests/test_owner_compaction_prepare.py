@@ -1,13 +1,16 @@
 """Provider-free read-only preparation from the exact disposable Pi tree."""
 
+import asyncio
 import json
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
 
+from agent_comms import backend
 from agent_comms.backend import PersistentPiSession
 from agent_comms.declarations import Goal, RelationViolationError, Thread, ThreadRegistry
 from agent_comms.operations import Comms
@@ -215,6 +218,104 @@ async def test_late_correction_after_summary_refuses_write_without_reusing_manag
     assert persistent.reopen_required == str(session)
     assert session.read_bytes() == original
     assert bridge.journal.unresolved(str(session)) == ()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_releases(
+    session, monkeypatch
+):
+    root = session.parent.parent
+    registry = ThreadRegistry(root / "registry.json")
+    registry.register(
+        Thread(
+            "owner",
+            frozenset(),
+            str(root),
+            pid=os.getpid(),
+            session_file=str(session),
+            goal=Goal("task", "goal"),
+        )
+    )
+    owner, epoch = registry.live_owner_with_epoch("owner")
+    owner, epoch = registry.claim_live_turn_with_epoch(owner, "turn", expected_epoch=epoch)
+    bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
+    persistent = PersistentPiSession()
+    native_call = bridge._call
+    entered = threading.Event()
+    release = threading.Event()
+    turn_lock = asyncio.Lock()
+
+    def delayed_native(*args, **kwargs):
+        entered.set()  # Journal intent and owner writer fence already acquired.
+        assert release.wait(4), "test did not release native writer"
+        return native_call(*args, **kwargs)
+
+    monkeypatch.setattr(bridge, "_call", delayed_native)
+
+    async def synthetic_summary(_metadata):
+        return "Synthetic provider-free summary"
+
+    async def owned_turn():
+        async with turn_lock:
+            return await compact_owner_once(
+                bridge, owner, epoch, persistent, synthetic_summary, keep_recent_tokens=1
+            )
+
+    task = asyncio.create_task(owned_turn())
+    try:
+        assert await asyncio.to_thread(entered.wait, 6)
+        assert turn_lock.locked()
+        assert len(bridge.journal.unresolved(str(session))) == 1
+        task.cancel()
+        await asyncio.sleep(0.03)
+        assert turn_lock.locked() and not task.done()
+        task.cancel()  # Even repeated cancellation cannot release the writer scope.
+        await asyncio.sleep(0.03)
+        assert turn_lock.locked() and not task.done()
+    finally:
+        release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert not turn_lock.locked()
+    assert bridge.journal.unresolved(str(session)) == ()
+    pending = bridge.journal.pending_publications(str(session))
+    assert len(pending) == 1
+    assert bridge.journal.get(pending[0].commit_id).status == "committed"
+    assert persistent.reopen_required == str(session)
+    assert (
+        len(
+            [
+                json.loads(row)
+                for row in session.read_bytes().splitlines()
+                if json.loads(row).get("type") == "compaction"
+            ]
+        )
+        == 1
+    )
+    # Only a distinct input with strict validated fresh disk may now proceed.
+    torn = session.read_bytes().rstrip(b"\n")
+    session.write_bytes(torn)
+    started = []
+
+    async def forbidden_spawn(*args, **kwargs):
+        started.append(args)
+        raise AssertionError("Corrupt saved session must not launch or send")
+
+    monkeypatch.setattr(backend.asyncio, "create_subprocess_exec", forbidden_spawn)
+    launcher = Path(PACKAGE).parents[3] / "bin/pi-native"
+    events = [
+        event
+        async for event in backend.stream_agent_events(
+            str(launcher),
+            [],
+            "distinct input, not replay",
+            str(root),
+            session_file=str(session),
+            persistent_session=persistent,
+        )
+    ]
+    assert events[-1]["reason_code"] == "compaction_reopen_invalid"
+    assert not started and session.read_bytes() == torn
 
 
 def test_three_sequential_native_commits_keep_exact_ids_and_prior_history(session):

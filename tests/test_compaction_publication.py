@@ -149,6 +149,38 @@ async def test_session_rebinding_during_actual_handoff_refuses_before_delivery(o
         await agent.shutdown()
 
 
+@pytest.mark.asyncio
+async def test_after_delivery_changed_acp_binding_never_marks_old_commit(owner, tmp_path):
+    agent, comms, session, journal, commit_id = owner
+    await agent.new_session(str(tmp_path / "project"))
+    comms.attach_session("project", str(session), pid=os.getpid())
+    received = []
+
+    class Client:
+        async def session_update(self, session_id, update):
+            received.append(update.model_dump(by_alias=True, exclude_none=True))
+            # Independent ACP binding shift AFTER this local handoff, BEFORE
+            # its await returns to the outbox observer. No changed owner is
+            # allowed to ACK the old session's exact commit row.
+            agent._sessions[session_id] = "other-canonical-thread"
+
+    agent.on_connect(Client())
+    try:
+        assert await publish_pending_local(agent, "project", "project") == 0
+        assert len(received) == 1
+        assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
+        # Rebinding the ACP map back reprojects only the same exact ID; remote
+        # consumers must deduplicate, and no summary text is ever projected.
+        agent._sessions["project"] = "project"
+        assert await publish_pending_local(agent, "project", "project") == 0
+        assert len(received) == 2
+        assert received[0] == received[1]
+        assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
+    finally:
+        agent._sessions["project"] = "project"
+        await agent.shutdown()
+
+
 def test_cross_process_identity_rebind_is_denied_during_projection_fence(owner, tmp_path):
     _agent, comms, first, _journal, _commit_id = owner
     # Fixture owner has not registered a thread until ACP creates its session.

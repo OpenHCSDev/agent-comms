@@ -42,7 +42,9 @@ marking observed. A changed identity leaves the commit-ID row pending; a
 post-COMMIT mark fsync fault may instead leave it observed (see
 `compaction-publication-outbox.md`). An independent-process identity-change
 control and a deterministic prehandoff ACP callback control prove no wrong
-session delivery/ACK for the reviewed first→second attack. This lock is not a
+session delivery/ACK for the reviewed first→second attack. A separate
+post-delivery ACP binding-change control leaves the original commit ID pending
+rather than marking observed. This lock is not a
 remote UI receipt, recipient selection, global OS sandbox or native writer
 replay authority. A client that reports success before actual asynchronous
 transport delivery cannot itself establish remote display.

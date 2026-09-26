@@ -58,7 +58,11 @@ sequential native commits with exact distinct IDs. The internal
 `compact_owner_once` sequencing helper also uses an injected provider-free
 summary callback to prove retirement **before** the native writer, including a
 late correction that refuses mutation and leaves reopen validation required.
-It has no production ACP caller or model strategy yet. This demonstrates
+It has no production ACP caller or model strategy yet. The later cancellation
+correction joins the exact in-flight native commit worker before the cancelled
+owner turn can release its async lock; a real pinned-writer test confirms
+persistent intent during the wait, one committed exact ID afterward, and strict
+invalid-disk denial before the next fake RPC launch. This demonstrates
 structural source/admission recovery, **not** summary quality, provider routing, cache
 behavior, or semantic memory retention. There is no general OS subprocess
 sandbox; pinned-package import/process checks are scoped to audited native
