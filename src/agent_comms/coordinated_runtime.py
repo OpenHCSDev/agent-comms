@@ -17,8 +17,9 @@ import os
 import secrets
 import sqlite3
 import threading
+import time
 from collections.abc import Callable, Iterator
-from contextlib import AbstractContextManager, contextmanager
+from contextlib import AbstractContextManager, contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -78,6 +79,10 @@ from .wake_injection import render_selected_wake_frame
 
 _MAX_PROMPT_BYTES = 32 * 1024
 _SUPPLEMENT_BUILD_SECONDS = 0.25
+# One unresolved optional reader cannot occupy the default executor or spawn
+# an unbounded queue of retired timed-out builders. The daemon may finish late;
+# only its own completion releases this admission slot.
+_OPTIONAL_BUILD_SLOT = threading.BoundedSemaphore(1)
 _LOG = logging.getLogger(__name__)
 
 
@@ -124,14 +129,48 @@ async def _bounded_optional_awareness(
     """Omit slow/invalid awareness without delaying or changing original delivery.
 
     The isolated read-only builder never receives a coordinator write handle.
-    Timed-out threads may finish later, but their result is discarded. Only
-    the original's native binding/cursor can advance after the raw send.
+    One timed-out daemon may finish later, but its result is discarded. While
+    that reader is unresolved every later optional build is omitted promptly;
+    mandatory raw-send/default-executor work never queues behind it.
     """
+    deadline = time.monotonic() + _SUPPLEMENT_BUILD_SECONDS
+    if not _OPTIONAL_BUILD_SLOT.acquire(blocking=False):
+        _LOG.warning("Optional awareness omitted; original delivered alone (builder busy)")
+        return ""
+    loop = asyncio.get_running_loop()
+    finished: asyncio.Future[tuple[bool, object]] = loop.create_future()
+
+    def deliver(success: bool, value: object) -> None:
+        if not finished.done():
+            finished.set_result((success, value))
+
+    def build() -> None:
+        try:
+            result: tuple[bool, object] = (True, builder(initial, claim, owner))
+        except Exception as error:
+            result = (False, error)
+        finally:
+            _OPTIONAL_BUILD_SLOT.release()
+        # The owner event loop may have ended after timeout/cancellation.
+        with suppress(RuntimeError):
+            loop.call_soon_threadsafe(deliver, *result)
+
     try:
-        item = await asyncio.wait_for(
-            asyncio.to_thread(builder, initial, claim, owner),
-            timeout=_SUPPLEMENT_BUILD_SECONDS,
+        try:
+            threading.Thread(
+                target=build, name="agent-comms-optional-awareness", daemon=True
+            ).start()
+        except RuntimeError:
+            _OPTIONAL_BUILD_SLOT.release()
+            raise
+        success, value = await asyncio.wait_for(
+            finished, timeout=max(0.0, deadline - time.monotonic())
         )
+        if not success:
+            if isinstance(value, Exception):
+                raise value
+            raise ValueError("optional awareness builder failed")
+        item = value
         if (
             type(item) is not OptionalAwarenessSupplement
             or type(item.text) is not str
@@ -148,6 +187,8 @@ async def _bounded_optional_awareness(
         )
         if len(text.encode("utf-8")) > remaining_prompt_bytes:
             raise ValueError("optional awareness exceeds the remaining prompt budget")
+        if time.monotonic() > deadline:
+            raise TimeoutError("optional awareness exceeded the build deadline")
         return text
     except Exception as error:
         _LOG.warning(

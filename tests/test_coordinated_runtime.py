@@ -369,6 +369,8 @@ async def test_slow_optional_awareness_omits_without_blocking_selected_original(
         )
     finally:
         release.set()
+    assert await asyncio.to_thread(runtime._OPTIONAL_BUILD_SLOT.acquire, True, 2)
+    runtime._OPTIONAL_BUILD_SLOT.release()
     assert entered.is_set()
     assert outcome is not None and outcome.response_message_id
     assert len(calls) == 1 and "late context must not appear" not in calls[0][1]
@@ -381,6 +383,62 @@ async def test_slow_optional_awareness_omits_without_blocking_selected_original(
             ).fetchone()[0]
             == 1
         )
+
+
+async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
+    tmp_path: Path, monkeypatch
+) -> None:
+    first_base = tmp_path / "first"
+    first_base.mkdir()
+    first_root, _first_id, first_comms, first_initial, people = _root(first_base, direct=True)
+    with MutationStore(str(first_root / "coordination.sqlite3")) as store:
+        claim = sealed_cohort_claims(store, stable_thread_lookup(people[2].created_at))[0]
+    owner = first_comms.registry.require("beta")
+    monkeypatch.setattr(runtime, "_SUPPLEMENT_BUILD_SECONDS", 0.02)
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+
+    def blocked_builder(*_args):
+        calls.append(True)
+        entered.set()
+        release.wait(timeout=3)
+        return runtime.OptionalAwarenessSupplement("too late", True)
+
+    try:
+        assert (
+            await runtime._bounded_optional_awareness(
+                blocked_builder, first_initial, claim, owner, 1024
+            )
+            == ""
+        )
+        assert entered.is_set()
+        for _ in range(40):
+            assert (
+                await runtime._bounded_optional_awareness(
+                    blocked_builder, first_initial, claim, owner, 1024
+                )
+                == ""
+            )
+        assert len(calls) == 1  # no queued/retired builder fleet
+        assert await asyncio.wait_for(asyncio.to_thread(lambda: 42), timeout=1) == 42
+        second_base = tmp_path / "second"
+        second_base.mkdir()
+        second_root, second_id, _comms, _initial, _people = _root(second_base, direct=True)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        runner, native_calls = _fake_model()
+        monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
+        original = await asyncio.wait_for(
+            run_one_sealed_claim(
+                second_root, wire_root_id=second_id, owner_name="beta", native_package=tmp_path
+            ),
+            timeout=3,
+        )
+        assert original is not None and original.response_message_id
+        assert len(native_calls) == 1
+    finally:
+        release.set()
+        assert await asyncio.to_thread(runtime._OPTIONAL_BUILD_SLOT.acquire, True, 2)
+        runtime._OPTIONAL_BUILD_SLOT.release()
 
 
 @pytest.mark.parametrize("kind", ["complete", "incomplete", "oversize"])
