@@ -2800,6 +2800,31 @@ class ThreadRegistry:
             self._save_unlocked()
             return canonical, new_name
 
+    def fence_idle_owner(self, expected: Thread, *, expected_epoch: int) -> int:
+        """Atomically deny new turns for exactly one idle owner before signaling.
+
+        The outer wire lock alone cannot exclude a direct registry claim; this
+        check and the STOPPED transition share the registry's own lock.
+        """
+        with _store_lock(self._path):
+            self._load_unlocked()
+            current = self._threads.get(expected.name)
+            status = self._statuses.get(expected.name)
+            if (
+                current != expected
+                or current is None
+                or current.active_turn is not None
+                or status is None
+                or not status.active
+                or self._admission_generations.get(expected.name) != expected_epoch
+            ):
+                raise RelationViolationError("Idle owner changed before restart fence.")
+            self._statuses[expected.name] = ThreadStatus.STOPPED
+            self._bump_admission_unlocked(expected.name)
+            self._bump_owner_epoch_unlocked(expected.name)
+            self._save_unlocked()
+            return self._admission_generations[expected.name]
+
     def unregister(self, name: str) -> None:
         with _store_lock(self._path):
             self._load_unlocked()

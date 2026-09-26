@@ -3254,17 +3254,22 @@ class Comms:
                 if selection is not None and identities != selection:
                     raise RelationViolationError("Owner selection changed before restart.")
                 selection = identities
-                if expected_incarnations is not None and set(expected_incarnations) != {
-                    thread.name for thread in threads
-                }:
-                    raise RelationViolationError("Restart selection differs from queued owners.")
+                if expected_incarnations is not None and (
+                    len(threads) != 1
+                    or set(expected_incarnations) != {thread.name for thread in threads}
+                ):
+                    raise RelationViolationError(
+                        "Guarded restart requires exactly one queued owner."
+                    )
                 captured = []
                 for thread in threads:
                     epoch = snapshot.admission_generations.get(thread.name)
                     if expected_incarnations is not None and expected_incarnations[thread.name] != (
                         thread.pid, thread.created_at, epoch
                     ):
-                        raise RelationViolationError("Queued owner incarnation changed before restart.")
+                        raise RelationViolationError(
+                            "Queued owner incarnation changed before restart."
+                        )
                     if (
                         not thread.role.executable
                         or not snapshot.statuses[thread.name].active
@@ -3327,6 +3332,15 @@ class Comms:
                     for thread, _epoch in captured
                 ):
                     continue
+                if expected_incarnations is not None:
+                    # Persist the admission fence BEFORE signaling. An owner
+                    # receiving a wake after this lock releases cannot claim
+                    # a turn while SIGTERM is pending: claim_local_turn rejects
+                    # STOPPED. Never undo this fence on an uncertain signal.
+                    stop_epochs = {
+                        thread.name: self.registry.fence_idle_owner(thread, expected_epoch=epoch)
+                        for thread, epoch in captured
+                    }
                 for thread, _epoch in captured:
                     with suppress(ProcessLookupError):
                         self._signal_local_owner(thread.pid, signal.SIGTERM)
@@ -3342,7 +3356,20 @@ class Comms:
         if alive:
             with _store_lock(self._wire_lock_path):
                 for thread, epoch in alive:
-                    self._require_same_stop_owner(thread, epoch)
+                    if expected_incarnations is not None:
+                        current = self.registry.snapshot()
+                        existing = current.threads.get(thread.name)
+                        if (
+                            existing is None
+                            or (existing.pid, existing.created_at)
+                            != (thread.pid, thread.created_at)
+                            or current.statuses.get(thread.name) is not ThreadStatus.STOPPED
+                            or current.admission_generations.get(thread.name)
+                            != stop_epochs[thread.name]
+                        ):
+                            raise RelationViolationError("Fenced owner changed after signal.")
+                    else:
+                        self._require_same_stop_owner(thread, epoch)
                     if not self._is_local_participant(thread, wait=False):
                         raise RelationViolationError(
                             f"Refusing to signal unverifiable process {thread.pid}."
@@ -3363,12 +3390,23 @@ class Comms:
             final = self.registry.snapshot()
             for thread, epoch in captured:
                 current = final.threads.get(thread.name)
-                if self._released_same_owner(final, thread, epoch):
-                    continue
-                self._require_same_stop_owner(thread, epoch)
-            for thread, _epoch in captured:
-                if self.registry.status(thread.name).active:
-                    self.registry.unregister(thread.name)
+                if expected_incarnations is not None:
+                    if (
+                        current is None
+                        or (current.pid, current.created_at) != (thread.pid, thread.created_at)
+                        or final.statuses.get(thread.name) is not ThreadStatus.STOPPED
+                        or final.admission_generations.get(thread.name) != stop_epochs[thread.name]
+                        or self._process_alive(thread.pid)
+                    ):
+                        raise RelationViolationError(
+                            "Fenced owner changed or survived after signal."
+                        )
+                elif not self._released_same_owner(final, thread, epoch):
+                    self._require_same_stop_owner(thread, epoch)
+            if expected_incarnations is None:
+                for thread, _epoch in captured:
+                    if self.registry.status(thread.name).active:
+                        self.registry.unregister(thread.name)
             results = []
             for thread, _epoch in captured:
                 current = self.registry.require(thread.name)
