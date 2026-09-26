@@ -358,6 +358,9 @@ async def test_started_then_ack_only_direct_survives_reopen_without_replay(tmp_p
     session_file.touch()
     stub.write_text(f"#!{sys.executable}\n" + f"session_file = {str(session_file)!r}\n" + """
 import json, sys
+from pathlib import Path
+launches = Path(session_file + '.launches')
+launches.write_text(launches.read_text() + 'x' if launches.exists() else 'x')
 send = lambda event: print(json.dumps(event), flush=True)
 state = json.loads(sys.stdin.readline())
 send({"type":"response", "command":"get_state", "id":state["id"],
@@ -368,13 +371,13 @@ send({"type":"response", "command":"prompt", "id":prompt["id"], "success":True})
 send({"type":"message_start", "message":{"role":"user", "content":prompt["message"],
       "inputId":prompt["inputId"]}})
 steer = json.loads(sys.stdin.readline())
+assert steer["type"] == "prompt" and steer["streamingBehavior"] == "steer"
 send({"type":"response", "command":"prompt", "id":steer["id"], "success":True})
 send({"type":"message_end", "message":{"role":"assistant", "stopReason":"stop"}})
 send({"type":"agent_settled"})
-sys.stdin.readline()
-sys.stdin.readline()
-send({"type":"response", "command":"get_session_stats", "success":True,
-      "data":{"contextUsage":{}}})
+# Exit after ACK-only steering: there is deliberately no second input start.
+# A persistent owner correctly refuses to settle this pending input and does
+# not request final stats. Waiting for those requests deadlocks the fixture.
 """)
     stub.chmod(0o755)
     with tempfile.TemporaryDirectory(dir="/var/tmp") as wire_dir:
@@ -425,6 +428,9 @@ send({"type":"response", "command":"get_session_stats", "success":True,
             second_agent.on_connect(SilentClient())
             assert await second_agent._drain_inbox("project") == 0
             assert not second_agent._pending_turns.get("project")
+            assert Path(str(session_file) + ".launches").read_text() == "x"
+            assert reopened.status("bus:1") == "started"
+            assert reopened.status("bus:2") == "unknown"
         finally:
             await agent.shutdown()
 

@@ -32,6 +32,12 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
         advance(aliases, through)
 
     monkeypatch.setattr(agent._delivery_cursors, "advance", durable_before_cursor)
+
+    async def unexpected_backend(*args, **kwargs):
+        raise AssertionError("Revoked UNKNOWN input must not launch a backend")
+        yield {}
+
+    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", unexpected_backend)
     try:
         await agent._drain_inbox("worker")
         assert observed
@@ -56,11 +62,38 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
             async def session_update(self, **kwargs):
                 updates.append(kwargs["update"].model_dump(by_alias=True))
 
+        ledger = InputDispositions(comms.root)
+        before = ledger._read()
+        cursor_before = agent._delivery_cursors.path.read_bytes()
         await agent.replay_unknown_inputs("worker", Client())
         unknown = [row["_meta"]["agentComms"]["inputDisposition"] for row in updates]
-        assert [(row["sequence"], row["target"], row["status"]) for row in unknown] == [
+        overview = agent._comms.input_delivery(
+            "worker", include_history=True, awaiting_keys=agent.awaiting_input_keys("worker")
+        )
+        assert overview["inputs"] == unknown
+        assert overview["dismissedHistoricalCount"] == 0
+        if revocation == "stop":
+            # No live owner context: preserve the compatibility projection.
+            assert overview["historicalCount"] == 0
+            assert overview["historicalInputs"] == []
+            visible = unknown
+        else:
+            # The live owner's queue is empty after revocation/reopen. These
+            # UNKNOWN notices remain explicitly inspectable, not awaiting work.
+            assert overview["currentScope"] == "owner_queue"
+            assert unknown == []
+            assert overview["historicalCount"] == 1
+            visible = overview["historicalInputs"]
+            assert len(visible) == 1 and visible[0]["noticeDismissed"] is False
+        assert [(row["sequence"], row["target"], row["status"]) for row in visible] == [
             (message.seq, "#team", "unknown")
         ]
+        assert [row["sequence"] for row in ledger.unknown(frozenset({"worker"}))] == [message.seq]
+        assert ledger._read() == before
+        assert agent._delivery_cursors.path.read_bytes() == cursor_before
+        assert await agent._drain_inbox("worker") == 0
+        assert not agent._pending_turns.get("worker")
+        assert ledger._read() == before
     finally:
         await agent.shutdown()
 

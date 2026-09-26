@@ -1713,9 +1713,9 @@ class TestWireProtocol:
                     deadline = _time.monotonic() + 30
                     while True:
                         if b"\n" not in pending:
-                            assert selector.select(
-                                max(0, deadline - _time.monotonic())
-                            ), "ACP timeout"
+                            assert selector.select(max(0, deadline - _time.monotonic())), (
+                                "ACP timeout"
+                            )
                             chunk = os.read(proc.stdout.fileno(), 65536)
                             assert chunk, "ACP closed before response"
                             pending += chunk
@@ -1952,12 +1952,23 @@ class TestAgentTurnForwarding:
             "inputStarted" in (getattr(update, "field_meta", None) or {}).get("agentComms", {})
             for update in sent
         )
+        delivery_updates = [
+            update
+            for update in sent
+            if "inputDeliveryChanged"
+            in (getattr(update, "field_meta", None) or {}).get("agentComms", {})
+        ]
+        assert len(delivery_updates) == 2
+        for update in delivery_updates:
+            assert type(update).__name__ == "AgentMessageChunk"
+            assert update.content.text == ""
+            assert update.field_meta == {"agentComms": {"inputDeliveryChanged": True}}
         sent = [
             update
             for update in sent
             if not any(
                 key in (getattr(update, "field_meta", None) or {}).get("agentComms", {})
-                for key in ("inputDisposition", "inputStarted", "queue")
+                for key in ("inputDisposition", "inputStarted", "queue", "inputDeliveryChanged")
             )
         ]
         goal_updates = [update for update in sent if isinstance(update, SessionInfoUpdate)]
@@ -1974,8 +1985,8 @@ class TestAgentTurnForwarding:
             "ToolCallProgress",  # live output
             "ToolCallProgress",  # completed
             "AgentMessageChunk",  # " finished"
-            "AgentMessageChunk",  # turn-settled metadata
             "AgentMessageChunk",  # committed transcript invalidation
+            "AgentMessageChunk",  # turn-settled metadata
         ]
         turn_id = sent[0].field_meta["agentComms"]["turnId"]
         assert turn_id and sent[0].field_meta["agentComms"]["turnStarted"]
@@ -1990,8 +2001,8 @@ class TestAgentTurnForwarding:
         progress = sent[5]
         assert progress.status == "completed"
         assert progress.content[0].content.text == "/wt"
-        assert sent[-2].field_meta == {"agentComms": {"turnSettled": True, "turnId": turn_id}}
-        assert sent[-1].field_meta == {
+        assert sent[-1].field_meta == {"agentComms": {"turnSettled": True, "turnId": turn_id}}
+        assert sent[-2].field_meta == {
             "agentComms": {
                 "transcriptChanged": True,
                 "transcriptCursor": {"session_file": "", "offset": 0},

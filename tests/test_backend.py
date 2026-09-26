@@ -299,7 +299,12 @@ for line in sys.stdin:
             "completed reply"
         ]
         assert any(event.get("context_used") == 64330 for event in events)
-        assert events[-1] == {"type": "done", "ok": True, "text": "completed reply"}
+        assert events[-1] == {
+            "type": "done",
+            "ok": True,
+            "text": "completed reply",
+            "diagnostic": {"exit_code": 0},
+        }
 
     async def test_partial_large_record_survives_cancelled_read(self):
         stream = asyncio.StreamReader(limit=8)
@@ -508,7 +513,12 @@ for line in sys.stdin:
             78330,
         ]
         assert all(e["context_size"] == 272000 for e in events if e["type"] == "agent_info")
-        assert events[-1] == {"type": "done", "ok": True, "text": ""}
+        assert events[-1] == {
+            "type": "done",
+            "ok": True,
+            "text": "",
+            "diagnostic": {"exit_code": 0},
+        }
 
     @pytest.mark.parametrize("nested", [False, True])
     async def test_final_usage_replaces_provisional_even_if_lower(self, tmp_path, nested):
@@ -997,7 +1007,12 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
             if e.get("reason_code") == "steering_command_rejected"
         ] == [(mutation_type, "rejected-1")]
         assert [e["type"] for e in events].count("done") == 1
-        assert events[-1] == {"type": "done", "ok": True, "text": "A-before A-after"}
+        assert events[-1] == {
+            "type": "done",
+            "ok": True,
+            "text": "A-before A-after",
+            "diagnostic": {"exit_code": 0},
+        }
         assert process is not None and process.returncode == 0
         assert owner not in backend._ACTIVE_PROCESSES
         assert owner not in backend._ACTIVE_STEERING
@@ -1447,7 +1462,12 @@ time.sleep(60)
         assert [event["state"] for event in states] == ["retrying", "recovered"]
         assert states[-1]["replay_safe"] is False
         assert states[-1]["side_effects_possible"] is True
-        assert events[-1] == {"type": "done", "ok": True, "text": "recovered reply"}
+        assert events[-1] == {
+            "type": "done",
+            "ok": True,
+            "text": "recovered reply",
+            "diagnostic": {"exit_code": 0},
+        }
 
     async def test_routine_compaction_emits_no_false_recovery_states(self, tmp_path):
         rpc_lines = "\n".join(
@@ -1470,7 +1490,12 @@ time.sleep(60)
         events = [e async for e in backend.stream_agent_events(stub, [], "task", str(tmp_path))]
 
         assert not [event for event in events if event["type"] == "turn_state"]
-        assert events[-1] == {"type": "done", "ok": True, "text": "after compaction"}
+        assert events[-1] == {
+            "type": "done",
+            "ok": True,
+            "text": "after compaction",
+            "diagnostic": {"exit_code": 0},
+        }
 
     async def test_overflow_compaction_retry_recovers_only_after_model_progress(self, tmp_path):
         rpc_lines = "\n".join(
@@ -1607,7 +1632,12 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
             10,
             11,
         ]
-        assert events[-1] == {"type": "done", "ok": True, "text": "ok"}
+        assert events[-1] == {
+            "type": "done",
+            "ok": True,
+            "text": "ok",
+            "diagnostic": {"exit_code": 0},
+        }
 
     async def test_prestart_compaction_failure_refuses_prompt(self, tmp_path):
         stub = _stub(
@@ -1848,7 +1878,12 @@ for line in sys.stdin:
         ]
 
         assert not [event for event in events if event["type"] == "turn_state"]
-        assert events[-1] == {"type": "done", "ok": True, "text": "done after tool"}
+        assert events[-1] == {
+            "type": "done",
+            "ok": True,
+            "text": "done after tool",
+            "diagnostic": {"exit_code": 0},
+        }
 
     async def test_stall_after_tool_is_failed_without_retry(self, tmp_path):
         launches = tmp_path / "launches"
