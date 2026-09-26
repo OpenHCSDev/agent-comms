@@ -211,8 +211,13 @@ def _verify_claim_bus_before_read_unlocked(bus_path: Path) -> None:
 
 
 @contextmanager
-def _store_lock(store_path: Path) -> Iterator[None]:
-    """Hold an exclusive process lock associated with a wire store."""
+def _store_lock(store_path: Path) -> Iterator[int]:
+    """Hold the wire-store lock; yield its descriptor for trusted child inheritance.
+
+    POSIX release is by close, not LOCK_UN: an inherited descriptor must retain
+    the authority span if the parent dies before a native mutation finishes.
+    Never close that descriptor in a child while it can still mutate.
+    """
     store_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = store_path.with_name(f".{store_path.name}.lock")
     with open(lock_path, "a+b") as lock_file:
@@ -238,15 +243,15 @@ def _store_lock(store_path: Path) -> Iterator[None]:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
         try:
             _verify_claim_bus_before_read_unlocked(store_path)
-            yield
+            yield lock_file.fileno()
         finally:
             if os.name == "nt":
                 lock_file.seek(0)
                 msvcrt.locking(  # type: ignore[attr-defined]
                     lock_file.fileno(), msvcrt.LK_UNLCK, 1  # type: ignore[attr-defined]
                 )
-            else:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            # POSIX flock releases on the last close of this open-file
+            # description (including inherited copies), at the outer `with`.
 
 
 def _replace_snapshot(source: Path, target: Path, *, windows: bool = os.name == "nt") -> None:
@@ -2539,7 +2544,41 @@ class ThreadRegistry:
         session_leaf: str,
         session_revision: str,
     ) -> OwnerCompactionAttestation:
-        """Recheck canonical owner authority for one compaction commit, atomically.
+        """Return an audit snapshot, NOT authority for a later native mutation."""
+        with self.guard_owner_compaction(
+            expected,
+            expected_epoch,
+            turn_id,
+            expected_goal_id=expected_goal_id,
+            expected_goal_revision=expected_goal_revision,
+            correction_revision=correction_revision,
+            session_file=session_file,
+            session_leaf=session_leaf,
+            session_revision=session_revision,
+        ) as (attestation, _):
+            return attestation
+
+    @contextmanager
+    def guard_owner_compaction(
+        self,
+        expected: Thread,
+        expected_epoch: int,
+        turn_id: str,
+        *,
+        expected_goal_id: str,
+        expected_goal_revision: int,
+        correction_revision: int,
+        session_file: str,
+        session_leaf: str,
+        session_revision: str,
+    ) -> Iterator[tuple[OwnerCompactionAttestation, int]]:
+        """Hold canonical authority through the caller's native mutation.
+
+        Lock order: registry, then native session writer. No registry method
+        may be called inside this scope (the lock is not reentrant). A native
+        child MUST inherit the yielded descriptor and keep it until exit;
+        the caller must bound, terminate and reap it before leaving normally.
+        This scope does not validate correction or native session evidence.
 
         This is NOT a bearer token: the same check must run again at commit
         time under this lock. Anything that moved since the caller captured
@@ -2568,7 +2607,7 @@ class ThreadRegistry:
             or not session_revision
         ):
             raise ValueError("owner compaction attestation requires bounded exact expectations")
-        with _store_lock(self._path):
+        with _store_lock(self._path) as authority_fd:
             self._load_unlocked()
             canonical = self._aliases.get(expected.name, expected.name)
             owner = self._threads.get(canonical)
@@ -2597,7 +2636,7 @@ class ThreadRegistry:
                 )
             from .owner_compaction_gate import OwnerCompactionAttestation
 
-            return OwnerCompactionAttestation(
+            yield OwnerCompactionAttestation(
                 thread=owner.name,
                 owner_epoch=epoch,
                 turn_id=turn_id,
@@ -2608,7 +2647,7 @@ class ThreadRegistry:
                 session_leaf=session_leaf,
                 session_revision=session_revision,
                 registry_revision=file_revision(self._path),
-            )
+            ), authority_fd
 
     def _claim_turn_unlocked(
         self, current: Thread, turn_id: str, routing: TurnRouting | None
