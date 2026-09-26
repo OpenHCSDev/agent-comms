@@ -12,12 +12,15 @@ import subprocess
 import sys
 from contextlib import suppress
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import pytest
 
 from agent_comms.compaction_journal import CompactionJournalError
 from agent_comms.declarations import Goal, RelationViolationError, Thread, ThreadRegistry
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.operations import Comms
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_process import CompactionTransportUnknownError
 from agent_comms.session_fence import SessionWriterBusyError, session_writer_fence
@@ -61,6 +64,9 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
     owner, epoch = registry.live_owner_with_epoch("owner")
     owner, epoch = registry.claim_live_turn_with_epoch(owner, "turn", expected_epoch=epoch)
     bridge = OwnerCompactionCommit(tmp_path / "registry.json", Path(PACKAGE))
+    # Capture once BEFORE each test's summary/invalidations, never at commit.
+    source = bridge.capture_source(owner, epoch, witness)
+    bridge.commit = partial(bridge.commit, source=source)
     return bridge, owner, epoch, witness
 
 
@@ -78,6 +84,81 @@ async def test_active_backend_executor_refuses_before_intent_or_dispatch(native)
     assert Path(witness["sessionFile"]).read_bytes() == before
 
 
+def test_json_source_is_not_accepted_as_owner_capture(native):
+    bridge, owner, epoch, witness = native
+    with pytest.raises(ValueError, match="Owner-captured"):
+        OwnerCompactionCommit.commit(bridge, owner, epoch, witness, "summary", 42, source={})
+    assert bridge.journal.unresolved(witness["sessionFile"]) == ()
+
+
+def test_malformed_bus_refuses_source_capture_without_repair(native):
+    bridge, owner, epoch, witness = native
+    bus = bridge.root / "bus.jsonl"
+    bus.write_bytes(b'{"incomplete":')
+    with pytest.raises(RelationViolationError, match="Invalid compaction ingress"):
+        bridge.capture_source(owner, epoch, witness)
+    assert bus.read_bytes() == b'{"incomplete":'
+    assert bridge.journal.unresolved(witness["sessionFile"]) == ()
+
+
+def test_new_correction_send_invalidates_pre_summary_source(native):
+    bridge, owner, epoch, witness = native
+    comms = Comms(bridge.root)
+    comms.register(Thread("peer", frozenset(), str(bridge.root)))
+    comms.send("peer", "owner", "Correction: retain the newer requirement")
+    with pytest.raises(RelationViolationError, match="source changed"):
+        bridge.commit(owner, epoch, witness, "stale summary", 42)
+    assert bridge.journal.unresolved(witness["sessionFile"]) == ()
+    assert entries(witness)[-1]["type"] == "message"
+
+
+def test_unsettled_input_refuses_preparation_and_commit_without_touching_unknown(native):
+    bridge, owner, epoch, witness = native
+    inputs = InputDispositions(bridge.root)
+    inputs.record(
+        "acp:queued",
+        seq=None,
+        owner=owner.name,
+        admission=owner.active_turn.admission_generation,
+        target=owner.name,
+        text="queued correction",
+    )
+    with pytest.raises(RelationViolationError, match="Unsettled"):
+        bridge.capture_source(owner, epoch, witness)
+    with pytest.raises(RelationViolationError, match="Unsettled"):
+        bridge.commit(owner, epoch, witness, "summary", 42)
+    assert inputs.status("acp:queued") == "unknown"
+    assert bridge.journal.unresolved(witness["sessionFile"]) == ()
+    assert entries(witness)[-1]["type"] == "message"
+
+
+def test_changed_started_input_still_invalidates_pre_summary_source(native):
+    bridge, owner, epoch, witness = native
+    inputs = InputDispositions(bridge.root)
+    admission = owner.active_turn.admission_generation
+    inputs.record(
+        "acp:new",
+        seq=None,
+        owner=owner.name,
+        admission=admission,
+        target=owner.name,
+        text="correction",
+    )
+    assert inputs.bind(
+        "acp:new",
+        admission=admission,
+        turn_id=owner.active_turn.id,
+        native_id="a" * 32,
+        text="correction",
+    )
+    assert inputs.started(
+        "acp:new", turn_id=owner.active_turn.id, native_id="a" * 32, text="correction"
+    )
+    with pytest.raises(RelationViolationError, match="source changed"):
+        bridge.commit(owner, epoch, witness, "summary", 42)
+    assert bridge.journal.unresolved(witness["sessionFile"]) == ()
+
+
 def test_positive_owner_validated_native_commit(native):
     bridge, owner, epoch, witness = native
     operation = bridge.commit(owner, epoch, witness, "retained summary", 42)
@@ -89,8 +170,8 @@ def test_positive_owner_validated_native_commit(native):
     assert json.loads(operation.evidence_json)["entryId"] == entry["id"]
 
 
-@pytest.mark.parametrize("mutation", ["stop", "heartbeat", "goal"])
-def test_competing_registry_writer_waits_through_real_native_commit(native, monkeypatch, mutation):
+@pytest.mark.parametrize("mutation", ["stop", "heartbeat", "goal", "bus", "input", "send"])
+def test_competing_writer_waits_through_real_native_commit(native, monkeypatch, mutation):
     bridge, owner, epoch, witness = native
     call = bridge._call
     children = []
@@ -98,29 +179,50 @@ def test_competing_registry_writer_waits_through_real_native_commit(native, monk
 import fcntl,sys
 from pathlib import Path
 from dataclasses import replace
-from agent_comms.declarations import ThreadRegistry, Goal
+from agent_comms.declarations import ThreadRegistry, Goal, Message, MessageBus, MessageType
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.operations import Comms
 root = Path(sys.argv[1])
-with (root / '.registry.json.lock').open('ab') as lock:
+mutation = sys.argv[2]
+lock_name = {'bus':'bus.jsonl','input':'input_dispositions.json','send':'wire'}.get(
+    mutation,'registry.json')
+with (root / ('.' + lock_name + '.lock')).open('ab') as lock:
     try:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         print('blocked',flush=True)
     else:
         raise AssertionError('authority escaped before native write')
-registry = ThreadRegistry(root / 'registry.json')
-if sys.argv[2] == 'stop':
-    registry.unregister('owner')
-elif sys.argv[2] == 'heartbeat':
-    registry.heartbeat('owner')
+if mutation == 'input':
+    InputDispositions(root).record('acp:late',seq=None,owner='owner',
+        admission=int(sys.argv[3]),target='owner',text='late correction')
 else:
-    owner = registry.snapshot().threads['owner']
-    registry.register(replace(owner,goal=Goal('new','new-goal')))
+    registry = ThreadRegistry(root / 'registry.json')
+    if mutation == 'stop':
+        registry.unregister('owner')
+    elif mutation == 'heartbeat':
+        registry.heartbeat('owner')
+    elif mutation == 'goal':
+        owner = registry.snapshot().threads['owner']
+        registry.register(replace(owner,goal=Goal('new','new-goal')))
+    elif mutation == 'bus':
+        MessageBus(root / 'bus.jsonl', registry).publish(
+            Message(sender='owner',target='broadcast',body='late message',type=MessageType.INFO))
+    else:
+        Comms(root).send('owner','broadcast','late message')
 print('changed',flush=True)
 """
 
     def with_competitor(*args):
         child = subprocess.Popen(
-            [sys.executable, "-c", script, str(bridge.journal.path.parent), mutation],
+            [
+                sys.executable,
+                "-c",
+                script,
+                str(bridge.journal.path.parent),
+                mutation,
+                str(owner.active_turn.admission_generation),
+            ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             bufsize=0,
@@ -270,7 +372,9 @@ def lose_result(*args):
     print('native-durable-before-journal-result',flush=True)
     signal.pause()
 bridge._call = lose_result
-bridge.commit(owner,epoch,json.loads(sys.argv[3]),'crash summary',42)
+witness = json.loads(sys.argv[3])
+source = bridge.capture_source(owner,epoch,witness)
+bridge.commit(owner,epoch,witness,'crash summary',42,source=source)
 """
     child = subprocess.Popen(
         [
@@ -362,7 +466,9 @@ bridge.registry.unregister('owner')
 bridge.registry.register(replace(owner,pid=os.getpid(),active_turn=None))
 owner,epoch = bridge.registry.live_owner_with_epoch('owner')
 owner,epoch = bridge.registry.claim_live_turn_with_epoch(owner,'crash',expected_epoch=epoch)
-bridge.commit(owner,epoch,json.loads(sys.argv[3]),'post-parent-crash summary',42,timeout=30)
+witness = json.loads(sys.argv[3])
+source = bridge.capture_source(owner,epoch,witness)
+bridge.commit(owner,epoch,witness,'post-parent-crash summary',42,source=source,timeout=30)
 """
     parent = subprocess.Popen(
         [
@@ -408,15 +514,24 @@ with (root / '.registry.json.lock').open('ab') as lock:
     try:
         fcntl.flock(lock.fileno(),fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        print('still-fenced',flush=True)
+        pass
     else:
         raise AssertionError('parent death released native authority')
+for name in ('wire','bus.jsonl','input_dispositions.json'):
+    with (root / ('.' + name + '.lock')).open('ab') as lock:
+        try:
+            fcntl.flock(lock.fileno(),fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            pass
+        else:
+            raise AssertionError('parent death released ingress exclusion: ' + name)
 from agent_comms.session_fence import idle_session_writer_fence, SessionWriterBusyError
 try:
     with idle_session_writer_fence(sys.argv[2]):
         raise AssertionError('parent death released native executor exclusion')
 except SessionWriterBusyError:
     pass
+print('still-fenced',flush=True)
 ThreadRegistry(root / 'registry.json').unregister('owner')
 print('stopped-after-native',flush=True)
 """,

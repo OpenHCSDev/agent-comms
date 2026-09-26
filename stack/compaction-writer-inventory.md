@@ -39,13 +39,13 @@ There are **two distinct session locks**:
 2. The patched native `.pr48-writer.lock` is the per-entry file mutation fence.
    It comes AFTER registry authority in the compaction path.
 
-Current external bridge order: executor slot → registry → native-entry lock.
-Both executor and registry descriptors are inherited until native child exit.
-An idle persistent Pi process is not ruled out by the executor slot; runtime
-integration must explicitly close/reopen it around an external helper commit.
+Current external bridge order: executor slot → wire → bus → registry → input
+ledger → native-entry lock. All five Python descriptors are inherited until
+native child exit. An idle persistent Pi process is not ruled out by the
+executor slot; runtime integration must explicitly close/reopen it around an
+external helper commit.
 
-Required **future ingress/publication boundary** must also respect existing
-wire → bus → registry order. Evidence:
+The **ingress boundary** respects existing wire → bus → registry order. Evidence:
 
 - `Comms.send_message` takes wire, then `MessageBus.publish` takes bus and calls
   `_prepare_message_unlocked`, which obtains a registry snapshot.
@@ -57,19 +57,23 @@ wire → bus → registry order. Evidence:
   are not replay requests, and their ledger is not owned by the registry lock.
 
 Therefore **never acquire bus or executor locks from inside the existing
-registry guard**. A future combined boundary needs executor → wire → bus →
-registry → input ledger → native entry, after proving no reverse edge in every
-caller. Every necessary outer exclusion must also survive parent death through
-retained descriptors. This order is a design target, not yet implemented or
-independently reviewed.
+registry guard**. `_boundary` acquires the combined order above. Real-process
+raw bus publication, Comms.send, input ledger record, and registry lifecycle
+competitors are blocked through native mutation. The real-native SIGKILL
+barrier additionally checks that wire, bus, input, registry and executor locks
+all remain excluded after parent death until native child exit. Independent
+review and full runtime call-graph integration are still required.
 
 ## Open gates
 
-- Capture an ingress witness before summary preparation, compare it under the
-  final boundary, refuse newly admitted/queued corrections and in-flight inputs.
-  No caller-stamped correction counter may substitute for canonical evidence.
-- Retain wire/bus/input exclusion through mutation, and couple result publication
-  through a durable keyed outcome/outbox rather than replaying native mutation.
+- Integrate the now-executable `capture_source`/`CompactionSource` API into actual
+  summary preparation. It binds canonical native witness, root identity,
+  owner/turn/goal and actual bus/input fingerprints; the commit boundary rejects
+  drift or current-admission UNKNOWN input before journal/dispatch. The legacy
+  receipt correction counter is not evidence. Whole-store revision matching is
+  intentionally conservative (unrelated traffic can decline a candidate).
+- Couple result publication through a durable keyed outcome/outbox rather than
+  replaying native mutation. Ingress exclusion is not publication coupling.
 - Verify all native writer paths and transitive package provenance during
   deployment; the dormant per-entry patch is not yet applied by preparation.
 - Extend deterministic race tests to raw bus sends, ACP queued/steered inputs,

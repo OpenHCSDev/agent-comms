@@ -107,16 +107,30 @@ fence, which still comes AFTER registry authority. Idle persistent Pi managers
 must additionally be closed/reopened by the future runtime integration; they
 cannot silently keep an in-memory tree after this external helper writes.
 
-Current combined focused suite: **169 passed, 1 skipped**. Native in-flight
-SIGKILL plus active-executor refusal passed five repeated runs. No provider calls
+The bridge additionally captures a frozen `CompactionSource` BEFORE summary
+preparation: native witness, root identity, owner/turn/goal, and bounded actual
+bus/input contents plus file identities. Commit compares those observations
+under executor → wire → bus → registry → input → native exclusion, retains all
+five Python descriptors in the child, and rejects current-admission UNKNOWN
+inputs without resolving or replaying them. Whole-store fingerprints are
+conservative: unrelated bus/input movement also declines the candidate. Invalid
+or incomplete bus data declines preparation without repair. The legacy integer
+correction counter is not used as evidence.
+
+New tests cover raw bus sends, Comms.send and direct input-record races, accepted
+queued correction refusal, STARTED-input drift, and pre-summary bus correction
+invalidation. Native orphan tests now prove all five outer exclusions survive
+SIGKILL. Combined focused suite: **177 passed, 1 skipped**; the seven
+native-process race/crash cases passed three repeated runs. No provider calls
 were used; the installed package remains unchanged.
 
 ## Still required before activation
 
 1. Independent review of the combined authority/journal/native slice and
    exhaustive conflicting-writer inventory (see `compaction-writer-inventory.md`).
-2. Canonical correction/ingress currency, including in-flight steer/send refusal;
-   caller-supplied correction counters remain non-authoritative.
+2. Integrate the source capture and ingress exclusion into actual summarization
+   and runtime entrypoints; close/reopen idle persistent native managers and
+   verify all ACP queue/steer paths, not just their canonical store methods.
 3. Verified full deployment and trusted bridge origin at every actual runtime
    entrypoint, plus send/publication coupling (the authority lock alone does
    not make split transactions atomic).
