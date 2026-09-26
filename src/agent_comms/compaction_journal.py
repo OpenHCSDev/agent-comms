@@ -145,11 +145,14 @@ class CompactionJournal:
                     commit_id TEXT,
                     decline_reason TEXT
                 )""")
-            # Until an exact-ID recovery protocol exists, even terminal-looking
-            # rows keep this session blocked. A failed post-COMMIT directory
-            # fsync can leave linked/declined rows although the caller got UNKNOWN.
-            db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS selected_summary_session
-                ON selected_summary_attempts(session_file)""")
+            # 47c8's partial index permitted several historical terminal rows.
+            # Preserve every row: a global UNIQUE migration would fail journal
+            # open and block unrelated sessions. BEGIN IMMEDIATE + the SELECT
+            # before reserve below excludes any *new* attempt for that session.
+            db.execute("DROP INDEX IF EXISTS selected_summary_session")
+            db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS unresolved_selected_summary_session
+                ON selected_summary_attempts(session_file)
+                WHERE status IN ('reserved','unknown')""")
         parent = path.parent.resolve(strict=True)
         for directory in (parent, *parent.parents):
             parent_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
@@ -204,11 +207,12 @@ class CompactionJournal:
                     "SELECT operation_id, status FROM selected_summary_attempts "
                     "WHERE session_file = ?",
                     (canonical,),
-                ).fetchone()
-                if selected is not None and (
-                    selected[1] != "reserved"
+                ).fetchall()
+                if selected and (
+                    len(selected) != 1
+                    or selected[0][1] != "reserved"
                     or type(intent) is not dict
-                    or intent.get("selectedSummaryOperationId") != selected[0]
+                    or intent.get("selectedSummaryOperationId") != selected[0][0]
                 ):
                     raise CompactionJournalError(
                         "Blocked selected summary; unrelated native commit forbidden"
@@ -275,6 +279,11 @@ class CompactionJournal:
                     (canonical,),
                 ).fetchone():
                     raise CompactionJournalError("Unresolved native commit; no selected summary")
+                if db.execute(
+                    "SELECT 1 FROM selected_summary_attempts WHERE session_file = ? LIMIT 1",
+                    (canonical,),
+                ).fetchone():
+                    raise CompactionJournalError("Blocked selected summary; never replay")
                 db.execute(
                     "INSERT INTO selected_summary_attempts "
                     "VALUES (?, ?, ?, 'reserved', NULL, NULL)",

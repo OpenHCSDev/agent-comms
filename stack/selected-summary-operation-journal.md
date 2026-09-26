@@ -12,8 +12,11 @@ cleared only its prompt-preflight readiness race; it is not integrated here.
 SQLite DELETE/EXTRA, per-transaction post-COMMIT directory-fsync journal. It
 records a fresh 128-bit lowercase hex operation ID and bounded JSON containing
 source, selected model and settings witnesses **before** any future Pi RPC
-write. One attempt of **any status** per saved session is indexed; exact IDs
-can never be reused. There is no automatic per-session release API. Ambiguous stdin send, process death, timeout or
+write. The partial unique index preserves the valid predecessor schema;
+`BEGIN IMMEDIATE` plus a SELECT-any-status guard forbids a **new** attempt on
+a session with any historical row. Historical multiple terminal rows are
+preserved, never deleted or replayed; exact IDs cannot be reused. There is no
+automatic per-session release API. Ambiguous stdin send, process death, timeout or
 post-side-effect error stays reserved/UNKNOWN and blocks later provider input
 at the existing ACP final-send gate. The journal does not decide whether a
 provider was paid; no retry or automatic no-spend inference follows from a
@@ -47,14 +50,22 @@ verified pre-start decline could return post-COMMIT fsync UNKNOWN while a
 terminal-looking row passed ACP final send in this process and after restart.
 See `/dev/shm/pr95-47c8-independent-VfzSGB/REVIEW.md` (SHA256
 `3f7c090cae267f326be3895caec054d36279938bebf53a3c1f6e513d94501e00`).
-The present conservative correction blocks all selected rows and forbids a new
-reservation; tests exercise both fault cases, same/fresh process, repeated
-fsync failure, and native begin refusal. Bounded serial provider-free successor
-checks: selected-summary journal **17 passed**, adjacent native journal,
-send-admission and selected dry-run **26 passed**, Black/Ruff/mypy/diff checks
-passed (Python 3.11 Black warns it cannot AST-verify configured 3.13 grammar).
-This is a *safety backstop*, not an operationally complete selected summary.
-Fresh exact-successor independent review remains mandatory.
+Exact `3ae8e1d` review found the terminal-fsync correction narrowly CLEAN,
+but **NON-CLEAN P2 migration/availability**: its all-status unique index
+rejects valid predecessor multiple terminal rows, denying unrelated sessions
+under that wire root. See `/dev/shm/pr95-3ae8-independent-Yn2gdP/REVIEW.md`
+(SHA256 `b994844da3c101c3d7eb713ffe652033449d27920ce8f2f9872944ac183b41d5`).
+This successor restores the predecessor partial index, transactionally rejects
+all new attempts if any selected row exists, and refuses native begin when
+multiple historical rows are present. All historical rows continue to block
+their exact session at the ACP gate, without globally denying other sessions.
+Tests also exercise same/fresh-process fsync faults, repeated fsync denial,
+two-process reservation race and non-destructive migration. Bounded provider-free
+serial suites: selected journal **19 passed**; native journal, ACP send barrier
+and selected dry-run **26 passed**; Black/Ruff/mypy/diff checks passed (Black
+on Python 3.11 warns it cannot AST-verify configured 3.13 grammar). Fresh exact
+independent review remains mandatory. This is a *safety backstop*,
+not an operationally complete selected summary.
 
 Before activating a provider path, the owner must call reserve under current
 owner/turn/ingress authority, serialize the **same** exact source/model/settings

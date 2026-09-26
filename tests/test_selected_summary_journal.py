@@ -2,6 +2,7 @@
 
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 
@@ -73,6 +74,82 @@ def test_link_requires_exact_committed_native_intent_binding(reserved):
         journal.reserve_selected_summary(session, source, operation_id=operation_id)
     with pytest.raises(CompactionJournalError, match="transition|Exact committed"):
         journal.mark_selected_summary_unknown(operation_id)
+
+
+def test_predecessor_multiple_terminal_rows_migrate_without_wire_wide_denial(reserved):
+    journal, session, source = reserved
+    first = journal.reserve_selected_summary(session, source, operation_id="a" * 32)
+    journal.decline_selected_summary_prestart(first, "split_turn")
+    # Exact 47c8 permitted a second terminal after the first. Reconstruct its
+    # valid partial-index schema/rows; never delete historical operation IDs.
+    with sqlite3.connect(journal.path) as db:
+        db.execute("DROP INDEX IF EXISTS selected_summary_session")
+        db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS unresolved_selected_summary_session "
+            "ON selected_summary_attempts(session_file) "
+            "WHERE status IN ('reserved','unknown')"
+        )
+        db.execute(
+            "INSERT INTO selected_summary_attempts VALUES (?, ?, ?, 'declined-prestart', NULL, ?)",
+            ("b" * 32, str(session), json.dumps(source), "unsupported"),
+        )
+    migrated = CompactionJournal(journal.path)
+    assert {row.operation_id for row in migrated.blocking_selected_summary(session)} == {
+        "a" * 32,
+        "b" * 32,
+    }
+    assert not native_input_admitted(journal.path.parent, session)
+    other = journal.path.parent / "other-session.jsonl"
+    other.write_text("{}\n")
+    assert native_input_admitted(journal.path.parent, str(other))
+    with pytest.raises(CompactionJournalError, match="never replay"):
+        migrated.reserve_selected_summary(session, source)
+    with pytest.raises(CompactionJournalError, match="unrelated native commit"):
+        migrated.begin(session, {"selectedSummaryOperationId": first})
+    assert {row.operation_id for row in migrated.blocking_selected_summary(session)} == {
+        "a" * 32,
+        "b" * 32,
+    }
+
+
+def test_selected_reservation_two_process_race_has_exactly_one_winner(reserved):
+    journal, session, source = reserved
+    script = """
+import json,sys
+from pathlib import Path
+from agent_comms.compaction_journal import CompactionJournal,CompactionJournalError
+j=CompactionJournal(Path(sys.argv[1]))
+sys.stdin.buffer.read(1)
+try:
+    j.reserve_selected_summary(sys.argv[2],json.loads(sys.argv[3]),operation_id=sys.argv[4])
+except CompactionJournalError:
+    print('blocked')
+else:
+    print('reserved')
+"""
+    workers = [
+        subprocess.Popen(
+            [sys.executable, "-c", script, str(journal.path), session, json.dumps(source), c * 32],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for c in "ab"
+    ]
+    for worker in workers:
+        assert worker.stdin is not None
+        worker.stdin.write("G")
+        worker.stdin.close()
+    outcomes = []
+    for worker in workers:
+        assert worker.stdout is not None and worker.stderr is not None
+        worker.wait(timeout=10)
+        assert worker.returncode == 0, worker.stderr.read()
+        outcomes.append(worker.stdout.read().strip())
+    assert sorted(outcomes) == ["blocked", "reserved"]
+    assert len(journal.blocking_selected_summary(session)) == 1
+    assert not native_input_admitted(journal.path.parent, session)
 
 
 def test_selected_attempt_does_not_block_another_session(reserved):

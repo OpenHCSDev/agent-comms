@@ -118,26 +118,33 @@ No Pi-side bytes have been integrated into this branch; phase 2 has no reviewed
 implementation or provider authorization.
 
 Exact `47c8e70` Python-only default-off selected-summary ledger was independently
-**NON-CLEAN P2**: post-COMMIT parent fsync failure on either native link or
-pre-start clean decline raised UNKNOWN but left a terminal-looking row which
-passed the ACP final-send gate in this process and across reopen. The native
-commit itself was durably committed in the link probe; the fault is send
-admission, not proof of lost provider output. The conservative successor keeps
-**every** selected-summary row (reserved, UNKNOWN, linked, declined-prestart)
-as a durable final-input blocker and prevents another per-session reservation.
-A linked or declined row is accounting information, **never** automatic input
-permission. No exact-ID durable recovery/owner-scoped handoff exists yet. The
+**NON-CLEAN P2**: post-COMMIT parent fsync failure on native link or pre-start
+clean decline raised UNKNOWN but left a terminal-looking row which passed ACP
+final send, including after reopen. The native commit in the link probe was
+durably committed; fault is send admission, not proof of lost provider output.
+Exact successor `3ae8e1d` independently cleared this narrow terminal-fsync
+safety defect, but was **NON-CLEAN P2 migration/availability**: its new
+all-status unique index failed on valid predecessor multiple terminal rows and
+denied unrelated sessions under the wire root. The next conservative successor
+retains the historical partial index, transactionally forbids new reservations
+when any selected row exists, and keeps **every** selected-summary row
+(reserved, UNKNOWN, linked, declined-prestart) as a durable final-input blocker.
+Historical duplicate terminals remain preserved and block only their own
+session. A linked or declined row is accounting information, **never**
+automatic input permission; no exact-ID recovery/owner-scoped handoff exists. The
 journal still reserves before any future RPC and requires same-ID native
 committed-intent linkage; no provider request or original input is retried.
 There is no ACP producer or imported Pi phase-2 bytes. Exact separate Pi
 candidate `85ef9e6` is independently NON-CLEAN P2 for noncooperative stream
 timeout and buffered output cap, and must not be imported or repinned.
-`selected-summary-operation-journal.md` records scope, fault and remaining
-gates. Bounded provider-free successor suites pass serially: selected-journal
-**17**, adjacent native journal/send gate/dry-run **26**; Black/Ruff/mypy/diff
-checks pass. Fresh exact-head independent review, phase-2 route/auth parity,
-semantic retention, reviewed operator opt-in and full combined source/wheel
-testing remain mandatory. No selected provider operation has been started.
+`selected-summary-operation-journal.md` records both exact failures and
+remaining gates. New focused two-process race, historical migration and
+terminal-fault checks pass: selected journal **19**, adjacent native journal,
+ACP send gate and selected dry-run **26**, serial and provider-free; Black,
+Ruff, mypy and diff checks pass. Fresh exact-head review, phase-2 route/auth
+parity, semantic retention, reviewed operator opt-in and full combined
+source/wheel testing remain mandatory. No selected provider operation has
+been started.
 
 ## Normal PR104/105 main integration and socket incarnation (combined review pending)
 
