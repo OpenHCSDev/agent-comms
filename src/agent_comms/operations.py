@@ -97,6 +97,7 @@ from .exporting import (
     WireTranscriptExporter,
 )
 from .importing import ImportFormat, ImportLimits, ImportReceipt
+from .maintenance_barrier import MaintenanceBarrier
 from .tool_results import ToolDiff
 from .transcript_routes import InputDisplay, TranscriptRoutes
 
@@ -360,6 +361,7 @@ class Comms:
         self.runtime_info = RuntimeInfoStore(self.root / "runtime_info.json")
         self.transcript_reads = transcript_read_state(self.root / "thread_read_markers.json")
         self._wire_lock_path = self.root / "wire"
+        self.maintenance = MaintenanceBarrier(self.registry._path)
         self._sent_times_signature: tuple[int, int, int] | None = None
         self._sent_times: dict[str, float] = {}
 
@@ -3100,6 +3102,7 @@ class Comms:
         from dataclasses import replace
 
         with _store_lock(self._wire_lock_path):
+            self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             if not thread.role.executable:
                 raise RelationViolationError("A human participant cannot become an agent executor.")
@@ -3139,6 +3142,7 @@ class Comms:
     ) -> Thread:
         """Attach or launch an active thread; never revive an intentionally stopped one."""
         with _store_lock(self._wire_lock_path):
+            self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             if not thread.role.executable:
                 raise RelationViolationError("A human participant cannot become an agent executor.")
@@ -3163,6 +3167,7 @@ class Comms:
         original_epoch: int | None = None
         for _ in range(3):
             with _store_lock(self._wire_lock_path):
+                self.maintenance.assert_open_unlocked()
                 snapshot = self.registry.snapshot()
                 canonical = snapshot.aliases.get(name, name)
                 thread = self.registry.require(name)
@@ -3196,6 +3201,7 @@ class Comms:
                     f"Cannot reuse unverifiable process {thread.pid} for {thread.name!r}."
                 )
             with _store_lock(self._wire_lock_path):
+                self.maintenance.assert_open_unlocked()
                 current = self.registry.snapshot()
                 fresh = current.threads.get(canonical)
                 if (
@@ -3237,6 +3243,7 @@ class Comms:
         original_epochs: tuple[int, ...] | None = None
         for _ in range(3):
             with _store_lock(self._wire_lock_path):
+                self.maintenance.assert_open_unlocked()
                 snapshot = self.registry.snapshot()
                 if names is None:
                     threads = [
@@ -3309,6 +3316,7 @@ class Comms:
                         f"for {thread.name!r}."
                     )
             with _store_lock(self._wire_lock_path):
+                self.maintenance.assert_open_unlocked()
                 fresh = self.registry.snapshot()
                 if any(
                     (
@@ -3431,6 +3439,8 @@ class Comms:
         *,
         prompt: str | None = None,
     ) -> Thread:
+        # Callers hold the wire lock; a phase change takes wire then registry.
+        self.maintenance.assert_open_unlocked()
         env = os.environ.copy()
         for key in ("PI_PROMPT", "PI_PARENT_ID", "PI_TASK", "AGENT_COMMS_RESERVATION_FD"):
             env.pop(key, None)

@@ -2209,6 +2209,7 @@ class CommsAgent:
             # This lock spans the final authority read and stdin.write only.
             # Pi's turn, ACK, and provider response happen after it is released.
             with _store_lock(self._comms._wire_lock_path):
+                self._comms.maintenance.assert_open_unlocked()
                 snapshot = self._comms.registry.snapshot()
                 canonical = snapshot.aliases.get(thread_name, thread_name)
                 current = snapshot.threads.get(canonical)
@@ -2381,8 +2382,10 @@ class CommsAgent:
                             allowed = False
                             break
                 if (
-                    allowed and current_wait is not None
-                    and not interrupt_ok and not owner_interrupt_followup
+                    allowed
+                    and current_wait is not None
+                    and not interrupt_ok
+                    and not owner_interrupt_followup
                 ):
                     allowed = self._comms.consume_goal_wait(canonical, current_wait.wait_id)
                 if allowed:
@@ -2401,6 +2404,10 @@ class CommsAgent:
                         routing=TurnRouting(input_origins, None) if input_origins else None,
                     )
                 yield True if allowed else None if defer_for_goal else False
+
+        # Backend recognizes this exact callback as already owning the wire
+        # lock; arbitrary callbacks receive its outer send-boundary lock.
+        send_boundary._maintenance_wire_locked = True  # type: ignore[attr-defined]
 
         def native_start(public_id: str | None, native_id: str, sent_text: str) -> bool:
             keys = (
