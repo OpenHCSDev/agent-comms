@@ -12,6 +12,7 @@ import json
 from typing import Literal
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
+from .claim_admission import SelectedClaimObservation
 from .coordination import (
     ClaimDisposition,
     ObligationState,
@@ -32,6 +33,7 @@ def render_selected_wake_frame(
     *,
     phase: Literal["triage", "full"],
     obligation: ResponseObligation | None = None,
+    claim_awareness: SelectedClaimObservation | None = None,
 ) -> str:
     """Render one selected wake; do not manufacture one from message text.
 
@@ -97,6 +99,18 @@ def render_selected_wake_frame(
             ensure_ascii=True,
             separators=(",", ":"),
         )
+    if claim_awareness is not None and (
+        type(claim_awareness) is not SelectedClaimObservation
+        or claim_awareness.source_seq != claim.wire_seq
+        or claim_awareness.wake_claim_id != claim.claim_id
+        or claim_awareness.owner != owner.name
+    ):
+        raise IdentityConflict("claim awareness belongs to another selected wake")
+    awareness_line = (
+        json.dumps(claim_awareness.message(), ensure_ascii=True)
+        if claim_awareness is not None
+        else "no resource-specific claim snapshot supplied"
+    )
     selected_line = json.dumps(
         {
             "source_seq": claim.wire_seq,
@@ -115,5 +129,9 @@ def render_selected_wake_frame(
         f"expected: {expectation}\n"
         "── your state ──\n"
         f"{obligation_line}\n"
-        "This frame is a read-only projection, not file-write permission.\n"
+        f"claim awareness (source #{claim.wire_seq}, wake {claim.claim_id}): "
+        f"{awareness_line}\n"
+        "A selected wake alone owns no file; verify durable claims separately.\n"
+        "This frame is a read-only projection, not file-write permission. "
+        "Any claim snapshot is advisory only.\n"
     )

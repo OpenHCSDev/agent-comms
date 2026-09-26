@@ -11,7 +11,11 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms.bus_publication import stable_thread_lookup
-from agent_comms.claim_admission import publish_selected_resource_claim, verify_selected_wake
+from agent_comms.claim_admission import (
+    observe_selected_resource_claim,
+    publish_selected_resource_claim,
+    verify_selected_wake,
+)
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordinated_runtime import _engage
 from agent_comms.coordination import AttemptPhase, ClaimDisposition
@@ -20,6 +24,7 @@ from agent_comms.coordination_store import IdentityConflict, MutationStore, prep
 from agent_comms.declarations import ClaimEnvelopeUnknownError, Thread
 from agent_comms.envelope_claim_transitions import WakeAdmission
 from agent_comms.operations import Comms
+from agent_comms.wake_injection import render_selected_wake_frame
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort admission requires real /var/tmp"
@@ -97,6 +102,18 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 attempt_ordinal=1,
             )
             verify_selected_wake(comms, store, admission, owner.name)
+            absent = observe_selected_resource_claim(comms, store, admission, owner.name, resource)
+            assert not absent.observed and absent.claim_seq is None
+            assert f"source #{message.seq}" in absent.message()
+            no_wake = observe_selected_resource_claim(
+                comms, store, replace(admission, recipient_lookup=bob_lookup), "Bob", resource
+            )
+            assert not no_wake.observed and no_wake.claim_seq is None
+            wrong_source = observe_selected_resource_claim(
+                comms, store, replace(admission, source_message_id="unrelated"), "Alice", resource
+            )
+            assert not wrong_source.observed and wrong_source.claim_seq is None
+            assert resource.read_text() == "value = 1\n"
             with pytest.raises(IdentityConflict):
                 publish_selected_resource_claim(
                     comms, store, replace(admission, recipient_lookup=bob_lookup), "Bob", resource
@@ -115,11 +132,63 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             selected_owner = Comms(root).claim_projection()[str(resource)]
             assert selected_owner.admission == admission
             assert selected_owner.resource == str(resource)
+            observed = observe_selected_resource_claim(
+                comms, store, admission, owner.name, resource
+            )
+            assert observed.observed and observed.claim_seq == selected_owner.seq
+            assert observed.generation == selected_owner.generation
+            assert observed.elapsed_ms >= observed.projection_ms >= 0
+            assert observed.lock_wait_ms >= 0 and observed.lock_held_ms >= 0
+            assert f"bus #{selected_owner.seq}" in observed.message()
+            assert "not permission to write" in observed.message()
+            frame = render_selected_wake_frame(
+                initial,
+                engaged,
+                owner,
+                phase="full",
+                obligation=started.value.snapshot.obligation,
+                claim_awareness=observed,
+            )
+            assert f"source #{message.seq}" in frame
+            assert str(resource) in frame and "not file-write permission" in frame
+            with pytest.raises(IdentityConflict):
+                render_selected_wake_frame(
+                    initial,
+                    engaged,
+                    owner,
+                    phase="full",
+                    obligation=started.value.snapshot.obligation,
+                    claim_awareness=replace(observed, wake_claim_id="other"),
+                )
+            assert resource.read_text() == "value = 1\n"
             assert (
                 publish_selected_resource_claim(comms, store, admission, owner.name, resource)
                 == selected_owner
             )
             assert len(comms.full_history()) == 2
+            other = worktree / "other.py"
+            other.write_text("other = 1\n")
+            comms.send_message("Bob", "#team", "Independent legacy claim", claims=["other.py"])
+            conflict = observe_selected_resource_claim(comms, store, admission, "Alice", other)
+            assert not conflict.observed and conflict.owner == "Alice"
+            assert "Bob" in conflict.message() and "bus #" in conflict.message()
+            assert "generation" in conflict.message() and other.read_text() == "other = 1\n"
+            comms.send_message("Alice", "#team", "Release selected claim", releases=["module.py"])
+            released = observe_selected_resource_claim(comms, store, admission, "Alice", resource)
+            assert not released.observed and released.claim_seq is None
+            comms.send_message("Bob", "#team", "Reclaim with new generation", claims=["module.py"])
+            successor = observe_selected_resource_claim(comms, store, admission, "Alice", resource)
+            assert not successor.observed and "Bob" in successor.message()
+            assert successor.generation != selected_owner.generation
+            assert resource.read_text() == "value = 1\n"
+            with monkeypatch.context() as patch:
+                clock = iter((0.0, 1.0))
+                patch.setattr("agent_comms.claim_admission.time.monotonic", lambda: next(clock))
+                overrun = observe_selected_resource_claim(
+                    comms, store, admission, "Alice", resource, max_check_seconds=0.25
+                )
+            assert not overrun.observed and overrun.claim_seq is None
+            assert overrun.elapsed_ms > 250 and "deadline" in overrun.message()
             foreign_root = Path(dirname) / "foreign"
             foreign_root.mkdir(mode=0o700)
             with MutationStore(str(foreign_root / "coordination.sqlite3")) as foreign:
@@ -148,6 +217,16 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             )
             with pytest.raises(IdentityConflict):
                 verify_selected_wake(comms, store, admission, "Alice")
+            settled = observe_selected_resource_claim(comms, store, admission, "Alice", resource)
+            assert not settled.observed and settled.claim_seq is None
+            drift = observe_selected_resource_claim(
+                comms,
+                store,
+                replace(admission, owner_admission_generation=admission_generation + 1),
+                "Alice",
+                resource,
+            )
+            assert not drift.observed and drift.claim_seq is None
             with pytest.raises(IdentityConflict):
                 publish_selected_resource_claim(
                     comms,
@@ -157,8 +236,11 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                     resource,
                 )
             comms.registry.unregister("Alice")
+            assert not observe_selected_resource_claim(
+                comms, store, admission, "Alice", resource
+            ).observed
             with pytest.raises(IdentityConflict):
                 verify_selected_wake(comms, store, admission, "Alice")
             with pytest.raises(IdentityConflict):
                 publish_selected_resource_claim(comms, store, admission, "Alice", resource)
-            assert len(comms.full_history()) == 2
+            assert len(comms.full_history()) == 5

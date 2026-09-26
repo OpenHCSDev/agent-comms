@@ -7,6 +7,8 @@ write boundary must repeat current authority checks before touching the file.
 from __future__ import annotations
 
 import os
+import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
@@ -29,10 +31,176 @@ from .declarations import (
 from .envelope_claim_transitions import (
     ClaimConflict,
     ClaimOwner,
+    ClaimTransitionError,
     WakeAdmission,
     normalize_existing_file,
 )
 from .operations import Comms
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedClaimObservation:
+    """Ephemeral, source-cited advisory; never a grant or a write fence."""
+
+    source_seq: int
+    wake_claim_id: str
+    resource: str
+    owner: str
+    observed: bool
+    detail: str
+    claim_seq: int | None = None
+    generation: str | None = None
+    elapsed_ms: float = 0.0
+    lock_wait_ms: float = 0.0
+    lock_held_ms: float = 0.0
+    projection_ms: float = 0.0
+
+    def message(self) -> str:
+        result = "observed" if self.observed else "denied"
+        return (
+            f"Selected claim {result} for source #{self.source_seq}, "
+            f"wake {self.wake_claim_id}, resource {self.resource}: {self.detail}. "
+            "This is a read-only snapshot, not permission to write; "
+            "message the owner or choose other work if denied."
+        )
+
+
+def observe_selected_resource_claim(
+    comms: Comms,
+    store: MutationStore,
+    admission: WakeAdmission,
+    owner_name: str,
+    resource_path: str | Path,
+    *,
+    max_check_seconds: float = 0.25,
+) -> SelectedClaimObservation:
+    """Inspect a selected wake and a complete durable claim projection, read-only.
+
+    Holds wire→bus→registry→SQL while observing. The elapsed budget rejects
+    slow results AFTER work/lock acquisition; it cannot interrupt flock or a
+    full bus scan. A subsequent write is never fenced by this observation.
+    """
+    if type(comms) is not Comms or type(store) is not MutationStore:
+        raise TypeError("Claim observation requires actual wire and coordinator stores")
+    if type(admission) is not WakeAdmission or type(owner_name) is not str:
+        raise IdentityConflict("Claim observation needs typed selected wake identity")
+    if (
+        type(max_check_seconds) not in (float, int)
+        or not 0 < max_check_seconds <= 1
+        or store.path.resolve() != (comms.root / "coordination.sqlite3").resolve()
+    ):
+        raise IdentityConflict("Claim observation has an invalid budget or coordinator root")
+    started = time.monotonic()
+    timing_started = time.perf_counter()
+    lock_acquired_at = timing_started
+    projection_ms = 0.0
+    bus = comms.bus
+
+    def observation(
+        resource: str, detail: str, *, existing: ClaimOwner | None = None, owned: bool = False
+    ) -> SelectedClaimObservation:
+        elapsed = (time.monotonic() - started) * 1000
+        lock_held_ms = (time.perf_counter() - lock_acquired_at) * 1000
+        lock_wait_ms = (lock_acquired_at - timing_started) * 1000
+        if elapsed > max_check_seconds * 1000:
+            return SelectedClaimObservation(
+                admission.source_seq,
+                admission.wake_claim_id,
+                resource,
+                owner_name,
+                False,
+                "guarded projection exceeded the observation deadline",
+                elapsed_ms=elapsed,
+                lock_wait_ms=lock_wait_ms,
+                lock_held_ms=lock_held_ms,
+                projection_ms=projection_ms,
+            )
+        return SelectedClaimObservation(
+            admission.source_seq,
+            admission.wake_claim_id,
+            resource,
+            owner_name,
+            owned,
+            detail,
+            existing.seq if existing is not None else None,
+            existing.generation if existing is not None else None,
+            elapsed_ms=elapsed,
+            lock_wait_ms=lock_wait_ms,
+            lock_held_ms=lock_held_ms,
+            projection_ms=projection_ms,
+        )
+
+    # Nothing returned by this function can outlive the checked snapshot as
+    # authority. In particular, do not run a filesystem operation after it.
+    with (
+        _store_lock(comms._wire_lock_path),
+        _store_lock(bus._path),
+        _store_lock(comms.registry._path),
+    ):
+        lock_acquired_at = time.perf_counter()
+        try:
+            registry = comms.registry._snapshot_unlocked()
+            canonical = registry.aliases.get(owner_name, owner_name)
+            owner = registry.threads.get(canonical)
+            status = registry.statuses.get(canonical)
+            generation = registry.admission_generations.get(canonical)
+            if (
+                owner is None
+                or status is None
+                or not status.active
+                or owner.pid != os.getpid()
+                or not owner.role.executable
+                or generation is None
+            ):
+                raise IdentityConflict("selected owner is not live in this process")
+            metadata = bus._private_marker_unlocked()
+            if metadata["wire_root_id"] != admission.wire_root_id:
+                raise IdentityConflict("wire root changed")
+            initial = next(
+                (
+                    row
+                    for _message, _receipt, row in bus._verified_private_rows_unlocked(metadata)
+                    if row is not None and row.message.seq == admission.source_seq
+                ),
+                None,
+            )
+            if initial is None:
+                raise IdentityConflict("source has no committed initial row")
+            with store._read_transaction():
+                _verify_selected_wake_state(initial, owner, generation, store, admission)
+                resource = normalize_existing_file(Path(owner.worktree), resource_path)
+                projection_started = time.perf_counter()
+                projection, _ = bus._claim_projection_unlocked(metadata)
+                projection_ms = (time.perf_counter() - projection_started) * 1000
+                existing = projection.get(resource)
+                if existing is None:
+                    return observation(resource, "no durable claim currently owns this file")
+                if (
+                    existing.admission != admission
+                    or existing.incarnation != str(owner.created_at)
+                    or existing.owner != owner.name
+                ):
+                    return observation(
+                        resource,
+                        f"current claim belongs to {existing.owner} at bus #{existing.seq} "
+                        f"(generation {existing.generation})",
+                        existing=existing,
+                    )
+                return observation(
+                    resource,
+                    f"durable claim by {existing.owner} at bus #{existing.seq} "
+                    f"(generation {existing.generation})",
+                    existing=existing,
+                    owned=True,
+                )
+        except (
+            IdentityConflict,
+            ClaimTransitionError,
+            RelationViolationError,
+            OSError,
+            ValueError,
+        ) as error:
+            return observation(str(resource_path), f"authority unavailable or stale ({error})")
 
 
 def verify_selected_wake(
