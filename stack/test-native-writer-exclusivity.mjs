@@ -55,17 +55,20 @@ try {
   writeFileSync(gate, 'go');
   const outcomes = await Promise.all(children);
 
-  const committed = outcomes.reduce((total, outcome) => total + outcome.appended, 0);
-  assert.ok(committed >= 3, `at least one burst commits: ${JSON.stringify(outcomes)}`);
+  const winners = outcomes.filter(outcome => outcome.appended > 0);
+  const losers = outcomes.filter(outcome => outcome.appended === 0);
+  // Blocker-3 invariant: the shared lock plus load-time revision check admits
+  // exactly one aligned writer; every other aligned writer refuses entirely.
+  assert.equal(winners.length, 1, `exactly one writer may commit: ${JSON.stringify(outcomes)}`);
+  assert.equal(winners[0].appended, 3, `winner completes its burst: ${JSON.stringify(outcomes)}`);
+  assert.equal(losers.length, outcomes.length - 1);
+  assert.ok(losers.every(outcome => outcome.refusals.length > 0), 'losers must refuse, not hang');
   assert.ok(
-    outcomes.some(outcome => outcome.refusals.length > 0) || outcomes.length === 1,
-    'stale-loaded writers must refuse rather than interleave blindly',
-  );
-  assert.ok(
-    outcomes.flatMap(outcome => outcome.refusals).every(text =>
-      text.includes('Native session writer changed') ||
-      text.includes('Native session writer lock unavailable')),
-    'all refusals must be fail-closed revision or lock denials',
+    losers.every(outcome =>
+      outcome.refusals.some(text =>
+        text.includes('Native session writer changed') ||
+        text.includes('Native session writer lock unavailable'))),
+    'loser refusals must be typed fail-closed denials',
   );
 
   console.log('outcomes', JSON.stringify(outcomes));
@@ -74,6 +77,7 @@ try {
   const header = entries.find(entry => entry.type === 'session');
   assert.ok(header, 'session header intact');
   const messages = entries.filter(entry => entry.type === 'message');
+  const committed = winners[0].appended;
   // Per-append atomicity: every committed message is intact and exactly the
   // set the children report; staleness refuses, never silent interleaving.
   // Two seed messages (user + assistant) plus every reported burst append.
