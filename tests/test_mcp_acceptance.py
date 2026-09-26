@@ -431,6 +431,10 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         )
                         assert owner._active_turns.get("project")  # Genuine mid-turn denial.
                     elif case == "disconnect":
+                        if observer:
+                            # Receipt of the RPC is not proof that the user saw
+                            # an Ask. The UI adapter signals only after mounting.
+                            await asyncio.wait_for(observer.permission_presented.wait(), 5)
                         await proxy.close()  # Actual controlling Unix-socket attachment loss.
                         if observer:
                             await observer.disconnected()

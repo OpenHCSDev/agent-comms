@@ -66,7 +66,11 @@ async with open_observer(case: str, artifact_dir: Path) as observer:
 RuntimeProxy attachment, not pydantic models. `request_permission` returns an ACP
 permission response with the standard `outcome` object, using explicit simulated
 UI input only. The harness withholds that response until the appropriate test
-barrier is released. The observer should exercise actual Agent/Conversation
+barrier is released. For the disconnect case, the observer must expose an
+`asyncio.Event` named `permission_presented`, set only after the actual Ask is
+mounted (and its permission screenshot captured). The harness waits for it
+before closing the socket, proving retirement of a visible pending dialog,
+not merely cancellation of a queued RPC. The observer should exercise actual Agent/Conversation
 rendering and retain UI evidence. It must check stale-first-successor-turn,
 foreign-session, and settled receipts fail closed, and disconnect clears the
 live view. Non-disconnect cases drain the attachment's settlement update before
