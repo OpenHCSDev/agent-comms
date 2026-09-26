@@ -22,6 +22,26 @@ already be committed to the same private coordination store. A send does not
 silently enroll a recipient, start an executor, activate a provider, or infer
 acceptance from an inbox ACK.
 
+A supported owner rename on a committed private recipient now takes the
+Comms wire lock, validates the new registry identity, and CAS-advances the
+participant's coordinator owner thread and generation **before** publishing
+the new canonical registry name. Old-generation native attempts remain fenced,
+not retried; frozen initials addressed to the former canonical name are not
+admitted as new-generation work, and previously sealed pending old-name claims
+are skipped rather than injected. A failed registry write attempts a fresh
+old-name generation to restore alignment, otherwise reports an uncertain
+rename requiring manual inspection. The old direct alias remains explicitly
+rejected before publication: this does not promise alias-target sends. The
+normal new canonical direct name must reach one selected model call in the
+provider-free ACP test; neither a selected receipt nor a fake call proves
+real provider consumption. A private rename also fsyncs a pending-intent file
+before the dual SQL/registry transition and clears it only after all local
+rename stores have completed and its deletion is directory-fsynced. A crash or
+uncertain commit leaves private publication and selected execution blocked
+before a new initial/model send; the operator must inspect both authorities.
+This is a fail-closed recovery limit, not a cross-filesystem atomic commit or
+permission to replay an old selected input.
+
 An opt-in `CommsAgent` ACP session can now consume that same selected private
 source via its already registered process owner (`private_nk_wire_root_id` and
 `private_nk_native_package` must both be passed to the constructor). Its live
@@ -64,7 +84,10 @@ uses real bus/SQLite/foreground processing with only model responses faked:
 - unmentioned channel bounded triage → FULL (two distinct inputs);
 - addressed-to-other channel delivery with zero model calls;
 - public legacy root unchanged; no marker/schema auto-install;
-- direct legacy writer and explicitly disabled private writer still refused.
+- direct legacy writer and explicitly disabled private writer still refused;
+- normal committed private owner beta→gamma generation migration, old-alias
+  prepublish refusal, old frozen/pending source non-replay, new canonical FULL,
+  and a durable pending intent that blocks publication on uncertain failure.
 
 It checks exact N/K counts and historical binding equality, not native/provider
 acceptance. Fake responses cannot close real protocol acceptance gates.
@@ -88,8 +111,10 @@ v1/v2 runtime schema roots require an explicit reviewed migration to v3 rather
 than an implicit upgrade. In particular, historical v2 inputs cannot be assigned
 a new send epoch from a journal. Independent exact review remains open.
 
-Mediated pre-write admission, append-driven/indexed refresh, full alias/human
-coverage and scaling/deadline acceptance remain open. The foreground consumer
+Append-driven/indexed refresh, old-alias-target sends, full human/global-write
+coverage and scaling/deadline acceptance remain open. A bounded cooperative
+selected-file pre-write API exists, but it is not an ambient filesystem fence.
+The foreground consumer
 remains one-shot; no production ACP environment was activated and no legacy
 historical input replay occurred. Shell/child and ordinary human ACP coding
 writes remain unenforced by this selected-message path.

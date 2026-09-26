@@ -47,7 +47,13 @@ from .coordination_store import (
     StaleFence,
     prepare_fence_token,
 )
-from .declarations import MessageBus, RelationViolationError, Thread, _store_lock
+from .declarations import (
+    MessageBus,
+    RelationViolationError,
+    Thread,
+    _require_no_private_owner_rename,
+    _store_lock,
+)
 from .native_pi import (
     NativeContextProof,
     NativeTurnResult,
@@ -748,6 +754,7 @@ async def run_one_sealed_claim(
     comms = Comms(root)
     bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
     with _store_lock(bus._path):
+        _require_no_private_owner_rename(root)
         marker = bus._private_marker_unlocked()
     if marker["wire_root_id"] != wire_root_id:
         raise IdentityConflict("private initial wire root changed")
@@ -778,7 +785,8 @@ async def run_one_sealed_claim(
                 (
                     claim
                     for claim in selected
-                    if claim.disposition
+                    if claim.recipient == owner.name
+                    and claim.disposition
                     in {ClaimDisposition.TRIAGE_PENDING, ClaimDisposition.FULL_PENDING}
                 ),
                 None,

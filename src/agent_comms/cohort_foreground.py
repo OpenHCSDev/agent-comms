@@ -31,7 +31,13 @@ from .coordinated_runtime_schema import install_native_runtime_schema
 from .coordination_cohort import accept_initial_cohort
 from .coordination_response import install_private_response_schema
 from .coordination_store import IdentityConflict, MutationStore, PublicationActivationBlocked
-from .declarations import MessageBus, RelationViolationError, Thread, _store_lock
+from .declarations import (
+    MessageBus,
+    RelationViolationError,
+    Thread,
+    _require_no_private_owner_rename,
+    _store_lock,
+)
 from .native_pi import _private_session_dir, _trusted_package
 from .native_prompt_binding import install_prompt_binding_schema
 from .operations import Comms
@@ -60,7 +66,13 @@ def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool
 
 
 def _accept_visible_initials(
-    bus: MessageBus, root_id: str, store: MutationStore, lookup: str, after_seq: int
+    bus: MessageBus,
+    root_id: str,
+    store: MutationStore,
+    lookup: str,
+    after_seq: int,
+    *,
+    owner_name: str,
 ) -> int:
     """Accept only committed initial rows addressed to this durable recipient.
 
@@ -69,19 +81,27 @@ def _accept_visible_initials(
     Never infer a cohort from an ordinary public message or its body.
     """
     with _store_lock(bus._path):
+        _require_no_private_owner_rename(bus._path.parent)
         marker = bus._private_marker_unlocked()
         if marker["wire_root_id"] != root_id:
             raise IdentityConflict("private initial wire root changed")
         initials = tuple(
             initial
             for _message, _receipt, initial in bus._verified_private_rows_unlocked(marker)
-            if initial is not None and initial.message.seq > after_seq
+            if initial is not None
+            and initial.message.seq > after_seq
+            and any(
+                r.recipient_lookup == lookup and r.canonical_thread == owner_name
+                for r in initial.audience.recipients
+            )
         )
     if len(initials) > 100:
-        raise IdentityConflict("initial cohort batch exceeds bounded foreground scan")
+        raise IdentityConflict("recipient initial cohort batch exceeds bounded foreground scan")
     for initial in initials:
-        if any(r.recipient_lookup == lookup for r in initial.audience.recipients):
-            accept_initial_cohort(bus, root_id, initial.message.seq, store)
+        # A prior canonical name is historical after a private owner rename.
+        # Never create a NEW generation's selected attempt from that old
+        # frozen recipient, or infer it was consumed.
+        accept_initial_cohort(bus, root_id, initial.message.seq, store)
     return initials[-1].message.seq if initials else after_seq
 
 
@@ -137,7 +157,9 @@ async def run_foreground_once(
         cursor = 0
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             while True:
-                cursor = _accept_visible_initials(bus, wire_root_id, store, lookup, cursor)
+                cursor = _accept_visible_initials(
+                    bus, wire_root_id, store, lookup, cursor, owner_name=thread.name
+                )
                 # Even an empty scan checks this PID against the live registry.
                 # A terminal claim cannot be replayed by this foreground owner.
                 result = await run_one_sealed_claim(

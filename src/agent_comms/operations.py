@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore
     from .relationships import ThreadRelationships
 from .declarations import (
+    PRIVATE_OWNER_RENAME_PENDING,
     Activity,
     ActivityLog,
     ActivityState,
@@ -81,6 +82,7 @@ from .declarations import (
     UnregisteredThreadError,
     WireRevision,
     _atomic_write_text,
+    _require_no_private_owner_rename,
     _store_lock,
     current_thread,
     file_revision,
@@ -2273,7 +2275,7 @@ class Comms:
                 len(new_name) > 48 or len(re.split(r"[-_]+", new_name)) > 6
             ):
                 raise ValueError("Choose a concise topic title: at most 6 words and 48 characters.")
-            return self._rename_thread(
+            return self._rename_thread_unlocked(
                 caller, new_name, title=new_name.replace("-", " ").replace("_", " ")
             )
 
@@ -2325,15 +2327,121 @@ class Comms:
             suffix = 2
             while self.registry.name_reserved(new_name):
                 if self.registry.canonical_name(new_name) == thread.name:
-                    return self._rename_thread(thread.name, new_name, title=display_name)
+                    return self._rename_thread_unlocked(thread.name, new_name, title=display_name)
                 new_name = f"{base_name}-{suffix}"
                 suffix += 1
-            return self._rename_thread(thread.name, new_name, title=display_name)
+            return self._rename_thread_unlocked(thread.name, new_name, title=display_name)
 
     def _rename_thread(
         self, name: str, new_name: str, *, title: str | None = None
     ) -> RenameThreadResult:
-        previous, current = self.registry.rename(name, new_name)
+        # Keep direct callers under the same wire lock as public self/managed
+        # rename. Private owner migration and ordinary publication share it.
+        with _store_lock(self._wire_lock_path):
+            return self._rename_thread_unlocked(name, new_name, title=title)
+
+    def _rename_thread_unlocked(
+        self, name: str, new_name: str, *, title: str | None = None
+    ) -> RenameThreadResult:
+        from .bus_publication import stable_thread_lookup
+        from .coordination import MAX_IDENTIFIER_CHARS
+        from .coordination_store import IdentityConflict, MutationStore
+
+        before = self.registry.require(name)
+        private_meta = self.root / "bus_meta.json"
+        if private_meta.is_symlink():
+            raise RelationViolationError("Private/legacy bus metadata cannot be a symlink.")
+        private = False
+        if private_meta.exists():
+            with _store_lock(self.bus._path):
+                try:
+                    metadata = json.loads(private_meta.read_text())
+                except (OSError, ValueError, UnicodeError) as error:
+                    raise RelationViolationError("Invalid bus protocol metadata.") from error
+                if type(metadata) is not dict:
+                    raise RelationViolationError("Invalid bus protocol metadata.")
+                if "writer_protocol_version" in metadata:
+                    self.bus._private_marker_unlocked()
+                    private = True
+        if private:
+            _require_no_private_owner_rename(self.root)
+        coordinator = self.root / "coordination.sqlite3"
+        intent = self.root / PRIVATE_OWNER_RENAME_PENDING
+        intent_created = False
+        if not private or not coordinator.exists() or before.name == new_name:
+            previous, current = self.registry.rename(name, new_name)
+        else:
+            # Validate every deterministic registry/SQL name refusal *before*
+            # advancing a committed private owner's generation. The wire lock
+            # excludes cooperating sends until both authorities agree.
+            if not self.registry.status(before.name).running:
+                raise RelationViolationError("Only a running thread can rename itself.")
+            if (
+                self.registry.name_reserved(new_name)
+                and self.registry.canonical_name(new_name) != before.name
+            ):
+                raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
+            replace(before, name=new_name)
+            if len(new_name) > MAX_IDENTIFIER_CHARS:
+                raise ValueError("Private coordinator owner name exceeds its bound.")
+            with MutationStore(str(coordinator)) as store:
+                try:
+                    person = store.participant(stable_thread_lookup(before.created_at))
+                except IdentityConflict as error:
+                    if str(error) != "participant aggregate is not registered":
+                        raise
+                    previous, current = self.registry.rename(name, new_name)
+                else:
+                    if not person.committed or person.owner_thread != before.name:
+                        raise RelationViolationError(
+                            "Private coordinator owner differs from the registered owner."
+                        )
+                    # Persist a fail-closed cross-store intent before SQL or
+                    # registry changes. A crash leaves private publication and
+                    # selected execution unavailable until manual inspection;
+                    # it cannot silently turn an old attempt into a new send.
+                    _atomic_write_text(
+                        intent,
+                        json.dumps(
+                            {
+                                "version": 1,
+                                "lookup": person.lookup,
+                                "old": before.name,
+                                "new": new_name,
+                                "generation": person.generation,
+                                "wireRootId": metadata["wire_root_id"],
+                            },
+                            sort_keys=True,
+                        ),
+                        fsync_parent=True,
+                    )
+                    intent_created = True
+                    store.advance_owner_generation(
+                        person.lookup, new_name, expected_generation=person.generation
+                    )
+                    # An old selected attempt stays fenced in its old generation;
+                    # never retry or reassign it after this ownership change.
+                    try:
+                        previous, current = self.registry.rename(name, new_name)
+                    except BaseException as error:
+                        # Registry persistence can fail after the SQL CAS. If
+                        # its atomic snapshot still names the old owner, make
+                        # a NEW generation for that owner instead of leaving
+                        # a committed coordinator pointing at the new name.
+                        # Neither generation may inherit an old native input.
+                        try:
+                            actual = self.registry.require(before.name).name
+                            if actual == before.name:
+                                store.advance_owner_generation(
+                                    person.lookup,
+                                    before.name,
+                                    expected_generation=person.generation + 1,
+                                )
+                        except BaseException:
+                            pass  # ambiguous dual-store failure needs manual inspection
+                        raise RelationViolationError(
+                            "Private owner rename is uncertain; inspect both authorities."
+                        ) from error
         thread = self.registry.require(current)
         if thread.auto_title_pending or title is not None:
             self.registry.register(
@@ -2347,6 +2455,22 @@ class Comms:
         self.runtime_info.rename_thread(previous, current)
         self.ledger.rename_thread(previous, current)
         self.channel_catalog.rename_thread(previous, current)
+        if intent_created:
+            # Persist completion only after both authorities and ancillary
+            # stores agree. If the subsequent unlink/fsync is uncertain, the
+            # previous durable record already proves a finished transition;
+            # an extant file still blocks all new private sends.
+            completed_intent = json.loads(intent.read_text())
+            completed_intent["completed"] = True
+            _atomic_write_text(
+                intent, json.dumps(completed_intent, sort_keys=True), fsync_parent=True
+            )
+            intent.unlink()
+            directory_fd = os.open(self.root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
         return RenameThreadResult(previous, current, True)
 
     def goal_pause(self, name: str) -> GoalPauseEvent | None:

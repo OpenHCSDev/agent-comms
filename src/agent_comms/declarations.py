@@ -788,6 +788,16 @@ class MessageType(Enum):
 
 
 GLOBAL_CHANNEL = "#all"
+PRIVATE_OWNER_RENAME_PENDING = ".private-owner-rename.pending"
+
+
+def _require_no_private_owner_rename(root: Path) -> None:
+    """A crashed cross-store rename cannot publish or run a selected input."""
+    intent = root / PRIVATE_OWNER_RENAME_PENDING
+    if intent.exists() or intent.is_symlink():
+        raise RelationViolationError("Private owner rename is pending; inspect both authorities.")
+
+
 BROADCAST_ALIASES = frozenset({GLOBAL_CHANNEL, "broadcast"})
 _TAG_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")
 
@@ -3736,6 +3746,7 @@ class MessageBus:
         if classification is not ControlClassification.ORDINARY:
             raise RelationViolationError("System-control initial issuer is not available.")
         with nullcontext() if _bus_locked else _store_lock(self._path):
+            _require_no_private_owner_rename(self._path.parent)
             metadata = self._private_marker_unlocked()
             previous_sequence = 0
             for previous, _, _ in self._verified_private_rows_unlocked(metadata):

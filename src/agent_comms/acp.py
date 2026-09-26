@@ -1731,7 +1731,12 @@ class CommsAgent:
         )
         with MutationStore(str(self._comms.root / "coordination.sqlite3")) as store:
             _accept_visible_initials(
-                bus, wire_root_id, store, stable_thread_lookup(owner.created_at), 0
+                bus,
+                wire_root_id,
+                store,
+                stable_thread_lookup(owner.created_at),
+                0,
+                owner_name=owner.name,
             )
         result = await run_one_sealed_claim(
             self._comms.root,
