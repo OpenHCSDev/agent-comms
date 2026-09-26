@@ -1,5 +1,7 @@
 import json
+import os
 import sqlite3
+import stat
 from pathlib import Path
 
 import pytest
@@ -48,16 +50,24 @@ def opencode_export(path, project):
     )
 
 
-def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path):
+@pytest.mark.parametrize("legacy_directory", [False, True])
+def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, legacy_directory):
     source = tmp_path / "export.json"
     opencode_export(source, tmp_path)
     before = source.read_bytes()
     comms = wire(tmp_path / "wire")
+    directory = comms.root / "imported_sessions"
+    if legacy_directory:
+        directory.mkdir(parents=True)
+        directory.chmod(0o755)
     receipt = comms.import_thread(source, ImportFormat.OPENCODE, name="imported")
     thread = comms.registry.require("imported")
     assert thread.pid == 0 and comms.registry.status(thread.name) is ThreadStatus.STOPPED
     assert receipt.source_id == "ses_test" and receipt.imported_messages == 4
     assert source.read_bytes() == before
+    if os.name == "posix":
+        assert stat.S_IMODE(directory.stat().st_mode) == 0o700
+        assert stat.S_IMODE(Path(thread.session_file).stat().st_mode) == 0o600
     records = [json.loads(line) for line in Path(thread.session_file).read_text().splitlines()]
     assert records[0]["type"] == "session" and records[0]["version"] == 3
     parent = None
@@ -69,6 +79,22 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path):
     assert "remaining work" in context
     with pytest.raises(ValueError, match="reserved"):
         comms.import_thread(source, ImportFormat.OPENCODE, name="imported")
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX ownership and symlinks")
+def test_import_refuses_redirected_legacy_session_directory(tmp_path):
+    source = tmp_path / "export.json"
+    opencode_export(source, tmp_path)
+    comms = wire(tmp_path / "wire")
+    outside = tmp_path / "outside"
+    outside.mkdir(mode=0o755)
+    (comms.root / "imported_sessions").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="owner-controlled"):
+        comms.import_thread(source, ImportFormat.OPENCODE, name="imported")
+    assert stat.S_IMODE(outside.stat().st_mode) == 0o755
+    assert not list(outside.iterdir())
+    assert not comms.registry.name_reserved("imported")
 
 
 def test_codex_uses_response_items_not_mirrored_events_and_keeps_recent_budget(tmp_path):

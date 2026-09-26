@@ -1,5 +1,7 @@
 """Explicit inspection decisions unblock waiting without inventing native receipts."""
 
+import os
+
 import pytest
 
 from agent_comms import Thread, wire
@@ -13,7 +15,8 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _: None)
     await agent.new_session(str(tmp_path / "worker"))
-    comms.register(Thread("parent", frozenset(), str(tmp_path)))
+    comms.register(Thread("parent", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.begin_turn("parent", "parent-delegation-in-flight")
     comms.register(Thread("other", frozenset(), str(tmp_path)))
     goal = comms.update_goal(
         "worker", "set", text="Delegate and wait", owner_store=agent._open_goal_store()
@@ -77,8 +80,20 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
             report.invoke(comms, {**args, "reviewed_inputs": keys})["goal_execution"]["state"]
             == "standby"
         )
+        # A benign standby transition must not strand unattempted NEW direct
+        # DMs: they remain typed ordinary interrupts (proven fresh by their
+        # unattempted dispositions) and dispatch later, never as replayed
+        # dependency replies.
+        pending = agent._pending_turns.get("worker", [])
+        assert pending and all(turn.direct_interrupt_goal_id == goal.id for turn in pending)
+        assert all(turn.goal_wait_id is None for turn in pending)
+        for turn in pending:
+            row = agent._dispositions.get(turn.direct_interrupt_input_key)
+            assert row is not None and row["status"] == "unknown" and row["native_id"] is None
         agent._schedule_goal("worker")
-        assert not agent._pending_turns.get("worker")
+        # The standby wait still defers any goal turn; the ordinary interrupts
+        # stay queued and unattempted.
+        assert agent._pending_turns.get("worker")
         again = comms.goal_input_review("worker", goal.id, ["parent"])
         assert again["reviewed_inputs"] == []
         assert [row["inputId"] for row in again["already_reviewed_inputs"]] == keys
@@ -94,7 +109,17 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
         monkeypatch.setattr(agent, "_schedule_wake", lambda _: None)
         await agent._drain_inbox("worker")
         pending = agent._pending_turns["worker"]
-        assert len(pending) == 1 and pending[0].origin.seq == fresh.seq
+        fresh_entries = [turn for turn in pending if turn.origin.seq == fresh.seq]
+        assert len(fresh_entries) == 1
+        # After standby the same sender is a declared dependency: this fresh
+        # DM is a typed goal-wake continuation, NOT an ordinary interrupt.
+        assert fresh_entries[0].goal_wait_id is not None
+        assert fresh_entries[0].direct_interrupt_goal_id is None
+        assert all(
+            turn.direct_interrupt_goal_id == goal.id
+            for turn in pending
+            if turn.origin.seq != fresh.seq
+        )
         # The current owner pause cannot be bypassed by an inspection argument.
         comms.update_goal("worker", "paused", goal_id=goal.id, owner_action=True)
         with pytest.raises(ValueError, match="paused by the owner"):

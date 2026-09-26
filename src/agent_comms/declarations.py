@@ -28,7 +28,7 @@ import uuid
 from bisect import bisect_left
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import closing, contextmanager, suppress
+from contextlib import closing, contextmanager, nullcontext, suppress
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from enum import Enum, StrEnum
@@ -54,11 +54,13 @@ from .bus_route_counts import BusRouteCounts
 if TYPE_CHECKING:
     from .coordination import PublicationIntent
     from .goal_history import GoalHistoryEntry
+    from .owner_compaction_gate import OwnerCompactionAttestation
     from .private_registry_guard import PrivateRegistryGuard
 from .envelope_claim_transitions import (
     ClaimProjection,
     ClaimRelease,
     ClaimTransition,
+    WakeAdmission,
     apply_transition,
     normalize_existing_file,
     parse_complete_transition_line,
@@ -79,7 +81,7 @@ class ClaimEnvelopeUnknownError(RelationViolationError):
 
 
 def _claim_transition_wire(transition: ClaimTransition) -> dict[str, object]:
-    return {
+    value: dict[str, object] = {
         "owner": transition.owner,
         "incarnation": transition.incarnation,
         "seq": transition.seq,
@@ -88,6 +90,9 @@ def _claim_transition_wire(transition: ClaimTransition) -> dict[str, object]:
         "releases": [asdict(release) for release in transition.releases],
         "generation": transition.generation,
     }
+    if transition.admission is not None:
+        value["admission"] = asdict(transition.admission)
+    return value
 
 
 def _claim_transition_from_wire(value: object) -> ClaimTransition:
@@ -816,11 +821,21 @@ class GoalExecution:
     state: GoalExecutionState
     goal_id: str
     wait_for: tuple[GoalWaitTarget, ...] = ()
+    inactive_wait_for: tuple[GoalWaitTarget, ...] = ()
+    block_reason: str | None = None
 
     def presentation(self, title: str) -> ThreadPresentation:
         if self.state is GoalExecutionState.STANDBY:
             names = ", ".join(f"@{target.name}" for target in self.wait_for)
-            return ThreadPresentation(title, "◌", f"Standby · waiting for {names}")
+            idle = ", ".join(f"@{target.name}" for target in self.inactive_wait_for)
+            suffix = f"; no active turn: {idle}" if idle else ""
+            return ThreadPresentation(title, "◌", f"Standby · waiting for {names}{suffix}")
+        if self.state is GoalExecutionState.BLOCKED:
+            reason = (
+                " ".join(self.block_reason.split()) if self.block_reason else "reason unavailable"
+            )
+            summary = reason[:157] + "…" if len(reason) > 160 else reason
+            return ThreadPresentation(title, "!", f"Blocked · {summary}")
         return ThreadPresentation(title, "✓", self.state.value.title())
 
     @classmethod
@@ -829,7 +844,71 @@ class GoalExecution:
             GoalExecutionState(data["state"]),
             str(data["goal_id"]),
             tuple(GoalWaitTarget(**target) for target in data.get("wait_for", ())),
+            tuple(GoalWaitTarget(**target) for target in data.get("inactive_wait_for", ())),
+            data.get("block_reason"),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class GoalMentionBinding:
+    """An exact goal token resolved once, never rebound by a later name reuse."""
+
+    token: str
+    resolution: str
+    peer_name: str | None = None
+    peer_created_at: float | None = None
+
+    def __post_init__(self) -> None:
+        if not self.token or self.resolution not in {
+            "resolved",
+            "self",
+            "unknown",
+            "alias",
+            "malformed",
+            "limit_exceeded",
+            "non_executable",
+        }:
+            raise ValueError("Invalid goal mention binding.")
+        if self.resolution == "resolved":
+            if (
+                not self.peer_name
+                or not isinstance(self.peer_created_at, (float, int))
+                or isinstance(self.peer_created_at, bool)
+                or not math.isfinite(self.peer_created_at)
+            ):
+                raise ValueError("Resolved goal mention requires a stable peer incarnation.")
+        elif self.peer_name is not None or self.peer_created_at is not None:
+            raise ValueError("Unresolved goal mention cannot name a peer incarnation.")
+
+
+@dataclass(frozen=True, slots=True)
+class GoalMentionSource:
+    """Text-revision and owner-incarnation proof saved with its registry Goal."""
+
+    goal_id: str
+    text_revision: int
+    text_digest: str
+    owner_name: str
+    owner_created_at: float
+    bindings: tuple[GoalMentionBinding, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            not self.goal_id
+            or type(self.text_revision) is not int
+            or not 0 <= self.text_revision < 1 << 63
+            or type(self.text_digest) is not str
+            or len(self.text_digest) != 64
+            or not self.owner_name
+            or type(self.owner_created_at) not in {float, int}
+            or not math.isfinite(self.owner_created_at)
+        ):
+            raise ValueError("Invalid goal mention source.")
+        bindings = tuple(
+            row if isinstance(row, GoalMentionBinding) else GoalMentionBinding(**row)
+            for row in self.bindings
+        )
+        object.__setattr__(self, "bindings", bindings)
 
 
 @dataclass(frozen=True, slots=True)
@@ -845,6 +924,9 @@ class Goal:
     # identical values, so a captured Goal cannot pass a stale CAS after ABA.
     revision: int = 0
     reported_turn: str | None = None
+    mention_source: GoalMentionSource | None = None
+    # Legacy blocked rows omit this field; never invent their reason from progress.
+    block_reason: str | None = None
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:
@@ -855,6 +937,23 @@ class Goal:
             raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
         if self.reported_turn is not None and not isinstance(self.reported_turn, str):
             raise ValueError("Goal reported turn must be a string or null.")
+        if self.block_reason is not None and (
+            self.status != "blocked"
+            or type(self.block_reason) is not str
+            or not self.block_reason.strip()
+            or self.block_reason != self.block_reason.strip()
+            or len(self.block_reason) > 1024
+        ):
+            raise ValueError("A blocked goal requires a bounded explicit reason.")
+        source = self.mention_source
+        if isinstance(source, dict):
+            source = GoalMentionSource(**source)
+            object.__setattr__(self, "mention_source", source)
+        # Older registry writers can change the Goal without updating this
+        # optional projection. Preserve their current-state authority; readers
+        # suppress stale mention bindings rather than rejecting the whole goal.
+        if source is not None and not isinstance(source, GoalMentionSource):
+            raise ValueError("Invalid goal mention source.")
 
     @property
     def active(self) -> bool:
@@ -1089,6 +1188,7 @@ class ActiveTurn:
     started_at: float = field(default_factory=time.time)
     routing: TurnRouting | None = None
     admission_generation: int | None = None
+    turn_generation: int | None = None
 
     @classmethod
     def from_wire(cls, data: Mapping) -> ActiveTurn:
@@ -1098,10 +1198,33 @@ class ActiveTurn:
             data["started_at"],
             TurnRouting.from_wire(data["routing"]) if data.get("routing") else None,
             data.get("admission_generation"),
+            data.get("turn_generation"),
         )
 
     def to_wire(self) -> dict[str, object]:
         return {**asdict(self), "routing": self.routing.to_wire() if self.routing else None}
+
+
+@dataclass(frozen=True, slots=True)
+class TurnClaimFence:
+    """Exact local begin-turn claim; a reused turn ID is not this claim."""
+
+    name: str
+    created_at: float
+    turn_id: str
+    turn_generation: int
+    admission_generation: int
+
+
+@dataclass(frozen=True, slots=True)
+class FinishedTurnFence:
+    """Durable exact-turn completion witness, not a reply or model grant."""
+
+    name: str
+    created_at: float
+    turn_id: str
+    turn_generation: int
+    admission_generation: int
 
 
 class _GeneratedCreationTime(float):
@@ -1134,6 +1257,9 @@ class Thread:
     role: ThreadRole = ThreadRole.AGENT
     active_turn: ActiveTurn | None = None
     last_goal_report_turn: str | None = None
+    channel_scope_generation: int = 0
+    turn_generation: int = 0
+    last_finished_turn_id: str | None = None
 
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)
@@ -1141,12 +1267,32 @@ class Thread:
         if generated:
             object.__setattr__(self, "created_at", float(self.created_at))
         object.__setattr__(self, "role", ThreadRole(self.role))
-        if self.active_turn is not None and self.active_turn.owner_pid != self.pid:
-            raise RelationViolationError("A turn must belong to the registered executor.")
+        if self.active_turn is not None:
+            if self.active_turn.owner_pid != self.pid:
+                raise RelationViolationError("A turn must belong to the registered executor.")
+            if self.active_turn.turn_generation is not None and (
+                type(self.active_turn.turn_generation) is not int
+                or self.active_turn.turn_generation <= 0
+                or self.active_turn.turn_generation != self.turn_generation
+            ):
+                raise RelationViolationError("Active turn generation differs from its owner.")
         if self.last_goal_report_turn is not None and not isinstance(
             self.last_goal_report_turn, str
         ):
             raise ValueError("Last goal report turn must be a string or null.")
+        if (
+            type(self.channel_scope_generation) is not int
+            or not 0 <= self.channel_scope_generation < 1 << 63
+        ):
+            raise ValueError("Channel scope generation must be a nonnegative 63-bit integer.")
+        if type(self.turn_generation) is not int or not 0 <= self.turn_generation < 1 << 63:
+            raise ValueError("Turn generation must be an exact nonnegative 63-bit integer.")
+        if self.last_finished_turn_id is not None and (
+            type(self.last_finished_turn_id) is not str
+            or not self.last_finished_turn_id
+            or self.turn_generation == 0
+        ):
+            raise ValueError("Finished turn requires a prior turn generation and ID.")
         for tag in self.tags:
             Tag(tag)
         allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
@@ -1643,6 +1789,26 @@ class ScheduledTurn:
     origin: Message | None = None
     goal_id: str | None = None
     goal_wait_id: str | None = None
+    # New ordinary direct DM interrupting an active goal, not a goal attempt.
+    # None distinguishes the ordinary path from all existing goal/wait turns.
+    direct_interrupt_goal_id: str | None = None
+    direct_interrupt_goal_revision: int | None = None
+    direct_interrupt_wait_id: str | None = None
+    direct_interrupt_input_key: str | None = None
+    direct_interrupt_ticket: str | None = None
+
+    def still_current_interrupt(self, goal: Goal | None) -> bool:
+        """A NEW queued DM survives benign same-goal revision bumps.
+
+        Ordinary goal progress or a standby report bumps the revision without
+        changing the goal identity; that must not strand an unattempted input.
+        Only a goal replacement (a different, fresh goal ID) or an inactive
+        goal invalidates the queue entry. Dispatch-time admission separately
+        rechecks the unattempted disposition row before any native start.
+        """
+        return self.direct_interrupt_goal_id is None or (
+            goal is not None and goal.active and goal.id == self.direct_interrupt_goal_id
+        )
 
     @property
     def reply_target(self) -> str | None:
@@ -2055,6 +2221,9 @@ class ThreadRegistry:
                     ActiveTurn.from_wire(data["active_turn"]) if data.get("active_turn") else None
                 ),
                 last_goal_report_turn=data.get("last_goal_report_turn"),
+                channel_scope_generation=data.get("channel_scope_generation", 0),
+                turn_generation=data.get("turn_generation", 0),
+                last_finished_turn_id=data.get("last_finished_turn_id"),
             )
             self._statuses[name] = ThreadStatus(data.get("status", "running"))
             self._last_seen[name] = data.get("last_seen", 0.0)
@@ -2165,6 +2334,29 @@ class ThreadRegistry:
             previous_status = self._statuses.get(thread.name)
             if previous:
                 thread = replace(thread, created_at=previous.created_at)
+                if thread.tags != previous.tags:
+                    if previous.channel_scope_generation >= (1 << 63) - 1:
+                        raise RelationViolationError("Channel scope generation exhausted")
+                    thread = replace(
+                        thread,
+                        channel_scope_generation=previous.channel_scope_generation + 1,
+                    )
+                elif thread.channel_scope_generation != previous.channel_scope_generation:
+                    # A metadata writer cannot erase or forge channel scope history.
+                    thread = replace(
+                        thread, channel_scope_generation=previous.channel_scope_generation
+                    )
+                if thread.turn_generation < previous.turn_generation:
+                    # A stale metadata writer cannot reset a completed-turn fence.
+                    thread = replace(
+                        thread,
+                        turn_generation=previous.turn_generation,
+                        last_finished_turn_id=(
+                            previous.last_finished_turn_id
+                            if thread.active_turn == previous.active_turn
+                            else None
+                        ),
+                    )
             elif any(
                 existing.created_at == thread.created_at for existing in self._threads.values()
             ):
@@ -2337,17 +2529,106 @@ class ThreadRegistry:
                 raise RelationViolationError("live owner stopped or changed before turn claim")
             return self._claim_turn_unlocked(current, turn_id, routing)
 
+    def attest_owner_compaction(
+        self,
+        expected: Thread,
+        expected_epoch: int,
+        turn_id: str,
+        *,
+        expected_goal_id: str,
+        expected_goal_revision: int,
+        correction_revision: int,
+        session_file: str,
+        session_leaf: str,
+        session_revision: str,
+    ) -> OwnerCompactionAttestation:
+        """Recheck canonical owner authority for one compaction commit, atomically.
+
+        This is NOT a bearer token: the same check must run again at commit
+        time under this lock. Anything that moved since the caller captured
+        its expectations — owner epoch, active turn, goal id/revision/status,
+        or liveness — fails closed here. The native session fence (file, leaf,
+        disk revision) is echoed unverified; the native writer CAS is the only
+        authority for those values.
+        """
+        if (
+            type(expected) is not Thread
+            or type(expected_epoch) is not int
+            or expected_epoch < 1
+            or type(turn_id) is not str
+            or not 0 < len(turn_id) <= 128
+            or type(expected_goal_id) is not str
+            or not expected_goal_id
+            or type(expected_goal_revision) is not int
+            or expected_goal_revision < 0
+            or type(correction_revision) is not int
+            or correction_revision < 0
+            or type(session_file) is not str
+            or not session_file
+            or type(session_leaf) is not str
+            or not session_leaf
+            or type(session_revision) is not str
+            or not session_revision
+        ):
+            raise ValueError("owner compaction attestation requires bounded exact expectations")
+        with _store_lock(self._path):
+            self._load_unlocked()
+            canonical = self._aliases.get(expected.name, expected.name)
+            owner = self._threads.get(canonical)
+            status = self._statuses.get(canonical)
+            epoch = self._owner_epochs.get(canonical)
+            goal = owner.goal if owner is not None else None
+            if (
+                not self._epoch_metadata_present
+                or owner is None
+                or status is None
+                or not status.active
+                or owner != expected
+                or epoch != expected_epoch
+                or owner.pid != os.getpid()
+                or not owner.role.executable
+                or owner.active_turn is None
+                or owner.active_turn.id != turn_id
+                or self._turn_epochs.get(canonical) != epoch
+                or goal is None
+                or not goal.active
+                or goal.id != expected_goal_id
+                or goal.revision != expected_goal_revision
+            ):
+                raise RelationViolationError(
+                    "canonical owner attestation unavailable for compaction commit"
+                )
+            from .owner_compaction_gate import OwnerCompactionAttestation
+
+            return OwnerCompactionAttestation(
+                thread=owner.name,
+                owner_epoch=epoch,
+                turn_id=turn_id,
+                goal_id=goal.id,
+                goal_revision=goal.revision,
+                correction_revision=correction_revision,
+                session_file=session_file,
+                session_leaf=session_leaf,
+                session_revision=session_revision,
+                registry_revision=file_revision(self._path),
+            )
+
     def _claim_turn_unlocked(
         self, current: Thread, turn_id: str, routing: TurnRouting | None
     ) -> tuple[Thread, int]:
         """Caller holds the registry lock and has checked live turn ownership."""
+        if current.turn_generation >= (1 << 63) - 1:
+            raise RelationViolationError("Turn generation exhausted")
         claimed = replace(
             current,
+            turn_generation=current.turn_generation + 1,
+            last_finished_turn_id=None,
             active_turn=ActiveTurn(
                 turn_id,
                 current.pid,
                 routing=routing,
                 admission_generation=self._admission_generations[current.name],
+                turn_generation=current.turn_generation + 1,
             ),
         )
         self._threads[current.name] = claimed
@@ -2394,18 +2675,55 @@ class ThreadRegistry:
         )
         return claimed
 
-    def finish_claimed_turn(self, name: str, turn_id: str) -> bool:
-        """Release only the exact owned turn, resolving retained aliases under lock."""
+    def finish_claimed_turn_with_fence(
+        self, name: str, turn_id: str, *, expected: TurnClaimFence | None = None
+    ) -> tuple[bool, FinishedTurnFence | None]:
+        """Release only the claimed turn; legacy ID-only release cannot attest a fence."""
         with _store_lock(self._path):
             self._load_unlocked()
             name = self._aliases.get(name, name)
             current = self._threads.get(name)
             if current is None or current.active_turn is None or current.active_turn.id != turn_id:
-                return False
-            self._threads[name] = replace(current, active_turn=None)
+                return False, None
+            admission = current.active_turn.admission_generation
+            if expected is not None and (
+                type(expected) is not TurnClaimFence
+                or self._aliases.get(expected.name, expected.name) != name
+                or expected.created_at != current.created_at
+                or expected.turn_id != turn_id
+                or expected.turn_generation != current.turn_generation
+                or expected.admission_generation != admission
+                or current.active_turn.turn_generation != expected.turn_generation
+            ):
+                return False, None
+            attested = (
+                expected is not None
+                and current.turn_generation > 0
+                and type(admission) is int
+                and admission > 0
+                and self._admission_generations.get(name) == admission
+                and current.active_turn.turn_generation == current.turn_generation
+                and self._statuses[name].active
+            )
+            self._threads[name] = replace(
+                current,
+                active_turn=None,
+                last_finished_turn_id=(current.active_turn.id if current.turn_generation else None),
+            )
+            self._last_seen[name] = time.time()
             self._bump_owner_epoch_unlocked(name)
             self._save_unlocked()
-            return True
+            if not attested:
+                return True, None
+            assert type(admission) is int
+            return True, FinishedTurnFence(
+                current.name, current.created_at, turn_id, current.turn_generation, admission
+            )
+
+    def finish_claimed_turn(self, name: str, turn_id: str) -> bool:
+        """Release only the exact owned turn, resolving retained aliases under lock."""
+        released, _ = self.finish_claimed_turn_with_fence(name, turn_id)
+        return released
 
     def canonical_name(self, name: str) -> str:
         self._load()
@@ -2904,8 +3222,8 @@ class MessageBus:
 
         if not exists(message.sender):
             raise UnregisteredThreadError(f"Sender {message.sender!r} is not a registered thread.")
-        if message.target == BuiltinChannel.ANY.value or self._channels.is_view_target(
-            message.target
+        if message.target == BuiltinChannel.ANY.value or (
+            is_channel_target(message.target) and self._channels.is_view_target(message.target)
         ):
             raise RelationViolationError(
                 f"View {message.target!r} is a projection, not a routable target."
@@ -3073,6 +3391,9 @@ class MessageBus:
         incarnation: str,
         claims: Sequence[str | Path] = (),
         releases: Sequence[str | Path] = (),
+        _locked_registry_snapshot: RegistrySnapshot | None = None,
+        _bus_locked: bool = False,
+        _admission: WakeAdmission | None = None,
     ) -> Message:
         """One guarded message and whole-set claim transition in ONE bus row.
 
@@ -3096,11 +3417,17 @@ class MessageBus:
             raise RelationViolationError("Claim and release sets must be finite sequences.")
         if len(claims) + len(releases) > 32:
             raise RelationViolationError("Claim envelope exceeds the bounded resource set.")
-        with _store_lock(self._path):
+        if _admission is not None and (
+            not claims or releases or not _bus_locked or _locked_registry_snapshot is None
+        ):
+            raise RelationViolationError("Bound claims require the selected wake boundary.")
+        with nullcontext() if _bus_locked else _store_lock(self._path):
             metadata = self._private_marker_unlocked()
             if metadata.get("claim_envelopes_version") != 1:
                 raise RelationViolationError("Claim read barrier is unavailable.")
-            sender, target = self._validate_publish_request(message)
+            sender, target = self._validate_publish_request(
+                message, registry_snapshot=_locked_registry_snapshot
+            )
             projection, verified_sequence = self._claim_projection_unlocked(metadata)
             # The verified bus high-water also covers rows left by an earlier
             # uncertain append. Reserve and sync the next sequence before use.
@@ -3112,6 +3439,7 @@ class MessageBus:
                 sender=sender,
                 target=target,
                 sequence=last_sequence + 1,
+                snapshot=_locked_registry_snapshot,
             )
             owner_incarnation = str(incarnation)
             requested = tuple(sorted(normalize_existing_file(worktree, path) for path in claims))
@@ -3130,6 +3458,7 @@ class MessageBus:
                 requested,
                 tuple(release_records),
                 uuid.uuid4().hex if requested else None,
+                _admission,
             )
             # The typed decoder imposes its own bound. Never return success on a
             # durable row that every future guarded reader would reject.

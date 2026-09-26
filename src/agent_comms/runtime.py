@@ -99,6 +99,36 @@ class OwnerIdentityChangedError(RuntimeError):
     """A saved attachment must not follow a reused thread name."""
 
 
+def _owner_error(error: Exception) -> dict[str, Any]:
+    from acp.exceptions import RequestError
+
+    if isinstance(error, RequestError):
+        data = error.data if isinstance(error.data, dict) else {}
+        reason = data.get("details") or data.get("reason")
+        # Keep the string for already-running proxies while preserving the
+        # original JSON-RPC error for clients which understand this envelope.
+        return {
+            "error": reason if isinstance(reason, str) and reason else str(error),
+            "rpcError": error.to_error_obj(),
+        }
+    return {"error": str(error)}
+
+
+def _raise_owner_error(data: dict[str, Any]) -> None:
+    if "error" not in data:
+        return
+    from acp.exceptions import RequestError
+
+    rpc = data.get("rpcError")
+    if (
+        isinstance(rpc, dict)
+        and type(rpc.get("code")) is int
+        and isinstance(rpc.get("message"), str)
+    ):
+        raise RequestError(rpc["code"], rpc["message"], rpc.get("data"))
+    raise RuntimeError(data["error"])
+
+
 class RuntimeServer:
     def __init__(self, agent: Any):
         self.agent = agent
@@ -252,11 +282,17 @@ class RuntimeServer:
                 include_history = request.get("include_history", False)
                 if type(include_history) is not bool:
                     raise ValueError("include_history must be a boolean.")
-                result = self.agent._comms.input_delivery(name, include_history=include_history)
+                result = self.agent._comms.input_delivery(
+                    name,
+                    include_history=include_history,
+                    awaiting_keys=self.agent.awaiting_input_keys(session_id),
+                )
                 writer.write((json.dumps({"result": result}) + "\n").encode())
                 await writer.drain()
             elif action == "dismiss_historical_inputs":
-                result = self.agent._comms.dismiss_historical_inputs(name)
+                result = self.agent._comms.dismiss_historical_inputs(
+                    name, awaiting_keys=self.agent.awaiting_input_keys(session_id)
+                )
                 await self.agent.emit_input_delivery_changed(session_id)
                 writer.write((json.dumps({"result": result}) + "\n").encode())
                 await writer.drain()
@@ -329,7 +365,7 @@ class RuntimeServer:
         except (Exception, asyncio.CancelledError) as error:
             if not isinstance(error, asyncio.CancelledError):
                 try:
-                    writer.write((json.dumps({"error": str(error)}) + "\n").encode())
+                    writer.write((json.dumps(_owner_error(error)) + "\n").encode())
                     await writer.drain()
                 except (ConnectionError, OSError):
                     pass
@@ -441,8 +477,7 @@ class RuntimeProxy:
             await writer.drain()
             while line := await reader.readline():
                 data = json.loads(line)
-                if "error" in data:
-                    raise RuntimeError(data["error"])
+                _raise_owner_error(data)
                 if "ready" in data:
                     token = data.get("controllerToken")
                     # Older detached owners remain attachable for ordinary
@@ -580,8 +615,7 @@ class RuntimeProxy:
             if not line:
                 raise RuntimeError("Thread owner disconnected after request; outcome unknown.")
             data = json.loads(line)
-            if "error" in data:
-                raise RuntimeError(data["error"])
+            _raise_owner_error(data)
             return cast(dict[str, Any], data["result"])
         finally:
             writer.close()

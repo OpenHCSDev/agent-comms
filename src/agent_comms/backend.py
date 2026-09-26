@@ -27,12 +27,14 @@ exhausted usage limit) also fail the turn, carrying ``errorMessage``.
 from __future__ import annotations
 
 import asyncio
+import getpass
 import json
 import os
 import re
 import secrets
 import shutil
 import signal
+import tempfile
 import unicodedata
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import AbstractContextManager, aclosing, nullcontext, suppress
@@ -41,8 +43,10 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from .diagnostics import FailureReason
 from .image_inputs import ImageInput
 from .native_pi import CAPABILITY as NATIVE_INPUT_CAPABILITY
+from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .tool_results import ToolDiff
 
 
@@ -79,7 +83,7 @@ _PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS = 300.0
 MODEL_WAIT_TIMEOUT_SECONDS = 360.0
 assert MODEL_WAIT_TIMEOUT_SECONDS > _PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS
 RPC_ABORT_GRACE_SECONDS = 2.0
-CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS = 5.0
+CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS = NATIVE_STARTUP_POLICY.readiness_seconds
 PROMPT_START_TIMEOUT_SECONDS = 180.0
 _SESSION_MUTATING_COMMANDS = frozenset({"new_session", "switch_session", "fork", "clone"})
 _IDENTITY_FAILURE_TEXT = "Pi session identity changed during this turn."
@@ -699,6 +703,13 @@ async def stream_agent_events(
     """
     owner = asyncio.current_task()
     terminal_seen = False
+    startup = NativeStartupAdmission(
+        Path(
+            (env_extra or {}).get("AGENT_COMMS_ROOT")
+            or os.environ.get("AGENT_COMMS_ROOT")
+            or str(Path(tempfile.gettempdir()) / f"agent-comms-startup-{getpass.getuser()}")
+        ).expanduser()
+    )
     try:
         from .session_fence import session_writer_fence
 
@@ -727,6 +738,7 @@ async def stream_agent_events(
                         interrupt_boundary=interrupt_boundary,
                         persistent_session=persistent_session,
                         ui_request=ui_request,
+                        startup=startup,
                     )
                 ) as events:
                     async for event in events:
@@ -734,6 +746,7 @@ async def stream_agent_events(
                             terminal_seen = True
                         yield event
             finally:
+                startup.release()
                 if owner is not None:
                     await terminate_task_process(owner)
                     stderr_task = _ACTIVE_STDERR_TASKS.pop(owner, None)
@@ -778,6 +791,7 @@ async def _stream_agent_events(
     native_start: Callable[[str | None, str, str], bool] | None = None,
     persistent_session: PersistentPiSession | None = None,
     ui_request: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]] | None = None,
+    startup: NativeStartupAdmission | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     if shutil.which(agent_bin) is None and not Path(agent_bin).is_file():
         yield {"type": "done", "text": f"agent backend {agent_bin!r} not found", "ok": False}
@@ -848,6 +862,8 @@ async def _stream_agent_events(
         if not reused:
             await persistent_session.close()
     loop = asyncio.get_running_loop()
+    if not reused and rpc_args is not None and require_input_id and startup is not None:
+        await startup.acquire(finish_event)
     launch_started_at = loop.time()
     session_bytes: int | None = None
     if session_file:
@@ -913,6 +929,8 @@ async def _stream_agent_events(
     text_parts: list[str] = []
     ok = True
     fail_reason = ""
+    diagnostic: dict[str, int] = {}
+    preflight_failure: str | None = None
     error_message: str | None = None
     image_input_sent = bool(images)
     inherited_image_sensitive = bool(
@@ -959,12 +977,13 @@ async def _stream_agent_events(
     authority_revoked = False
     followup_start_unrecognized = False
     final_assistant_stop = False
+    forwarded_generation = 0
     if steering_queue is not None and proc.stdin is not None:
         stdin = proc.stdin
 
         async def forward_steering() -> None:
             nonlocal fail_reason, input_uncertain, authority_revoked
-            nonlocal final_assistant_stop, image_input_sent
+            nonlocal final_assistant_stop, image_input_sent, forwarded_generation
             while True:
                 message = await steering_queue.get()
                 original = dict(message) if isinstance(message, dict) else message
@@ -1055,6 +1074,7 @@ async def _stream_agent_events(
                         if authorized:
                             if command.get("images"):
                                 image_input_sent = True
+                            forwarded_generation += 1
                             stdin.write((json.dumps(command) + "\n").encode())
                     if not authorized:
                         if authorized is False:
@@ -1112,6 +1132,10 @@ async def _stream_agent_events(
     stats_responses: set[str] = set()
     stats_complete = False
     stats_failed = False
+    stats_busy = False
+    stats_generation = 0
+    settlement_count = 0
+    stats_settlement_count = 0
     agent_settled_seen = False
     reader = (
         persistent_session.reader
@@ -1138,10 +1162,15 @@ async def _stream_agent_events(
     ui_seen: set[str] = set()
 
     async def request_stats() -> None:
-        nonlocal stats_requested
+        nonlocal stats_requested, stats_state_id, stats_usage_id
+        nonlocal stats_generation, stats_settlement_count
         if proc.stdin is None or stats_requested:
             return
         stats_requested = True
+        stats_generation = forwarded_generation
+        stats_settlement_count = settlement_count
+        stats_state_id = f"agent-comms-stats-state-{secrets.token_hex(16)}"
+        stats_usage_id = f"agent-comms-stats-usage-{secrets.token_hex(16)}"
         try:
             state_request = {"type": "get_state"}
             usage_request = {"type": "get_session_stats"}
@@ -1394,6 +1423,10 @@ async def _stream_agent_events(
                 capability_failed = True
                 elapsed_ms = round((loop.time() - launch_started_at) * 1000)
                 wait_ms = round((loop.time() - preflight_wait_started_at) * 1000)
+                preflight_failure = FailureReason.PREFLIGHT_TIMEOUT
+                diagnostic = {"elapsed_ms": elapsed_ms, "wait_ms": wait_ms, "spawn_ms": spawn_ms}
+                if session_bytes is not None:
+                    diagnostic["session_bytes"] = session_bytes
                 session_size = session_bytes if session_bytes is not None else "unknown"
                 fail_reason = (
                     "Pi native input-ID capability preflight timed out "
@@ -1447,6 +1480,13 @@ async def _stream_agent_events(
         if not line:
             if require_input_id and not native_capability_confirmed:
                 capability_failed = True
+                preflight_failure = FailureReason.PREFLIGHT_EXIT
+                diagnostic = {
+                    "elapsed_ms": round((loop.time() - launch_started_at) * 1000),
+                    "spawn_ms": spawn_ms,
+                }
+                if session_bytes is not None:
+                    diagnostic["session_bytes"] = session_bytes
                 fail_reason = "Pi native input-ID capability preflight ended before attestation."
             break
         line = line.strip()
@@ -1490,6 +1530,8 @@ async def _stream_agent_events(
                 await _terminate_process(proc)
                 break
             native_capability_confirmed = True
+            if startup is not None:
+                startup.release()
             prompt_start_deadline = loop.time() + PROMPT_START_TIMEOUT_SECONDS
             assert proc.stdin is not None
             try:
@@ -1645,6 +1687,10 @@ async def _stream_agent_events(
                 if payload.get("success") is True:
                     stats_responses.add(response_id)
                     stats_complete = len(stats_responses) == 2
+                    if response_id == stats_state_id and isinstance(data, dict):
+                        stats_busy = (
+                            data.get("isStreaming") is True or data.get("isCompacting") is True
+                        )
                 else:
                     stats_failed = True
         initial_prompt_response = (
@@ -1972,7 +2018,8 @@ async def _stream_agent_events(
                 if isinstance(context, dict) and not session_identity_uncertain:
                     context_size = context.get("contextWindow") or context_size
                 yield context_info()
-                break
+                if persistent_session is None:
+                    break
         elif kind == "message_update":
             message = payload.get("message") or {}
             if not isinstance(message, dict):
@@ -2084,15 +2131,46 @@ async def _stream_agent_events(
                         yield context_info()
                     provisional_usage = False
         elif kind == "agent_settled":
+            settlement_count += 1
+            # Pi can emit an older run's settlement after a forwarded prompt
+            # has already crossed stdin. Keep the owner's turn alive until
+            # that input receives its own start, final response and settlement.
+            if persistent_session is not None and pending_inputs:
+                continue
             agent_settled_seen = True
             if not stats_requested:
                 last_model_progress = loop.time()
                 phase = "settling_stats"
-                yield {"type": "settled"}
-                if finish_event is None:
+                if persistent_session is not None:
+                    await request_stats()
+                else:
+                    yield {"type": "settled"}
+                if persistent_session is None and finish_event is None:
                     await request_stats()
 
         if persistent_session is not None and (stats_complete or stats_failed):
+            # Publishing the stats above can enqueue a follow-up. Give the
+            # already-woken forwarder its turn before checking the send epoch.
+            await asyncio.sleep(0)
+            queued_commands = steering_queue is not None and not steering_queue.empty()
+            if not stats_failed and (
+                stats_busy
+                or pending_inputs
+                or queued_commands
+                or forwarded_generation != stats_generation
+            ):
+                # These snapshots describe an earlier settlement, not a
+                # barrier against a late prompt. Do not publish owner-idle or
+                # close Pi while its newer run is working.
+                stats_requested = stats_complete = stats_busy = False
+                stats_responses.clear()
+                phase = "model_wait"
+                if (
+                    settlement_count > stats_settlement_count or queued_commands
+                ) and not pending_inputs:
+                    await request_stats()
+                continue
+            yield {"type": "settled"}
             break
 
     if steering_task is not None:
@@ -2175,21 +2253,21 @@ async def _stream_agent_events(
     )
     terminal_reason_code: str | None = None
     if capability_failed:
-        terminal_reason_code = "pi_input_id_unavailable"
+        terminal_reason_code = FailureReason.INPUT_ID_UNAVAILABLE
     elif prestart_compaction_failed:
-        terminal_reason_code = "prestart_compaction_failed"
+        terminal_reason_code = FailureReason.COMPACTION_FAILED
     elif session_identity_uncertain:
-        terminal_reason_code = "session_identity_uncertain"
+        terminal_reason_code = FailureReason.IDENTITY_UNCERTAIN
     elif authority_revoked:
-        terminal_reason_code = "input_authority_changed"
+        terminal_reason_code = FailureReason.AUTHORITY_CHANGED
     elif followup_start_unrecognized:
-        terminal_reason_code = "unrecognized_followup_input"
+        terminal_reason_code = FailureReason.FOLLOWUP_UNRECOGNIZED
     elif (transport_successful or input_uncertain or fail_reason) and not initial_input_started:
-        terminal_reason_code = "current_prompt_input_missing"
+        terminal_reason_code = FailureReason.INPUT_MISSING
     elif transport_successful and not final_assistant_stop:
-        terminal_reason_code = "assistant_final_stop_missing"
+        terminal_reason_code = FailureReason.FINAL_STOP_MISSING
     elif otherwise_successful and unresolved_inputs:
-        terminal_reason_code = "queued_input_start_missing"
+        terminal_reason_code = FailureReason.QUEUED_INPUT_MISSING
     yield {
         "type": "done",
         "text": (
@@ -2210,4 +2288,9 @@ async def _stream_agent_events(
         ),
         "ok": success and not session_identity_uncertain,
         **({"reason_code": terminal_reason_code} if terminal_reason_code else {}),
+        "diagnostic": {
+            **diagnostic,
+            **({"reason": preflight_failure} if preflight_failure else {}),
+            **({"exit_code": proc.returncode} if proc.returncode is not None else {}),
+        },
     }

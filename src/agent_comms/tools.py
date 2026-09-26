@@ -18,7 +18,11 @@ from .declarations import (
     is_channel_target,
 )
 from .operations import Comms, ForkSpec, TagAction
-from .tool_output import MAX_INLINE_OUTPUT_BYTES, materialize_oversized_output
+from .tool_output import (
+    MAX_INLINE_OUTPUT_BYTES,
+    materialize_oversized_output,
+    serialize_tool_output,
+)
 
 JsonObject = dict[str, object]
 ToolHandler = Callable[[Comms, Mapping[str, object]], JsonObject]
@@ -165,34 +169,63 @@ def _inbox(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
         comms.root, response, inline_limit=MAX_INLINE_OUTPUT_BYTES - 64
     )
     if result_file is not None:
-        bounded: JsonObject = {
-            "messages": [],
-            "acknowledged": 0,
-            "unresolved_inputs": [],
-            "complete": False,
-            "ackDeferred": bool(arguments["ack"]),
-            "counts": {"messages": len(messages), "unresolved_inputs": len(unresolved)},
-            "result_file": str(result_file),
-            "instruction": (
-                "Payload arrays are omitted, not empty. The file is a complete public result "
-                "snapshot, not current authority. Read it selectively with read offset/limit "
-                "or a JSON query; do not "
-                "dump the whole file into context. No messages were acknowledged. UNKNOWN "
-                "inputs are unchanged. Review full relevant messages before using any "
-                "standby reviewed_inputs from the file."
-            ),
-        }
-        if review is not None:
-            bounded["standby_review"] = {
-                "complete": False,
-                "counts": {
-                    key: len(review[key])
-                    for key in ("messages", "already_reviewed_inputs", "excluded_inputs")
-                },
-            }
-        return bounded
+        return _bounded_inbox_response(response, str(result_file), ack=bool(arguments["ack"]))
     response["acknowledged"] = comms.acknowledge(thread) if arguments["ack"] else 0
     return response
+
+
+def _bounded_inbox_response(response: JsonObject, result_file: str, *, ack: bool) -> JsonObject:
+    """Project a saved inbox snapshot without changing any delivery or goal authority."""
+    messages, unresolved = response["messages"], response["unresolved_inputs"]
+    review = response.get("standby_review")
+    assert isinstance(messages, list) and isinstance(unresolved, list)
+    assert review is None or isinstance(review, dict)
+    bounded: JsonObject = {
+        "messages": [],
+        "acknowledged": 0,
+        "unresolved_inputs": [],
+        "complete": False,
+        "ackDeferred": ack,
+        "counts": {"messages": len(messages), "unresolved_inputs": len(unresolved)},
+        "result_file": str(result_file),
+        "instruction": (
+            "The messages and unresolved_inputs arrays are omitted, not empty. "
+            "The file is a complete public result "
+            "snapshot, not current authority. Read it selectively with read offset/limit "
+            "or a JSON query; do not "
+            "dump the whole file into context. No messages were acknowledged. UNKNOWN "
+            "inputs are unchanged. When standby_review.messages is present, its complete "
+            "eligible messages and exact reviewed_inputs are inline; other review arrays "
+            "are omitted with counts. Otherwise read the review from the file. Inspect "
+            "the full relevant messages before passing their reviewed_inputs to comms_goal."
+        ),
+    }
+    if review is not None:
+        review_summary: JsonObject = {
+            "complete": False,
+            "counts": {
+                key: len(review[key])
+                for key in ("messages", "already_reviewed_inputs", "excluded_inputs")
+            },
+        }
+        bounded["standby_review"] = review_summary
+        # Keep the complete eligible bodies and their keys together. A large
+        # excluded backlog must not hide a small actionable dependency reply.
+        # If the whole candidate exceeds the budget, expose neither here.
+        candidate = {
+            **bounded,
+            "standby_review": {
+                **review_summary,
+                "goal_id": review["goal_id"],
+                "wait_for": review["wait_for"],
+                "messages": review["messages"],
+                "reviewed_inputs": review["reviewed_inputs"],
+                "messages_complete": True,
+            },
+        }
+        if len(serialize_tool_output(candidate).encode("utf-8")) <= MAX_INLINE_OUTPUT_BYTES:
+            return candidate
+    return bounded
 
 
 def _fork(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
@@ -322,6 +355,7 @@ def _goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
         goal_id=str(arguments["goal_id"]),
         expected_status="active",
         progress=str(arguments["progress"]),
+        block_reason=(str(arguments["progress"]) if arguments["status"] == "blocked" else None),
         model_report=True,
         wait_for=wait_for or (),
         reviewed_inputs=reviewed_inputs or (),
@@ -395,11 +429,25 @@ def _collaboration(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 
 
 def _collaborations(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    return {
-        "collaborations": [
-            asdict(edge) for edge in comms.relationships.collaborations(_executing_thread())
+    owner = _executing_thread()
+    projection = comms.relationships.contact_projection(owner)
+    result: JsonObject = {
+        "collaborations": [asdict(edge) for edge in projection.explicit]
+    }  # Legacy explicit declarations remain independently editable.
+    if any(entry.goal_contacts for entry in projection.visible):
+        result["visible_collaborators"] = [
+            {
+                "peer": entry.target,
+                "available": entry.available,
+                "sources": entry.sources,
+                "detail": entry.detail,
+                "goal_contacts": [asdict(contact) for contact in entry.goal_contacts],
+            }
+            for entry in projection.visible
         ]
-    }
+    if projection.diagnostics:
+        result["unresolved_goal_mentions"] = [asdict(row) for row in projection.diagnostics]
+    return result
 
 
 def _tags(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
@@ -722,7 +770,11 @@ TOOLS = (
                 "Goal state",
                 choices=("active", "standby", "completed", "blocked"),
             ),
-            ToolParameter("progress", "string", "Progress summary or reason input is needed"),
+            ToolParameter(
+                "progress",
+                "string",
+                "Progress summary; blocked requires a nonempty explicit reason",
+            ),
             ToolParameter(
                 "wait_for",
                 "array",
@@ -806,8 +858,8 @@ TOOLS = (
     ToolDeclaration(
         "comms_collaborations",
         "List collaborations",
-        "Read your mutual contacts, including links created by either participant, "
-        "without changing delivery or owners.",
+        "Read explicit contacts and goal-derived awareness with provenance, "
+        "without changing delivery, work acceptance or owners.",
         (),
         _collaborations,
     ),
