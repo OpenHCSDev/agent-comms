@@ -40,9 +40,18 @@ human/ACP turn, and pins the exact goal scheduling snapshot at turn CAS and
 final raw-send admission. A stable preexisting goal is **not** globally banned
 from an ordinary selected interruption. No early rejection implies a native
 input retry. This correction needs its own exact independent review.
-This is an explicit constructor-only pilot, **not** automatic enablement
-by the production ACP entry point; it neither creates participants/schema nor
-replays uncertain inputs. A bounded 100-initial scan remains a scale limit.
+The production stdio ACP attachment and its separate owner worker now accept
+an **explicit dormant configuration**: both
+`AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=<32-hex-root>` and
+`AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=<absolute-reviewed-copied-Pi-package>`
+under the exact `AGENT_COMMS_ROOT`. Both entry points preflight before creating
+or attaching their wire; the worker passes the pinned pair into its owner
+`CommsAgent`. A marker alone cannot activate this path, half-configured or
+wrong-root/package inputs fail closed, and `PI_PROMPT` cannot silently launch
+an unbound legacy prompt in private mode. Nothing in this change sets those
+variables on a live installation, creates participants/schema, or retries
+uncertain inputs. An operator must separately perform fresh-root opt-in and
+commit the frozen recipients. A bounded 100-initial scan remains a scale limit.
 
 ## Provider-free tests
 
@@ -63,9 +72,10 @@ acceptance. Fake responses cannot close real protocol acceptance gates.
 ## Still incomplete
 
 This is **not** completion of ordinary-delivery integration: a durable current
-injection cursor, production ACP entry-point configuration and session-UI
-receipt/reconnect coverage, mediated pre-write admission, append-driven refresh,
+injection cursor, session-UI receipt/reconnect coverage, mediated pre-write
+admission, append-driven refresh,
 alias/human-path coverage, and scaling/deadline acceptance remain open. The
-foreground consumer remains one-shot; no production ACP activation or legacy
-historical input replay occurred. Shell/child and ordinary human ACP coding
+foreground consumer remains one-shot; no production ACP environment was
+activated and no legacy historical input replay occurred. Shell/child and
+ordinary human ACP coding
 writes remain unenforced by this selected-message path.

@@ -3566,6 +3566,12 @@ def main() -> int:
             format="%(asctime)s %(name)s %(levelname)s %(message)s",
             filename=debug_path + ".log",
         )
+    # The stdio ACP client only attaches to a separately owned worker. An
+    # explicit private launch must be checked before it can create a wire or
+    # request an owner; the worker independently repeats the same preflight.
+    from .private_nk_entrypoint import private_nk_from_environment
+
+    private_nk_from_environment()
     comms = wire()
 
     async def run() -> None:

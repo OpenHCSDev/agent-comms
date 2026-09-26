@@ -6,13 +6,20 @@ import signal
 
 from .acp import CommsAgent
 from .operations import wire
+from .private_nk_entrypoint import private_nk_from_environment
 
 
 async def run() -> None:
+    private_nk = private_nk_from_environment()  # fail before wire creation/attach
     comms = wire()
     name = os.environ["AGENT_COMMS_THREAD"]
     thread = comms.registry.require(name)
-    agent = CommsAgent(comms, runtime_enabled=True)
+    agent = CommsAgent(
+        comms,
+        runtime_enabled=True,
+        private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
+        private_nk_native_package=private_nk.native_package if private_nk else None,
+    )
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
