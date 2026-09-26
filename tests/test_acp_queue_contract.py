@@ -7,6 +7,9 @@ import json
 import os
 from pathlib import Path
 
+import pytest
+from acp import RequestError
+
 from agent_comms.acp import CommsAgent, QueuedInput
 from agent_comms.declarations import Thread
 from agent_comms.operations import Comms
@@ -96,6 +99,40 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
     assert meta["queueBinding"]["ownerThread"] == "beta"
     assert meta["queueState"] is None
     assert exact in agent._queued_inputs["beta"]  # no drop, skip, or replay
+
+
+@pytest.mark.parametrize("user_text", [["list"], [], {"text": "dict"}, 7, False, None])
+async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tmp_path, user_text):
+    _, agent, _, _ = _owner(tmp_path)
+    agent._active_turns["beta"] = "fake-active"
+    inbox = agent._backend_inboxes["beta"] = asyncio.Queue()
+    with pytest.raises(RequestError) as error:
+        await agent.prompt(
+            "beta",
+            [{"type": "text", "text": "valid model task"}],
+            agentComms={"delivery": "queue", "deferDisplay": True, "userText": user_text},
+        )
+    assert error.value.code == -32602
+    assert error.value.data == {"reason": "userText must be a string"}
+    assert inbox.empty()
+    assert agent._queued_inputs.get("beta", {}) == {}
+    assert agent._forwarded_inputs.get("beta", set()) == set()
+    assert not agent._dispositions.path.exists()
+    assert (
+        agent._session_metadata("beta", session_id="beta")["agentComms"]["queueState"]["items"]
+        == []
+    )
+
+
+async def test_legacy_malformed_queue_text_is_unavailable_without_dropping_id(tmp_path):
+    _, agent, created, epoch = _owner(tmp_path)
+    exact = "e" * 32
+    agent._queued_inputs["beta"] = {exact: QueuedInput(["malformed"], True, created, epoch)}
+    binding, state = agent._queue_state("beta")
+    assert binding is not None and state is None
+    meta = agent._session_metadata("beta", session_id="beta")["agentComms"]
+    assert meta["queueBinding"] == binding and meta["queueState"] is None
+    assert exact in agent._queued_inputs["beta"]
 
 
 async def test_queue_overflow_unavailable_without_dropping_ids(tmp_path):

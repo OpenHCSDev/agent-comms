@@ -87,7 +87,14 @@ class InputDispositions:
         text: str,
     ) -> bool:
         """Persist UNKNOWN before cursor advance or any Pi prompt write."""
-        if not key or not owner or not target or not text or admission <= 0:
+        if (
+            type(text) is not str
+            or not key
+            or not owner
+            or not target
+            or not text
+            or admission <= 0
+        ):
             raise ValueError("Invalid ACP input identity")
         if seq is not None and (
             seq <= 0 or (key != f"bus:{seq}" and not key.startswith(f"bus:{seq}:owner:"))

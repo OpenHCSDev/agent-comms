@@ -591,6 +591,8 @@ class CommsAgent:
         delivery = options.get("delivery", "queue")
         if not isinstance(delivery, str) or delivery not in {"queue", "steer"}:
             raise RequestError.invalid_params({"reason": "delivery must be queue or steer"})
+        if "userText" in options and type(options["userText"]) is not str:
+            raise RequestError.invalid_params({"reason": "userText must be a string"})
         display_text = options.get("userText") or self._prompt_text(prompt)
         defer_display = options.get("deferDisplay") is True
         if options.get("clearQueue") is True:
@@ -848,6 +850,10 @@ class CommsAgent:
         items = current(self._queued_inputs.get(session_id, {}))
         restored = current(self._restored_inputs.get(session_id, {}))
         if len(items) + len(restored) > 32:
+            return binding, None
+        if any(type(row["text"]) is not str for row in items + restored):
+            # Historical malformed entries retain their exact IDs and UNKNOWN
+            # dispositions, but cannot be projected as a valid queue state.
             return binding, None
         try:
             sizes = [len(row["text"].encode("utf-8")) for row in items + restored]
