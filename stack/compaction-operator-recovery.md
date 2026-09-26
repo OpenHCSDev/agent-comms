@@ -55,7 +55,16 @@ post-COMMIT parent-fsync error during `observe_publication` may leave it
 or treat notification uncertainty as native commit authority. Reproject only
 pending rows to the matching canonical owner/session under the local handoff
 fence. UI consumers deduplicate by exact commit ID; local acceptance is not
-proof of remote display.
+proof of remote display. A stalled local handoff has a finite deadline. The
+publisher cancels and **awaits** transport cleanup under the per-wire owner
+identity fence before returning; a timeout or cancellation leaves the exact
+outbox row pending, even if an earlier local listener accepted the metadata.
+It does not change the native commit outcome, consume an input, or authorize a
+new native summary. After cooperative cleanup the lease releases and normal
+identity operations recover. If arbitrary client code suppresses cancellation,
+the lease intentionally stays held rather than permitting a late wrong-session
+handoff: use verified owner-process stop/termination and preserve pending-row
+evidence; never delete the lease file or steal the kernel lock.
 
 ## Fresh reopen and escalation
 

@@ -51,9 +51,12 @@ publisher precheck but before the handoff sends to neither old nor new client
 and leaves the row pending. A separate after-delivery client swap confirms
 the first delivery **already happened** and cannot be undone; it only prevents
 an incorrect observed mark. The registry identity fence does not guard these
-ACP-local binding changes. Awaited client delivery still has no deadline,
-so identity-change liveness/operational recovery is an OPEN follow-up before
-activation; these binding tests do not clear it. This lock is not a
+ACP-local binding changes. A separate later liveness correction places a
+finite deadline around awaited local transport, joins cancellation cleanup
+before releasing the identity fence, and leaves the exact row pending after
+stalled/partial delivery. Arbitrary client code that suppresses cancellation
+cannot safely release the fence without verified owner-process termination;
+that operational limitation remains explicit before activation. This lock is not a
 remote UI receipt, recipient selection, global OS sandbox or native writer
 replay authority. A client that reports success before actual asynchronous
 transport delivery cannot itself establish remote display.

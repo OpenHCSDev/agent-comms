@@ -6,6 +6,7 @@ remains pending under the same exact native commit ID for safe deduplication.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from typing import Any
@@ -15,6 +16,11 @@ from acp.schema import AgentMessageChunk, TextContentBlock
 from .compaction_journal import CompactionJournal
 from .compaction_publication_lease import publication_identity_fence
 from .declarations import RelationViolationError, UnregisteredThreadError
+
+# A stalled local client must not indefinitely pin the wire's owner-identity
+# fence. wait_for joins cancellation of its transport coroutine before the
+# lease is released; an uncooperative coroutine keeps the fence (fail closed).
+LOCAL_HANDOFF_TIMEOUT_SECONDS = 3.0
 
 
 async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -> int:
@@ -74,16 +80,24 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
                 break
             # Only exact outbox metadata, never intent/summary/recipient.
             metadata = json.loads(item.metadata_json)
-            delivered = await runtime.session_update(
-                session_id=session_id,
-                update=AgentMessageChunk(
-                    session_update="agent_message_chunk",
-                    content=TextContentBlock(type="text", text=""),
-                    field_meta={"agentComms": {"compactionPublication": metadata}},
-                ),
-                _expected_client=client,
-                _expected_thread=owner.name,
-            )
+            try:
+                delivered = await asyncio.wait_for(
+                    runtime.session_update(
+                        session_id=session_id,
+                        update=AgentMessageChunk(
+                            session_update="agent_message_chunk",
+                            content=TextContentBlock(type="text", text=""),
+                            field_meta={"agentComms": {"compactionPublication": metadata}},
+                        ),
+                        _expected_client=client,
+                        _expected_thread=owner.name,
+                    ),
+                    timeout=LOCAL_HANDOFF_TIMEOUT_SECONDS,
+                )
+            except TimeoutError:
+                # wait_for has cancelled and joined this local transport task.
+                # A partial/uncertain delivery is NOT a native abort or ACK.
+                break
             if not delivered:
                 # A client-only rebind after the outer check, or no surviving
                 # socket transport, does not mark this exact row observed.

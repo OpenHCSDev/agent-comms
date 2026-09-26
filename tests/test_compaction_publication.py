@@ -10,6 +10,7 @@ import sys
 
 import pytest
 
+from agent_comms import compaction_publication
 from agent_comms.acp import CommsAgent
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_publication import publish_pending_local
@@ -232,6 +233,86 @@ async def test_after_delivery_changed_acp_binding_never_marks_old_commit(owner, 
     finally:
         agent._sessions["project"] = "project"
         agent.on_connect(original)
+        await agent.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "interrupt,partial", [("deadline", False), ("cancel", False), ("deadline", True)]
+)
+async def test_stalled_local_client_releases_identity_only_after_transport_cleanup(
+    owner, tmp_path, monkeypatch, interrupt, partial
+):
+    agent, comms, first, journal, commit_id = owner
+    second = tmp_path / "second.jsonl"
+    second.write_text("{}\n")
+    await agent.new_session(str(tmp_path / "project"))
+    agent._drain_tasks["project"].cancel()
+    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    comms.attach_session("project", str(first), pid=os.getpid())
+    started = asyncio.Event()
+    cleaned = asyncio.Event()
+
+    class StalledClient:
+        async def session_update(self, session_id, update):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleaned.set()
+
+    early_received = []
+    if partial:
+
+        class EarlyClient:
+            async def session_update(self, session_id, update):
+                early_received.append(update.model_dump(by_alias=True, exclude_none=True))
+
+        agent.on_connect(EarlyClient())
+        agent._runtime.clients["project"] = {StalledClient()}
+    else:
+        agent.on_connect(StalledClient())
+    # The test's timeout is short; production timeout remains finite and more
+    # generous. No native writer is started and no summary is dispatched.
+    monkeypatch.setattr(compaction_publication, "LOCAL_HANDOFF_TIMEOUT_SECONDS", 0.4)
+    task = asyncio.create_task(publish_pending_local(agent, "project", "project"))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=2)
+        with pytest.raises(RelationViolationError, match="identity is publishing"):
+            comms.attach_session("project", str(second), pid=os.getpid())
+        if interrupt == "cancel":
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            assert await asyncio.wait_for(task, timeout=2) == 0
+        assert cleaned.is_set(), "transport cancellation cleanup must precede lease release"
+        assert [row.commit_id for row in journal.pending_publications(str(first))] == [commit_id]
+        assert len(early_received) == (1 if partial else 0)
+        # Even if the first local listener accepted the metadata, a stalled
+        # later socket leaves the exact ID pending: no false observed mark.
+        # Only after cleanup may owner identity mutate. A future publication
+        # can reproject this exact metadata ID, never resend a native summary.
+        assert comms.attach_session("project", str(second), pid=os.getpid()).session_file == str(
+            second
+        )
+        comms.attach_session("project", str(first), pid=os.getpid())
+        received = []
+
+        class ReconnectedClient:
+            async def session_update(self, session_id, update):
+                received.append(update.model_dump(by_alias=True, exclude_none=True))
+
+        agent.on_connect(ReconnectedClient())
+        if partial:
+            agent._runtime.clients["project"].clear()
+        assert await publish_pending_local(agent, "project", "project") == 1
+        assert len(received) == 1 and commit_id in json.dumps(received)
+        assert journal.pending_publications(str(first)) == ()
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
         await agent.shutdown()
 
 

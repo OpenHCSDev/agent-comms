@@ -3,6 +3,33 @@
 Base: merged PR48 `d0ced47fbec39ac4d110c9f7395442524363871d`.
 This is **not deployment approval**. The adaptive trigger remains disabled.
 
+## Scoped eedf reviews and subsequent local-transport corrections
+
+Independent exact `eedf7993` reviewers returned **narrow CLEAN** only for
+(a) cancelled idle-child retirement/strict reopen and symlink alias legacy
+writer denial (`/dev/shm/ac-pr48-retire-correction-independent-review-eedf799-20260926.md`)
+and (b) first→second canonical session handoff fencing/metadata pending
+(`/dev/shm/pr95-eedf-independent-review-20260926/PR95-EEDF-LOCAL-PUBLICATION-INDEPENDENT-REVIEW.md`).
+They do **not** clear the aggregate successor or adaptive production caller.
+
+The later exact `483d304` client-only binding correction checks the ACP
+client/thread at the actual transport entry as well as around outbox
+observation. Distinct controls cover pretransport wrong-client refusal and
+post-delivery pending/no false ACK (delivery already happened). A separate
+liveness successor places a finite deadline around the local transport and
+**joins** cancellation cleanup while still holding the per-wire identity
+fence. Its provider-free controls cover timeout, owner-task cancellation,
+and partial multi-listener delivery: identity mutation is refused while the
+transport is stalled, succeeds only after cleanup, and the exact row remains
+pending with no native abort or retry permission. An uncooperative arbitrary
+client that suppresses cancellation deliberately retains the fence until
+verified owner-process termination. The first concurrent full-suite attempt
+stalled without a result and was preserved; a sterile verbose rerun passed
+**1724 passed/62 skipped** with three nonfatal asyncio subprocess destructor
+warnings. Extracted-wheel subset **30 passed**; Black/Ruff/mypy clean.
+This successor requires an independent exact review before widening any
+clearance.
+
 ## Owner native commit cancellation join (future ACP caller still open)
 
 Exact `37796d5` independent review cleared only the read-only pre-summary
