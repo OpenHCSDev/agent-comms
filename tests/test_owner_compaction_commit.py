@@ -10,6 +10,7 @@ import selectors
 import signal
 import subprocess
 import sys
+from contextlib import suppress
 from dataclasses import replace
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from agent_comms.compaction_journal import CompactionJournalError
 from agent_comms.declarations import Goal, RelationViolationError, Thread, ThreadRegistry
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_process import CompactionTransportUnknownError
+from agent_comms.session_fence import SessionWriterBusyError, session_writer_fence
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(
@@ -64,6 +66,16 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
 
 def entries(witness):
     return [json.loads(line) for line in Path(witness["sessionFile"]).read_text().splitlines()]
+
+
+async def test_active_backend_executor_refuses_before_intent_or_dispatch(native):
+    bridge, owner, epoch, witness = native
+    before = Path(witness["sessionFile"]).read_bytes()
+    async with session_writer_fence(witness["sessionFile"]):
+        with pytest.raises(SessionWriterBusyError, match="not dispatched"):
+            bridge.commit(owner, epoch, witness, "summary", 42)
+    assert bridge.journal.unresolved(witness["sessionFile"]) == ()
+    assert Path(witness["sessionFile"]).read_bytes() == before
 
 
 def test_positive_owner_validated_native_commit(native):
@@ -304,3 +316,155 @@ bridge.commit(owner,epoch,json.loads(sys.argv[3]),'crash summary',42)
         child.wait()
         child.stdout.close()
         child.stderr.close()
+
+
+def test_parent_sigkill_after_stdin_before_native_write_retains_authority(native, tmp_path):
+    """A test-only JS wrapper gates the REAL native method, not a Python stand-in.
+
+    The deployed helper/manager have no fault hooks. The wrapper installs an
+    in-memory method barrier after inherited-FD/parent validation and request
+    parsing, before CAS. Parent dies with stdin sent and no result read; native
+    continues only when the test releases it, still owning registry authority.
+    """
+    bridge, owner, epoch, witness = native
+    ready, gate, written = [tmp_path / name for name in ("ready.fifo", "go.fifo", "written.fifo")]
+    for path in (ready, gate, written):
+        os.mkfifo(path)
+    handles = [os.open(path, os.O_RDWR | os.O_NONBLOCK) for path in (ready, gate, written)]
+    wrapper = tmp_path / "native-barrier.mjs"
+    wrapper.write_text(
+        "import {writeFileSync,openSync,readSync,closeSync} from 'node:fs';\n"
+        "import {pathToFileURL} from 'node:url';\n"
+        "const managerURL = "
+        + json.dumps((bridge.package_dir / "dist/core/session-manager.js").as_uri())
+        + ";\n"
+        "const {SessionManager} = await import(managerURL);\n"
+        "const append = SessionManager.prototype.appendCompactionIfCurrent;\n"
+        "SessionManager.prototype.appendCompactionIfCurrent = function(...args) {\n"
+        f"  writeFileSync({json.dumps(str(ready))}, String(process.pid));\n"
+        f"  const gate = openSync({json.dumps(str(gate))}, 'r');\n"
+        "  readSync(gate, Buffer.alloc(1), 0, 1, null); closeSync(gate);\n"
+        "  const id = append.apply(this,args);\n"
+        f"  writeFileSync({json.dumps(str(written))}, id);\n"
+        "  return id;\n"
+        "};\n"
+        f"await import({json.dumps(bridge.helper.as_uri())});\n"
+    )
+    script = """
+import json,os,sys
+from pathlib import Path
+from dataclasses import replace
+from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+bridge = OwnerCompactionCommit(Path(sys.argv[1]),Path(sys.argv[2]))
+bridge.helper = Path(sys.argv[4])  # Test-only in-memory JS method barrier.
+owner = bridge.registry.snapshot().threads['owner']
+bridge.registry.unregister('owner')
+bridge.registry.register(replace(owner,pid=os.getpid(),active_turn=None))
+owner,epoch = bridge.registry.live_owner_with_epoch('owner')
+owner,epoch = bridge.registry.claim_live_turn_with_epoch(owner,'crash',expected_epoch=epoch)
+bridge.commit(owner,epoch,json.loads(sys.argv[3]),'post-parent-crash summary',42,timeout=30)
+"""
+    parent = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            script,
+            str(tmp_path / "registry.json"),
+            PACKAGE,
+            json.dumps(witness),
+            str(wrapper),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    native_pid = None
+    competitor = None
+
+    def barrier(fd):
+        with selectors.DefaultSelector() as selector:
+            selector.register(fd, selectors.EVENT_READ)
+            assert selector.select(10), "native barrier not reached"
+        return os.read(fd, 1024)
+
+    try:
+        native_pid = int(barrier(handles[0]))
+        pending = bridge.journal.unresolved(witness["sessionFile"])
+        assert len(pending) == 1 and pending[0].status == "intent"
+        before = Path(witness["sessionFile"]).read_bytes()
+        parent.kill()
+        assert parent.wait(timeout=5) == -signal.SIGKILL
+        # Native is still blocked before mutation. A real registry stop cannot
+        # pass the inherited authority held by that orphaned native process.
+        competitor = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                """
+import fcntl,sys
+from pathlib import Path
+from agent_comms.declarations import ThreadRegistry
+root = Path(sys.argv[1])
+with (root / '.registry.json.lock').open('ab') as lock:
+    try:
+        fcntl.flock(lock.fileno(),fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print('still-fenced',flush=True)
+    else:
+        raise AssertionError('parent death released native authority')
+from agent_comms.session_fence import idle_session_writer_fence, SessionWriterBusyError
+try:
+    with idle_session_writer_fence(sys.argv[2]):
+        raise AssertionError('parent death released native executor exclusion')
+except SessionWriterBusyError:
+    pass
+ThreadRegistry(root / 'registry.json').unregister('owner')
+print('stopped-after-native',flush=True)
+""",
+                str(tmp_path),
+                witness["sessionFile"],
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+        )
+        with selectors.DefaultSelector() as selector:
+            selector.register(competitor.stdout, selectors.EVENT_READ)
+            assert selector.select(5)
+        assert competitor.stdout.readline() == b"still-fenced\n"
+        assert Path(witness["sessionFile"]).read_bytes() == before
+        os.write(handles[1], b"x")
+        entry_id = barrier(handles[2]).decode()
+        output, error = competitor.communicate(timeout=10)
+        assert competitor.returncode == 0, error
+        assert output == b"stopped-after-native\n"
+        native_pid = None  # Process has dropped its last authority FD at exit.
+        assert entries(witness)[-1]["id"] == entry_id
+        assert bridge.journal.get(pending[0].commit_id).status == "intent"
+        bridge.registry.register(replace(owner, active_turn=None))
+        recovered, epoch = bridge.registry.live_owner_with_epoch("owner")
+        recovered, epoch = bridge.registry.claim_live_turn_with_epoch(
+            recovered,
+            "recovery",
+            expected_epoch=epoch,
+        )
+        result = bridge.reconcile(recovered, epoch, pending[0].commit_id)
+        assert result.status == "committed"
+        assert json.loads(result.evidence_json)["entryId"] == entry_id
+        assert len([row for row in entries(witness) if row["type"] == "compaction"]) == 1
+    finally:
+        if parent.poll() is None:
+            parent.kill()
+        parent.wait()
+        if native_pid is not None:
+            with suppress(ProcessLookupError):
+                os.kill(native_pid, signal.SIGKILL)
+        if competitor is not None:
+            if competitor.poll() is None:
+                competitor.kill()
+            competitor.wait()
+            competitor.stdout.close()
+            competitor.stderr.close()
+        for fd in handles:
+            os.close(fd)
+        parent.stdout.close()
+        parent.stderr.close()

@@ -17,6 +17,7 @@ from pathlib import Path
 from .compaction_journal import CompactionJournal, CompactionJournalError, CompactionOperation
 from .declarations import Thread, ThreadRegistry
 from .owner_compaction_process import CompactionTransportUnknownError, run_authority_child
+from .session_fence import idle_session_writer_fence
 
 NATIVE_MANAGER_SHA256 = "8ec0b8f1b62ee6abe3ba3c98e2f64b1efea549b7e27f561fad2516f955b7c49c"
 
@@ -68,7 +69,9 @@ class OwnerCompactionCommit:
             session_revision=witness["revision"],
         )
 
-    def _call(self, fd: int, request: dict, timeout: float) -> dict:
+    def _call(
+        self, fd: int, request: dict, timeout: float, retained_fds: tuple[int, ...] = ()
+    ) -> dict:
         self._verify_native()
         held = os.fstat(fd)
         request = dict(
@@ -84,6 +87,7 @@ class OwnerCompactionCommit:
             json.dumps(request, ensure_ascii=False, allow_nan=False).encode(),
             authority_fd=fd,
             timeout=timeout,
+            retained_fds=retained_fds,
         )
         try:
             evidence = json.loads(result.stdout)
@@ -136,7 +140,10 @@ class OwnerCompactionCommit:
             separators=(",", ":"),
         )
         digest = hashlib.sha256(payload.encode()).hexdigest()
-        with self.registry.guard_owner_compaction(owner, epoch, **arguments) as (receipt, fd):
+        with (
+            idle_session_writer_fence(arguments["session_file"]) as executor_fd,
+            self.registry.guard_owner_compaction(owner, epoch, **arguments) as (receipt, fd),
+        ):
             intent = dict(witness=witness, payloadDigest=digest, owner=asdict(receipt))
             commit_id = self.journal.begin(witness["sessionFile"], intent)
             request = dict(
@@ -147,7 +154,7 @@ class OwnerCompactionCommit:
                 commit=dict(commitId=commit_id, payloadDigest=digest),
             )
             try:
-                evidence = self._call(fd, request, timeout)
+                evidence = self._call(fd, request, timeout, (executor_fd,))
             except Exception as error:
                 # Includes launch/protocol errors: conservative even where no
                 # write probably occurred. Cancellation leaves durable intent.
@@ -165,7 +172,10 @@ class OwnerCompactionCommit:
         intent = json.loads(operation.intent_json)
         witness = intent["witness"]
         arguments = self._guard_arguments(owner, witness)
-        with self.registry.guard_owner_compaction(owner, epoch, **arguments) as (_, fd):
+        with (
+            idle_session_writer_fence(arguments["session_file"]) as executor_fd,
+            self.registry.guard_owner_compaction(owner, epoch, **arguments) as (_, fd),
+        ):
             # Re-read after acquiring authority; a prior resolver may have won.
             current = self.journal.get(commit_id)
             if current.status not in {"intent", "unknown"}:
@@ -178,7 +188,7 @@ class OwnerCompactionCommit:
                 commit=dict(commitId=commit_id, payloadDigest=intent["payloadDigest"]),
             )
             try:
-                evidence = self._call(fd, request, timeout)
+                evidence = self._call(fd, request, timeout, (executor_fd,))
             except Exception as error:
                 evidence = dict(status="unknown", reason=str(error)[:1024])
             self.journal.resolve(commit_id, evidence["status"], evidence)

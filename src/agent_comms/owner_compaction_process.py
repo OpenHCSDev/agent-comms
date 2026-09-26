@@ -26,6 +26,7 @@ def run_authority_child(
     *,
     authority_fd: int,
     timeout: float,
+    retained_fds: tuple[int, ...] = (),
 ) -> subprocess.CompletedProcess[bytes]:
     """Run one trusted helper, retaining authority across crash/cancellation.
 
@@ -38,13 +39,15 @@ def run_authority_child(
         raise NotImplementedError("Inherited compaction authority requires POSIX flock")
     if not math.isfinite(timeout) or not 0 < timeout <= 30:
         raise ValueError("Compaction child deadline must be in (0, 30] seconds")
-    os.fstat(authority_fd)
+    inherited = tuple(dict.fromkeys((authority_fd, *retained_fds)))
+    for fd in inherited:
+        os.fstat(fd)
     child = subprocess.Popen(
         command,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        pass_fds=(authority_fd,),
+        pass_fds=inherited,
         start_new_session=True,
     )
     try:

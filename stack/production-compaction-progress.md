@@ -92,15 +92,29 @@ Integration tests exercise actual native commit while stop/heartbeat/goal
 registry writers are excluded, stale owner/goal refusal, lost result without
 resend, no-write reconciliation, outcome-persistence failure, stale-lock
 recovery, and real owner SIGKILL after native durability but before journal
-outcome. This last test does **not** prove the distinct stdin-write/result-read
-crash cut with a still-running native child; inherited-FD tests currently prove
-that lifetime primitive with Python children.
+outcome. A further deterministic test-only JS wrapper gates the actual native
+`appendCompactionIfCurrent` after stdin parsing and lineage validation: kill
+Python with the native child still waiting, prove real registry stop and native
+executor acquisition both remain excluded, release the native mutation, then
+recover the original intent under a fresh owner without resending. Neither the
+production helper nor the patched package contains that barrier/fault hook.
+
+The bridge now acquires the existing **executor lifetime** session fence
+nonblocking BEFORE registry authority, and inherits both descriptors into the
+native child. An already-running backend stream is refused before intent or
+dispatch. This executor fence is distinct from the native per-entry writer
+fence, which still comes AFTER registry authority. Idle persistent Pi managers
+must additionally be closed/reopened by the future runtime integration; they
+cannot silently keep an in-memory tree after this external helper writes.
+
+Current combined focused suite: **169 passed, 1 skipped**. Native in-flight
+SIGKILL plus active-executor refusal passed five repeated runs. No provider calls
+were used; the installed package remains unchanged.
 
 ## Still required before activation
 
-1. Independent review of the combined authority/journal/native slice; actual
-   native in-flight-child crash barriers and exhaustive conflicting-writer
-   inventory.
+1. Independent review of the combined authority/journal/native slice and
+   exhaustive conflicting-writer inventory (see `compaction-writer-inventory.md`).
 2. Canonical correction/ingress currency, including in-flight steer/send refusal;
    caller-supplied correction counters remain non-authoritative.
 3. Verified full deployment and trusted bridge origin at every actual runtime
