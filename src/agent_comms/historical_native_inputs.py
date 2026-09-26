@@ -54,8 +54,10 @@ def read_historical_native_inputs(
     Caller-supplied identity must come from a trusted bus/owner snapshot, never
     from model arguments. This read does not look up a live owner or even assert
     that the original bus remains valid now. It cannot authorize work. In
-    particular, do NOT derive max-seq or a cursor from these exact rows: gaps
-    and PASSIVE/no-wake deliveries have different semantics.
+    particular, do NOT derive max-seq or a cursor from these rows alone: gaps
+    and PASSIVE/no-wake deliveries have different semantics. A separate
+    current-owner cursor additionally verifies the canonical bus prefix and
+    requires a just-settled input in the live admission epoch.
     """
     if (
         type(store) is not MutationStore

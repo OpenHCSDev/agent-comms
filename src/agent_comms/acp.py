@@ -22,6 +22,7 @@ import json
 import os
 import re
 import shlex
+import sqlite3
 import sys
 import time
 from collections.abc import Iterator
@@ -63,6 +64,7 @@ from . import backend
 from .bus_publication import stable_thread_lookup, unique_wire_object
 from .cohort_foreground import _accept_visible_initials, _preflight
 from .coordinated_runtime import run_one_sealed_claim
+from .coordination import CoordinationError
 from .coordination_store import (
     IdentityConflict,
     MutationStore,
@@ -94,6 +96,7 @@ from .goal_attempts import (
     UnresolvedAttempt,
 )
 from .input_disposition import AcpDeliveryCursors, InputDispositions
+from .native_source_cursor import advance_current_native_cursor, read_current_native_cursor
 from .operations import OBSERVATION_INTERVAL, Comms, wire
 from .passive_channel_awareness import PassiveChannelAwareness
 from .runtime import (
@@ -169,6 +172,7 @@ class CommsAgent:
             raise ValueError("private N/K ACP requires both reviewed Pi package and exact root")
         self._private_nk_native_package = private_nk_native_package
         self._private_nk_wire_root_id = private_nk_wire_root_id
+        self._private_cursor_announced: dict[str, tuple[int, int, int, str | None]] = {}
         self._comms = comms
         self._sessions: dict[str, str] = {}
         self._client: Any = None
@@ -335,31 +339,33 @@ class CommsAgent:
         self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> NewSessionResponse:
         self._reject_foreign_mcp(mcp_servers)
+        private = self._private_session_mode()
         thread = self._declare_thread(cwd, os.getpid())
         thread_name = thread.name
         session_id = thread_name
         self._sessions[session_id] = thread_name
-        cursor, legacy = self._delivery_cursors.initialize(
-            self._comms.registry.aliases_for(thread_name),
-            thread_name,
-            high_water=self._comms.message_high_water(),
-            fresh=True,
-        )
-        with _store_lock(self._comms._wire_lock_path):
-            owner = self._comms.registry.require(thread_name)
-            admission = self._comms.registry.snapshot().admission_generations[owner.name]
-            # Optional awareness cannot turn a committed owner/session
-            # declaration into an apparent failed attach.
-            with suppress(OSError, TypeError, ValueError):
-                self._passive_awareness.initialize(
-                    owner,
-                    admission=admission,
-                    high_water=self._comms.message_high_water(),
-                    channels=self._comms.channel_catalog.targets_for(owner.tags),
-                    fresh=True,
-                )
-        self._inbox_cursors[session_id] = cursor
-        self._legacy_through[session_id] = legacy
+        if not private:
+            cursor, legacy = self._delivery_cursors.initialize(
+                self._comms.registry.aliases_for(thread_name),
+                thread_name,
+                high_water=self._comms.message_high_water(),
+                fresh=True,
+            )
+            with _store_lock(self._comms._wire_lock_path):
+                owner = self._comms.registry.require(thread_name)
+                admission = self._comms.registry.snapshot().admission_generations[owner.name]
+                # Optional awareness cannot turn a committed owner/session
+                # declaration into an apparent failed attach.
+                with suppress(OSError, TypeError, ValueError):
+                    self._passive_awareness.initialize(
+                        owner,
+                        admission=admission,
+                        high_water=self._comms.message_high_water(),
+                        channels=self._comms.channel_catalog.targets_for(owner.tags),
+                        fresh=True,
+                    )
+            self._inbox_cursors[session_id] = cursor
+            self._legacy_through[session_id] = legacy
         self._session_titles[session_id] = thread_name
         self._session_worktrees[session_id] = thread.worktree
         if self._runtime_enabled:
@@ -401,33 +407,46 @@ class CommsAgent:
     ) -> LoadSessionResponse:
         """Reconnect an ACP client to its persistent wire thread."""
         self._reject_foreign_mcp(mcp_servers)
+        private = self._private_session_mode()
         thread = self._validated_thread(cwd, session_id)
-        thread = self._comms.acquire_thread(thread.name, owner_pid=os.getpid())
+        # A reconnect to an already-owned live session is not a new owner
+        # incarnation. Re-registering the same PID would bump its admission
+        # epoch and discard a correctly proven current native cursor.
+        if not (
+            self._sessions.get(session_id) == thread.name
+            and thread.pid == os.getpid()
+            and self._comms.registry.status(thread.name).active
+        ):
+            thread = self._comms.acquire_thread(thread.name, owner_pid=os.getpid())
         if thread.pid != os.getpid():
             return await self._attach_owner(thread, session_id)
         self._comms.heartbeat(thread.name)
         self._sessions[session_id] = thread.name
-        cursor, legacy = self._delivery_cursors.initialize(
-            self._comms.registry.aliases_for(thread.name),
-            thread.name,
-            high_water=self._comms.message_high_water(),
-            fresh=False,
-        )
-        with _store_lock(self._comms._wire_lock_path):
-            owner = self._comms.registry.require(thread.name)
-            admission = self._comms.registry.snapshot().admission_generations[owner.name]
-            # A previously committed session remains attachable even if
-            # the best-effort advisory ledger cannot be initialized.
-            with suppress(OSError, TypeError, ValueError):
-                self._passive_awareness.initialize(
-                    owner,
-                    admission=admission,
-                    high_water=self._comms.message_high_water(),
-                    channels=self._comms.channel_catalog.targets_for(owner.tags),
-                    fresh=False,
-                )
-        self._inbox_cursors[session_id] = cursor
-        self._legacy_through[session_id] = legacy
+        if not private:
+            cursor, legacy = self._delivery_cursors.initialize(
+                self._comms.registry.aliases_for(thread.name),
+                thread.name,
+                high_water=self._comms.message_high_water(),
+                fresh=False,
+            )
+            with _store_lock(self._comms._wire_lock_path):
+                owner = self._comms.registry.require(thread.name)
+                admission = self._comms.registry.snapshot().admission_generations[owner.name]
+                # A previously committed session remains attachable even if
+                # the best-effort advisory ledger cannot be initialized.
+                with suppress(OSError, TypeError, ValueError):
+                    self._passive_awareness.initialize(
+                        owner,
+                        admission=admission,
+                        high_water=self._comms.message_high_water(),
+                        channels=self._comms.channel_catalog.targets_for(owner.tags),
+                        fresh=False,
+                    )
+            self._inbox_cursors[session_id] = cursor
+            self._legacy_through[session_id] = legacy
+        else:
+            self._inbox_cursors.pop(session_id, None)
+            self._legacy_through.pop(session_id, None)
         self._session_titles[session_id] = thread.name
         self._session_worktrees[session_id] = thread.worktree
         if self._runtime_enabled:
@@ -1146,6 +1165,34 @@ class CommsAgent:
         leaf = re.sub(r"[^A-Za-z0-9_-]+", "-", Path(cwd).name or "session").strip("-")
         return leaf or "session"
 
+    def _private_cursor_metadata(self, thread_name: str) -> dict[str, Any]:
+        """Owner-only informational native cursor for ACP reconnect/UI.
+
+        Never reconstruct an old epoch, infer Pi acceptance from an ACK, or
+        suppress an unavailable store as a zero/proven cursor.
+        """
+        root_id = self._private_nk_wire_root_id
+        if root_id is None:
+            return {}
+        try:
+            with MutationStore(str(self._comms.root / "coordination.sqlite3")) as store:
+                bus = MessageBus(
+                    self._comms.root / "bus.jsonl",
+                    self._comms.registry,
+                    private_response_writes=True,
+                )
+                cursor = read_current_native_cursor(
+                    bus, store, wire_root_id=root_id, owner_name=thread_name
+                )
+        except (OSError, ValueError, sqlite3.Error, CoordinationError):
+            return {"status": "unavailable"}
+        if cursor is None:
+            return {"status": "none"}
+        return {
+            "status": "proven" if cursor.injected_seq else "coverage_only",
+            **asdict(cursor),
+        }
+
     def _session_metadata(self, thread_name: str) -> dict[str, Any]:
         thread = self._comms.registry.require(thread_name)
         goal, execution = self._comms.goal_snapshot(thread_name)
@@ -1169,6 +1216,11 @@ class CommsAgent:
                 "model": thread.model,
                 "thinkingLevel": thread.thinking_level,
                 "worktree": thread.worktree,
+                **(
+                    {"privateNativeCursor": self._private_cursor_metadata(thread_name)}
+                    if self._private_nk_wire_root_id is not None
+                    else {}
+                ),
                 "autoTitle": backend.rpc_args_for(self._agent_bin, self._agent_args) is not None,
                 "title": thread.title or thread.name,
                 "promptQueue": backend.rpc_args_for(self._agent_bin, self._agent_args) is not None,
@@ -1405,6 +1457,16 @@ class CommsAgent:
         )
         previous[session_id] = signature
 
+    def _private_session_mode(self) -> bool:
+        marker = self._private_nk_marker()
+        if marker is None:
+            return False
+        if self._private_nk_wire_root_id != marker or self._private_nk_native_package is None:
+            raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+        return True
+
     def _private_nk_marker(self) -> str | None:
         """Distinguish exact legacy metadata from a guarded private marker.
 
@@ -1478,6 +1540,64 @@ class CommsAgent:
             owner_name=thread_name,
             native_package=package,
         )
+        if result is None:
+            # N (or absent-audience) rows prove coverage, not an injected
+            # input. Extend only an existing current epoch or an all-N prefix;
+            # old-epoch Pi evidence cannot initialize this cursor on reconnect.
+            try:
+                with MutationStore(str(self._comms.root / "coordination.sqlite3")) as store:
+                    person = store.participant(stable_thread_lookup(owner.created_at))
+                    epoch = self._comms.registry.snapshot().admission_generations[thread_name]
+                    cursor = advance_current_native_cursor(
+                        bus,
+                        store,
+                        wire_root_id=wire_root_id,
+                        owner=owner,
+                        owner_admission_epoch=epoch,
+                        owner_generation=person.generation,
+                        committed_input_id=None,
+                    )
+            except (OSError, ValueError, sqlite3.Error, CoordinationError, KeyError):
+                cursor = None  # projection unavailable; no claim or model retry
+            if cursor is not None:
+                signature = (
+                    cursor.owner_generation,
+                    cursor.owner_admission_epoch,
+                    cursor.covered_seq,
+                    cursor.input_id,
+                )
+                if self._private_cursor_announced.get(session_id) != signature:
+                    with suppress(OSError, RuntimeError):
+                        await self._runtime.session_update(
+                            session_id=session_id,
+                            update=SessionInfoUpdate(
+                                session_update="session_info_update",
+                                field_meta={
+                                    "agentComms": {
+                                        "privateNativeCursor": self._private_cursor_metadata(
+                                            thread_name
+                                        )
+                                    }
+                                },
+                            ),
+                        )
+                        self._private_cursor_announced[session_id] = signature
+        else:
+            # A disconnected client must not turn a settled claim into an
+            # apparent model failure. Reconnect reads the same durable row.
+            with suppress(OSError, RuntimeError):
+                await self._runtime.session_update(
+                    session_id=session_id,
+                    update=SessionInfoUpdate(
+                        session_update="session_info_update",
+                        field_meta={
+                            "agentComms": {
+                                "privateNativeCursor": self._private_cursor_metadata(thread_name),
+                                "lastSelectedCursorStatus": result.cursor_status,
+                            }
+                        },
+                    ),
+                )
         return int(result is not None)
 
     async def _drain_owned_inbox(self, session_id: str) -> int:

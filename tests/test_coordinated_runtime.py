@@ -1103,6 +1103,7 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
         root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     )
     assert outcome is not None and outcome.disposition is ClaimDisposition.IGNORED
+    assert outcome.cursor_status == "unavailable"  # bounded projection, not a retry
     assert len(calls) == 1
     assert not (root / "read_markers.json").exists()
 

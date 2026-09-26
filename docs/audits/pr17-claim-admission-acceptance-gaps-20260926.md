@@ -72,8 +72,9 @@ The following is partial implementation evidence, not closure or approval.
   selected sources (direct/channel FULL, triage IGNORE/engage, no-wake).
   Unmarked public roots are unchanged; no historical audience is inferred.
   Seven new pipeline cases plus adjacent suites: 212 passed, provider-free.
-  See `docs/ordinary_nk_delivery.md`. Proven cursor, normal ACP/session wake
-  wiring, mediated writes, alias/human paths and scale acceptance remain open.
+  See `docs/ordinary_nk_delivery.md`. The subsequent explicit ACP/session
+  and bounded current-cursor candidates are not integrated-review clearance;
+  mediated writes, alias/human paths and scale acceptance remain open.
   The earlier record-only candidate prototype is still non-authoritative and
   is not used to admit these ordinary sends.
 - **Injected-message cursor: bounded historical coverage only.** Independent
@@ -88,9 +89,23 @@ The following is partial implementation evidence, not closure or approval.
   selected source even if a later source has proof; it distinguishes sealed
   no-wake receipts from injections. **Its `covered_seq` is not an ACK or a
   current injected-message cursor** and cannot authorize skipping work,
-  provider receipt, writes, or responses. A durable current-owner/session
-  cursor and indexed/scale path remain open. Fsync/lock time is not a hard
-  250 ms deadline. This successor requires its own exact independent review.
+  provider receipt, writes, or responses. Fsync/lock time is not a hard
+  250 ms deadline. This historical API retains its independent review scope.
+- **Current native injected-source cursor: bounded candidate, not integrated
+  clearance.** A separate versioned SQL row is keyed by exact root, stable
+  recipient, participant generation and live registry admission epoch. It can
+  advance only from a just-settled native input's verified sealed source,
+  claim, stage, prelaunch binding, native request digest/session and canonical
+  bus prefix; N/absent-audience rows may advance coverage with `injected_seq=0`
+  or an unchanged prior injection. A gap leaves the prior row unchanged. Reads
+  revalidate the canonical bus and native journal; owner replacement returns
+  no current row, never promoting historical input. ACP emits this distinction
+  on selected/no-wake updates and reconnect, without legacy private ACKs.
+  The existing 100-initial/8 MiB bounded scan still makes the cursor
+  unavailable at scale, never a retry or permission to skip work. Schema v2
+  requires explicit fresh installation; v1 roots refuse until a reviewed
+  migration exists. Independent delta/integrated review and scale acceptance
+  remain open. This is not provider acceptance or a write/response permit.
 - **Every-wake injection service, decision/obligation projections, supersession,
   task heads** (proposal §§3–4): not started.
 - **Mediated pre-write admission gate** (proposal §5): not started; legacy

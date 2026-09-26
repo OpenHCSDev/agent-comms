@@ -35,6 +35,7 @@ from agent_comms.native_prompt_binding import (
     native_request_digest,
     read_expected_prompt_binding,
 )
+from agent_comms.native_source_cursor import read_current_native_cursor
 from agent_comms.operations import Comms
 from agent_comms.proven_source_coverage import read_proven_source_coverage
 
@@ -206,8 +207,15 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
         root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     )
     assert turn is not None
+    assert turn.cursor_status == "proven"
     assert len(calls) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
+        current = read_current_native_cursor(
+            comms.bus, store, wire_root_id=root_id, owner_name="alpha"
+        )
+        assert current is not None and current.input_id == turn.input_id
+        assert current.injected_seq == initial.message.seq
+        assert current.covered_seq == initial.message.seq
         evidence = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
@@ -246,12 +254,10 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
         )
         assert before.covered_seq == 0 and before.blocked_seq == first.message.seq
         accept_initial_cohort(bus, root_id, second.seq, store)
-    assert (
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-        )
-        is not None
+    first_turn = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     )
+    assert first_turn is not None and first_turn.cursor_status == "proven"
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         middle = read_proven_source_coverage(
             bus, store, wire_root_id=root_id, recipient_lookup=lookup
@@ -259,12 +265,12 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
         assert middle.covered_seq == first.message.seq
         assert middle.injected_source_seqs == (first.message.seq,)
         assert middle.blocked_seq == second.seq
-    assert (
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-        )
-        is not None
+        current = read_current_native_cursor(bus, store, wire_root_id=root_id, owner_name="alpha")
+        assert current is not None and current.injected_seq == first.message.seq
+    second_turn = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     )
+    assert second_turn is not None and second_turn.cursor_status == "proven"
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         after = read_proven_source_coverage(
             bus, store, wire_root_id=root_id, recipient_lookup=lookup
@@ -272,6 +278,9 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
         assert after.covered_seq == second.seq
         assert after.injected_source_seqs == (first.message.seq, second.seq)
         assert after.blocked_seq is None
+        current = read_current_native_cursor(bus, store, wire_root_id=root_id, owner_name="alpha")
+        assert current is not None and current.injected_seq == second.seq
+        assert current.input_id == second_turn.input_id
     assert len(calls) == 2
 
 
@@ -289,12 +298,10 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second.seq, store)
     monkeypatch.setattr(runtime, "run_native_pi_turn", good)
-    assert (
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-        )
-        is not None
+    later = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     )
+    assert later is not None and later.cursor_status == "blocked_gap"
     assert len(calls) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         coverage = read_proven_source_coverage(
@@ -306,6 +313,10 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
         assert coverage.covered_seq == 0
         assert coverage.injected_source_seqs == ()
         assert coverage.blocked_seq == first.message.seq
+        assert (
+            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
+            is None
+        )
         with pytest.raises(IdentityConflict, match="bounded private initial scan"):
             read_proven_source_coverage(
                 comms.bus,
@@ -418,6 +429,95 @@ async def test_source_coverage_stops_at_triage_without_required_full(tmp_path, m
         assert coverage.blocked_seq == first.message.seq
 
 
+async def test_current_cursor_never_promotes_old_owner_epoch(tmp_path, monkeypatch):
+    root, root_id, comms, initial, people = _root(tmp_path)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model(decision="IGNORE")
+    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    turn = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    )
+    assert turn is not None and turn.cursor_status == "proven"
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        old = read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
+        assert old is not None and old.injected_seq == initial.message.seq
+    comms.registry.unregister("alpha")
+    comms.registry.heartbeat("alpha")
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        assert (
+            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
+            is None
+        )
+        retained = store._connection.execute(
+            "SELECT owner_admission_epoch,input_id FROM native_runtime_source_cursors"
+        ).fetchone()
+        assert tuple(retained) == (old.owner_admission_epoch, turn.input_id)
+    assert len(calls) == 1
+
+
+async def test_current_cursor_rejects_forged_high_water(tmp_path, monkeypatch):
+    root, root_id, comms, first, _ = _root(tmp_path)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model(decision="IGNORE")
+    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    turn = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    )
+    assert turn is not None and turn.cursor_status == "proven"
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        store._connection.execute(
+            "UPDATE native_runtime_source_cursors SET covered_seq=?",
+            (first.message.seq + 100,),
+        )
+        with pytest.raises(IdentityConflict, match="exceeds canonical source proof"):
+            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
+    assert len(calls) == 1
+
+
+async def test_current_cursor_alias_refusal_and_new_owner_generation(tmp_path, monkeypatch):
+    root, root_id, comms, first, people = _root(tmp_path)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model(decision="IGNORE")
+    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    old_turn = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    )
+    assert old_turn is not None and old_turn.cursor_status == "proven"
+    lookup = stable_thread_lookup(people[1].created_at)
+    comms.registry.rename("alpha", "alpha-new")
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        store.advance_owner_generation(lookup, "alpha-new", expected_generation=1)
+        assert (
+            read_current_native_cursor(
+                comms.bus, store, wire_root_id=root_id, owner_name="alpha-new"
+            )
+            is None
+        )
+    with pytest.raises(RelationViolationError, match="stable send binding"):
+        comms.send_initial_cohort("sender", "alpha", "Unbound retained alias.")
+    second = comms.send_initial_cohort("sender", "alpha-new", "Canonical recipient.")
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        accept_initial_cohort(comms.bus, root_id, second.seq, store)
+    fresh = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="alpha-new", native_package=tmp_path
+    )
+    assert fresh is not None and fresh.cursor_status == "proven"
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        cursor = read_current_native_cursor(
+            comms.bus, store, wire_root_id=root_id, owner_name="alpha-new"
+        )
+        assert cursor is not None
+        assert cursor.owner_generation == 2 and cursor.owner_thread == "alpha-new"
+        assert cursor.injected_seq == second.seq and cursor.input_id == fresh.input_id
+        assert cursor.covered_seq == second.seq
+        rows = store._connection.execute(
+            "SELECT owner_generation,input_id FROM native_runtime_source_cursors "
+            "ORDER BY owner_generation"
+        ).fetchall()
+        assert [tuple(row) for row in rows] == [(1, old_turn.input_id), (2, fresh.input_id)]
+    assert len(calls) == 2 and first.message.seq < second.seq
+
+
 async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, monkeypatch):
     root, root_id, comms, initial, people = _root(tmp_path)
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
@@ -427,6 +527,7 @@ async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, 
         root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     )
     assert turn is not None
+    assert turn.cursor_status == "proven"
     assert len(calls) == 2  # triage probe, then the FULL answer turn
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         evidence = read_historical_native_inputs(

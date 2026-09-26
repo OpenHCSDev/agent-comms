@@ -102,7 +102,7 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     )
     assert await agent._drain_inbox(session.session_id) == 1
     assert len(calls) == 1
-    assert agent._inbox_cursors[session.session_id] == 0
+    assert agent._inbox_cursors == {}  # private receipt, never legacy display cursor
 
 
 async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_path, monkeypatch):
@@ -115,8 +115,35 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
         comms, "comms_send", {"from": "sender", "to": "beta", "body": "Compute 17+25"}
     )
     original = comms.bus.message_by_id(sent["id"])
+    before = agent._session_metadata("beta")["agentComms"]["privateNativeCursor"]
+    assert before == {"status": "none"}
+    updates = []
+
+    async def record_update(*, session_id, update):
+        assert session_id == "beta"
+        updates.append(update)
+
+    monkeypatch.setattr(agent._runtime, "session_update", record_update)
     assert await agent._drain_inbox("beta") == 1
     assert len(calls) == 1
+    current = agent._session_metadata("beta")["agentComms"]["privateNativeCursor"]
+    assert current["status"] == "proven"
+    assert current["covered_seq"] == original.seq
+    assert current["injected_seq"] == original.seq
+    assert updates[-1].field_meta["agentComms"]["privateNativeCursor"] == current
+    assert updates[-1].field_meta["agentComms"]["lastSelectedCursorStatus"] == "proven"
+
+    async def noop(*_args, **_kwargs):
+        return None
+
+    async def no_options(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(agent._runtime, "start", noop)
+    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _: None)
+    monkeypatch.setattr(agent, "_config_options", no_options)
+    reconnected = await agent.load_session(str(tmp_path), "beta", mcp_servers=[])
+    assert reconnected.field_meta["agentComms"]["privateNativeCursor"] == current
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
@@ -189,6 +216,12 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
     original = comms.bus.message_by_id(sent["id"])
     assert await agent._drain_inbox("beta") == 0
     assert calls == [] and agent._inbox_cursors == {}
+    cursor = agent._session_metadata("beta")["agentComms"]["privateNativeCursor"]
+    assert cursor["status"] == "coverage_only"
+    assert cursor["covered_seq"] == original.seq
+    assert cursor["injected_seq"] == 0 and cursor["input_id"] is None
+    assert await agent._drain_inbox("beta") == 0
+    assert calls == []
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         receipt = store._connection.execute(
             "SELECT kind,claim_id FROM cohort_delivery_receipts WHERE wire_root_id=? "

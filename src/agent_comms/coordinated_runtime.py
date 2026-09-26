@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import secrets
+import sqlite3
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
@@ -60,8 +61,9 @@ from .native_prompt_binding import (
     expected_prompt_matches_journal,
     read_expected_prompt_binding,
 )
+from .native_source_cursor import advance_current_native_cursor
 from .operations import Comms
-from .private_sidecar import native_request_digest
+from .private_sidecar import SidecarCommitUnknown, native_request_digest
 from .wake import WakeDecision, derive_exact_reply_target
 from .wake_injection import render_selected_wake_frame
 
@@ -75,6 +77,7 @@ class CoordinatedTurn:
     input_id: str
     response_message_id: str | None
     exact_target: str | None
+    cursor_status: str = "unavailable"  # never an ACK, work-skip or provider permit
 
 
 def _token_digest(token: str) -> str:
@@ -439,6 +442,46 @@ def _verify_live_turn(
             or not expected_prompt_matches_journal(result.context.session_file, binding)
         ):
             raise IdentityConflict("live native input lacks exact bound source prompt equality")
+
+
+def _current_cursor_status(
+    bus: MessageBus,
+    store: MutationStore,
+    *,
+    wire_root_id: str,
+    owner: Thread,
+    epoch: int,
+    generation: int,
+    input_id: str,
+) -> str:
+    """Cursor failure cannot undo a terminal claim or replay a model input.
+
+    This auxiliary projection is independently unavailable when capacity,
+    contention, durability or corroboration fail. Never convert a successful
+    selected response into a retryable model result because its cursor failed.
+    """
+    try:
+        cursor = advance_current_native_cursor(
+            bus,
+            store,
+            wire_root_id=wire_root_id,
+            owner=owner,
+            owner_admission_epoch=epoch,
+            owner_generation=generation,
+            committed_input_id=input_id,
+        )
+    except (
+        OSError,
+        sqlite3.Error,
+        ValueError,
+        IdentityConflict,
+        StaleFence,
+        RelationViolationError,
+        PublicationActivationBlocked,
+        SidecarCommitUnknown,
+    ):
+        return "unavailable"
+    return "proven" if cursor is not None and cursor.input_id == input_id else "blocked_gap"
 
 
 def _proof_columns(result: NativeTurnResult) -> tuple[str, str, str, int, str]:
@@ -837,8 +880,22 @@ async def run_one_sealed_claim(
                 store, pending, owner, person.generation, input_id, token, result, decision
             )
             if decision == "IGNORE":
+                cursor_status = _current_cursor_status(
+                    bus,
+                    store,
+                    wire_root_id=wire_root_id,
+                    owner=owner,
+                    epoch=owner_epoch,
+                    generation=person.generation,
+                    input_id=input_id,
+                )
                 return CoordinatedTurn(
-                    pending.claim_id, ClaimDisposition.IGNORED, input_id, None, None
+                    pending.claim_id,
+                    ClaimDisposition.IGNORED,
+                    input_id,
+                    None,
+                    None,
+                    cursor_status,
                 )
             triage_session = result.context.session_file
         else:
@@ -961,12 +1018,22 @@ async def run_one_sealed_claim(
         ).value
         if published.publication_receipt is None:
             raise IdentityConflict("fenced response has no durable receipt")
+        cursor_status = _current_cursor_status(
+            bus,
+            store,
+            wire_root_id=wire_root_id,
+            owner=owner,
+            epoch=owner_epoch,
+            generation=person.generation,
+            input_id=input_id,
+        )
         return CoordinatedTurn(
             pending.claim_id,
             ClaimDisposition.COMPLETED,
             input_id,
             published.publication_receipt.message_id,
             published.execution.exact_target,
+            cursor_status,
         )
     finally:
         try:

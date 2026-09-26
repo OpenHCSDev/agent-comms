@@ -71,11 +71,21 @@ acceptance. Fake responses cannot close real protocol acceptance gates.
 
 ## Still incomplete
 
-This is **not** completion of ordinary-delivery integration: a durable current
-injection cursor, session-UI receipt/reconnect coverage, mediated pre-write
-admission, append-driven refresh,
-alias/human-path coverage, and scaling/deadline acceptance remain open. The
-foreground consumer remains one-shot; no production ACP environment was
-activated and no legacy historical input replay occurred. Shell/child and
-ordinary human ACP coding
+This is **not** completion of ordinary-delivery integration. An additional
+explicit ACP owner candidate now publishes a *bounded* durable current-owner
+cursor (canonical root/recipient/owner generation and admission epoch, exact
+sealed source/claim/stage/native binding and journal request digest), and
+exposes it in session updates/reconnect metadata. `covered_seq` can include
+sealed no-wake/absent-audience sources; `injected_seq=0` means no native input.
+A selected UNKNOWN source blocks prefix advancement; owner replacement yields
+no current cursor, not historical recovery. This cursor never authorizes an
+ACK, skipped claim, response, write, provider acceptance or replay. The
+100-initial/8 MiB historical scan still makes it unavailable at scale; existing
+v1 runtime schema roots require an explicit reviewed migration to v2 rather
+than an implicit upgrade. Independent exact review remains open.
+
+Mediated pre-write admission, append-driven/indexed refresh, full alias/human
+coverage and scaling/deadline acceptance remain open. The foreground consumer
+remains one-shot; no production ACP environment was activated and no legacy
+historical input replay occurred. Shell/child and ordinary human ACP coding
 writes remain unenforced by this selected-message path.

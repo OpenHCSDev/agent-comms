@@ -27,8 +27,14 @@ snapshot lock fail nonblocking on contention. Admission refuses use on any
 running asyncio event loop, rather than allowing the original deadlock pattern.
 
 Complete OS writes are **not** native acceptance, assembled-context evidence,
-provider receipt, a response permit, or a proven injected cursor. Those still
-require their existing separate proof/fence paths.
+provider receipt, a response permit, or a proven injected cursor. Later
+live-recorded native request-digest/context proof plus exact prelaunch binding
+may advance a separate *current-owner* source cursor only after the sealed
+selected stage settles. A missing/UNKNOWN earlier source leaves a gap; the
+bounded cursor is informational, not provider acceptance, ACK, response or
+write permission. Owner replacement cannot promote historical evidence into a
+new current cursor. See `docs/ordinary_nk_delivery.md` for its capacity and
+schema-v2 limitations.
 
 ## Bounded uncertainty and cleanup
 
