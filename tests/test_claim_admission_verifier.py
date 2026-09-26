@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import sys
 from dataclasses import replace
+from multiprocessing import Pipe, Process
+from multiprocessing.connection import Connection
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -29,6 +32,20 @@ from agent_comms.wake_injection import render_selected_wake_frame
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort admission requires real /var/tmp"
 )
+
+
+def _hold_exclusive_coordinator(path: str, pipe: Connection) -> None:
+    """Separate process holds a real rollback-journal writer lock until release."""
+    connection = sqlite3.connect(path, timeout=1.0, isolation_level=None)
+    try:
+        connection.execute("BEGIN EXCLUSIVE")
+        pipe.send("ready")
+        if pipe.recv() != "done":
+            raise AssertionError("exclusive lock holder was not released")
+        connection.execute("ROLLBACK")
+    finally:
+        connection.close()
+        pipe.close()
 
 
 def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
@@ -161,6 +178,32 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                     claim_awareness=replace(observed, wake_claim_id="other"),
                 )
             assert resource.read_text() == "value = 1\n"
+            store._connection.execute("PRAGMA busy_timeout=25")
+            parent, child = Pipe()
+            holder = Process(
+                target=_hold_exclusive_coordinator,
+                args=(str(root / "coordination.sqlite3"), child),
+            )
+            holder.start()
+            child.close()
+            try:
+                assert parent.poll(3) and parent.recv() == "ready"
+                busy = observe_selected_resource_claim(comms, store, admission, "Alice", resource)
+                assert not busy.observed and busy.claim_seq is None and busy.generation is None
+                assert f"source #{message.seq}" in busy.message()
+                assert "coordinator schema or read unavailable" in busy.message()
+                assert resource.read_text() == "value = 1\n"
+            finally:
+                parent.send("done")
+                holder.join(timeout=3)
+                if holder.is_alive():
+                    holder.terminate()
+                    holder.join(timeout=3)
+                parent.close()
+            assert holder.exitcode == 0
+            assert observe_selected_resource_claim(
+                comms, store, admission, "Alice", resource
+            ).observed
             assert (
                 publish_selected_resource_claim(comms, store, admission, owner.name, resource)
                 == selected_owner

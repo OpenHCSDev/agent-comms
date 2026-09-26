@@ -7,6 +7,7 @@ write boundary must repeat current authority checks before touching the file.
 from __future__ import annotations
 
 import os
+import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,7 @@ from .coordination import (
     AttemptPhase,
     ClaimDisposition,
     ExecutionStatus,
+    SchemaVersionError,
     TriageVerdict,
     WakeMode,
 )
@@ -90,15 +92,20 @@ def observe_selected_resource_claim(
             resource_path,
             max_check_seconds=max_check_seconds,
         )
-    except (RelationViolationError, OSError):
+    except (RelationViolationError, OSError, SchemaVersionError, sqlite3.OperationalError) as error:
         elapsed = (time.perf_counter() - started) * 1000
+        detail = (
+            "coordinator schema or read unavailable"
+            if isinstance(error, (SchemaVersionError, sqlite3.OperationalError))
+            else "guarded bus or registry unavailable"
+        )
         return SelectedClaimObservation(
             admission.source_seq,
             admission.wake_claim_id,
             str(resource_path),
             owner_name,
             False,
-            "guarded bus or registry unavailable",
+            detail,
             elapsed_ms=elapsed,
         )
 
@@ -235,6 +242,8 @@ def _observe_selected_resource_claim_locked(
             return observation(str(resource_path), "selected wake or resource identity stale")
         except (RelationViolationError, OSError):
             return observation(str(resource_path), "guarded bus or registry unavailable")
+        except (SchemaVersionError, sqlite3.OperationalError):
+            return observation(str(resource_path), "coordinator schema or read unavailable")
 
 
 def verify_selected_wake(
