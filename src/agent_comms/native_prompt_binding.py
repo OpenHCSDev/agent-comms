@@ -1,7 +1,7 @@
 """Versioned prelaunch expected-prompt binding for coordinated native inputs.
 
 Written to a separate sidecar store BEFORE Pi launches, immediately after the
-input reservation commits. The binding records the exact prompt bytes' digest
+input reservation commits. The binding records the native request-envelope digest
 joined to the source sequence, sealed claim, stage, input ID, and owner
 incarnation. It confers no authority by itself: a binding without a recorded
 live proof is unproven, and equality is only ever reported after the private
@@ -125,8 +125,7 @@ def install_prompt_binding_schema(store: MutationStore) -> None:
 
 
 def _ensure_binding_schema(store: MutationStore) -> None:
-    """Self-initialize the sidecar like GoalHistoryStore; then verify the
-    actual schema objects, permissions, and durable creation."""
+    """Serialized snapshot installation; never repair an uncertain commit."""
     create_sidecar_file(binding_store_path(store), _DDL, _DDL_DIGEST)
 
 
@@ -215,28 +214,35 @@ def bind_expected_prompt(
             ).fetchone()
             if existing is not None:
                 raise IdentityConflict("this input already has a prelaunch prompt binding")
-            sidecar.execute(
+            expected = (
+                input_id,
+                1,
+                stage,
+                claim.claim_id,
+                execution_id,
+                attempt_ordinal,
+                claim.recipient_lookup,
+                owner.name,
+                generation,
+                wire_root_id,
+                claim.wire_seq,
+                claim.message_id,
+                digest,
+                store._now(0),
+            )
+            inserted = sidecar.execute(
                 "INSERT INTO prompt_bindings"
                 "(input_id,binding_version,stage,claim_id,execution_id,attempt_ordinal,"
                 "owner_lookup,owner_thread,owner_generation,wire_root_id,source_seq,"
                 "message_id,expected_prompt_digest,bound_at_ms) "
-                "VALUES (?,1,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    input_id,
-                    stage,
-                    claim.claim_id,
-                    execution_id,
-                    attempt_ordinal,
-                    claim.recipient_lookup,
-                    owner.name,
-                    generation,
-                    wire_root_id,
-                    claim.wire_seq,
-                    claim.message_id,
-                    digest,
-                    store._now(0),
-                ),
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                expected,
             )
+            actual = sidecar.execute(
+                "SELECT * FROM prompt_bindings WHERE input_id=?", (input_id,)
+            ).fetchone()
+            if inserted.rowcount != 1 or actual is None or tuple(actual) != expected:
+                raise IdentityConflict("prelaunch binding insert did not preserve exact identity")
     return digest
 
 
@@ -261,7 +267,7 @@ def read_expected_prompt_binding(store: MutationStore, input_id: str) -> PromptB
     if type(store) is not MutationStore or type(input_id) is not str:
         raise ValueError("prompt binding lookup requires the coordinator store and input ID")
     path = binding_store_path(store)
-    if not path.exists():
+    if not path.exists() and not path.is_symlink():
         return None
     with sidecar_connection(path, _DDL, _DDL_DIGEST) as db:
         binding = db.execute(

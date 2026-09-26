@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -69,6 +70,65 @@ def _root(tmp_path: Path):
         accepted = accept_initial_cohort(comms.bus, root_id, message.seq, store)
         assert accepted.value.member_count == len(initial.audience.recipients)
     return root, root_id, comms, initial, people
+
+
+async def test_suppressed_binding_insert_denies_native_send(tmp_path, monkeypatch):
+    from agent_comms import native_prompt_binding as binding
+
+    root, root_id, _, _, _ = _root(tmp_path)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model(decision="IGNORE")
+    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    original = binding.sidecar_connection
+
+    @contextmanager
+    def suppressed(*args, **kwargs):
+        with original(*args, **kwargs) as db:
+            # Inject after schema admission to independently test insert/readback,
+            # not only the complete-schema negative in test_private_sidecar.
+            db.execute(
+                "CREATE TRIGGER suppress BEFORE INSERT ON prompt_bindings "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+            yield db
+
+    monkeypatch.setattr(binding, "sidecar_connection", suppressed)
+    with pytest.raises(IdentityConflict, match="insert did not preserve exact identity"):
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        )
+    assert calls == []
+
+
+async def test_uncertain_binding_commit_denies_native_send_and_retry(tmp_path, monkeypatch):
+    from agent_comms import private_sidecar
+
+    root, root_id, _, _, _ = _root(tmp_path)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model(decision="IGNORE")
+    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    publish = private_sidecar._publish
+
+    def uncertain(*args, **kwargs):
+        # Model a lost success receipt after the snapshot really became durable.
+        publish(*args, **kwargs)
+        raise private_sidecar.SidecarCommitUnknown("lost commit receipt")
+
+    monkeypatch.setattr(private_sidecar, "_publish", uncertain)
+    with pytest.raises(private_sidecar.SidecarCommitUnknown):
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        )
+    assert calls == []
+    # Reservation is already deferred: a new run cannot resend this input even
+    # when durable binding bytes happen to be present after an uncertain return.
+    assert (
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        )
+        is None
+    )
+    assert calls == []
 
 
 def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):

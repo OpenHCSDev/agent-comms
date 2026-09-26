@@ -42,9 +42,24 @@ The following is partial implementation evidence, not closure or approval.
   adapter/binding/runtime/foreground suite: 93 passed, 5 existing native-artifact
   skips. No fake stream or lock probe establishes native acceptance or provider receipt.
   Sidecar hardening below is still required for the combined boundary.
-- **Private sidecar safety/durability.** Path replacement, full schema/trigger
-  validation, serialized installation, and per-commit sync/UNKNOWN handling need
-  adversarial coverage and fixes. Current helper is not a hardened boundary.
+- **Private sidecar safety/durability: implemented, review pending.** SQLite now
+  opens only `:memory:` and deserializes bytes from a pinned no-follow regular,
+  owner-only, single-link file descriptor. It never reopens the pathname for SQL.
+  A pinned-directory snapshot lock serializes installers/readers/writers. Every
+  schema object (not only prefixed names), metadata, and snapshot integrity are
+  checked on the exact connection used. Binding insertion requires rowcount=1
+  and exact full-row readback. Changed snapshots publish via fsynced staging,
+  atomic replacement, and directory fsync; a durable intent blocks automatic
+  reuse after interrupted publication. Any failed durability receipt denies send.
+  Final intent-removal fsync can fail after data is already durable; later reads
+  remain informational and cannot retry a reserved input. Tests cover both
+  parent's concrete negatives, path/lock substitution, alias/mode/owner drift,
+  schema drift, suppressed binding inserts, every fsync point, concurrent
+  installers, and real SIGKILL before/after replacement.
+  **Limitation:** bounded 32 MiB pilot snapshot store, full-file rewrite per
+  changed commit; not a scalable append database. All cooperating writers must
+  use this protocol; arbitrary same-uid code and shell/child writes are not an
+  OS-enforced sandbox. Capacity/performance remains an explicit integration gate.
 - **Ordinary `comms_send` → private N/K bridge.** A record-only candidate
   prototype exists, with three focused tests. It is not integrated into sends,
   does not establish authoritative bus-root/audience identity, and grants no
