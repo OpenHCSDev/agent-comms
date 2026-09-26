@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
-from .cohort_schema import COHORT_SCHEMA_VERSION
+from .cohort_schema import COHORT_SCHEMA_VERSION, assert_optional_awareness_schema
 from .coordination import (
     COORDINATION_SCHEMA_VERSION,
     COORDINATION_SNAPSHOT_VERSION,
@@ -125,13 +125,8 @@ class OptionalAwarenessProjection:
         ):
             raise ProjectionUnavailableError("selected owner or source window changed")
         _require_no_private_owner_rename(self.index.bus._path.parent)
-        # Frozen older claims carry a stable recipient lookup and name, but no
-        # per-claim participant generation. After any generation transition,
-        # even one retaining the same name, a historical selected row cannot
-        # be distinguished from current work. Omit rather than silently rank
-        # it away or inject it into a successor owner.
-        if self.expected_participant_generation != 1:
-            raise ProjectionUnavailableError("older claims lack owner-generation provenance")
+        # Each selected row must now carry immutable same-transaction owner
+        # generation provenance. Legacy rows lacking it omit the whole read.
         root_id = initial.wire_root_id
         lookup = claim.recipient_lookup
         page = self.index.page(
@@ -165,6 +160,21 @@ class OptionalAwarenessProjection:
             if candidates != accepted:
                 raise ProjectionUnavailableError("candidate rows differ from sealed decisions")
             obligations = self._open_obligations(db, lookup, owner.name)
+            selected = [
+                row
+                for row in decisions
+                if row["accepted_generation"] == self.expected_participant_generation
+            ]
+            if not any(row["claim_id"] == claim.claim_id for row in selected):
+                raise ProjectionUnavailableError("current selected claim has no owner generation")
+            current_obligations = [
+                row
+                for row in obligations
+                if row["accepted_generation"] == self.expected_participant_generation
+            ]
+            historical_omitted = (len(decisions) - len(selected)) + (
+                len(obligations) - len(current_obligations)
+            )
 
         # The SQL read above is an immutable snapshot, not a live-owner lease.
         # Do not hold the SQL read lock while consulting the registry. A newer
@@ -183,7 +193,7 @@ class OptionalAwarenessProjection:
                     "disposition": row["disposition"],
                     "target": row["exact_target"],
                 }
-                for row in decisions
+                for row in selected
             ],
             "open_obligations": [
                 {
@@ -191,13 +201,13 @@ class OptionalAwarenessProjection:
                     "target": row["exact_target"],
                     "state": row["state"],
                 }
-                for row in obligations
+                for row in current_obligations
             ],
         }
         text = json.dumps(context, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         if len(text.encode("utf-8")) > self.max_text_bytes:
             raise ProjectionUnavailableError("binding awareness exceeds the byte budget")
-        return OptionalAwarenessResult(text, True)
+        return OptionalAwarenessResult(text, True, omitted_count=historical_omitted)
 
     def _verify_live_inclusion(self, path: os.PathLike[str], lookup: str, owner: Thread) -> None:
         _require_no_private_owner_rename(self.index.bus._path.parent)
@@ -264,6 +274,7 @@ class OptionalAwarenessProjection:
         ):
             raise ProjectionUnavailableError("coordinator schema changed")
         _assert_schema(db)
+        assert_optional_awareness_schema(db)
         cohort_version = db.execute(
             "SELECT version FROM cohort_schema_meta WHERE singleton=1"
         ).fetchone()
@@ -293,13 +304,18 @@ class OptionalAwarenessProjection:
             "SELECT c.claim_id,c.recipient,c.wire_seq,c.message_id,c.wake_mode,"
             "c.disposition,r.exact_target,r.sealed,r.message_id AS receipt_message_id,"
             "m.claim_id AS member_claim,"
-            "d.claim_id AS delivery_claim,d.kind,d.canonical_thread "
+            "d.claim_id AS delivery_claim,d.kind,d.canonical_thread,"
+            "ag.claim_id AS generation_claim,ag.recipient_lookup AS generation_lookup,"
+            "ag.canonical_thread AS generation_thread,"
+            "ag.owner_generation AS accepted_generation "
             "FROM wake_claims c "
             "LEFT JOIN claim_batch_receipts r ON r.wire_root_id=? AND r.wire_seq=c.wire_seq "
             "LEFT JOIN claim_batch_members m ON m.wire_root_id=r.wire_root_id "
             "AND m.wire_seq=r.wire_seq AND m.claim_id=c.claim_id "
             "LEFT JOIN cohort_delivery_receipts d ON d.wire_root_id=r.wire_root_id "
             "AND d.wire_seq=r.wire_seq AND d.recipient_lookup=c.recipient_lookup "
+            "LEFT JOIN awareness_claim_generations ag ON ag.claim_id=c.claim_id "
+            "AND ag.wire_root_id=r.wire_root_id AND ag.wire_seq=r.wire_seq "
             "WHERE c.recipient_lookup=? AND c.wire_seq>? AND c.wire_seq<=? "
             "ORDER BY c.wire_seq LIMIT ?",
             (root_id, lookup, self.after_seq, through_seq, self.max_rows + 1),
@@ -311,10 +327,15 @@ class OptionalAwarenessProjection:
             or row["delivery_claim"] != row["claim_id"]
             or row["kind"] != "selected"
             or row["canonical_thread"] != row["recipient"]
-            # A stable lookup survives a normal rename, but an old frozen
-            # selected owner is NOT current gamma's input. Omit the entire
-            # supplement rather than hiding a binding row or injecting it.
-            or row["recipient"] != owner_name
+            or row["generation_claim"] != row["claim_id"]
+            or row["generation_lookup"] != lookup
+            or row["generation_thread"] != row["recipient"]
+            or type(row["accepted_generation"]) is not int
+            or row["accepted_generation"] > self.expected_participant_generation
+            or (
+                row["accepted_generation"] == self.expected_participant_generation
+                and row["recipient"] != owner_name
+            )
             for row in rows
         ):
             raise ProjectionUnavailableError("binding decisions are unsealed or over budget")
@@ -324,12 +345,29 @@ class OptionalAwarenessProjection:
         self, db: sqlite3.Connection, lookup: str, owner_name: str
     ) -> list[sqlite3.Row]:
         rows = db.execute(
-            "SELECT o.execution_id,o.exact_target,o.state,e.owner_thread "
+            "SELECT o.execution_id,o.exact_target,o.state,e.owner_thread,e.origin,"
+            "ec.claim_id AS linked_claim,ag.owner_generation AS accepted_generation,"
+            "ag.canonical_thread AS generation_thread "
             "FROM obligations o JOIN executions e ON e.execution_id=o.execution_id "
+            "LEFT JOIN execution_claims ec ON ec.execution_id=e.execution_id "
+            "LEFT JOIN awareness_claim_generations ag ON ag.claim_id=ec.claim_id "
             "WHERE e.owner_lookup=? AND o.state IN ('pending','publishing','deferred') "
             "ORDER BY o.created_at_ms,o.execution_id LIMIT ?",
             (lookup, self.max_rows + 1),
         ).fetchall()
-        if len(rows) > self.max_rows or any(row["owner_thread"] != owner_name for row in rows):
-            raise ProjectionUnavailableError("open obligations have old owner or exceed budget")
+        if len(rows) > self.max_rows or len({row["execution_id"] for row in rows}) != len(rows):
+            raise ProjectionUnavailableError("open obligations exceed complete row budget")
+        if any(
+            row["origin"] != "wire"
+            or row["linked_claim"] is None
+            or type(row["accepted_generation"]) is not int
+            or row["accepted_generation"] > self.expected_participant_generation
+            or row["generation_thread"] != row["owner_thread"]
+            or (
+                row["accepted_generation"] == self.expected_participant_generation
+                and row["owner_thread"] != owner_name
+            )
+            for row in rows
+        ):
+            raise ProjectionUnavailableError("open obligation lacks exact owner provenance")
         return rows

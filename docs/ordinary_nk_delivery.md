@@ -92,6 +92,28 @@ uses real bus/SQLite/foreground processing with only model responses faked:
 It checks exact N/K counts and historical binding equality, not native/provider
 acceptance. Fake responses cannot close real protocol acceptance gates.
 
+## Optional selected-awareness generation provenance (draft)
+
+Fresh opt-in cohort roots install a separately versioned/digested
+`awareness_claim_generations` table. The cohort writer records one immutable
+owner-generation witness per selected claim in the same SQLite acceptance
+transaction, before sealing the mandatory N/K receipt. Its SAVEPOINT rolls
+back *all* optional rows if any witness or optional schema insert fails; the
+mandatory cohort still seals when its own facts are valid. A crash before the
+outer COMMIT leaves neither receipt nor optional row. Disk/full-store failures
+outside the optional savepoint can still fail mandatory acceptance; they are
+never reported as successful delivery.
+
+The read-only builder requires an exact optional schema, per-claim receipt /
+member / message-ID / canonical-owner / generation join, and a live current
+owner turn. Proven predecessor generations are historical, never current
+selected prompts or response obligations. Missing/legacy/corrupt generation
+rows, ambiguous obligations, excess size or stale owner omit the *entire*
+optional supplement without claiming a cursor or replay. Existing roots with
+older sealed claims cannot infer their generations retroactively; those
+windows remain original-alone unless explicitly migrated with a reviewed
+source witness. No optional record grants action, provider, or ACK authority.
+
 ## Still incomplete
 
 This is **not** completion of ordinary-delivery integration. An additional

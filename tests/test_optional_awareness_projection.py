@@ -4,20 +4,26 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from agent_comms import coordinated_runtime as runtime
+from agent_comms import coordination_cohort as cohort
 from agent_comms.bus_publication import CommittedInitial, stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination import ExecutionOrigin, WakeClaim
 from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import MutationStore
 from agent_comms.declarations import Thread
 from agent_comms.operations import Comms
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.wake_candidate_index import WakeCandidateIndex
+from test_coordinated_runtime import _fake_model
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="private cohort requires POSIX")
 
@@ -86,6 +92,154 @@ def _projection(
         expected_admission_epoch=epoch,
         max_rows=max_rows,
     )
+
+
+def test_optional_generation_insert_fault_rolls_back_only_optional_rows(
+    tmp_path: Path, monkeypatch
+) -> None:
+    comms, store, _index, root_id = _root(tmp_path)
+    try:
+        message = comms.send_initial_cohort("sender", "#team", "@member000 @member001 act")
+        initial = comms.bus.read_initial_cohort(root_id, message.seq)
+        for recipient in initial.audience.recipients:
+            store.register_participant(
+                recipient.recipient_lookup,
+                recipient.canonical_thread,
+                recipient.canonical_thread,
+                committed=True,
+            )
+        actual_assert = cohort.assert_optional_awareness_schema
+
+        def inject_second_insert_failure(db):
+            actual_assert(db)
+            db.execute(
+                "CREATE TRIGGER zz_optional_fault BEFORE INSERT "
+                "ON awareness_claim_generations "
+                "WHEN NEW.canonical_thread='member001' "
+                "BEGIN SELECT RAISE(ABORT,'injected optional fault'); END"
+            )
+
+        monkeypatch.setattr(
+            cohort, "assert_optional_awareness_schema", inject_second_insert_failure
+        )
+        accepted = accept_initial_cohort(comms.bus, root_id, message.seq, store).value
+        assert len(accepted.claims) == 2
+        assert (
+            store._connection.execute(
+                "SELECT sealed FROM claim_batch_receipts WHERE wire_root_id=? AND wire_seq=?",
+                (root_id, message.seq),
+            ).fetchone()[0]
+            == 1
+        )
+        assert (
+            store._connection.execute(
+                "SELECT COUNT(*) FROM awareness_claim_generations WHERE wire_seq=?",
+                (message.seq,),
+            ).fetchone()[0]
+            == 0
+        )
+        assert (
+            store._connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE name='zz_optional_fault'"
+            ).fetchone()
+            is None
+        )  # the SAVEPOINT removed the transient fault too
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("phase", ["before_optional", "after_optional", "after_seal"])
+def test_acceptance_fault_before_commit_never_leaves_partial_provenance(
+    tmp_path: Path, monkeypatch, phase: str
+) -> None:
+    comms, store, _index, root_id = _root(tmp_path)
+    try:
+        message = comms.send_initial_cohort("sender", "member000", "fresh")
+        initial = comms.bus.read_initial_cohort(root_id, message.seq)
+        for recipient in initial.audience.recipients:
+            store.register_participant(
+                recipient.recipient_lookup,
+                recipient.canonical_thread,
+                recipient.canonical_thread,
+                committed=True,
+            )
+        real_record = cohort._record_optional_owner_generations
+
+        if phase in {"before_optional", "after_optional"}:
+
+            def crash_optional(db, claims, wire_root_id, wire_seq):
+                if phase == "after_optional":
+                    real_record(db, claims, wire_root_id, wire_seq)
+                raise RuntimeError("simulated interruption before commit")
+
+            monkeypatch.setattr(cohort, "_record_optional_owner_generations", crash_optional)
+        else:
+
+            def crash_after_seal(*_args, **_kwargs):
+                raise RuntimeError("simulated interruption after seal before commit")
+
+            monkeypatch.setattr(cohort, "_receipt_matches", crash_after_seal)
+        with pytest.raises(RuntimeError, match="simulated interruption"):
+            accept_initial_cohort(comms.bus, root_id, message.seq, store)
+        assert (
+            store._connection.execute(
+                "SELECT COUNT(*) FROM claim_batch_receipts WHERE wire_seq=?", (message.seq,)
+            ).fetchone()[0]
+            == 0
+        )
+        assert (
+            store._connection.execute(
+                "SELECT COUNT(*) FROM wake_claims WHERE wire_seq=?", (message.seq,)
+            ).fetchone()[0]
+            == 0
+        )
+        assert (
+            store._connection.execute(
+                "SELECT COUNT(*) FROM awareness_claim_generations WHERE wire_seq=?",
+                (message.seq,),
+            ).fetchone()[0]
+            == 0
+        )
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("damage", ["missing", "drift"])
+async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered(
+    monkeypatch, damage: str
+) -> None:
+    if Path("/var").is_symlink() or not Path("/var/tmp").is_dir():
+        pytest.skip("private selected runtime requires a real /var/tmp")
+    with tempfile.TemporaryDirectory(prefix="pr94-legacy-optional-", dir="/var/tmp") as temp:
+        root = Path(temp)
+        comms, store, _index, root_id = _root(root)
+        try:
+            initial, claim = _accepted(comms, store, root_id, "member000", "mandatory work")
+            install_private_response_schema(store)
+            install_native_runtime_schema(store)
+            if damage == "missing":
+                store._connection.execute("DROP TABLE awareness_claim_generations")
+            else:
+                store._connection.execute("DROP TRIGGER awareness_generation_insert_guard")
+                store._connection.execute(
+                    "CREATE TRIGGER awareness_generation_insert_guard BEFORE INSERT "
+                    "ON awareness_claim_generations BEGIN SELECT RAISE(ABORT,'drift'); END"
+                )
+        finally:
+            store.close()
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        runner, calls = _fake_model()
+        monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
+        outcome = await runtime.run_one_sealed_claim(
+            comms.root,
+            wire_root_id=root_id,
+            owner_name="member000",
+            native_package=root,
+        )
+        assert outcome is not None and outcome.response_message_id
+        assert outcome.claim_id == claim.claim_id and len(calls) == 1
+        assert initial.message.body in calls[0][1]
+        assert "Selected source decisions through " not in calls[0][1]
 
 
 def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: Path) -> None:
@@ -211,6 +365,52 @@ def test_new_snapshot_after_same_name_generation_bump_omits_old_claim(
         store.close()
 
 
+def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Path) -> None:
+    comms, store, index, root_id = _root(tmp_path)
+    try:
+        old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
+        store.create_execution(
+            "old-reply",
+            ExecutionOrigin.WIRE,
+            old_claim.recipient_lookup,
+            "member000",
+            1,
+            claim_ids=(old_claim.claim_id,),
+            exact_target="sender",
+        )
+        store.advance_owner_generation(
+            old_claim.recipient_lookup, "member000", expected_generation=1
+        )
+        current, claim = _accepted(comms, store, root_id, "member000", "new pending")
+        index.maintain(rebuild=True)
+        owner = _owner(comms, "member000")
+        result = _projection(index, store, owner, 0, current.message.seq)(current, claim, owner)
+        assert result.mandatory_complete and result.omitted_count == 2
+        context = json.loads(result.text)
+        assert [row["claim_id"] for row in context["selected"]] == [claim.claim_id]
+        assert context["open_obligations"] == []
+        assert old_claim.claim_id not in result.text and "old-reply" not in result.text
+        assert old.message.seq < current.message.seq
+    finally:
+        store.close()
+
+
+def test_fresh_gen2_only_selected_is_available(tmp_path: Path) -> None:
+    comms, store, index, root_id = _root(tmp_path)
+    try:
+        lookup = stable_thread_lookup(comms.registry.require("member000").created_at)
+        store.register_participant(lookup, "member000", "member000", committed=True)
+        store.advance_owner_generation(lookup, "member000", expected_generation=1)
+        initial, claim = _accepted(comms, store, root_id, "member000", "fresh")
+        index.maintain(rebuild=True)
+        owner = _owner(comms, "member000")
+        result = _projection(index, store, owner, 0, initial.message.seq)(initial, claim, owner)
+        assert result.mandatory_complete and result.omitted_count == 0
+        assert [row["claim_id"] for row in json.loads(result.text)["selected"]] == [claim.claim_id]
+    finally:
+        store.close()
+
+
 def test_owner_generation_advance_during_snapshot_omits_at_inclusion(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -280,7 +480,10 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
         )
         assert old_claim.recipient == "member000" and current_claim.recipient == "gamma"
         assert old.message.seq < current.message.seq
-        assert not result.mandatory_complete and result.text == ""
+        assert result.mandatory_complete and result.omitted_count == 1
+        selected = json.loads(result.text)["selected"]
+        assert [row["claim_id"] for row in selected] == [current_claim.claim_id]
+        assert old_claim.claim_id not in result.text
     finally:
         store.close()
 
