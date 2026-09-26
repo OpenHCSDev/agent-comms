@@ -30,6 +30,15 @@ from agent_comms.wake_candidate_index import (
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="private N/K bus requires POSIX")
 
 
+@pytest.fixture(autouse=True)
+def _manual_projection_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    # These tests own the explicit WAL maintenance schedule and fault points;
+    # the production post-commit worker has separate integration coverage.
+    monkeypatch.setattr(
+        "agent_comms.operations.schedule_private_candidate_after_commit", lambda *_: None
+    )
+
+
 def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)

@@ -176,7 +176,8 @@ async def test_real_backend_fake_rpc_never_writes_prompt_after_pause(tmp_path: P
     root = tmp_path / "wire"
     MaintenanceBarrier(root / "registry.json").begin("operator")
     marker = tmp_path / "sent"
-    stub = tmp_path / "fake-pi"
+    ready = tmp_path / "ready"
+    stub = tmp_path / "pi-fake"
     stub.write_text(
         f"#!{sys.executable}\n"
         "import json, select, sys\n"
@@ -185,6 +186,7 @@ async def test_real_backend_fake_rpc_never_writes_prompt_after_pause(tmp_path: P
         "reply = {'type':'response', 'command':'get_state', 'id':request['id'], "
         "'success':True, 'data':cap}\n"
         "print(json.dumps(reply), flush=True)\n"
+        f"open({str(ready)!r}, 'w').write('RPC_READY')\n"
         "if select.select([sys.stdin], [], [], 1)[0] and sys.stdin.readline():\n"
         f"    open({str(marker)!r}, 'w').write('PROMPT')\n"
     )
@@ -195,6 +197,7 @@ async def test_real_backend_fake_rpc_never_writes_prompt_after_pause(tmp_path: P
             str(stub), [], "fake-only", str(tmp_path), env_extra={"AGENT_COMMS_ROOT": str(root)}
         )
     ]
+    assert ready.read_text() == "RPC_READY"  # Real RPC capability preflight ran.
     assert result[-1]["ok"] is False
     assert not marker.exists()
 

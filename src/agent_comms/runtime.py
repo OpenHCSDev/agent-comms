@@ -386,6 +386,35 @@ class RuntimeServer:
             self.path.unlink(missing_ok=True)
 
 
+def _present_cursor_session(metadata: dict[str, Any], session_id: str) -> dict[str, Any]:
+    """Map trusted owner cursor metadata to this ACP attachment's session ID.
+
+    A permanent alias can be the client's sessionId while the owner process
+    emits its canonical sessionId. Rewrite only this presentation coordinate;
+    never alter the owner epoch, revision, status, or native proof fields.
+    """
+    agent_meta = metadata.get("agentComms")
+    if not isinstance(agent_meta, dict):
+        field_meta = metadata.get("_meta")
+        agent_meta = field_meta.get("agentComms") if isinstance(field_meta, dict) else None
+    if isinstance(agent_meta, dict):
+        cursor = agent_meta.get("privateNativeCursor")
+        if isinstance(cursor, dict) and cursor.get("version") == 1:
+            scope = cursor.get("scope")
+            if isinstance(scope, dict) and isinstance(scope.get("sessionId"), str):
+                scope["sessionId"] = session_id
+        # A canonical owner socket also serves permanent aliases. Change only
+        # the attachment coordinate; leave exact IDs, epochs and revisions.
+        for key in ("queueBinding", "queueState", "inputStarted"):
+            value = agent_meta.get(key)
+            if not isinstance(value, dict) or value.get("version") != 1:
+                continue
+            scope = value if key == "queueBinding" else value.get("scope")
+            if isinstance(scope, dict) and isinstance(scope.get("sessionId"), str):
+                scope["sessionId"] = session_id
+    return metadata
+
+
 class RuntimeProxy:
     def __init__(self, agent: Any, session_id: str, path: Path):
         self.agent = agent
@@ -485,7 +514,8 @@ class RuntimeProxy:
                     self._controller_token = (
                         token if isinstance(token, str) and len(token) == 64 else None
                     )
-                    return reader, cast(dict[str, Any], data["ready"])
+                    metadata = cast(dict[str, Any], data["ready"])
+                    return reader, _present_cursor_session(metadata, self.session_id)
                 await self.update(data)
             raise RuntimeError("Thread owner disconnected during attachment")
         except BaseException:
@@ -495,7 +525,8 @@ class RuntimeProxy:
     async def update(self, data: dict[str, Any]) -> None:
         if "update" in data and self.agent._client is not None:
             await self.agent._client.session_update(
-                session_id=self.session_id, update=data["update"]
+                session_id=self.session_id,
+                update=_present_cursor_session(data["update"], self.session_id),
             )
         if "permissionRequest" in data:
             request = data["permissionRequest"]

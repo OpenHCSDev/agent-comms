@@ -192,7 +192,7 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
     assert fresh.full_history() == [sent]
     marker_before = (comms.root / "bus_meta.json").read_bytes()
     with pytest.raises(RelationViolationError, match="Legacy append"):
-        fresh.send_message("alice", "bob", "old writer cannot append")
+        fresh.bus.publish(Message("alice", "bob", "old writer cannot append", MessageType.INFO))
     with pytest.raises(RelationViolationError, match="Private bus protocol blocks legacy deletion"):
         fresh.bus.remove_thread("alice")
     assert (comms.root / "bus_meta.json").read_bytes() == marker_before
