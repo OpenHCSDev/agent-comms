@@ -28,7 +28,7 @@ import uuid
 from bisect import bisect_left
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import closing, contextmanager, nullcontext, suppress
+from contextlib import AbstractContextManager, closing, contextmanager, nullcontext, suppress
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from enum import Enum, StrEnum
@@ -211,8 +211,13 @@ def _verify_claim_bus_before_read_unlocked(bus_path: Path) -> None:
 
 
 @contextmanager
-def _store_lock(store_path: Path) -> Iterator[None]:
-    """Hold an exclusive process lock associated with a wire store."""
+def _store_lock(store_path: Path) -> Iterator[int]:
+    """Hold the wire-store lock; yield its descriptor for trusted child inheritance.
+
+    POSIX release is by close, not LOCK_UN: an inherited descriptor must retain
+    the authority span if the parent dies before a native mutation finishes.
+    Never close that descriptor in a child while it can still mutate.
+    """
     store_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = store_path.with_name(f".{store_path.name}.lock")
     with open(lock_path, "a+b") as lock_file:
@@ -238,15 +243,15 @@ def _store_lock(store_path: Path) -> Iterator[None]:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
         try:
             _verify_claim_bus_before_read_unlocked(store_path)
-            yield
+            yield lock_file.fileno()
         finally:
             if os.name == "nt":
                 lock_file.seek(0)
                 msvcrt.locking(  # type: ignore[attr-defined]
                     lock_file.fileno(), msvcrt.LK_UNLCK, 1  # type: ignore[attr-defined]
                 )
-            else:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            # POSIX flock releases on the last close of this open-file
+            # description (including inherited copies), at the outer `with`.
 
 
 def _replace_snapshot(source: Path, target: Path, *, windows: bool = os.name == "nt") -> None:
@@ -2373,29 +2378,45 @@ class ThreadRegistry:
                 if not math.isfinite(candidate):
                     raise RelationViolationError("Registry creation identities collide.")
                 thread = replace(thread, created_at=candidate)
-            history = None
-            intent = None
-            before_goal = previous.goal if previous is not None else None
-            if before_goal != thread.goal:
-                from .goal_history import GoalHistoryStore
-
-                history = GoalHistoryStore(self._path)
-                intent = history.begin(thread.created_at, before_goal, thread.goal)
-            self._threads[thread.name] = thread
-            self._statuses[thread.name] = status
-            self._last_seen[thread.name] = time.time()
-            if (
-                previous is None
-                or new_owner
+            identity_changed = previous is not None and (
+                previous.created_at != thread.created_at
                 or previous.pid != thread.pid
+                or previous.session_file != thread.session_file
+                or previous.worktree != thread.worktree
                 or previous.role != thread.role
                 or (previous_status is not None and previous_status.active != status.active)
-            ):
-                self._bump_admission_unlocked(thread.name)
-            self._bump_owner_epoch_unlocked(thread.name)
-            self._save_unlocked()
-            if history is not None and intent is not None:
-                history.commit(intent)
+            )
+            identity_scope: AbstractContextManager[None]
+            if identity_changed:
+                from .compaction_publication_lease import publication_identity_fence
+
+                identity_scope = publication_identity_fence(self._path.parent, nonblocking=True)
+            else:
+                identity_scope = nullcontext()
+            with identity_scope:
+                history = None
+                intent = None
+                before_goal = previous.goal if previous is not None else None
+                if before_goal != thread.goal:
+                    from .goal_history import GoalHistoryStore
+
+                    history = GoalHistoryStore(self._path)
+                    intent = history.begin(thread.created_at, before_goal, thread.goal)
+                self._threads[thread.name] = thread
+                self._statuses[thread.name] = status
+                self._last_seen[thread.name] = time.time()
+                if (
+                    previous is None
+                    or new_owner
+                    or previous.pid != thread.pid
+                    or previous.role != thread.role
+                    or (previous_status is not None and previous_status.active != status.active)
+                ):
+                    self._bump_admission_unlocked(thread.name)
+                self._bump_owner_epoch_unlocked(thread.name)
+                self._save_unlocked()
+                if history is not None and intent is not None:
+                    history.commit(intent)
 
     def live_owner_with_epoch(self, name: str) -> tuple[Thread, int]:
         """Capture an active owner and its persistent incarnation under one lock.
@@ -2542,7 +2563,41 @@ class ThreadRegistry:
         session_leaf: str,
         session_revision: str,
     ) -> OwnerCompactionAttestation:
-        """Recheck canonical owner authority for one compaction commit, atomically.
+        """Return an audit snapshot, NOT authority for a later native mutation."""
+        with self.guard_owner_compaction(
+            expected,
+            expected_epoch,
+            turn_id,
+            expected_goal_id=expected_goal_id,
+            expected_goal_revision=expected_goal_revision,
+            correction_revision=correction_revision,
+            session_file=session_file,
+            session_leaf=session_leaf,
+            session_revision=session_revision,
+        ) as (attestation, _):
+            return attestation
+
+    @contextmanager
+    def guard_owner_compaction(
+        self,
+        expected: Thread,
+        expected_epoch: int,
+        turn_id: str,
+        *,
+        expected_goal_id: str,
+        expected_goal_revision: int,
+        correction_revision: int,
+        session_file: str,
+        session_leaf: str,
+        session_revision: str,
+    ) -> Iterator[tuple[OwnerCompactionAttestation, int]]:
+        """Hold canonical authority through the caller's native mutation.
+
+        Lock order: registry, then native session writer. No registry method
+        may be called inside this scope (the lock is not reentrant). A native
+        child MUST inherit the yielded descriptor and keep it until exit;
+        the caller must bound, terminate and reap it before leaving normally.
+        This scope does not validate correction or native session evidence.
 
         This is NOT a bearer token: the same check must run again at commit
         time under this lock. Anything that moved since the caller captured
@@ -2571,7 +2626,7 @@ class ThreadRegistry:
             or not session_revision
         ):
             raise ValueError("owner compaction attestation requires bounded exact expectations")
-        with _store_lock(self._path):
+        with _store_lock(self._path) as authority_fd:
             self._load_unlocked()
             canonical = self._aliases.get(expected.name, expected.name)
             owner = self._threads.get(canonical)
@@ -2600,7 +2655,7 @@ class ThreadRegistry:
                 )
             from .owner_compaction_gate import OwnerCompactionAttestation
 
-            return OwnerCompactionAttestation(
+            yield OwnerCompactionAttestation(
                 thread=owner.name,
                 owner_epoch=epoch,
                 turn_id=turn_id,
@@ -2611,7 +2666,7 @@ class ThreadRegistry:
                 session_leaf=session_leaf,
                 session_revision=session_revision,
                 registry_revision=file_revision(self._path),
-            )
+            ), authority_fd
 
     def _claim_turn_unlocked(
         self, current: Thread, turn_id: str, routing: TurnRouting | None
@@ -2759,7 +2814,12 @@ class ThreadRegistry:
 
     def rename(self, name: str, new_name: str) -> tuple[str, str]:
         """Rename one running thread while retaining old names as aliases."""
-        with _store_lock(self._path):
+        from .compaction_publication_lease import publication_identity_fence
+
+        with (
+            publication_identity_fence(self._path.parent, nonblocking=True),
+            _store_lock(self._path),
+        ):
             self._load_unlocked()
             canonical = self._aliases.get(name, name)
             if canonical not in self._threads:
@@ -2801,7 +2861,12 @@ class ThreadRegistry:
             return canonical, new_name
 
     def unregister(self, name: str) -> None:
-        with _store_lock(self._path):
+        from .compaction_publication_lease import publication_identity_fence
+
+        with (
+            publication_identity_fence(self._path.parent, nonblocking=True),
+            _store_lock(self._path),
+        ):
             self._load_unlocked()
             name = self._aliases.get(name, name)
             if name not in self._threads:
@@ -2813,7 +2878,12 @@ class ThreadRegistry:
             self._save_unlocked()
 
     def archive(self, name: str) -> None:
-        with _store_lock(self._path):
+        from .compaction_publication_lease import publication_identity_fence
+
+        with (
+            publication_identity_fence(self._path.parent, nonblocking=True),
+            _store_lock(self._path),
+        ):
             self._load_unlocked()
             name = self._aliases.get(name, name)
             if name not in self._threads:
@@ -2824,7 +2894,12 @@ class ThreadRegistry:
             self._save_unlocked()
 
     def begin_delete(self, name: str) -> None:
-        with _store_lock(self._path):
+        from .compaction_publication_lease import publication_identity_fence
+
+        with (
+            publication_identity_fence(self._path.parent, nonblocking=True),
+            _store_lock(self._path),
+        ):
             self._load_unlocked()
             name = self._aliases.get(name, name)
             if name not in self._threads:
@@ -2841,7 +2916,12 @@ class ThreadRegistry:
 
     def remove(self, name: str) -> tuple[str, ...]:
         """Remove a declaration and atomically detach its surviving children."""
-        with _store_lock(self._path):
+        from .compaction_publication_lease import publication_identity_fence
+
+        with (
+            publication_identity_fence(self._path.parent, nonblocking=True),
+            _store_lock(self._path),
+        ):
             self._load_unlocked()
             name = self._aliases.get(name, name)
             if name not in self._threads:

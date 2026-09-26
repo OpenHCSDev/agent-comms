@@ -59,8 +59,15 @@ agent-comms-nk-foreground = "agent_comms.nk_foreground:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent_comms"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"stack/pi-native.sha256" = "agent_comms/_native/pi-native.sha256"
+"stack/native-compaction-commit-child.mjs" = "agent_comms/_native/native-compaction-commit-child.mjs"
+
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "extensions", "README.md", "LICENSE"]
+include = [
+    "src", "tests", "extensions", "README.md", "LICENSE",
+    "stack/pi-native.sha256", "stack/native-compaction-commit-child.mjs",
+]
 
 [tool.hatch.version]
 path = "src/agent_comms/__init__.py"

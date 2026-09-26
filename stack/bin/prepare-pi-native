@@ -2,6 +2,9 @@
 # Build the pinned input-ID Pi copy on persistent disk. Never alter stock Pi.
 set -euo pipefail
 umask 077
+# Preparation runs Node only for version/syntax checks, never ambient preloads.
+unset NODE_OPTIONS NODE_PATH NODE_COMPILE_CACHE
+export NODE_DISABLE_COMPILE_CACHE=1
 
 stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 repo_root=$(cd -- "$stack_root/.." && pwd)
@@ -13,7 +16,8 @@ bedrock=node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
 
 verify() (
     cd -- "$1/node_modules/@earendil-works/pi-coding-agent"
-    sha256sum --check --status "$manifest"
+    sha256sum --check --status "$manifest" &&
+        python3 "$repo_root/src/agent_comms/native_package.py" "$PWD"
 )
 
 if [[ -e "$target" ]]; then
@@ -57,7 +61,21 @@ python3 "$stack_root/patch-native-input-recovery.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
 python3 "$stack_root/patch-native-proof-headroom.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
+manager=dist/core/session-manager.js
+python3 "$stack_root/patch-native-session-writer-prototype.py" --production \
+    "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
+python3 "$stack_root/patch-native-compaction-journal.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
+python3 "$stack_root/patch-native-writer-coverage.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
+python3 "$stack_root/patch-native-writer-failure-state.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
+cp -- "$repo_root/src/agent_comms/pi_project_bootstrap.mjs" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-project-bootstrap.mjs"
+python3 "$stack_root/prepare-native-import-boundary.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent"
 verify "$stage"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$compaction"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$session"

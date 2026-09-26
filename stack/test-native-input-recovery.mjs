@@ -30,7 +30,7 @@ function recover(entries, rows) {
   try {
     const proof = join(root, 'proof');
     writeFileSync(proof, rows.map((value) => JSON.stringify(value) + '\n').join(''));
-    const manager = Object.create(SessionManager.prototype);
+    const manager = SessionManager.inMemory(root);
     manager.fileEntries = entries;
     manager.isPersisted = () => true;
     manager.assertNativeInputSafe = () => true;
