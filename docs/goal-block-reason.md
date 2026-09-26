@@ -18,9 +18,10 @@ goal is waiting for.
   its own fails; it does not copy a stale progress report that may describe
   already-completed work.
 - **Automatic blocks record their own diagnostic.** `block_goal_after_failed_turn`
-  and `block_unverified_goal_completion` store the exact diagnostic (appended
-  to progress, and as the reason) so the visible explanation matches the
-  automated failure rather than older text.
+  appends the exact diagnostic to prior progress and stores it as the reason;
+  `block_unverified_goal_completion` **replaces** progress with the diagnostic
+  and stores it as the reason. In both cases the visible explanation matches
+  the automated failure rather than older text.
 - **Owner resume refusal is persisted.** When an owner Resume hits a private
   attempt that is still `blocked`, the refusal explanation ("The interrupted
   goal attempt is unresolved …") is written to the goal as its `block_reason`
