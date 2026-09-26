@@ -8,6 +8,8 @@ or model-context delivery. No batch writer or runtime reader exists here.
 from __future__ import annotations
 
 import hashlib
+import logging
+import sqlite3
 from typing import Final
 
 from .coordination import COORDINATION_SCHEMA_VERSION, SchemaVersionError
@@ -249,6 +251,109 @@ _DDL: Final[tuple[tuple[str, str], ...]] = (
 
 _DDL_DIGEST: Final = hashlib.sha256("\n".join(sql for _, sql in _DDL).encode()).hexdigest()
 _EXPECTED_NAMES: Final = frozenset(name for name, _sql in _DDL)
+_LOG = logging.getLogger(__name__)
+
+# This optional read model has a separate version and digest. A legacy cohort
+# remains deliverable without it; missing/partial provenance omits awareness.
+_AWARENESS_DDL: Final[tuple[tuple[str, str], ...]] = (
+    (
+        "awareness_schema_meta",
+        """CREATE TABLE awareness_schema_meta (
+            singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+            version INTEGER NOT NULL CHECK (version = 1),
+            ddl_digest TEXT NOT NULL CHECK (length(ddl_digest) = 64)
+        ) STRICT""",
+    ),
+    (
+        "awareness_claim_generations",
+        """CREATE TABLE awareness_claim_generations (
+            claim_id TEXT PRIMARY KEY REFERENCES wake_claims(claim_id),
+            wire_root_id TEXT NOT NULL,
+            wire_seq INTEGER NOT NULL CHECK (wire_seq > 0),
+            recipient_lookup TEXT NOT NULL REFERENCES participants(participant_lookup),
+            canonical_thread TEXT NOT NULL CHECK (length(canonical_thread) BETWEEN 1 AND 256),
+            owner_generation INTEGER NOT NULL CHECK (owner_generation > 0),
+            FOREIGN KEY (wire_root_id,wire_seq,claim_id)
+                REFERENCES claim_batch_members(wire_root_id,wire_seq,claim_id)
+        ) STRICT""",
+    ),
+    (
+        "awareness_generation_insert_guard",
+        """CREATE TRIGGER awareness_generation_insert_guard
+        BEFORE INSERT ON awareness_claim_generations BEGIN
+            SELECT RAISE(ABORT, 'optional generation requires unsealed exact claim/member')
+            WHERE NOT EXISTS (
+                SELECT 1 FROM claim_batch_members m JOIN wake_claims c
+                  ON c.claim_id=m.claim_id JOIN claim_batch_receipts r
+                  ON r.wire_root_id=m.wire_root_id AND r.wire_seq=m.wire_seq
+                JOIN owner_generations g ON g.owner_lookup=m.recipient_lookup
+                WHERE m.claim_id=NEW.claim_id AND m.wire_root_id=NEW.wire_root_id
+                  AND m.wire_seq=NEW.wire_seq
+                  AND m.recipient_lookup=NEW.recipient_lookup
+                  AND c.recipient=NEW.canonical_thread
+                  AND c.message_id=r.message_id AND r.sealed=0
+                  AND g.owner_thread=NEW.canonical_thread
+                  AND g.generation=NEW.owner_generation);
+        END""",
+    ),
+    (
+        "awareness_generation_update_guard",
+        """CREATE TRIGGER awareness_generation_update_guard
+        BEFORE UPDATE ON awareness_claim_generations
+        BEGIN SELECT RAISE(ABORT, 'optional generation is immutable'); END""",
+    ),
+    (
+        "awareness_generation_delete_guard",
+        """CREATE TRIGGER awareness_generation_delete_guard
+        BEFORE DELETE ON awareness_claim_generations
+        BEGIN SELECT RAISE(ABORT, 'optional generation cannot be deleted'); END""",
+    ),
+    (
+        "awareness_meta_update_guard",
+        """CREATE TRIGGER awareness_meta_update_guard BEFORE UPDATE ON awareness_schema_meta
+        BEGIN SELECT RAISE(ABORT, 'optional schema metadata is immutable'); END""",
+    ),
+    (
+        "awareness_meta_delete_guard",
+        """CREATE TRIGGER awareness_meta_delete_guard BEFORE DELETE ON awareness_schema_meta
+        BEGIN SELECT RAISE(ABORT, 'optional schema metadata cannot be deleted'); END""",
+    ),
+)
+_AWARENESS_DIGEST: Final = hashlib.sha256(
+    "\n".join(sql for _, sql in _AWARENESS_DDL).encode()
+).hexdigest()
+_AWARENESS_NAMES: Final = frozenset(name for name, _ in _AWARENESS_DDL)
+
+
+def assert_optional_awareness_schema(db: sqlite3.Connection) -> None:
+    actual = {
+        row["name"]: row["sql"]
+        for row in db.execute(
+            "SELECT name,sql FROM sqlite_master WHERE type IN ('table','trigger','index') "
+            "AND name LIKE 'awareness_%'"
+        )
+    }
+    meta = db.execute(
+        "SELECT version,ddl_digest FROM awareness_schema_meta WHERE singleton=1"
+    ).fetchone()
+    if (
+        set(actual) != _AWARENESS_NAMES
+        or any(actual.get(name) != sql for name, sql in _AWARENESS_DDL)
+        or meta is None
+        or tuple(meta) != (1, _AWARENESS_DIGEST)
+    ):
+        raise SchemaVersionError("optional awareness generation schema is unavailable")
+
+
+def _install_optional_awareness_schema(db: sqlite3.Connection) -> None:
+    present = db.execute(
+        "SELECT 1 FROM sqlite_master WHERE name LIKE 'awareness_%' LIMIT 1"
+    ).fetchone()
+    if present is None:
+        for _, statement in _AWARENESS_DDL:
+            db.execute(statement)
+        db.execute("INSERT INTO awareness_schema_meta VALUES(1,1,?)", (_AWARENESS_DIGEST,))
+    assert_optional_awareness_schema(db)
 
 
 def install_private_cohort_schema(store: MutationStore) -> None:
@@ -294,3 +399,13 @@ def install_private_cohort_schema(store: MutationStore) -> None:
             raise SchemaVersionError("cohort foreign keys must be enabled")
         if db.execute("PRAGMA journal_mode").fetchone()[0] != "delete":
             raise SchemaVersionError("cohort schema requires rollback-journal mode")
+        # Legacy/corrupt optional metadata must never roll back the mandatory
+        # cohort install. No old claim is retroactively assigned a generation.
+        db.execute("SAVEPOINT optional_awareness_install")
+        try:
+            _install_optional_awareness_schema(db)
+        except (sqlite3.Error, SchemaVersionError) as error:
+            db.execute("ROLLBACK TO optional_awareness_install")
+            _LOG.warning("Optional awareness schema unavailable (%s)", type(error).__name__)
+        finally:
+            db.execute("RELEASE optional_awareness_install")

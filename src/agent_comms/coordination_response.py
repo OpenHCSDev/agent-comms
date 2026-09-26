@@ -146,7 +146,7 @@ def install_private_response_schema(store: MutationStore) -> None:
 
 
 @contextmanager
-def _response_boundary(bus: MessageBus) -> Iterator[RegistrySnapshot]:
+def _response_boundary(bus: MessageBus, *, blocking: bool = True) -> Iterator[RegistrySnapshot]:
     """Total lock order: shared wire -> bus -> registry -> SQLite.
 
     Raw keyed appends acquire bus then registry; Comms register takes shared
@@ -154,9 +154,9 @@ def _response_boundary(bus: MessageBus) -> Iterator[RegistrySnapshot]:
     this boundary: the bus append receives this immutable loaded revision.
     """
     with (
-        _store_lock(bus._path.parent / "wire"),
-        _store_lock(bus._path),
-        _store_lock(bus._registry._path),
+        _store_lock(bus._path.parent / "wire", blocking=blocking),
+        _store_lock(bus._path, blocking=blocking),
+        _store_lock(bus._registry._path, blocking=blocking),
     ):
         yield bus._registry._snapshot_unlocked()
 

@@ -86,7 +86,8 @@ def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_
     assert len(root_id) == 32
     assert (tmp_path / "comms" / "bus_meta.json").stat().st_mode & 0o777 == 0o600
     with pytest.raises(RelationViolationError, match="Legacy append"):
-        comms.send_message("sender", "#team", "Old writer blocked")
+        # Direct legacy append stays blocked; current Comms.send is private-aware.
+        comms.bus.publish(Message("sender", "#team", "Old writer blocked", MessageType.INFO))
     message = comms.send_initial_cohort("sender", "#team", "Hello @Alice")
     raw = json.loads((tmp_path / "comms" / "bus.jsonl").read_text())
     assert (tmp_path / "comms" / "bus.jsonl").stat().st_mode & 0o777 == 0o600

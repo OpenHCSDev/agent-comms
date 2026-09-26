@@ -482,6 +482,37 @@ for line in sys.stdin:
         ]
         assert events[-1]["ok"] is True
 
+    async def test_foreign_tool_use_before_exact_input_start_is_not_progress(self, tmp_path):
+        # A typed prompt ACK is not a current-turn start. A previous Pi
+        # assistant message must not escape as human-visible progress.
+        stub = _stub(
+            tmp_path,
+            "#!/usr/bin/env python3\n"
+            "import json, sys\n"
+            "def emit(row): print(json.dumps(row), flush=True)\n"
+            "state=json.loads(sys.stdin.readline())\n"
+            "emit({'type':'response','command':'get_state','id':state['id'],"
+            "'success':True,'data':{'nativeInputProofCapability':'pi-native-input-v1-live-only'}})\n"
+            "prompt=json.loads(sys.stdin.readline())\n"
+            "emit({'type':'response','command':'prompt','id':prompt['id'],'success':True})\n"
+            "emit({'type':'message_start','message':{'role':'assistant'}})\n"
+            "emit({'type':'message_update','assistantMessageEvent':"
+            "{'type':'text_delta','delta':'foreign earlier turn'}})\n"
+            "emit({'type':'message_end','message':{'role':'assistant',"
+            "'stopReason':'toolUse','content':[{'type':'text',"
+            "'text':'foreign earlier turn'}]}})\n"
+            "emit({'type':'message_start','message':{'role':'user',"
+            "'content':'foreign later turn','inputId':'foreign'}})\n",
+        )
+        events = [
+            event
+            async for event in backend.stream_agent_events(
+                stub, [], "current prompt", str(tmp_path)
+            )
+        ]
+        assert not [event for event in events if event["type"] == "committed_progress"]
+        assert any(event["type"] == "done" and event["ok"] is False for event in events)
+
     async def test_rpc_model_and_context_metadata(self, tmp_path):
         rpc_lines = "\n".join(
             [

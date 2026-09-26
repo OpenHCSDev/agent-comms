@@ -133,9 +133,15 @@ def _claim_gate_enabled(bus_path: Path) -> bool:
     if bus_path.name != "bus.jsonl":
         return False
     marker = _claim_gate_path(bus_path)
+    checkpoint_path = bus_path.with_name("private_bus_checkpoint.sqlite3")
+    checkpoint_present = checkpoint_path.exists() or checkpoint_path.is_symlink()
     try:
         metadata = json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
-    except FileNotFoundError:
+    except FileNotFoundError as error:
+        if checkpoint_present:
+            raise RelationViolationError(
+                "Private checkpoint has no durable protocol marker."
+            ) from error
         return False
     except (ValueError, UnicodeError) as error:
         raise RelationViolationError("Bus protocol marker is malformed.") from error
@@ -143,6 +149,8 @@ def _claim_gate_enabled(bus_path: Path) -> bool:
         raise RelationViolationError("Bus protocol marker is not an object.")
     version = metadata.get("claim_envelopes_version")
     if version is None:
+        if checkpoint_present or "checkpoint_version" in metadata or "checkpoint_seal" in metadata:
+            raise RelationViolationError("Private checkpoint lacks its claim read barrier.")
         return False
     if type(version) is not int or version != 1:
         raise RelationViolationError("Unsupported claim-envelope protocol marker.")
@@ -178,11 +186,50 @@ def _verify_claim_bus_before_read_unlocked(bus_path: Path) -> None:
             descriptor = os.open(bus_path, flags)
         except FileNotFoundError:
             descriptor = None
+        if descriptor is None and (
+            (bus_path.with_name("private_bus_checkpoint.sqlite3")).exists()
+            or (bus_path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+            or any(
+                key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                for key in ("checkpoint_version", "checkpoint_seal")
+            )
+        ):
+            raise RelationViolationError("Private checkpoint bus inode is missing.")
         if descriptor is not None:
             with os.fdopen(descriptor, "rb") as stream:
                 if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                     raise RelationViolationError("Claim bus is not a regular file.")
                 os.fsync(stream.fileno())
+                from .private_bus_checkpoint import (
+                    certificate_enabled,
+                    verify_private_bus_checkpoint_unlocked,
+                )
+
+                if certificate_enabled(bus_path) or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                ):
+                    # The caller already owns the bus lock. Do not instantiate
+                    # a registry (or recursively acquire a store lock) here.
+                    bus = MessageBus.__new__(MessageBus)
+                    bus._path = bus_path
+                    private_marker = bus._private_marker_unlocked()
+                    if (
+                        private_marker.get("checkpoint_version") != 1
+                        or "checkpoint_seal" not in private_marker
+                    ):
+                        raise RelationViolationError(
+                            "Private checkpoint lacks durable marker binding."
+                        )
+                    directory_fd = os.open(
+                        bus_path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                    )
+                    try:
+                        os.fsync(directory_fd)
+                    finally:
+                        os.close(directory_fd)
+                    verify_private_bus_checkpoint_unlocked(bus, private_marker)
+                    return
                 while line := stream.readline(8 * 1024 * 1024 + 1):
                     if len(line) > 8 * 1024 * 1024 or not line.endswith(b"\n"):
                         raise RelationViolationError("Incomplete or oversized claim bus row.")
@@ -211,8 +258,12 @@ def _verify_claim_bus_before_read_unlocked(bus_path: Path) -> None:
 
 
 @contextmanager
-def _store_lock(store_path: Path) -> Iterator[None]:
-    """Hold an exclusive process lock associated with a wire store."""
+def _store_lock(
+    store_path: Path, *, blocking: bool = True, max_bus_bytes: int | None = None
+) -> Iterator[None]:
+    """Hold a canonical store lock; optionally cap bytes before its durability scan."""
+    if max_bus_bytes is not None and (type(max_bus_bytes) is not int or max_bus_bytes < 0):
+        raise ValueError("bus read cap must be a nonnegative integer")
     store_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = store_path.with_name(f".{store_path.name}.lock")
     with open(lock_path, "a+b") as lock_file:
@@ -229,14 +280,21 @@ def _store_lock(store_path: Path) -> Iterator[None]:
                     )
                     break
                 except OSError as error:
-                    if error.errno not in {errno.EACCES, errno.EDEADLK}:
+                    if not blocking or error.errno not in {errno.EACCES, errno.EDEADLK}:
                         raise
                     time.sleep(0.01)
         else:
             import fcntl
 
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
         try:
+            # The shared claim bus durability guard may parse the entire log.
+            # A bounded projection must refuse over-budget bytes *before* that
+            # guard starts; the flock excludes cooperating appends meanwhile.
+            if max_bus_bytes is not None and store_path.exists():
+                bus_info = store_path.lstat()
+                if not stat.S_ISREG(bus_info.st_mode) or bus_info.st_size > max_bus_bytes:
+                    raise RelationViolationError("Bus exceeds bounded read budget.")
             _verify_claim_bus_before_read_unlocked(store_path)
             yield
         finally:
@@ -777,6 +835,16 @@ class MessageType(Enum):
 
 
 GLOBAL_CHANNEL = "#all"
+PRIVATE_OWNER_RENAME_PENDING = ".private-owner-rename.pending"
+
+
+def _require_no_private_owner_rename(root: Path) -> None:
+    """A crashed cross-store rename cannot publish or run a selected input."""
+    intent = root / PRIVATE_OWNER_RENAME_PENDING
+    if intent.exists() or intent.is_symlink():
+        raise RelationViolationError("Private owner rename is pending; inspect both authorities.")
+
+
 BROADCAST_ALIASES = frozenset({GLOBAL_CHANNEL, "broadcast"})
 _TAG_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")
 
@@ -2075,6 +2143,24 @@ class ThreadRegistry:
             not in (
                 {"last_seq", "writer_protocol_version", "wire_root_id"},
                 {"last_seq", "writer_protocol_version", "wire_root_id", "claim_envelopes_version"},
+                {
+                    "last_seq",
+                    "writer_protocol_version",
+                    "wire_root_id",
+                    "claim_envelopes_version",
+                    "checkpoint_version",
+                    "checkpoint_seal",
+                },
+            )
+            or (
+                "checkpoint_version" in marker and (type(marker.get("checkpoint_seal")) is not dict)
+            )
+            or (
+                "checkpoint_version" in marker
+                and (
+                    type(marker["checkpoint_version"]) is not int
+                    or marker["checkpoint_version"] != 1
+                )
             )
             or (
                 "claim_envelopes_version" in marker
@@ -2477,6 +2563,7 @@ class ThreadRegistry:
                 or current.pid != os.getpid()
                 or not current.role.executable
                 or current.active_turn is not None
+                or current.goal != expected.goal
                 or (current.name, current.created_at, current.pid, current.role, current.worktree)
                 != (
                     expected.name,
@@ -3322,6 +3409,27 @@ class MessageBus:
             _append_jsonl(self._path, stored.to_wire())
         return stored
 
+    def publish_ordinary(self, message: Message) -> Message:
+        """Ordinary Comms send on either a legacy or explicitly marked private root.
+
+        A private marker is never installed here and an old public row is never
+        retroactively assigned an audience. Only the new private-aware writer
+        uses this entry point: direct legacy ``publish`` still refuses cutover.
+        The caller retains the ordinary Comms wire lock throughout publication.
+        """
+        with _store_lock(self._path):
+            meta = self._path.parent / "bus_meta.json"
+            metadata = json.loads(meta.read_text()) if meta.exists() else {}
+            if not isinstance(metadata, dict):
+                raise RelationViolationError("Invalid ordinary delivery metadata.")
+            if "writer_protocol_version" in metadata:
+                # Exact marker/root/private-registry validation and frozen N/K
+                # decisions remain owned by the existing private publisher.
+                return self.publish_initial_cohort(message, _bus_locked=True)
+        # Legacy publish rechecks its barrier under its own lock: if a fresh-root
+        # cutover raced the dispatch, it refuses rather than appending a legacy row.
+        return self.publish(message)
+
     def _assert_private_directory(self) -> None:
         """Require a nonredirectable, owned ancestry (root sticky /tmp permitted)."""
         if os.name != "posix":
@@ -3550,6 +3658,25 @@ class MessageBus:
             not in (
                 {"last_seq", "writer_protocol_version", "wire_root_id"},
                 {"last_seq", "writer_protocol_version", "wire_root_id", "claim_envelopes_version"},
+                {
+                    "last_seq",
+                    "writer_protocol_version",
+                    "wire_root_id",
+                    "claim_envelopes_version",
+                    "checkpoint_version",
+                    "checkpoint_seal",
+                },
+            )
+            or (
+                "checkpoint_version" in metadata
+                and (type(metadata.get("checkpoint_seal")) is not dict)
+            )
+            or (
+                "checkpoint_version" in metadata
+                and (
+                    type(metadata["checkpoint_version"]) is not int
+                    or metadata["checkpoint_version"] != 1
+                )
             )
             or (
                 "claim_envelopes_version" in metadata
@@ -3570,7 +3697,15 @@ class MessageBus:
         return metadata
 
     def _verified_private_rows_unlocked(
-        self, metadata: Mapping[str, int | str]
+        self,
+        metadata: Mapping[str, int | str],
+        *,
+        on_row: (
+            Callable[
+                [int, bytes, Message, Mapping[str, object] | None, CommittedInitial | None], None
+            ]
+            | None
+        ) = None,
     ) -> Iterator[tuple[Message, Mapping[str, object] | None, CommittedInitial | None]]:
         """Validate the ENTIRE append-only log before any new append or trusted read.
 
@@ -3586,7 +3721,11 @@ class MessageBus:
         if not self._path.exists():
             return
         with self._path.open("rb") as stream:
-            while line := stream.readline(8 * 1024 * 1024 + 1):
+            while True:
+                offset = stream.tell()
+                line = stream.readline(8 * 1024 * 1024 + 1)
+                if not line:
+                    break
                 if len(line) > 8 * 1024 * 1024:
                     raise RelationViolationError("Oversized private bus row.")
                 if not line.endswith(b"\n"):
@@ -3614,6 +3753,8 @@ class MessageBus:
                     public_envelope_digest(public)
                     previous_sequence = existing.seq
                     if not has_private_wire_fields(record):
+                        if on_row is not None:
+                            on_row(offset, line, existing, None, None)
                         yield existing, None, None
                         continue
                     if set(key for key in record if key.startswith("_agent_comms_private")) != {
@@ -3634,6 +3775,8 @@ class MessageBus:
                             raise RelationViolationError(
                                 "Malformed private initial bus sideband."
                             ) from error
+                        if on_row is not None:
+                            on_row(offset, line, existing, None, initial)
                         yield existing, None, initial
                         continue
                     if set(private) != {"version", "response"}:
@@ -3663,6 +3806,8 @@ class MessageBus:
                             "Conflicting or malformed private bus receipt."
                         )
                     seen_keys.add(receipt["publication_key"])
+                    if on_row is not None:
+                        on_row(offset, line, existing, receipt, None)
                     yield existing, receipt, None
                 except (KeyError, TypeError, ValueError, AttributeError, OverflowError) as error:
                     if isinstance(error, RelationViolationError):
@@ -3708,8 +3853,34 @@ class MessageBus:
             os.fsync(directory_fd)
         finally:
             os.close(directory_fd)
+        from .private_bus_checkpoint import (
+            append_private_bus_checkpoint_unlocked,
+            certificate_enabled,
+        )
 
-    def publish_initial_cohort(self, message: Message, *, control: str = "ordinary") -> Message:
+        if certificate_enabled(self._path):
+            private = row.get(PRIVATE_WIRE_FIELD)
+            initial = (
+                validate_initial_record(row, metadata["wire_root_id"])
+                if isinstance(private, dict) and "initial" in private
+                else None
+            )
+            receipt = private.get("response") if isinstance(private, dict) else None
+            public = {key: value for key, value in row.items() if key != PRIVATE_WIRE_FIELD}
+            try:
+                append_private_bus_checkpoint_unlocked(
+                    self, metadata, encoded, Message.from_wire(public), receipt, initial
+                )
+            except Exception as error:
+                # The bus may already contain this fsynced row. Never retry an
+                # uncertain input or report publication as definitely absent.
+                raise RelationViolationError(
+                    "Private bus checkpoint publication outcome UNKNOWN."
+                ) from error
+
+    def publish_initial_cohort(
+        self, message: Message, *, control: str = "ordinary", _bus_locked: bool = False
+    ) -> Message:
         """Commit public envelope and FULL N private decisions in the SAME fsynced row.
 
         This private path assumes cooperating Comms writers hold the global
@@ -3725,11 +3896,22 @@ class MessageBus:
         classification = ControlClassification(control)
         if classification is not ControlClassification.ORDINARY:
             raise RelationViolationError("System-control initial issuer is not available.")
-        with _store_lock(self._path):
+        with nullcontext() if _bus_locked else _store_lock(self._path):
+            _require_no_private_owner_rename(self._path.parent)
             metadata = self._private_marker_unlocked()
-            previous_sequence = 0
-            for previous, _, _ in self._verified_private_rows_unlocked(metadata):
-                previous_sequence = previous.seq
+            from .private_bus_checkpoint import (
+                certificate_enabled,
+                verify_private_bus_checkpoint_unlocked,
+            )
+
+            if certificate_enabled(self._path):
+                previous_sequence = verify_private_bus_checkpoint_unlocked(
+                    self, metadata
+                ).through_seq
+            else:
+                previous_sequence = 0
+                for previous, _, _ in self._verified_private_rows_unlocked(metadata):
+                    previous_sequence = previous.seq
             if int(metadata["last_seq"]) >= MAX_WIRE_SEQ:
                 raise RelationViolationError("Private bus sequence is exhausted.")
             source_paths = (

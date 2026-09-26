@@ -8,11 +8,17 @@ pure digest, caller-supplied DTO, or legacy singleton claim is not bus proof.
 from __future__ import annotations
 
 import hashlib
+import logging
 import sqlite3
 from dataclasses import dataclass
 
 from .bus_publication import CommittedInitial
-from .cohort_schema import _DDL, _DDL_DIGEST, COHORT_SCHEMA_VERSION
+from .cohort_schema import (
+    _DDL,
+    _DDL_DIGEST,
+    COHORT_SCHEMA_VERSION,
+    assert_optional_awareness_schema,
+)
 from .coordination import (
     POLICY_VERSION,
     RESOLVER_VERSION,
@@ -25,6 +31,8 @@ from .coordination import (
 from .coordination_store import AlreadyApplied, Applied, IdentityConflict, MutationStore, _claim
 from .declarations import MessageBus
 from .wake import NoWakeDecision, WakeDecision
+
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,6 +214,46 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedInitial) -> Accep
     )
 
 
+def _record_optional_owner_generations(
+    db: sqlite3.Connection,
+    claims: tuple[WakeClaim, ...],
+    wire_root_id: str,
+    wire_seq: int,
+) -> None:
+    """Same acceptance transaction; a failed optional savepoint cannot veto N/K.
+
+    Rows are written only while the exact cohort is unsealed. A missing or
+    damaged optional schema, or a frozen old-name claim accepted after rename,
+    leaves NO partial generation evidence. The reader then omits awareness.
+    """
+    db.execute("SAVEPOINT optional_awareness_claims")
+    try:
+        assert_optional_awareness_schema(db)
+        for claim in claims:
+            current = db.execute(
+                "SELECT owner_thread,generation FROM owner_generations WHERE owner_lookup=?",
+                (claim.recipient_lookup,),
+            ).fetchone()
+            if current is None or current["owner_thread"] != claim.recipient:
+                raise IdentityConflict("optional claim generation has no current canonical owner")
+            db.execute(
+                "INSERT INTO awareness_claim_generations VALUES(?,?,?,?,?,?)",
+                (
+                    claim.claim_id,
+                    wire_root_id,
+                    wire_seq,
+                    claim.recipient_lookup,
+                    claim.recipient,
+                    current["generation"],
+                ),
+            )
+    except (sqlite3.Error, SchemaVersionError, IdentityConflict) as error:
+        db.execute("ROLLBACK TO optional_awareness_claims")
+        _LOG.warning("Optional generation provenance omitted (%s)", type(error).__name__)
+    finally:
+        db.execute("RELEASE optional_awareness_claims")
+
+
 def accept_initial_cohort(
     bus: MessageBus,
     wire_root_id: str,
@@ -314,6 +362,7 @@ def accept_initial_cohort(
                     claim_id,
                 ),
             )
+        _record_optional_owner_generations(db, expected, wire_root_id, wire_seq)
         db.execute(
             "UPDATE claim_batch_receipts SET sealed=1 WHERE wire_root_id=? AND wire_seq=?",
             (wire_root_id, wire_seq),

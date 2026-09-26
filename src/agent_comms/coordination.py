@@ -2195,10 +2195,12 @@ CREATE INDEX recovery_execution_idx ON recovery_audit(execution_id, audit_id);
 class CoordinationStore:
     """Open or initialize the private versioned coordination database."""
 
-    def __init__(self, path: str | os.PathLike[str]) -> None:
+    def __init__(self, path: str | os.PathLike[str], *, lock_timeout: float = 5.0) -> None:
+        if type(lock_timeout) not in (int, float) or not 0 <= lock_timeout <= 5:
+            raise ValueError("coordination lock timeout must be bounded")
         self.path = Path(path)
         self._prepare_private_file()
-        self._connection = sqlite3.connect(self.path, isolation_level=None, timeout=5.0)
+        self._connection = sqlite3.connect(self.path, isolation_level=None, timeout=lock_timeout)
         self._connection.create_function(
             "coordination_validate_publication_intent",
             10,
@@ -2207,11 +2209,15 @@ class CoordinationStore:
         )
         self._connection.row_factory = sqlite3.Row
         self._connection.execute("PRAGMA foreign_keys = ON")
-        self._connection.execute("PRAGMA busy_timeout = 5000")
-        self._initialize_schema()
-        # Rollback journal avoids a post-schema WAL-mode race among fresh openers.
-        self._connection.execute("PRAGMA synchronous = FULL")
-        self._enforce_private_modes()
+        self._connection.execute(f"PRAGMA busy_timeout = {int(lock_timeout * 1000)}")
+        try:
+            self._initialize_schema()
+            # Rollback journal avoids a post-schema WAL-mode race among fresh openers.
+            self._connection.execute("PRAGMA synchronous = FULL")
+            self._enforce_private_modes()
+        except BaseException:
+            self._connection.close()
+            raise
 
     @staticmethod
     def _validate_publication_intent_sql(
