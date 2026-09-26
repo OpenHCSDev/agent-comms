@@ -99,6 +99,31 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     assert control.advance(second, "installing").phase == "installing"
 
 
+@pytest.mark.parametrize("generation", [True, 1.0, "1", -1, 0, 1, 2])
+def test_legacy_state_generation_requires_exact_matching_positive_int(
+    tmp_path: Path, generation: object
+) -> None:
+    gate = MaintenanceBarrier(tmp_path / "wire" / "registry.json")
+    assert gate.read() is None  # Fresh roots remain default OFF.
+    FixtureMaintenanceControl(gate).begin("disposable-fixture")
+    state = json.loads(gate.state_path.read_text())
+    state["phase"] = "ready"  # Disposable READY detects a false-open parser result.
+    state["generation"] = generation
+    gate.state_path.write_text(json.dumps(state))
+    if type(generation) is int and generation == 1:
+        assert gate.read().phase == "ready"
+        with gate.admit_ingress() as receipt:
+            assert receipt is not None and receipt.phase == "ready"
+    else:
+        with pytest.raises(RelationViolationError, match="Maintenance witness inconsistent"):
+            gate.read()
+        with (
+            pytest.raises(RelationViolationError, match="Maintenance witness inconsistent"),
+            gate.admit_ingress(),
+        ):
+            pytest.fail("Malformed generation must never admit ingress")
+
+
 @pytest.mark.parametrize(
     "fault",
     ["missing-state", "missing-marker", "corrupt-state", "stale-generation", "symlink-state"],

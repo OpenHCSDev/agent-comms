@@ -105,6 +105,7 @@ class MaintenanceBarrier:
             or state["root"] != root
             or type(generation) is not int
             or not 0 < generation < 1 << 63
+            or type(state["generation"]) is not int
             or state["generation"] != generation
             or type(state["operator"]) is not str
             or not state["operator"]
