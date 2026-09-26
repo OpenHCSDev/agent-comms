@@ -1,18 +1,20 @@
 """Exact-session compaction barrier before ANY ACP provider input send.
 
-Unresolved native commits or selected-summary reservations/UNKNOWN attempts
-refuse input. Neither an ACP correction nor a fresh session may replay them.
+Unresolved native commits or ANY selected-summary attempt refuse input. A
+terminal-looking selected row is not durable caller acknowledgment: its last
+post-COMMIT fsync may have failed. Neither correction nor restart grants replay.
 """
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from .compaction_journal import CompactionJournal, CompactionJournalError
 
 
 def native_input_admitted(wire_root: Path, session_file: str | None) -> bool:
-    """Fail closed on an unresolved native commit or selected summary attempt.
+    """Fail closed on an unresolved native commit or any selected attempt.
 
     No journal is normal before the owner has ever prepared a native commit.
     Call under the wire lock immediately before the backend's stdin write; the
@@ -25,8 +27,8 @@ def native_input_admitted(wire_root: Path, session_file: str | None) -> bool:
         if not path.exists() and not path.is_symlink():
             return True
         journal = CompactionJournal(path)
-        return not journal.unresolved(session_file) and not journal.unresolved_selected_summary(
+        return not journal.unresolved(session_file) and not journal.blocking_selected_summary(
             session_file
         )
-    except (OSError, ValueError, CompactionJournalError):
+    except (OSError, ValueError, sqlite3.Error, CompactionJournalError):
         return False

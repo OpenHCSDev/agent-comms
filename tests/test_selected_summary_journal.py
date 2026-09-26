@@ -65,7 +65,10 @@ def test_link_requires_exact_committed_native_intent_binding(reserved):
     journal.link_selected_summary_commit(operation_id, commit_id)
     assert journal.selected_summary(operation_id).commit_id == commit_id
     assert journal.unresolved_selected_summary(session) == ()
-    assert native_input_admitted(journal.path.parent, session)
+    assert journal.blocking_selected_summary(session) == (journal.selected_summary(operation_id),)
+    assert not native_input_admitted(journal.path.parent, session)
+    with pytest.raises(CompactionJournalError, match="unrelated native commit"):
+        journal.begin(session, {})
     with pytest.raises(CompactionJournalError, match="never replay"):
         journal.reserve_selected_summary(session, source, operation_id=operation_id)
     with pytest.raises(CompactionJournalError, match="transition|Exact committed"):
@@ -110,15 +113,66 @@ def test_competing_native_begin_refused_unless_exact_reserved_operation_bound(re
 
 
 @pytest.mark.parametrize("reason", ["split_turn", "unsupported"])
-def test_exact_prestart_clean_decline_permits_original_hard_backstop(reserved, reason):
+def test_exact_prestart_clean_decline_is_recorded_but_not_send_authority(reserved, reason):
     journal, session, source = reserved
     operation_id = journal.reserve_selected_summary(session, source)
     journal.decline_selected_summary_prestart(operation_id, reason)
     attempt = journal.selected_summary(operation_id)
     assert attempt.status == "declined-prestart" and attempt.decline_reason == reason
-    assert native_input_admitted(journal.path.parent, session)
+    assert journal.blocking_selected_summary(session) == (attempt,)
+    assert not native_input_admitted(journal.path.parent, session)
+    with pytest.raises(CompactionJournalError, match="never replay"):
+        journal.reserve_selected_summary(session, source)
     with pytest.raises(CompactionJournalError, match="prestart decline"):
         journal.decline_selected_summary_prestart(operation_id, reason)
+
+
+@pytest.mark.parametrize("terminal", ["linked", "declined-prestart"])
+def test_terminal_postcommit_fsync_unknown_blocks_across_reopen(reserved, monkeypatch, terminal):
+    journal, session, source = reserved
+    operation_id = journal.reserve_selected_summary(session, source, operation_id="a" * 32)
+    if terminal == "linked":
+        commit_id = journal.begin(session, {"selectedSummaryOperationId": operation_id})
+        journal.resolve(commit_id, "committed", {"fixture": "metadata"})
+    original_fsync = os.fsync
+
+    def deny_fsync(_fd):
+        raise OSError("post-COMMIT directory fsync denied")
+
+    monkeypatch.setattr(os, "fsync", deny_fsync)
+    with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
+        if terminal == "linked":
+            journal.link_selected_summary_commit(operation_id, commit_id)
+        else:
+            journal.decline_selected_summary_prestart(operation_id, "split_turn")
+    # Even a second fsync failure in the final-send read must fail closed.
+    assert not native_input_admitted(journal.path.parent, session)
+    monkeypatch.setattr(os, "fsync", original_fsync)
+    assert journal.selected_summary(operation_id).status == terminal
+    assert not native_input_admitted(journal.path.parent, session)
+    reopened = CompactionJournal(journal.path)
+    assert reopened.blocking_selected_summary(session) == (reopened.selected_summary(operation_id),)
+    assert not native_input_admitted(journal.path.parent, session)
+    fresh = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from pathlib import Path; "
+            "from agent_comms.compaction_send_admission import native_input_admitted; "
+            "print(native_input_admitted(Path(sys.argv[1]),sys.argv[2]))",
+            str(journal.path.parent),
+            session,
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=10,
+    )
+    assert fresh.stdout.strip() == "False"
+    with pytest.raises(CompactionJournalError, match="never replay"):
+        reopened.reserve_selected_summary(session, source)
+    with pytest.raises(CompactionJournalError, match="unrelated native commit"):
+        reopened.begin(session, {})
 
 
 @pytest.mark.parametrize(

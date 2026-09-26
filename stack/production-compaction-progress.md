@@ -117,24 +117,27 @@ The old bytes remain NON-CLEAN. The new dry-run `ready` explicitly reports
 No Pi-side bytes have been integrated into this branch; phase 2 has no reviewed
 implementation or provider authorization.
 
-A subsequent Python-only, default-off candidate extends the existing durable
-`CompactionJournal` with one exact per-session selected-summary operation ID,
-source/selected/settings witness, reserved/UNKNOWN blocking states and strict
-linkage only to a same-session native committed intent carrying that ID. It
-reserves *before* any future selected Pi RPC send. An ambiguous send/death or
-post-COMMIT fsync error remains unresolved and blocks ordinary input; no API
-replays the provider request. The ACP send-admission gate now checks these
-rows as well as native commit intents. There is **no production producer** of
-these records yet and no ACP invocation of the selected Pi dry-run adapter.
-Provider-free serial selected-summary journal **15 passed** and legacy native
-journal/send-admission **17 passed** in separate bounded runs, including crash,
-duplicate ID, fsync uncertainty, wrong native binding, two-way competing-commit
-exclusion, narrow pre-start clean declines and other-session isolation. An
-earlier combined run timed out after 31 dots under host pressure and is **not**
-counted as a passing combined run. No real Pi phase-2 or provider operation was
-started. `selected-summary-operation-journal.md` records scope and limits.
-Fresh exact-head review, phase-2 route parity, semantic retention, a reviewed
-operator opt-in, and full combined source/wheel testing remain mandatory.
+Exact `47c8e70` Python-only default-off selected-summary ledger was independently
+**NON-CLEAN P2**: post-COMMIT parent fsync failure on either native link or
+pre-start clean decline raised UNKNOWN but left a terminal-looking row which
+passed the ACP final-send gate in this process and across reopen. The native
+commit itself was durably committed in the link probe; the fault is send
+admission, not proof of lost provider output. The conservative successor keeps
+**every** selected-summary row (reserved, UNKNOWN, linked, declined-prestart)
+as a durable final-input blocker and prevents another per-session reservation.
+A linked or declined row is accounting information, **never** automatic input
+permission. No exact-ID durable recovery/owner-scoped handoff exists yet. The
+journal still reserves before any future RPC and requires same-ID native
+committed-intent linkage; no provider request or original input is retried.
+There is no ACP producer or imported Pi phase-2 bytes. Exact separate Pi
+candidate `85ef9e6` is independently NON-CLEAN P2 for noncooperative stream
+timeout and buffered output cap, and must not be imported or repinned.
+`selected-summary-operation-journal.md` records scope, fault and remaining
+gates. Bounded provider-free successor suites pass serially: selected-journal
+**17**, adjacent native journal/send gate/dry-run **26**; Black/Ruff/mypy/diff
+checks pass. Fresh exact-head independent review, phase-2 route/auth parity,
+semantic retention, reviewed operator opt-in and full combined source/wheel
+testing remain mandatory. No selected provider operation has been started.
 
 ## Normal PR104/105 main integration and socket incarnation (combined review pending)
 

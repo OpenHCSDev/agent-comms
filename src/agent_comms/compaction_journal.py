@@ -145,9 +145,11 @@ class CompactionJournal:
                     commit_id TEXT,
                     decline_reason TEXT
                 )""")
-            db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS unresolved_selected_summary_session
-                ON selected_summary_attempts(session_file)
-                WHERE status IN ('reserved','unknown')""")
+            # Until an exact-ID recovery protocol exists, even terminal-looking
+            # rows keep this session blocked. A failed post-COMMIT directory
+            # fsync can leave linked/declined rows although the caller got UNKNOWN.
+            db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS selected_summary_session
+                ON selected_summary_attempts(session_file)""")
         parent = path.parent.resolve(strict=True)
         for directory in (parent, *parent.parents):
             parent_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
@@ -200,7 +202,7 @@ class CompactionJournal:
             with self._transaction() as db:
                 selected = db.execute(
                     "SELECT operation_id, status FROM selected_summary_attempts "
-                    "WHERE session_file = ? AND status IN ('reserved','unknown')",
+                    "WHERE session_file = ?",
                     (canonical,),
                 ).fetchone()
                 if selected is not None and (
@@ -209,7 +211,7 @@ class CompactionJournal:
                     or intent.get("selectedSummaryOperationId") != selected[0]
                 ):
                     raise CompactionJournalError(
-                        "Unresolved selected summary; unrelated native commit forbidden"
+                        "Blocked selected summary; unrelated native commit forbidden"
                     )
                 db.execute(
                     "INSERT INTO operations VALUES (?, ?, ?, 'intent', NULL)",
@@ -246,8 +248,9 @@ class CompactionJournal:
     ) -> str:
         """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
 
-        Reservation is deliberately unresolved even if the caller fails before
-        writing stdin: no crash or ambiguous transport authorizes a retry.
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
         The caller must separately retain owner/turn/ingress authority; this
         journal is only an exclusion and recovery record, never a bearer grant.
         """
@@ -279,7 +282,7 @@ class CompactionJournal:
                 )
         except sqlite3.IntegrityError as error:
             raise CompactionJournalError(
-                "Unresolved selected summary or reused operation ID; never replay"
+                "Blocked selected summary or reused operation ID; never replay"
             ) from error
         return operation_id
 
@@ -304,6 +307,21 @@ class CompactionJournal:
             ).fetchall()
         return tuple(SelectedSummaryAttempt(*row) for row in rows)
 
+    def blocking_selected_summary(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:
+        """All attempts block automatic native input, including apparent terminals.
+
+        A post-COMMIT parent-fsync failure can leave linked or declined-prestart
+        visible even though its caller received UNKNOWN. Neither status is
+        automatic send authority, in this process or after a restart.
+        """
+        canonical = str(Path(session_file).resolve(strict=True))
+        with self._transaction() as db:
+            rows = db.execute(
+                "SELECT * FROM selected_summary_attempts WHERE session_file = ?",
+                (canonical,),
+            ).fetchall()
+        return tuple(SelectedSummaryAttempt(*row) for row in rows)
+
     def mark_selected_summary_unknown(self, operation_id: str) -> None:
         """Record transport uncertainty; never erase or retry the reservation."""
         with self._transaction() as db:
@@ -321,9 +339,11 @@ class CompactionJournal:
     def decline_selected_summary_prestart(self, operation_id: str, reason: str) -> None:
         """Settle only an exact, verified clean Pi response before any side effect.
 
-        Only split-turn or explicitly unsupported cuts can fall back to the
-        independent hard-context protection. Busy, changed source/model/settings,
-        timeout, transport loss, and post-auth/stream errors remain blocking.
+        Only split-turn or explicitly unsupported cuts may be *recorded* as
+        clean pre-start declines. Even these remain blocked at the final input
+        gate until separately reviewed exact-ID recovery exists. Busy, changed
+        source/model/settings, timeout, transport loss, and post-auth/stream
+        errors remain blocking.
         The future owner caller must verify the correlated Pi reply and current
         owner/ingress source before invoking this method; the journal is not
         that authority or evidence verifier.
@@ -346,9 +366,11 @@ class CompactionJournal:
     def link_selected_summary_commit(self, operation_id: str, commit_id: str) -> None:
         """Settle only a reserved attempt after its exact native commit is durable.
 
-        This is NOT a provider receipt validator. A future caller must check
-        the complete selected Pi result and current owner/ingress source before
-        the native CAS, and call this only after the native journal committed.
+        This is NOT a provider receipt validator or an input admission grant.
+        Even a linked row remains a durable blocker until an exact-ID recovery
+        path exists. A future caller must check the complete selected Pi result
+        and current owner/ingress source before the native CAS, and call this
+        only after the native journal committed.
         An UNKNOWN provider attempt cannot be automatically linked or retried.
         """
         with self._transaction() as db:

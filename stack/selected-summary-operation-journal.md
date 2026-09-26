@@ -12,8 +12,8 @@ cleared only its prompt-preflight readiness race; it is not integrated here.
 SQLite DELETE/EXTRA, per-transaction post-COMMIT directory-fsync journal. It
 records a fresh 128-bit lowercase hex operation ID and bounded JSON containing
 source, selected model and settings witnesses **before** any future Pi RPC
-write. One reserved/UNKNOWN attempt per saved session is indexed; exact IDs
-can never be reused. Ambiguous stdin send, process death, timeout or
+write. One attempt of **any status** per saved session is indexed; exact IDs
+can never be reused. There is no automatic per-session release API. Ambiguous stdin send, process death, timeout or
 post-side-effect error stays reserved/UNKNOWN and blocks later provider input
 at the existing ACP final-send gate. The journal does not decide whether a
 provider was paid; no retry or automatic no-spend inference follows from a
@@ -24,40 +24,50 @@ review gate.
 
 `CompactionJournal.begin()` refuses a competing native commit while a selected
 summary is reserved, except an intent bound to the *same* operation ID. If the
-summary is UNKNOWN, **all** new native commits are refused. The successful
+summary is UNKNOWN **or terminal-looking**, all new native commits are refused. The successful
 `link_selected_summary_commit()` transition requires that reserved ID in a
 same-session **committed** native intent; wrong-session, different-ID,
 nonterminal or UNKNOWN attempts cannot link. A post-COMMIT directory-sync
 error during bookkeeping may leave a linked row despite the caller receiving
-UNKNOWN; the owner still must block and inspect both exact IDs and source.
-No journal status is itself owner authority or permission to replay input.
-
-A correlated, pre-side-effect Pi decline may clear reservation only for
-`split_turn` or explicit `unsupported`, after the future owner separately
-rechecks original input and source. Busy, queued, changed source/model/settings,
-transport loss and post-auth/stream cancellation remain operator-blocking;
-`decline_selected_summary_prestart()` does not infer no spend from silence.
-The independent native hard-context guard remains unchanged.
+UNKNOWN. A decline transition can likewise leave `declined-prestart` on an
+unacknowledged fsync. **Every selected-summary row, including linked and
+pre-start declined, remains a durable final-input blocker through restart.**
+The owner must not equate a terminal row with successful caller acknowledgement,
+provider acceptance, or original-input permission. A correlated, pre-side-effect
+Pi decline can be recorded only for `split_turn` or explicit `unsupported`,
+but cannot automatically fall back to the original input. Busy, queued, changed
+source/model/settings, transport loss and post-auth/stream cancellation remain
+operator-blocking; `decline_selected_summary_prestart()` never infers no spend
+from silence. The independent native hard-context guard remains unchanged.
 
 ## Evidence and remaining integration
 
-Serial provider-free suites: `tests/test_selected_summary_journal.py` **15
-passed**, `tests/test_compaction_journal.py` plus
-`tests/test_compaction_send_admission.py` **17 passed**. Tests include process
-exit after durable reserve, duplicate ID and session exclusion, post-COMMIT
-fsync uncertainty, wrong committed-intent binding, unrelated native begin
-refusal, exact same-ID native begin, narrow clean decline, and original input
-send exclusion. Black/Ruff/mypy and diff checks pass. One initial combined run
-was interrupted after 31 dots; it grants no clearance.
+Exact `47c8e70` independent review found **NON-CLEAN P2**: both link and
+verified pre-start decline could return post-COMMIT fsync UNKNOWN while a
+terminal-looking row passed ACP final send in this process and after restart.
+See `/dev/shm/pr95-47c8-independent-VfzSGB/REVIEW.md` (SHA256
+`3f7c090cae267f326be3895caec054d36279938bebf53a3c1f6e513d94501e00`).
+The present conservative correction blocks all selected rows and forbids a new
+reservation; tests exercise both fault cases, same/fresh process, repeated
+fsync failure, and native begin refusal. Bounded serial provider-free successor
+checks: selected-summary journal **17 passed**, adjacent native journal,
+send-admission and selected dry-run **26 passed**, Black/Ruff/mypy/diff checks
+passed (Python 3.11 Black warns it cannot AST-verify configured 3.13 grammar).
+This is a *safety backstop*, not an operationally complete selected summary.
+Fresh exact-successor independent review remains mandatory.
 
 Before activating a provider path, the owner must call reserve under current
 owner/turn/ingress authority, serialize the **same** exact source/model/settings
 into one bounded selected-child request, and never send without durable begin.
-The still-unimplemented Pi phase-2 operation must attest the selected process's
-actual stream/auth/extension route, return validated native compaction result
-and retain no-retry/UNKNOWN semantics. Then retire the idle child, perform
-native CAS with the same operation ID in its durable intent, link exact committed
-ID, project only local metadata and strictly reopen before **one** original
-input send. Source/correction/settings/goal changes refuse the handoff; no
-UNKNOWN input is replayed. Full provider-free ACP E2E, wheel/source suites,
-operator recovery and independent exact combined review are still required.
+The separately frozen Pi phase-2 candidate exact `85ef9e6` independently
+failed its claimed noncooperative stream deadline/output bounds, and may not
+be imported or repinned. A new separately reviewed hard selected-child
+retirement/watchdog and model/auth/baseURL/extension parity are required. A
+future owner-scoped, exact-ID durable recovery/positive acknowledgement must
+make terminal-link/decline transition safe before **any** automatic original
+input: current linked/declined rows remain blockers even after a successful
+call. Native CAS, local metadata, child retirement and reopened-source evidence
+must bind the same operation ID. Source/correction/settings/goal changes refuse
+the handoff; no UNKNOWN input is replayed. Full provider-free ACP E2E,
+wheel/source suites, operator recovery and independent exact combined review
+are still required.
