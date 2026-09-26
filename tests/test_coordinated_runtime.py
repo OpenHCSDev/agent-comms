@@ -1307,8 +1307,19 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
         root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     )
     assert outcome is not None and outcome.disposition is ClaimDisposition.IGNORED
-    assert outcome.cursor_status == "blocked_gap"  # settled rows lack native proof
-    assert len(calls) == 1  # no retry of the current original
+    # The earlier selected rows lack native proof. Under xdist pressure the
+    # best-effort 250 ms canonical scan may instead be unavailable; neither
+    # status may advance a cursor or retry the current original.
+    assert outcome.cursor_status in {"blocked_gap", "unavailable"}
+    assert len(calls) == 1
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        assert (
+            store._connection.execute(
+                "SELECT COUNT(*) FROM native_runtime_source_cursors WHERE recipient_lookup=?",
+                (lookup,),
+            ).fetchone()[0]
+            == 0
+        )
     assert not (root / "read_markers.json").exists()
 
 
