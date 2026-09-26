@@ -2992,6 +2992,15 @@ class Comms:
                 or current.status not in {"active", "paused", "completed"}
             ):
                 return current
+            if (
+                current.status == "paused"
+                and (pause := self.goal_pause(name)) is not None
+                and pause.source is GoalPauseSource.OWNER
+            ):
+                # Preserve this exact owner-authored pause. The caller still
+                # records the failed private attempt and terminal diagnostic;
+                # preserving intent grants neither resume nor replay authority.
+                return current
             progress = f"{current.progress}\n\n{diagnostic}" if current.progress else diagnostic
             blocked = replace(
                 current,
