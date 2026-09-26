@@ -2651,6 +2651,15 @@ class CommsAgent:
                     )
                 if reply_targets and kind == "chunk":
                     reply_parts.append(str(event.get("text") or ""))
+                elif reply_targets and kind == "committed_progress":
+                    progress = event.get("text")
+                    if type(progress) is str and progress and "".join(reply_parts) == progress:
+                        # Pi committed this assistant message before tool work.
+                        # Publish it once as visible, non-waking progress; the
+                        # final reply contains only subsequent assistant text.
+                        for target in reply_targets:
+                            self._comms.send(thread_name, target, progress, notice=True)
+                        reply_parts.clear()
                 if kind == "tool_end" and event.get("ok") is True:
                     successful_tool_observed = True
                 if kind == "done":

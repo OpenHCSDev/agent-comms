@@ -10,6 +10,7 @@ modes:
 
 Events (dicts):
     {"type": "chunk",      "text": str}
+    {"type": "committed_progress", "text": str}  # completed Pi tool-use message
     {"type": "tool_start", "id": str, "name": str, "title": str}
     {"type": "tool_end",   "id": str, "name": str, "ok": bool, "output": str}
     {"type": "agent_info", "model": str | None, "context_used": int | None,
@@ -991,6 +992,7 @@ async def _stream_agent_events(
             pass
 
     text_parts: list[str] = []
+    assistant_message_parts: list[str] = []
     ok = True
     fail_reason = ""
     diagnostic: dict[str, int] = {}
@@ -1991,6 +1993,8 @@ async def _stream_agent_events(
                 yield turn_state(
                     "retrying", "overflow_compaction_retry", 0, event_phase="model_wait"
                 )
+        elif kind == "message_start" and (payload.get("message") or {}).get("role") == "assistant":
+            assistant_message_parts.clear()
         elif kind == "message_start" and (payload.get("message") or {}).get("role") == "user":
             message = payload["message"]
             content = message.get("content")
@@ -2118,6 +2122,7 @@ async def _stream_agent_events(
                 if piece:
                     output_started = True
                 text_parts.append(piece)
+                assistant_message_parts.append(piece)
                 yield {"type": "chunk", "text": piece}
             elif delta_type == "thinking_delta":
                 piece = delta_event.get("delta") or ""
@@ -2172,6 +2177,27 @@ async def _stream_agent_events(
             # A later successful assistant message means a retry recovered.
             message = payload.get("message") or {}
             if message.get("role") == "assistant":
+                content = message.get("content")
+                committed_text = (
+                    "".join(
+                        part["text"]
+                        for part in content
+                        if isinstance(part, dict)
+                        and part.get("type") == "text"
+                        and type(part.get("text")) is str
+                    )
+                    if isinstance(content, list)
+                    else ""
+                )
+                if (
+                    message.get("stopReason") == "toolUse"
+                    and committed_text
+                    and committed_text == "".join(assistant_message_parts)
+                ):
+                    # Only a completed Pi assistant message may be published
+                    # while the surrounding tool turn is still running.
+                    yield {"type": "committed_progress", "text": committed_text}
+                assistant_message_parts.clear()
                 usage = message.get("usage")
                 if isinstance(usage, dict) and not session_identity_uncertain:
                     provider_response_index += 1

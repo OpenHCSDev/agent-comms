@@ -427,6 +427,61 @@ for line in sys.stdin:
         assert tool_end["ok"] is True and "hi" in tool_end["output"]
         assert events[-1]["text"] == "hello done" and events[-1]["ok"] is True
 
+    async def test_tool_use_progress_requires_committed_assistant_text(self, tmp_path):
+        records = [
+            {"type": "response", "command": "prompt", "id": "agent-comms-prompt", "success": True},
+            {"type": "message_start", "message": {"role": "user", "content": "task"}},
+            {"type": "message_start", "message": {"role": "assistant"}},
+            {
+                "type": "message_update",
+                "assistantMessageEvent": {"type": "text_delta", "delta": "Working"},
+            },
+            {
+                "type": "message_end",
+                "message": {
+                    "role": "assistant",
+                    "stopReason": "toolUse",
+                    "content": [{"type": "text", "text": "Working"}],
+                },
+            },
+            {
+                "type": "tool_execution_start",
+                "toolCallId": "t1",
+                "toolName": "bash",
+                "args": {"command": "true"},
+            },
+            {
+                "type": "tool_execution_end",
+                "toolCallId": "t1",
+                "toolName": "bash",
+                "result": {"content": []},
+                "isError": False,
+            },
+            {"type": "message_start", "message": {"role": "assistant"}},
+            {
+                "type": "message_update",
+                "assistantMessageEvent": {"type": "text_delta", "delta": "Done"},
+            },
+            {
+                "type": "message_end",
+                "message": {
+                    "role": "assistant",
+                    "stopReason": "stop",
+                    "content": [{"type": "text", "text": "Done"}],
+                },
+            },
+            {"type": "agent_settled"},
+        ]
+        lines = "\n".join(json.dumps(record) for record in records)
+        stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{lines}\nEOF\n")
+        events = [
+            event async for event in backend.stream_agent_events(stub, [], "task", str(tmp_path))
+        ]
+        assert [event["text"] for event in events if event["type"] == "committed_progress"] == [
+            "Working"
+        ]
+        assert events[-1]["ok"] is True
+
     async def test_rpc_model_and_context_metadata(self, tmp_path):
         rpc_lines = "\n".join(
             [
