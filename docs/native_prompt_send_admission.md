@@ -33,8 +33,10 @@ may advance a separate *current-owner* source cursor only after the sealed
 selected stage settles. A missing/UNKNOWN earlier source leaves a gap; the
 bounded cursor is informational, not provider acceptance, ACK, response or
 write permission. Owner replacement cannot promote historical evidence into a
-new current cursor. See `docs/ordinary_nk_delivery.md` for its capacity and
-schema-v2 limitations.
+new current cursor. The v3 native runtime input records its immutable owner
+admission epoch at the locked send boundary; v1/v2 roots have no inferred
+migration or replay path. See `docs/ordinary_nk_delivery.md` for its capacity
+and migration limitations.
 
 ## Bounded uncertainty and cleanup
 

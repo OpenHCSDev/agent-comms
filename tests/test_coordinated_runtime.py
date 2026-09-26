@@ -1076,6 +1076,26 @@ def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: 
             assert_native_runtime_schema(store._connection)
 
 
+def test_native_runtime_v2_is_not_implicitly_migrated(tmp_path: Path) -> None:
+    path = tmp_path / "old-runtime.sqlite3"
+    with MutationStore(str(path)) as store:
+        # The v2 metadata is enough to force an explicit, reviewed migration;
+        # never relabel historical native inputs with an inferred send epoch.
+        store._connection.execute(
+            "CREATE TABLE native_runtime_schema_meta (singleton INTEGER PRIMARY KEY,"
+            "version INTEGER NOT NULL,ddl_digest TEXT NOT NULL)"
+        )
+        store._connection.execute(
+            "INSERT INTO native_runtime_schema_meta VALUES (1,2,?)", ("0" * 64,)
+        )
+        with pytest.raises(PublicationActivationBlocked, match="version differs"):
+            install_native_runtime_schema(store)
+        version = store._connection.execute(
+            "SELECT version FROM native_runtime_schema_meta"
+        ).fetchone()[0]
+        assert version == 2
+
+
 async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, monkeypatch) -> None:
     """Page saturation is not an empty inbox; scaffolding is not model authority."""
     root, root_id, comms, _initial, people = _root(tmp_path)

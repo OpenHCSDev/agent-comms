@@ -78,11 +78,15 @@ sealed source/claim/stage/native binding and journal request digest), and
 exposes it in session updates/reconnect metadata. `covered_seq` can include
 sealed no-wake/absent-audience sources; `injected_seq=0` means no native input.
 A selected UNKNOWN source blocks prefix advancement; owner replacement yields
-no current cursor, not historical recovery. This cursor never authorizes an
-ACK, skipped claim, response, write, provider acceptance or replay. The
+no current cursor, not historical recovery. A v3 native runtime input now
+records the owner admission epoch under the sealed Pi send lock; cursor
+advance/read checks that immutable input-to-epoch witness so a caller-supplied
+old input ID cannot seed a new epoch. This cursor never authorizes an ACK,
+skipped claim, response, write, provider acceptance or replay. The
 100-initial/8 MiB historical scan still makes it unavailable at scale; existing
-v1 runtime schema roots require an explicit reviewed migration to v2 rather
-than an implicit upgrade. Independent exact review remains open.
+v1/v2 runtime schema roots require an explicit reviewed migration to v3 rather
+than an implicit upgrade. In particular, historical v2 inputs cannot be assigned
+a new send epoch from a journal. Independent exact review remains open.
 
 Mediated pre-write admission, append-driven/indexed refresh, full alias/human
 coverage and scaling/deadline acceptance remain open. The foreground consumer

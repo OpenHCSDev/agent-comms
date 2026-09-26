@@ -18,7 +18,7 @@ _DDL = (
         "native_runtime_schema_meta",
         """CREATE TABLE native_runtime_schema_meta (
             singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-            version INTEGER NOT NULL CHECK (version = 2),
+            version INTEGER NOT NULL CHECK (version = 3),
             ddl_digest TEXT NOT NULL CHECK (length(ddl_digest) = 64)
         ) STRICT""",
     ),
@@ -35,6 +35,7 @@ _DDL = (
             owner_thread TEXT NOT NULL,
             owner_generation INTEGER NOT NULL CHECK (owner_generation > 0),
             owner_token_digest TEXT NOT NULL CHECK (length(owner_token_digest) = 64),
+            sent_owner_admission_epoch INTEGER CHECK (sent_owner_admission_epoch > 0),
             session_id TEXT,
             session_file TEXT,
             session_entry_id TEXT,
@@ -112,8 +113,11 @@ _DDL = (
             OR NEW.owner_thread IS NOT OLD.owner_thread
             OR NEW.owner_generation IS NOT OLD.owner_generation
             OR NEW.owner_token_digest IS NOT OLD.owner_token_digest
+            OR (OLD.sent_owner_admission_epoch IS NOT NULL
+                AND NEW.sent_owner_admission_epoch IS NOT OLD.sent_owner_admission_epoch)
+            OR (NEW.sent_owner_admission_epoch IS NULL AND NEW.session_id IS NOT NULL)
             OR OLD.session_id IS NOT NULL
-            OR NEW.session_id IS NULL
+            OR (NEW.session_id IS NULL AND NEW.sent_owner_admission_epoch IS NULL)
         BEGIN SELECT RAISE(ABORT,'native runtime input identity is frozen'); END""",
     ),
     (
@@ -145,7 +149,7 @@ def assert_native_runtime_schema(db: sqlite3.Connection) -> None:
         ).fetchone()
     except sqlite3.OperationalError as error:
         raise PublicationActivationBlocked("native runtime schema is not installed") from error
-    if row is None or tuple(row) != (2, _DDL_DIGEST):
+    if row is None or tuple(row) != (3, _DDL_DIGEST):
         raise PublicationActivationBlocked("native runtime schema version differs")
     actual = {
         row["name"]: row["sql"]
@@ -170,5 +174,5 @@ def install_native_runtime_schema(store: MutationStore) -> None:
         if exists is None:
             for _, statement in _DDL:
                 db.execute(statement)
-            db.execute("INSERT INTO native_runtime_schema_meta VALUES(1,2,?)", (_DDL_DIGEST,))
+            db.execute("INSERT INTO native_runtime_schema_meta VALUES(1,3,?)", (_DDL_DIGEST,))
         assert_native_runtime_schema(db)

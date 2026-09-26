@@ -197,6 +197,7 @@ def _native_send_boundary(
                 reserved["execution_id"],
                 reserved["attempt_ordinal"],
                 reserved["owner_token_digest"],
+                reserved["sent_owner_admission_epoch"],
                 reserved["session_id"],
                 reserved["verdict"],
             ) != (
@@ -208,6 +209,7 @@ def _native_send_boundary(
                 execution_id,
                 ordinal,
                 _token_digest(token),
+                None,
                 None,
                 None,
             ):
@@ -270,7 +272,17 @@ def _native_send_boundary(
                 ordinal,
             ):
                 raise IdentityConflict("native send differs from its durable prompt binding")
-            # All exclusions remain held through the writer's final os.write.
+            # Bind the exact input ID to the owner admission in which Pi is
+            # actually sent the prompt, not to a later caller-provided epoch.
+            # The same transaction holds all exclusions through os.write;
+            # failure rolls back this proof and leaves the attempt uncertain.
+            updated = db.execute(
+                "UPDATE native_runtime_inputs SET sent_owner_admission_epoch=? "
+                "WHERE input_id=? AND sent_owner_admission_epoch IS NULL",
+                (epoch, input_id),
+            )
+            if updated.rowcount != 1:
+                raise StaleFence("native input admission was already bound")
             # No event-loop transport buffer may own any of these prompt bytes.
             yield
 

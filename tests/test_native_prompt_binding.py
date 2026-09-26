@@ -35,7 +35,10 @@ from agent_comms.native_prompt_binding import (
     native_request_digest,
     read_expected_prompt_binding,
 )
-from agent_comms.native_source_cursor import read_current_native_cursor
+from agent_comms.native_source_cursor import (
+    advance_current_native_cursor,
+    read_current_native_cursor,
+)
 from agent_comms.operations import Comms
 from agent_comms.proven_source_coverage import read_proven_source_coverage
 
@@ -452,6 +455,61 @@ async def test_current_cursor_never_promotes_old_owner_epoch(tmp_path, monkeypat
             "SELECT owner_admission_epoch,input_id FROM native_runtime_source_cursors"
         ).fetchone()
         assert tuple(retained) == (old.owner_admission_epoch, turn.input_id)
+    assert len(calls) == 1
+
+
+async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, monkeypatch):
+    root, root_id, comms, _, people = _root(tmp_path)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model(decision="IGNORE")
+    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    turn = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    )
+    assert turn is not None and turn.cursor_status == "proven"
+    comms.registry.unregister("alpha")
+    comms.registry.heartbeat("alpha")
+    owner = comms.registry.require("alpha")
+    epoch = comms.registry.snapshot().admission_generations["alpha"]
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        lookup = stable_thread_lookup(people[1].created_at)
+        generation = store.participant(lookup).generation
+        assert (
+            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
+            is None
+        )
+        assert (
+            advance_current_native_cursor(
+                comms.bus,
+                store,
+                wire_root_id=root_id,
+                owner=owner,
+                owner_admission_epoch=epoch,
+                owner_generation=generation,
+                committed_input_id=turn.input_id,
+            )
+            is None
+        )
+        assert (
+            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
+            is None
+        )
+        old_epoch = store._connection.execute(
+            "SELECT sent_owner_admission_epoch FROM native_runtime_inputs WHERE input_id=?",
+            (turn.input_id,),
+        ).fetchone()[0]
+        assert old_epoch != epoch
+        with pytest.raises(sqlite3.IntegrityError, match="input identity is frozen"):
+            store._connection.execute(
+                "UPDATE native_runtime_inputs SET sent_owner_admission_epoch=? WHERE input_id=?",
+                (epoch, turn.input_id),
+            )
+        assert (
+            store._connection.execute(
+                "SELECT COUNT(*) FROM native_runtime_source_cursors"
+            ).fetchone()[0]
+            == 1
+        )
     assert len(calls) == 1
 
 

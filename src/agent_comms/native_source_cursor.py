@@ -178,15 +178,24 @@ def advance_current_native_cursor(
                 return prior  # Current source lies after an unproven gap.
             reserved = db.execute(
                 "SELECT stage,claim_id,owner_lookup,owner_thread,owner_generation,"
-                "session_id,request_generation FROM native_runtime_inputs WHERE input_id=?",
+                "sent_owner_admission_epoch,session_id,request_generation "
+                "FROM native_runtime_inputs WHERE input_id=?",
                 (proof.input_id,),
             ).fetchone()
+            if (
+                reserved is not None
+                and reserved["sent_owner_admission_epoch"] != owner_admission_epoch
+            ):
+                if prior is None or injected_seq > prior.injected_seq:
+                    return prior  # An old native input cannot seed a new admission.
+                raise IdentityConflict("current cursor input admission differs")
             if reserved is None or tuple(reserved) != (
                 proof.stage,
                 proof.claim_id,
                 lookup,
                 owner.name,
                 owner_generation,
+                owner_admission_epoch,
                 proof.context.session_id,
                 proof.context.request_generation,
             ):
@@ -278,6 +287,26 @@ def read_current_native_cursor(
                 "AND recipient_lookup=? AND owner_generation=? AND owner_admission_epoch=?",
                 (wire_root_id, lookup, person.generation, epoch),
             ).fetchone()
+            if row is not None and row["input_id"] is not None:
+                input_row = store._connection.execute(
+                    "SELECT sent_owner_admission_epoch,owner_lookup,owner_thread,"
+                    "owner_generation,claim_id,stage,session_id,request_generation "
+                    "FROM native_runtime_inputs WHERE input_id=?",
+                    (row["input_id"],),
+                ).fetchone()
+                if input_row is None or input_row["sent_owner_admission_epoch"] != epoch:
+                    raise IdentityConflict("current cursor input admission differs")
+                if tuple(input_row) != (
+                    epoch,
+                    lookup,
+                    owner_name,
+                    person.generation,
+                    row["claim_id"],
+                    row["stage"],
+                    row["session_id"],
+                    row["request_generation"],
+                ):
+                    raise IdentityConflict("current cursor proof differs from journal")
         cursor = _cursor_from_row(row) if row is not None else None
         generation = person.generation
     if cursor is not None:
