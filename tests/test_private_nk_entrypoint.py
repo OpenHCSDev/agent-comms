@@ -10,6 +10,7 @@ import pytest
 
 from agent_comms import acp, cohort_foreground, operations, private_nk_entrypoint, worker
 from agent_comms.coordination_store import IdentityConflict, PublicationActivationBlocked
+from agent_comms.declarations import Thread
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, private_nk_launch
 from test_native_prompt_binding import _root
 from test_native_prompt_binding import tmp_path as private_root_fixture
@@ -129,3 +130,59 @@ async def test_private_relative_root_pinned_across_cwd_change_before_wire(
             await worker.run()
     assert seen == [root]
     assert not (other / "wire").exists()
+
+
+def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypatch):
+    """Private lexical pinning must not regress the existing public child path."""
+    if os.name != "posix":
+        pytest.skip("symlink handoff control requires POSIX")
+    physical = tmp_path / "physical"
+    physical.mkdir()
+    other = tmp_path / "other"
+    other.mkdir()
+    link = tmp_path / "public-link"
+    link.symlink_to(physical, target_is_directory=True)
+    comms = operations.Comms(link)
+    seen = []
+
+    class StopBeforeSpawnError(Exception):
+        pass
+
+    def intercept(_argv, *, env, **_kwargs):
+        seen.append(env["AGENT_COMMS_ROOT"])
+        link.unlink()
+        link.symlink_to(other, target_is_directory=True)
+        # Actual child env continues to select physical A, not retargeted B.
+        assert operations.wire(env["AGENT_COMMS_ROOT"]).root == physical
+        raise StopBeforeSpawnError
+
+    monkeypatch.setattr(operations.subprocess, "Popen", intercept)
+    with pytest.raises(StopBeforeSpawnError):
+        comms._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi")
+    assert seen == [str(physical)]
+    assert not (other / "registry.json").exists()
+
+
+def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path, monkeypatch):
+    root, root_id, _, _, _ = _root(tmp_path)
+    comms = operations.Comms(root)
+    comms.pin_private_nk_launch(root, root_id, tmp_path)
+    other = tmp_path / "other"
+    other.mkdir()
+    monkeypatch.setenv("AGENT_COMMS_ROOT", str(other))
+    monkeypatch.setenv(ROOT_ID_ENV, "f" * 32)
+    monkeypatch.setenv(PACKAGE_ENV, str(other))
+    seen = []
+
+    class StopBeforeSpawnError(Exception):
+        pass
+
+    def intercept(_argv, *, env, **_kwargs):
+        seen.append((env["AGENT_COMMS_ROOT"], env[ROOT_ID_ENV], env[PACKAGE_ENV]))
+        raise StopBeforeSpawnError
+
+    monkeypatch.setattr(operations.subprocess, "Popen", intercept)
+    with pytest.raises(StopBeforeSpawnError):
+        comms._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi")
+    assert seen == [(str(root), root_id, str(tmp_path))]
+    assert not (other / "registry.json").exists()

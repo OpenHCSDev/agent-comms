@@ -3573,6 +3573,10 @@ def main() -> int:
 
     private_nk = private_nk_from_environment()
     comms = wire(private_nk.validated_root) if private_nk is not None else wire()
+    if private_nk is not None:
+        comms.pin_private_nk_launch(
+            private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
+        )
 
     async def run() -> None:
         if os.environ.get("AGENT_COMMS_DEBUG_LOG"):

@@ -360,8 +360,32 @@ class Comms:
         self.runtime_info = RuntimeInfoStore(self.root / "runtime_info.json")
         self.transcript_reads = transcript_read_state(self.root / "thread_read_markers.json")
         self._wire_lock_path = self.root / "wire"
+        self._private_nk_launch: tuple[Path, str, Path] | None = None
         self._sent_times_signature: tuple[int, int, int] | None = None
         self._sent_times: dict[str, float] = {}
+
+    def pin_private_nk_launch(
+        self, validated_root: Path, wire_root_id: str, native_package: Path
+    ) -> None:
+        """Bind an already preflighted ACP/worker launch to future owner handoffs.
+
+        Public Comms instances never opt in from a marker or ambient env.
+        Recheck the root marker before retaining the exact lexical absolute
+        path; child env is generated from this pin, not a later cwd/env read.
+        """
+        if (
+            not isinstance(validated_root, Path)
+            or not validated_root.is_absolute()
+            or validated_root != self.root
+            or not isinstance(native_package, Path)
+            or not native_package.is_absolute()
+        ):
+            raise ValueError("private owner launch requires the validated absolute root/package")
+        with _store_lock(self.bus._path):
+            marker = self.bus._private_marker_unlocked()
+            if marker["wire_root_id"] != wire_root_id:
+                raise RelationViolationError("private owner launch root ID changed")
+        self._private_nk_launch = (validated_root, wire_root_id, native_package)
 
     # ─── Messaging ────────────────────────────────────────────────────────────
 
@@ -3291,6 +3315,7 @@ class Comms:
         env = os.environ.copy()
         for key in ("PI_PROMPT", "PI_PARENT_ID", "PI_TASK", "AGENT_COMMS_RESERVATION_FD"):
             env.pop(key, None)
+        private_launch = self._private_nk_launch
         env.update(
             {
                 "PI_AGENT_ID": thread.name,
@@ -3298,15 +3323,18 @@ class Comms:
                 "PI_AGENT_TAGS": ",".join(sorted(thread.tags)),
                 "AGENT_COMMS_TAGS": ",".join(sorted(thread.tags)),
                 "PI_WORKTREE": thread.worktree,
-                # A private ACP launch already preflighted an absolute path.
-                # Preserve those exact path bytes across the worker handoff;
-                # resolving a symlink or re-evaluating cwd would change root.
+                # Preserve the preflight pin ONLY on explicit private launch.
+                # Ordinary/public roots keep their canonical child path, even
+                # when their original spelling was an absolute symlink.
                 "AGENT_COMMS_ROOT": str(
-                    self.root if self.root.is_absolute() else self.root.resolve()
+                    private_launch[0] if private_launch is not None else self.root.resolve()
                 ),
                 "AGENT_COMMS_AGENT_BIN": agent_bin,
             }
         )
+        if private_launch is not None:
+            env["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"] = private_launch[1]
+            env["AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE"] = str(private_launch[2])
         if thread.parent is not None:
             env["PI_PARENT_ID"] = thread.parent
         if thread.task is not None:
