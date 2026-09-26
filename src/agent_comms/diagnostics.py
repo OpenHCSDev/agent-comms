@@ -15,7 +15,7 @@ class FailureReason(StrEnum):
     BACKEND_FAILED = "backend_failed"
     PREFLIGHT_TIMEOUT = "native_preflight_timeout"
     PREFLIGHT_EXIT = "native_preflight_exit"
-    PROOF_JOURNAL_LIMIT = "native_proof_journal_limit"
+    PROOF_JOURNAL_REJECTED = "native_proof_journal_rejected"
     INPUT_ID_UNAVAILABLE = "pi_input_id_unavailable"
     COMPACTION_FAILED = "prestart_compaction_failed"
     IDENTITY_UNCERTAIN = "session_identity_uncertain"

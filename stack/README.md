@@ -35,9 +35,11 @@ The native proof journal's decoded-content startup limit is temporarily
 hash and verifies the exact resulting hash; the complete journal is still
 validated and never truncated or skipped. Pi currently reads the file before
 checking the limit, so this is emergency headroom, not a memory bound or
-compaction. ACP warns when the journal reaches 96 MiB and gives a specific
-safe error when the 128 MiB limit is hit. An independently reviewed
-crash-atomic checkpoint/segment design is needed before further growth.
+compaction. ACP reports byte size as an advisory warning from 96 MiB; Pi's
+limit is decoded text length, not byte size. If Pi rejects a journal during
+preflight as oversized *or* incomplete, ACP gives a safe, specific rejection
+without claiming which cause occurred. An independently reviewed crash-atomic
+checkpoint/segment design is needed before further growth.
 
 All three packages are installed from immutable Git commits. Toad also pins
 agent-comms in its own manifest, so both agent-comms pins must agree. Update

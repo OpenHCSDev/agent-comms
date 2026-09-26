@@ -26,12 +26,13 @@ def _pi_stub(tmp_path: Path, script: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_complete_near_limit_journal_warns_before_native_prompt(tmp_path):
+@pytest.mark.parametrize("proof_bytes", [96 * 1024 * 1024, 128 * 1024 * 1024 + 1])
+async def test_byte_size_is_only_advisory_when_pi_accepts(tmp_path, proof_bytes):
     session = tmp_path / "owner.jsonl"
     session.write_text("")
     proof = Path(f"{session}.input-proof")
     with proof.open("wb") as stream:
-        stream.truncate(backend._NATIVE_PROOF_JOURNAL_WARN_BYTES)
+        stream.truncate(proof_bytes)
     stub = _pi_stub(
         tmp_path,
         """import json, sys
@@ -55,12 +56,12 @@ assert sys.stdin.readline() == ""  # refused at send_boundary before any prompt
         )
     ]
     assert [event["type"] for event in events].count("notice") == 1
-    assert "approaching its 128 MiB startup limit" in next(
+    assert "byte size is only an advisory" in next(
         event["text"] for event in events if event["type"] == "notice"
     )
     assert events[-1]["ok"] is False
-    assert events[-1]["diagnostic"].get("reason") != FailureReason.PROOF_JOURNAL_LIMIT
-    assert proof.stat().st_size == backend._NATIVE_PROOF_JOURNAL_WARN_BYTES
+    assert events[-1]["diagnostic"].get("reason") != FailureReason.PROOF_JOURNAL_REJECTED
+    assert proof.stat().st_size == proof_bytes
 
 
 @pytest.mark.asyncio
@@ -69,7 +70,7 @@ async def test_over_limit_preflight_exit_has_safe_explicit_diagnostic(tmp_path):
     session.write_text("")
     proof = Path(f"{session}.input-proof")
     with proof.open("wb") as stream:
-        stream.truncate(backend._NATIVE_PROOF_JOURNAL_LIMIT_BYTES + 1)
+        stream.truncate(128 * 1024 * 1024 + 1)
     stub = _pi_stub(
         tmp_path,
         """import sys
@@ -85,17 +86,46 @@ sys.exit(1)
     ]
     terminal = events[-1]
     assert terminal["ok"] is False
-    assert terminal["diagnostic"]["reason"] == FailureReason.PROOF_JOURNAL_LIMIT
+    assert terminal["diagnostic"]["reason"] == FailureReason.PROOF_JOURNAL_REJECTED
     assert terminal["diagnostic"]["proof_journal_bytes"] == proof.stat().st_size
-    assert "exceeded its 128 MiB startup limit before this prompt was sent" in terminal["text"]
+    assert "rejected its native input proof journal before this prompt was sent" in terminal["text"]
+    assert "decoded-content limit or incomplete final row" in terminal["text"]
     assert "Truncated or oversized" not in terminal["text"]
     record = record_terminal_failure(
         tmp_path, turn_id="a" * 32, thread="owner", event=terminal, sequences=()
     )
     persisted = json.loads(record.read_text())
-    assert persisted["reason"] == FailureReason.PROOF_JOURNAL_LIMIT
+    assert persisted["reason"] == FailureReason.PROOF_JOURNAL_REJECTED
     assert persisted["measurements"]["proof_journal_bytes"] == proof.stat().st_size
-    assert proof.stat().st_size == backend._NATIVE_PROOF_JOURNAL_LIMIT_BYTES + 1
+    assert proof.stat().st_size == 128 * 1024 * 1024 + 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("proof_bytes", [128 * 1024 * 1024, 512])
+async def test_incomplete_final_row_is_not_labeled_size_exceeded(tmp_path, proof_bytes):
+    session = tmp_path / "owner.jsonl"
+    session.write_text("")
+    proof = Path(f"{session}.input-proof")
+    with proof.open("wb") as stream:
+        stream.truncate(proof_bytes)  # Missing final newline, regardless of size.
+    stub = _pi_stub(
+        tmp_path,
+        """import sys
+print('Error: Truncated or oversized native input proof journal', file=sys.stderr)
+sys.exit(1)
+""",
+    )
+    events = [
+        event
+        async for event in backend.stream_agent_events(
+            stub, [], "never send this prompt", str(tmp_path), session_file=str(session)
+        )
+    ]
+    terminal = events[-1]
+    assert terminal["diagnostic"]["reason"] == FailureReason.PROOF_JOURNAL_REJECTED
+    assert terminal["diagnostic"]["proof_journal_bytes"] == proof_bytes
+    assert "decoded-content limit or incomplete final row" in terminal["text"]
+    assert "exceeded" not in terminal["text"]
 
 
 @pytest.mark.asyncio

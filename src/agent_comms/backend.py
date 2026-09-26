@@ -85,9 +85,8 @@ MODEL_WAIT_TIMEOUT_SECONDS = 360.0
 assert MODEL_WAIT_TIMEOUT_SECONDS > _PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS
 RPC_ABORT_GRACE_SECONDS = 2.0
 CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS = NATIVE_STARTUP_POLICY.readiness_seconds
-# Match the pinned Pi's temporary complete-proof-journal startup guard. This
-# advisory measures bytes; Pi checks decoded text length after reading the file.
-_NATIVE_PROOF_JOURNAL_LIMIT_BYTES = 128 * 1024 * 1024
+# Advisory uses bytes. Pinned Pi checks decoded JS text length (or a missing
+# newline) after reading the proof journal; byte size alone is not the cause.
 _NATIVE_PROOF_JOURNAL_WARN_BYTES = 96 * 1024 * 1024
 PROMPT_START_TIMEOUT_SECONDS = 180.0
 _SESSION_MUTATING_COMMANDS = frozenset({"new_session", "switch_session", "fork", "clone"})
@@ -1552,15 +1551,14 @@ async def _stream_agent_events(
                 startup.release()
             if (
                 proof_journal_bytes is not None
-                and _NATIVE_PROOF_JOURNAL_WARN_BYTES
-                <= proof_journal_bytes
-                < _NATIVE_PROOF_JOURNAL_LIMIT_BYTES
+                and proof_journal_bytes >= _NATIVE_PROOF_JOURNAL_WARN_BYTES
             ):
                 yield {
                     "type": "notice",
                     "text": (
-                        "[agent-comms warning] Pi native input proof journal is approaching "
-                        "its 128 MiB startup limit. Preserve the session and proof journal; "
+                        "[agent-comms warning] Pi native input proof journal measures at least "
+                        "96 MiB. Pi checks decoded content against a 128 MiB startup limit; "
+                        "byte size is only an advisory. Preserve the session and journal; "
                         "arrange a reviewed checkpoint or upgrade before further growth."
                     ),
                 }
@@ -2290,17 +2288,17 @@ async def _stream_agent_events(
     if (
         preflight_failure == FailureReason.PREFLIGHT_EXIT
         and proof_journal_bytes is not None
-        and proof_journal_bytes >= _NATIVE_PROOF_JOURNAL_LIMIT_BYTES
         and "Truncated or oversized native input proof journal" in error_text
     ):
         # Only classify this exact local Pi startup failure. Never publish raw
         # stderr, journal content, session paths, or a replay instruction.
-        preflight_failure = FailureReason.PROOF_JOURNAL_LIMIT
+        preflight_failure = FailureReason.PROOF_JOURNAL_REJECTED
         diagnostic["proof_journal_bytes"] = proof_journal_bytes
         fail_reason = (
-            "Pi native input proof journal exceeded its 128 MiB startup limit before "
-            "this prompt was sent. Preserve the session and journal; arrange a reviewed "
-            "recovery. Uncertain inputs must not be replayed."
+            "Pi rejected its native input proof journal before this prompt was sent "
+            f"(measured {proof_journal_bytes} bytes; decoded-content limit or incomplete "
+            "final row). Preserve the session and journal; arrange a reviewed recovery. "
+            "Uncertain inputs must not be replayed."
         )
     if owner is not None:
         _ACTIVE_STDERR_TASKS.pop(owner, None)
