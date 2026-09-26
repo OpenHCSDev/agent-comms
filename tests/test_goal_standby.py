@@ -9,8 +9,9 @@ import pytest
 
 from agent_comms import GoalExecution, GoalExecutionState, Thread
 from agent_comms.acp import CommsAgent
-from agent_comms.declarations import _store_lock
+from agent_comms.declarations import GoalWaitTarget, _store_lock
 from agent_comms.goal_attempts import GoalAttemptStore, StaleAttempt
+from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.operations import wire
 from agent_comms.tools import TOOLS
 
@@ -166,6 +167,81 @@ def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_pa
     comms.update_goal("parent", "paused", owner_action=True)
     comms.update_goal("parent", "edit", text="Edited @mention")
     assert comms.goal_pause("parent").source == "owner"
+
+
+def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path):
+    comms = wire(tmp_path)
+    for name in ("alice", "bob"):
+        comms.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.begin_turn(name, f"{name}-turn")
+    alice = comms.update_goal("alice", "set", text="Wait for Bob")
+    bob = comms.update_goal("bob", "set", text="Wait for Alice")
+    assert alice is not None and bob is not None
+
+    comms.update_goal("alice", "standby", goal_id=alice.id, wait_for=["bob"])
+    with pytest.raises(ValueError, match="dependency wait group.*@alice.*@bob"):
+        comms.update_goal("bob", "standby", goal_id=bob.id, wait_for=["alice"])
+
+    assert comms.goal_wait("alice") is not None
+    assert comms.goal_wait("bob") is None
+    assert comms.registry.require("bob").goal == bob
+
+
+def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
+    comms = wire(tmp_path)
+    for name in ("alice", "bob", "carol"):
+        comms.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.begin_turn(name, f"{name}-turn")
+    alice = comms.update_goal("alice", "set", text="Wait for Bob or Carol")
+    bob = comms.update_goal("bob", "set", text="Wait for Alice")
+    assert alice is not None and bob is not None
+
+    comms.update_goal("alice", "standby", goal_id=alice.id, wait_for=["bob", "carol"])
+    comms.update_goal("bob", "standby", goal_id=bob.id, wait_for=["alice"])
+
+    assert comms.goal_wait("alice") is not None
+    assert comms.goal_wait("bob") is not None
+
+
+@pytest.mark.parametrize("pending_reply", [False, True])
+def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending_reply):
+    comms = wire(tmp_path)
+    for name in ("alice", "bob"):
+        comms.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.begin_turn(name, f"{name}-turn")
+    alice = comms.update_goal("alice", "set", text="Wait for Bob")
+    bob = comms.update_goal("bob", "set", text="Wait for Alice")
+    assert alice is not None and bob is not None
+    comms.update_goal("alice", "standby", goal_id=alice.id, wait_for=["bob"])
+
+    # Represent a wait recorded by an older owner before cycle admission was
+    # enforced. Both turns subsequently finish without any dependency reply.
+    owner = comms.registry.require("bob")
+    peer = comms.registry.require("alice")
+    GoalWaits(tmp_path / "goal_waits.json").record(
+        GoalWait(
+            bob.id,
+            "older-bob-wait",
+            bob.revision,
+            0,
+            (GoalWaitTarget("alice", peer.created_at),),
+            owner_created_at=owner.created_at,
+        )
+    )
+    comms.finish_turn("alice", "alice-turn")
+    comms.finish_turn("bob", "bob-turn")
+
+    if pending_reply:
+        comms.send_message("bob", "alice", "The work is finished")
+        assert comms.recover_closed_goal_wait("alice") == ()
+        assert comms.goal_wait("alice") is not None
+        return
+
+    assert comms.recover_closed_goal_wait("alice") == ("alice", "bob")
+    assert comms.goal_wait("alice") is None
+    assert comms.goal_execution("alice").state is GoalExecutionState.RUNNABLE
+    assert "Standby was released" in comms.registry.require("alice").goal.progress
+    assert comms.recover_closed_goal_wait("alice") == ()
 
 
 @pytest.mark.parametrize("already_drained", [False, True])

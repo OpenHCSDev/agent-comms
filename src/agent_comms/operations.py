@@ -2435,6 +2435,70 @@ class Comms:
         waits = GoalWaits(self.root / "goal_waits.json")
         return waits.for_goal(self.registry.require(name).goal, waits.snapshot())
 
+    def recover_closed_goal_wait(self, name: str) -> tuple[str, ...]:
+        """Release one stranded standby without replaying a dependency input.
+
+        This is an owner-side liveness check, not an agent turn. A subsequent
+        scheduler pass may continue the still-active goal only if its private
+        attempt ledger has a fresh READY grant.
+        """
+        with _store_lock(self._wire_lock_path):
+            snapshot = self.registry.snapshot()
+            canonical = snapshot.aliases.get(name, name)
+            owner = snapshot.threads.get(canonical)
+            if owner is None or owner.active_turn is not None:
+                return ()
+            goal = owner.goal
+            if goal is None or not goal.active:
+                return ()
+            waits = GoalWaits(self.root / "goal_waits.json")
+            rows = waits.snapshot()
+            wait = rows.get(goal.id)
+            if (
+                wait is None
+                or wait.owner_created_at not in (None, owner.created_at)
+                or wait.revision > goal.revision
+            ):
+                return ()
+            closed = GoalWaits.closed_wait_group(canonical, wait.targets, rows, snapshot)
+            if not closed:
+                return ()
+            owner_aliases = frozenset(
+                {
+                    canonical,
+                    *(alias for alias, target in snapshot.aliases.items() if target == canonical),
+                }
+            )
+            try:
+                reply = self.bus._history_page(
+                    lambda message: message.target in owner_aliases
+                    and message.starts_turn_for(canonical, aliases=snapshot.aliases)
+                    and wait.matches(message, snapshot),
+                    before=None,
+                    after=wait.after_seq,
+                    limit=1,
+                    max_bytes=256 * 1024,
+                    targets=owner_aliases,
+                )
+            except (OSError, ValueError, sqlite3.DatabaseError):
+                # An unavailable read cannot prove that no reply was delivered.
+                return ()
+            if reply.messages:
+                return ()
+            names = ", ".join(f"@{member}" for member in closed)
+            note = (
+                f"Dependency wait group ({names}) has no independent worker. "
+                "Standby was released; inspect dependencies and continue useful work."
+            )
+            progress = f"{goal.progress}\n\n{note}" if goal.progress else note
+            if not waits.clear(goal.id, wait_id=wait.wait_id):
+                return ()
+            self.registry.register(
+                replace(owner, goal=replace(goal, progress=progress, revision=goal.revision + 1)),
+                snapshot.statuses[canonical],
+            )
+            return closed
+
     def pause_waits_after_terminal_turn(self, fence: FinishedTurnFence | None) -> tuple[str, ...]:
         """Pause only for the latest exact, still-idle, completed child turn.
 
@@ -2763,6 +2827,19 @@ class Comms:
                         "A running/ready process or queued input does not prove active work. "
                         "Message or restart the responsible agent, inspect its status, "
                         "then declare standby only while a target is actually working."
+                    )
+                closed = GoalWaits.closed_wait_group(
+                    thread.name,
+                    wait_targets,
+                    GoalWaits(self.root / "goal_waits.json").snapshot(),
+                    snapshot,
+                )
+                if closed:
+                    names = ", ".join(f"@{name}" for name in closed)
+                    raise ValueError(
+                        f"Standby would close a dependency wait group ({names}). "
+                        "At least one agent must remain able to work or reply. "
+                        "Continue independent work or change the dependencies."
                     )
             elif wait_for or reviewed_inputs:
                 raise ValueError("wait_for and reviewed_inputs are only valid for standby.")

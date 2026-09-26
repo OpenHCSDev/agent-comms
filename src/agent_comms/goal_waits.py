@@ -149,6 +149,61 @@ class GoalWaits:
         )
 
     @staticmethod
+    def closed_wait_group(
+        owner: str,
+        targets: tuple[GoalWaitTarget, ...],
+        rows: dict[str, GoalWait],
+        snapshot: RegistrySnapshot,
+    ) -> tuple[str, ...]:
+        """Find waits with no path to a current thread outside the wait graph.
+
+        A dependency list wakes on any qualifying reply. One independent
+        target is therefore enough to keep a group runnable, even if another
+        branch contains a cycle. Call this under the wire lock before recording
+        the proposed wait so concurrent standby reports cannot both pass.
+        """
+        pending = [owner]
+        seen: set[str] = set()
+        while pending:
+            name = pending.pop()
+            if name in seen:
+                continue
+            seen.add(name)
+            thread = snapshot.threads[name]
+            goal = thread.goal
+            wait = rows.get(goal.id) if goal is not None and goal.active else None
+            dependencies = (
+                targets
+                if name == owner
+                else (
+                    wait.targets
+                    if wait is not None and wait.owner_created_at in (None, thread.created_at)
+                    else ()
+                )
+            )
+            for target in dependencies:
+                canonical = snapshot.aliases.get(target.name, target.name)
+                peer = snapshot.threads.get(canonical)
+                if peer is None or peer.created_at != target.created_at:
+                    continue
+                if canonical == owner:
+                    pending.append(owner)
+                    continue
+                peer_goal = peer.goal
+                peer_wait = (
+                    rows.get(peer_goal.id) if peer_goal is not None and peer_goal.active else None
+                )
+                if peer_wait is None:
+                    if (
+                        peer_goal is not None and peer_goal.active
+                        and snapshot.statuses[canonical].running
+                    ) or GoalWaits.target_has_active_turn(target, snapshot):
+                        return ()
+                    continue
+                pending.append(canonical)
+        return tuple(sorted(seen))
+
+    @staticmethod
     def execution(
         goal: Goal | None, rows: dict[str, GoalWait], snapshot: RegistrySnapshot
     ) -> GoalExecution | None:
