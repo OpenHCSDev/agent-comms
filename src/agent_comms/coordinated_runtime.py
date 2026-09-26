@@ -173,6 +173,10 @@ def _native_send_boundary(
             _response_boundary(bus, blocking=False) as registry,
             store._transaction() as db,
         ):
+            # Rename may begin after reservation but before the isolated raw
+            # send. Its wire-locked durable intent must fence the last
+            # irreversible boundary, not just the outer turn entry.
+            _require_no_private_owner_rename(bus._path.parent)
             actual = registry.threads.get(owner.name)
             status = registry.statuses.get(owner.name)
             if (

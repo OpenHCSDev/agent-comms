@@ -478,6 +478,52 @@ def test_private_rename_compensates_registry_failure_with_new_old_owner_generati
     assert comms.message_high_water() == 0
 
 
+async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_path, monkeypatch):
+    comms, agent, _ = _session(tmp_path)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model(decision="FULL")
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def held_before_raw_send(*args, **kwargs):
+        entered.set()
+        await release.wait()
+        return await fake(*args, **kwargs)
+
+    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", held_before_raw_send)
+    invoke_tool(
+        comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected before rename"}
+    )
+    running = asyncio.create_task(agent._drain_inbox("beta"))
+    await asyncio.wait_for(entered.wait(), timeout=5)
+    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+        reserved_count = store._connection.execute(
+            "SELECT COUNT(*) FROM native_runtime_inputs"
+        ).fetchone()[0]
+        assert reserved_count == 1
+
+    def fail_before_sql(*args, **kwargs):
+        raise OSError("synthetic SQL rename CAS outage")
+
+    monkeypatch.setattr(MutationStore, "advance_owner_generation", fail_before_sql)
+    with pytest.raises(OSError, match="synthetic SQL rename CAS outage"):
+        comms._rename_thread("beta", "gamma")
+    assert (comms.root / ".private-owner-rename.pending").is_file()
+    assert comms.registry.require("beta").name == "beta"
+    release.set()
+    with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
+        await asyncio.wait_for(running, timeout=8)
+    assert calls == []  # No raw native send; reserved outcome remains UNKNOWN, never retried.
+    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+        assert (
+            store._connection.execute(
+                "SELECT COUNT(*) FROM native_runtime_inputs "
+                "WHERE sent_owner_admission_epoch IS NOT NULL"
+            ).fetchone()[0]
+            == 0
+        )
+
+
 async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_path, monkeypatch):
     comms, agent, root_id = _session(tmp_path)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)

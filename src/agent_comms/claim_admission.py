@@ -25,6 +25,7 @@ from .declarations import (
     MessageType,
     RelationViolationError,
     Thread,
+    _require_no_private_owner_rename,
     _store_lock,
 )
 from .envelope_claim_transitions import (
@@ -47,6 +48,7 @@ def verify_selected_wake(
     if store.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
     with _store_lock(comms._wire_lock_path):
+        _require_no_private_owner_rename(comms.root)
         try:
             initial = comms.bus.read_initial_cohort(admission.wire_root_id, admission.source_seq)
             owner, generation = comms.registry.live_owner_with_admission(owner_name)
@@ -161,6 +163,7 @@ def publish_selected_resource_claim(
             or generation is None
         ):
             raise IdentityConflict("Selected wake owner stopped or changed")
+        _require_no_private_owner_rename(comms.root)
         metadata = bus._private_marker_unlocked()
         if metadata["wire_root_id"] != admission.wire_root_id:
             raise IdentityConflict("Selected wake belongs to another wire root")
@@ -271,6 +274,7 @@ def write_selected_claimed_file(
             or generation != admission.owner_admission_generation
         ):
             raise IdentityConflict("Selected write owner stopped or changed")
+        _require_no_private_owner_rename(comms.root)
         marker = bus._private_marker_unlocked()
         if marker["wire_root_id"] != admission.wire_root_id:
             raise IdentityConflict("Selected write belongs to another private root")
