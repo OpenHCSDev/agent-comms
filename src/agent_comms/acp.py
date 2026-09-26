@@ -74,7 +74,7 @@ from .declarations import (
     _store_lock,
     is_channel_target,
 )
-from .diagnostics import record_terminal_failure
+from .diagnostics import record_terminal_failure, terminal_failure_reason
 from .goal_attempts import (
     Generation,
     GoalAttemptError,
@@ -83,6 +83,7 @@ from .goal_attempts import (
     StaleAttempt,
     UnresolvedAttempt,
 )
+from .goal_failure_observation import FailedTurnObservation
 from .input_disposition import AcpDeliveryCursors, InputDispositions
 from .operations import OBSERVATION_INTERVAL, Comms, wire
 from .passive_channel_awareness import PassiveChannelAwareness
@@ -2886,10 +2887,28 @@ class CommsAgent:
                         self._goal_store.record_verified_progress(goal_permit, witness)
                         goal_attempt_resolved = True
                 if not goal_attempt_resolved:
+                    terminal_snapshot = self._comms.registry.snapshot()
                     with suppress(StaleAttempt):
                         self._goal_store.record_failed(
                             goal_permit.reservation,
                             "Goal turn ended without verified terminal progress.",
+                            observation=(
+                                FailedTurnObservation.from_terminal(
+                                    goal_permit.reservation,
+                                    owner=thread,
+                                    goal=goal,
+                                    claim=turn_claim,
+                                    turn_id=turn_id,
+                                    admission=turn_admission,
+                                    current_owner=terminal_snapshot.threads.get(thread_name),
+                                    current_admission=terminal_snapshot.admission_generations.get(
+                                        thread_name
+                                    ),
+                                    reason=terminal_failure_reason(terminal_failure),
+                                )
+                                if terminal_ok is not True
+                                else None
+                            ),
                         )
                     goal_attempt_resolved = True
                     if current_goal is not None and current_goal.id == goal.id:
