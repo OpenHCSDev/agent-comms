@@ -334,6 +334,9 @@ def _native_send_boundary(
             # send. Its wire-locked durable intent must fence the last
             # irreversible boundary, not just the outer turn entry.
             _require_no_private_owner_rename(bus._path.parent)
+            from .maintenance_barrier import MaintenanceBarrier
+
+            MaintenanceBarrier(bus._registry._path).assert_open_unlocked()
             actual = registry.threads.get(owner.name)
             status = registry.statuses.get(owner.name)
             if (
@@ -1038,6 +1041,7 @@ async def run_one_sealed_claim(
                 worktree=worktree,
                 session_dir=session_dir,
                 session_file=triage_session,
+                maintenance_root=root,
                 prompt_send_boundary=_native_send_boundary(
                     store,
                     bus,
@@ -1174,6 +1178,7 @@ async def run_one_sealed_claim(
             worktree=worktree,
             session_dir=session_dir,
             session_file=triage_session,
+            maintenance_root=root,
             prompt_send_boundary=_native_send_boundary(
                 store,
                 bus,
