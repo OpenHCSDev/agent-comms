@@ -3,6 +3,21 @@
 Base: merged PR48 `d0ced47fbec39ac4d110c9f7395442524363871d`.
 This is **not deployment approval**. The adaptive trigger remains disabled.
 
+## Read-only selected-settings trigger seam (not an ACP caller)
+
+`owner_compaction_settings.read_compaction_decision` now obtains Pi's effective
+global/project compaction settings through Pi's own `SettingsManager` merge and
+`shouldCompact`, but a read-only bounded storage adapter avoids settings lock
+files and rejects malformed, symlinked or changing configuration. Private
+`PI_CODING_AGENT_DIR` provider-free controls cover strict threshold, disabled
+settings and no writes (**4 source/4 extracted-wheel passed**). See
+`compaction-trigger-settings.md` for the outstanding selected-model binding,
+effective kept-window preparation and model/settings source recheck. This
+helper has **no ACP call site, provider request or commit authority** and does
+not change the independent hard-context protection. Exact prior full suite
+at frozen `7e0ef0b` passed **1729/62 skipped** on `/var/tmp`; the new seam
+has not had a fresh full-source rerun yet and cannot be promoted to clearance.
+
 ## Scoped eedf reviews and subsequent local-transport corrections
 
 Independent exact `eedf7993` reviewers returned **narrow CLEAN** only for
