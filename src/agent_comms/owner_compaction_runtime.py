@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from .backend import PersistentPiSession
@@ -59,8 +60,13 @@ async def compact_owner_once(
     # No native write can begin until this returns; closing under the borrow
     # lock makes an old RPC manager unusable even if commit is later refused.
     await persistent.discard_for_external_write(prepared.witness["sessionFile"])
-    committing = asyncio.create_task(
-        asyncio.to_thread(
+    # Do not use asyncio.to_thread in a named inner Task: all-tasks shutdown
+    # can cancel that Task and mark it done while its real OS worker still
+    # holds the native writer. Retain the concurrent.futures.Future itself,
+    # outside asyncio Task cancellation, until the exact operation settles.
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="owner-native-commit")
+    try:
+        committing = executor.submit(
             bridge.commit,
             owner,
             epoch,
@@ -68,25 +74,25 @@ async def compact_owner_once(
             summary,
             prepared.tokens_before,
             source=source,
-        ),
-        name="owner-native-compaction-commit",
-    )
+        )
+    finally:
+        # No queued follow-up or replay. The submitted worker remains owned
+        # by its Future; executor threads retire after this one operation.
+        executor.shutdown(wait=False)
     try:
-        return await asyncio.shield(committing)
+        return await asyncio.shield(asyncio.wrap_future(committing))
     except asyncio.CancelledError:
-        # Shielding alone is insufficient: it would let the caller release its
-        # ACP turn lock while the Python worker/native child still mutates.
-        # Join the exact worker before cancellation can escape. A repeated
-        # cancellation still cannot turn an in-flight write into no-write.
+        # The wrapper may itself become cancelled during loop shutdown, but
+        # the concurrent Future cannot report completion while its native
+        # worker is still mutating. Keep the caller's turn lock until that
+        # exact worker settles, even under repeated owner cancellation.
         while not committing.done():
             try:
-                await asyncio.shield(committing)
+                await asyncio.sleep(0.01)
             except asyncio.CancelledError:
                 continue
-            except Exception:
-                break
-        if committing.done() and not committing.cancelled():
-            # Consume a worker exception without substituting an abort verdict.
-            # Its durable intent/outcome remains the authority for recovery.
+        # Consume worker failure without treating cancellation as no-write.
+        # The journal's exact intent/outcome is still the recovery authority.
+        if not committing.cancelled():
             committing.exception()
         raise

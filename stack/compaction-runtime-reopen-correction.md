@@ -59,9 +59,13 @@ sequential native commits with exact distinct IDs. The internal
 summary callback to prove retirement **before** the native writer, including a
 late correction that refuses mutation and leaves reopen validation required.
 It has no production ACP caller or model strategy yet. The later cancellation
-correction joins the exact in-flight native commit worker before the cancelled
-owner turn can release its async lock; a real pinned-writer test confirms
-persistent intent during the wait, one committed exact ID afterward, and strict
+correction initially joined only an asyncio Task and was independently
+**NON-CLEAN** under direct inner-Task/all-tasks cancellation: the OS writer
+could outlive `Task.done()`. The subsequent correction retains the underlying
+`concurrent.futures.Future` independently of asyncio Task cancellation and
+joins its real completion before the cancelled owner turn releases its lock;
+provider-free fake and real pinned-writer tests cover outer, wrapper and
+all-tasks cancellation, blocked next turn, one committed exact ID and strict
 invalid-disk denial before the next fake RPC launch. This demonstrates
 structural source/admission recovery, **not** summary quality, provider routing, cache
 behavior, or semantic memory retention. There is no general OS subprocess

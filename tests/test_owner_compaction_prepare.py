@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import backend
+from agent_comms import backend, owner_compaction_runtime
 from agent_comms.acp import CommsAgent
 from agent_comms.backend import PersistentPiSession
 from agent_comms.compaction_publication import publish_pending_local
@@ -224,8 +224,9 @@ async def test_late_correction_after_summary_refuses_write_without_reusing_manag
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("shutdown", ["owner", "inner_wrapper", "all_tasks"])
 async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_releases(
-    session, monkeypatch
+    session, monkeypatch, shutdown
 ):
     root = session.parent.parent
     registry = ThreadRegistry(root / "registry.json")
@@ -247,6 +248,16 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
     entered = threading.Event()
     release = threading.Event()
     turn_lock = asyncio.Lock()
+    next_entered = asyncio.Event()
+    wrappers = []
+    wrap = asyncio.wrap_future
+
+    def retained_wrapper(future):
+        result = wrap(future)
+        wrappers.append(result)
+        return result
+
+    monkeypatch.setattr(owner_compaction_runtime.asyncio, "wrap_future", retained_wrapper)
 
     def delayed_native(*args, **kwargs):
         entered.set()  # Journal intent and owner writer fence already acquired.
@@ -273,12 +284,36 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
         await asyncio.sleep(0.03)
         assert turn_lock.locked() and not task.done()
         task.cancel()  # Even repeated cancellation cannot release the writer scope.
+        if shutdown == "inner_wrapper":
+            assert len(wrappers) == 1
+            wrappers[0].cancel()  # Async wrapper completion is NOT OS worker completion.
+        elif shutdown == "all_tasks":
+            extra = asyncio.create_task(asyncio.Event().wait(), name="shutdown-bystander")
+            for candidate in tuple(asyncio.all_tasks()):
+                if candidate is not asyncio.current_task():
+                    candidate.cancel()
+            await asyncio.gather(extra, return_exceptions=True)
         await asyncio.sleep(0.03)
         assert turn_lock.locked() and not task.done()
+        assert len(bridge.journal.unresolved(str(session))) == 1
+        assert not any(
+            candidate.get_name() == "owner-native-compaction-commit"
+            for candidate in asyncio.all_tasks()
+        )
+
+        async def next_turn():
+            async with turn_lock:
+                next_entered.set()
+
+        following = asyncio.create_task(next_turn())
+        await asyncio.sleep(0.02)
+        assert not next_entered.is_set(), "no next owner input before worker quiescence"
     finally:
         release.set()
     with pytest.raises(asyncio.CancelledError):
         await task
+    await asyncio.wait_for(following, 2)
+    assert next_entered.is_set()
     assert not turn_lock.locked()
     assert bridge.journal.unresolved(str(session)) == ()
     pending = bridge.journal.pending_publications(str(session))

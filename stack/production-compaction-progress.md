@@ -36,11 +36,26 @@ Exact `37796d5` independent review cleared only the read-only pre-summary
 source and corrected outbox mark semantics, while identifying a forward
 integration hazard: unshielded `asyncio.to_thread(bridge.commit)` could outlive
 owner cancellation and release the outer ACP turn lock before native mutation
-settled. The successor now retains/shields and **joins** the exact worker even
-under repeated cancellation. A provider-free actual pinned-native test holds
-the native call after durable intent, cancels twice, proves the outer turn lock
-and intent remain until one exact native commit settles, then corrupts saved
-disk and proves no fresh fake RPC launch before strict reopen. Cancellation is
+settled. Exact `26e8393` fixed repeated **outer owner** cancellation but an
+independent fake and real pinned-native review found **NON-CLEAN** inner-task
+cancellation: `Task.done()` became true while its `to_thread` OS worker still
+held one unresolved native intent; the outer lock was released too early.
+The new corrective successor retains the actual `concurrent.futures.Future`
+for a single native worker (not a cancellable named asyncio Task), shields its
+async wrapper, and joins real worker completion under repeated owner/wrapper/
+all-tasks cancellation before releasing the turn lock. Provider-free fake and
+actual pinned-native controls hold the writer after durable intent, verify a
+second turn cannot enter before quiescence, then corrupt saved disk and prove
+no fresh fake RPC launch before strict reopen. Prior26e839 NON-CLEAN remains
+attached to its original bytes until this successor receives exact review.
+Focused fake/pinned-native shutdown controls **6 passed**, extracted-wheel
+owner/publication/reopen suite **61 passed**, Black/Ruff/mypy clean. The full
+postcorrection suite has not yielded a valid result: one run stalled in an
+unrelated publication test, and a second hit `/dev/shm` user disk quota
+(`sqlite3 disk I/O error`) despite filesystem free space; logs are preserved.
+Only our own disposable prior test basetemps were removed after recording log
+hashes in `/var/tmp/pr95-own-scratch-cleanup-20260926.txt`. Full sterile source
+and exact combined review must be rerun before integration. Cancellation is
 never interpreted as aborted-no-write or replay authority. Normal integration of main `0887b811…` (including PR100) passed isolated full
 suite **1719 passed/62 skipped**, extracted wheel **81 passed**, and focused
 Black/Ruff/mypy. A later provider-free three-round integration fixture now
