@@ -2251,6 +2251,37 @@ class TestFailureFeedback:
         assert history[0].body == "complete answer"
         assert len(routed) == 1
 
+    async def test_committed_progress_appears_in_channel_before_final_reply(
+        self, wired, tmp_path, monkeypatch
+    ):
+        from agent_comms.declarations import Message, MessageType, Thread
+
+        agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
+        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
+        human = wired.user_identity(str(tmp_path / "proj"))
+        wired.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
+        origin = Message(human.name, "#team", "please help", MessageType.INFO)
+
+        async def events(*args, **kwargs):
+            yield {"type": "chunk", "text": "Working"}
+            yield {"type": "committed_progress", "text": "Working"}
+            progress = wired.channel_history("#team")
+            assert [message.body for message in progress] == ["Working"]
+            assert progress[0].notice and not progress[0].starts_turn
+            yield {"type": "chunk", "text": "Done"}
+            yield {"type": "settled"}
+            yield {"type": "done", "ok": True, "text": "WorkingDone"}
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        await agent._run_agent_turn(
+            "proj", "proj", "answer", reply_targets=("#team",), origins=(origin,)
+        )
+        history = wired.channel_history("#team")
+        assert [(message.body, message.notice) for message in history] == [
+            ("Working", True),
+            ("Done", False),
+        ]
+
     async def test_failed_turn_notices_unique_reply_and_origin_targets(
         self, wired, tmp_path, monkeypatch
     ):
