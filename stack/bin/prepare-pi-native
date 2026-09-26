@@ -3,7 +3,8 @@
 set -euo pipefail
 umask 077
 # Preparation runs Node only for version/syntax checks, never ambient preloads.
-unset NODE_OPTIONS NODE_PATH
+unset NODE_OPTIONS NODE_PATH NODE_COMPILE_CACHE
+export NODE_DISABLE_COMPILE_CACHE=1
 
 stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 repo_root=$(cd -- "$stack_root/.." && pwd)
@@ -69,6 +70,8 @@ python3 "$stack_root/patch-native-writer-failure-state.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
 cp -- "$repo_root/src/agent_comms/pi_project_bootstrap.mjs" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-project-bootstrap.mjs"
+python3 "$stack_root/prepare-native-import-boundary.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent"
 verify "$stage"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"

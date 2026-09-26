@@ -75,6 +75,15 @@ registerHooks({
     },
 });
 
+/** Before package discovery/install/update: never fetch or run lifecycle scripts
+ * for a source that cannot be executed under this immutable deployment policy. */
+export function assertApprovedPackage(path) {
+    if (typeof path !== 'string') throw deny('mutable npm/git package source');
+    const actual = realpathSync(path);
+    if (!entries.has(actual) && !extensionRoots.includes(actual))
+        throw deny('package source not in deployment manifest');
+}
+
 /** SDK loader replacement: exact manifest entry, native import, NO Jiti fallback. */
 export async function loadApprovedExtension(path) {
     // Resource discovery can preserve an outer installation-path alias; authority

@@ -154,7 +154,23 @@ def test_failed_tree_verification_precedes_journal_creation(package, tmp_path, m
     assert not (tmp_path / "compaction-commits.sqlite3").exists()
 
 
-@pytest.mark.parametrize("variable", ["NODE_OPTIONS", "NODE_PATH"])
+def test_copied_helper_must_match_packaged_resource_before_journal(package, tmp_path, monkeypatch):
+    from agent_comms import owner_compaction_commit as commit
+
+    helper = package / "dist/agent-comms-compaction-commit-child.mjs"
+    helper.parent.mkdir()
+    helper.write_text("// inconsistent SDK/helper release")
+    native_package.MANIFEST.write_text(
+        native_package.TREE_PREFIX + package_tree_digest(package) + "\n"
+    )
+    monkeypatch.setattr(commit, "require_deadline_support", lambda: None)
+    monkeypatch.setattr(commit.shutil, "which", lambda executable: f"/fixture/{executable}")
+    with pytest.raises(ValueError, match="differs from packaged resource"):
+        commit.OwnerCompactionCommit(tmp_path / "registry.json", package)
+    assert not (tmp_path / "compaction-commits.sqlite3").exists()
+
+
+@pytest.mark.parametrize("variable", ["NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"])
 def test_node_loader_environment_is_not_package_authority(package, tmp_path, monkeypatch, variable):
     from agent_comms import owner_compaction_commit as commit
 
@@ -166,7 +182,8 @@ def test_node_loader_environment_is_not_package_authority(package, tmp_path, mon
 
     def launch(command, *args, **kwargs):
         assert command[:5] == [shutil.which("env"), "-u", "NODE_OPTIONS", "-u", "NODE_PATH"]
-        assert command[6] == "--no-global-search-paths"
+        assert command[5:8] == ["-u", "NODE_COMPILE_CACHE", "NODE_DISABLE_COMPILE_CACHE=1"]
+        assert command[9:12] == ["--no-global-search-paths", "--import", str(bridge.import_fence)]
         return subprocess.CompletedProcess(command, 1, b'{"status":"unknown","reason":"fixture"}')
 
     monkeypatch.setattr(commit, "run_authority_child", launch)
@@ -212,6 +229,12 @@ def launcher(tmp_path):
     )
     (staged / "dist/agent-comms-project-bootstrap.mjs").write_text(
         "process.env.COPIED_BOOTSTRAP = 'trusted';\n"
+    )
+    shutil.copyfile(
+        repo / "stack/native-import-fence.mjs", staged / "dist/agent-comms-import-fence.mjs"
+    )
+    (staged / "dist/agent-comms-imports.json").write_text(
+        json.dumps({"version": 1, "extensionEntries": [], "peerAliases": {}})
     )
     (staged / "dependency.js").write_text("// full tree coverage, not in short manifest\n")
     manifest = (

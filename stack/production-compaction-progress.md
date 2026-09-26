@@ -3,7 +3,21 @@
 Base: merged PR48 `d0ced47fbec39ac4d110c9f7395442524363871d`.
 This is **not deployment approval**. The adaptive trigger remains disabled.
 
-## Current blocking independent findings
+## Import-boundary integration candidate (review pending)
+
+After draft `5dbd6fe`, canonical preparation now includes the immutable PR77
+production package, native-only manifest extension loader, pre-install package
+source admission, synchronous Node resolve/load hooks and in-root compaction
+helper. CLI and bridge preload the fence; helper/resource bytes must agree.
+Tree `b6d13d86…`, build `26e29f3669b35ce5`; manager remains `10ac30c1…`.
+Real canonical `pi install`/RPC proves PR77 registration/status with no unapproved
+MCP child under kernel network denial. A reached committed dependency's ancestor
+require is refused; old unguarded execution succeeds. Source **243 passed,
+1 skipped**, wheel **54 passed**, native/import/adaptive contracts pass.
+See `native-import-boundary-integration.md` for exact evidence and limits.
+Actual runtime/idle/ACP/outbox/recovery integration and fresh review remain OPEN.
+
+## Earlier blocking independent writer findings
 
 The `9c7445e` writer-coverage review is **NON-CLEAN**. Manager `41a94b37…`
 remained affected through `8cf666c` and the main integrations at `98b8770`:
@@ -20,7 +34,9 @@ all subsequent mutators and history/witness reads rather than just the first
 exception. New manager `10ac30c1…`, tree `7d16eb01…`, build `1684f7d9f014feb8`:
 **494 continuation controls pass** on a fresh canonical build; both original
 counterexamples reproduce on the preserved old artifact. This is owner evidence,
-not independent clearance. Exact corrective review must go to both
+not by itself independent clearance. Preflight reviewer subsequently reported
+narrow CLEAN for exact `3585b0f` (own differential and 114-control subset).
+Original-findings sink review remains a separate gate. Exact corrective review goes to both
 `pr1-goal-p15-sink-independent-review` and
 `pr1-native-goal-preflight-independent-review`. See
 `compaction-writer-failure-state-corrections.md`; import closure and runtime

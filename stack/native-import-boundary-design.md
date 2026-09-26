@@ -1,4 +1,9 @@
-# Native import boundary v1 — executable API draft, NOT integrated clearance
+# Native import boundary v1 — API design and prototype history
+
+The successor now integrates this API and package-source admission into new
+canonical bytes. See `native-import-boundary-integration.md` for current pins,
+real installed-PR77/ancestor evidence and open review/runtime gates. The draft
+checkpoint and results below describe the preserved `5dbd6fe` stage.
 
 Baseline is PR95 `3585b0f`, manager `10ac30c1…`, complete tree `7d16eb01…`.
 **Those artifact bytes are unchanged.** The new boundary module and manifest in

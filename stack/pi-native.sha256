@@ -13,4 +13,6 @@ e6003ded7cd11fc8bfd01e4f48cd3d5a19338b64c2e1febe81d0659c31013c11  node_modules/@
 ae6d784ad8a63299720ecd3628a8c162becee22791208f569723994d709475c5  node_modules/@earendil-works/pi-ai/dist/types.d.ts
 13d6fec97d08f4303714aca50f3113ba0263706e961fc220ccb1cc023c520e6b  node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
 981cf215591ab156d407e01f9634c511c2eebab2f6b68c95dd68b5c22ef0d8a1  dist/core/compaction/agent-comms-policy.js
-# agent-comms-native-tree-v1 7d16eb0199d7fc7ef119d75251b26be7eded8fd0672efdec96ba3a34299670ff
+5aa2488a9695a629a5057659161a0fadac9f6dadd6eee3b5dbd73864ddb7a0c5  dist/core/extensions/loader.js
+dc6f91239e8f15bad9dbdd1e912e89d43f8eb48ffe055b39593b3165cd7093ab  dist/core/package-manager.js
+# agent-comms-native-tree-v1 b6d13d86dd690817b0f30329fe75598ea3347cd38dbbeb1602f6188822d25db8

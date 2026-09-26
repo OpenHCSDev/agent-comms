@@ -61,7 +61,8 @@ class OwnerCompactionCommit:
         self.registry = ThreadRegistry(registry_path)
         self.inputs = InputDispositions(self.root)
         self.package_dir = package_dir.resolve(strict=True)
-        self.helper = COMPACTION_HELPER
+        self.helper = self.package_dir / "dist/agent-comms-compaction-commit-child.mjs"
+        self.import_fence = self.package_dir / "dist/agent-comms-import-fence.mjs"
         node = shutil.which("node")
         if node is None:
             raise ValueError("Node executable unavailable")
@@ -75,8 +76,14 @@ class OwnerCompactionCommit:
 
     def _verify_native(self) -> None:
         verify_native_package(self.package_dir)
-        if not self.helper.is_file():
-            raise ValueError("Trusted compaction helper unavailable")
+        copied_helper = self.package_dir / "dist/agent-comms-compaction-commit-child.mjs"
+        if (
+            not copied_helper.is_file()
+            or copied_helper.read_bytes() != COMPACTION_HELPER.read_bytes()
+        ):
+            raise ValueError("Trusted compaction helper differs from packaged resource")
+        if not self.import_fence.is_file():
+            raise ValueError("Native import boundary unavailable")
 
     @staticmethod
     def _guard_arguments(owner: Thread, witness: dict) -> dict:
@@ -205,8 +212,13 @@ class OwnerCompactionCommit:
                 "NODE_OPTIONS",
                 "-u",
                 "NODE_PATH",
+                "-u",
+                "NODE_COMPILE_CACHE",
+                "NODE_DISABLE_COMPILE_CACHE=1",
                 self.node,
                 "--no-global-search-paths",
+                "--import",
+                str(self.import_fence),
                 str(self.helper),
                 str(self.package_dir),
                 str(fd),

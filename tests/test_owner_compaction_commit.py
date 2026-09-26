@@ -7,6 +7,7 @@ provider calls or installed package edits. Normal unit suites skip this file.
 import json
 import os
 import selectors
+import shutil
 import signal
 import subprocess
 import sys
@@ -72,6 +73,23 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
 
 def entries(witness):
     return [json.loads(line) for line in Path(witness["sessionFile"]).read_text().splitlines()]
+
+
+def test_compaction_child_refuses_external_helper_before_execution(native, tmp_path):
+    bridge, _, _, _ = native
+    marker = tmp_path / "external-helper-executed"
+    helper = tmp_path / "external-helper.mjs"
+    helper.write_text(
+        "import {writeFileSync} from 'node:fs';"
+        f"writeFileSync({json.dumps(str(marker))}, 'unsafe');"
+    )
+    bridge.helper = helper  # A trusted test's attempted override still cannot escape the fence.
+    with (
+        (tmp_path / "authority").open("w") as authority,
+        pytest.raises(CompactionTransportUnknownError, match="Unparseable native outcome"),
+    ):
+        bridge._call(authority.fileno(), {}, 3)
+    assert not marker.exists()
 
 
 def test_compaction_child_cannot_inherit_node_preload(native, tmp_path, monkeypatch):
@@ -471,12 +489,19 @@ def test_parent_sigkill_after_stdin_before_native_write_retains_authority(
     for path in (ready, gate, written):
         os.mkfifo(path)
     handles = [os.open(path, os.O_RDWR | os.O_NONBLOCK) for path in (ready, gate, written)]
-    wrapper = tmp_path / "native-barrier.mjs"
+    # The production fence must NOT admit an external test wrapper. Publish a
+    # separate test-only copied tree/pin containing the barrier, not a bypass.
+    from agent_comms.native_package import TREE_PREFIX, package_tree_digest
+
+    copied_package = tmp_path / "barrier-package"
+    shutil.copytree(bridge.package_dir, copied_package)
+    copied_helper = copied_package / "dist/agent-comms-compaction-commit-child.mjs"
+    wrapper = copied_package / "dist/native-barrier.mjs"
     wrapper.write_text(
         "import {writeFileSync,openSync,readSync,closeSync} from 'node:fs';\n"
         "import {pathToFileURL} from 'node:url';\n"
         "const managerURL = "
-        + json.dumps((bridge.package_dir / "dist/core/session-manager.js").as_uri())
+        + json.dumps((copied_package / "dist/core/session-manager.js").as_uri())
         + ";\n"
         "const {SessionManager} = await import(managerURL);\n"
         "const append = SessionManager.prototype.appendCompactionIfCurrent;\n"
@@ -488,13 +513,17 @@ def test_parent_sigkill_after_stdin_before_native_write_retains_authority(
         f"  writeFileSync({json.dumps(str(written))}, id);\n"
         "  return id;\n"
         "};\n"
-        f"await import({json.dumps(bridge.helper.as_uri())});\n"
+        f"await import({json.dumps(copied_helper.as_uri())});\n"
     )
+    test_manifest = tmp_path / "barrier-package.sha256"
+    test_manifest.write_text(TREE_PREFIX + package_tree_digest(copied_package) + "\n")
     script = """
 import json,os,sys
 from pathlib import Path
 from dataclasses import replace
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+import agent_comms.native_package as provenance
+provenance.MANIFEST = Path(sys.argv[6])  # Test-only published tree including barrier.
 bridge = OwnerCompactionCommit(Path(sys.argv[1]),Path(sys.argv[2]))
 bridge.helper = Path(sys.argv[4])  # Test-only in-memory JS method barrier.
 owner = bridge.registry.snapshot().threads['owner']
@@ -513,10 +542,11 @@ bridge.commit(owner,epoch,witness,'post-parent-crash summary',42,source=source,
             "-c",
             script,
             str(tmp_path / "registry.json"),
-            PACKAGE,
+            str(copied_package),
             json.dumps(witness),
             str(wrapper),
             "30" if release_native else "3",
+            str(test_manifest),
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

@@ -1,7 +1,8 @@
 # Native package provenance checkpoint (not activation approval)
 
 The canonical preparation **code** now applies the production writer, journal,
-writer-coverage and writer-failure-state patches in that order. Only disposable builds were made for
+writer-coverage and writer-failure-state patches in that order, then assembles
+the in-root import boundary, copied helper and PR77 production package. Only disposable builds were made for
 this checkpoint; no installed package, running owner or user session was changed.
 Adaptive runtime entrypoints and publication coupling remain unfinished.
 
@@ -11,10 +12,12 @@ Adaptive runtime entrypoints and publication coupling remain unfinished.
 `# agent-comms-native-tree-v1 <digest>` commitment. Its complete bytes still
 select the build directory, so changing the tree pin changes the build identity.
 The current tree digest is
-`7d16eb0199d7fc7ef119d75251b26be7eded8fd0672efdec96ba3a34299670ff`;
-build directory suffix is `1684f7d9f014feb8`. The SessionManager is
+`b6d13d86dd690817b0f30329fe75598ea3347cd38dbbeb1602f6188822d25db8`;
+build directory suffix is `26e29f3669b35ce5`. The SessionManager is
 `10ac30c15dd1b47b86fef4121c01d4b52b4a114cb9fcba6a909c04a3f5f88a7d`.
-These corrective bytes supersede the `8cf666c` checkpoint's `4a688172…` tree /
+The import-boundary candidate supersedes `3585b0f`'s `7d16eb01…` tree without
+changing manager bytes; see `native-import-boundary-integration.md`. That writer
+correction superseded the `8cf666c` checkpoint's `4a688172…` tree /
 `41a94b37…` manager and require fresh review. See
 `compaction-writer-failure-state-corrections.md`; narrow prior packaging CLEAN is
 not independent clearance of the new artifact or of import-resolution closure.
@@ -61,29 +64,33 @@ layout; it never searches neighboring directories for an arbitrary stack.
 An offline sdist-to-wheel build and extracted-wheel execution verify this path
 without installing or modifying the live Python environment.
 
-Ambient `NODE_OPTIONS` / `NODE_PATH` cannot inject code into these native entry
+Ambient `NODE_OPTIONS` / `NODE_PATH` / `NODE_COMPILE_CACHE` cannot inject code into these native entry
 paths. Preparation and the CLI wrapper remove them; the non-forking commit child
 uses `env -u` before exec of Node, preserving the exact watchdog PID and retained
 FD lifetime. Node is passed `--no-global-search-paths`. This deliberately also
 removes ambient Node tuning flags. The managed-project cwd override is preserved
 by copying `pi_project_bootstrap.mjs` into the pinned package and importing only
-that verified copy from the CLI wrapper. The commit helper needs no CLI preload.
-Parent process environment is not changed by an external commit.
+that verified copy from the CLI wrapper. Both entrypoints preload the in-root
+import boundary first, and disable compilation caching. The commit helper is
+also copied inside the root and must match the packaged Python-owned resource;
+it needs no CLI cwd bootstrap. Parent environment is not changed by a commit.
 
 ## Threat and rollout boundary
 
 This is content provenance, not a sandbox against arbitrary same-UID programs,
 untrusted OS/interpreter binaries, malicious native CLI arguments/extensions or
 an installer rewriting files after verification. Python owner/helper code and
-the system interpreters remain trusted. Managed backend/native-input paths
-already disable automatic extension loading. Arbitrary user programs writing
+the system interpreters remain trusted. Approved PR77 installation must select
+the exact copied in-root package; project/MCP execution trust is separate.
+Arbitrary user programs writing
 session JSONL outside the native API are not made cooperative by a digest.
 
-A remaining provenance gate is Node's ancestor `node_modules` fallback: disabling
-global search paths and verifying the package tree is not itself an import
-resolution fence. Before activation, enforce or independently establish the
-actual runtime import closure, including optional/dynamic resolution. Do not
-infer that all code potentially reachable through Node is covered by this tree.
+Disabling global search paths and hashing the tree alone did not close ancestor
+`node_modules` fallback. The successor adds synchronous resolution/load fencing,
+native-only manifest extension loading and pre-install package-source admission.
+See `native-import-boundary-integration.md` for executable positive/negative
+controls. Fresh exact-byte independent review is still required; neither this
+mechanism nor its limited tests claim an OS sandbox or complete runtime readiness.
 
 Package directories must be immutable **by deployment policy** after publication.
 Prepare a new directory and switch only new processes; never patch a running
@@ -93,7 +100,12 @@ Runtime integration must close/reopen persistent managers against the verified
 build and exclude conflicting old writers before activation. Legacy/torn native
 sessions now fail closed; explicit safe recovery remains a separate gate.
 
-## Provider-free evidence
+## Earlier provenance checkpoint evidence
+
+The current import integration has **243 passed, 1 skipped** source tests and
+**54 passed** extracted-wheel tests plus real network-denied canonical PR77 and
+ancestor controls; see the integration report. The following results retain the
+historical `8cf666c` baseline rather than relabeling old evidence.
 
 - Source-tree complete-package/unit and native authority/journal/ingress suite:
   **227 passed, 1 skipped**. Includes dependency/metadata/hidden-entry tampering,
