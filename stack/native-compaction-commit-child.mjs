@@ -13,7 +13,7 @@ try {
     const input = readFileSync(0);
     if (input.length > 524288) throw new Error('Native commit request too large');
     const request = JSON.parse(input.toString('utf8'));
-    const keys = ['action', 'authority', 'witness', 'commit', 'summary', 'tokensBefore'];
+    const keys = ['action', 'authority', 'witness', 'commit', 'summary', 'tokensBefore', 'details', 'usage'];
     if (Object.keys(request).some(key => !keys.includes(key)))
         throw new Error('Unexpected request fields; JSON receipts are not authority');
     const authority = request.authority;
@@ -33,8 +33,35 @@ try {
     const { SessionManager } = await import(pathToFileURL(join(packageDir, 'dist/core/session-manager.js')));
     const manager = SessionManager.open(file);
     if (request.action === 'commit') {
+        const operations = request.details;
+        if (operations !== undefined) {
+            const paths = values => Array.isArray(values) && values.length <= 256 &&
+                values.every(path => typeof path === 'string' && path.length > 0 &&
+                    Buffer.byteLength(path, 'utf8') <= 4096 && !path.includes('\\0'));
+            if (!operations || typeof operations !== 'object' || Array.isArray(operations) ||
+                Object.keys(operations).sort().join(',') !== 'modifiedFiles,readFiles' ||
+                !paths(operations.readFiles) || !paths(operations.modifiedFiles) ||
+                Buffer.byteLength(JSON.stringify(operations), 'utf8') > 65536)
+                throw new Error('Invalid native file operations');
+        }
+        const usage = request.usage;
+        if (usage !== undefined) {
+            const counter = value => Number.isSafeInteger(value) && value >= 0;
+            const nonnegative = value => typeof value === 'number' && Number.isFinite(value) &&
+                value >= 0 && value <= Number.MAX_SAFE_INTEGER;
+            const counters = ['input', 'output', 'cacheRead', 'cacheWrite', 'totalTokens'];
+            const costs = ['input', 'output', 'cacheRead', 'cacheWrite', 'total'];
+            if (!usage || typeof usage !== 'object' || Array.isArray(usage) ||
+                Object.keys(usage).some(key => ![...counters, 'cost', 'reasoning', 'cacheWrite1h'].includes(key)) ||
+                counters.some(key => !counter(usage[key])) ||
+                ['reasoning', 'cacheWrite1h'].some(key => usage[key] !== undefined && !counter(usage[key])) ||
+                !usage.cost || typeof usage.cost !== 'object' || Array.isArray(usage.cost) ||
+                Object.keys(usage.cost).sort().join(',') !== costs.sort().join(',') ||
+                costs.some(key => !nonnegative(usage.cost[key])))
+                throw new Error('Invalid native compaction usage');
+        }
         manager.appendCompactionIfCurrent(request.witness, request.summary, request.tokensBefore,
-            { agentCommsCommit: request.commit });
+            { ...(operations ?? {}), agentCommsCommit: request.commit }, usage);
     } else if (request.action !== 'reconcile') throw new Error('Invalid native commit action');
     console.log(JSON.stringify(manager.reconcileCompactionCommit(request.commit, request.witness)));
     // Never close the authority FD early. Kernel closes it at process exit.

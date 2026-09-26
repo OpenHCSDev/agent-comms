@@ -11,7 +11,10 @@ import asyncio
 import json
 import os
 import shutil
+from dataclasses import dataclass
+from math import isfinite
 from pathlib import Path
+from typing import Any
 
 from .native_package import verify_native_package
 from .owner_compaction_prepare import NativePreparation
@@ -69,10 +72,30 @@ try {
     auth.auth.headers, undefined, stop.signal, 'low', boundedStream, auth.env,
     {enabled:false,maxRetries:0,provider:{maxRetries:0}}, undefined, undefined);
   const summary = result?.summary;
+  const details = result?.details;
+  const paths = values => Array.isArray(values) && values.length <= 256 &&
+    values.every(value => typeof value === 'string' && value.length > 0 &&
+      Buffer.byteLength(value,'utf8') <= 4096 && !value.includes('\\0'));
+  const usage = result?.usage;
+  const nonnegative = value => typeof value === 'number' &&
+    Number.isFinite(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER;
+  const counters = ['input','output','cacheRead','cacheWrite','totalTokens'];
+  const costs = ['input','output','cacheRead','cacheWrite','total'];
   if (typeof summary !== 'string' || !summary.trim() ||
-      Buffer.byteLength(summary,'utf8') > 262144)
-    throw new Error('Invalid bounded Pi summary');
-  const out = JSON.stringify({summary});
+      Buffer.byteLength(summary,'utf8') > 262144 || !details ||
+      Object.keys(details).sort().join(',') !== 'modifiedFiles,readFiles' ||
+      !paths(details.readFiles) || !paths(details.modifiedFiles) ||
+      !usage || typeof usage !== 'object' || Array.isArray(usage) ||
+      Object.keys(usage).some(key =>
+        ![...counters,'cost','reasoning','cacheWrite1h'].includes(key)) ||
+      counters.some(key => !Number.isSafeInteger(usage[key]) || usage[key] < 0) ||
+      ['reasoning','cacheWrite1h'].some(key => usage[key] !== undefined &&
+        (!Number.isSafeInteger(usage[key]) || usage[key] < 0)) ||
+      !usage.cost || typeof usage.cost !== 'object' || Array.isArray(usage.cost) ||
+      Object.keys(usage.cost).sort().join(',') !== costs.sort().join(',') ||
+      costs.some(key => !nonnegative(usage.cost[key])))
+    throw new Error('Invalid bounded Pi summary, file operations or usage');
+  const out = JSON.stringify({summary, details, usage});
   if (Buffer.byteLength(out,'utf8') > 270000) throw new Error('Summary envelope too large');
   process.stdout.write(out);
 } finally { clearTimeout(timer); }
@@ -81,6 +104,53 @@ try {
 
 class NativeSummaryError(ValueError):
     """No summary was obtained; no native commit was authorized."""
+
+
+def valid_native_usage(value: Any) -> bool:
+    if (
+        type(value) is not dict
+        or not {"input", "output", "cacheRead", "cacheWrite", "totalTokens", "cost"} <= value.keys()
+        or set(value)
+        - {
+            "input",
+            "output",
+            "cacheRead",
+            "cacheWrite",
+            "totalTokens",
+            "cost",
+            "reasoning",
+            "cacheWrite1h",
+        }
+    ):
+        return False
+    counters = ("input", "output", "cacheRead", "cacheWrite", "totalTokens")
+    if any(type(value[key]) is not int or not 0 <= value[key] <= 2**53 - 1 for key in counters):
+        return False
+    if any(
+        key in value and (type(value[key]) is not int or not 0 <= value[key] <= 2**53 - 1)
+        for key in ("reasoning", "cacheWrite1h")
+    ):
+        return False
+    cost = value["cost"]
+    if type(cost) is not dict or set(cost) != {
+        "input",
+        "output",
+        "cacheRead",
+        "cacheWrite",
+        "total",
+    }:
+        return False
+    return all(
+        type(amount) in (int, float) and isfinite(amount) and 0 <= amount <= 2**53 - 1
+        for amount in cost.values()
+    )
+
+
+@dataclass(frozen=True)
+class NativeSummary:
+    text: str
+    details: dict[str, list[str]]
+    usage: dict[str, Any]
 
 
 async def summarize_native(
@@ -92,8 +162,8 @@ async def summarize_native(
     context_window: int,
     reserve_tokens: int,
     keep_recent_tokens: int,
-) -> str:
-    """Generate one result from a verified Pi package; no provider retry or disk writer."""
+) -> NativeSummary:
+    """Generate bounded Pi summary and file operations without a disk writer."""
     if (
         not provider
         or not model_id
@@ -155,12 +225,33 @@ async def summarize_native(
         if child.returncode != 0:
             raise NativeSummaryError("Native summarization refused")
         result = json.loads(raw)
-        if set(result) != {"summary"} or type(result["summary"]) is not str:
+        if (
+            type(result) is not dict
+            or set(result) != {"summary", "details", "usage"}
+            or type(result["summary"]) is not str
+        ):
             raise NativeSummaryError("Invalid native summary envelope")
         summary = result["summary"]
+        details = result["details"]
         if not summary.strip() or len(summary.encode()) > 262144:
             raise NativeSummaryError("Invalid bounded native summary")
-        return summary
+        if not valid_native_usage(result["usage"]):
+            raise NativeSummaryError("Invalid bounded native usage")
+        if (
+            type(details) is not dict
+            or set(details) != {"readFiles", "modifiedFiles"}
+            or any(
+                type(paths) is not list
+                or len(paths) > 256
+                or any(
+                    type(path) is not str or not path or len(path.encode()) > 4096 or "\\0" in path
+                    for path in paths
+                )
+                for paths in details.values()
+            )
+        ):
+            raise NativeSummaryError("Invalid bounded native file operations")
+        return NativeSummary(summary, details, result["usage"])
     except BaseException:
         if child.returncode is None:
             child.kill()

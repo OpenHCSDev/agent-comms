@@ -15,6 +15,7 @@ from .compaction_journal import CompactionOperation
 from .declarations import Thread
 from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
+from .owner_compaction_provider import NativeSummary
 
 
 @dataclass(frozen=True)
@@ -32,7 +33,7 @@ async def compact_owner_once(
     owner: Thread,
     epoch: int,
     persistent: PersistentPiSession,
-    summarize: Callable[[PreparedOwnerSummary], Awaitable[str]],
+    summarize: Callable[[PreparedOwnerSummary], Awaitable[str | NativeSummary]],
     *,
     keep_recent_tokens: int | None = None,
     pending_input_key: str | None = None,
@@ -62,11 +63,14 @@ async def compact_owner_once(
         # The current native writer persists one summary but no separate turn
         # prefix summary. Never discard a split turn's unsummarized prefix.
         return None
-    summary = await summarize(
+    result = await summarize(
         PreparedOwnerSummary(
             prepared.tokens_before, prepared.is_split_turn, prepared.session_id, prepared
         )
     )
+    details = result.details if isinstance(result, NativeSummary) else None
+    usage = result.usage if isinstance(result, NativeSummary) else None
+    summary = result.text if isinstance(result, NativeSummary) else result
     if type(summary) is not str or not summary:
         raise ValueError("Bounded owner summary required")
     # No native write can begin until this returns; closing under the borrow
@@ -86,6 +90,8 @@ async def compact_owner_once(
             summary,
             prepared.tokens_before,
             source=source,
+            details=details,
+            usage=usage,
         )
     finally:
         # No queued follow-up or replay. The submitted worker remains owned

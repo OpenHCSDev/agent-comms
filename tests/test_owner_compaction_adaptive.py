@@ -24,7 +24,11 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import wire
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
 from agent_comms.owner_compaction_prepare import prepare_native_source
-from agent_comms.owner_compaction_provider import NativeSummaryError, summarize_native
+from agent_comms.owner_compaction_provider import (
+    NativeSummary,
+    NativeSummaryError,
+    summarize_native,
+)
 from agent_comms.owner_compaction_settings import PiCompactionDecision
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
@@ -52,7 +56,7 @@ console.log(manager.getSessionFile());
         ["node", "--input-type=module", "-e", script, PACKAGE, str(tmp_path)],
         capture_output=True,
         check=True,
-        timeout=5,
+        timeout=20,
         text=True,
     )
     session = Path(result.stdout.strip())
@@ -251,26 +255,42 @@ async def test_native_summary_transport_assembles_bounded_chunked_envelope(
     preparation = prepare_native_source(Path(PACKAGE), str(session), keep_recent_tokens=100)
     assert preparation is not None
     node = tmp_path / "fake-node"
+    usage = {
+        "input": 2,
+        "output": 3,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 5,
+        "cost": {"input": 0.0, "output": 0.0, "cacheRead": 0.0, "cacheWrite": 0.0, "total": 0.0},
+    }
+    payload = json.dumps(
+        {
+            "summary": "one bounded result",
+            "details": {"readFiles": ["/tmp/a"], "modifiedFiles": []},
+            "usage": usage,
+        }
+    )
+    half = len(payload) // 2
     node.write_text(
         f"#!{sys.executable}\n"
         "import sys,time\n"
-        'sys.stdout.write(\'{"summary":"\');sys.stdout.flush();time.sleep(.02)\n'
-        "sys.stdout.write('one bounded result\"}');sys.stdout.flush()\n"
+        f"sys.stdout.write({payload[:half]!r});sys.stdout.flush();time.sleep(.02)\n"
+        f"sys.stdout.write({payload[half:]!r});sys.stdout.flush()\n"
     )
     node.chmod(0o700)
     monkeypatch.setattr("agent_comms.owner_compaction_provider.shutil.which", lambda _: str(node))
-    assert (
-        await summarize_native(
-            Path(PACKAGE),
-            preparation,
-            provider="fake",
-            model_id="model",
-            context_window=1000,
-            reserve_tokens=100,
-            keep_recent_tokens=100,
-        )
-        == "one bounded result"
+    result = await summarize_native(
+        Path(PACKAGE),
+        preparation,
+        provider="fake",
+        model_id="model",
+        context_window=1000,
+        reserve_tokens=100,
+        keep_recent_tokens=100,
     )
+    assert result.text == "one bounded result"
+    assert result.details == {"readFiles": ["/tmp/a"], "modifiedFiles": []}
+    assert result.usage == usage
 
 
 @pytest.mark.parametrize("correction", [False, True])
@@ -301,7 +321,24 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
                 target="proj",
                 text="Changed requirement before native write",
             )
-        return "Provider-free ACP-owner summary"
+        return NativeSummary(
+            "Provider-free ACP-owner summary",
+            {"readFiles": ["src/retained.py"], "modifiedFiles": ["src/changed.py"]},
+            {
+                "input": 7,
+                "output": 4,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "totalTokens": 11,
+                "cost": {
+                    "input": 0.0,
+                    "output": 0.0,
+                    "cacheRead": 0.0,
+                    "cacheWrite": 0.0,
+                    "total": 0.0,
+                },
+            },
+        )
 
     agent = CommsAgent(
         comms,
@@ -383,9 +420,16 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
             await turn
             assert dispatched == ["a" * 32]
             assert InputDispositions(root).status("acp:original") == "started"
-        assert sum(
-            json.loads(line)["type"] == "compaction" for line in session.read_text().splitlines()
-        ) == (0 if correction else 1)
+        compactions = [
+            row
+            for line in session.read_text().splitlines()
+            if (row := json.loads(line))["type"] == "compaction"
+        ]
+        assert len(compactions) == (0 if correction else 1)
+        if not correction:
+            assert compactions[0]["details"]["readFiles"] == ["src/retained.py"]
+            assert compactions[0]["details"]["modifiedFiles"] == ["src/changed.py"]
+            assert compactions[0]["usage"]["totalTokens"] == 11
     finally:
         await agent.shutdown()
 

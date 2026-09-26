@@ -30,14 +30,36 @@ unrelated ACP baseline controls; clean-identity rerun of those six passed.
 **No fresh full combined source/wheel run or independent exact-head clearance.**
 
 Adversarial read-only audit identified live project-trust, custom-model/auth,
-file-operation metadata and settings-race gaps. This candidate refuses adaptive
-payment if project settings or global/project custom model declarations exist;
-source capture and commit compare bounded global/project settings and model-file
-revisions. Remaining activation blockers: establish the *actual* live selected
-model/auth/extension route (including stored credentials or CLI overrides) and
-Pi project-trust parity; preserve native `details.readFiles/modifiedFiles`
-across subsequent compactions; demonstrate provider semantic retention and a
-fresh combined review. The ordinary native hard-context guard is never disabled.
+file-operation/usage metadata and settings-race gaps. This candidate refuses
+adaptive payment if project settings or global/project custom model
+declarations exist; source capture and commit compare bounded settings/model-file
+revisions. Independent exact `9aef5b8` reviews found the default-OFF owner
+admission narrowly sound but **NON-CLEAN for activation**: the Pi result's
+structured file operations and usage were lost, the selected live Pi model/auth
+route remains unbound, and no supported production worker opt-in exists. The
+ordinary native hard-context guard is never disabled.
+
+### Subsequent file-operations/usage corrective WIP (not accepted)
+
+An uncommitted successor carries Pi-native `details.readFiles/modifiedFiles`
+and bounded provider usage through the owner callback, durable metadata digest
+and verified single-shot child into the native compaction entry. Native Pi's
+**next** `prepareCompaction` now sees the preserved file-operation lists in a
+provider-free two-round control; the ACP synthetic owner success control
+asserts file lists and usage too. A disposable copy of the pinned Pi package
+with only the changed helper has complete-tree digest
+`739c00b7d1e1914bd54815477a1ad593aca0f731229250704bc8ee312d9c7d71`;
+no installed/live package was edited. Four new narrow fileOps/ACP tests and
+three real SIGKILL cancellation cases passed independently. A larger clean
+serial focus had **36 passed, three destructive cases deselected, one Node
+fixture startup timeout after five seconds** during severe host memory/IO
+pressure; an earlier full focus timed out and is **not** a passing run. The
+fixture startup ceiling is being increased for later resource-safe rerun.
+The metadata corrective bytes have no independent exact review or full
+combined clearance. Remaining blockers: bind the actual live model/auth/
+extension/CLI route and project-trust parity, implement reviewed human/operator
+opt-in only after clearance, demonstrate provider semantics, and run fresh
+resource-safe full source/wheel suites and combined review. No activation.
 
 ## Normal PR104/105 main integration and socket incarnation (combined review pending)
 

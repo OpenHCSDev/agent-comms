@@ -92,6 +92,62 @@ def test_compaction_child_refuses_external_helper_before_execution(native, tmp_p
     assert not marker.exists()
 
 
+def test_native_file_operations_survive_journaled_commit(native):
+    bridge, owner, epoch, witness = native
+    source = bridge.capture_source(owner, epoch, witness)
+    usage = {
+        "input": 12,
+        "output": 9,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 21,
+        "cost": {"input": 0.01, "output": 0.02, "cacheRead": 0.0, "cacheWrite": 0.0, "total": 0.03},
+    }
+    operation = OwnerCompactionCommit.commit(
+        bridge,
+        owner,
+        epoch,
+        witness,
+        "Synthetic summary with file evidence",
+        42,
+        source=source,
+        details={"readFiles": ["src/a.py"], "modifiedFiles": ["src/b.py"]},
+        usage=usage,
+    )
+    assert operation.status == "committed"
+    saved = entries(witness)[-1]
+    assert saved["details"]["readFiles"] == ["src/a.py"]
+    assert saved["details"]["modifiedFiles"] == ["src/b.py"]
+    assert saved["usage"] == usage
+    assert saved["details"]["agentCommsCommit"]["commitId"] == operation.commit_id
+    # Pi's next preparation consumes the prior structured details, not just
+    # text that a later provider might omit. This executes native source only.
+    script = """
+import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+const root=process.argv[1], file=process.argv[2];
+const {SessionManager}=await import(pathToFileURL(join(root,'dist/core/session-manager.js')));
+const {prepareCompaction,DEFAULT_COMPACTION_SETTINGS}=await import(
+  pathToFileURL(join(root,'dist/core/compaction/compaction.js')));
+const {computeFileLists}=await import(pathToFileURL(join(root,'dist/core/compaction/utils.js')));
+const manager=SessionManager.open(file);
+manager.appendMessage({role:'user',content:'next task',timestamp:3});
+manager.appendMessage({role:'assistant',content:[{type:'text',text:'next answer'}],
+  provider:'fixture',model:'fixture',api:'fixture',stopReason:'stop',timestamp:4});
+const prepared=prepareCompaction(manager.getBranch(),
+  {...DEFAULT_COMPACTION_SETTINGS,keepRecentTokens:1});
+console.log(JSON.stringify(prepared && computeFileLists(prepared.fileOps)));
+"""
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script, PACKAGE, witness["sessionFile"]],
+        capture_output=True,
+        check=True,
+        timeout=10,
+        text=True,
+    )
+    assert json.loads(result.stdout) == {"readFiles": ["src/a.py"], "modifiedFiles": ["src/b.py"]}
+
+
 def test_compaction_child_cannot_inherit_node_preload(native, tmp_path, monkeypatch):
     bridge, owner, epoch, witness = native
     marker = tmp_path / "untrusted-preload-executed"

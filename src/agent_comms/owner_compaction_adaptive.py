@@ -17,7 +17,7 @@ from .compaction_journal import CompactionJournalError
 from .declarations import AgentRuntimeInfo, RelationViolationError, ThreadRegistry
 from .native_session_reopen import package_for_launcher
 from .owner_compaction_commit import OwnerCompactionCommit
-from .owner_compaction_provider import summarize_native
+from .owner_compaction_provider import NativeSummary, summarize_native
 from .owner_compaction_runtime import PreparedOwnerSummary, compact_owner_once
 from .owner_compaction_settings import (
     PiCompactionDecision,
@@ -115,12 +115,13 @@ async def maybe_compact_owner_turn(
         return False
     bridge = await asyncio.to_thread(OwnerCompactionCommit, registry._path, package)
 
-    async def summarize(prepared: PreparedOwnerSummary) -> str:
+    async def summarize(prepared: PreparedOwnerSummary) -> str | NativeSummary:
         # Recheck immediately before paid provider work, then after it. The
         # owner source and ingress remain independently fenced by the bridge.
         current, current_epoch = registry.live_owner_with_epoch(thread_name)
         if current != owner or current_epoch != epoch or await decision() != settings:
             raise RelationViolationError("Adaptive model, owner or settings changed")
+        text: str | NativeSummary
         if summary_strategy is None:
             text = await summarize_native(
                 package,

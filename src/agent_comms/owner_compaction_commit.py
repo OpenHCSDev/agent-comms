@@ -35,6 +35,7 @@ from .owner_compaction_process import (
     require_deadline_support,
     run_authority_child,
 )
+from .owner_compaction_provider import valid_native_usage
 from .session_fence import idle_session_writer_fence
 
 
@@ -363,6 +364,8 @@ class OwnerCompactionCommit:
         tokens_before: int,
         *,
         source: CompactionSource,
+        details: dict[str, list[str]] | None = None,
+        usage: dict | None = None,
         timeout: float = 5,
     ) -> CompactionOperation:
         """Journal intent under authority, dispatch once, persist observed outcome."""
@@ -376,6 +379,34 @@ class OwnerCompactionCommit:
             or not 0 <= tokens_before <= 2**53 - 1
         ):
             raise ValueError("Bounded native compaction payload required")
+        if details is not None and (
+            type(details) is not dict
+            or set(details) != {"readFiles", "modifiedFiles"}
+            or any(
+                type(paths) is not list
+                or len(paths) > 256
+                or any(type(path) is not str or not path or "\\0" in path for path in paths)
+                for paths in details.values()
+            )
+        ):
+            raise ValueError("Bounded native file operations required")
+        try:
+            encoded_details = (
+                json.dumps(details, ensure_ascii=False, separators=(",", ":")).encode()
+                if details is not None
+                else b""
+            )
+        except UnicodeError as error:
+            raise ValueError("Invalid native file operation encoding") from error
+        if len(encoded_details) > 65536 or any(
+            len(path.encode()) > 4096 for paths in (details or {}).values() for path in paths
+        ):
+            raise ValueError("Bounded native file operations required")
+        if usage is not None and not valid_native_usage(usage):
+            raise ValueError("Bounded native usage required")
+        # The pinned native writer's CAS digest deliberately covers its
+        # original summary/cut payload. File operations and usage are checked
+        # by the trusted helper and separately recorded in the durable intent.
         payload = json.dumps(
             [summary, witness["firstKeptEntryId"], tokens_before],
             ensure_ascii=False,
@@ -391,8 +422,15 @@ class OwnerCompactionCommit:
                 receipt, witness, source.pending_input_key, source.settings_paths
             ):
                 raise RelationViolationError("Compaction source changed; derive fresh evidence")
+            metadata_digest = hashlib.sha256(
+                json.dumps([details, usage], ensure_ascii=False, separators=(",", ":")).encode()
+            ).hexdigest()
             intent = dict(
-                witness=witness, payloadDigest=digest, owner=asdict(receipt), source=asdict(source)
+                witness=witness,
+                payloadDigest=digest,
+                metadataDigest=metadata_digest,
+                owner=asdict(receipt),
+                source=asdict(source),
             )
             commit_id = self.journal.begin(witness["sessionFile"], intent)
             request = dict(
@@ -401,6 +439,8 @@ class OwnerCompactionCommit:
                 summary=summary,
                 tokensBefore=tokens_before,
                 commit=dict(commitId=commit_id, payloadDigest=digest),
+                **({"details": details} if details is not None else {}),
+                **({"usage": usage} if usage is not None else {}),
             )
             try:
                 evidence = self._call(fd, request, timeout, retained)
