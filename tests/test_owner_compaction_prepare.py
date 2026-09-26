@@ -6,14 +6,17 @@ import os
 import subprocess
 import sys
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from agent_comms import backend
+from agent_comms.acp import CommsAgent
 from agent_comms.backend import PersistentPiSession
+from agent_comms.compaction_publication import publish_pending_local
 from agent_comms.declarations import Goal, RelationViolationError, Thread, ThreadRegistry
-from agent_comms.operations import Comms
+from agent_comms.operations import Comms, wire
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativePreparationError, prepare_native_source
 from agent_comms.owner_compaction_runtime import compact_owner_once
@@ -390,6 +393,88 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
     ]
     assert len(compactions) == 3
     assert [row["details"]["agentCommsCommit"]["commitId"] for row in compactions] == commit_ids
+
+
+@pytest.mark.asyncio
+async def test_provider_free_three_round_owner_commit_to_local_acp_metadata(session, tmp_path):
+    root = tmp_path / "wire"
+    comms = wire(root)
+    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+    await agent.new_session(str(tmp_path / "project"))
+    agent._drain_tasks["project"].cancel()
+    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    comms.attach_session("project", str(session), pid=os.getpid())
+    current = comms.registry.require("project")
+    comms.registry.register(replace(current, goal=Goal("retain exact history", "goal-e2e")))
+    owner, epoch = comms.registry.live_owner_with_epoch("project")
+    owner, epoch = comms.registry.claim_live_turn_with_epoch(owner, "rounds", expected_epoch=epoch)
+    bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
+    persistent = agent._persistent_backends.setdefault("project", PersistentPiSession())
+    received = []
+
+    class Client:
+        async def session_update(self, session_id, update):
+            received.append(update.model_dump(by_alias=True, exclude_none=True))
+
+    agent.on_connect(Client())
+    commit_ids = []
+    try:
+        for index in range(3):
+            if index:
+                script = """
+import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
+  'dist/core/session-manager.js')));
+const manager=SessionManager.open(process.argv[2]);
+manager.appendMessage({role:'user',content:'Correction '+process.argv[3]+' '+
+  'retain exact goal-e2e and prior decisions '.repeat(300),timestamp:5});
+manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}],
+  provider:'fixture',model:'fixture',api:'fixture',stopReason:'stop',timestamp:6});
+"""
+                subprocess.run(
+                    [
+                        "node",
+                        "--input-type=module",
+                        "-e",
+                        script,
+                        PACKAGE,
+                        str(session),
+                        str(index),
+                    ],
+                    capture_output=True,
+                    check=True,
+                    timeout=5,
+                )
+
+            async def synthetic_summary(metadata, round_index=index):
+                assert metadata.tokens_before > 0
+                return f"Synthetic round {round_index}; goal-e2e; not a semantic retention claim"
+
+            operation = await compact_owner_once(
+                bridge, owner, epoch, persistent, synthetic_summary, keep_recent_tokens=1
+            )
+            assert operation is not None and operation.status == "committed"
+            commit_ids.append(operation.commit_id)
+            assert persistent.reopen_required == str(session)
+            assert await publish_pending_local(agent, "project", "project") == 1
+            assert bridge.journal.pending_publications(str(session)) == ()
+            assert comms.registry.require("project").goal.id == "goal-e2e"
+        publications = [
+            event.get("_meta", {}).get("agentComms", {}).get("compactionPublication")
+            for event in received
+        ]
+        publications = [event for event in publications if event is not None]
+        assert [event["commitId"] for event in publications] == commit_ids
+        assert len(set(commit_ids)) == 3
+        assert all(
+            set(event) == {"commitId", "entryId", "revision", "leafId"} for event in publications
+        )
+        assert "Synthetic round" not in json.dumps(received)
+        bus = root / "bus.jsonl"
+        assert not bus.exists() or b"Synthetic round" not in bus.read_bytes()
+    finally:
+        await agent.shutdown()
 
 
 def test_invalid_session_fails_closed_without_repair(session):

@@ -31,7 +31,10 @@ Ambient `NODE_OPTIONS`/`NODE_PATH` are removed; the managed-project bootstrap is
 copied into and loaded from the verified package. Native v3 files with complete,
 valid ancestry are required; legacy or damaged files are refused without repair.
 This prepares code, **not adaptive activation**: old workers must be retired and
-the remaining runtime/publication/recovery gates reviewed first.
+the remaining runtime/publication/recovery gates reviewed first. Operator
+failure handling and exact-ID no-replay rules are documented in
+[`compaction-operator-recovery.md`](compaction-operator-recovery.md); that
+runbook is not an activation procedure.
 The `toad-comms` launcher uses this copy so a direct prompt can produce the
 required native user-start receipt. Existing Pi session directories and files
 must be private (0700 directory, 0600 file) before a tracked prompt; the native

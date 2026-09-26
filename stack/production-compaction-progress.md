@@ -16,8 +16,19 @@ and intent remain until one exact native commit settles, then corrupts saved
 disk and proves no fresh fake RPC launch before strict reopen. Cancellation is
 never interpreted as aborted-no-write or replay authority. Normal integration of main `0887b811…` (including PR100) passed isolated full
 suite **1719 passed/62 skipped**, extracted wheel **81 passed**, and focused
-Black/Ruff/mypy. No production ACP caller/model strategy exists yet; this test
-alone is not full runtime clearance.
+Black/Ruff/mypy. A later provider-free three-round integration fixture now
+drives the internal owner helper through real pinned native CAS into the durable
+outbox and an existing local ACP client, checking distinct exact commit IDs,
+metadata-only output, unchanged goal authority and no summary broadcast.
+It deliberately injects synthetic summaries and is **not** an ACP production
+trigger/call site or evidence of semantic retention. The successor isolated
+suite passed **1720/62 skipped** (two nonfatal event-loop subprocess destructor
+warnings in unrelated cases) and extracted-wheel controls **82 passed**;
+run directories were moved to `/dev/shm` after the shared `/var/tmp`
+filesystem temporarily filled during concurrent runs. No production ACP caller/model strategy exists yet; this test
+alone is not full runtime clearance. The operator failure classes, exact-ID
+reconciliation and conservative no-repair path are recorded in
+`compaction-operator-recovery.md` (not an activation procedure).
 
 ## Runtime/ACP exact 12050b1 NON-CLEAN corrective candidate (review pending)
 
