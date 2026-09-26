@@ -166,5 +166,7 @@ class GoalWaits:
             )
             return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets, inactive)
         return GoalExecution(
-            GoalExecutionState.RUNNABLE if goal.active else GoalExecutionState(goal.status), goal.id
+            GoalExecutionState.RUNNABLE if goal.active else GoalExecutionState(goal.status),
+            goal.id,
+            block_reason=goal.block_reason if goal.status == "blocked" else None,
         )

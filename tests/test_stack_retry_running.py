@@ -149,7 +149,9 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
         store.record_failed(reservation, "Earlier goal attempt failed")
-        blocked = comms.update_goal(session, "blocked", goal_id=goal.id)
+        blocked = comms.update_goal(
+            session, "blocked", goal_id=goal.id, block_reason="Owner retry decision required"
+        )
         owner._dispositions.record(
             "acp:old-unknown",
             seq=None,
