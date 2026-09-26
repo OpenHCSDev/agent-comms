@@ -269,6 +269,27 @@ def test_foreground_cli_passes_bounded_source_to_explicit_selected_write_entry(
         argv[-1] = str(alias)
         assert foreground.main(argv) == 1
         assert observed == []
+        fifo = base / "source-fifo"
+        os.mkfifo(fifo)
+        # A blocking open of a reader-only FIFO must not hold the owner entry
+        # indefinitely before its regular-file check or wait deadline.
+        probe = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; from pathlib import Path; "
+                "from agent_comms.cohort_foreground import _read_selected_write_source; "
+                "\ntry: _read_selected_write_source(Path(sys.argv[1]))"
+                "\nexcept ValueError: raise SystemExit(0)"
+                "\nraise SystemExit(1)",
+                str(fifo),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")},
+        )
+        assert probe.returncode == 0, probe.stderr
 
 
 async def test_foreground_explicit_selected_write_never_mutates_no_wake(

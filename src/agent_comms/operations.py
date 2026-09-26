@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import select
@@ -31,6 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
+from .candidate_maintenance import schedule_private_candidate_after_commit
 from .channels import ChannelCatalog
 from .goal_history import GoalHistoryEntry
 from .goal_mentions import bind_goal_mentions
@@ -103,6 +105,7 @@ from .tool_results import ToolDiff
 from .transcript_routes import InputDisplay, TranscriptRoutes
 
 OBSERVATION_INTERVAL = 0.05
+_LOG = logging.getLogger(__name__)
 
 
 def _required_block_reason(reason: str | None) -> str:
@@ -437,14 +440,25 @@ class Comms:
                 ]
                 if len(set(incarnations)) != len(incarnations):
                     raise RelationViolationError("Registry creation identities collide.")
-                return self.bus.publish_claim_envelope(
+                committed = self.bus.publish_claim_envelope(
                     message,
                     worktree=Path(owner.worktree),
                     incarnation=str(owner.created_at),
                     claims=claims,
                     releases=releases,
                 )
-            return self.bus.publish_ordinary(message)
+            else:
+                committed = self.bus.publish_ordinary(message)
+        # Pure memory notification and daemon scheduling occur only AFTER the
+        # canonical wire/bus publication locks are released. Projection errors
+        # can never turn a committed original into an apparent failed send.
+        try:
+            schedule_private_candidate_after_commit(self.bus, committed.seq)
+        except Exception as error:
+            _LOG.warning(
+                "Candidate notification omitted after committed send (%s)", error.__class__.__name__
+            )
+        return committed
 
     def initialize_private_initial_protocol(self) -> str:
         """Initialize the private protocol on a fresh owner-only root."""
@@ -473,9 +487,17 @@ class Comms:
         with _store_lock(self._wire_lock_path):
             if sender not in self.registry or not self.registry.require(sender).role.executable:
                 raise RelationViolationError("Initial sender must be a registered executable.")
-            return self.bus.publish_initial_cohort(
+            committed = self.bus.publish_initial_cohort(
                 Message(sender=sender, target=target, body=body, type=type, notice=notice)
             )
+        try:
+            schedule_private_candidate_after_commit(self.bus, committed.seq)
+        except Exception as error:
+            _LOG.warning(
+                "Candidate notification omitted after committed initial (%s)",
+                error.__class__.__name__,
+            )
+        return committed
 
     def sent_tool_message(self, name: str, output: str, ok: bool) -> Message | None:
         """Resolve a successful send receipt, including older ID-only tool results."""

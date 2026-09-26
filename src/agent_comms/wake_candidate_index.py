@@ -61,6 +61,23 @@ class CandidatePage:
 
 
 @dataclass(frozen=True, slots=True)
+class CommittedAppendHint:
+    """Untrusted scheduling hint, never a sealed claim or native input receipt."""
+
+    root_id: str
+    through_seq: int
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateCatchUp:
+    """One bounded derived-index maintenance result, not delivery authority."""
+
+    checkpoint_seq: int
+    caught_up: bool
+    more_source_bytes: bool
+
+
+@dataclass(frozen=True, slots=True)
 class _IndexedResponse:
     """The existing typed receipt plus its two private-bus-only fields."""
 
@@ -408,6 +425,107 @@ class WakeCandidateIndex:
             if isinstance(error, ProjectionUnavailableError):
                 raise
             raise ProjectionUnavailableError("candidate index maintenance unavailable") from error
+
+    def notify_committed_append(self, *, root_id: str, through_seq: int) -> CommittedAppendHint:
+        """Create a post-commit hint without touching the bus or WAL.
+
+        The publisher must call this only AFTER a durable private bus commit and
+        release its wire/bus locks. Hand the returned hint to a separate bounded
+        maintenance task; calling ``catch_up_committed_append`` inline in the
+        publication critical path would delay original delivery. Hints are
+        volatile: losing one in a crash leaves the index stale/unavailable, and
+        a later hint or explicit maintenance can catch up from the checkpoint.
+        No hint proves that its claimed sequence actually committed.
+        """
+        if (
+            type(root_id) is not str
+            or len(root_id) != 32
+            or any(ch not in "0123456789abcdef" for ch in root_id)
+            or type(through_seq) is not int
+            or through_seq <= 0
+        ):
+            raise ValueError("candidate append hint requires exact private root and sequence")
+        return CommittedAppendHint(root_id, through_seq)
+
+    def _verified_checkpoint(self, root_id: str) -> int:
+        """Check one WAL checkpoint against its bounded source prefix-tail witness."""
+        try:
+            marker = self.bus._private_marker_unlocked()
+            if marker["wire_root_id"] != root_id:
+                raise ProjectionRebuildRequiredError("candidate private root changed")
+            with closing(self._connect(self.path, readonly=True)) as db:
+                self._schema(db, create=False)
+                db.execute("BEGIN")
+                with self.bus._path.open("rb") as stream:
+                    stat = os.fstat(stream.fileno())
+                    offset, last_seq = self._checkpoint_start(
+                        db, stream, stat, root_id, rebuild=False
+                    )
+                    self._source_end(stream, offset)
+                    # _checkpoint_start verifies the saved prefix; the source
+                    # may have newer complete rows not yet in this projection.
+                    if stat.st_size:
+                        stream.seek(-1, os.SEEK_END)
+                        if stream.read(1) != b"\n":
+                            raise ProjectionUnavailableError(
+                                "candidate source has an incomplete tail"
+                            )
+                return last_seq
+        except (OSError, RelationViolationError, sqlite3.DatabaseError) as error:
+            raise ProjectionUnavailableError("candidate checkpoint unavailable") from error
+
+    def catch_up_committed_append(
+        self,
+        hint: CommittedAppendHint,
+        *,
+        max_rows: int = 64,
+        max_bytes: int = 256 * 1024,
+        bootstrap_new: bool = False,
+    ) -> CandidateCatchUp:
+        """Replay at most ONE bounded batch after a durable append notification.
+
+        Run outside publisher locks and off its latency path. An absent
+        derived index may be explicitly bootstrapped in bounded batches; an
+        existing v1, missing checkpoint, changed/truncated source or corrupt
+        WAL never gets an implicit rebuild. If ``caught_up`` is false and
+        ``more_source_bytes`` is true, a deferred worker may schedule another
+        finite batch. Pages remain unavailable for required high-water until
+        the index catches up. This
+        contains no seal, owner, claim or native proof and never retries work.
+        """
+        if (
+            type(hint) is not CommittedAppendHint
+            or type(hint.root_id) is not str
+            or len(hint.root_id) != 32
+            or any(ch not in "0123456789abcdef" for ch in hint.root_id)
+            or type(hint.through_seq) is not int
+            or hint.through_seq <= 0
+            or type(bootstrap_new) is not bool
+        ):
+            raise ValueError(
+                "candidate catch-up requires an exact append hint and bootstrap choice"
+            )
+        self._validate_limits(max_rows, max_bytes)
+        if self.bus._private_marker_unlocked()["wire_root_id"] != hint.root_id:
+            raise ProjectionRebuildRequiredError("candidate append hint belongs to another root")
+        if self.path.exists():
+            prior = self._verified_checkpoint(hint.root_id)
+            if prior >= hint.through_seq:
+                return CandidateCatchUp(prior, True, False)
+            rebuild = False
+        elif bootstrap_new:
+            rebuild = True
+        else:
+            raise ProjectionRebuildRequiredError("candidate index needs explicit initial build")
+        more_source_bytes = not self.maintain(
+            rebuild=rebuild, max_rows=max_rows, max_bytes=max_bytes
+        )
+        checkpoint = self._verified_checkpoint(hint.root_id)
+        if checkpoint < hint.through_seq and not more_source_bytes:
+            raise ProjectionUnavailableError(
+                "candidate notification exceeds verified bus high-water"
+            )
+        return CandidateCatchUp(checkpoint, checkpoint >= hint.through_seq, more_source_bytes)
 
     def page(
         self,

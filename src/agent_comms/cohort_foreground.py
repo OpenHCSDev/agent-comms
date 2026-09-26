@@ -224,10 +224,18 @@ def _read_selected_write_source(path: Path) -> bytes:
     """Read explicit operator input before reserving an owner or native input."""
     if not hasattr(os, "O_NOFOLLOW"):
         raise ValueError("selected source requires no-follow descriptors")
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > 1024 * 1024:
+        raise ValueError("selected source must be a bounded regular file")
+    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | os.O_CLOEXEC)
     try:
         info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > 1024 * 1024:
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_nlink != 1
+            or info.st_size > 1024 * 1024
+            or (info.st_dev, info.st_ino) != (before.st_dev, before.st_ino)
+        ):
             raise ValueError("selected source must be a bounded regular file")
         contents = os.read(fd, 1024 * 1024 + 1)
         if len(contents) > 1024 * 1024:
