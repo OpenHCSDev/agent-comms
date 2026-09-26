@@ -1,7 +1,7 @@
-"""Exact-session native compaction barrier before ANY ACP provider input send.
+"""Exact-session compaction barrier before ANY ACP provider input send.
 
-This is a read-only policy gate. Unknown/intents require explicit exact-ID native
-reconciliation; neither an ACP correction nor a fresh session may replay them.
+Unresolved native commits or selected-summary reservations/UNKNOWN attempts
+refuse input. Neither an ACP correction nor a fresh session may replay them.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from .compaction_journal import CompactionJournal, CompactionJournalError
 
 
 def native_input_admitted(wire_root: Path, session_file: str | None) -> bool:
-    """Fail closed if this saved session has an unresolved native commit.
+    """Fail closed on an unresolved native commit or selected summary attempt.
 
     No journal is normal before the owner has ever prepared a native commit.
     Call under the wire lock immediately before the backend's stdin write; the
@@ -24,6 +24,9 @@ def native_input_admitted(wire_root: Path, session_file: str | None) -> bool:
     try:
         if not path.exists() and not path.is_symlink():
             return True
-        return not CompactionJournal(path).unresolved(session_file)
+        journal = CompactionJournal(path)
+        return not journal.unresolved(session_file) and not journal.unresolved_selected_summary(
+            session_file
+        )
     except (OSError, ValueError, CompactionJournalError):
         return False

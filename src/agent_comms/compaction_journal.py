@@ -40,6 +40,18 @@ class CompactionOperation:
 
 
 @dataclass(frozen=True)
+class SelectedSummaryAttempt:
+    """Provider attempt reservation, not a summary or native commit receipt."""
+
+    operation_id: str
+    session_file: str
+    source_json: str
+    status: str
+    commit_id: str | None
+    decline_reason: str | None
+
+
+@dataclass(frozen=True)
 class CompactionPublication:
     """Local metadata-only projection, keyed by native commit ID; no recipient."""
 
@@ -124,6 +136,18 @@ class CompactionJournal:
                     metadata_json TEXT NOT NULL,
                     status TEXT NOT NULL CHECK(status IN ('pending','observed'))
                 )""")
+            db.execute("""CREATE TABLE IF NOT EXISTS selected_summary_attempts (
+                    operation_id TEXT PRIMARY KEY,
+                    session_file TEXT NOT NULL,
+                    source_json TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN
+                        ('reserved','unknown','linked','declined-prestart')),
+                    commit_id TEXT,
+                    decline_reason TEXT
+                )""")
+            db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS unresolved_selected_summary_session
+                ON selected_summary_attempts(session_file)
+                WHERE status IN ('reserved','unknown')""")
         parent = path.parent.resolve(strict=True)
         for directory in (parent, *parent.parents):
             parent_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
@@ -174,6 +198,19 @@ class CompactionJournal:
             raise ValueError("Compaction intent exceeds bound")
         try:
             with self._transaction() as db:
+                selected = db.execute(
+                    "SELECT operation_id, status FROM selected_summary_attempts "
+                    "WHERE session_file = ? AND status IN ('reserved','unknown')",
+                    (canonical,),
+                ).fetchone()
+                if selected is not None and (
+                    selected[1] != "reserved"
+                    or type(intent) is not dict
+                    or intent.get("selectedSummaryOperationId") != selected[0]
+                ):
+                    raise CompactionJournalError(
+                        "Unresolved selected summary; unrelated native commit forbidden"
+                    )
                 db.execute(
                     "INSERT INTO operations VALUES (?, ?, ?, 'intent', NULL)",
                     (commit_id, canonical, payload),
@@ -203,6 +240,146 @@ class CompactionJournal:
                 (canonical,),
             ).fetchall()
         return tuple(CompactionOperation(*row) for row in rows)
+
+    def reserve_selected_summary(
+        self, session_file: str, source: dict, *, operation_id: str | None = None
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+
+        Reservation is deliberately unresolved even if the caller fails before
+        writing stdin: no crash or ambiguous transport authorizes a retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        if (
+            type(source) is not dict
+            or set(source) != {"source", "selected", "settings"}
+            or any(type(value) is not dict or not value for value in source.values())
+        ):
+            raise ValueError("Source, selected route and settings witnesses required")
+        payload = json.dumps(source, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        if len(payload.encode()) > 65536:
+            raise ValueError("Selected summary source exceeds bound")
+        try:
+            with self._transaction() as db:
+                if db.execute(
+                    "SELECT 1 FROM operations WHERE session_file = ? "
+                    "AND status IN ('intent','unknown') LIMIT 1",
+                    (canonical,),
+                ).fetchone():
+                    raise CompactionJournalError("Unresolved native commit; no selected summary")
+                db.execute(
+                    "INSERT INTO selected_summary_attempts "
+                    "VALUES (?, ?, ?, 'reserved', NULL, NULL)",
+                    (operation_id, canonical, payload),
+                )
+        except sqlite3.IntegrityError as error:
+            raise CompactionJournalError(
+                "Unresolved selected summary or reused operation ID; never replay"
+            ) from error
+        return operation_id
+
+    def selected_summary(self, operation_id: str) -> SelectedSummaryAttempt:
+        with self._transaction() as db:
+            row = db.execute(
+                "SELECT * FROM selected_summary_attempts WHERE operation_id = ?",
+                (operation_id,),
+            ).fetchone()
+        if row is None:
+            raise CompactionJournalError("Unknown selected summary operation")
+        return SelectedSummaryAttempt(*row)
+
+    def unresolved_selected_summary(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:
+        """Crash-orphaned reservations block every subsequent input send."""
+        canonical = str(Path(session_file).resolve(strict=True))
+        with self._transaction() as db:
+            rows = db.execute(
+                "SELECT * FROM selected_summary_attempts WHERE session_file = ? "
+                "AND status IN ('reserved','unknown')",
+                (canonical,),
+            ).fetchall()
+        return tuple(SelectedSummaryAttempt(*row) for row in rows)
+
+    def mark_selected_summary_unknown(self, operation_id: str) -> None:
+        """Record transport uncertainty; never erase or retry the reservation."""
+        with self._transaction() as db:
+            row = db.execute(
+                "SELECT status FROM selected_summary_attempts WHERE operation_id = ?",
+                (operation_id,),
+            ).fetchone()
+            if row is None or row[0] not in {"reserved", "unknown"}:
+                raise CompactionJournalError("Selected summary uncertainty transition forbidden")
+            db.execute(
+                "UPDATE selected_summary_attempts SET status = 'unknown' WHERE operation_id = ?",
+                (operation_id,),
+            )
+
+    def decline_selected_summary_prestart(self, operation_id: str, reason: str) -> None:
+        """Settle only an exact, verified clean Pi response before any side effect.
+
+        Only split-turn or explicitly unsupported cuts can fall back to the
+        independent hard-context protection. Busy, changed source/model/settings,
+        timeout, transport loss, and post-auth/stream errors remain blocking.
+        The future owner caller must verify the correlated Pi reply and current
+        owner/ingress source before invoking this method; the journal is not
+        that authority or evidence verifier.
+        """
+        if type(reason) is not str or reason not in {"split_turn", "unsupported"}:
+            raise CompactionJournalError("Selected summary decline is not a clean skip")
+        with self._transaction() as db:
+            row = db.execute(
+                "SELECT status FROM selected_summary_attempts WHERE operation_id = ?",
+                (operation_id,),
+            ).fetchone()
+            if row != ("reserved",):
+                raise CompactionJournalError("Selected summary prestart decline forbidden")
+            db.execute(
+                "UPDATE selected_summary_attempts SET status = 'declined-prestart', "
+                "decline_reason = ? WHERE operation_id = ?",
+                (reason, operation_id),
+            )
+
+    def link_selected_summary_commit(self, operation_id: str, commit_id: str) -> None:
+        """Settle only a reserved attempt after its exact native commit is durable.
+
+        This is NOT a provider receipt validator. A future caller must check
+        the complete selected Pi result and current owner/ingress source before
+        the native CAS, and call this only after the native journal committed.
+        An UNKNOWN provider attempt cannot be automatically linked or retried.
+        """
+        with self._transaction() as db:
+            row = db.execute(
+                "SELECT session_file, status FROM selected_summary_attempts "
+                "WHERE operation_id = ?",
+                (operation_id,),
+            ).fetchone()
+            commit = db.execute(
+                "SELECT session_file, status, intent_json FROM operations WHERE commit_id = ?",
+                (commit_id,),
+            ).fetchone()
+            try:
+                bound = commit is not None and (
+                    json.loads(commit[2]).get("selectedSummaryOperationId") == operation_id
+                )
+            except (TypeError, ValueError, AttributeError):
+                bound = False
+            if (
+                row is None
+                or row[1] != "reserved"
+                or commit is None
+                or commit[:2] != (row[0], "committed")
+                or not bound
+            ):
+                raise CompactionJournalError("Exact committed native result required to link")
+            db.execute(
+                "UPDATE selected_summary_attempts SET status = 'linked', commit_id = ? "
+                "WHERE operation_id = ?",
+                (commit_id, operation_id),
+            )
 
     def pending_publications(self, session_file: str) -> tuple[CompactionPublication, ...]:
         """Read exact-ID metadata; an unknown commit cannot be projected."""

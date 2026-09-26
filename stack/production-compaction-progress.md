@@ -106,6 +106,36 @@ extension/CLI route and project-trust parity, implement reviewed human/operator
 opt-in only after clearance, demonstrate provider semantics, and run fresh
 resource-safe full source/wheel suites and combined review. No activation.
 
+## Selected idle-Pi readiness and durable operation reservation (not activation)
+
+An independent exact `2256e2bc…` Pi-side phase-1 review is **scoped CLEAN only**
+for the old `05774aeb…` prompt-preflight false-idle race
+(`/dev/shm/pr95-225-review-R5v8GP/REVIEW.md`, SHA256
+`076a86f0775ad47993fa3aa0b0ac536cc1473c15a4cd09dc9b1ffc644a21f800`).
+The old bytes remain NON-CLEAN. The new dry-run `ready` explicitly reports
+`UNVERIFIED_NO_AUTH_RESOLUTION` and cannot authorize payment or native commit.
+No Pi-side bytes have been integrated into this branch; phase 2 has no reviewed
+implementation or provider authorization.
+
+A subsequent Python-only, default-off candidate extends the existing durable
+`CompactionJournal` with one exact per-session selected-summary operation ID,
+source/selected/settings witness, reserved/UNKNOWN blocking states and strict
+linkage only to a same-session native committed intent carrying that ID. It
+reserves *before* any future selected Pi RPC send. An ambiguous send/death or
+post-COMMIT fsync error remains unresolved and blocks ordinary input; no API
+replays the provider request. The ACP send-admission gate now checks these
+rows as well as native commit intents. There is **no production producer** of
+these records yet and no ACP invocation of the selected Pi dry-run adapter.
+Provider-free serial selected-summary journal **15 passed** and legacy native
+journal/send-admission **17 passed** in separate bounded runs, including crash,
+duplicate ID, fsync uncertainty, wrong native binding, two-way competing-commit
+exclusion, narrow pre-start clean declines and other-session isolation. An
+earlier combined run timed out after 31 dots under host pressure and is **not**
+counted as a passing combined run. No real Pi phase-2 or provider operation was
+started. `selected-summary-operation-journal.md` records scope and limits.
+Fresh exact-head review, phase-2 route parity, semantic retention, a reviewed
+operator opt-in, and full combined source/wheel testing remain mandatory.
+
 ## Normal PR104/105 main integration and socket incarnation (combined review pending)
 
 After clean `dadb7c4`, normally merged main `a6b43fec` (including PR104/105)
