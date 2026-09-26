@@ -289,6 +289,43 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
     assert comms.recover_closed_goal_wait("alice") == ()
 
 
+def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeypatch):
+    comms = wire(tmp_path)
+    for name in ("alice", "bob"):
+        comms.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.begin_turn(name, f"{name}-turn")
+    alice = comms.update_goal("alice", "set", text="Wait for Bob")
+    bob = comms.update_goal("bob", "set", text="Wait for Alice")
+    assert alice is not None and bob is not None
+    comms.update_goal("alice", "standby", goal_id=alice.id, wait_for=["bob"])
+    GoalWaits(tmp_path / "goal_waits.json").record(
+        GoalWait(
+            bob.id,
+            "older-bob-wait",
+            bob.revision,
+            0,
+            (GoalWaitTarget("alice", comms.registry.require("alice").created_at),),
+            owner_created_at=comms.registry.require("bob").created_at,
+        )
+    )
+    comms.finish_turn("alice", "alice-turn")
+    comms.finish_turn("bob", "bob-turn")
+    original_clear = GoalWaits.clear
+
+    def unavailable(*_args, **_kwargs):
+        raise OSError("injected wait-clear failure")
+
+    monkeypatch.setattr(GoalWaits, "clear", unavailable)
+    with pytest.raises(OSError, match="wait-clear failure"):
+        comms.recover_closed_goal_wait("alice")
+    reopened = wire(tmp_path)
+    assert reopened.registry.require("alice").goal.active
+    assert reopened.goal_execution("alice").state is GoalExecutionState.STANDBY
+    monkeypatch.setattr(GoalWaits, "clear", original_clear)
+    assert reopened.recover_closed_goal_wait("alice") == ("alice", "bob")
+    assert reopened.goal_execution("alice").state is GoalExecutionState.RUNNABLE
+
+
 @pytest.mark.parametrize("already_drained", [False, True])
 async def test_standby_refuses_reply_that_arrived_before_wait(
     tmp_path, monkeypatch, already_drained

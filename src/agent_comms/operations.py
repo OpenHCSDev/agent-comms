@@ -2493,16 +2493,16 @@ class Comms:
                 "Standby was released; inspect dependencies and continue useful work."
             )
             progress = f"{goal.progress}\n\n{note}" if goal.progress else note
-            if not waits.clear(goal.id, wait_id=wait.wait_id):
-                return ()
             self.registry.register(
                 replace(owner, goal=replace(goal, progress=progress, revision=goal.revision + 1)),
                 snapshot.statuses[canonical],
             )
+            if not waits.clear(goal.id, wait_id=wait.wait_id):
+                return ()
             return closed
 
-    def pause_waits_after_terminal_turn(self, fence: FinishedTurnFence | None) -> tuple[str, ...]:
-        """Pause only for the latest exact, still-idle, completed child turn.
+    def release_waits_after_terminal_turn(self, fence: FinishedTurnFence | None) -> tuple[str, ...]:
+        """Release waits after the latest exact, still-idle child turn.
 
         ACP invokes this after terminal publication, never at the earlier UI
         `settled` event. A later turn (even already finished) invalidates the
@@ -2525,7 +2525,7 @@ class Comms:
             ):
                 return ()
             waits = GoalWaits(self.root / "goal_waits.json").snapshot()
-            paused: list[str] = []
+            released: list[str] = []
             for owner in snapshot.threads.values():
                 goal = owner.goal
                 if goal is None or not goal.active:
@@ -2585,7 +2585,7 @@ class Comms:
                     )
                 except (OSError, ValueError, sqlite3.DatabaseError):
                     # The terminal turn has already committed. An unavailable
-                    # optional reply read cannot prove silence or pause this
+                    # optional reply read cannot prove silence or release this
                     # owner; do not turn the completed ACP turn into a failure.
                     # Registry/goal writes below remain outside this guard.
                     continue
@@ -2594,26 +2594,20 @@ class Comms:
                 diagnostic = (
                     f"Declared dependency @{canonical} finished without a qualifying direct "
                     "reply, and no declared dependency has an active turn. "
-                    "Goal paused: inspect messages and UNKNOWN inputs before explicitly "
-                    "resuming or redelegating. No model turn or claim was admitted."
+                    "Standby was released; inspect messages and UNKNOWN inputs, then "
+                    "continue independent work or redelegate. No input was replayed."
                 )
                 progress = f"{goal.progress}\n\n{diagnostic}" if goal.progress else diagnostic
-                # The entire owner/incarnation/goal check and transition is
-                # protected by the wire lock. Persist the non-runnable goal
-                # FIRST: a crash before wait-clear leaves an orphan wait that
-                # cannot launch while the goal is paused.
-                paused_goal = replace(
-                    goal, status="paused", progress=progress, revision=goal.revision + 1
-                )
+                # Persist the explanation before clearing the wait. A crash
+                # between these writes leaves the active goal in standby;
+                # the periodic closed-wait check can release it later.
+                continued_goal = replace(goal, progress=progress, revision=goal.revision + 1)
                 self.registry.register(
-                    replace(owner, goal=paused_goal), snapshot.statuses[owner.name]
+                    replace(owner, goal=continued_goal), snapshot.statuses[owner.name]
                 )
                 GoalWaits(self.root / "goal_waits.json").clear(goal.id, wait_id=wait.wait_id)
-                GoalPauseEvents(self.root / "goal_pause_events.json").record(
-                    GoalPauseEvent(goal.id, paused_goal.revision, GoalPauseSource.RUNTIME)
-                )
-                paused.append(owner.name)
-            return tuple(paused)
+                released.append(owner.name)
+            return tuple(released)
 
     def goal_execution(self, name: str) -> GoalExecution | None:
         return self._goal_snapshot(name)[1]

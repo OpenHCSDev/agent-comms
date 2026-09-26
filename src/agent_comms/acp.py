@@ -909,7 +909,7 @@ class CommsAgent:
                     finally:
                         # Relay output, if any, is committed before the waiter
                         # observes that this dependency finished silently.
-                        self._comms.pause_waits_after_terminal_turn(terminal_fence)
+                        self._comms.release_waits_after_terminal_turn(terminal_fence)
             self._debug_log("prompt:returning")
             return PromptResponse(stop_reason="end_turn")
         except asyncio.CancelledError:
@@ -3074,11 +3074,11 @@ class CommsAgent:
                 try:
                     await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
                 finally:
-                    self._comms.pause_waits_after_terminal_turn(terminal_fence)
+                    self._comms.release_waits_after_terminal_turn(terminal_fence)
             else:
                 # `settled` precedes terminal `done` in native RPC. Reconcile
                 # only after the terminal reply or failure notice was published.
-                self._comms.pause_waits_after_terminal_turn(terminal_fence)
+                self._comms.release_waits_after_terminal_turn(terminal_fence)
 
     def _started_event(self, thread_name: str, turn_id: str) -> dict[str, Any]:
         """Project one owner-authored turn without inventing presentation timestamps."""
