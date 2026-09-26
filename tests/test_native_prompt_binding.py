@@ -559,20 +559,21 @@ async def test_current_cursor_alias_refusal_and_new_owner_generation(tmp_path, m
     fresh = await run_one_sealed_claim(
         root, wire_root_id=root_id, owner_name="alpha-new", native_package=tmp_path
     )
-    assert fresh is not None and fresh.cursor_status == "proven"
+    assert fresh is not None and fresh.cursor_status == "blocked_gap"
     with MutationStore(str(root / "coordination.sqlite3")) as store:
-        cursor = read_current_native_cursor(
-            comms.bus, store, wire_root_id=root_id, owner_name="alpha-new"
+        # The old selected native proof remains historical evidence, not a
+        # prefix bridge into the renamed owner's new generation/epoch.
+        assert (
+            read_current_native_cursor(
+                comms.bus, store, wire_root_id=root_id, owner_name="alpha-new"
+            )
+            is None
         )
-        assert cursor is not None
-        assert cursor.owner_generation == 2 and cursor.owner_thread == "alpha-new"
-        assert cursor.injected_seq == second.seq and cursor.input_id == fresh.input_id
-        assert cursor.covered_seq == second.seq
         rows = store._connection.execute(
             "SELECT owner_generation,input_id FROM native_runtime_source_cursors "
             "ORDER BY owner_generation"
         ).fetchall()
-        assert [tuple(row) for row in rows] == [(1, old_turn.input_id), (2, fresh.input_id)]
+        assert [tuple(row) for row in rows] == [(1, old_turn.input_id)]
     assert len(calls) == 2 and first.message.seq < second.seq
 
 

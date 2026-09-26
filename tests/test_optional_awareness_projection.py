@@ -461,6 +461,38 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         store.close()
 
 
+async def test_real_selected_caller_after_rename_injects_only_new_generation(
+    monkeypatch,
+) -> None:
+    if Path("/var").is_symlink() or not Path("/var/tmp").is_dir():
+        pytest.skip("private selected runtime requires a real /var/tmp")
+    with tempfile.TemporaryDirectory(prefix="pr94-renamed-awareness-", dir="/var/tmp") as temp:
+        root = Path(temp)
+        comms, store, index, root_id = _root(root)
+        try:
+            _old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
+            comms._rename_thread("member000", "gamma")
+            current, claim = _accepted(comms, store, root_id, "gamma", "new original")
+            install_private_response_schema(store)
+            install_native_runtime_schema(store)
+            index.maintain(rebuild=True)
+        finally:
+            store.close()
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        runner, calls = _fake_model()
+        monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
+        outcome = await runtime.run_one_sealed_claim(
+            comms.root, wire_root_id=root_id, owner_name="gamma", native_package=root
+        )
+        assert outcome is not None and outcome.response_message_id
+        assert outcome.claim_id == claim.claim_id and len(calls) == 1
+        assert current.message.body in calls[0][1]
+        assert "Selected source decisions through " in calls[0][1]
+        assert claim.claim_id in calls[0][1]
+        assert old_claim.claim_id not in calls[0][1]
+        assert "Nonbinding rows omitted: 1" in calls[0][1]
+
+
 def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
     tmp_path: Path,
 ) -> None:

@@ -33,6 +33,7 @@ class ProvenSourceCoverage:
     injected_source_seqs: tuple[int, ...]
     no_wake_seqs: tuple[int, ...]
     blocked_seq: int | None
+    more_initials: bool = False
 
 
 def read_proven_source_coverage(
@@ -42,6 +43,8 @@ def read_proven_source_coverage(
     wire_root_id: str,
     recipient_lookup: str,
     limit: int = 100,
+    after_seq: int = 0,
+    partial: bool = False,
 ) -> ProvenSourceCoverage:
     """Conservatively walk a bounded, *canonical* private initial snapshot.
 
@@ -54,6 +57,11 @@ def read_proven_source_coverage(
     This pilot refuses oversized bus bytes before the lock's durability scan,
     stops at the first over-budget row/initial, and applies a best-effort scan
     deadline. Filesystem fsync/locks are not a hard wall-clock deadline.
+
+    A cursor caller may request a partial, at-most-100-initial page after a
+    *previously reverified* covered prefix. Every partial page still validates
+    the entire bounded canonical bus, including rows after the page. The
+    returned more_initials bit is not evidence that later sources were covered.
     """
     if (
         type(bus) is not MessageBus
@@ -66,12 +74,17 @@ def read_proven_source_coverage(
         or any(ch not in "0123456789abcdef" for ch in recipient_lookup)
         or type(limit) is not int
         or not 0 < limit <= 100
+        or type(after_seq) is not int
+        or after_seq < 0
+        or type(partial) is not bool
+        or (after_seq != 0 and not partial)
     ):
         raise ValueError("source coverage needs exact private identities and bounded scan")
     if store._connection.in_transaction:
         raise IdentityConflict("source coverage requires a committed coordinator snapshot")
     deadline = time.monotonic() + _MAX_SCAN_SECONDS
     initials: list[CommittedInitial] = []
+    more_initials = False
     with _store_lock(bus._path, blocking=False, max_bus_bytes=_MAX_BUS_BYTES):
         if time.monotonic() > deadline:
             raise IdentityConflict("source coverage exceeded its scan deadline")
@@ -83,11 +96,14 @@ def read_proven_source_coverage(
         ):
             if row_count > _MAX_BUS_ROWS or time.monotonic() > deadline:
                 raise IdentityConflict("source coverage exceeded row or scan deadline budget")
-            if initial is not None:
+            if initial is not None and initial.message.seq > after_seq:
                 if len(initials) >= limit:
-                    raise IdentityConflict(
-                        "source coverage exceeded its bounded private initial scan"
-                    )
+                    if not partial:
+                        raise IdentityConflict(
+                            "source coverage exceeded its bounded private initial scan"
+                        )
+                    more_initials = True
+                    continue  # Validate the rest of the canonical bus, but never cover it.
                 initials.append(initial)
     covered = 0
     injected: list[int] = []
@@ -172,5 +188,11 @@ def read_proven_source_coverage(
         injected.append(seq)
         covered = seq
     return ProvenSourceCoverage(
-        wire_root_id, recipient_lookup, covered, tuple(injected), tuple(no_wake), blocked
+        wire_root_id,
+        recipient_lookup,
+        covered,
+        tuple(injected),
+        tuple(no_wake),
+        blocked,
+        more_initials,
     )

@@ -9,17 +9,101 @@ projection. The authoritative sealed claims still drive execution.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import sqlite3
+import stat
 from dataclasses import dataclass
 
 from .bus_publication import stable_thread_lookup
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_response import _response_boundary
 from .coordination_store import IdentityConflict, MutationStore, StaleFence
-from .declarations import MessageBus, Thread
+from .declarations import MessageBus, Thread, _store_lock
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
-from .proven_source_coverage import read_proven_source_coverage
+from .proven_source_coverage import ProvenSourceCoverage, read_proven_source_coverage
+
+# The current canonical bus read still has an 8 MiB / 1,000-row ceiling.
+# Never turn this bound into a guessed max-sequence cursor or trust the
+# disposable candidate WAL as a substitute for canonical source proof.
+_MAX_COVERAGE_PAGES = 10
+_MAX_SOURCE_BYTES = 8 * 1024 * 1024
+
+
+def _source_witness_unlocked(bus: MessageBus) -> tuple[int, int, int, str]:
+    """Fingerprint precisely the capped bus bytes covered by the canonical walk."""
+    descriptor = os.open(bus._path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > _MAX_SOURCE_BYTES:
+            raise IdentityConflict("current cursor source exceeds bounded canonical bus")
+        with os.fdopen(descriptor, "rb", closefd=False) as source:
+            contents = source.read(_MAX_SOURCE_BYTES + 1)
+        if len(contents) != info.st_size:
+            raise IdentityConflict("current cursor source changed while fingerprinting")
+        return (info.st_dev, info.st_ino, info.st_size, hashlib.sha256(contents).hexdigest())
+    finally:
+        os.close(descriptor)
+
+
+def _source_witness(bus: MessageBus) -> tuple[int, int, int, str]:
+    with _store_lock(bus._path, blocking=False, max_bus_bytes=_MAX_SOURCE_BYTES):
+        return _source_witness_unlocked(bus)
+
+
+def _bounded_coverage_pages(
+    bus: MessageBus,
+    store: MutationStore,
+    root_id: str,
+    lookup: str,
+    *,
+    through_seq: int | None = None,
+) -> ProvenSourceCoverage:
+    """Reverify each bounded canonical page; stop at a selected-proof gap.
+
+    The page cursor is in-memory only. A durable SQL cursor is written only
+    after all preceding pages are checked, and no caller-provided high-water
+    can make us skip an initial. ``through_seq`` is used only when verifying
+    an existing persisted cursor: even its alleged prefix is rescanned.
+    """
+    covered = 0
+    injected: list[int] = []
+    no_wake: list[int] = []
+    for _ in range(_MAX_COVERAGE_PAGES):
+        page = read_proven_source_coverage(
+            bus,
+            store,
+            wire_root_id=root_id,
+            recipient_lookup=lookup,
+            after_seq=covered,
+            partial=True,
+        )
+        if page.covered_seq < covered:
+            raise IdentityConflict("canonical source coverage regressed between pages")
+        covered = page.covered_seq
+        injected.extend(page.injected_source_seqs)
+        no_wake.extend(page.no_wake_seqs)
+        if through_seq is not None and covered >= through_seq:
+            return ProvenSourceCoverage(
+                root_id,
+                lookup,
+                covered,
+                tuple(injected),
+                tuple(no_wake),
+                page.blocked_seq,
+                page.more_initials,
+            )
+        if page.blocked_seq is not None or not page.more_initials:
+            return ProvenSourceCoverage(
+                root_id,
+                lookup,
+                covered,
+                tuple(injected),
+                tuple(no_wake),
+                page.blocked_seq,
+                page.more_initials,
+            )
+    raise IdentityConflict("source coverage exceeded bounded canonical page budget")
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +120,55 @@ class CurrentNativeCursor:
     stage: str | None
     session_id: str | None
     request_generation: int | None
+
+
+def _prefix_evidence(
+    store: MutationStore,
+    root_id: str,
+    lookup: str,
+    coverage: ProvenSourceCoverage,
+    *,
+    through_seq: int | None = None,
+) -> tuple[HistoricalNativeInput, ...]:
+    """Inspect every selected source of the canonical covered prefix, not its maximum."""
+    return tuple(
+        evidence
+        for source_seq in coverage.injected_source_seqs
+        if through_seq is None or source_seq <= through_seq
+        for evidence in read_historical_native_inputs(
+            store, wire_root_id=root_id, recipient_lookup=lookup, source_seq=source_seq
+        )
+    )
+
+
+def _same_epoch_prefix(
+    db: sqlite3.Connection,
+    evidence: tuple[HistoricalNativeInput, ...],
+    lookup: str,
+    owner_name: str,
+    generation: int,
+    epoch: int,
+) -> bool:
+    """Reject an old native proof even in a legacy persisted cursor prefix."""
+    for item in evidence:
+        row = db.execute(
+            "SELECT owner_lookup,owner_thread,owner_generation,sent_owner_admission_epoch,"
+            "stage,claim_id,session_id,request_generation "
+            "FROM native_runtime_inputs WHERE input_id=?",
+            (item.input_id,),
+        ).fetchone()
+        if row is None or tuple(row) != (
+            lookup,
+            owner_name,
+            generation,
+            epoch,
+            item.stage,
+            item.claim_id,
+            item.context.session_id,
+            item.context.request_generation,
+        ):
+            return False
+    return True
 
 
 def _last_source_proof(
@@ -99,13 +232,18 @@ def advance_current_native_cursor(
     ):
         raise ValueError("current cursor requires exact coordinator and owner identities")
     lookup = stable_thread_lookup(owner.created_at)
-    coverage = read_proven_source_coverage(
-        bus, store, wire_root_id=wire_root_id, recipient_lookup=lookup
-    )
+    source_witness = _source_witness(bus)
+    coverage = _bounded_coverage_pages(bus, store, wire_root_id, lookup)
     injected_seq = coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else 0
     proof = _last_source_proof(store, wire_root_id, lookup, injected_seq)
+    # Historical journal reads need a committed SQL snapshot. Collect the
+    # exact IDs before the write transaction, then verify their immutable SQL
+    # receipt identities again inside its live-owner fence.
+    prefix_evidence = _prefix_evidence(store, wire_root_id, lookup, coverage)
     with _response_boundary(bus, blocking=False) as registry, store._transaction() as db:
         marker = bus._private_marker_unlocked()
+        if _source_witness_unlocked(bus) != source_witness:
+            raise IdentityConflict("current cursor canonical source changed before commit")
         actual = registry.threads.get(owner.name)
         status = registry.statuses.get(owner.name)
         if (
@@ -148,6 +286,8 @@ def advance_current_native_cursor(
             (wire_root_id, lookup, owner_generation, owner_admission_epoch),
         ).fetchone()
         prior = _cursor_from_row(old) if old is not None else None
+        if prior is None and coverage.covered_seq == 0:
+            return None  # A blocked first source is not a zero-valued cursor.
         if prior is not None and (
             prior.owner_thread != owner.name
             or prior.owner_generation != owner_generation
@@ -155,9 +295,24 @@ def advance_current_native_cursor(
             or injected_seq < prior.injected_seq
         ):
             raise IdentityConflict("current cursor would change owner or regress")
+        # Checking only the newest proof could borrow a prior owner's
+        # historical selected input as a bridge across a new admission epoch.
+        # Every selected source in this covered prefix must belong to this
+        # live owner generation and admission epoch, including triage+FULL.
+        if not _same_epoch_prefix(
+            db,
+            prefix_evidence,
+            lookup,
+            owner.name,
+            owner_generation,
+            owner_admission_epoch,
+        ):
+            return prior  # Do not borrow historical native acceptance.
         if proof is None:
-            if committed_input_id is not None:
-                return prior  # Earlier source is UNKNOWN: do not skip it.
+            # An absent-audience or sealed no-wake prefix may progress even if
+            # the just-committed input lies after an UNKNOWN selected gap.
+            # It carries no injected source or native-input pointer.
+            pass
         else:
             if (
                 proof.owner_lookup != lookup
@@ -310,18 +465,31 @@ def read_current_native_cursor(
         cursor = _cursor_from_row(row) if row is not None else None
         generation = person.generation
     if cursor is not None:
+        source_witness = _source_witness(bus)
         if cursor.owner_thread != owner_name or cursor.owner_generation != generation:
             raise IdentityConflict("current native cursor owner identity differs")
         # A persisted pointer is rechecked against the current canonical bus,
         # never inferred from a self-consistent SQL/journal claim alone. Do
         # this outside the registry lock: coverage takes the bus lock itself.
-        coverage = read_proven_source_coverage(
-            bus, store, wire_root_id=wire_root_id, recipient_lookup=lookup
+        coverage = _bounded_coverage_pages(
+            bus, store, wire_root_id, lookup, through_seq=cursor.covered_seq
         )
         if cursor.covered_seq > coverage.covered_seq or (
             cursor.injected_seq > 0 and cursor.injected_seq not in coverage.injected_source_seqs
         ):
             raise IdentityConflict("current native cursor exceeds canonical source proof")
+        # A cursor from an older implementation may point at a current-epoch
+        # *last* input while silently spanning a selected gen1/old-epoch input.
+        # Reopen must reject the whole persisted prefix, not bless that row.
+        prefix_evidence = _prefix_evidence(
+            store, wire_root_id, lookup, coverage, through_seq=cursor.covered_seq
+        )
+        with store._read_transaction():
+            assert_native_runtime_schema(store._connection)
+            if not _same_epoch_prefix(
+                store._connection, prefix_evidence, lookup, owner_name, generation, epoch
+            ):
+                raise IdentityConflict("current cursor borrows historical owner source proof")
         proof = _last_source_proof(store, wire_root_id, lookup, cursor.injected_seq)
         if (cursor.injected_seq == 0 and cursor.input_id is not None) or (
             proof is not None
@@ -337,6 +505,8 @@ def read_current_native_cursor(
         ):
             raise IdentityConflict("current native cursor proof differs from journal")
     with _response_boundary(bus, blocking=False) as registry:
+        if cursor is not None and _source_witness_unlocked(bus) != source_witness:
+            raise IdentityConflict("current cursor canonical source changed while reading")
         current = registry.threads.get(owner_name)
         status = registry.statuses.get(owner_name)
         if (
@@ -344,9 +514,49 @@ def read_current_native_cursor(
             or current is None
             or status is None
             or not status.active
-            or current.created_at != actual.created_at
+            or (
+                current.name,
+                current.created_at,
+                current.pid,
+                current.role,
+                current.worktree,
+                current.active_turn,
+                current.goal,
+            )
+            != (
+                actual.name,
+                actual.created_at,
+                actual.pid,
+                actual.role,
+                actual.worktree,
+                actual.active_turn,
+                actual.goal,
+            )
             or current.pid != os.getpid()
             or registry.admission_generations.get(owner_name) != epoch
         ):
             raise StaleFence("current native cursor owner changed while reading")
+        # The canonical pages and earlier SQL proof view ran outside this
+        # boundary. A supported participant-generation advance can occur
+        # between them without changing the registry. Recheck SQL while all
+        # wire/bus/registry locks are held; never return a stale gen1 cursor
+        # after a same-owner gen2 advance or a replacement SQL cursor row.
+        with store._read_transaction():
+            assert_native_runtime_schema(store._connection)
+            fresh = store._participant(lookup)
+            if (
+                not fresh.committed
+                or fresh.owner_thread != owner_name
+                or fresh.generation != generation
+            ):
+                raise StaleFence("current native cursor participant generation changed")
+            fresh_row = store._connection.execute(
+                "SELECT * FROM native_runtime_source_cursors WHERE wire_root_id=? "
+                "AND recipient_lookup=? AND owner_generation=? AND owner_admission_epoch=?",
+                (wire_root_id, lookup, generation, epoch),
+            ).fetchone()
+            if (fresh_row is None) != (cursor is None) or (
+                fresh_row is not None and _cursor_from_row(fresh_row) != cursor
+            ):
+                raise StaleFence("current native cursor SQL row changed while reading")
     return cursor

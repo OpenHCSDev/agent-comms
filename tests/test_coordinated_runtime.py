@@ -37,6 +37,7 @@ from agent_comms.coordination_store import (
 from agent_comms.declarations import MessageBus, Thread, ThreadRegistry
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, NativeTurnResult
+from agent_comms.native_source_cursor import read_current_native_cursor
 from agent_comms.operations import Comms
 from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 from agent_comms.wake_injection import render_selected_wake_frame
@@ -517,17 +518,14 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
         root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     )
     assert outcome is not None and outcome.response_message_id
-    assert outcome.cursor_status == "unavailable"  # known bounded scan, not an ACK
+    assert outcome.cursor_status == "proven"  # exact original only; not an unrelated ACK
     assert len(calls) == 1 and comms.dm_history("sender", "beta")[-1].body
     with MutationStore(str(root / "coordination.sqlite3")) as store:
-        lookup = stable_thread_lookup(people[2].created_at)
-        assert (
-            store._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_source_cursors WHERE recipient_lookup=?",
-                (lookup,),
-            ).fetchone()[0]
-            == 0
+        cursor = read_current_native_cursor(
+            comms.bus, store, wire_root_id=root_id, owner_name="beta"
         )
+        assert cursor is not None and cursor.input_id == outcome.input_id
+        assert cursor.covered_seq == 102 and cursor.injected_seq == _initial.message.seq
 
 
 async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
@@ -1309,8 +1307,8 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
         root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     )
     assert outcome is not None and outcome.disposition is ClaimDisposition.IGNORED
-    assert outcome.cursor_status == "unavailable"  # bounded projection, not a retry
-    assert len(calls) == 1
+    assert outcome.cursor_status == "blocked_gap"  # settled rows lack native proof
+    assert len(calls) == 1  # no retry of the current original
     assert not (root / "read_markers.json").exists()
 
 
