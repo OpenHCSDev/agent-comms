@@ -2121,11 +2121,18 @@ async def _stream_agent_events(
                 )
                 if (
                     message.get("stopReason") == "toolUse"
+                    and initial_prompt_acknowledged
+                    and initial_input_started
+                    and not input_uncertain
+                    and not session_identity_uncertain
                     and committed_text
                     and committed_text == "".join(assistant_message_parts)
                 ):
-                    # Only a completed Pi assistant message may be published
-                    # while the surrounding tool turn is still running.
+                    # A prompt ACK is not a start. Never publish an assistant
+                    # message from a previous turn before this prompt's exact
+                    # user input has started (including its native ID when
+                    # require_input_id is set). This remains progress, not a
+                    # receipt or terminal response.
                     yield {"type": "committed_progress", "text": committed_text}
                 assistant_message_parts.clear()
                 usage = message.get("usage")
