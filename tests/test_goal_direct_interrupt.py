@@ -400,3 +400,40 @@ async def test_change_after_dispatch_denies_without_retry(tmp_path, monkeypatch,
         assert row["status"] == "unknown" and row["native_id"] is None
     finally:
         await agent.shutdown()
+
+
+@pytest.mark.parametrize("terminal", ["clear", "paused"])
+async def test_goal_cleared_or_paused_drops_queued_interrupt_without_crash(
+    tmp_path, monkeypatch, terminal
+):
+    """No active goal: queued ordinary interrupts are discarded, never dispatched."""
+    comms, agent, session, goal = await _owner(tmp_path, monkeypatch)
+    message = comms.send_message("outsider", session, "Question before the change")
+    original_schedule = agent._schedule_wake
+    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    try:
+        await agent._drain_owned_inbox(session)
+        assert agent._pending_turns[session][0].direct_interrupt_goal_id == goal.id
+        if terminal == "clear":
+            comms.update_goal(session, "clear", goal_id=goal.id, owner_action=True)
+        else:
+            comms.update_goal(session, "paused", goal_id=goal.id, owner_action=True)
+        called = []
+
+        async def forbidden_events(*args, **kwargs):
+            called.append(True)
+            yield {"type": "done", "ok": True, "text": "unexpected"}
+
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", forbidden_events)
+        monkeypatch.setattr(agent, "_schedule_wake", original_schedule)
+        agent._schedule_wake(session)
+        if agent._wake_tasks.get(session):
+            await asyncio.wait_for(agent._wake_tasks[session], timeout=3)
+        # No turn, no crash, no ticket reuse; the row stays durably UNKNOWN.
+        assert called == []
+        row = agent._dispositions.get(f"bus:{message.seq}")
+        assert row is not None and row["status"] == "unknown" and row["native_id"] is None
+        assert not agent._pending_turns.get(session)
+        assert not agent._direct_interrupt_tickets.get(session, {})
+    finally:
+        await agent.shutdown()

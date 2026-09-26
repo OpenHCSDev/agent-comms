@@ -1547,7 +1547,16 @@ class CommsAgent:
                             )
                         ]
                     else:
-                        pending = [turn for turn in pending if turn.goal_id is None]
+                        # No active goal: ordinary interrupts are invalid now
+                        # (their goal is gone/cleared); discard them and their
+                        # tickets instead of dispatching parked-goal framing.
+                        active_pending = [
+                            turn for turn in pending if turn.direct_interrupt_goal_id is None
+                        ]
+                        for turn in pending:
+                            if turn not in active_pending:
+                                self._forget_direct_interrupt(session_id, turn)
+                        pending = active_pending
                     for turn in old_pending:
                         if turn not in pending:
                             self._forget_direct_interrupt(session_id, turn)
