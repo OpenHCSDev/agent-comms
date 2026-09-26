@@ -477,11 +477,16 @@ def _native_send_boundary(
             ):
                 raise IdentityConflict("native saved session changed before send")
 
-            # Hold the selected journal's BEGIN IMMEDIATE across the exact
-            # raw os.write, under the existing wire→bus→registry→store locks.
-            # This also serializes a direct reservation that missed the wire
-            # lock; every selected status and unresolved native intent denies.
-            with journal.ordinary_input_send_fence(saved):
+            # Persist UNKNOWN in the selected journal *before* the first raw
+            # byte. A crash, lost parent-fsync ACK, or provider uncertainty can
+            # never turn a previous raw send into a later selected reservation.
+            # This marker is never cleared by a raw pipe ACK or fake result.
+            journal.reserve_private_raw_input(saved, input_id)
+            # Reacquire the SAME journal's exclusion after the durable marker;
+            # a concurrent selected reserve sees it and must refuse. Hold the
+            # journal lock through every raw os.write under PR94's canonical
+            # wire→bus→registry→store lock order.
+            with journal.ordinary_input_send_fence(saved, private_input_id=input_id):
                 # Bind the input ID to the owner admission in which Pi is sent
                 # the prompt, never a later caller-provided epoch.
                 updated = db.execute(

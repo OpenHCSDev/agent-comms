@@ -20,7 +20,11 @@ import pytest
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
-from agent_comms.compaction_journal import CompactionJournal, CompactionJournalError
+from agent_comms.compaction_journal import (
+    CompactionJournal,
+    CompactionJournalError,
+    CompactionJournalUnknownError,
+)
 from agent_comms.coordinated_runtime import run_one_sealed_claim
 from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
@@ -607,6 +611,22 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
             )
 
 
+def _legacy_private_selected_row(journal: CompactionJournal, session_file: Path) -> str:
+    """A persisted pre-coverage selected row must still block the raw writer."""
+    operation_id = "a" * 32
+    source = json.dumps(
+        {"source": {"witness": "fake"}, "selected": {"provider": "fake"}, "settings": {"limit": 1}},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    with journal._transaction() as db:
+        db.execute(
+            "INSERT INTO selected_summary_attempts VALUES (?, ?, ?, 'reserved', NULL, NULL)",
+            (operation_id, str(session_file.resolve(strict=True)), source),
+        )
+    return operation_id
+
+
 @pytest.mark.parametrize("status", ["reserved", "unknown", "declined-prestart"])
 async def test_private_raw_send_refuses_same_session_selected_row_before_write(
     tmp_path: Path, monkeypatch, status: str
@@ -620,10 +640,7 @@ async def test_private_raw_send_refuses_same_session_selected_row_before_write(
     session_file.write_text(original)
     session_file.chmod(0o600)
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
-    operation_id = journal.reserve_selected_summary(
-        str(session_file),
-        {"source": {"witness": "fake"}, "selected": {"provider": "fake"}, "settings": {"limit": 1}},
-    )
+    operation_id = _legacy_private_selected_row(journal, session_file)
     if status == "unknown":
         journal.mark_selected_summary_unknown(operation_id)
     elif status == "declined-prestart":
@@ -666,6 +683,71 @@ async def test_private_raw_send_refuses_same_session_selected_row_before_write(
     assert calls == []
 
 
+async def test_private_raw_prewrite_fsync_unknown_never_dispatches_or_retries(
+    tmp_path: Path, monkeypatch
+) -> None:
+    root, root_id, comms, initial, people = _root(tmp_path, direct=True)
+    lookup = stable_thread_lookup(people[2].created_at)
+    session_dir = root / "native-sessions" / lookup
+    session_dir.mkdir(parents=True, mode=0o700)
+    saved = session_dir / "saved.jsonl"
+    saved.write_text(json.dumps({"type": "session", "id": "isolated-session"}) + "\n")
+    saved.chmod(0o600)
+    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+    fake, calls = _fake_model()
+    monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", fake)
+    reserve = CompactionJournal.reserve_private_raw_input
+
+    def uncertain(self, session_file, input_id):
+        fsync = os.fsync
+        try:
+            os.fsync = lambda _fd: (_ for _ in ()).throw(OSError("parent fsync denied"))
+            reserve(self, session_file, input_id)
+        finally:
+            os.fsync = fsync
+
+    monkeypatch.setattr(CompactionJournal, "reserve_private_raw_input", uncertain)
+    with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
+        await run_one_sealed_claim(
+            root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=tmp_path,
+            session_file=saved,
+            opt_in=True,
+        )
+    assert calls == []
+    journal = CompactionJournal(root / "compaction-commits.sqlite3")
+    with journal._transaction() as db:
+        assert (
+            db.execute(
+                "SELECT count(*) FROM private_raw_inputs WHERE session_file = ?", (str(saved),)
+            ).fetchone()[0]
+            == 1
+        )
+    with pytest.raises(CompactionJournalError, match="coverage floor"):
+        journal.reserve_selected_summary(
+            str(saved),
+            {
+                "source": {"witness": "fake"},
+                "selected": {"provider": "fake"},
+                "settings": {"limit": 1},
+            },
+        )
+    assert (
+        await run_one_sealed_claim(
+            root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=tmp_path,
+            session_file=saved,
+            opt_in=True,
+        )
+        is None
+    )
+    assert calls == []
+
+
 async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -683,14 +765,7 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
     async def renamed(*args, **kwargs):
         saved.rename(moved)
         journal = CompactionJournal(root / "compaction-commits.sqlite3")
-        journal.reserve_selected_summary(
-            str(moved),
-            {
-                "source": {"witness": "fake"},
-                "selected": {"provider": "fake"},
-                "settings": {"limit": 1},
-            },
-        )
+        _legacy_private_selected_row(journal, moved)
         return await base(*args, **kwargs)
 
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", renamed)

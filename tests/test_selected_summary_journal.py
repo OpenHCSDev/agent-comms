@@ -109,6 +109,124 @@ def test_raw_send_fence_serializes_concurrent_direct_reservation(reserved):
         pass
 
 
+def test_legacy_private_session_without_marker_fails_closed_at_selected_reserve(reserved):
+    journal, session, source = reserved
+    private_dir = journal.path.parent / "native-sessions" / ("f" * 32)
+    private_dir.mkdir(parents=True)
+    saved = private_dir / "old-pr94-session.jsonl"
+    saved.write_text('{"type":"session","id":"legacy"}\n')
+    # This file can predate marker deployment; absence of a marker never
+    # proves it has no old PR94 raw or UNKNOWN input on the same session.
+    with sqlite3.connect(journal.path) as db:
+        assert db.execute("SELECT count(*) FROM private_raw_inputs").fetchone()[0] == 0
+    with pytest.raises(CompactionJournalError, match="coverage floor"):
+        journal.reserve_selected_summary(str(saved), source)
+    with (
+        pytest.raises(CompactionJournalError, match="prewrite marker"),
+        journal.ordinary_input_send_fence(saved),
+    ):
+        pass
+    journal.reserve_private_raw_input(saved, "a" * 32)
+    with journal.ordinary_input_send_fence(saved, private_input_id="a" * 32):
+        pass  # Existing ordinary private N/K raw dispatch stays available.
+    with pytest.raises(CompactionJournalError, match="coverage floor"):
+        journal.reserve_selected_summary(str(saved), source)
+    assert journal.reserve_selected_summary(session, source)
+
+
+def test_private_raw_prewrite_marker_blocks_only_its_saved_session(reserved):
+    journal, session, source = reserved
+    other = Path(session).with_name("other.jsonl")
+    other.write_text('{"type":"session","id":"other"}\n')
+    journal.reserve_private_raw_input(Path(session), "a" * 32)
+    reopened = CompactionJournal(journal.path)
+    with pytest.raises(CompactionJournalError, match="never replay"):
+        reopened.reserve_selected_summary(session, source)
+    with reopened.ordinary_input_send_fence(Path(session), private_input_id="a" * 32):
+        pass  # The exact prewrite marker permits its own PR94 raw input only.
+    reopened.reserve_private_raw_input(Path(session), "b" * 32)
+    with reopened.ordinary_input_send_fence(Path(session), private_input_id="b" * 32):
+        pass  # Ordinary next private N/K turn remains available.
+    with (
+        pytest.raises(CompactionJournalError, match="marker required"),
+        reopened.ordinary_input_send_fence(Path(session), private_input_id="c" * 32),
+    ):
+        pass
+    assert reopened.reserve_selected_summary(str(other), source)
+
+
+def test_private_raw_marker_and_selected_reservation_share_symlink_alias_identity(reserved):
+    journal, session, source = reserved
+    alias = Path(session).with_name("alias.jsonl")
+    alias.symlink_to(Path(session))
+    journal.reserve_private_raw_input(alias, "a" * 32)
+    with pytest.raises(CompactionJournalError, match="never replay"):
+        journal.reserve_selected_summary(session, source)
+    other = Path(session).with_name("other.jsonl")
+    other.write_text("{}\n")
+    journal.reserve_selected_summary(str(other), source)
+    with (
+        pytest.raises(CompactionJournalError, match="blocks native input"),
+        journal.ordinary_input_send_fence(other),
+    ):
+        pass
+    # A selected reservation through a symlink uses the exact real session.
+    fresh = Path(session).with_name("fresh.jsonl")
+    fresh.write_text("{}\n")
+    fresh_alias = Path(session).with_name("fresh-alias.jsonl")
+    fresh_alias.symlink_to(fresh)
+    journal.reserve_selected_summary(str(fresh_alias), source)
+    with (
+        pytest.raises(CompactionJournalError, match="blocks native input"),
+        journal.ordinary_input_send_fence(fresh),
+    ):
+        pass
+
+
+@pytest.mark.parametrize("moment", ["before-write", "after-write"])
+def test_private_raw_marker_survives_child_crash_before_selected_reserve(reserved, moment):
+    journal, session, source = reserved
+    marker = Path(session).with_name("fake-local-raw-write")
+    script = """
+import os,sys
+from pathlib import Path
+from agent_comms.compaction_journal import CompactionJournal
+j=CompactionJournal(Path(sys.argv[1]))
+j.reserve_private_raw_input(Path(sys.argv[2]),'a'*32)
+if sys.argv[3]=='after-write':
+    fd=os.open(sys.argv[4],os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+    os.write(fd,b'FAKE RAW BYTES')
+    os.close(fd)
+os._exit(0)
+"""
+    process = subprocess.run(
+        [sys.executable, "-c", script, str(journal.path), session, moment, str(marker)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert process.returncode == 0, process.stderr
+    assert marker.exists() is (moment == "after-write")
+    reopened = CompactionJournal(journal.path)
+    with pytest.raises(CompactionJournalError, match="never replay"):
+        reopened.reserve_selected_summary(session, source)
+
+
+def test_private_raw_prewrite_parent_fsync_unknown_never_writes_or_retries(reserved, monkeypatch):
+    journal, session, source = reserved
+    fsync = os.fsync
+    monkeypatch.setattr(os, "fsync", lambda _fd: (_ for _ in ()).throw(OSError("denied")))
+    with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
+        journal.reserve_private_raw_input(Path(session), "a" * 32)
+    monkeypatch.setattr(os, "fsync", fsync)
+    reopened = CompactionJournal(journal.path)
+    # The marker may be visible despite UNKNOWN; raw os.write has not run.
+    with pytest.raises(CompactionJournalError, match="never replay"):
+        reopened.reserve_selected_summary(session, source)
+    with pytest.raises(CompactionJournalError, match="already reserved"):
+        reopened.reserve_private_raw_input(Path(session), "a" * 32)
+
+
 def test_link_requires_exact_committed_native_intent_binding(reserved):
     journal, session, source = reserved
     wrong = journal.begin(session, {"selectedSummaryOperationId": "0" * 32})

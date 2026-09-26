@@ -168,4 +168,25 @@ combined **167 passed, 1 pinned-Pi-import test deliberately deselected**
 closes raw-write AFTER an existing selected row. Selected reservation AFTER
 an unresolved PR94 private input is not yet barred by a durable cross-store
 proof and remains a **pre-opt-in blocker**, alongside actual Pi transport/route
-auth parity. No paid operation or activation is authorized.
+auth parity. Exact `8d1bcd8` received independent SCOPED CLEAN only for the
+raw-after-selected direction (`/dev/shm/pr95-8d-independent-utVmO9/REVIEW.md`,
+SHA256 `e6652111c502d14b3444a56e7acf30a3185dc34813f5f3bc3fde9f1da8575010`).
+The separate reverse-order safety draft adds an immutable exact-session
+`private_raw_inputs` UNKNOWN marker in this SAME journal, fsynced before any
+PR94 private raw `os.write`. Selected reserve and prewrite marker now serialize
+in the journal; an fsync UNKNOWN stops the write, and crashes before/after fake
+local bytes leave a blocking marker after reopen. PR94 ordinary next input and
+other sessions continue, but the marker is never auto-cleared on raw ACK/result.
+Since PR94 sessions may predate marker installation and its historical input
+rows lack session_file until live result, all canonical private
+`root/native-sessions/` selected reservations are refused **before side
+effects** absent a separately reviewed coverage/new-session epoch issuer. No
+migration is guessed from filesystem time, missing marker or terminal status.
+Existing pre-floor selected rows still deny raw writes; symlink aliases resolve
+to the same saved-file identity. Provider-free split suites: runtime/raw 104
+passed with 1 pinned import deselected, selected journal27, admission/guardian43,
+adjacent ACP/private bus120 and send/private N/K28 (logs listed in
+`production-compaction-progress.md`). Positive private selected compaction
+remains unavailable until authenticated exact-file dev/ino/owner epoch coverage
+and independently reviewed terminal input-ID/child-retirement settlement.
+No paid operation or activation is authorized.

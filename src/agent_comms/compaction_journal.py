@@ -175,6 +175,13 @@ class CompactionJournal:
             db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS unresolved_selected_summary_session
                 ON selected_summary_attempts(session_file)
                 WHERE status IN ('reserved','unknown')""")
+            # Exact saved-session prewrite barrier for PR94's private raw writer.
+            # An UNKNOWN marker is never cleared by a pipe ACK or fake result.
+            db.execute("""CREATE TABLE IF NOT EXISTS private_raw_inputs (
+                    input_id TEXT PRIMARY KEY,
+                    session_file TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK(status = 'unknown')
+                )""")
         parent = path.parent.resolve(strict=True)
         for directory in (parent, *parent.parents):
             parent_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
@@ -291,6 +298,15 @@ class CompactionJournal:
         if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
             raise ValueError("Expected exact selected summary operation ID")
         canonical = str(Path(session_file).resolve(strict=True))
+        private_sessions = (self.path.parent / "native-sessions").resolve(strict=False)
+        if Path(canonical).is_relative_to(private_sessions):
+            # Existing PR94 sessions can predate this new raw-prewrite marker,
+            # and the old runtime's pending input rows do not bind a saved
+            # session path. No trustworthy migration/epoch floor exists yet.
+            # Never infer clean history from missing marker rows or file times.
+            raise CompactionJournalError(
+                "Private selected reservation requires reviewed raw-history coverage floor"
+            )
         if (
             type(source) is not dict
             or set(source) != {"source", "selected", "settings"}
@@ -333,10 +349,16 @@ class CompactionJournal:
                     (canonical,),
                 ).fetchone():
                     raise CompactionJournalError("Unresolved native commit; no selected summary")
-                if db.execute(
-                    "SELECT 1 FROM selected_summary_attempts WHERE session_file = ? LIMIT 1",
-                    (canonical,),
-                ).fetchone():
+                if (
+                    db.execute(
+                        "SELECT 1 FROM selected_summary_attempts WHERE session_file = ? LIMIT 1",
+                        (canonical,),
+                    ).fetchone()
+                    or db.execute(
+                        "SELECT 1 FROM private_raw_inputs WHERE session_file = ? LIMIT 1",
+                        (canonical,),
+                    ).fetchone()
+                ):
                     raise CompactionJournalError("Blocked selected summary; never replay")
                 db.execute(
                     "INSERT INTO selected_summary_attempts "
@@ -385,8 +407,45 @@ class CompactionJournal:
             ).fetchall()
         return tuple(SelectedSummaryAttempt(*row) for row in rows)
 
+    def reserve_private_raw_input(self, session_file: Path, input_id: str) -> None:
+        """Durably mark exact private-session raw input UNKNOWN before any pipe write.
+
+        Called after PR94's owner/claim/prompt binding checks under its shared
+        wire lock. The marker lives in the SAME journal as selected reservation,
+        so their write transactions serialize. This returned fsync ACK permits
+        only attempting the one raw write; it never proves provider acceptance
+        or authorizes later selected summary reservation.
+        """
+        if type(input_id) is not str or not re.fullmatch(r"[0-9a-f]{32}", input_id):
+            raise CompactionJournalError("Exact private raw input ID required")
+        canonical = str(session_file.resolve(strict=False))
+        try:
+            with self._transaction() as db:
+                if (
+                    db.execute(
+                        "SELECT 1 FROM operations WHERE session_file = ? "
+                        "AND status IN ('intent','unknown') LIMIT 1",
+                        (canonical,),
+                    ).fetchone()
+                    or db.execute(
+                        "SELECT 1 FROM selected_summary_attempts WHERE session_file = ? LIMIT 1",
+                        (canonical,),
+                    ).fetchone()
+                ):
+                    raise CompactionJournalError(
+                        "Selected or unresolved journal blocks native input"
+                    )
+                db.execute(
+                    "INSERT INTO private_raw_inputs VALUES (?, ?, 'unknown')",
+                    (input_id, canonical),
+                )
+        except sqlite3.IntegrityError as error:
+            raise CompactionJournalError("Private raw input ID already reserved") from error
+
     @contextmanager
-    def ordinary_input_send_fence(self, session_file: Path) -> Iterator[None]:
+    def ordinary_input_send_fence(
+        self, session_file: Path, *, private_input_id: str | None = None
+    ) -> Iterator[None]:
         """Exclude selected rows and unresolved commits through a raw stdin write.
 
         The caller must already hold the authoritative shared wire lock. This
@@ -399,6 +458,9 @@ class CompactionJournal:
         # header. A reservation requires an existing file; the journal lock
         # excludes a newly created/reserved file through the raw write too.
         canonical = str(session_file.resolve(strict=False))
+        private_sessions = (self.path.parent / "native-sessions").resolve(strict=False)
+        if Path(canonical).is_relative_to(private_sessions) and private_input_id is None:
+            raise CompactionJournalError("Private raw send requires durable prewrite marker")
         with self._transaction() as db:
             if (
                 db.execute(
@@ -412,6 +474,11 @@ class CompactionJournal:
                 ).fetchone()
             ):
                 raise CompactionJournalError("Selected or unresolved journal blocks native input")
+            if private_input_id is not None and db.execute(
+                "SELECT session_file,status FROM private_raw_inputs WHERE input_id = ?",
+                (private_input_id,),
+            ).fetchone() != (canonical, "unknown"):
+                raise CompactionJournalError("Exact durable private raw prewrite marker required")
             yield
 
     def mark_selected_summary_unknown(self, operation_id: str) -> None:

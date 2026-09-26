@@ -237,8 +237,57 @@ This is a one-way raw-after-selected safety fence, **not** a proof that a
 selected reservation AFTER an uncertain PR94 raw input is refused by the
 separate PR94 runtime store. That reverse-order cross-store gate and real Pi
 terminal/route parity remain explicit pre-opt-in blockers; no provider spend,
-live input or production activation occurred. Fresh exact-head adversarial
-review is mandatory.
+live input or production activation occurred. Exact pushed `8d1bcd8` received
+independent **SCOPED CLEAN** for raw-after-selected only
+(`/dev/shm/pr95-8d-independent-utVmO9/REVIEW.md`, SHA256
+`e6652111c502d14b3444a56e7acf30a3185dc34813f5f3bc3fde9f1da8575010`);
+that verdict does not cover the following successor.
+
+### Conservative raw-first UNKNOWN marker and legacy coverage floor (safety draft)
+
+PR94's existing `native_runtime_inputs` row reserves input ID before Pi starts
+but leaves `session_file=NULL` until an authenticated live result, so it cannot
+bind a crashed/UNKNOWN raw input to the exact saved file. A distinct safety-only
+successor introduces immutable `private_raw_inputs(input_id, session_file,
+status='unknown')` in the SAME durable selected journal. The verified PR94
+isolated writer registers this exact-session marker **with COMMIT and parent
+fsync BEFORE `os.write`**, then rechecks the marker and selected/native rows
+under journal BEGIN IMMEDIATE through the bytes. If the marker fsync is UNKNOWN,
+no raw write is attempted and the reserved PR94 input is not replayed; a
+visible marker remains a selected reservation blocker. Crash before write and
+after fake local write before result also leave the marker after reopen.
+Ordinary subsequent PR94 raw input IDs may proceed on the same session, and
+other sessions remain independent. Marker rows are **never cleared** by a raw
+ACK, fake result, or terminal-looking row; exact child retirement/native
+input-ID settlement is not yet available as a reviewed clearance authority.
+
+Pre-install PR94 saved sessions can lack markers despite old raw/UNKNOWN input.
+An exact-`8d1bcd8` disposable provider-free baseline **wrongly allowed** an old
+private saved session with no marker; the successor denies it
+(`/dev/shm/pr95-private-legacy-floor-probe.py`, SHA256
+`769a8cda39ae26d6b1bed3660db039496084b5938f2149818f88552663eacd3b`;
+before/after logs `/var/tmp/pr95-private-legacy-floor-{before,after}.log`).
+Therefore `reserve_selected_summary` now refuses **all canonical private
+`root/native-sessions/**` paths** before any selected side effect: there is no
+trusted new-session epoch/coverage issuer and no guessed backfill. Existing
+pre-floor selected rows still block raw write. Alias/symlink path resolution,
+old-import no-marker denial, post-COMMIT parent-fsync UNKNOWN, and crash/reopen
+controls are provider-free. Bounded serial split suites: PR94 runtime/raw
+**104 passed, 1 pinned-Pi-import test deselected**
+(`/var/tmp/pr95-private-reverse-runtime.log`), selected journal **27 passed**
+(`/var/tmp/pr95-private-reverse-journal-only.log`), admission/guardian **43
+passed** (`/var/tmp/pr95-private-reverse-admission.log`), adjacent ACP/private
+bus **120 passed** and send/private N/K **28 passed**
+(`/var/tmp/pr95-private-reverse-adjacent-core.log`,
+`/var/tmp/pr95-private-reverse-adjacent-tail.log`). A final exact negative
+subset **11 passed** (`/var/tmp/pr95-private-reverse-marker-negative.log`, SHA256
+`b39ea8c15f48d3b13805f46b7f143d3acb036ee369f32d9629ae4b1ebcd452bd`).
+A larger monolithic run stalled and was stopped at its hard bound; split runs
+passed and cannot be represented as a single full-suite pass. This safety successor is NOT usable
+positive selected compaction on private sessions; separately reviewed exact
+file dev/ino + owner/new-session epoch migration/coverage and authenticated
+terminal settlement/reap must precede opt-in. Fresh exact-head review remains
+mandatory; no provider spend/live input/activation.
 
 ## Normal PR104/105 main integration and socket incarnation (combined review pending)
 
