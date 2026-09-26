@@ -6,6 +6,7 @@ acceptance and final post-merge review; no fake can establish Pi model authority
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -112,10 +113,12 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         session_file=None,
         **_kwargs,
     ):
-        # Fake boundary models only adapter scope; real write/drain coverage
-        # lives in native adapter tests.
-        with _kwargs["prompt_send_boundary"]():
-            calls.append((input_id, prompt))
+        # Model only admission in its dedicated thread, not native receipt.
+        def admitted():
+            with _kwargs["prompt_send_boundary"]():
+                calls.append((input_id, prompt))
+
+        await asyncio.to_thread(admitted)
         if fail_on == len(calls):
             raise NativePiUnavailable("fake backend process died")
         if session_file is None:

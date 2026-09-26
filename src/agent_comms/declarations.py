@@ -211,8 +211,8 @@ def _verify_claim_bus_before_read_unlocked(bus_path: Path) -> None:
 
 
 @contextmanager
-def _store_lock(store_path: Path) -> Iterator[None]:
-    """Hold an exclusive process lock associated with a wire store."""
+def _store_lock(store_path: Path, *, blocking: bool = True) -> Iterator[None]:
+    """Hold a canonical store lock; nonblocking callers fail before contention waits."""
     store_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = store_path.with_name(f".{store_path.name}.lock")
     with open(lock_path, "a+b") as lock_file:
@@ -229,13 +229,13 @@ def _store_lock(store_path: Path) -> Iterator[None]:
                     )
                     break
                 except OSError as error:
-                    if error.errno not in {errno.EACCES, errno.EDEADLK}:
+                    if not blocking or error.errno not in {errno.EACCES, errno.EDEADLK}:
                         raise
                     time.sleep(0.01)
         else:
             import fcntl
 
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
         try:
             _verify_claim_bus_before_read_unlocked(store_path)
             yield

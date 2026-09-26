@@ -26,22 +26,28 @@ The following is partial implementation evidence, not closure or approval.
 
 | Gap | Now provided |
 | --- | --- |
-| "No versioned prelaunch source/claim/stage/input/prompt digest binding exists yet" | `native_prompt_binding.py`: versioned sidecar store writes `expected_prompt_digest` (sha256 of the native `pi-input-request-v1` JSON request envelope) bound to source seq/message, sealed claim, stage, input ID, and owner incarnation **before Pi launch**. Digest is cross-checked against a compiled native method. Binding insertion holds the coordination transaction. A separate one-use callback now holds wire/bus/registry/coordination exclusions at the adapter's actual prompt write/drain |
+| "No versioned prelaunch source/claim/stage/input/prompt digest binding exists yet" | `native_prompt_binding.py`: versioned sidecar store writes `expected_prompt_digest` (sha256 of the native `pi-input-request-v1` JSON request envelope) bound to source seq/message, sealed claim, stage, input ID, and owner incarnation **before Pi launch**. Digest is cross-checked against a compiled native method. Binding insertion holds the coordination transaction. A separate one-use callback holds wire/bus/registry/coordination exclusions at actual raw-pipe prompt writes on an isolated writer thread |
 | Crash/UNKNOWN ordering untested for that binding | Binding commits after reservation and before launch; crash anywhere before launch leaves the input unprovable; tests cover owner-change between reserve and bind, launch failure after bind, digest mismatch, and immutable bindings |
 | Historical evidence could not establish expected-prompt equality | `read_historical_native_inputs` joins the immutable binding to the private journal's durable `inputDigest` and sets `expected_prompt_equality_established` only on exact match; identity mismatch fails closed |
 
 ## Still open (unchanged by this slice)
 
-- **Owner/generation fence through actual native send: implemented, review pending.**
-  The adapter invokes a one-use scope at prompt write/drain; it checks registry
-  incarnation/turn, SQL generation, reserved input identity/token, claim state,
-  full-attempt fence and exact binding. Scope uses existing wire→bus→registry→SQL
-  lock order. Deterministic subprocess lock probes verify all four exclusions
-  at both write and drain; revoked owners send no prompt bytes (triage and FULL).
-  Parent `test_parent_binding_owner_race.py` now passes unchanged. Focused
-  adapter/binding/runtime/foreground suite: 93 passed, 5 existing native-artifact
-  skips. No fake stream or lock probe establishes native acceptance or provider receipt.
-  Sidecar hardening below is still required for the combined boundary.
+- **Owner/generation fence through actual native send: successor review pending.**
+  Independent review rejected `96b71e0` (also present at `3a22119`): synchronous
+  admission held across `await stdin.drain()` deadlocked when an ordinary
+  same-loop lifecycle callback waited for that registry lock. Green subprocess
+  exclusion tests did not prove event-loop liveness. The successor uses a
+  dedicated raw writer thread, thread-local SQL connection and nonblocking
+  canonical wire/bus/registry/SQL/sidecar admission. Every `os.write` is inside
+  the scope; no StreamWriter prompt buffer can flush after release. A monotonic
+  writer deadline capped at five seconds progresses independently of the owner
+  loop. Partial/error/cancelled sends stay UNKNOWN/unreplayable; cancellation
+  joins the writer and shields child reap from repeated cancellation.
+  Twelve focused admission tests include real pipe backpressure, synchronous
+  same-loop unregister, send timeout, repeated cancellation, suspended preflight
+  drain, real child reaping, subprocess exclusions and stale-owner refusal.
+  See `docs/native_prompt_send_admission.md`. This proves neither native
+  acceptance nor provider receipt; full N/K/write admission remains incomplete.
 - **Private sidecar safety/durability: implemented, review pending.** SQLite now
   opens only `:memory:` and deserializes bytes from a pinned no-follow regular,
   owner-only, single-link file descriptor. It never reopens the pathname for SQL.

@@ -15,11 +15,13 @@ import re
 import signal
 import stat
 from collections.abc import Callable
-from contextlib import AbstractContextManager, nullcontext, suppress
+from contextlib import AbstractContextManager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
 
 CAPABILITY = "pi-native-input-v1-live-only"
 _INPUT_ID = re.compile(r"[0-9a-f]{32}\Z")
@@ -558,8 +560,11 @@ async def run_native_pi_turn(
         return event
 
     async def send(command: dict[str, Any]) -> None:
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise NativePiUnavailable("Native Pi send deadline expired")
         stdin.write((json.dumps(command, separators=(",", ":")) + "\n").encode())
-        await stdin.drain()
+        await asyncio.wait_for(stdin.drain(), timeout=remaining)
 
     try:
         await send({"type": "get_state", "id": "native-capability"})
@@ -584,11 +589,18 @@ async def run_native_pi_turn(
                 raise NativePiUnavailable("Native Pi rebound its session")
             session_id = data["sessionId"]
             break
-        # The admission scope spans the real stdin write AND drain, not an
-        # earlier preflight or a post-send check. Failure is never retried.
-        with prompt_send_boundary() if prompt_send_boundary is not None else nullcontext():
-            await send(
-                {"type": "prompt", "id": "native-prompt", "inputId": input_id, "message": prompt}
+        command = {"type": "prompt", "id": "native-prompt", "inputId": input_id, "message": prompt}
+        if prompt_send_boundary is None:
+            await send(command)
+        else:
+            # A dedicated raw writer holds admission through every actual pipe
+            # write, independent of owner-loop lifecycle callbacks and drain.
+            # There is no buffered prompt remainder to flush after revocation.
+            await send_fenced_prompt(
+                stdin,
+                (json.dumps(command, separators=(",", ":")) + "\n").encode(),
+                prompt_send_boundary,
+                timeout=deadline - asyncio.get_running_loop().time(),
             )
         accepted = False
         input_event: dict[str, Any] | None = None
@@ -654,38 +666,52 @@ async def run_native_pi_turn(
             raise NativePiUnavailable("Native Pi has no unique authoritative completed response")
         proof = _verify_context(actual_file, input_id, session_id, input_event, contexts[-1])
         return NativeTurnResult(final_messages[0].strip(), proof)
+    except PromptSendUnknown as error:
+        raise NativePiUnavailable("Native Pi prompt send is UNKNOWN; no retry") from error
     except (TimeoutError, OSError) as error:
-        raise NativePiUnavailable("Native Pi tracked turn failed") from error
+        raise NativePiUnavailable("Native Pi tracked turn failed; send may be UNKNOWN") from error
     finally:
-        stdin.close()
-        if process.returncode is None:
-            try:
-                if os.name == "posix":
-                    os.killpg(process.pid, signal.SIGTERM)
-                else:
-                    process.terminate()
-            except PermissionError:
-                # A just-exited child may no longer own its process group on
-                # macOS while asyncio has not observed its return code yet.
-                # Signal the exact child as a fallback, then reap it below.
-                with suppress(ProcessLookupError):
-                    process.terminate()
-            except ProcessLookupError:
-                pass
-        try:
-            await asyncio.wait_for(process.wait(), timeout=3)
-        except TimeoutError:
+
+        async def cleanup() -> None:
+            stdin.close()
             if process.returncode is None:
                 try:
                     if os.name == "posix":
-                        os.killpg(process.pid, signal.SIGKILL)
+                        os.killpg(process.pid, signal.SIGTERM)
                     else:
-                        process.kill()
+                        process.terminate()
                 except PermissionError:
+                    # A just-exited macOS child may have lost its process group.
                     with suppress(ProcessLookupError):
-                        process.kill()
+                        process.terminate()
                 except ProcessLookupError:
                     pass
-            await process.wait()
-        stderr_task.cancel()
-        await asyncio.gather(stderr_task, return_exceptions=True)
+            try:
+                await asyncio.wait_for(process.wait(), timeout=3)
+            except TimeoutError:
+                if process.returncode is None:
+                    try:
+                        if os.name == "posix":
+                            os.killpg(process.pid, signal.SIGKILL)
+                        else:
+                            process.kill()
+                    except PermissionError:
+                        with suppress(ProcessLookupError):
+                            process.kill()
+                    except ProcessLookupError:
+                        pass
+                await process.wait()
+            stderr_task.cancel()
+            await asyncio.gather(stderr_task, return_exceptions=True)
+
+        # Repeated caller cancellation must not abandon the child or its reader.
+        cleanup_task = asyncio.create_task(cleanup())
+        cancelled_during_cleanup = False
+        while not cleanup_task.done():
+            try:
+                await asyncio.shield(cleanup_task)
+            except asyncio.CancelledError:
+                cancelled_during_cleanup = True
+        cleanup_task.result()
+        if cancelled_during_cleanup:
+            raise asyncio.CancelledError

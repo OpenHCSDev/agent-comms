@@ -9,10 +9,12 @@ journal, no legacy cursor ACK, no monitor/SILENT, no automatic resend.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
 import secrets
+import threading
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
@@ -136,19 +138,30 @@ def _native_send_boundary(
 ) -> Callable[[], AbstractContextManager[None]]:
     """One-use final-send admission, with wire→bus→registry→SQL lock order.
 
-    Called by the native adapter only at its actual prompt write/drain. The
-    reservation already forbids recovery/retry; this closure additionally
+    Entered only by the native adapter's isolated raw-pipe writer (never an
+    event loop). The reservation already forbids recovery/retry; this closure additionally
     forbids a second use within this process, including a failed admission.
     """
-    attempted = False
+    once = threading.Lock()
+    store_path = store.path
 
     @contextmanager
     def boundary() -> Iterator[None]:
-        nonlocal attempted
-        if attempted:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            raise IdentityConflict("native send admission requires the isolated raw writer")
+        if not once.acquire(blocking=False):
             raise IdentityConflict("native send admission cannot be reused")
-        attempted = True
-        with _response_boundary(bus) as registry, store._transaction() as db:
+        # Never share a SQLite connection across threads, and never wait for
+        # flock/SQLite/sidecar contention while an owner event loop may wait on us.
+        with (
+            MutationStore(str(store_path), lock_timeout=0) as store,
+            _response_boundary(bus, blocking=False) as registry,
+            store._transaction() as db,
+        ):
             actual = registry.threads.get(owner.name)
             status = registry.statuses.get(owner.name)
             if (
@@ -224,7 +237,7 @@ def _native_send_boundary(
                     or attempt.process_dead
                 ):
                     raise StaleFence("full execution is not running before native send")
-            binding = read_expected_prompt_binding(store, input_id)
+            binding = read_expected_prompt_binding(store, input_id, blocking=False)
             if binding is None or (
                 binding.stage,
                 binding.claim_id,
@@ -251,7 +264,8 @@ def _native_send_boundary(
                 ordinal,
             ):
                 raise IdentityConflict("native send differs from its durable prompt binding")
-            # All exclusions remain held until the adapter finishes its write/drain.
+            # All exclusions remain held through the writer's final os.write.
+            # No event-loop transport buffer may own any of these prompt bytes.
             yield
 
     return boundary

@@ -5,6 +5,7 @@ Fake native Pi only; real provider acceptance stays with the pinned executor.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -135,8 +136,11 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
     calls: list[tuple[str, str]] = []
 
     async def fake(package, *, input_id, prompt, worktree, session_dir, session_file=None, **_):
-        with _["prompt_send_boundary"]():
-            calls.append((input_id, prompt))
+        def admitted():
+            with _["prompt_send_boundary"]():
+                calls.append((input_id, prompt))
+
+        await asyncio.to_thread(admitted)
         if session_file is None:
             session_file = session_dir / "one.jsonl"
             entries = [{"type": "session", "id": "isolated-session"}]

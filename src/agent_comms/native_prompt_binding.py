@@ -262,14 +262,16 @@ def _binding_wire_root(store: MutationStore, claim: WakeClaim) -> str:
     return resolved
 
 
-def read_expected_prompt_binding(store: MutationStore, input_id: str) -> PromptBinding | None:
+def read_expected_prompt_binding(
+    store: MutationStore, input_id: str, *, blocking: bool = True
+) -> PromptBinding | None:
     """Return the immutable binding, or None when none was durably written."""
     if type(store) is not MutationStore or type(input_id) is not str:
         raise ValueError("prompt binding lookup requires the coordinator store and input ID")
     path = binding_store_path(store)
     if not path.exists() and not path.is_symlink():
         return None
-    with sidecar_connection(path, _DDL, _DDL_DIGEST) as db:
+    with sidecar_connection(path, _DDL, _DDL_DIGEST, blocking=blocking) as db:
         binding = db.execute(
             "SELECT * FROM prompt_bindings WHERE input_id=?", (input_id,)
         ).fetchone()

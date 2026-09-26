@@ -242,8 +242,10 @@ def _attempt(row: sqlite3.Row) -> AttemptRecord:
 class MutationStore(CoordinationStore):
     """Single-writer transactions over Slice-1's frozen private schema."""
 
-    def __init__(self, path: str, *, clock_ms: Callable[[], int] | None = None) -> None:
-        super().__init__(path)
+    def __init__(
+        self, path: str, *, clock_ms: Callable[[], int] | None = None, lock_timeout: float = 5.0
+    ) -> None:
+        super().__init__(path, lock_timeout=lock_timeout)
         self._clock_ms = clock_ms or (lambda: time.time_ns() // 1_000_000)
 
     def _now(self, floor: int = 0) -> int:
