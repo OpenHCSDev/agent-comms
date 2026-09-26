@@ -11,7 +11,11 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms.bus_publication import stable_thread_lookup
-from agent_comms.claim_admission import publish_selected_resource_claim, verify_selected_wake
+from agent_comms.claim_admission import (
+    publish_selected_resource_claim,
+    verify_selected_wake,
+    write_selected_claimed_file,
+)
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordinated_runtime import _engage
 from agent_comms.coordination import AttemptPhase, ClaimDisposition
@@ -120,6 +124,20 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 == selected_owner
             )
             assert len(comms.full_history()) == 2
+            write_selected_claimed_file(
+                comms, store, admission, "Alice", selected_owner, b"value = 2\n"
+            )
+            assert resource.read_bytes() == b"value = 2\n"
+            with pytest.raises(IdentityConflict):
+                write_selected_claimed_file(
+                    comms,
+                    store,
+                    admission,
+                    "Alice",
+                    replace(selected_owner, generation="0" * 32),
+                    b"forged\n",
+                )
+            assert resource.read_bytes() == b"value = 2\n"
             foreign_root = Path(dirname) / "foreign"
             foreign_root.mkdir(mode=0o700)
             with MutationStore(str(foreign_root / "coordination.sqlite3")) as foreign:
@@ -148,6 +166,11 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             )
             with pytest.raises(IdentityConflict):
                 verify_selected_wake(comms, store, admission, "Alice")
+            with pytest.raises(IdentityConflict):
+                write_selected_claimed_file(
+                    comms, store, admission, "Alice", selected_owner, b"after settlement\n"
+                )
+            assert resource.read_bytes() == b"value = 2\n"
             with pytest.raises(IdentityConflict):
                 publish_selected_resource_claim(
                     comms,
