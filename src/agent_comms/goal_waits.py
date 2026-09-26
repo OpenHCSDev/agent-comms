@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
@@ -28,6 +29,10 @@ class GoalWait:
     owner_created_at: float | None = None
     # Positional with targets. Legacy waits cannot attest a terminal callback.
     target_turn_generations: tuple[int | None, ...] = ()
+    # The exact owner turn that reported this wait. Older unbound rows cannot
+    # prove that a later active turn is merely continuing the wait report.
+    report_turn_id: str | None = None
+    report_turn_generation: int | None = None
 
     def matches(self, message: Message, snapshot: RegistrySnapshot) -> bool:
         sender = snapshot.threads.get(snapshot.aliases.get(message.sender, message.sender))
@@ -102,6 +107,8 @@ class GoalWaits:
                 targets=tuple(GoalWaitTarget(**target) for target in row["targets"]),
                 owner_created_at=row.get("owner_created_at"),
                 target_turn_generations=tuple(row.get("target_turn_generations", ())),
+                report_turn_id=row.get("report_turn_id"),
+                report_turn_generation=row.get("report_turn_generation"),
             )
             for key, row in data.items()
         }
@@ -147,6 +154,80 @@ class GoalWaits:
             and status.running
             and thread.active_turn is not None
         )
+
+    @staticmethod
+    def closed_wait_group(
+        owner: str,
+        targets: tuple[GoalWaitTarget, ...],
+        rows: dict[str, GoalWait],
+        snapshot: RegistrySnapshot,
+        process_alive: Callable[[int], bool],
+    ) -> tuple[str, ...]:
+        """Find waits with no path to a live active turn outside the wait graph.
+
+        A dependency list wakes on any qualifying reply. One independent
+        target is therefore enough to keep a group runnable, even if another
+        branch contains a cycle. Call this under the wire lock before recording
+        the proposed wait so concurrent standby reports cannot both pass.
+        """
+        pending = [owner]
+        seen: set[str] = set()
+        while pending:
+            name = pending.pop()
+            if name in seen:
+                continue
+            seen.add(name)
+            thread = snapshot.threads[name]
+            goal = thread.goal
+            wait = rows.get(goal.id) if goal is not None and goal.active else None
+            if wait is not None and (
+                goal is None
+                or wait.owner_created_at not in (None, thread.created_at)
+                or wait.revision > goal.revision
+            ):
+                wait = None
+            dependencies = (
+                targets
+                if name == owner
+                else (
+                    wait.targets
+                    if wait is not None and wait.owner_created_at in (None, thread.created_at)
+                    else ()
+                )
+            )
+            for target in dependencies:
+                canonical = snapshot.aliases.get(target.name, target.name)
+                peer = snapshot.threads.get(canonical)
+                if peer is None or peer.created_at != target.created_at:
+                    continue
+                if canonical == owner:
+                    pending.append(owner)
+                    continue
+                peer_goal = peer.goal
+                peer_wait = (
+                    rows.get(peer_goal.id) if peer_goal is not None and peer_goal.active else None
+                )
+                if peer_wait is not None and (
+                    peer_goal is None
+                    or peer_wait.owner_created_at not in (None, peer.created_at)
+                    or peer_wait.revision > peer_goal.revision
+                ):
+                    peer_wait = None
+                if GoalWaits.target_has_active_turn(target, snapshot) and process_alive(peer.pid):
+                    # A persisted wait does not make a *new* live owner turn
+                    # part of the old wait graph. It may send the reply before
+                    # its turn finishes. Legacy unbound waits remain open here.
+                    current_turn = peer.active_turn
+                    if (
+                        peer_wait is None
+                        or current_turn is None
+                        or peer_wait.report_turn_id != current_turn.id
+                        or peer_wait.report_turn_generation != peer.turn_generation
+                    ):
+                        return ()
+                if peer_wait is not None:
+                    pending.append(canonical)
+        return tuple(sorted(seen))
 
     @staticmethod
     def execution(

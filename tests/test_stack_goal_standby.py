@@ -192,10 +192,14 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             )
             goal_id = goal.id
             if review_pending:
+                # Stage unresolved inputs without allowing an unrelated direct
+                # message to start a turn before the goal wake under test.
+                agent._auto_wake = False
                 for index in range(5):
                     early = comms.send_message("child", "parent", f"WAIT_INSTRUCTION_{index}")
                     pending_keys.append(f"bus:{early.seq}")
                 await agent._drain_inbox("parent")
+                agent._auto_wake = True
                 admission = comms.registry.snapshot().admission_generations["parent"]
                 for index in range(4):
                     agent._dispositions.record(
