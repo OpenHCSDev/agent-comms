@@ -4,6 +4,8 @@ An enabled record does not constrain a process that imported older code. Externa
 old-client exclusion and a Toad ingress pause are required before live use.
 The enabled witness is written before the state and never removed; a lost or
 corrupt state therefore denies admission instead of silently returning to OFF.
+An optional protected-reader prototype requires explicit configuration; it is
+NOT wired into workers or an authenticated operator/control plane.
 """
 
 from __future__ import annotations
@@ -36,11 +38,16 @@ class MaintenanceBarrier:
     future separately protected control plane may write phase witnesses.
     """
 
-    def __init__(self, registry_path: Path):
+    def __init__(self, registry_path: Path, *, protected_config_path: Path | None = None):
         self.registry_path = Path(registry_path)
         self.wire_path = self.registry_path.parent / "wire"
         self.marker_path = self.registry_path.parent / ".maintenance-enabled"
         self.state_path = self.registry_path.parent / ".maintenance-state"
+        # Prototype only: callers must be migrated together by a separately
+        # reviewed root-owned deployment. Never select this via a worker env var.
+        self.protected_config_path = (
+            Path(protected_config_path) if protected_config_path is not None else None
+        )
 
     @staticmethod
     def _read(path: Path) -> dict[str, object] | None:
@@ -79,6 +86,12 @@ class MaintenanceBarrier:
         the registry lock spans the turn's durable transition. A phase change
         takes both locks in wire -> registry order.
         """
+        if self.protected_config_path is not None:
+            from .protected_maintenance_reader import read_protected
+
+            return MaintenanceReceipt(
+                *read_protected(self.registry_path, self.protected_config_path)
+            )
         marker = self._read(self.marker_path)
         state = self._read(self.state_path)
         if marker is None and state is None:
