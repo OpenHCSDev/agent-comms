@@ -112,8 +112,10 @@ review, and persistent runtime manager error/reopen semantics remain open.
   intentionally conservative (unrelated traffic can decline a candidate).
 - Couple result publication through a durable keyed outcome/outbox rather than
   replaying native mutation. Ingress exclusion is not publication coupling.
-- Verify all native writer paths and transitive package provenance during
-  deployment; the dormant per-entry patch is not yet applied by preparation.
+- Independently review native writer coverage and complete-package provenance.
+  Canonical preparation now applies the production patch chain and checks the
+  complete tree; see `native-package-provenance.md`. Safe rollout must still
+  retire old unfenced/idle managers before any adaptive activation.
 - Extend deterministic race tests to raw bus sends, ACP queued/steered inputs,
   every lifecycle writer, and idle persistent-session invalidation.
 

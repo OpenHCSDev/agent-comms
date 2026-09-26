@@ -10,4 +10,9 @@ if [[ ! -f "$cli" ]]; then
     printf 'Native Pi is unavailable; run %s/bin/prepare-pi-native first.\n' "$stack_root" >&2
     exit 1
 fi
-exec node "$cli" "$@"
+# Drop inherited preloads (including the old external project bootstrap). The
+# managed-project override is now copied inside the verified package instead.
+unset NODE_OPTIONS NODE_PATH
+python3 "$stack_root/../src/agent_comms/native_package.py" "${cli%/dist/cli.js}"
+exec node --no-global-search-paths \
+    --import "${cli%/cli.js}/agent-comms-project-bootstrap.mjs" "$cli" "$@"

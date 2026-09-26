@@ -74,6 +74,20 @@ def entries(witness):
     return [json.loads(line) for line in Path(witness["sessionFile"]).read_text().splitlines()]
 
 
+def test_compaction_child_cannot_inherit_node_preload(native, tmp_path, monkeypatch):
+    bridge, owner, epoch, witness = native
+    marker = tmp_path / "untrusted-preload-executed"
+    preload = tmp_path / "untrusted-loader.mjs"
+    preload.write_text(
+        "import {writeFileSync} from 'node:fs';"
+        f"writeFileSync({json.dumps(str(marker))}, 'executed');process.exit(29);"
+    )
+    monkeypatch.setenv("NODE_OPTIONS", f"--import={preload.as_uri()}")
+    operation = bridge.commit(owner, epoch, witness, "isolated native mutation", 42)
+    assert operation.status == "committed"
+    assert not marker.exists()
+
+
 async def test_active_backend_executor_refuses_before_intent_or_dispatch(native):
     bridge, owner, epoch, witness = native
     before = Path(witness["sessionFile"]).read_bytes()

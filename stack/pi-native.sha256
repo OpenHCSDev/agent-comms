@@ -1,7 +1,7 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
 d8184d801d79e167eedaf69b43fb8df614656a4030bf458e2da52486ab51cdae  dist/core/agent-session.js
 4489eb330033f16d3f37a248b8e421154978153e148fbb0b14073e5ac96eeb9d  dist/core/compaction/compaction.js
-dd75fef58eaa5458a91cff9fe1cf70556ebc720afd98720eae3dcb6572cb63ca  dist/core/session-manager.js
+41a94b3777ac0ec322f649e3e234836893b8de86085f55a927ce29216205c28f  dist/core/session-manager.js
 bd6dfca7b14cad4023c5ab56a7fc91bef3db9670c96b6ad7625df16353b42e5a  dist/modes/rpc/rpc-mode.js
 fced5349c36bc329acf9ed5fe1d8ba63fe29e455e23ac3926a96bd025a9d999c  dist/core/agent-session.d.ts
 41f7ac2e6d204e295d635542db513f0d1f1d85228beabae3bb8d08b05e1b1f00  dist/core/session-manager.d.ts
@@ -13,3 +13,4 @@ e6003ded7cd11fc8bfd01e4f48cd3d5a19338b64c2e1febe81d0659c31013c11  node_modules/@
 ae6d784ad8a63299720ecd3628a8c162becee22791208f569723994d709475c5  node_modules/@earendil-works/pi-ai/dist/types.d.ts
 13d6fec97d08f4303714aca50f3113ba0263706e961fc220ccb1cc023c520e6b  node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
 981cf215591ab156d407e01f9634c511c2eebab2f6b68c95dd68b5c22ef0d8a1  dist/core/compaction/agent-comms-policy.js
+# agent-comms-native-tree-v1 4a688172768342c219b48681587b3c8f20eb80db6732aa2fcea0fe5ed858c27d

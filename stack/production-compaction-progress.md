@@ -81,7 +81,8 @@ requires an inherited FD with matching stat identity and parent PID. **These
 lineage checks do not independently prove a flock is held**; correctness relies
 on the trusted Python launch path. They are not a new public RPC authorization
 protocol or proof against arbitrary same-UID code execution. The bridge pins
-SessionManager bytes, not yet the entire transitive package/deployment manifest.
+SessionManager bytes at this initial checkpoint. The later complete-package
+checkpoint below replaces that weaker bridge-only pin.
 
 Additional provider-free reproduction:
 
@@ -155,8 +156,37 @@ manual/parallel compaction, input recovery and adaptive-contract scripts pass.
 The two older summary fixtures now accept `PI_NATIVE_PACKAGE_DIR`, avoiding any
 need to populate an installed/canonical package path for tests. Main-integrated
 Python authority/journal/ingress regression suite: **200 passed, 1 skipped**.
-Logs: `/var/tmp/pr48-allwriter-*.log`. Full-package provenance/preparation and
-runtime integration are still unfinished; no installed package was changed.
+Logs: `/var/tmp/pr48-allwriter-*.log`. This checkpoint preceded the complete-tree
+preparation below; runtime integration remained unfinished and no installed
+package was changed.
+
+## Complete-package preparation and packaged bridge resources
+
+Canonical preparation code now applies all three native successor patches and
+verifies the entire dependency tree. The CLI wrapper verifies it again before
+launch; the bridge checks before journal creation and before each native call.
+A single full-tree commitment in `pi-native.sha256` replaces the manager-only
+bridge pin. Build identity is `d45562f846a0afa3`, tree SHA `4a688172…`.
+Preparation materializes only internal regular-file npm aliases as independent
+copies, preventing symlink/hardlink patch escape into stock. Node ambient loader
+options are removed; the managed-project bootstrap is preserved inside the
+verified native package. The helper uses non-forking `env` → Node exec, retaining
+the exact watchdog PID and inherited exclusions.
+
+Wheel builds include the canonical manifest and Node helper as package data;
+installed code never guesses a neighboring source checkout for these resources.
+An offline sdist → wheel build and **51 passing** extracted-wheel package/native
+integration tests cover this path, without installing anything. The source-tree
+provenance/authority/journal/ingress suite passes **227 tests, 1 skipped**. Canonical preparation was also
+run twice in a disposable repository, with actual CLI `--version` and all native
+scripts. Unlisted dependency drift blocks both launch and re-preparation, and
+ambient malicious Node preload tests prove no marker execution.
+
+Details and trust/rollout limits: `native-package-provenance.md`. Independent
+CLEAN of prior durability/watchdog defects is limited to `5f50fe7`/`90c4d57`;
+new writer/provenance bytes still require review. Current main `3e1813e` was
+normally merged at `409349c`. Broader backend tests have 11 identical failures
+also reproduced on archived main; those are not silently counted as passing.
 
 ## Still required before activation
 
@@ -169,7 +199,7 @@ runtime integration are still unfinished; no installed package was changed.
    entrypoint, plus send/publication coupling (the authority lock alone does
    not make split transactions atomic).
 
-Then canonical all-writer deployment, operator recovery, real adaptive/ACP
-integration, and isolated end-to-end tests remain. The independent hard-context
+Then safe rollout/retirement of old native writers, operator recovery, real
+adaptive/ACP integration, and isolated end-to-end tests remain. The independent hard-context
 backstop is unchanged. No installed-package edits, provider calls, or live
 activation have occurred. Independent review is mandatory before merge.

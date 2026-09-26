@@ -27,6 +27,7 @@ from .declarations import (
     unique_wire_object,
 )
 from .input_disposition import InputDispositions
+from .native_package import COMPACTION_HELPER, verify_native_package
 from .owner_compaction_gate import OwnerCompactionAttestation
 from .owner_compaction_process import (
     CompactionTransportUnknownError,
@@ -34,8 +35,6 @@ from .owner_compaction_process import (
     run_authority_child,
 )
 from .session_fence import idle_session_writer_fence
-
-NATIVE_MANAGER_SHA256 = "41a94b3777ac0ec322f649e3e234836893b8de86085f55a927ce29216205c28f"
 
 
 @dataclass(frozen=True)
@@ -61,21 +60,21 @@ class OwnerCompactionCommit:
         self.root = registry_path.parent.resolve(strict=True)
         self.registry = ThreadRegistry(registry_path)
         self.inputs = InputDispositions(self.root)
-        self.journal = CompactionJournal(registry_path.with_name("compaction-commits.sqlite3"))
         self.package_dir = package_dir.resolve(strict=True)
-        self.helper = (
-            Path(__file__).resolve().parents[2] / "stack/native-compaction-commit-child.mjs"
-        )
+        self.helper = COMPACTION_HELPER
         node = shutil.which("node")
         if node is None:
             raise ValueError("Node executable unavailable")
         self.node = node
+        environment_launcher = shutil.which("env")
+        if environment_launcher is None:
+            raise ValueError("Isolated native environment launcher unavailable")
+        self.environment_launcher = environment_launcher
         self._verify_native()
+        self.journal = CompactionJournal(registry_path.with_name("compaction-commits.sqlite3"))
 
     def _verify_native(self) -> None:
-        manager = self.package_dir / "dist/core/session-manager.js"
-        if hashlib.sha256(manager.read_bytes()).hexdigest() != NATIVE_MANAGER_SHA256:
-            raise ValueError("Expected pinned native commit/reconciliation artifact")
+        verify_native_package(self.package_dir)
         if not self.helper.is_file():
             raise ValueError("Trusted compaction helper unavailable")
 
@@ -200,7 +199,18 @@ class OwnerCompactionCommit:
             ),
         )
         result = run_authority_child(
-            [self.node, str(self.helper), str(self.package_dir), str(fd)],
+            [
+                self.environment_launcher,
+                "-u",
+                "NODE_OPTIONS",
+                "-u",
+                "NODE_PATH",
+                self.node,
+                "--no-global-search-paths",
+                str(self.helper),
+                str(self.package_dir),
+                str(fd),
+            ],
             json.dumps(request, ensure_ascii=False, allow_nan=False).encode(),
             authority_fd=fd,
             timeout=timeout,
