@@ -344,6 +344,70 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
     assert comms.bus.dm_history("sender", "beta")[-1].target == "sender"
 
 
+async def test_slow_optional_awareness_omits_without_blocking_selected_original(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    root, root_id, _comms, _initial, _people = _root(tmp_path, direct=True)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    runner, calls = _fake_model()
+    monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
+    release = threading.Event()
+    entered = threading.Event()
+
+    def stalled_builder(_initial, _claim, _owner):
+        entered.set()
+        release.wait(timeout=5)
+        return runtime.OptionalAwarenessSupplement("late context must not appear", True)
+
+    try:
+        outcome = await run_one_sealed_claim(
+            root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=tmp_path,
+            optional_awareness_builder=stalled_builder,
+        )
+    finally:
+        release.set()
+    assert entered.is_set()
+    assert outcome is not None and outcome.response_message_id
+    assert len(calls) == 1 and "late context must not appear" not in calls[0][1]
+    assert "Optional awareness omitted; original delivered alone" in caplog.text
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        assert (
+            store._connection.execute(
+                "SELECT COUNT(*) FROM native_runtime_inputs WHERE claim_id=?",
+                (outcome.claim_id,),
+            ).fetchone()[0]
+            == 1
+        )
+
+
+@pytest.mark.parametrize("kind", ["complete", "incomplete", "oversize"])
+async def test_optional_awareness_requires_complete_binding_and_prompt_budget(
+    tmp_path: Path, monkeypatch, kind: str
+) -> None:
+    root, root_id, _comms, _initial, _people = _root(tmp_path, direct=True)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    runner, calls = _fake_model()
+    monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
+    outcome = await run_one_sealed_claim(
+        root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=tmp_path,
+        optional_awareness_builder=lambda *_: runtime.OptionalAwarenessSupplement(
+            "x" * 32768 if kind == "oversize" else "bounded awareness",
+            kind != "incomplete",
+            omitted_count=2,
+        ),
+    )
+    assert outcome is not None and outcome.response_message_id
+    assert len(calls) == 1
+    assert ("bounded awareness" in calls[0][1]) is (kind == "complete")
+    assert ("Nonbinding rows omitted: 2" in calls[0][1]) is (kind == "complete")
+
+
 async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
     tmp_path: Path, monkeypatch
 ) -> None:
