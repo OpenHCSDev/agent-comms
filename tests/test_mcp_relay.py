@@ -20,6 +20,42 @@ from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable stub")
 
 
+async def test_live_projection_requires_owning_acp_turn_and_session(tmp_path):
+    owner = CommsAgent(wire(tmp_path / "wire"), auto_wake=False)
+    updates = []
+
+    class Observer:
+        async def session_update(self, **kwargs):
+            updates.append(kwargs)
+
+    observer = Observer()
+    receipt = {"inputId": "a" * 32}  # Backend validation is tested separately.
+    event = {"type": "mcp_live_status", "receipt": receipt, "turn_id": "turn-1"}
+    try:
+        owner._active_turns["session-1"] = "turn-1"
+        await owner._emit_event("session-1", event, observer)
+        assert len(updates) == 1
+        assert updates[0]["session_id"] == "session-1"
+        meta = updates[0]["update"].model_dump(by_alias=True)["_meta"]["agentComms"]
+        assert meta == {"turnId": "turn-1", "mcpClient": receipt}
+        owner._active_turns.pop("session-1")  # Settled: no receipt may escape.
+        await owner._emit_event("session-1", event, observer)
+        owner._active_turns["session-1"] = "turn-2"
+        # A stale receipt arriving FIRST in a successor turn still loses.
+        await owner._emit_event("session-1", event, observer)
+        await owner._emit_event("session-2", event, observer)
+        await owner._emit_event("session-1", {**event, "turn_id": None}, observer)
+        assert len(updates) == 1
+        await owner._emit_event("session-1", {**event, "turn_id": "turn-2"}, observer)
+        assert len(updates) == 2
+        assert (
+            updates[-1]["update"].model_dump(by_alias=True)["_meta"]["agentComms"]["turnId"]
+            == "turn-2"
+        )
+    finally:
+        await owner.shutdown()
+
+
 def stub(tmp_path: Path, body: str) -> str:
     path = tmp_path / "pi-rpc-stub"
     path.write_text(f"#!{sys.executable}\n" + body)
@@ -504,6 +540,23 @@ input.on('line', async line => {{
             with pytest.raises(ProcessLookupError):
                 os.kill(pid, 0)
         rendered = [update.model_dump(by_alias=True, exclude_none=True) for update in updates]
+        active_turn = None
+        receipt_turns = []
+        for row in rendered:
+            meta = row.get("_meta", {}).get("agentComms", {})
+            if meta.get("turnStarted"):
+                assert active_turn is None
+                active_turn = meta["turnId"]
+            if "mcpClient" in meta:
+                assert active_turn is not None
+                assert meta["turnId"] == active_turn
+                assert active_turn not in receipt_turns  # Exactly once, before settlement.
+                receipt_turns.append(active_turn)
+            if meta.get("turnSettled"):
+                assert meta["turnId"] == active_turn
+                active_turn = None
+        assert active_turn is None
+        assert len(receipt_turns) == 2 and len(set(receipt_turns)) == 2
         receipts = [row.get("_meta", {}).get("agentComms", {}).get("mcpClient") for row in rendered]
         receipts = [receipt for receipt in receipts if receipt is not None]
         assert len(receipts) == 2

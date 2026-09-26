@@ -2879,12 +2879,18 @@ class CommsAgent:
                 ),
             )
         elif kind == "mcp_live_status":
+            # The native input ID belongs to Pi, not ACP. Carry the owning
+            # ACP turn separately so queued updates cannot attach to a later
+            # turn. session_update's session_id is the outer session fence.
+            turn_id = event.get("turn_id")
+            if not turn_id or self._active_turns.get(session_id) != turn_id:
+                return
             await client.session_update(
                 session_id=session_id,
                 update=AgentMessageChunk(
                     session_update="agent_message_chunk",
                     content=TextContentBlock(type="text", text=""),
-                    field_meta={"agentComms": {"mcpClient": event["receipt"]}},
+                    field_meta={"agentComms": {"turnId": turn_id, "mcpClient": event["receipt"]}},
                 ),
             )
         elif kind == "agent_info":
