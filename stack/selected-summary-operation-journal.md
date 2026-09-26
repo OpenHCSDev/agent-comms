@@ -104,14 +104,24 @@ adjacent native journal, dry-run and ACP input/goal regressions **71 passed**
 (`/var/tmp/pr95-selected-ack-correction-adjacent.log`, SHA256
 `21138219005db534f435fcbbc33300f915bdea864816a026e612321c245e096b`);
 Black/Ruff/mypy/diff checks pass (Black under Python 3.11 warns it cannot
-AST-verify configured 3.13 grammar). Independent exact `a6b6974` review is
-**SCOPED CLEAN** for the correction and default-OFF fake guardian integration
-(`/dev/shm/pr95-a6b-independent-4pXfAC/REVIEW.md`, SHA256
-`b6ef26cd50804d2e86b093d55b0b55b57c1171ca718e4545ce7b50a0b90d0d8e`).
-It separately reproduced linked/decline fsync UNKNOWN, wrong original and
-one-use success. This verdict does not transfer to the subsequent PR94 merge
-or establish live selected producer, Pi terminal attestation or original-input
-success.
+AST-verify configured 3.13 grammar). Exact `a6b6974` review's initial scoped
+CLEAN characterization was corrected by its reviewer: **NON-CLEAN P1** private
+status-only mint, despite successful fsync-UNKNOWN/wrong-original probes
+(`/dev/shm/pr95-a6b-independent-4pXfAC/ADDENDUM-status-only-ack.md`, SHA256
+`98b466910a3964118d9c6d3d1c81544e22f2ef1d2b1d78d82990b90aeb0c7a17`).
+A direct `_transaction(selected_ack=caller_scope)` previously minted after raw
+status-only SQL with `decline_reason=NULL`; no public clean-decline method had
+run. The corrective successor removes all selected ACK arguments from generic
+`_transaction`. Only exact public link or clean-decline methods issue a receipt
+after their own checked SQL and returned COMMIT+parent fsync. Direct status-only
+SQL now cannot issue a receipt; its terminal row remains a blocker and public
+retry refuses. Focused provider-free **49 passed**, including direct linked/
+declined status-only denial (`/var/tmp/pr95-selected-closed-terminal-ack-focused.log`,
+SHA256 `810e689b7f80b50d6353fdafa801c15030b25069fcf08de64fab96bdd6297c8c`);
+adjacent ACP/native-journal/authority/fake guardian **150 passed**
+(`/var/tmp/pr95-selected-closed-terminal-ack-adjacent.log`).
+Fresh exact independent review is required; no live selected producer, Pi
+terminal attestation or original-input success was tested.
 
 Before activating a provider path, the owner must call reserve under current
 owner/turn/ingress authority, serialize the **same** exact source/model/settings

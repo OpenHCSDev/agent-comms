@@ -16,7 +16,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 from weakref import WeakKeyDictionary
 
@@ -184,12 +184,14 @@ class CompactionJournal:
                 os.close(parent_fd)
 
     @contextmanager
-    def _transaction(
-        self,
-        *,
-        selected_ack: list[object] | None = None,
-        selected_operation_id: str | None = None,
-    ) -> Iterator[sqlite3.Connection]:
+    def _transaction(self) -> Iterator[sqlite3.Connection]:
+        """Durable generic transaction; never mints a selected admission ACK.
+
+        Only the verified terminal methods below issue their one-use receipt,
+        after this exact transaction's commit and parent fsync have returned.
+        A caller's status-only SQL transition cannot use this generic API to
+        construct input authority.
+        """
         db = sqlite3.connect(self.path, timeout=5)
         try:
             mode = db.execute("PRAGMA journal_mode=DELETE").fetchone()
@@ -197,39 +199,8 @@ class CompactionJournal:
             if mode != ("delete",) or db.execute("PRAGMA synchronous").fetchone() != (3,):
                 raise CompactionJournalError("Required durable SQLite mode unavailable")
             db.execute("BEGIN IMMEDIATE")
-            changes_before = db.total_changes
-            before = None
-            if selected_ack is not None:
-                if selected_operation_id is None:
-                    raise CompactionJournalError("Exact terminal ACK operation required")
-                before = db.execute(
-                    "SELECT session_file, source_json, status, commit_id "
-                    "FROM selected_summary_attempts WHERE operation_id = ?",
-                    (selected_operation_id,),
-                ).fetchone()
-                if before is None or before[2] != "reserved":
-                    raise CompactionJournalError("Terminal ACK requires reserved operation")
             try:
                 yield db
-                if selected_ack is not None:
-                    assert before is not None
-                    if len(selected_ack) != 1 or db.total_changes != changes_before + 1:
-                        raise CompactionJournalError("Terminal ACK requires one exact update")
-                    info = selected_ack[0]
-                    after = db.execute(
-                        "SELECT session_file, source_json, status, commit_id "
-                        "FROM selected_summary_attempts WHERE operation_id = ?",
-                        (selected_operation_id,),
-                    ).fetchone()
-                    if (
-                        type(info) is not tuple
-                        or len(info) != 6
-                        or info[:3] != (str(self.path), before[0], selected_operation_id)
-                        or info[3] not in {"linked", "declined-prestart"}
-                        or info[5] != before[1]
-                        or after != (before[0], before[1], info[3], info[4])
-                    ):
-                        raise CompactionJournalError("Terminal ACK transition witness changed")
             except BaseException:
                 db.rollback()
                 raise
@@ -243,10 +214,6 @@ class CompactionJournal:
                     os.fsync(directory_fd)
                 finally:
                     os.close(directory_fd)
-                if selected_ack is not None:
-                    receipt = _ReturnedTerminalAck()
-                    _issued_selected_acks[receipt] = cast(tuple, selected_ack[0])
-                    selected_ack[0] = receipt
             except Exception as error:
                 raise CompactionJournalUnknownError(
                     "Compaction journal durability UNKNOWN; never dispatch or replay"
@@ -452,29 +419,43 @@ class CompactionJournal:
         """
         if type(reason) is not str or reason not in {"split_turn", "unsupported"}:
             raise CompactionJournalError("Selected summary decline is not a clean skip")
-        selected_ack: list[object] | None = [] if admission is not None else None
-        with self._transaction(selected_ack=selected_ack, selected_operation_id=operation_id) as db:
+        with self._transaction() as db:
             row = db.execute(
-                "SELECT session_file, source_json, status FROM selected_summary_attempts "
-                "WHERE operation_id = ?",
+                "SELECT session_file, source_json, status, commit_id, decline_reason "
+                "FROM selected_summary_attempts WHERE operation_id = ?",
                 (operation_id,),
             ).fetchone()
-            if row is None or row[2] != "reserved":
+            if row is None or row[2:] != ("reserved", None, None):
                 raise CompactionJournalError("Selected summary prestart decline forbidden")
+            before = db.total_changes
             db.execute(
                 "UPDATE selected_summary_attempts SET status = 'declined-prestart', "
-                "decline_reason = ? WHERE operation_id = ?",
+                "decline_reason = ? WHERE operation_id = ? AND status = 'reserved'",
                 (reason, operation_id),
             )
-            if selected_ack is not None:
-                selected_ack.append(
-                    (str(self.path), row[0], operation_id, "declined-prestart", None, row[1])
-                )
-        if admission is not None and selected_ack is not None:
+            after = db.execute(
+                "SELECT session_file, source_json, status, commit_id, decline_reason "
+                "FROM selected_summary_attempts WHERE operation_id = ?",
+                (operation_id,),
+            ).fetchone()
+            if db.total_changes != before + 1 or after != (
+                row[0],
+                row[1],
+                "declined-prestart",
+                None,
+                reason,
+            ):
+                raise CompactionJournalError("Exact clean decline transition required")
+        if admission is not None:
             from .selected_summary_admission import SelectedSummaryAdmission
 
+            # This method's verified clean-decline SQL is the only issuer.
+            # _transaction() has already returned COMMIT + parent-fsync ACK.
+            scope = (str(self.path), row[0], operation_id, "declined-prestart", None, row[1])
+            receipt = _ReturnedTerminalAck()
+            _issued_selected_acks[receipt] = scope
             return SelectedSummaryAdmission._from_returned_ack(
-                selected_ack.pop(),
+                receipt,
                 self.path,
                 row[0],
                 operation_id,
@@ -501,11 +482,10 @@ class CompactionJournal:
         only after the native journal committed.
         An UNKNOWN provider attempt cannot be automatically linked or retried.
         """
-        selected_ack: list[object] | None = [] if admission is not None else None
-        with self._transaction(selected_ack=selected_ack, selected_operation_id=operation_id) as db:
+        with self._transaction() as db:
             row = db.execute(
-                "SELECT session_file, status, source_json FROM selected_summary_attempts "
-                "WHERE operation_id = ?",
+                "SELECT session_file, status, source_json, commit_id, decline_reason "
+                "FROM selected_summary_attempts WHERE operation_id = ?",
                 (operation_id,),
             ).fetchone()
             commit = db.execute(
@@ -521,6 +501,7 @@ class CompactionJournal:
             if (
                 row is None
                 or row[1] != "reserved"
+                or row[3:] != (None, None)
                 or commit is None
                 or commit[:2] != (row[0], "committed")
                 or not bound
@@ -532,20 +513,34 @@ class CompactionJournal:
                 != hashlib.sha256(row[2].encode()).hexdigest()
             ):
                 raise CompactionJournalError("Selected native intent source digest required")
+            before = db.total_changes
             db.execute(
                 "UPDATE selected_summary_attempts SET status = 'linked', commit_id = ? "
-                "WHERE operation_id = ?",
+                "WHERE operation_id = ? AND status = 'reserved'",
                 (commit_id, operation_id),
             )
-            if selected_ack is not None:
-                selected_ack.append(
-                    (str(self.path), row[0], operation_id, "linked", commit_id, row[2])
-                )
-        if admission is not None and selected_ack is not None:
+            after = db.execute(
+                "SELECT session_file, status, source_json, commit_id, decline_reason "
+                "FROM selected_summary_attempts WHERE operation_id = ?",
+                (operation_id,),
+            ).fetchone()
+            if db.total_changes != before + 1 or after != (
+                row[0],
+                "linked",
+                row[2],
+                commit_id,
+                None,
+            ):
+                raise CompactionJournalError("Exact committed native link required")
+        if admission is not None:
             from .selected_summary_admission import SelectedSummaryAdmission
 
+            # Only this method's verified native-link SQL can mint on returned fsync.
+            scope = (str(self.path), row[0], operation_id, "linked", commit_id, row[2])
+            receipt = _ReturnedTerminalAck()
+            _issued_selected_acks[receipt] = scope
             return SelectedSummaryAdmission._from_returned_ack(
-                selected_ack.pop(),
+                receipt,
                 self.path,
                 row[0],
                 operation_id,

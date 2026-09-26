@@ -18,6 +18,7 @@ from agent_comms.compaction_journal import (
     CompactionJournal,
     CompactionJournalError,
     CompactionJournalUnknownError,
+    _ReturnedTerminalAck,
 )
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.declarations import _store_lock
@@ -343,6 +344,44 @@ def test_terminal_postcommit_fsync_fault_never_mints_ack(case, monkeypatch, term
             saved.source_json,
             identity,
         )
+    assert not native_input_admitted(comms.root, session)
+    assert dispositions.get(identity.ingress_key)["native_id"] is None
+
+
+@pytest.mark.parametrize("terminal", ["declined-prestart", "linked"])
+def test_private_status_only_transaction_cannot_issue_admission_ack(case, terminal):
+    comms, session, journal, operation_id, dispositions, identity, text = case
+    saved = journal.selected_summary(operation_id)
+    scope = (str(journal.path), session, operation_id, terminal, None, saved.source_json)
+    ack = [scope]
+    # The exact predecessor bypass accepted these caller-supplied ACK arguments,
+    # one raw SQL UPDATE, then issued an input-capable post-fsync receipt.
+    with (
+        pytest.raises(TypeError),
+        journal._transaction(selected_ack=ack, selected_operation_id=operation_id),
+    ):
+        pass
+    assert journal.selected_summary(operation_id).status == "reserved"
+    with journal._transaction() as db:
+        db.execute(
+            "UPDATE selected_summary_attempts SET status = ? WHERE operation_id = ?",
+            (terminal, operation_id),
+        )
+    assert journal.selected_summary(operation_id).status == terminal
+    for forged in (scope, _ReturnedTerminalAck()):
+        with pytest.raises(CompactionJournalError, match="returned terminal fsync ACK"):
+            SelectedSummaryAdmission._from_returned_ack(
+                forged,
+                journal.path,
+                session,
+                operation_id,
+                terminal,
+                None,
+                saved.source_json,
+                identity,
+            )
+    with pytest.raises(CompactionJournalError):
+        journal.decline_selected_summary_prestart(operation_id, "split_turn", admission=identity)
     assert not native_input_admitted(comms.root, session)
     assert dispositions.get(identity.ingress_key)["native_id"] is None
 

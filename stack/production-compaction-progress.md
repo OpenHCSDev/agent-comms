@@ -157,12 +157,28 @@ Provider-free fault/fake ACP tests cover both reviewer counterexamples,
 owner/source mismatch, fork/process death, one-use and post-bind uncertainty:
 focused selected admission/journal/send-gate **45 passed** and adjacent native
 journal/dry-run/ACP input+goal **71 passed**, serial/local; Black/Ruff/mypy/diff
-checks pass. Independent exact `a6b6974` review is **SCOPED CLEAN** for this
-corrective Python admission and fake guardian seam
-(`/dev/shm/pr95-a6b-independent-4pXfAC/REVIEW.md`, SHA256
-`b6ef26cd50804d2e86b093d55b0b55b57c1171ca718e4545ce7b50a0b90d0d8e`;
-56 own provider-free tests and linked/decline post-COMMIT fsync UNKNOWN probes).
-It does not transfer to this subsequent PR94 merge head. No production ACP producer
+checks pass. Independent exact `a6b6974` review initially reported scoped CLEAN for the
+previous fsync-UNKNOWN/original-digest probes, but its reviewer independently
+confirmed a distinct **NON-CLEAN P1** private status-only mint: callable generic
+`_transaction(selected_ack=...)` accepted a raw one-row terminal UPDATE with
+no clean decline reason/verified transition, issued a receipt, then bound input
+(`/dev/shm/pr95-a6b-independent-4pXfAC/ADDENDUM-status-only-ack.md`, SHA256
+`98b466910a3964118d9c6d3d1c81544e22f2ef1d2b1d78d82990b90aeb0c7a17`).
+Exact `b2ae982` inherits the defective bytes; its subsequent independent
+SCOPED CLEAN is **merge-conflict-only**, not admission clearance
+(`/dev/shm/pr95-b2ae-independent-muv0lc/REVIEW.md`, SHA256
+`d9131a5b547917694fa1a5aaf28aab4acaad2ffb2ec058df0ff2f14a71240901`).
+This narrow corrective successor removes receipt issuance and caller-supplied
+ACK scope entirely from generic `_transaction`; only public exact committed
+link or clean-decline SQL can register a one-use receipt after that method's
+COMMIT + parent fsync returns. Status-only private SQL leaves a terminal row
+but no ACK, fails direct mint, and blocks ordinary final send. Local focused
+provider-free **49 passed** (`/var/tmp/pr95-selected-closed-terminal-ack-focused.log`,
+SHA256 `810e689b7f80b50d6353fdafa801c15030b25069fcf08de64fab96bdd6297c8c`);
+adjacent ACP/native-journal/authority/fake guardian **150 passed**
+(`/var/tmp/pr95-selected-closed-terminal-ack-adjacent.log`, SHA256
+`4f6067e3bf12c2097156d527201502c84743d9082bd28056d46ddc9e221b3a10`).
+Fresh independent exact-head review is required. No production ACP producer
 exists and persisted linked/declined rows never grant input by status.
 Pi phase-2 candidates through `764b69d` remain NON-CLEAN P1 for custom
 EventStream terminal/slot authority. A separately reviewed Linux dedicated
