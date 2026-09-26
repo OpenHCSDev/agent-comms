@@ -123,6 +123,18 @@ def test_protected_reader_closes_on_damage(fake_protected, fault: str) -> None:
         gate.read()
 
 
+@pytest.mark.parametrize("generation", [True, 1.0])
+def test_state_generation_requires_exact_int(fake_protected, generation: object) -> None:
+    gate, config_path, config, directory = fake_protected
+    _seed(gate, config_path, config, directory, "ready")
+    state = directory / "state.json"
+    content = json.loads(state.read_text())
+    content["generation"] = generation
+    _put(state, content, 0o640)
+    with pytest.raises(RelationViolationError, match="protected witness"):
+        gate.read()
+
+
 def test_config_root_and_trust_anchor_are_not_caller_fallback(fake_protected) -> None:
     gate, config_path, config, directory = fake_protected
     _seed(gate, config_path, config, directory, "ready")
