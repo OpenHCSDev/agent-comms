@@ -94,6 +94,22 @@ def test_hint_is_pure_and_crash_after_bus_before_wal_catches_up(tmp_path: Path) 
     assert comms.bus._path.read_bytes() == before
 
 
+def test_deferred_catch_up_refuses_zero_progress_budget_until_explicitly_enlarged(
+    tmp_path: Path,
+) -> None:
+    comms, index, root_id, lookup = _fresh(tmp_path)
+    message = comms.send_initial_cohort("sender", "member000", "x" * 4096)
+    hint = index.notify_committed_append(root_id=root_id, through_seq=message.seq)
+    for _ in range(2):
+        with pytest.raises(ProjectionUnavailableError, match="no checkpoint progress"):
+            index.catch_up_committed_append(hint, max_bytes=128, bootstrap_new=True)
+    assert index._verified_checkpoint(root_id) == 0
+    # The underlying explicit maintenance API keeps its configurable budget;
+    # a human/bounded scheduler may choose a larger safe batch, never spin.
+    assert index.catch_up_committed_append(hint, max_bytes=8192, bootstrap_new=True).caught_up
+    assert [row.source_seq for row in _page(index, root_id, lookup, message.seq).entries] == [1]
+
+
 def test_crash_after_wal_before_ack_is_idempotent_and_future_hint_refuses(tmp_path: Path) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path)
     first = comms.send_initial_cohort("sender", "member000", "first")

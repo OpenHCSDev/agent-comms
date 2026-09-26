@@ -514,6 +514,7 @@ class WakeCandidateIndex:
                 return CandidateCatchUp(prior, True, False)
             rebuild = False
         elif bootstrap_new:
+            prior = 0
             rebuild = True
         else:
             raise ProjectionRebuildRequiredError("candidate index needs explicit initial build")
@@ -521,6 +522,10 @@ class WakeCandidateIndex:
             rebuild=rebuild, max_rows=max_rows, max_bytes=max_bytes
         )
         checkpoint = self._verified_checkpoint(hint.root_id)
+        if checkpoint <= prior and more_source_bytes:
+            raise ProjectionUnavailableError(
+                "candidate batch made no checkpoint progress; explicit larger budget required"
+            )
         if checkpoint < hint.through_seq and not more_source_bytes:
             raise ProjectionUnavailableError(
                 "candidate notification exceeds verified bus high-water"
