@@ -1051,7 +1051,10 @@ async def _stream_agent_events(
     )
     assert reader is not None
     preflight_wait_started_at = loop.time()
-    preflight_deadline = preflight_wait_started_at + CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
+    preflight_budget = NATIVE_STARTUP_POLICY.readiness_timeout(
+        session_bytes, base_seconds=CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
+    )
+    preflight_deadline = preflight_wait_started_at + preflight_budget
     if not require_input_id:
         prompt_start_deadline = loop.time() + PROMPT_START_TIMEOUT_SECONDS
     last_model_progress = loop.time()
@@ -1330,14 +1333,20 @@ async def _stream_agent_events(
                 elapsed_ms = round((loop.time() - launch_started_at) * 1000)
                 wait_ms = round((loop.time() - preflight_wait_started_at) * 1000)
                 preflight_failure = FailureReason.PREFLIGHT_TIMEOUT
-                diagnostic = {"elapsed_ms": elapsed_ms, "wait_ms": wait_ms, "spawn_ms": spawn_ms}
+                diagnostic = {
+                    "elapsed_ms": elapsed_ms,
+                    "wait_ms": wait_ms,
+                    "spawn_ms": spawn_ms,
+                    "budget_ms": round(preflight_budget * 1000),
+                }
                 if session_bytes is not None:
                     diagnostic["session_bytes"] = session_bytes
                 session_size = session_bytes if session_bytes is not None else "unknown"
                 fail_reason = (
                     "Pi native input-ID capability preflight timed out "
                     f"(phase=await_get_state, elapsed_ms={elapsed_ms}, "
-                    f"wait_ms={wait_ms}, spawn_ms={spawn_ms}, session_bytes={session_size})."
+                    f"wait_ms={wait_ms}, budget_ms={round(preflight_budget * 1000)}, "
+                    f"spawn_ms={spawn_ms}, session_bytes={session_size})."
                 )
                 await _terminate_process(proc)
                 break
