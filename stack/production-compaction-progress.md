@@ -39,11 +39,45 @@ structured file operations and usage were lost, the selected live Pi model/auth
 route remains unbound, and no supported production worker opt-in exists. The
 ordinary native hard-context guard is never disabled.
 
-### Subsequent file-operations/usage corrective WIP (not accepted)
+### File-operations/usage corrective successor (pushed; NOT accepted)
 
-An uncommitted successor carries Pi-native `details.readFiles/modifiedFiles`
-and bounded provider usage through the owner callback, durable metadata digest
-and verified single-shot child into the native compaction entry. Native Pi's
+Exact `872fb075f7087e69bc22d91789aaa9a3f8ea76b0` carries Pi-native
+`details.readFiles/modifiedFiles` and bounded provider usage through the owner
+callback, durable metadata digest and verified single-shot child into the native
+compaction entry. The independent exact-head review identified a binding gap:
+`metadataDigest` is journaled but absent from the native commit marker and
+reconciliation. A provider-free transport-fault injection changed `readFiles`
+between journal intent and the genuine pinned native write; the operation
+reported committed although the journal digest and persisted metadata differ
+(`/var/tmp/pr95-872-metadata-binding-probe.log`). The final scoped review is
+`/dev/shm/pr95-872-fileops-usage-independent-review-20260926.md` (SHA256
+`38a3f457be41996fa8e58a4e60efe67f4cf6dea0f0244715c611d262df95cbbd`).
+It confirms narrow positive native preservation and loss/reconciliation checks,
+not combined clearance. The mismatch does **not** establish ordinary provider
+tampering, but prevents claiming metadata is commit-bound.
+Treat exact `872fb07` as NON-CLEAN for metadata integrity; no activation or
+merge. A subsequent **corrective candidate, not yet independently reviewed**
+adds a versioned cross-language metadata digest over UTF-8 file paths, safe
+usage counters and IEEE-754 cost bytes. Python persists it in the intent and
+passes it through the exact native commit marker. The disposable pinned native
+manager checks the hash against actual details/usage under the write CAS and
+checks both marker and persisted fields under locked exact-ID reconciliation;
+a successful native receipt echoes the digest and Python compares it to its
+durable intent before claiming committed or enqueuing metadata. The single-shot
+helper requires the three-field marker. Existing two-field
+native fixture markers remain supported, but the production bridge always
+requires the digest. A trusted-transport fault changing either fileOps or usage
+now returns UNKNOWN with **no write**; explicit no-write reconciliation is
+required before any fresh operation. A trusted-transport fault that changes
+both details and its request digest may make a native write, but the independent
+receipt/intent comparison remains UNKNOWN, with no publication or retry; exact
+reconciliation against the original intent remains UNKNOWN. Test-only
+post-write changes to persisted fileOps, usage or marker likewise leave
+reconciliation UNKNOWN, not committed. Provider-free targeted
+positive Unicode/floating-cost, native carry-forward, ACP adaptive and
+three-round outbox cases passed serially; full source/wheel/combined review
+remains open. A new disposable package was made from the prior reviewed copy;
+no installed or live package was changed. Native Pi's
 **next** `prepareCompaction` now sees the preserved file-operation lists in a
 provider-free two-round control; the ACP synthetic owner success control
 asserts file lists and usage too. A disposable copy of the pinned Pi package
@@ -55,8 +89,8 @@ serial focus had **36 passed, three destructive cases deselected, one Node
 fixture startup timeout after five seconds** during severe host memory/IO
 pressure; an earlier full focus timed out and is **not** a passing run. The
 fixture startup ceiling is being increased for later resource-safe rerun.
-The metadata corrective bytes have no independent exact review or full
-combined clearance. Remaining blockers: bind the actual live model/auth/
+No metadata successor has successful full combined clearance or independent
+exact-head clearance. Remaining blockers: bind the actual live model/auth/
 extension/CLI route and project-trust parity, implement reviewed human/operator
 opt-in only after clearance, demonstrate provider semantics, and run fresh
 resource-safe full source/wheel suites and combined review. No activation.

@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import stat
+import struct
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
@@ -343,7 +344,7 @@ class OwnerCompactionCommit:
         }:
             raise CompactionTransportUnknownError("Invalid native outcome; never replay")
         fields = {
-            "committed": {"entryId", "revision", "leafId"},
+            "committed": {"entryId", "revision", "leafId", "metadataDigest"},
             "aborted-no-write": {"revision", "leafId"},
             "unknown": {"reason"},
         }[evidence["status"]]
@@ -353,6 +354,11 @@ class OwnerCompactionCommit:
             raise CompactionTransportUnknownError("Incomplete native outcome; never replay")
         if result.returncode != 0 and evidence["status"] != "unknown":
             raise CompactionTransportUnknownError("Inconsistent native outcome; never replay")
+        if evidence["status"] == "committed" and (
+            len(evidence["metadataDigest"]) != 64
+            or any(c not in "0123456789abcdef" for c in evidence["metadataDigest"])
+        ):
+            raise CompactionTransportUnknownError("Invalid native metadata receipt; never replay")
         return evidence
 
     def commit(
@@ -404,9 +410,40 @@ class OwnerCompactionCommit:
             raise ValueError("Bounded native file operations required")
         if usage is not None and not valid_native_usage(usage):
             raise ValueError("Bounded native usage required")
-        # The pinned native writer's CAS digest deliberately covers its
-        # original summary/cut payload. File operations and usage are checked
-        # by the trusted helper and separately recorded in the durable intent.
+        # Preserve the summary/cut digest and bind fileOps/usage separately
+        # through the native marker, writer CAS and exact-ID reconciliation.
+        # Hex-encoded UTF-8 paths and IEEE-754 big-endian costs avoid divergent
+        # Python/JS JSON string escaping and floating-point formatting.
+        metadata = [
+            (
+                [
+                    [path.encode("utf-8").hex() for path in details["readFiles"]],
+                    [path.encode("utf-8").hex() for path in details["modifiedFiles"]],
+                ]
+                if details is not None
+                else None
+            ),
+            (
+                [
+                    *[
+                        usage[key]
+                        for key in ("input", "output", "cacheRead", "cacheWrite", "totalTokens")
+                    ],
+                    usage.get("reasoning"),
+                    usage.get("cacheWrite1h"),
+                    *[
+                        struct.pack(">d", float(usage["cost"][key])).hex()
+                        for key in ("input", "output", "cacheRead", "cacheWrite", "total")
+                    ],
+                ]
+                if usage is not None
+                else None
+            ),
+        ]
+        metadata_digest = hashlib.sha256(
+            b"agent-comms-metadata-v1\n"
+            + json.dumps(metadata, separators=(",", ":")).encode("ascii")
+        ).hexdigest()
         payload = json.dumps(
             [summary, witness["firstKeptEntryId"], tokens_before],
             ensure_ascii=False,
@@ -422,9 +459,6 @@ class OwnerCompactionCommit:
                 receipt, witness, source.pending_input_key, source.settings_paths
             ):
                 raise RelationViolationError("Compaction source changed; derive fresh evidence")
-            metadata_digest = hashlib.sha256(
-                json.dumps([details, usage], ensure_ascii=False, separators=(",", ":")).encode()
-            ).hexdigest()
             intent = dict(
                 witness=witness,
                 payloadDigest=digest,
@@ -438,7 +472,9 @@ class OwnerCompactionCommit:
                 witness=witness,
                 summary=summary,
                 tokensBefore=tokens_before,
-                commit=dict(commitId=commit_id, payloadDigest=digest),
+                commit=dict(
+                    commitId=commit_id, payloadDigest=digest, metadataDigest=metadata_digest
+                ),
                 **({"details": details} if details is not None else {}),
                 **({"usage": usage} if usage is not None else {}),
             )
@@ -448,6 +484,11 @@ class OwnerCompactionCommit:
                 # Includes launch/protocol errors: conservative even where no
                 # write probably occurred. Cancellation leaves durable intent.
                 evidence = dict(status="unknown", reason=str(error)[:1024])
+            if (
+                evidence["status"] == "committed"
+                and evidence.get("metadataDigest") != metadata_digest
+            ):
+                evidence = {"status": "unknown", "reason": "native-metadata-mismatch"}
             self.journal.resolve(
                 commit_id,
                 evidence["status"],
@@ -475,12 +516,21 @@ class OwnerCompactionCommit:
             request = dict(
                 action="reconcile",
                 witness=witness,
-                commit=dict(commitId=commit_id, payloadDigest=intent["payloadDigest"]),
+                commit=dict(
+                    commitId=commit_id,
+                    payloadDigest=intent["payloadDigest"],
+                    metadataDigest=intent["metadataDigest"],
+                ),
             )
             try:
                 evidence = self._call(fd, request, timeout, retained)
             except Exception as error:
                 evidence = dict(status="unknown", reason=str(error)[:1024])
+            if (
+                evidence["status"] == "committed"
+                and evidence.get("metadataDigest") != intent["metadataDigest"]
+            ):
+                evidence = {"status": "unknown", "reason": "native-metadata-mismatch"}
             self.journal.resolve(
                 commit_id,
                 evidence["status"],

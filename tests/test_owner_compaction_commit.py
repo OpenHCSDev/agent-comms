@@ -4,6 +4,8 @@ Only PI_COMPACTION_TEST_PACKAGE selects a disposable, patched package. No
 provider calls or installed package edits. Normal unit suites skip this file.
 """
 
+import copy
+import hashlib
 import json
 import os
 import selectors
@@ -146,6 +148,165 @@ console.log(JSON.stringify(prepared && computeFileLists(prepared.fileOps)));
         text=True,
     )
     assert json.loads(result.stdout) == {"readFiles": ["src/a.py"], "modifiedFiles": ["src/b.py"]}
+
+
+def test_metadata_digest_preserves_unicode_paths_and_binary_costs(native):
+    bridge, owner, epoch, witness = native
+    source = bridge.capture_source(owner, epoch, witness)
+    operation = OwnerCompactionCommit.commit(
+        bridge,
+        owner,
+        epoch,
+        witness,
+        "summary",
+        42,
+        source=source,
+        details={"readFiles": ["src/⚙️-𝄞.py"], "modifiedFiles": []},
+        usage={
+            "input": 12,
+            "output": 9,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "totalTokens": 21,
+            "reasoning": 0,
+            "cost": {
+                "input": 0.0000001,
+                "output": 0.02,
+                "cacheRead": 0.0,
+                "cacheWrite": 0.0,
+                "total": 0.0200001,
+            },
+        },
+    )
+    assert operation.status == "committed"
+    row = entries(witness)[-1]
+    assert row["details"]["readFiles"] == ["src/⚙️-𝄞.py"]
+    assert row["details"]["agentCommsCommit"]["metadataDigest"] == (
+        json.loads(operation.intent_json)["metadataDigest"]
+    )
+
+
+@pytest.mark.parametrize("alter", ["details", "usage"])
+def test_native_metadata_digest_refuses_changed_transport_before_write(native, alter):
+    bridge, owner, epoch, witness = native
+    source = bridge.capture_source(owner, epoch, witness)
+    original = bridge._call
+    before = Path(witness["sessionFile"]).read_bytes()
+    usage = {
+        "input": 12,
+        "output": 9,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 21,
+        "cost": {"input": 0.01, "output": 0.02, "cacheRead": 0, "cacheWrite": 0, "total": 0.03},
+    }
+
+    def changed_transport(fd, request, timeout, retained_fds=()):
+        altered = copy.deepcopy(request)
+        if alter == "details":
+            altered["details"]["readFiles"] = ["src/other.py"]
+        else:
+            altered["usage"]["input"] += 1
+        assert altered["commit"]["metadataDigest"] == request["commit"]["metadataDigest"]
+        return original(fd, altered, timeout, retained_fds)
+
+    bridge._call = changed_transport
+    operation = OwnerCompactionCommit.commit(
+        bridge,
+        owner,
+        epoch,
+        witness,
+        "summary",
+        42,
+        source=source,
+        details={"readFiles": ["src/a.py"], "modifiedFiles": []},
+        usage=usage,
+    )
+    assert operation.status == "unknown"
+    assert Path(witness["sessionFile"]).read_bytes() == before
+    bridge._call = original
+    assert bridge.reconcile(owner, epoch, operation.commit_id).status == "aborted-no-write"
+
+
+def test_metadata_transport_rehash_cannot_claim_wrong_native_commit(native):
+    bridge, owner, epoch, witness = native
+    source = bridge.capture_source(owner, epoch, witness)
+    original = bridge._call
+
+    def changed_transport(fd, request, timeout, retained_fds=()):
+        altered = copy.deepcopy(request)
+        altered["details"]["readFiles"] = ["src/other.py"]
+        canonical = [[[b"src/other.py".hex()], []], None]
+        altered["commit"]["metadataDigest"] = hashlib.sha256(
+            b"agent-comms-metadata-v1\n"
+            + json.dumps(canonical, separators=(",", ":")).encode("ascii")
+        ).hexdigest()
+        return original(fd, altered, timeout, retained_fds)
+
+    bridge._call = changed_transport
+    operation = OwnerCompactionCommit.commit(
+        bridge,
+        owner,
+        epoch,
+        witness,
+        "summary",
+        42,
+        source=source,
+        details={"readFiles": ["src/a.py"], "modifiedFiles": []},
+    )
+    assert operation.status == "unknown"
+    assert entries(witness)[-1]["details"]["readFiles"] == ["src/other.py"]
+    assert bridge.journal.pending_publications(witness["sessionFile"]) == ()
+    bridge._call = original
+    assert bridge.reconcile(owner, epoch, operation.commit_id).status == "unknown"
+
+
+@pytest.mark.parametrize("alter", ["details", "marker", "usage"])
+def test_native_metadata_reconcile_refuses_changed_persisted_entry(native, alter):
+    bridge, owner, epoch, witness = native
+    source = bridge.capture_source(owner, epoch, witness)
+    original = bridge._call
+
+    def lost_result(fd, request, timeout, retained_fds=()):
+        result = original(fd, request, timeout, retained_fds)
+        assert result["status"] == "committed"
+        return {"status": "unknown", "reason": "test-only lost receipt"}
+
+    bridge._call = lost_result
+    operation = OwnerCompactionCommit.commit(
+        bridge,
+        owner,
+        epoch,
+        witness,
+        "summary",
+        42,
+        source=source,
+        details={"readFiles": ["src/a.py"], "modifiedFiles": []},
+        usage={
+            "input": 12,
+            "output": 9,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "totalTokens": 21,
+            "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0},
+        },
+    )
+    assert operation.status == "unknown"
+    bridge._call = original
+    rows = entries(witness)
+    assert rows[-1]["details"]["agentCommsCommit"]["metadataDigest"] == (
+        json.loads(operation.intent_json)["metadataDigest"]
+    )
+    if alter == "details":
+        rows[-1]["details"]["readFiles"] = ["src/other.py"]
+    elif alter == "marker":
+        rows[-1]["details"]["agentCommsCommit"]["metadataDigest"] = "0" * 64
+    else:
+        rows[-1]["usage"]["input"] += 1
+    Path(witness["sessionFile"]).write_text(
+        "".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows)
+    )
+    assert bridge.reconcile(owner, epoch, operation.commit_id).status == "unknown"
 
 
 def test_compaction_child_cannot_inherit_node_preload(native, tmp_path, monkeypatch):

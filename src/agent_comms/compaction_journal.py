@@ -51,8 +51,20 @@ class CompactionPublication:
 
 def _publication_metadata(commit_id: str, evidence: dict) -> str:
     if (
-        set(evidence) != {"status", "entryId", "revision", "leafId"}
+        set(evidence)
+        not in (
+            {"status", "entryId", "revision", "leafId"},
+            {"status", "entryId", "revision", "leafId", "metadataDigest"},
+        )
         or evidence.get("status") != "committed"
+        or (
+            "metadataDigest" in evidence
+            and (
+                type(evidence["metadataDigest"]) is not str
+                or len(evidence["metadataDigest"]) != 64
+                or any(c not in "0123456789abcdef" for c in evidence["metadataDigest"])
+            )
+        )
         or any(
             type(evidence[key]) is not str or not evidence[key]
             for key in ("entryId", "revision", "leafId")

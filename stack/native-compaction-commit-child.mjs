@@ -16,6 +16,13 @@ try {
     const keys = ['action', 'authority', 'witness', 'commit', 'summary', 'tokensBefore', 'details', 'usage'];
     if (Object.keys(request).some(key => !keys.includes(key)))
         throw new Error('Unexpected request fields; JSON receipts are not authority');
+    const commit = request.commit;
+    if (!commit || typeof commit !== 'object' || Array.isArray(commit) ||
+        Object.keys(commit).sort().join(',') !== 'commitId,metadataDigest,payloadDigest' ||
+        !/^[0-9a-f]{32}$/.test(commit.commitId) ||
+        !/^[0-9a-f]{64}$/.test(commit.payloadDigest) ||
+        !/^[0-9a-f]{64}$/.test(commit.metadataDigest))
+        throw new Error('Bound native compaction commit identity required');
     const authority = request.authority;
     if (authority?.parentPid !== process.ppid ||
         String(held.dev) !== authority.device || String(held.ino) !== authority.inode ||
