@@ -172,7 +172,7 @@ class CommsAgent:
             raise ValueError("private N/K ACP requires both reviewed Pi package and exact root")
         self._private_nk_native_package = private_nk_native_package
         self._private_nk_wire_root_id = private_nk_wire_root_id
-        self._private_cursor_announced: dict[str, tuple[int, int, int, str | None]] = {}
+        self._private_cursor_announced: dict[str, str] = {}
         # Local ACP projection order, allocated before any async notification.
         # This is informational UI ordering, never a native input disposition.
         self._private_cursor_revisions: dict[str, int] = {}
@@ -1242,6 +1242,36 @@ class CommsAgent:
             )
         return result
 
+    async def _publish_private_cursor(
+        self, session_id: str, thread_name: str, *, selected_status: str | None = None
+    ) -> None:
+        """Publish observed owner transitions even when no native input was sent.
+
+        A stopped/re-admitted owner or a new admission with no current cursor
+        must invalidate a previously displayed proof. This is only projection
+        metadata: it never selects, sends, acknowledges, or retries an input.
+        """
+        cursor = self._private_cursor_metadata(thread_name, session_id)
+        signature = json.dumps(
+            {key: value for key, value in cursor.items() if key != "revision"},
+            sort_keys=True,
+        )
+        if selected_status is None and self._private_cursor_announced.get(session_id) == signature:
+            return
+        fields: dict[str, Any] = {"privateNativeCursor": cursor}
+        if selected_status is not None:
+            fields["lastSelectedCursorStatus"] = selected_status
+        try:
+            await self._runtime.session_update(
+                session_id=session_id,
+                update=SessionInfoUpdate(
+                    session_update="session_info_update", field_meta={"agentComms": fields}
+                ),
+            )
+        except (OSError, RuntimeError):
+            return  # A disconnected client can read a fresh trusted load later.
+        self._private_cursor_announced[session_id] = signature
+
     def _session_metadata(
         self, thread_name: str, *, session_id: str | None = None
     ) -> dict[str, Any]:
@@ -1565,18 +1595,22 @@ class CommsAgent:
             raise PublicationActivationBlocked(
                 "private N/K ACP requires an explicit matching root and native package"
             )
+        _preflight(self._comms.root, wire_root_id, package, True)
+        thread_name = await self._sync_session_identity(session_id)
+        # Registry admission may change without session/new or session/load.
+        # Publish the observed status even when stopped, busy, or no-wake;
+        # callbacks may only invalidate a prior client binding, not replace it.
+        await self._publish_private_cursor(session_id, thread_name)
         if not self._auto_wake or not self._runtime_enabled:
             return 0  # Explicitly disabled: no legacy path or ACK fallback.
+        if self._comms.registry.status(thread_name).stopped:
+            return 0
         if (
             session_id in self._active_turns
             or session_id in self._turn_tasks
             or session_id in self._backend_inboxes
         ):
             return 0  # Never overlap the ACP owner session's running turn.
-        _preflight(self._comms.root, wire_root_id, package, True)
-        thread_name = await self._sync_session_identity(session_id)
-        if self._comms.registry.status(thread_name).stopped:
-            return 0
         owner = self._comms.registry.require(thread_name)
         if owner.pid != os.getpid():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
@@ -1615,46 +1649,13 @@ class CommsAgent:
             except (OSError, ValueError, sqlite3.Error, CoordinationError, KeyError):
                 cursor = None  # projection unavailable; no claim or model retry
             if cursor is not None:
-                signature = (
-                    cursor.owner_generation,
-                    cursor.owner_admission_epoch,
-                    cursor.covered_seq,
-                    cursor.input_id,
-                )
-                if self._private_cursor_announced.get(session_id) != signature:
-                    with suppress(OSError, RuntimeError):
-                        await self._runtime.session_update(
-                            session_id=session_id,
-                            update=SessionInfoUpdate(
-                                session_update="session_info_update",
-                                field_meta={
-                                    "agentComms": {
-                                        "privateNativeCursor": self._private_cursor_metadata(
-                                            thread_name, session_id
-                                        )
-                                    }
-                                },
-                            ),
-                        )
-                        self._private_cursor_announced[session_id] = signature
+                await self._publish_private_cursor(session_id, thread_name)
         else:
             # A disconnected client must not turn a settled claim into an
             # apparent model failure. Reconnect reads the same durable row.
-            with suppress(OSError, RuntimeError):
-                await self._runtime.session_update(
-                    session_id=session_id,
-                    update=SessionInfoUpdate(
-                        session_update="session_info_update",
-                        field_meta={
-                            "agentComms": {
-                                "privateNativeCursor": self._private_cursor_metadata(
-                                    thread_name, session_id
-                                ),
-                                "lastSelectedCursorStatus": result.cursor_status,
-                            }
-                        },
-                    ),
-                )
+            await self._publish_private_cursor(
+                session_id, thread_name, selected_status=result.cursor_status
+            )
         return int(result is not None)
 
     async def _drain_owned_inbox(self, session_id: str) -> int:

@@ -7,8 +7,12 @@ implied. It is distinct from the exact-ID `queueBinding`/`queueState` contract.
 On an explicitly configured private N/K owner, `agentComms.privateNativeCursor`
 is included in trusted `session/new` and `session/load` results, owner-socket
 `ready.agentComms`, and subsequent `session_info_update` metadata. The owner
-may also emit identity updates before `ready`; these callbacks **must not**
-establish a client binding. The v1 envelope is:
+may emit identity updates before `ready`; these callbacks **must not**
+establish a client binding. The proxy currently consumes `ready` internally
+and does not forward its private cursor to an already mounted Toad client after
+automatic reconnect. Such a client remains unavailable until an explicit
+trusted new/load result; a callback or `configOptions` is never a substitute.
+The v1 envelope is:
 
 ```json
 {
@@ -29,16 +33,29 @@ from the canonical owner session before forwarding ready/callback metadata.
 `scope` is identical for all updates of one owner incarnation; `ownerEpoch`
 is the registry admission generation, not a native receipt. The revision is a
 positive monotonically increasing **per ACP process/session** projection order,
-allocated before awaiting delivery. A new trusted load/ready can bind a new
-scope (including a lower revision if the ACP process changed); only that trusted
-result resets the binding. Once bound, reject different scopes, lower revisions,
-and contradictory equal-revision payloads. Equal-revision identical bytes are
-idempotent. Never bind or switch incarnation from a callback alone. Malformed,
+allocated before awaiting delivery. A trusted new/load result (or a trusted ready **only where actually delivered
+as such**) can bind a new scope, including a lower revision after process
+replacement. The mounted Toad client currently has only new/load for this
+purpose. Define the logical attachment key as exact `sessionId`, `wireRootId`,
+`ownerThread`; the incarnation additionally includes exact `ownerCreatedAt`,
+`ownerPid`, and positive integer `ownerEpoch` (a boolean is not an integer).
+Do not sort timestamps. Once bound, a same-logical-key authenticated callback
+with the same `ownerCreatedAt` and strictly greater `ownerEpoch` **quarantines
+and hides** the incumbent, even if the callback says `none`; it does not bind
+the new epoch. Different `ownerCreatedAt` or same-epoch conflicting PID on the
+same logical key is ambiguous and also quarantines. A null scope for the
+receiving private session cannot sustain an incumbent proof and hides it.
+Unrelated logical attachments and lower-epoch callbacks are ignored. While
+quarantined, ignore *all* callbacks (including old-scope higher revisions)
+until an explicit trusted new/load result. After that result, reject older
+scopes, lower revisions, and contradictory equal-revision payloads; identical
+equal-revision bytes are idempotent. Never rebind from a callback. Malformed,
 unsupported, or absent envelopes are unavailable/hidden, not proof of no work.
-A null `scope` occurs only when the owner itself cannot be established; it
-cannot bind a consumer. `none` and `unavailable` still carry scope and revision
-whenever the owner is known, so an older delayed `proven` update cannot
-supersede a newer reconnect snapshot.
+Observed registry stop/re-admission with no selected input publishes an
+unavailable/null-scope or new-epoch `none` update; watcher delivery is not an
+instantaneous registry-change guarantee. `none` and `unavailable` carry owner
+scope and revision whenever the owner is known. A stopped owner may have a
+null scope; this never authorizes a consumer binding.
 
 Statuses: `proven` means a selected source has a current-owner native-source
 cursor; `coverage_only` means source coverage exists but **no injected input**;
@@ -51,7 +68,12 @@ provenance label and an explicit non-consumption tooltip.
 
 The provider-free event-order fixture is
 `tests/fixtures/private_native_cursor_v1.json`. It demonstrates trusted
-reconnect, a delayed old-epoch `proven`, same-epoch `unavailable`, equal-revision
-contradiction, foreign epoch, and a new trusted binding. This fixture is not a
-live ghost trace. Mounted-client acceptance requires an independent Toad
+a supported mid-session admission bump: trusted epoch-2 `proven` revision 2,
+new epoch-4 `none` callback revision 3, quarantine, delayed old callback,
+explicit trusted epoch-4 `none` load, delayed old callback rejected, and
+same-epoch unavailable/equal-revision conflict. `autoReconnectReadyForwardedToClient`
+is false. The delayed callback is an adversarial sink-order control, not a claim
+that one same-process producer allocates revisions out of order. The provider-
+free producer regression tests observed stop/heartbeat, new-epoch `none` and
+no replay of old-epoch native proof. This fixture is not a live ghost trace. Mounted-client acceptance requires an independent Toad
 reducer/presentation test; backend metadata alone cannot prove painting.

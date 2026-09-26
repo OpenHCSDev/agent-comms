@@ -64,30 +64,51 @@ def test_cursor_v1_event_order_fixture_is_consistent():
         (Path(__file__).parent / "fixtures" / "private_native_cursor_v1.json").read_text()
     )
     current = fixture["trustedLoad"]["cursor"]
-    assert current["status"] == "none" and current["scope"]["sessionId"] == "beta"
-    for entry in fixture["updates"]:
-        proposed = entry["cursor"]
+    assert current["status"] == "proven" and current["scope"]["sessionId"] == "beta"
+    quarantined = False
+
+    def apply(proposed, current, quarantined):
+        scope, bound = proposed["scope"], current["scope"]
         assert 1 <= proposed["revision"] < 2**53
-        if proposed["scope"] != current["scope"]:
-            decision = (
-                "reject_stale_scope"
-                if proposed["revision"] < current["revision"]
-                else "reject_foreign_scope"
-            )
-        elif proposed["revision"] == current["revision"] and proposed != current:
-            decision = "reject_equal_revision_conflict"
-        elif proposed["revision"] > current["revision"]:
-            decision = "accept"
-            current = proposed
-        else:
-            decision = "reject_stale_revision"
+        if quarantined:
+            return "reject_quarantined", current, True
+        same_attachment = all(
+            scope[key] == bound[key] for key in ("sessionId", "wireRootId", "ownerThread")
+        )
+        if not same_attachment:
+            return "reject_foreign_scope", current, False
+        if scope["ownerCreatedAt"] != bound["ownerCreatedAt"]:
+            return "quarantine_ambiguous_incarnation", current, True
+        if scope["ownerEpoch"] > bound["ownerEpoch"]:
+            return "quarantine_newer_epoch", current, True
+        if scope["ownerEpoch"] < bound["ownerEpoch"]:
+            return "reject_stale_scope", current, False
+        if scope["ownerPid"] != bound["ownerPid"]:
+            return "quarantine_ambiguous_incarnation", current, True
+        if proposed["revision"] == current["revision"] and proposed != current:
+            return "reject_equal_revision_conflict", current, False
+        if proposed["revision"] > current["revision"]:
+            return "accept", proposed, False
+        return "reject_stale_revision", current, False
+
+    for entry in fixture["updates"]:
+        decision, current, quarantined = apply(entry["cursor"], current, quarantined)
         assert decision == entry["decision"]
-    assert (current["status"], current["revision"], current["scope"]["ownerEpoch"]) == (
-        fixture["expectedBeforeNextLoad"]["status"],
-        fixture["expectedBeforeNextLoad"]["revision"],
-        fixture["expectedBeforeNextLoad"]["ownerEpoch"],
-    )
+    assert fixture["autoReconnectReadyForwardedToClient"] is False
+    assert quarantined and fixture["expectedBeforeNextLoad"] == {
+        "status": "unavailable",
+        "quarantined": True,
+        "ownerEpoch": current["scope"]["ownerEpoch"],
+    }
+    # Only the explicit trusted load resets quarantine; the proxy's private
+    # ready is not forwarded to this client after automatic reconnect.
     current = fixture["nextTrustedLoad"]["cursor"]
+    quarantined = False
+    assert current["status"] == "none" and current["scope"]["ownerEpoch"] == 4
+    for entry in fixture["afterNextLoad"]:
+        decision, current, quarantined = apply(entry["cursor"], current, quarantined)
+        assert decision == entry["decision"]
+    assert not quarantined
     assert (current["status"], current["revision"], current["scope"]["ownerEpoch"]) == (
         fixture["expectedAfterNextLoad"]["status"],
         fixture["expectedAfterNextLoad"]["revision"],
@@ -259,12 +280,48 @@ async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_pa
     fixture = json.loads(
         (Path(__file__).parent / "fixtures" / "private_native_cursor_v1.json").read_text()
     )
-    assert set(old) == set(fixture["updates"][0]["cursor"])
-    assert set(fresh) == set(fixture["trustedLoad"]["cursor"])
+    assert set(old) == set(fixture["trustedLoad"]["cursor"])
+    assert set(fresh) == set(fixture["nextTrustedLoad"]["cursor"])
     assert old["scope"]["ownerEpoch"] < fresh["scope"]["ownerEpoch"]
     assert old["revision"] < fresh["revision"]
     assert old["scope"]["sessionId"] == fresh["scope"]["sessionId"] == "beta"
     assert len(calls) == 1
+
+
+async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_path, monkeypatch):
+    """No reattach is required for a registry stop/heartbeat admission bump."""
+    comms, agent, _ = _session(tmp_path)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model(decision="FULL")
+    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+    updates = []
+
+    async def record_update(*, session_id, update):
+        assert session_id == "beta"
+        cursor = (update.field_meta or {}).get("agentComms", {}).get("privateNativeCursor")
+        if cursor is not None:
+            updates.append(cursor)
+
+    monkeypatch.setattr(agent._runtime, "session_update", record_update)
+    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "first"})
+    assert await agent._drain_inbox("beta") == 1
+    proven = agent._session_metadata("beta")["agentComms"]["privateNativeCursor"]
+    assert proven["status"] == "proven"
+    comms.registry.unregister("beta")
+    assert await agent._drain_inbox("beta") == 0
+    assert updates[-1]["status"] == "unavailable" and updates[-1]["scope"] is None
+    comms.registry.heartbeat("beta")
+    assert await agent._drain_inbox("beta") == 0
+    renewed = updates[-1]
+    assert renewed["status"] == "none" and "input_id" not in renewed
+    assert renewed["scope"]["ownerEpoch"] > proven["scope"]["ownerEpoch"]
+    assert renewed["revision"] > proven["revision"]
+    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "second"})
+    assert await agent._drain_inbox("beta") == 1
+    assert updates[-1]["status"] == "none"
+    assert updates[-1]["scope"] == renewed["scope"]
+    assert len(calls) == 2  # no old-epoch native input can initialize new proof
 
 
 async def test_unavailable_cursor_metadata_retains_owner_scope(tmp_path):
@@ -277,7 +334,7 @@ async def test_unavailable_cursor_metadata_retains_owner_scope(tmp_path):
     fixture = json.loads(
         (Path(__file__).parent / "fixtures" / "private_native_cursor_v1.json").read_text()
     )
-    assert set(unavailable) == set(fixture["updates"][1]["cursor"])
+    assert set(unavailable) == set(fixture["afterNextLoad"][1]["cursor"])
     assert unavailable["scope"] == before["scope"]
     assert unavailable["revision"] > before["revision"]
     assert "input_id" not in unavailable
