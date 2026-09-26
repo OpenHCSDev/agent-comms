@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.compaction_journal import CompactionJournalError
+from agent_comms.compaction_journal import CompactionJournalError, CompactionJournalUnknownError
 from agent_comms.declarations import Goal, RelationViolationError, Thread, ThreadRegistry
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import Comms
@@ -27,7 +27,7 @@ from agent_comms.session_fence import SessionWriterBusyError, session_writer_fen
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(
-    not PACKAGE or os.name != "posix", reason="Disposable native opt-in"
+    not PACKAGE or sys.platform != "linux", reason="Disposable Linux native opt-in"
 )
 
 
@@ -275,6 +275,25 @@ def test_lost_native_result_never_replays_and_reconciles_exact_id(native, monkey
     assert len([entry for entry in entries(witness) if entry["type"] == "compaction"]) == 1
 
 
+def test_postcommit_directory_fsync_fault_is_unknown_and_never_dispatches(native, monkeypatch):
+    bridge, owner, epoch, witness = native
+    fsync = os.fsync
+    called = []
+    monkeypatch.setattr(bridge, "_call", lambda *args: called.append(args))
+
+    def denied(fd):
+        raise OSError("directory fsync denied")
+
+    monkeypatch.setattr(os, "fsync", denied)
+    with pytest.raises(CompactionJournalUnknownError, match="durability UNKNOWN"):
+        bridge.commit(owner, epoch, witness, "summary", 42)
+    assert called == []
+    assert entries(witness)[-1]["type"] == "message"
+    monkeypatch.setattr(os, "fsync", fsync)
+    pending = bridge.journal.unresolved(witness["sessionFile"])
+    assert len(pending) == 1 and pending[0].status == "intent"
+
+
 def test_outcome_persistence_failure_keeps_intent_and_requires_reconciliation(native, monkeypatch):
     bridge, owner, epoch, witness = native
     resolve = bridge.journal.resolve
@@ -422,7 +441,10 @@ bridge.commit(owner,epoch,witness,'crash summary',42,source=source)
         child.stderr.close()
 
 
-def test_parent_sigkill_after_stdin_before_native_write_retains_authority(native, tmp_path):
+@pytest.mark.parametrize("release_native", [True, False], ids=["released", "hung-deadline"])
+def test_parent_sigkill_after_stdin_before_native_write_retains_authority(
+    native, tmp_path, release_native
+):
     """A test-only JS wrapper gates the REAL native method, not a Python stand-in.
 
     The deployed helper/manager have no fault hooks. The wrapper installs an
@@ -468,7 +490,8 @@ owner,epoch = bridge.registry.live_owner_with_epoch('owner')
 owner,epoch = bridge.registry.claim_live_turn_with_epoch(owner,'crash',expected_epoch=epoch)
 witness = json.loads(sys.argv[3])
 source = bridge.capture_source(owner,epoch,witness)
-bridge.commit(owner,epoch,witness,'post-parent-crash summary',42,source=source,timeout=30)
+bridge.commit(owner,epoch,witness,'post-parent-crash summary',42,source=source,
+              timeout=float(sys.argv[5]))
 """
     parent = subprocess.Popen(
         [
@@ -479,6 +502,7 @@ bridge.commit(owner,epoch,witness,'post-parent-crash summary',42,source=source,t
             PACKAGE,
             json.dumps(witness),
             str(wrapper),
+            "30" if release_native else "3",
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -547,13 +571,20 @@ print('stopped-after-native',flush=True)
             assert selector.select(5)
         assert competitor.stdout.readline() == b"still-fenced\n"
         assert Path(witness["sessionFile"]).read_bytes() == before
-        os.write(handles[1], b"x")
-        entry_id = barrier(handles[2]).decode()
-        output, error = competitor.communicate(timeout=10)
+        entry_id = None
+        if release_native:
+            os.write(handles[1], b"x")
+            entry_id = barrier(handles[2]).decode()
+        # Without release the native helper remains synchronously hung in a
+        # real readSync. Only its independent surviving watchdog can kill it.
+        output, error = competitor.communicate(timeout=5)
         assert competitor.returncode == 0, error
         assert output == b"stopped-after-native\n"
         native_pid = None  # Process has dropped its last authority FD at exit.
-        assert entries(witness)[-1]["id"] == entry_id
+        if release_native:
+            assert entries(witness)[-1]["id"] == entry_id
+        else:
+            assert Path(witness["sessionFile"]).read_bytes() == before
         assert bridge.journal.get(pending[0].commit_id).status == "intent"
         bridge.registry.register(replace(owner, active_turn=None))
         recovered, epoch = bridge.registry.live_owner_with_epoch("owner")
@@ -563,9 +594,12 @@ print('stopped-after-native',flush=True)
             expected_epoch=epoch,
         )
         result = bridge.reconcile(recovered, epoch, pending[0].commit_id)
-        assert result.status == "committed"
-        assert json.loads(result.evidence_json)["entryId"] == entry_id
-        assert len([row for row in entries(witness) if row["type"] == "compaction"]) == 1
+        assert result.status == ("committed" if release_native else "aborted-no-write")
+        if release_native:
+            assert json.loads(result.evidence_json)["entryId"] == entry_id
+        assert len([row for row in entries(witness) if row["type"] == "compaction"]) == int(
+            release_native
+        )
     finally:
         if parent.poll() is None:
             parent.kill()

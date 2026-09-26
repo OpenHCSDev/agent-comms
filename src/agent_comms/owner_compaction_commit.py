@@ -28,7 +28,11 @@ from .declarations import (
 )
 from .input_disposition import InputDispositions
 from .owner_compaction_gate import OwnerCompactionAttestation
-from .owner_compaction_process import CompactionTransportUnknownError, run_authority_child
+from .owner_compaction_process import (
+    CompactionTransportUnknownError,
+    require_deadline_support,
+    run_authority_child,
+)
 from .session_fence import idle_session_writer_fence
 
 NATIVE_MANAGER_SHA256 = "8ec0b8f1b62ee6abe3ba3c98e2f64b1efea549b7e27f561fad2516f955b7c49c"
@@ -53,6 +57,7 @@ class OwnerCompactionCommit:
     """Trusted owner bridge. A returned UNKNOWN never grants another dispatch."""
 
     def __init__(self, registry_path: Path, package_dir: Path):
+        require_deadline_support()
         self.root = registry_path.parent.resolve(strict=True)
         self.registry = ThreadRegistry(registry_path)
         self.inputs = InputDispositions(self.root)

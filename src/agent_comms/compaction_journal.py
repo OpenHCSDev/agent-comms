@@ -26,6 +26,10 @@ class CompactionJournalError(RuntimeError):
     """Journal state cannot authorize another dispatch; fail closed."""
 
 
+class CompactionJournalUnknownError(CompactionJournalError):
+    """A COMMIT may be visible but lacks durable confirmation; never dispatch/replay."""
+
+
 @dataclass(frozen=True)
 class CompactionOperation:
     commit_id: str
@@ -39,7 +43,7 @@ class CompactionJournal:
     """One durable journal per wire; at most one unresolved op per session.
 
     Parent directory must already exist (the registry owns its creation).
-    SQLite FULL synchronous commits and parent-directory fsync make successful
+    Verified SQLite EXTRA plus post-COMMIT directory fsync make successful
     ``begin`` durable before dispatch. If begin raises, DO NOT dispatch; if
     outcome persistence raises, the durable intent remains unresolved.
     """
@@ -81,14 +85,30 @@ class CompactionJournal:
     def _transaction(self) -> Iterator[sqlite3.Connection]:
         db = sqlite3.connect(self.path, timeout=5)
         try:
-            db.execute("PRAGMA synchronous=FULL")
-            db.execute("PRAGMA journal_mode=DELETE")
+            mode = db.execute("PRAGMA journal_mode=DELETE").fetchone()
+            db.execute("PRAGMA synchronous=EXTRA")
+            if mode != ("delete",) or db.execute("PRAGMA synchronous").fetchone() != (3,):
+                raise CompactionJournalError("Required durable SQLite mode unavailable")
             db.execute("BEGIN IMMEDIATE")
-            yield db
-            db.commit()
-        except BaseException:
-            db.rollback()
-            raise
+            try:
+                yield db
+            except BaseException:
+                db.rollback()
+                raise
+            try:
+                db.commit()
+                # EXTRA syncs the rollback-journal unlink. Explicitly sync the
+                # parent too, before returning ANY committed intent/outcome.
+                # Constructor-only directory sync cannot cover this unlink.
+                directory_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+            except Exception as error:
+                raise CompactionJournalUnknownError(
+                    "Compaction journal durability UNKNOWN; never dispatch or replay"
+                ) from error
         finally:
             db.close()
 

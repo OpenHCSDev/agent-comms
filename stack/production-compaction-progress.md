@@ -14,13 +14,14 @@ This is **not deployment approval**. The adaptive trigger remains disabled.
 - `_store_lock` yields its descriptor. POSIX release is by **last close**, not
   explicit `LOCK_UN`, so an inherited native child's descriptor keeps registry
   writers excluded even if Python dies or unexpectedly unwinds.
-- Internal `run_authority_child` is a single-attempt, maximum-30-second POSIX
-  transport. It inherits that FD, kills/reaps the direct child on timeout or
-  cancellation, and never retries. Its command must be a trusted, non-forking
-  helper retaining the FD until exit. No runtime caller exists yet; an FD
-  number or JSON receipt alone is not an authenticated native protocol.
-- Windows inherited authority is deliberately unsupported/fail-closed in the
-  transport; ordinary registry locks and audit attestations remain portable.
+- Internal `run_authority_child` is a single-attempt, maximum-30-second Linux
+  transport with an independent pidfd watchdog armed before native exec. It
+  inherits authority FDs, kills/reaps on timeout/cancellation, and never retries.
+  The watchdog survives parent SIGKILL and receives no authority descriptors.
+  See `compaction-durability-deadline-corrections.md` for the independent-review
+  findings, exec-gate proof, effective SQLite EXTRA and per-COMMIT directory sync.
+- Non-Linux/kernel-missing-pidfd configurations fail closed in this bridge;
+  ordinary registry locks and audit attestations retain their prior portability.
 
 Provider-free tests exercise real competing stop/heartbeat/goal registry
 writers, exception unwind with inherited authority, positive child completion,
@@ -47,7 +48,8 @@ Unsetting `AGENT_COMMS_THREAD` isolates a legacy test which only clears
 non-forking Node helper in a **disposable** pinned package. The Python API checks
 canonical owner/epoch/turn/goal and canonical saved-session path. It journals a
 unique intent BEFORE dispatch, retains authority until child exit and outcome
-persistence, and never dispatches a used ID. SQLite FULL synchronous commits,
+persistence, and never dispatches a used ID. Verified SQLite EXTRA commits plus
+explicit post-COMMIT directory fsync,
 parent/ancestor fsync and a unique unresolved-session index preserve uncertainty
 across crashes. A terminal outcome is immutable; unresolved intents block new
 bridge commits to that session.
@@ -122,7 +124,9 @@ queued correction refusal, STARTED-input drift, and pre-summary bus correction
 invalidation. Native orphan tests now prove all five outer exclusions survive
 SIGKILL. Combined focused suite: **177 passed, 1 skipped**; the seven
 native-process race/crash cases passed three repeated runs. No provider calls
-were used; the installed package remains unchanged.
+were used; the installed package remains unchanged. Subsequent independent-review
+journal/deadline corrections raise the focused total to **186 passed, 1 skipped**
+(see the dedicated corrections record).
 
 ## Still required before activation
 

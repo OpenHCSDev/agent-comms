@@ -137,6 +137,7 @@ def test_child_retains_authority_after_scope_exception(tmp_path):
             child.wait()
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux pidfd watchdog")
 def test_bounded_child_inherits_authority_and_releases(tmp_path):
     with owner_guard(tmp_path) as (_, fd):
         result = run_authority_child(
@@ -156,6 +157,7 @@ def test_bounded_child_inherits_authority_and_releases(tmp_path):
     assert_locked(tmp_path, False)
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux pidfd watchdog")
 def test_timeout_kills_child_before_authority_release(tmp_path):
     with owner_guard(tmp_path) as (_, fd):
         with pytest.raises(CompactionTransportUnknownError, match="never replay"):
@@ -169,6 +171,7 @@ def test_timeout_kills_child_before_authority_release(tmp_path):
     assert_locked(tmp_path, False)
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux pidfd watchdog")
 def test_cancellation_reaps_child_before_unwind(tmp_path, monkeypatch):
     children = []
     real_popen = subprocess.Popen
@@ -190,8 +193,9 @@ def test_cancellation_reaps_child_before_unwind(tmp_path, monkeypatch):
             authority_fd=fd,
             timeout=5,
         )
-    assert len(children) == 1
+    assert len(children) == 2  # Gated native child plus independent watchdog.
     assert children[0].returncode == -signal.SIGKILL
+    assert children[1].returncode is not None
     assert_locked(tmp_path, False)
 
 
@@ -252,3 +256,88 @@ with _store_lock(root / 'registry.json') as fd:
 def test_bad_deadline_refuses_before_spawn(tmp_path, deadline):
     with _store_lock(tmp_path / "registry.json") as fd, pytest.raises(ValueError):
         run_authority_child(["must-not-execute"], b"", authority_fd=fd, timeout=deadline)
+
+
+def test_unsupported_deadline_platform_refuses_before_spawn(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    with _store_lock(tmp_path / "registry.json") as fd, pytest.raises(NotImplementedError):
+        run_authority_child(["must-not-execute"], b"", authority_fd=fd, timeout=1)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux pidfd watchdog")
+def test_unarmed_watchdog_cannot_release_native_exec_gate(tmp_path, monkeypatch):
+    real_popen = subprocess.Popen
+    marker = tmp_path / "must-not-exist"
+
+    def broken_watchdog(command, **kwargs):
+        if command[1].endswith("compaction_child_watchdog.py"):
+            command = [sys.executable, "-c", "print('not-armed')"]
+        return real_popen(command, **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", broken_watchdog)
+    with owner_guard(tmp_path) as (_, fd), pytest.raises(CompactionTransportUnknownError):
+        run_authority_child(
+            [sys.executable, "-c", "import sys; open(sys.argv[1],'w').write('bad')", str(marker)],
+            b"request",
+            authority_fd=fd,
+            timeout=5,
+        )
+    assert not marker.exists()
+    assert_locked(tmp_path, False)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux pidfd watchdog")
+def test_parent_sigkill_during_watchdog_setup_never_execs_native(tmp_path):
+    script = """
+import os,signal,sys
+from pathlib import Path
+from agent_comms.declarations import _store_lock
+import agent_comms.owner_compaction_process as transport
+root = Path(sys.argv[1])
+open_pidfd = transport.open_pidfd
+def pause_before_watchdog(pid):
+    if pid != os.getpid():
+        print('gated',flush=True)
+        signal.pause()
+    return open_pidfd(pid)
+transport.open_pidfd = pause_before_watchdog
+with _store_lock(root / 'registry.json') as fd:
+    transport.run_authority_child(
+        [sys.executable,'-c',"import sys; open(sys.argv[1],'w').write('bad')",
+         str(root / 'must-not-exist')],b'request',authority_fd=fd,timeout=5)
+"""
+    parent = subprocess.Popen(
+        [sys.executable, "-c", script, str(tmp_path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=0,
+    )
+    try:
+        assert line(parent.stdout) == b"gated\n"
+        parent.kill()
+        assert parent.wait(timeout=5) == -signal.SIGKILL
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                """
+from pathlib import Path
+import sys
+from agent_comms.declarations import _store_lock
+with _store_lock(Path(sys.argv[1]) / 'registry.json'):
+    print('released')
+""",
+                str(tmp_path),
+            ],
+            capture_output=True,
+            timeout=5,
+            check=True,
+        )
+        assert result.stdout == b"released\n"
+        assert not (tmp_path / "must-not-exist").exists()
+    finally:
+        if parent.poll() is None:
+            parent.kill()
+        parent.wait()
+        parent.stdout.close()
+        parent.stderr.close()
