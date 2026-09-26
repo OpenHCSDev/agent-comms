@@ -62,9 +62,15 @@ or above that floor can bind; then apply matching same-incarnation buffered
 updates only in revision order, with equal-revision conflicts rejected. A
 same-logical-key different created-at or same-epoch PID conflict is ambiguous:
 keep unavailable until an explicit trusted new/load **initiated after** that
-conflict. Buffer overflow, malformed prebind metadata, or uncertain ordering
-is unavailable until a subsequent explicit trusted load initiated after the
-uncertainty, not an automatic retry. The buffer carries no text or private
+conflict. Same-key callback buffer overflow, malformed prebind metadata, or uncertain
+ordering is unavailable until a subsequent explicit trusted load initiated
+after the uncertainty, not an automatic retry. **Distinct-key floor saturation
+is different:** if 32 foreign logical keys fill the bounded prebind floor set
+and a 33rd real-owner key arrives, discarding or evicting any floor could
+revive an older proof. Enter sticky evidence-loss `unavailable` for that Agent
+attachment; no later trusted result (even a new/load on the same Agent) clears
+it. Only a genuinely fresh Agent attachment with a new trust boundary may
+start again. Remounting a screen around the same Agent does not reset it. The buffer carries no text or private
 proof fields into display without a trusted binding. After binding, reject
 older scopes, lower revisions, and contradictory equal-revision payloads;
 identical equal-revision bytes are idempotent. Never rebind from a callback.
@@ -94,7 +100,8 @@ same-epoch unavailable/equal-revision conflict. It also exercises a newer
 callback delivered *before* a delayed older trusted response, which must stay
 hidden until a later trusted new-epoch load; it also tests a stopped owner's
 null-scope `unavailable` callback before a delayed old `proven` result, and a
-bounded prebind overflow.
+bounded prebind overflow, and distinct-key floor saturation which is sticky
+until a fresh Agent attachment.
 `autoReconnectReadyForwardedToClient` is false. The delayed callback is an
 adversarial sink-order control, not a claim
 that one same-process producer allocates revisions out of order. The provider-

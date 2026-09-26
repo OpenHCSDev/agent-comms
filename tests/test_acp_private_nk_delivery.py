@@ -193,6 +193,37 @@ def test_cursor_v1_null_scope_prebind_hides_delayed_old_proof():
     assert race["expectedAfterSubsequentLoad"]["quarantined"] is False
 
 
+def test_cursor_v1_distinct_key_saturation_is_attachment_sticky():
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "private_native_cursor_v1.json").read_text()
+    )
+    race = fixture["distinctKeySaturation"]
+    low, high = race["foreignWireRootIdRangeInclusive"]
+    floors = {}
+    for i in range(low, high + 1):
+        scope = {**race["foreignScopeFields"], "wireRootId": f"{i:032x}"}
+        key = (scope["sessionId"], scope["wireRootId"], scope["ownerThread"])
+        assert key not in floors
+        floors[key] = scope["ownerEpoch"]
+    assert len(floors) == race["floorCapacity"] == 32
+    real = race["realOwnerCallback33"]
+    old = race["subsequentTrustedOldLoad"]
+    assert real["scope"]["sessionId"] == old["scope"]["sessionId"]
+    assert real["scope"]["wireRootId"] == old["scope"]["wireRootId"]
+    assert real["scope"]["ownerEpoch"] > old["scope"]["ownerEpoch"]
+    key = tuple(real["scope"][name] for name in ("sessionId", "wireRootId", "ownerThread"))
+    assert key not in floors  # cannot evict a foreign key or discard the real floor
+    evidence_loss = len(floors) >= race["floorCapacity"]
+    assert evidence_loss and race["expectedAfter33rdAndSubsequentLoad"] == {
+        "status": "unavailable",
+        "reason": "evidence_loss",
+        "attachmentSticky": True,
+    }
+    assert race["clearOnlyAfter"] == (
+        "fresh_agent_attachment_not_same_agent_explicit_load_or_screen_remount"
+    )
+
+
 async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, monkeypatch):
     root = tmp_path / "wire"
     project = tmp_path / "proj"
