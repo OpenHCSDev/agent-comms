@@ -1,9 +1,15 @@
 # Adaptive compaction and retained task memory
 
-**Status: draft plan — pending implementation.** This document introduces no
-runtime behavior, provider calls, or configuration switches. Implementation is
-deferred to a separate change after the current fixes in [PR #47](https://github.com/OpenHCSDev/agent-comms/pull/47)
-land and are installed. That release does not depend on this plan.
+**Status: historical draft plan. Implementation remains DORMANT.** The
+prototype and decision record now live in
+`stack/adaptive-wiring-decision.md` and `stack/native-writer-policy.md` on
+the PR48 integration branch: a local-only native writer CAS exists as
+disposable-copy evidence, but nothing is wired into the runtime, and
+adaptive activation stays blocked until the recorded preconditions (commit-
+time owner recheck spanning validation through mutation, canonical single
+writer, send/commit coordination, operator recovery runbook) are met. This
+document introduces no runtime behavior, provider calls, or configuration
+switches, and must not be read as live wiring.
 
 ## Evidence and intended improvement
 
