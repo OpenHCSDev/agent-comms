@@ -157,6 +157,7 @@ class RuntimeServer:
         update: Any,
         _expected_client: Any = _UNBOUND_PUBLICATION_CLIENT,
         _expected_thread: str | None = None,
+        _expected_sockets: frozenset[SocketClient] | None = None,
     ) -> bool:
         """Return whether any local transport accepted the update.
 
@@ -172,16 +173,30 @@ class RuntimeServer:
                 and self.agent._sessions.get(session_id) == _expected_thread
             )
 
-        if not bound():
+        def sockets_bound() -> bool:
+            return _expected_sockets is None or self.clients.get(session_id, set()).issubset(
+                _expected_sockets
+            )
+
+        if not bound() or not sockets_bound():
             return False
         delivered = False
         client = self.agent._client
         if client is not None:
             await client.session_update(session_id=session_id, update=update)
             delivered = True
-        for socket_client in tuple(self.clients.get(session_id, ())):
-            if not bound():
+        # Do not re-resolve the recipient set after an awaited handoff. A
+        # socket reattach has a new identity even with the same session ID.
+        sockets = (
+            tuple(self.clients.get(session_id, ()))
+            if _expected_sockets is None
+            else tuple(_expected_sockets)
+        )
+        for socket_client in sockets:
+            if not bound() or not sockets_bound():
                 return delivered
+            if socket_client not in self.clients.get(session_id, ()):
+                continue
             try:
                 await socket_client.session_update(session_id=session_id, update=update)
                 delivered = True

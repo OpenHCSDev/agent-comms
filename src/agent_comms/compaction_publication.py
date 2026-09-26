@@ -57,6 +57,7 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
         )
         journal = CompactionJournal(path)
         client = agent._client
+        sockets = frozenset(runtime.clients.get(session_id, ()))
         for item in journal.pending_publications(owner.session_file):
             # Recheck under the handoff fence; an owner epoch may change even
             # without a session rebind. No old row crosses that boundary.
@@ -76,6 +77,7 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
                 != identity
                 or agent._require_session(session_id) != owner.name
                 or agent._client is not client
+                or not runtime.clients.get(session_id, set()).issubset(sockets)
             ):
                 break
             # Only exact outbox metadata, never intent/summary/recipient.
@@ -91,6 +93,7 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
                         ),
                         _expected_client=client,
                         _expected_thread=owner.name,
+                        _expected_sockets=sockets,
                     ),
                     timeout=LOCAL_HANDOFF_TIMEOUT_SECONDS,
                 )
@@ -118,6 +121,7 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
                 != identity
                 or agent._require_session(session_id) != owner.name
                 or agent._client is not client
+                or not runtime.clients.get(session_id, set()).issubset(sockets)
                 or (client is None and not runtime.clients.get(session_id))
             ):
                 # No ACK after owner/client change or all socket sends failed.

@@ -21,6 +21,14 @@ from agent_comms.operations import wire
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX durable journal")
 
 
+def _publication_events(updates):
+    return [
+        item
+        for item in updates
+        if item.get("_meta", {}).get("agentComms", {}).get("compactionPublication")
+    ]
+
+
 @pytest.fixture
 def owner(tmp_path):
     comms = wire(tmp_path / "wire")
@@ -42,6 +50,8 @@ def owner(tmp_path):
 async def test_local_delivery_requires_existing_owner_and_attached_transport(owner, tmp_path):
     agent, comms, session, journal, commit_id = owner
     await agent.new_session(str(tmp_path / "project"))
+    agent._drain_tasks["project"].cancel()
+    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
     comms.attach_session("project", str(session), pid=os.getpid())
     try:
         assert await publish_pending_local(agent, "project", "project") == 0
@@ -117,6 +127,8 @@ async def test_session_rebinding_during_actual_handoff_refuses_before_delivery(o
     second = tmp_path / "second.jsonl"
     second.write_text("{}\n")
     await agent.new_session(str(tmp_path / "project"))
+    agent._drain_tasks["project"].cancel()
+    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
     comms.attach_session("project", str(first), pid=os.getpid())
     delivered = []
 
@@ -154,6 +166,8 @@ async def test_session_rebinding_during_actual_handoff_refuses_before_delivery(o
 async def test_client_only_rebind_before_actual_transport_denies_wrong_client(owner, tmp_path):
     agent, comms, session, journal, commit_id = owner
     await agent.new_session(str(tmp_path / "project"))
+    agent._drain_tasks["project"].cancel()
+    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
     comms.attach_session("project", str(session), pid=os.getpid())
     original_received, wrong_received = [], []
 
@@ -179,14 +193,16 @@ async def test_client_only_rebind_before_actual_transport_denies_wrong_client(ow
     agent._runtime.session_update = race
     try:
         assert await publish_pending_local(agent, "project", "project") == 0
-        assert not original_received and not wrong_received
+        assert not _publication_events(original_received)
+        assert not _publication_events(wrong_received)
         assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
         assert comms.registry.require("project").session_file == str(session)
         agent._runtime.session_update = actual
         agent._sessions["project"] = "project"
         agent.on_connect(original)
         assert await publish_pending_local(agent, "project", "project") == 1
-        assert len(original_received) == 1 and not wrong_received
+        assert len(_publication_events(original_received)) == 1
+        assert not _publication_events(wrong_received)
         assert journal.pending_publications(str(session)) == ()
     finally:
         agent._runtime.session_update = actual
@@ -195,9 +211,94 @@ async def test_client_only_rebind_before_actual_transport_denies_wrong_client(ow
 
 
 @pytest.mark.asyncio
+async def test_socket_incarnation_swap_before_transport_never_sends_old_commit_to_new_socket(
+    owner, tmp_path
+):
+    agent, comms, session, journal, commit_id = owner
+    await agent.new_session(str(tmp_path / "project"))
+    agent._drain_tasks["project"].cancel()
+    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    comms.attach_session("project", str(session), pid=os.getpid())
+    old_received, new_received = [], []
+
+    class Socket:
+        def __init__(self, received):
+            self.received = received
+
+        async def session_update(self, *, session_id, update):
+            self.received.append(update.model_dump(by_alias=True, exclude_none=True))
+
+    old, new = Socket(old_received), Socket(new_received)
+    agent._runtime.clients["project"] = {old}
+    actual = agent._runtime.session_update
+
+    async def swap(*, session_id, update, **binding):
+        # ACP socket set only; canonical registry/session/epoch stay unchanged.
+        agent._runtime.clients["project"] = {new}
+        return await actual(session_id=session_id, update=update, **binding)
+
+    agent._runtime.session_update = swap
+    try:
+        assert await publish_pending_local(agent, "project", "project") == 0
+        assert not old_received and not new_received
+        assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
+        agent._runtime.session_update = actual
+        agent._runtime.clients["project"] = {old}
+        assert await publish_pending_local(agent, "project", "project") == 1
+        assert len(_publication_events(old_received)) == 1 and not new_received
+        assert journal.pending_publications(str(session)) == ()
+    finally:
+        agent._runtime.session_update = actual
+        agent._runtime.clients["project"].clear()
+        await agent.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_socket_incarnation_swap_after_delivery_keeps_exact_row_pending(owner, tmp_path):
+    agent, comms, session, journal, commit_id = owner
+    await agent.new_session(str(tmp_path / "project"))
+    agent._drain_tasks["project"].cancel()
+    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    comms.attach_session("project", str(session), pid=os.getpid())
+    old_received, new_received = [], []
+
+    class NewSocket:
+        async def session_update(self, *, session_id, update):
+            new_received.append(update)
+
+    new = NewSocket()
+
+    class OldSocket:
+        swap = True
+
+        async def session_update(self, *, session_id, update):
+            old_received.append(update.model_dump(by_alias=True, exclude_none=True))
+            if self.swap:
+                agent._runtime.clients[session_id] = {new}
+
+    old = OldSocket()
+    agent._runtime.clients["project"] = {old}
+    try:
+        assert await publish_pending_local(agent, "project", "project") == 0
+        assert len(_publication_events(old_received)) == 1 and not new_received
+        assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
+        old.swap = False
+        agent._runtime.clients["project"] = {old}
+        assert await publish_pending_local(agent, "project", "project") == 1
+        assert len(_publication_events(old_received)) == 2 and not new_received
+        assert _publication_events(old_received)[0] == _publication_events(old_received)[1]
+        assert journal.pending_publications(str(session)) == ()
+    finally:
+        agent._runtime.clients["project"].clear()
+        await agent.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_after_delivery_changed_acp_binding_never_marks_old_commit(owner, tmp_path):
     agent, comms, session, journal, commit_id = owner
     await agent.new_session(str(tmp_path / "project"))
+    agent._drain_tasks["project"].cancel()
+    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
     comms.attach_session("project", str(session), pid=os.getpid())
     received = []
     wrong_received = []
@@ -220,15 +321,17 @@ async def test_after_delivery_changed_acp_binding_never_marks_old_commit(owner, 
     agent.on_connect(original)
     try:
         assert await publish_pending_local(agent, "project", "project") == 0
-        assert len(received) == 1 and not wrong_received
+        assert len(_publication_events(received)) == 1
+        assert not _publication_events(wrong_received)
         assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
         # Rebinding the ACP map back reprojects only the same exact ID; remote
         # consumers must deduplicate, and no summary text is ever projected.
         agent._sessions["project"] = "project"
         agent.on_connect(original)
         assert await publish_pending_local(agent, "project", "project") == 0
-        assert len(received) == 2 and not wrong_received
-        assert received[0] == received[1]
+        assert len(_publication_events(received)) == 2
+        assert not _publication_events(wrong_received)
+        assert _publication_events(received)[0] == _publication_events(received)[1]
         assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
     finally:
         agent._sessions["project"] = "project"
@@ -359,6 +462,8 @@ else:
 async def test_uncertain_local_delivery_remains_pending_until_exact_reprojection(owner, tmp_path):
     agent, comms, session, journal, commit_id = owner
     await agent.new_session(str(tmp_path / "project"))
+    agent._drain_tasks["project"].cancel()
+    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
     comms.attach_session("project", str(session), pid=os.getpid())
     seen = []
 

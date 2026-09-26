@@ -56,7 +56,15 @@ finite deadline around awaited local transport, joins cancellation cleanup
 before releasing the identity fence, and leaves the exact row pending after
 stalled/partial delivery. Arbitrary client code that suppresses cancellation
 cannot safely release the fence without verified owner-process termination;
-that operational limitation remains explicit before activation. This lock is not a
+that operational limitation remains explicit before activation. After normal
+PR104/105 integration, the local handoff additionally pins the exact socket
+client incarnation set before await: new sockets attached during delivery are
+never selected for an old commit, and an added/replaced socket before the
+postawait observation leaves the row pending. Removal of a failed listener
+alone remains compatible with the reviewed at-least-one accepted-local-send
+semantics. Provider-free before-transport and after-delivery socket-swap
+controls assert no wrong-recipient metadata/no false ACK respectively; the
+latter explicitly acknowledges prior delivery to the old socket. This lock is not a
 remote UI receipt, recipient selection, global OS sandbox or native writer
 replay authority. A client that reports success before actual asynchronous
 transport delivery cannot itself establish remote display.

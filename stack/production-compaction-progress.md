@@ -3,6 +3,32 @@
 Base: merged PR48 `d0ced47fbec39ac4d110c9f7395442524363871d`.
 This is **not deployment approval**. The adaptive trigger remains disabled.
 
+## Normal PR104/105 main integration and socket incarnation (combined review pending)
+
+After clean `dadb7c4`, normally merged main `a6b43fec` (including PR104/105)
+without rebase/reset. The sole conflict in `stack/bin/prepare-pi-native` was
+resolved by applying PR105's reviewed proof-journal headroom patch after
+input-recovery and before the PR95 manager/import-boundary patches. The
+manifest's complete-package tree commitment was recomputed against a
+**disposable copy** of the prior reviewed pinned package with exactly that
+proof patch: `7c5febb9e0671db69789554f6ce1d96f97ef2131b9fc51932c8146f0238f7e76`.
+All manifest file pins, native package tree verification and the canonical
+launcher admission passed. No installed Pi/live session was mutated. First
+merged full-suite attempt failed only because an unrelated ACP config-option
+update from the background drain appeared in a metadata-only test's recipient
+log; manual publication controls now cancel that unrelated drain and assert
+specifically on `compactionPublication`. Isolated corrected publication plus
+PR104 owner-followup controls **22 passed**. The new socket-incarnation
+pretransport/postdelivery controls and entire publication file **12 passed**
+on `/var/tmp`, plus **19 passed** in the extracted wheel for socket
+publication/owner worker/settings. `/dev/shm` user-quota instability remains
+a test-environment limitation. A merged full-suite attempt stopped after an
+unrelated ACP backend-process PID-file read saw an empty in-progress file;
+that one control passed isolated, but this is **not** a successful full-suite
+result. An expanded wheel attempt was inconclusive after unrelated native
+test startup, while the focused wheel subset passed. Full merged suite and
+independent combined review remain required.
+
 ## Read-only selected-settings trigger seam (not an ACP caller)
 
 `owner_compaction_settings.read_compaction_decision` now obtains Pi's effective
