@@ -50,3 +50,16 @@ stale, or malformed adaptive evidence can only ever *decline* an adaptive
 compaction; the hard threshold path must never consult it. This is preserved
 by the patch (no changes to those code paths) and re-proven by
 `stack/test-native-auto-compaction.mjs` against the patched copy.
+
+## Attestation reach boundary
+
+The JSON attestation consumed by the disposable JS bridge is **pre-handoff
+evidence only**: Python issues it under the registry lock, but JS cannot
+recheck the registry after the pipe handoff, so the receipt must never be
+treated as commit-time proof. The future commit-time owner check lives in
+the **Python owner process**, immediately before (and ideally inside the
+same critical section as) the native commit call — a re-run of
+`ThreadRegistry.attest_owner_compaction` under `_store_lock` adjacent to the
+writer-locked `appendCompactionIfCurrent`, with no replayable bearer token
+in between. Until that same-process/locked handshake exists, owner-scoped
+commits must continue to fail closed.
