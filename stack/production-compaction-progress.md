@@ -3,7 +3,20 @@
 Base: merged PR48 `d0ced47fbec39ac4d110c9f7395442524363871d`.
 This is **not deployment approval**. The adaptive trigger remains disabled.
 
-## Import-boundary integration candidate (review pending)
+## Package-subprocess corrective successor (review pending)
+
+Both reviewers retain NON-CLEAN for `8c6ce7` package admission: update checks
+could invoke npm/git for already-installed unapproved sources. New candidate
+admits the whole source set before dedup/probes and forbids all three actual
+package-manager subprocess sinks, including direct metadata/global-root APIs.
+Approved manifest-local install/discovery/check/update remains usable.
+Tree `628b68df…`, build `e9f19aa7add2a71c`; 36 provider-free package-process cases,
+actual canonical PR77 RPC/ancestor controls, source243/1skip, wheel54 and native/
+adaptive contracts pass. See `native-package-subprocess-correction.md`.
+Prior narrow import positives and both3585 manager-retirement CLEAN verdicts do
+not clear this successor. Runtime/ACP/outbox/recovery/final review remain OPEN.
+
+## Earlier 8c6ce7 import integration (package slice NON-CLEAN)
 
 After draft `5dbd6fe`, canonical preparation now includes the immutable PR77
 production package, native-only manifest extension loader, pre-install package
@@ -36,7 +49,9 @@ exception. New manager `10ac30c1…`, tree `7d16eb01…`, build `1684f7d9f014feb
 counterexamples reproduce on the preserved old artifact. This is owner evidence,
 not by itself independent clearance. Preflight reviewer subsequently reported
 narrow CLEAN for exact `3585b0f` (own differential and 114-control subset).
-Original-findings sink review remains a separate gate. Exact corrective review goes to both
+Original-findings sink subsequently independently gave narrow CLEAN for3585b0f
+as well (18 own denied continuations and fresh-instance recovery). Runtime
+manager disposal/error projection is NOT covered. Exact corrective review goes to both
 `pr1-goal-p15-sink-independent-review` and
 `pr1-native-goal-preflight-independent-review`. See
 `compaction-writer-failure-state-corrections.md`; import closure and runtime

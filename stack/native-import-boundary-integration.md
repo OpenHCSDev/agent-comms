@@ -1,4 +1,10 @@
-# Canonical import-boundary candidate — independent review required
+# Canonical import-boundary 8c6ce7 checkpoint — package admission NON-CLEAN
+
+Review found `checkForAvailableUpdates()` could spawn npm/git probes without
+admission. Both reviewers retain NON-CLEAN for this complete checkpoint; narrow
+module/PR77/helper positives do not clear package subprocesses. The preserved
+historical evidence below is superseded by the corrective candidate in
+`native-package-subprocess-correction.md` (fresh exact review required).
 
 This integrates the `5dbd6fe` API draft; it is NOT activation or combined runtime
 clearance. All builds/tests used new disposable copies. Reviewed writer artifact

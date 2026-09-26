@@ -12,10 +12,12 @@ Adaptive runtime entrypoints and publication coupling remain unfinished.
 `# agent-comms-native-tree-v1 <digest>` commitment. Its complete bytes still
 select the build directory, so changing the tree pin changes the build identity.
 The current tree digest is
-`b6d13d86dd690817b0f30329fe75598ea3347cd38dbbeb1602f6188822d25db8`;
-build directory suffix is `26e29f3669b35ce5`. The SessionManager is
+`628b68df3c1cc91e6b6698eb639ff108b4835d027cc34a219087861664d01a07`;
+build directory suffix is `e9f19aa7add2a71c`. The SessionManager is
 `10ac30c15dd1b47b86fef4121c01d4b52b4a114cb9fcba6a909c04a3f5f88a7d`.
-The import-boundary candidate supersedes `3585b0f`'s `7d16eb01…` tree without
+The update-check/all-package-spawn correction supersedes NON-CLEAN `8c6ce7`'s
+`b6d13d86…` tree; see `native-package-subprocess-correction.md` for current review
+gates. The original import-boundary candidate superseded `3585b0f`'s `7d16eb01…` tree without
 changing manager bytes; see `native-import-boundary-integration.md`. That writer
 correction superseded the `8cf666c` checkpoint's `4a688172…` tree /
 `41a94b37…` manager and require fresh review. See
@@ -88,7 +90,9 @@ session JSONL outside the native API are not made cooperative by a digest.
 Disabling global search paths and hashing the tree alone did not close ancestor
 `node_modules` fallback. The successor adds synchronous resolution/load fencing,
 native-only manifest extension loading and pre-install package-source admission.
-See `native-import-boundary-integration.md` for executable positive/negative
+See `native-package-subprocess-correction.md` for update-check/source admission
+and all three package-manager spawn sinks. See the historical
+`native-import-boundary-integration.md` for executable positive/negative
 controls. Fresh exact-byte independent review is still required; neither this
 mechanism nor its limited tests claim an OS sandbox or complete runtime readiness.
 

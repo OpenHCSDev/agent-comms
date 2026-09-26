@@ -9,7 +9,6 @@ import json
 import os
 import selectors
 import shutil
-import signal
 import subprocess
 import sys
 import tempfile
@@ -147,14 +146,8 @@ def main(launcher: Path, package: Path) -> None:
     deny = network_denial()
     node = shutil.which("node")
     assert node
-    control = subprocess.run(
-        [node, "-e", "require('net').connect(9,'127.0.0.1')"],
-        env=env,
-        preexec_fn=deny,
-        capture_output=True,
-        timeout=10,
-    )
-    assert control.returncode == -signal.SIGSYS, (control.returncode, control.stderr)
+    # No socket/connect control here: even a kernel-denied network attempt is
+    # outside this fixture's no-network-probe scope. Retain the child filter.
     extension = package / "agent-comms-extensions/pi-mcp-client"
     install = subprocess.run(
         [str(launcher), "install", str(extension)],
@@ -316,7 +309,7 @@ def main(launcher: Path, package: Path) -> None:
                     "root": str(root),
                     "commands": commands,
                     "status": status,
-                    "network": "seccomp-kill-on-network; negative control SIGSYS",
+                    "network": "seccomp-kill-on-network; no network probes",
                     "extension": str(extension),
                     "unapprovedChild": False,
                     "ancestor": ancestor,

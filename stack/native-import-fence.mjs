@@ -84,6 +84,14 @@ export function assertApprovedPackage(path) {
         throw deny('package source not in deployment manifest');
 }
 
+/** This deployment only admits prebuilt local packages. No package acquisition,
+ * metadata probe, global-root discovery or lifecycle subprocess is necessary.
+ * Guard the package manager's actual async/capture/sync spawn sinks as well as
+ * source admission, not unrelated trusted tools or approved MCP subprocesses. */
+export function denyPackageSubprocess() {
+    throw deny('package subprocess disabled in immutable deployment');
+}
+
 /** SDK loader replacement: exact manifest entry, native import, NO Jiti fallback. */
 export async function loadApprovedExtension(path) {
     // Resource discovery can preserve an outer installation-path alias; authority

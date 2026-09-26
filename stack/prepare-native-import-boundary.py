@@ -59,7 +59,10 @@ def patch_package_manager(path: Path) -> None:
     if hashlib.sha256(raw).hexdigest() != expected:
         raise SystemExit("Import boundary requires the exact upstream package manager")
     text = raw.decode()
-    text = 'import { assertApprovedPackage } from "../agent-comms-import-fence.mjs";\n' + text
+    text = (
+        'import { assertApprovedPackage, denyPackageSubprocess } from "../agent-comms-import-fence.mjs";\n'
+        + text
+    )
     for method in ("install", "remove"):
         old = f"    async {method}(source, options) {{\n        const parsed = this.parseSource(source);"
         assert text.count(old) == 1
@@ -85,6 +88,31 @@ def patch_package_manager(path: Path) -> None:
             assertApprovedPackage(parsed.type === "local" ? this.resolvePathFromBase(parsed.path, this.getBaseDirForScope(entry.scope)) : null);
         }""",
     )
+    # Check admission for the entire set BEFORE concurrency can start any probe.
+    old = "        const packageSources = this.dedupePackages(allPackages);\n        const checks = packageSources"
+    assert text.count(old) == 1
+    text = text.replace(
+        old,
+        """        for (const entry of allPackages) {
+            const source = typeof entry.pkg === "string" ? entry.pkg : entry.pkg.source;
+            const parsed = this.parseSource(source);
+            assertApprovedPackage(parsed.type === "local" ? this.resolvePathFromBase(parsed.path, this.getBaseDirForScope(entry.scope)) : null);
+        }
+        const packageSources = this.dedupePackages(allPackages);
+        const checks = packageSources""",
+    )
+    # Immutable manifest-local packages never require acquisition or metadata
+    # subprocesses. Guard all three actual spawn sinks too, including global-root
+    # discovery, direct metadata APIs and future routes through these primitives.
+    assert text.count("spawnProcess(") == 2
+    assert text.count("spawnProcessSync(") == 1
+    for signature in (
+        "    spawnCommand(command, args, options) {",
+        "    spawnCaptureCommand(command, args, options) {",
+        "    runCommandSync(command, args) {",
+    ):
+        assert text.count(signature) == 1
+        text = text.replace(signature, signature + "\n        denyPackageSubprocess();")
     path.write_text(text)
 
 
