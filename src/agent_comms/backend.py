@@ -37,15 +37,17 @@ import shutil
 import signal
 import tempfile
 import unicodedata
-from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Sequence
-from contextlib import AbstractContextManager, aclosing, nullcontext, suppress
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator, Sequence
+from contextlib import AbstractContextManager, aclosing, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from .declarations import _store_lock
 from .diagnostics import FailureReason
 from .image_inputs import ImageInput
+from .maintenance_barrier import MaintenanceBarrier
 from .native_pi import CAPABILITY as NATIVE_INPUT_CAPABILITY
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .tool_results import ToolDiff
@@ -710,6 +712,29 @@ def _result_text(result: Any, limit: int = 4000) -> str:
     return text[:limit] + ("…" if len(text) > limit else "")
 
 
+@contextmanager
+def _maintenance_send_boundary(
+    root: Path,
+    delegate: Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None,
+    public_id: str | None,
+    native_id: str,
+    text: str,
+) -> Iterator[bool | None]:
+    """Hold the wire lock through the final native stdin.write.
+
+    The managed ACP callback already holds that lock itself. Other backend
+    callers get this outer guard; a custom callback must not reacquire it.
+    """
+    if delegate is not None and getattr(delegate, "_maintenance_wire_locked", False):
+        with delegate(public_id, native_id, text) as allowed:
+            yield allowed
+        return
+    with _store_lock(root / "wire"):
+        MaintenanceBarrier(root / "registry.json").assert_open_unlocked()
+        with delegate(public_id, native_id, text) if delegate else nullcontext(True) as allowed:
+            yield allowed
+
+
 async def stream_agent_events(
     agent_bin: str,
     agent_args: Sequence[str],
@@ -1137,10 +1162,19 @@ async def _stream_agent_events(
                     rejected_signal.set()
                     continue
                 if command.get("type") == "prompt":
-                    boundary_context = (
-                        send_boundary(public_input_id, native_input_id, command["message"])
-                        if send_boundary is not None
-                        else nullcontext(True)
+                    boundary_context = _maintenance_send_boundary(
+                        Path(
+                            (env_extra or {}).get("AGENT_COMMS_ROOT")
+                            or os.environ.get("AGENT_COMMS_ROOT")
+                            or str(
+                                Path(tempfile.gettempdir())
+                                / f"agent-comms-startup-{getpass.getuser()}"
+                            )
+                        ),
+                        send_boundary,
+                        public_input_id,
+                        native_input_id,
+                        command["message"],
                     )
                     with boundary_context as authorized:
                         if authorized:
@@ -1635,10 +1669,18 @@ async def _stream_agent_events(
             prompt_start_deadline = loop.time() + PROMPT_START_TIMEOUT_SECONDS
             assert proc.stdin is not None
             try:
-                boundary_context = (
-                    send_boundary(None, original_input_id, task)
-                    if send_boundary is not None
-                    else nullcontext(True)
+                boundary_context = _maintenance_send_boundary(
+                    Path(
+                        (env_extra or {}).get("AGENT_COMMS_ROOT")
+                        or os.environ.get("AGENT_COMMS_ROOT")
+                        or str(
+                            Path(tempfile.gettempdir()) / f"agent-comms-startup-{getpass.getuser()}"
+                        )
+                    ),
+                    send_boundary,
+                    None,
+                    original_input_id,
+                    task,
                 )
                 with boundary_context as authorized:
                     if authorized:

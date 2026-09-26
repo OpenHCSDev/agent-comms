@@ -2413,6 +2413,15 @@ class ThreadRegistry:
     ) -> None:
         with _store_lock(self._path):
             self._load_unlocked()
+            prior = self._threads.get(thread.name)
+            prior_status = self._statuses.get(thread.name)
+            if thread.role.executable and (
+                new_owner
+                or (prior is None and thread.pid > 0 and status.active)
+                or (prior is not None and prior.pid != thread.pid)
+                or (prior_status is not None and not prior_status.active and status.active)
+            ):
+                self._assert_maintenance_open_unlocked()
             if thread.name in self._aliases:
                 raise RelationViolationError(
                     f"Thread name {thread.name!r} is a permanent alias and cannot be reused."
@@ -2755,10 +2764,16 @@ class ThreadRegistry:
                 registry_revision=file_revision(self._path),
             ), authority_fd
 
+    def _assert_maintenance_open_unlocked(self) -> None:
+        from .maintenance_barrier import MaintenanceBarrier
+
+        MaintenanceBarrier(self._path).assert_open_unlocked()
+
     def _claim_turn_unlocked(
         self, current: Thread, turn_id: str, routing: TurnRouting | None
     ) -> tuple[Thread, int]:
         """Caller holds the registry lock and has checked live turn ownership."""
+        self._assert_maintenance_open_unlocked()
         if current.turn_generation >= (1 << 63) - 1:
             raise RelationViolationError("Turn generation exhausted")
         claimed = replace(

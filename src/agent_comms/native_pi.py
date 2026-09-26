@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from .declarations import RelationViolationError, _store_lock
+from .maintenance_barrier import MaintenanceBarrier
 from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
 
 CAPABILITY = "pi-native-input-v1-live-only"
@@ -510,6 +512,7 @@ async def run_native_pi_turn(
     model: str = "z-ai/glm-5.3-flash",
     timeout: float = 90.0,
     prompt_send_boundary: Callable[[Path], AbstractContextManager[None]] | None = None,
+    maintenance_root: Path | None = None,
 ) -> NativeTurnResult:
     """One tracked real Pi RPC prompt in an isolated, persisted session.
 
@@ -563,7 +566,21 @@ async def run_native_pi_turn(
         remaining = deadline - asyncio.get_running_loop().time()
         if remaining <= 0:
             raise NativePiUnavailable("Native Pi send deadline expired")
-        stdin.write((json.dumps(command, separators=(",", ":")) + "\n").encode())
+        payload = (json.dumps(command, separators=(",", ":")) + "\n").encode()
+        if maintenance_root is not None:
+            # Only the non-provider capability preflight uses this buffered
+            # writer. The tracked prompt has a separate one-use raw writer
+            # holding wire→bus→registry→SQL authority through os.write.
+            try:
+                with _store_lock(maintenance_root / "wire"):
+                    MaintenanceBarrier(maintenance_root / "registry.json").assert_open_unlocked()
+                    stdin.write(payload)
+            except RelationViolationError as error:
+                raise NativePiUnavailable(
+                    "Maintenance closed before Pi capability preflight"
+                ) from error
+        else:
+            stdin.write(payload)
         await asyncio.wait_for(stdin.drain(), timeout=remaining)
 
     try:
