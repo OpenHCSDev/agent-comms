@@ -2765,8 +2765,10 @@ class CommsAgent:
                             allowed = False
                             break
                 if (
-                    allowed and current_wait is not None
-                    and not interrupt_ok and not owner_interrupt_followup
+                    allowed
+                    and current_wait is not None
+                    and not interrupt_ok
+                    and not owner_interrupt_followup
                 ):
                     allowed = self._comms.consume_goal_wait(canonical, current_wait.wait_id)
                 if allowed:
