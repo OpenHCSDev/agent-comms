@@ -73,8 +73,10 @@ from .native_prompt_binding import (
 )
 from .native_source_cursor import advance_current_native_cursor
 from .operations import Comms
+from .optional_awareness_projection import OptionalAwarenessProjection
 from .private_sidecar import SidecarCommitUnknown, native_request_digest
 from .wake import WakeDecision, derive_exact_reply_target
+from .wake_candidate_index import WakeCandidateIndex
 from .wake_injection import render_selected_wake_frame
 
 _MAX_PROMPT_BYTES = 32 * 1024
@@ -195,6 +197,50 @@ async def _bounded_optional_awareness(
             "Optional awareness omitted; original delivered alone (%s)", type(error).__name__
         )
         return ""
+
+
+def _production_optional_awareness(
+    index: WakeCandidateIndex,
+    *,
+    through_seq: int,
+    generation: int,
+    admission_epoch: int,
+) -> Callable[[CommittedInitial, WakeClaim, Thread], OptionalAwarenessSupplement]:
+    """Bind the trusted selected-owner snapshot to read-only SQL awareness.
+
+    This is invoked only on the selected private foreground path. Failed or
+    oversized projection is an omission, not an independent claim or cursor.
+    The builder is constructed before entering the dedicated optional reader.
+    """
+    projection = OptionalAwarenessProjection(
+        index,
+        after_seq=0,
+        through_seq=through_seq,
+        expected_participant_generation=generation,
+        expected_admission_epoch=admission_epoch,
+    )
+
+    def build(
+        initial: CommittedInitial, claim: WakeClaim, owner: Thread
+    ) -> OptionalAwarenessSupplement:
+        result = projection(initial, claim, owner)
+        if not result.mandatory_complete:
+            return OptionalAwarenessSupplement("", False)
+        context = json.loads(result.text)
+        # The supplement renderer JSON-quotes this readable text exactly once.
+        # Escape every untrusted identifier inside the text as JSON as well;
+        # never promote a candidate row to an instruction or action permit.
+        text = (
+            "Selected source decisions through "
+            + str(context["through_seq"])
+            + ": "
+            + json.dumps(context["selected"], ensure_ascii=False, sort_keys=True)
+            + "; open response obligations: "
+            + json.dumps(context["open_obligations"], ensure_ascii=False, sort_keys=True)
+        )
+        return OptionalAwarenessSupplement(text, True, result.omitted_count)
+
+    return build
 
 
 def _token_digest(token: str) -> str:
@@ -1093,6 +1139,13 @@ async def run_one_sealed_claim(
         if base_bytes > _MAX_PROMPT_BYTES:
             raise IdentityConflict("full prompt exceeds the bounded model context")
         optional_awareness = ""
+        if optional_awareness_builder is None:
+            optional_awareness_builder = _production_optional_awareness(
+                WakeCandidateIndex(bus),
+                through_seq=initial.message.seq,
+                generation=person.generation,
+                admission_epoch=owner_epoch,
+            )
         if optional_awareness_builder is not None:
             optional_awareness = await _bounded_optional_awareness(
                 optional_awareness_builder,

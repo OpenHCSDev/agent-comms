@@ -38,6 +38,7 @@ from agent_comms.declarations import MessageBus, Thread, ThreadRegistry
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, NativeTurnResult
 from agent_comms.operations import Comms
+from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 from agent_comms.wake_injection import render_selected_wake_frame
 
 
@@ -344,6 +345,41 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
     assert comms.bus.dm_history("sender", "beta")[-1].target == "sender"
 
 
+@pytest.mark.parametrize("available", [True, False])
+async def test_production_awareness_caller_includes_or_omits_without_losing_original(
+    tmp_path: Path, monkeypatch, available: bool
+) -> None:
+    root, root_id, comms, initial, _people = _root(tmp_path, direct=True)
+    if available:
+        assert WakeCandidateIndex(comms.bus).maintain(rebuild=True)
+    else:
+
+        def unavailable(*_args, **_kwargs):
+            raise ProjectionUnavailableError("candidate index unavailable")
+
+        monkeypatch.setattr(WakeCandidateIndex, "page", unavailable)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    runner, calls = _fake_model()
+    monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
+    outcome = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+    )
+    assert outcome is not None and outcome.response_message_id
+    assert len(calls) == 1
+    assert initial.message.body in calls[0][1]
+    assert ("Selected source decisions through " in calls[0][1]) is available
+    if available:
+        assert outcome.claim_id in calls[0][1]
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        assert (
+            store._connection.execute(
+                "SELECT COUNT(*) FROM native_runtime_inputs WHERE claim_id=?",
+                (outcome.claim_id,),
+            ).fetchone()[0]
+            == 1
+        )
+
+
 async def test_slow_optional_awareness_omits_without_blocking_selected_original(
     tmp_path: Path, monkeypatch, caplog
 ) -> None:
@@ -464,6 +500,34 @@ async def test_optional_awareness_requires_complete_binding_and_prompt_budget(
     assert len(calls) == 1
     assert ("bounded awareness" in calls[0][1]) is (kind == "complete")
     assert ("Nonbinding rows omitted: 2" in calls[0][1]) is (kind == "complete")
+
+
+async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
+    tmp_path: Path, monkeypatch
+) -> None:
+    root, root_id, comms, _initial, people = _root(tmp_path, direct=True)
+    # These are committed frozen direct sources for another recipient. They
+    # must not become beta's work or move beta's proven-injected cursor.
+    for index in range(101):
+        comms.send_initial_cohort("sender", "alpha", f"unrelated {index}")
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    runner, calls = _fake_model()
+    monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
+    outcome = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+    )
+    assert outcome is not None and outcome.response_message_id
+    assert outcome.cursor_status == "unavailable"  # known bounded scan, not an ACK
+    assert len(calls) == 1 and comms.dm_history("sender", "beta")[-1].body
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        lookup = stable_thread_lookup(people[2].created_at)
+        assert (
+            store._connection.execute(
+                "SELECT COUNT(*) FROM native_runtime_source_cursors WHERE recipient_lookup=?",
+                (lookup,),
+            ).fetchone()[0]
+            == 0
+        )
 
 
 async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
