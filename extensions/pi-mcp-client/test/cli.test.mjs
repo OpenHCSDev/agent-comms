@@ -55,6 +55,9 @@ test('CLI redacts literal env values, reports saved trust, refuses unattended wr
     assert.equal(inventory.status, 0, inventory.stderr);
     let listed = JSON.parse(inventory.stdout);
     assert.equal(listed.version, 2);
+    assert.deepEqual(listed.compatibility, {
+      version: 1, positiveDecisions: 'locked-project-approval-v1',
+    });
     assert.equal(listed.projectConfigSkipped, true);
     assert.deepEqual(listed.declarations.project, []);
     assert.equal(listed.live.state, 'not_running');

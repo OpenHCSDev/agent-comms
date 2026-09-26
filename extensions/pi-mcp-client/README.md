@@ -54,6 +54,22 @@ Pi's temporary `--approve` alone is not a saved MCP project trust decision. Proj
 (hidden executable overrides are unsafe); use `envFrom`. User-scope literal
 `--env` values are saved in the owner-controlled `mcp.json`.
 
+Inventory v2 additionally reports the bounded installed-package compatibility
+claim `"compatibility":{"version":1,"positiveDecisions":"locked-project-approval-v1"}`.
+This contract means project approval is revalidated inside the call-grant ledger
+writer lock, and denial retires existing call grants so same-digest reapproval
+cannot revive them. It is **not** a grant, live status, package signature, or
+cryptographic attestation. Thin consumers must keep positive actions held unless
+a successful inventory from the **same configured installed CLI** used for the
+subsequent decision has this exact object (integer version 1, exact token, no
+extra fields). Missing, malformed, or unsupported compatibility fails closed;
+never infer support from inventory version 2, package version, or an entrypoint
+hash. Discard compatibility on CLI/configuration change or failed refresh; do
+not reuse it across installations. Upgrading/replacing installed package bytes
+between query and decision is outside this compatibility claim. Existing local
+interactive challenges, saved project trust, digest checks and package ledger
+validation still apply. Consumers do not inspect or replicate ledger authority.
+
 In an active **native-input-proof Pi RPC turn**, the package emits a bounded
 `extension_ui_request` with `method:"setStatus"`, key `pi-mcp/live-v1`, and a
 JSON receipt after the native user start. Version 1 includes `source`, the

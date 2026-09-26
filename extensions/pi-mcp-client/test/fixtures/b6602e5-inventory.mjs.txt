@@ -27,10 +27,6 @@ export async function inventorySnapshot(options) {
   });
   return {
     version: 2, projectRoot, projectTrustedSaved: projectTrusted,
-    // Installed-package compatibility, NOT a grant or cryptographic attestation.
-    // v1 requires project approval revalidation under the ledger writer lock;
-    // denial retires call grants so same-digest reapproval cannot revive them.
-    compatibility: { version: 1, positiveDecisions: 'locked-project-approval-v1' },
     projectConfigSkipped: !projectTrusted && existsSync(join(projectRoot, options.configDirName, 'mcp.json')),
     lifetime: 'active_pi_turn', live: { state: 'not_running' },
     declarations: { user: rows('user', user.servers),
