@@ -1,0 +1,100 @@
+{
+  "contract": "privateNativeCursor-v1",
+  "trustedLoad": {
+    "sessionId": "beta",
+    "cursor": {
+      "version": 1,
+      "scope": {"sessionId": "beta", "wireRootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerPid": 1234, "ownerEpoch": 3},
+      "revision": 2,
+      "status": "none"
+    }
+  },
+  "updates": [
+    {
+      "decision": "reject_stale_scope",
+      "cursor": {
+        "version": 1,
+        "scope": {"sessionId": "beta", "wireRootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerPid": 1234, "ownerEpoch": 2},
+        "revision": 1,
+        "status": "proven",
+        "wire_root_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "recipient_lookup": "recipient-opaque",
+        "owner_thread": "beta",
+        "owner_generation": 1,
+        "owner_admission_epoch": 2,
+        "covered_seq": 1,
+        "injected_seq": 1,
+        "input_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "claim_id": "claim-opaque",
+        "stage": "triage",
+        "session_id": "native-session-opaque",
+        "request_generation": 1
+      }
+    },
+    {
+      "decision": "accept",
+      "cursor": {
+        "version": 1,
+        "scope": {"sessionId": "beta", "wireRootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerPid": 1234, "ownerEpoch": 3},
+        "revision": 3,
+        "status": "unavailable"
+      }
+    },
+    {
+      "decision": "reject_equal_revision_conflict",
+      "cursor": {
+        "version": 1,
+        "scope": {"sessionId": "beta", "wireRootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerPid": 1234, "ownerEpoch": 3},
+        "revision": 3,
+        "status": "none"
+      }
+    },
+    {
+      "decision": "reject_foreign_scope",
+      "cursor": {
+        "version": 1,
+        "scope": {"sessionId": "beta", "wireRootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerPid": 1234, "ownerEpoch": 4},
+        "revision": 99,
+        "status": "none"
+      }
+    },
+    {
+      "decision": "accept",
+      "cursor": {
+        "version": 1,
+        "scope": {"sessionId": "beta", "wireRootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerPid": 1234, "ownerEpoch": 3},
+        "revision": 4,
+        "status": "none"
+      }
+    }
+  ],
+  "nextTrustedLoad": {
+    "sessionId": "beta",
+    "cursor": {
+      "version": 1,
+      "scope": {"sessionId": "beta", "wireRootId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ownerThread": "beta", "ownerCreatedAt": 1000.0, "ownerPid": 1235, "ownerEpoch": 4},
+      "revision": 1,
+      "status": "none"
+    }
+  },
+  "coverageOnlyExample": {
+    "version": 1,
+    "scope": {"sessionId": "observer", "wireRootId": "cccccccccccccccccccccccccccccccc", "ownerThread": "observer", "ownerCreatedAt": 2000.0, "ownerPid": 1236, "ownerEpoch": 1},
+    "revision": 1,
+    "status": "coverage_only",
+    "wire_root_id": "cccccccccccccccccccccccccccccccc",
+    "recipient_lookup": "observer-opaque",
+    "owner_thread": "observer",
+    "owner_generation": 1,
+    "owner_admission_epoch": 1,
+    "covered_seq": 2,
+    "injected_seq": 0,
+    "input_id": null,
+    "claim_id": null,
+    "stage": null,
+    "session_id": null,
+    "request_generation": null
+  },
+  "expectedBeforeNextLoad": {"status": "none", "revision": 4, "ownerEpoch": 3},
+  "expectedAfterNextLoad": {"status": "none", "revision": 1, "ownerEpoch": 4}
+}

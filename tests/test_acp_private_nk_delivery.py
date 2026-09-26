@@ -7,7 +7,9 @@ activate private processing for existing public sessions.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -55,6 +57,42 @@ def _session(tmp_path, *, package=True):
     agent._session_titles["beta"] = "beta"
     agent._session_worktrees["beta"] = str(tmp_path)
     return comms, agent, root_id
+
+
+def test_cursor_v1_event_order_fixture_is_consistent():
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "private_native_cursor_v1.json").read_text()
+    )
+    current = fixture["trustedLoad"]["cursor"]
+    assert current["status"] == "none" and current["scope"]["sessionId"] == "beta"
+    for entry in fixture["updates"]:
+        proposed = entry["cursor"]
+        assert 1 <= proposed["revision"] < 2**53
+        if proposed["scope"] != current["scope"]:
+            decision = (
+                "reject_stale_scope"
+                if proposed["revision"] < current["revision"]
+                else "reject_foreign_scope"
+            )
+        elif proposed["revision"] == current["revision"] and proposed != current:
+            decision = "reject_equal_revision_conflict"
+        elif proposed["revision"] > current["revision"]:
+            decision = "accept"
+            current = proposed
+        else:
+            decision = "reject_stale_revision"
+        assert decision == entry["decision"]
+    assert (current["status"], current["revision"], current["scope"]["ownerEpoch"]) == (
+        fixture["expectedBeforeNextLoad"]["status"],
+        fixture["expectedBeforeNextLoad"]["revision"],
+        fixture["expectedBeforeNextLoad"]["ownerEpoch"],
+    )
+    current = fixture["nextTrustedLoad"]["cursor"]
+    assert (current["status"], current["revision"], current["scope"]["ownerEpoch"]) == (
+        fixture["expectedAfterNextLoad"]["status"],
+        fixture["expectedAfterNextLoad"]["revision"],
+        fixture["expectedAfterNextLoad"]["ownerEpoch"],
+    )
 
 
 async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, monkeypatch):
@@ -116,7 +154,10 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
     )
     original = comms.bus.message_by_id(sent["id"])
     before = agent._session_metadata("beta")["agentComms"]["privateNativeCursor"]
-    assert before == {"status": "none"}
+    assert before["status"] == "none"
+    assert before["version"] == 1 and before["revision"] >= 1
+    assert before["scope"]["ownerThread"] == "beta"
+    assert before["scope"]["wireRootId"] == root_id
     updates = []
 
     async def record_update(*, session_id, update):
@@ -130,7 +171,10 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
     assert current["status"] == "proven"
     assert current["covered_seq"] == original.seq
     assert current["injected_seq"] == original.seq
-    assert updates[-1].field_meta["agentComms"]["privateNativeCursor"] == current
+    announced = updates[-1].field_meta["agentComms"]["privateNativeCursor"]
+    assert announced["scope"] == current["scope"]
+    assert before["revision"] < announced["revision"] < current["revision"]
+    assert announced["input_id"] == current["input_id"]
     assert updates[-1].field_meta["agentComms"]["lastSelectedCursorStatus"] == "proven"
 
     async def noop(*_args, **_kwargs):
@@ -143,7 +187,10 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _: None)
     monkeypatch.setattr(agent, "_config_options", no_options)
     reconnected = await agent.load_session(str(tmp_path), "beta", mcp_servers=[])
-    assert reconnected.field_meta["agentComms"]["privateNativeCursor"] == current
+    reconnect_cursor = reconnected.field_meta["agentComms"]["privateNativeCursor"]
+    assert reconnect_cursor["scope"] == current["scope"]
+    assert reconnect_cursor["revision"] > current["revision"]
+    assert reconnect_cursor["input_id"] == current["input_id"]
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
@@ -162,6 +209,78 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
     assert len(calls) == 1
     assert agent._inbox_cursors == {} and agent._pending_turns == {}
     assert not (comms.root / "acks.json").exists()
+
+
+async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_path, monkeypatch):
+    """ACP metadata orders a delayed epoch-2 update below trusted epoch-3 load.
+
+    This tests the backend contract, not a Toad widget or provider acceptance.
+    """
+    comms, agent, _ = _session(tmp_path)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model(decision="FULL")
+    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    delivered = []
+
+    async def update(*, session_id, update):
+        assert session_id == "beta"
+        cursor = (update.field_meta or {}).get("agentComms", {}).get("privateNativeCursor")
+        if cursor and cursor["status"] == "proven":
+            entered.set()
+            await release.wait()
+        delivered.append(update)
+
+    async def noop(*_args, **_kwargs):
+        return None
+
+    async def no_options(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(agent._runtime, "session_update", update)
+    monkeypatch.setattr(agent._runtime, "start", noop)
+    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _: None)
+    monkeypatch.setattr(agent, "_config_options", no_options)
+    drain = asyncio.create_task(agent._drain_inbox("beta"))
+    await asyncio.wait_for(entered.wait(), timeout=5)
+    comms.registry.unregister("beta")
+    comms.registry.heartbeat("beta")
+    loaded = await agent.load_session(str(tmp_path), "beta", mcp_servers=[])
+    fresh = loaded.field_meta["agentComms"]["privateNativeCursor"]
+    assert fresh["status"] == "none"
+    assert fresh["scope"]["ownerEpoch"] > 0
+    release.set()
+    assert await asyncio.wait_for(drain, timeout=5) == 1
+    old = delivered[-1].field_meta["agentComms"]["privateNativeCursor"]
+    assert old["status"] == "proven" and old["input_id"]
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "private_native_cursor_v1.json").read_text()
+    )
+    assert set(old) == set(fixture["updates"][0]["cursor"])
+    assert set(fresh) == set(fixture["trustedLoad"]["cursor"])
+    assert old["scope"]["ownerEpoch"] < fresh["scope"]["ownerEpoch"]
+    assert old["revision"] < fresh["revision"]
+    assert old["scope"]["sessionId"] == fresh["scope"]["sessionId"] == "beta"
+    assert len(calls) == 1
+
+
+async def test_unavailable_cursor_metadata_retains_owner_scope(tmp_path):
+    comms, agent, _ = _session(tmp_path)
+    before = agent._session_metadata("beta")["agentComms"]["privateNativeCursor"]
+    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+        store._connection.execute("DROP TABLE native_runtime_schema_meta")
+    unavailable = agent._session_metadata("beta")["agentComms"]["privateNativeCursor"]
+    assert unavailable["status"] == "unavailable"
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "private_native_cursor_v1.json").read_text()
+    )
+    assert set(unavailable) == set(fixture["updates"][1]["cursor"])
+    assert unavailable["scope"] == before["scope"]
+    assert unavailable["revision"] > before["revision"]
+    assert "input_id" not in unavailable
 
 
 async def test_acp_private_does_not_overlap_owner_turn(tmp_path, monkeypatch):
@@ -218,6 +337,10 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
     assert calls == [] and agent._inbox_cursors == {}
     cursor = agent._session_metadata("beta")["agentComms"]["privateNativeCursor"]
     assert cursor["status"] == "coverage_only"
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "private_native_cursor_v1.json").read_text()
+    )
+    assert set(cursor) == set(fixture["coverageOnlyExample"])
     assert cursor["covered_seq"] == original.seq
     assert cursor["injected_seq"] == 0 and cursor["input_id"] is None
     assert await agent._drain_inbox("beta") == 0

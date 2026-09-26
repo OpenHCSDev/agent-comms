@@ -173,6 +173,9 @@ class CommsAgent:
         self._private_nk_native_package = private_nk_native_package
         self._private_nk_wire_root_id = private_nk_wire_root_id
         self._private_cursor_announced: dict[str, tuple[int, int, int, str | None]] = {}
+        # Local ACP projection order, allocated before any async notification.
+        # This is informational UI ordering, never a native input disposition.
+        self._private_cursor_revisions: dict[str, int] = {}
         self._comms = comms
         self._sessions: dict[str, str] = {}
         self._client: Any = None
@@ -383,7 +386,7 @@ class CommsAgent:
         return NewSessionResponse(
             session_id=session_id,
             config_options=config_options,
-            field_meta=self._session_metadata(thread_name),
+            field_meta=self._session_metadata(thread_name, session_id=session_id),
         )
 
     def _validated_thread(self, cwd: str, session_id: str) -> Thread:
@@ -464,7 +467,7 @@ class CommsAgent:
         self._ensure_live_drain(session_id)
         return LoadSessionResponse(
             config_options=config_options,
-            field_meta=self._session_metadata(thread.name),
+            field_meta=self._session_metadata(thread.name, session_id=session_id),
         )
 
     async def _attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
@@ -879,7 +882,7 @@ class CommsAgent:
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta=self._session_metadata(name),
+                field_meta=self._session_metadata(name, session_id=session_id),
             ),
         )
 
@@ -1165,15 +1168,47 @@ class CommsAgent:
         leaf = re.sub(r"[^A-Za-z0-9_-]+", "-", Path(cwd).name or "session").strip("-")
         return leaf or "session"
 
-    def _private_cursor_metadata(self, thread_name: str) -> dict[str, Any]:
-        """Owner-only informational native cursor for ACP reconnect/UI.
+    def _private_cursor_scope(self, thread_name: str, session_id: str) -> dict[str, Any] | None:
+        root_id = self._private_nk_wire_root_id
+        if root_id is None:
+            return None
+        try:
+            owner, epoch = self._comms.registry.live_owner_with_admission(thread_name)
+        except (OSError, ValueError):
+            return None
+        if owner.pid != os.getpid():
+            return None
+        return {
+            "sessionId": session_id,
+            "wireRootId": root_id,
+            "ownerThread": owner.name,
+            "ownerCreatedAt": owner.created_at,
+            "ownerPid": owner.pid,
+            "ownerEpoch": epoch,
+        }
 
-        Never reconstruct an old epoch, infer Pi acceptance from an ACK, or
-        suppress an unavailable store as a zero/proven cursor.
+    def _private_cursor_metadata(self, thread_name: str, session_id: str) -> dict[str, Any]:
+        """Owner-scoped, ordered informational cursor for trusted ACP attach.
+
+        Every status (including none/unavailable) advances the local projection
+        revision before an async update can be delayed. Only a trusted new/load
+        response or owner-ready may bind a client to this scope; callbacks must
+        never establish authority. Neither cursor nor ACK proves consumption.
         """
         root_id = self._private_nk_wire_root_id
         if root_id is None:
             return {}
+        revision = self._private_cursor_revisions.get(session_id, 0) + 1
+        self._private_cursor_revisions[session_id] = revision
+        scope = self._private_cursor_scope(thread_name, session_id)
+        result: dict[str, Any] = {
+            "version": 1,
+            "scope": scope,
+            "revision": revision,
+            "status": "unavailable",
+        }
+        if scope is None:
+            return result
         try:
             with MutationStore(str(self._comms.root / "coordination.sqlite3")) as store:
                 bus = MessageBus(
@@ -1185,15 +1220,31 @@ class CommsAgent:
                     bus, store, wire_root_id=root_id, owner_name=thread_name
                 )
         except (OSError, ValueError, sqlite3.Error, CoordinationError):
-            return {"status": "unavailable"}
+            cursor = None
+            unavailable = True
+        else:
+            unavailable = False
+        # A replacement during the read invalidates even a coherent old row.
+        # Fail closed for the newly observed incarnation; a later trusted
+        # snapshot may show its own current cursor.
+        current_scope = self._private_cursor_scope(thread_name, session_id)
+        if current_scope != scope:
+            result["scope"] = current_scope
+            return result
+        if unavailable:
+            return result
         if cursor is None:
-            return {"status": "none"}
-        return {
-            "status": "proven" if cursor.injected_seq else "coverage_only",
-            **asdict(cursor),
-        }
+            result["status"] = "none"
+        else:
+            result.update(
+                status="proven" if cursor.injected_seq else "coverage_only",
+                **asdict(cursor),
+            )
+        return result
 
-    def _session_metadata(self, thread_name: str) -> dict[str, Any]:
+    def _session_metadata(
+        self, thread_name: str, *, session_id: str | None = None
+    ) -> dict[str, Any]:
         thread = self._comms.registry.require(thread_name)
         goal, execution = self._comms.goal_snapshot(thread_name)
         info = self._comms.agent_info_of(thread_name)
@@ -1217,7 +1268,11 @@ class CommsAgent:
                 "thinkingLevel": thread.thinking_level,
                 "worktree": thread.worktree,
                 **(
-                    {"privateNativeCursor": self._private_cursor_metadata(thread_name)}
+                    {
+                        "privateNativeCursor": self._private_cursor_metadata(
+                            thread_name, session_id or thread_name
+                        )
+                    }
                     if self._private_nk_wire_root_id is not None
                     else {}
                 ),
@@ -1575,7 +1630,7 @@ class CommsAgent:
                                 field_meta={
                                     "agentComms": {
                                         "privateNativeCursor": self._private_cursor_metadata(
-                                            thread_name
+                                            thread_name, session_id
                                         )
                                     }
                                 },
@@ -1592,7 +1647,9 @@ class CommsAgent:
                         session_update="session_info_update",
                         field_meta={
                             "agentComms": {
-                                "privateNativeCursor": self._private_cursor_metadata(thread_name),
+                                "privateNativeCursor": self._private_cursor_metadata(
+                                    thread_name, session_id
+                                ),
                                 "lastSelectedCursorStatus": result.cursor_status,
                             }
                         },
