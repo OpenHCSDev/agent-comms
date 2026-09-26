@@ -2460,7 +2460,9 @@ class Comms:
                 or wait.revision > goal.revision
             ):
                 return ()
-            closed = GoalWaits.closed_wait_group(canonical, wait.targets, rows, snapshot)
+            closed = GoalWaits.closed_wait_group(
+                canonical, wait.targets, rows, snapshot, self._process_alive
+            )
             if not closed:
                 return ()
             owner_aliases = frozenset(
@@ -2833,6 +2835,7 @@ class Comms:
                     wait_targets,
                     GoalWaits(self.root / "goal_waits.json").snapshot(),
                     snapshot,
+                    self._process_alive,
                 )
                 if closed:
                     names = ", ".join(f"@{name}" for name in closed)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
@@ -154,8 +155,9 @@ class GoalWaits:
         targets: tuple[GoalWaitTarget, ...],
         rows: dict[str, GoalWait],
         snapshot: RegistrySnapshot,
+        process_alive: Callable[[int], bool],
     ) -> tuple[str, ...]:
-        """Find waits with no path to a current thread outside the wait graph.
+        """Find waits with no path to a live active turn outside the wait graph.
 
         A dependency list wakes on any qualifying reply. One independent
         target is therefore enough to keep a group runnable, even if another
@@ -172,6 +174,12 @@ class GoalWaits:
             thread = snapshot.threads[name]
             goal = thread.goal
             wait = rows.get(goal.id) if goal is not None and goal.active else None
+            if wait is not None and (
+                goal is None
+                or wait.owner_created_at not in (None, thread.created_at)
+                or wait.revision > goal.revision
+            ):
+                wait = None
             dependencies = (
                 targets
                 if name == owner
@@ -193,11 +201,16 @@ class GoalWaits:
                 peer_wait = (
                     rows.get(peer_goal.id) if peer_goal is not None and peer_goal.active else None
                 )
+                if peer_wait is not None and (
+                    peer_goal is None
+                    or peer_wait.owner_created_at not in (None, peer.created_at)
+                    or peer_wait.revision > peer_goal.revision
+                ):
+                    peer_wait = None
                 if peer_wait is None:
-                    if (
-                        peer_goal is not None and peer_goal.active
-                        and snapshot.statuses[canonical].running
-                    ) or GoalWaits.target_has_active_turn(target, snapshot):
+                    if GoalWaits.target_has_active_turn(target, snapshot) and process_alive(
+                        peer.pid
+                    ):
                         return ()
                     continue
                 pending.append(canonical)

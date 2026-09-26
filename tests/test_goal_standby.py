@@ -203,6 +203,51 @@ def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
     assert comms.goal_wait("bob") is not None
 
 
+def test_idle_active_goal_does_not_make_wait_cycle_runnable(tmp_path):
+    comms = wire(tmp_path)
+    for name in ("alice", "bob", "carol"):
+        comms.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+    for name in ("alice", "bob"):
+        comms.begin_turn(name, f"{name}-turn")
+    alice = comms.update_goal("alice", "set", text="Wait for Bob or Carol")
+    bob = comms.update_goal("bob", "set", text="Wait for Alice")
+    carol = comms.update_goal("carol", "set", text="Idle goal")
+    assert alice is not None and bob is not None and carol is not None
+
+    comms.update_goal("alice", "standby", goal_id=alice.id, wait_for=["bob", "carol"])
+    with pytest.raises(ValueError, match="dependency wait group.*@alice.*@bob"):
+        comms.update_goal("bob", "standby", goal_id=bob.id, wait_for=["alice"])
+
+    assert comms.goal_wait("bob") is None
+    assert comms.registry.require("bob").goal == bob
+
+
+def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
+    comms = wire(tmp_path)
+    for name in ("alice", "bob"):
+        comms.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.begin_turn(name, f"{name}-turn")
+    comms.register(Thread("carol", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.begin_turn("carol", "carol-turn")
+    carol_thread = comms.registry.require("carol")
+    assert carol_thread.active_turn is not None
+    comms.registry.register(
+        replace(
+            carol_thread,
+            pid=999999999,
+            active_turn=replace(carol_thread.active_turn, owner_pid=999999999),
+        ),
+        comms.registry.status("carol"),
+    )
+    alice = comms.update_goal("alice", "set", text="Wait for Bob or Carol")
+    bob = comms.update_goal("bob", "set", text="Wait for Alice")
+    assert alice is not None and bob is not None
+
+    comms.update_goal("alice", "standby", goal_id=alice.id, wait_for=["bob", "carol"])
+    with pytest.raises(ValueError, match="dependency wait group.*@alice.*@bob"):
+        comms.update_goal("bob", "standby", goal_id=bob.id, wait_for=["alice"])
+
+
 @pytest.mark.parametrize("pending_reply", [False, True])
 def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending_reply):
     comms = wire(tmp_path)
