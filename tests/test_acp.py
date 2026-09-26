@@ -1713,9 +1713,9 @@ class TestWireProtocol:
                     deadline = _time.monotonic() + 30
                     while True:
                         if b"\n" not in pending:
-                            assert selector.select(max(0, deadline - _time.monotonic())), (
-                                "ACP timeout"
-                            )
+                            assert selector.select(
+                                max(0, deadline - _time.monotonic())
+                            ), "ACP timeout"
                             chunk = os.read(proc.stdout.fileno(), 65536)
                             assert chunk, "ACP closed before response"
                             pending += chunk
