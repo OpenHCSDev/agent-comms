@@ -9,13 +9,16 @@ import asyncio
 import hashlib
 import json
 import os
+import sqlite3
 import tempfile
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
+from agent_comms import proven_source_coverage as coverage_module
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordinated_runtime import run_one_sealed_claim
@@ -23,7 +26,7 @@ from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import IdentityConflict, MutationStore, StaleFence
-from agent_comms.declarations import Thread
+from agent_comms.declarations import MessageBus, RelationViolationError, Thread
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativePiUnavailable, read_tracked_input_digest
 from agent_comms.native_prompt_binding import (
@@ -313,6 +316,46 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
             )
 
 
+def test_source_coverage_refuses_early_and_caps_bytes_before_bus_guard(tmp_path, monkeypatch):
+    root, root_id, comms, _, people = _root(tmp_path)
+    for index in range(8):
+        comms.send_initial_cohort("sender", "alpha", f"Additional source {index}")
+    lookup = stable_thread_lookup(people[1].created_at)
+    scanned = 0
+    original_rows = MessageBus._verified_private_rows_unlocked
+
+    def observed_rows(self, marker):
+        nonlocal scanned
+        for row in original_rows(self, marker):
+            scanned += 1
+            yield row
+
+    monkeypatch.setattr(MessageBus, "_verified_private_rows_unlocked", observed_rows)
+    with (
+        MutationStore(str(root / "coordination.sqlite3")) as store,
+        pytest.raises(IdentityConflict, match="bounded private initial scan"),
+    ):
+        read_proven_source_coverage(
+            comms.bus, store, wire_root_id=root_id, recipient_lookup=lookup, limit=1
+        )
+    assert scanned == 2  # Not nine eager initial DTOs before rejecting.
+    scanned = 0
+    monkeypatch.setattr(coverage_module, "_MAX_BUS_ROWS", 1)
+    with (
+        MutationStore(str(root / "coordination.sqlite3")) as store,
+        pytest.raises(IdentityConflict, match="row or scan deadline"),
+    ):
+        read_proven_source_coverage(comms.bus, store, wire_root_id=root_id, recipient_lookup=lookup)
+    assert scanned == 2
+    monkeypatch.setattr(coverage_module, "_MAX_BUS_BYTES", 10)
+    with (
+        MutationStore(str(root / "coordination.sqlite3")) as store,
+        pytest.raises(RelationViolationError, match="bounded read budget"),
+    ):
+        read_proven_source_coverage(comms.bus, store, wire_root_id=root_id, recipient_lookup=lookup)
+    assert scanned == 2  # Refused before the private bus row iterator.
+
+
 async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_path, monkeypatch):
     root, root_id, comms, first, people = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
@@ -476,6 +519,125 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
         is None
     )
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("stage", "field", "bad"),
+    [
+        ("triage", "owner_lookup", "f" * 32),
+        ("triage", "owner_thread", "attacker"),
+        ("triage", "owner_generation", 99),
+        ("full", "execution_id", "forged-execution"),
+        ("full", "attempt_ordinal", 99),
+        ("full", "owner_thread", "attacker"),
+    ],
+)
+async def test_live_binding_rejects_tampered_owner_and_attempt_before_proof(
+    tmp_path, monkeypatch, stage, field, bad
+):
+    root, root_id, _, initial, people = _root(tmp_path)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model(decision="FULL")
+    real_read = runtime.read_expected_prompt_binding
+    tampered = False
+
+    async def fake_then_tamper(package, **kwargs):
+        nonlocal tampered
+        result = await fake(package, **kwargs)
+        if ("triage" if "bounded triage" in kwargs["prompt"] else "full") == stage:
+            tampered = True
+        return result
+
+    def changed_binding(store, input_id, **kwargs):
+        binding = real_read(store, input_id, **kwargs)
+        return replace(binding, **{field: bad}) if tampered and binding is not None else binding
+
+    monkeypatch.setattr(runtime, "run_native_pi_turn", fake_then_tamper)
+    monkeypatch.setattr(runtime, "read_expected_prompt_binding", changed_binding)
+    with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        )
+    assert tampered and len(calls) == (1 if stage == "triage" else 2)
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        evidence = read_historical_native_inputs(
+            store,
+            wire_root_id=root_id,
+            recipient_lookup=stable_thread_lookup(people[1].created_at),
+            source_seq=initial.message.seq,
+        )
+        assert [row.stage for row in evidence] == ([] if stage == "triage" else ["triage"])
+        assert (
+            store._connection.execute(
+                "SELECT COUNT(*) FROM native_runtime_inputs "
+                "WHERE stage=? AND session_id IS NOT NULL",
+                (stage,),
+            ).fetchone()[0]
+            == 0
+        )
+    assert (
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        )
+        is None
+    )
+    assert len(calls) == (1 if stage == "triage" else 2)
+
+
+@pytest.mark.parametrize(
+    ("stage", "field", "value"),
+    [
+        ("triage", "owner_thread", "attacker"),
+        ("full", "execution_id", "forged-execution"),
+        ("full", "attempt_ordinal", 99),
+    ],
+)
+async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
+    tmp_path, monkeypatch, stage, field, value
+):
+    from agent_comms import native_prompt_binding as binding_module
+
+    root, root_id, _, initial, people = _root(tmp_path)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model(decision="FULL")
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        path = binding_store_path(store)
+
+    async def mutate_after_admitted_send(package, **kwargs):
+        result = await fake(package, **kwargs)
+        current_stage = "triage" if "bounded triage" in kwargs["prompt"] else "full"
+        if current_stage == stage:
+            with sqlite3.connect(path) as db:
+                db.execute("DROP TRIGGER prompt_binding_update_guard")
+                update = db.execute(
+                    f"UPDATE prompt_bindings SET {field}=? WHERE input_id=?",
+                    (value, kwargs["input_id"]),
+                )
+                assert update.rowcount == 1
+                db.execute(binding_module._DDL[2][1])
+        return result
+
+    monkeypatch.setattr(runtime, "run_native_pi_turn", mutate_after_admitted_send)
+    with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        )
+    assert len(calls) == (1 if stage == "triage" else 2)
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        evidence = read_historical_native_inputs(
+            store,
+            wire_root_id=root_id,
+            recipient_lookup=stable_thread_lookup(people[1].created_at),
+            source_seq=initial.message.seq,
+        )
+        assert [row.stage for row in evidence] == ([] if stage == "triage" else ["triage"])
+        assert (
+            store._connection.execute(
+                "SELECT COUNT(*) FROM native_runtime_inputs WHERE stage=? AND session_id IS NULL",
+                (stage,),
+            ).fetchone()[0]
+            == 1
+        )
 
 
 async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(

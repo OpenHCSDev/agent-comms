@@ -63,7 +63,12 @@ from . import backend
 from .bus_publication import stable_thread_lookup, unique_wire_object
 from .cohort_foreground import _accept_visible_initials, _preflight
 from .coordinated_runtime import run_one_sealed_claim
-from .coordination_store import IdentityConflict, MutationStore, PublicationActivationBlocked
+from .coordination_store import (
+    IdentityConflict,
+    MutationStore,
+    PublicationActivationBlocked,
+    StaleFence,
+)
 from .declarations import (
     ActivityState,
     FinishedTurnFence,
@@ -1458,6 +1463,8 @@ class CommsAgent:
         owner = self._comms.registry.require(thread_name)
         if owner.pid != os.getpid():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
+        if owner.active_turn is not None:
+            raise StaleFence("private N/K ACP owner is busy")
         bus = MessageBus(
             self._comms.root / "bus.jsonl", self._comms.registry, private_response_writes=True
         )

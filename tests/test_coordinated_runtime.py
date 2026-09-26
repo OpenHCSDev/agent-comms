@@ -34,7 +34,7 @@ from agent_comms.coordination_store import (
     PublicationActivationBlocked,
     StaleFence,
 )
-from agent_comms.declarations import MessageBus, Thread
+from agent_comms.declarations import MessageBus, Thread, ThreadRegistry
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, NativeTurnResult
 from agent_comms.operations import Comms
@@ -652,15 +652,14 @@ async def test_stop_before_atomic_turn_claim_does_not_revive_or_prompt(
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
-    actual_selected = runtime._require_selected
+    original_claim = ThreadRegistry.claim_live_turn_with_admission
 
-    def stop_before_claim(*args, **kwargs):
-        initial = actual_selected(*args, **kwargs)
+    def stop_before_claim(self, *args, **kwargs):
         comms.registry.unregister("beta")
-        return initial
+        return original_claim(self, *args, **kwargs)
 
-    monkeypatch.setattr(runtime, "_require_selected", stop_before_claim)
-    with pytest.raises(StaleFence, match="stopped before native turn"):
+    monkeypatch.setattr(ThreadRegistry, "claim_live_turn_with_admission", stop_before_claim)
+    with pytest.raises(StaleFence, match="stopped or busy before native turn"):
         await run_one_sealed_claim(
             root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         )
@@ -683,22 +682,23 @@ async def test_owner_epoch_denies_revival_without_blocking_another_owner(
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
-    actual_selected = runtime._require_selected
+    original_claim = ThreadRegistry.claim_live_turn_with_admission
     expected = comms.registry.require("beta")
 
-    def change_registry_before_claim(*args, **kwargs):
-        initial = actual_selected(*args, **kwargs)
+    def change_registry_before_claim(self, *args, **kwargs):
         if mutation == "stop_then_heartbeat":
             comms.registry.unregister("beta")
             comms.registry.heartbeat("beta")
             assert comms.registry.require("beta") == expected
         else:
             comms.registry.heartbeat("alpha")
-        return initial
+        return original_claim(self, *args, **kwargs)
 
-    monkeypatch.setattr(runtime, "_require_selected", change_registry_before_claim)
+    monkeypatch.setattr(
+        ThreadRegistry, "claim_live_turn_with_admission", change_registry_before_claim
+    )
     if mutation == "stop_then_heartbeat":
-        with pytest.raises(StaleFence, match="stopped before native turn"):
+        with pytest.raises(StaleFence, match="stopped or busy before native turn"):
             await run_one_sealed_claim(
                 root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
             )
@@ -851,8 +851,6 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
     tmp_path: Path, monkeypatch, mutation: str, boundary: str
 ) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
-    if mutation == "finish_turn":
-        comms.begin_turn("beta", "existing-full-turn")
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
@@ -864,7 +862,9 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
 
     def revoke(*args, **kwargs):
         if mutation == "finish_turn":
-            comms.finish_turn("beta", "existing-full-turn")
+            active = comms.registry.require("beta").active_turn
+            assert active is not None
+            comms.finish_turn("beta", active.id)
         else:
             comms.registry.unregister("beta")
             comms.registry.heartbeat("beta")
@@ -1001,20 +1001,36 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
         )
 
 
-async def test_existing_owner_turn_is_preserved_after_success(tmp_path: Path, monkeypatch) -> None:
+async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, monkeypatch) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
     comms.begin_turn("beta", "existing-real-turn")
     original = comms.registry.require("beta").active_turn
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
+    with pytest.raises(StaleFence, match="already has a current turn"):
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        )
+    assert calls == []
+    assert comms.registry.require("beta").active_turn == original
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        assert (
+            store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[0]
+            == 0
+        )
+        assert (
+            store._connection.execute(
+                "SELECT count(*) FROM wake_claims WHERE disposition='engaged'"
+            ).fetchone()[0]
+            == 0
+        )
+    comms.finish_turn("beta", "existing-real-turn")
     result = await run_one_sealed_claim(
         root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     )
     assert result is not None and result.disposition is ClaimDisposition.COMPLETED
     assert len(calls) == 1
-    assert comms.registry.require("beta").active_turn == original
-    comms.finish_turn("beta", "existing-real-turn")
 
 
 async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(

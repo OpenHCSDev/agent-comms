@@ -31,7 +31,16 @@ selected native claim. It refuses to run alongside an ACP owner turn and never
 uses legacy inbox cursors, dispositions, steer, or ACK on a marked private root.
 An unconfigured ACP agent encountering a marked root fails closed instead of
 falling back to legacy delivery. Public ACP roots still use their original
-path. This is an explicit constructor-only pilot, **not** automatic enablement
+path. Independent review of the earlier ACP checkpoint `ace00a3` found a
+second ACP instance could borrow its peer's active registry turn, stranding a
+FULL claim or admitting two concurrent TRIAGE sends; it also found a goal
+change after reservation could slip through final send. The successor claims
+an exclusive canonical owner turn before engagement, refuses an unrelated
+human/ACP turn, and pins the exact goal scheduling snapshot at turn CAS and
+final raw-send admission. A stable preexisting goal is **not** globally banned
+from an ordinary selected interruption. No early rejection implies a native
+input retry. This correction needs its own exact independent review.
+This is an explicit constructor-only pilot, **not** automatic enablement
 by the production ACP entry point; it neither creates participants/schema nor
 replays uncertain inputs. A bounded 100-initial scan remains a scale limit.
 

@@ -90,6 +90,7 @@ def _require_registry_owner(comms: Comms, owner: Thread, epoch: int) -> None:
     if (
         actual_epoch != epoch
         or actual.pid != os.getpid()
+        or actual.goal != owner.goal
         or (
             actual.name,
             actual.created_at,
@@ -169,6 +170,7 @@ def _native_send_boundary(
                 actual is None
                 or status is None
                 or not status.active
+                or actual.goal != owner.goal
                 or registry.admission_generations.get(owner.name) != epoch
                 or actual.pid != os.getpid()
                 or (actual.created_at, actual.pid, actual.role, actual.worktree, actual.active_turn)
@@ -356,6 +358,9 @@ def _verify_live_turn(
     wire_root_id: str,
     claim: WakeClaim,
     stage: str,
+    owner: Thread,
+    generation: int,
+    fence: OwnerFence | None,
 ) -> None:
     if (
         type(result) is not NativeTurnResult
@@ -379,19 +384,61 @@ def _verify_live_turn(
     # bytes. Check the committed prelaunch binding against this exact native
     # request digest before recording any live proof or settling the claim.
     # Failure after launch is UNKNOWN: the reserved input is never replayed.
-    binding = read_expected_prompt_binding(store, input_id)
-    if (
-        binding is None
-        or binding.input_id != input_id
-        or binding.expected_prompt_digest != expected_digest
-        or binding.wire_root_id != wire_root_id
-        or binding.claim_id != claim.claim_id
-        or binding.source_seq != claim.wire_seq
-        or binding.message_id != claim.message_id
-        or binding.stage != stage
-        or not expected_prompt_matches_journal(result.context.session_file, binding)
-    ):
-        raise IdentityConflict("live native input lacks exact bound source prompt equality")
+    with store._read_transaction():
+        assert_native_runtime_schema(store._connection)
+        _require_owner(store, claim.recipient_lookup, owner, generation)
+        reserved = store._connection.execute(
+            "SELECT * FROM native_runtime_inputs WHERE input_id=?", (input_id,)
+        ).fetchone()
+        binding = read_expected_prompt_binding(store, input_id)
+        execution_id = None if fence is None else fence.execution_id
+        ordinal = None if fence is None else fence.attempt_ordinal
+        expected_identity = (
+            input_id,
+            stage,
+            claim.claim_id,
+            execution_id,
+            ordinal,
+            claim.recipient_lookup,
+            owner.name,
+            generation,
+        )
+        if (
+            reserved is None
+            or tuple(
+                reserved[field]
+                for field in (
+                    "input_id",
+                    "stage",
+                    "claim_id",
+                    "execution_id",
+                    "attempt_ordinal",
+                    "owner_lookup",
+                    "owner_thread",
+                    "owner_generation",
+                )
+            )
+            != expected_identity
+            or reserved["session_id"] is not None
+            or binding is None
+            or (
+                binding.input_id,
+                binding.stage,
+                binding.claim_id,
+                binding.execution_id,
+                binding.attempt_ordinal,
+                binding.owner_lookup,
+                binding.owner_thread,
+                binding.owner_generation,
+            )
+            != expected_identity
+            or binding.expected_prompt_digest != expected_digest
+            or binding.wire_root_id != wire_root_id
+            or binding.source_seq != claim.wire_seq
+            or binding.message_id != claim.message_id
+            or not expected_prompt_matches_journal(result.context.session_file, binding)
+        ):
+            raise IdentityConflict("live native input lacks exact bound source prompt equality")
 
 
 def _proof_columns(result: NativeTurnResult) -> tuple[str, str, str, int, str]:
@@ -690,7 +737,6 @@ async def run_one_sealed_claim(
             raise IdentityConflict(
                 f"sealed claim scan exhausted; retry explicitly with after_seq={cursor}"
             )
-        initial = _require_selected(store, bus, wire_root_id, pending, owner, person.generation)
         # A PID and RUNNING bit can survive stop -> heartbeat in the same
         # process. Bind publication to this immutable turn; unregister and
         # finish_turn both clear it. CAS also compares the persistent per-owner
@@ -699,17 +745,25 @@ async def run_one_sealed_claim(
         # unrelated recipient's registry write must not invalidate this owner.
         # A stale owner epoch cannot reserve Pi input. Comms.begin_turn would
         # revive an owner stopped between preflight and registration calls.
-        if owner.active_turn is None:
-            owned_turn_id = secrets.token_hex(16)
-            try:
-                owner, owner_epoch = comms.registry.claim_live_turn_with_admission(
-                    owner, owned_turn_id, expected_generation=owner_epoch
-                )
-            except RelationViolationError as error:
-                raise StaleFence("selected owner stopped before native turn") from error
-            _require_registry_owner(comms, owner, owner_epoch)
+        # Never borrow another ACP instance's (or a human's) active turn:
+        # its local turn maps are not an owner-exclusive lease. Claim our own
+        # canonical turn *before* any selected source can be engaged.
+        if owner.active_turn is not None:
+            raise StaleFence("selected owner already has a current turn")
+        owned_turn_id = secrets.token_hex(16)
+        try:
+            owner, owner_epoch = comms.registry.claim_live_turn_with_admission(
+                owner,
+                owned_turn_id,
+                expected_generation=owner_epoch,
+            )
+        except RelationViolationError as error:
+            owned_turn_id = None
+            raise StaleFence("selected owner stopped or busy before native turn") from error
+        _require_registry_owner(comms, owner, owner_epoch)
         if owner.active_turn is None or owner.active_turn.owner_pid != owner.pid:
             raise StaleFence("selected recipient has no live owner-turn identity")
+        initial = _require_selected(store, bus, wire_root_id, pending, owner, person.generation)
         owner_witness = LiveResponseOwner(
             owner.name,
             lookup,
@@ -773,6 +827,9 @@ async def run_one_sealed_claim(
                 wire_root_id=wire_root_id,
                 claim=pending,
                 stage="triage",
+                owner=owner,
+                generation=person.generation,
+                fence=None,
             )
             _require_registry_owner(comms, owner, owner_epoch)
             decision = _parse_triage(result.text)
@@ -875,6 +932,9 @@ async def run_one_sealed_claim(
             wire_root_id=wire_root_id,
             claim=pending,
             stage="full",
+            owner=owner,
+            generation=person.generation,
+            fence=fence,
         )
         _require_registry_owner(comms, owner, owner_epoch)
         if not result.text:

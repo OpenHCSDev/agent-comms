@@ -211,8 +211,12 @@ def _verify_claim_bus_before_read_unlocked(bus_path: Path) -> None:
 
 
 @contextmanager
-def _store_lock(store_path: Path, *, blocking: bool = True) -> Iterator[None]:
-    """Hold a canonical store lock; nonblocking callers fail before contention waits."""
+def _store_lock(
+    store_path: Path, *, blocking: bool = True, max_bus_bytes: int | None = None
+) -> Iterator[None]:
+    """Hold a canonical store lock; optionally cap bytes before its durability scan."""
+    if max_bus_bytes is not None and (type(max_bus_bytes) is not int or max_bus_bytes < 0):
+        raise ValueError("bus read cap must be a nonnegative integer")
     store_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = store_path.with_name(f".{store_path.name}.lock")
     with open(lock_path, "a+b") as lock_file:
@@ -237,6 +241,13 @@ def _store_lock(store_path: Path, *, blocking: bool = True) -> Iterator[None]:
 
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
         try:
+            # The shared claim bus durability guard may parse the entire log.
+            # A bounded projection must refuse over-budget bytes *before* that
+            # guard starts; the flock excludes cooperating appends meanwhile.
+            if max_bus_bytes is not None and store_path.exists():
+                bus_info = store_path.lstat()
+                if not stat.S_ISREG(bus_info.st_mode) or bus_info.st_size > max_bus_bytes:
+                    raise RelationViolationError("Bus exceeds bounded read budget.")
             _verify_claim_bus_before_read_unlocked(store_path)
             yield
         finally:
@@ -2477,6 +2488,7 @@ class ThreadRegistry:
                 or current.pid != os.getpid()
                 or not current.role.executable
                 or current.active_turn is not None
+                or current.goal != expected.goal
                 or (current.name, current.created_at, current.pid, current.role, current.worktree)
                 != (
                     expected.name,
