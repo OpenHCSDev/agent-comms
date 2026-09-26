@@ -114,8 +114,19 @@ into one bounded selected-child request, and never send without durable begin.
 Pi phase-2 candidates through `764b69d` independently failed custom
 EventStream terminal/slot authority or noncooperative deadline, and may not be
 imported or repinned. A separately reviewed exact-child namespace guardian
-and model/auth/baseURL/extension parity are required. The guardian prototype
-`b6d95af` is itself under review and cannot authorize original input. Native
+and model/auth/baseURL/extension parity are required. The separate Linux
+guardian prototype exact `9a40d274` received scoped CLEAN only for provider-
+free dedicated child and namespace retirement tests (review
+`/dev/shm/pr95-guardian-9a-fresh-nnTPLY/REVIEW.md`, archive SHA256
+`fbf97797ca75b13970628ef08a803c2275345ffd010554308ebf5141100fe69b`).
+Two exact reviewed Python source files and two tests are imported byte-for-byte;
+`SelectedSummarySlot.run_selected_summary()` remains unconditionally disabled.
+A new fake combined test binds journal operation ID to fake child exchange,
+retirement and continued original-input exclusion; 60 guardian/combined plus
+selected admission/journal/send tests pass serial/provider-free
+(`/var/tmp/pr95-selected-guardian-combined-python.log`, SHA256
+`34a9661cace1a171ffb9cb16342cd5a705cd77cfd86391876ab19734bb12081a`).
+This is not SDK route proof or a hard 90-second production SLA. Native
 provider terminal, child+descendant retire/reap, exact CAS and strict reopen
 must precede any live producer minting the positive capability. Current
 linked/declined rows still block absent a returned ACK and one-use binding. Native CAS, local metadata, child retirement and reopened-source evidence

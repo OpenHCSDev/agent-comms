@@ -160,11 +160,20 @@ journal/dry-run/ACP input+goal **71 passed**, serial/local; Black/Ruff/mypy/diff
 checks pass. Fresh exact-head independent review still required. No production ACP producer
 exists and persisted linked/declined rows never grant input by status.
 Pi phase-2 candidates through `764b69d` remain NON-CLEAN P1 for custom
-EventStream terminal/slot authority; dedicated namespace guardian prototype
-`b6d95af` is independently under review and unimported. Provider terminal,
-exact child+descendant retire/reap, route/auth parity, semantic retention,
-reviewed operator opt-in and full combined source/wheel testing remain
-mandatory. No selected provider operation has been started.
+EventStream terminal/slot authority. A separately reviewed Linux dedicated
+namespace guardian prototype exact `9a40d274` received **scoped CLEAN** for
+provider-free operation-dedicated fake containment only
+(`/dev/shm/pr95-guardian-9a-fresh-nnTPLY/REVIEW.md`). Its two Python source
+files and two tests were copied byte-for-byte into a distinct default-OFF
+integration slice; `run_selected_summary()` still unconditionally rejects.
+Own fake combined tests reserve the SAME operation ID, exchange one fake RPC,
+retire the exact child and keep original input blocked on success/timeout;
+guardian/combined plus selected admission/journal/send focused **60 passed**
+serial/provider-free (`/var/tmp/pr95-selected-guardian-combined-python.log`,
+SHA256 `34a9661cace1a171ffb9cb16342cd5a705cd77cfd86391876ab19734bb12081a`). No 90-second hard SLA,
+SDK route/auth parity, provider terminal receipt, live selected Pi, semantic
+retention, operator opt-in or production clearance is inferred; fresh exact
+combined review and full source/wheel testing remain mandatory. No selected provider operation has been started.
 
 ## Normal PR104/105 main integration and socket incarnation (combined review pending)
 
