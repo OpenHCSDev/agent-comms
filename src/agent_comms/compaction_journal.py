@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sqlite3
+import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ from uuid import uuid4
 from weakref import WeakKeyDictionary
 
 if TYPE_CHECKING:
+    from .fresh_private_session import FreshPrivateSession
     from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 
 Outcome = Literal["committed", "refused", "aborted-no-write", "unknown"]
@@ -34,6 +36,9 @@ class _ReturnedTerminalAck:
 
 
 _issued_selected_acks: WeakKeyDictionary[_ReturnedTerminalAck, tuple] = WeakKeyDictionary()
+# A visible enrollment SQL row after lost parent fsync is NOT coverage authority.
+# Only its exact returned registration can allow a same-process private attempt.
+_returned_fresh_enrollments: WeakKeyDictionary[FreshPrivateSession, tuple] = WeakKeyDictionary()
 
 
 def _consume_selected_ack(receipt: object, expected: tuple) -> bool:
@@ -182,6 +187,19 @@ class CompactionJournal:
                     session_file TEXT NOT NULL,
                     status TEXT NOT NULL CHECK(status = 'unknown')
                 )""")
+            db.execute("""CREATE TABLE IF NOT EXISTS enrolled_private_sessions (
+                    session_file TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL UNIQUE,
+                    device INTEGER NOT NULL,
+                    inode INTEGER NOT NULL,
+                    header_sha256 TEXT NOT NULL,
+                    owner_name TEXT NOT NULL,
+                    owner_created_at TEXT NOT NULL,
+                    owner_lookup TEXT NOT NULL,
+                    owner_generation INTEGER NOT NULL,
+                    admission_epoch INTEGER NOT NULL,
+                    creator_pid INTEGER NOT NULL
+                )""")
         parent = path.parent.resolve(strict=True)
         for directory in (parent, *parent.parents):
             parent_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
@@ -283,8 +301,103 @@ class CompactionJournal:
             ).fetchall()
         return tuple(CompactionOperation(*row) for row in rows)
 
+    def enroll_fresh_private_session(
+        self,
+        fresh: FreshPrivateSession,
+        *,
+        owner_name: str,
+        owner_created_at: str,
+        owner_lookup: str,
+        owner_generation: int,
+        admission_epoch: int,
+    ) -> None:
+        """Persist exact O_EXCL new-session coverage under the caller's owner locks.
+
+        A file/header alone cannot be enrolled later: ``fresh`` is a returned
+        process-local creation object, and this transaction's COMMIT + parent
+        fsync must return before any native prompt. The caller must first
+        verify its current registry owner/SQL generation under the shared wire
+        lock. This row is NOT terminal raw-input settlement or selected grant.
+        """
+        from .fresh_private_session import FreshPrivateSession
+
+        if type(fresh) is not FreshPrivateSession:
+            raise CompactionJournalError("Returned fresh-session creation required")
+        fresh.verify_prewrite()
+        if type(owner_lookup) is not str or not owner_lookup or "/" in owner_lookup:
+            raise CompactionJournalError("Exact private owner lookup required")
+        private_root = (self.path.parent / "native-sessions").resolve(strict=False)
+        if (
+            fresh.path.resolve(strict=True).parent != private_root / owner_lookup
+            or type(owner_name) is not str
+            or not owner_name
+            or type(owner_created_at) is not str
+            or not owner_created_at
+            or type(owner_generation) is not int
+            or owner_generation <= 0
+            or type(admission_epoch) is not int
+            or admission_epoch <= 0
+        ):
+            raise CompactionJournalError("Fresh-session owner or private location differs")
+        try:
+            with self._transaction() as db:
+                if (
+                    db.execute(
+                        "SELECT 1 FROM private_raw_inputs WHERE session_file = ? LIMIT 1",
+                        (str(fresh.path),),
+                    ).fetchone()
+                    or db.execute(
+                        "SELECT 1 FROM selected_summary_attempts WHERE session_file = ? LIMIT 1",
+                        (str(fresh.path),),
+                    ).fetchone()
+                    or db.execute(
+                        "SELECT 1 FROM operations WHERE session_file = ? LIMIT 1",
+                        (str(fresh.path),),
+                    ).fetchone()
+                ):
+                    raise CompactionJournalError("Fresh-session history already exists")
+                fresh.verify_prewrite()
+                db.execute(
+                    "INSERT INTO enrolled_private_sessions "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(fresh.path),
+                        fresh.session_id,
+                        fresh.device,
+                        fresh.inode,
+                        fresh.header_sha256,
+                        owner_name,
+                        owner_created_at,
+                        owner_lookup,
+                        owner_generation,
+                        admission_epoch,
+                        fresh.creator_pid,
+                    ),
+                )
+        except sqlite3.IntegrityError as error:
+            raise CompactionJournalError("Fresh-session coverage already enrolled") from error
+        _returned_fresh_enrollments[fresh] = (
+            str(self.path),
+            fresh.session_id,
+            fresh.device,
+            fresh.inode,
+            fresh.header_sha256,
+            owner_name,
+            owner_created_at,
+            owner_lookup,
+            owner_generation,
+            admission_epoch,
+            fresh.creator_pid,
+        )
+
     def reserve_selected_summary(
-        self, session_file: str, source: dict, *, operation_id: str | None = None
+        self,
+        session_file: str,
+        source: dict,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_epoch: int | None = None,
     ) -> str:
         """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
 
@@ -298,15 +411,29 @@ class CompactionJournal:
         if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
             raise ValueError("Expected exact selected summary operation ID")
         canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
         private_sessions = (self.path.parent / "native-sessions").resolve(strict=False)
-        if Path(canonical).is_relative_to(private_sessions):
-            # Existing PR94 sessions can predate this new raw-prewrite marker,
-            # and the old runtime's pending input rows do not bind a saved
-            # session path. No trustworthy migration/epoch floor exists yet.
-            # Never infer clean history from missing marker rows or file times.
-            raise CompactionJournalError(
-                "Private selected reservation requires reviewed raw-history coverage floor"
-            )
+        private = Path(canonical).is_relative_to(private_sessions)
+        if private:
+            # Never infer coverage from a visible file, missing marker, or an
+            # enrolment SQL row alone after an uncertain fsync/restart. The
+            # original O_EXCL creation object must still be in this process.
+            from .fresh_private_session import FreshPrivateSession
+
+            if type(fresh_session) is not FreshPrivateSession:
+                raise CompactionJournalError(
+                    "Private selected reservation requires reviewed raw-history coverage floor"
+                )
+            fresh_session.verify_saved_identity()
+            if fresh_session.path != Path(canonical) or (
+                admission_epoch is not None and type(admission_epoch) is not int
+            ):
+                raise CompactionJournalError("Fresh private selected identity changed")
         if (
             type(source) is not dict
             or set(source) != {"source", "selected", "settings"}
@@ -343,6 +470,28 @@ class CompactionJournal:
                 raise ValueError("Selected summary durable original input changed")
         try:
             with self._transaction() as db:
+                if private:
+                    assert fresh_session is not None
+                    coverage = db.execute(
+                        "SELECT session_id,device,inode,header_sha256,owner_name,"
+                        "owner_created_at,owner_lookup,owner_generation,"
+                        "admission_epoch,creator_pid "
+                        "FROM enrolled_private_sessions WHERE session_file = ?",
+                        (canonical,),
+                    ).fetchone()
+                    witness = source["source"]
+                    if (
+                        coverage is None
+                        or _returned_fresh_enrollments.get(fresh_session)
+                        != (str(self.path), *coverage)
+                        or witness.get("ownerName") != coverage[4]
+                        or witness.get("ownerCreatedAt") != coverage[5]
+                        or Path(canonical).parent.name != coverage[6]
+                        or witness.get("ownerPid") != coverage[9]
+                        or (admission_epoch is not None and admission_epoch != coverage[8])
+                    ):
+                        raise CompactionJournalError("Fresh private owner coverage differs")
+                    fresh_session.verify_saved_identity()
                 if db.execute(
                     "SELECT 1 FROM operations WHERE session_file = ? "
                     "AND status IN ('intent','unknown') LIMIT 1",

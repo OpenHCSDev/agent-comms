@@ -143,10 +143,13 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             proof_rows = []
         else:
             entries = [json.loads(line) for line in session_file.read_text().splitlines()]
-            proof_rows = [
-                json.loads(line)
-                for line in Path(str(session_file) + ".input-proof").read_text().splitlines()
-            ]
+            proof_file = Path(str(session_file) + ".input-proof")
+            proof_rows = (
+                [json.loads(line) for line in proof_file.read_text().splitlines()]
+                if proof_file.exists()
+                else []
+            )
+        session_id = entries[0]["id"]
         generation = 1 + max((row["requestGeneration"] for row in proof_rows), default=0)
         entry_id = hashlib.sha256(input_id.encode()).hexdigest()[:16]
         entries.append(
@@ -176,14 +179,18 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
                 },
             }
         )
-        session_file.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        if fresh:
+            session_file.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        else:
+            with session_file.open("a") as output:
+                output.write(json.dumps(entries[-1]) + "\n")
         session_file.chmod(0o600)
         digest = hashlib.sha256((input_id + str(generation)).encode()).hexdigest()
         proof_rows.append(
             {
                 "schema": 1,
                 "type": "context_committed",
-                "sessionId": "isolated-session",
+                "sessionId": session_id,
                 "inputId": input_id,
                 "sessionEntryId": entry_id,
                 "requestGeneration": generation,
@@ -196,9 +203,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         reply = json.dumps({"decision": decision}) if "bounded triage" in prompt else "42"
         return NativeTurnResult(
             reply,
-            NativeContextProof(
-                input_id, "isolated-session", entry_id, generation, digest, session_file
-            ),
+            NativeContextProof(input_id, session_id, entry_id, generation, digest, session_file),
         )
 
     return fake, calls
@@ -358,6 +363,103 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
         assert one[0].triage_result is None
         assert one[0].input_id == outcome.input_id
     assert comms.bus.dm_history("sender", "beta")[-1].target == "sender"
+
+
+async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, root_id, _comms, _initial, people = _root(tmp_path, direct=True)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    runner, calls = _fake_model()
+    monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
+    result = await run_one_sealed_claim(
+        root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=tmp_path,
+        fresh_private_enrollment=True,
+    )
+    assert result is not None and result.disposition is ClaimDisposition.COMPLETED
+    fresh = result.fresh_session
+    assert fresh is not None and len(calls) == 1
+    assert fresh.path.parent == root / "native-sessions" / stable_thread_lookup(
+        people[2].created_at
+    )
+    fresh.verify_saved_identity()
+    assert len(fresh.path.read_text().splitlines()) == 2
+    journal = CompactionJournal(root / "compaction-commits.sqlite3")
+    with journal._transaction() as db:
+        coverage = db.execute(
+            "SELECT session_id,device,inode,owner_generation,admission_epoch "
+            "FROM enrolled_private_sessions WHERE session_file=?",
+            (str(fresh.path),),
+        ).fetchone()
+        assert coverage is not None and coverage[:3] == (
+            fresh.session_id,
+            fresh.device,
+            fresh.inode,
+        )
+        assert db.execute(
+            "SELECT input_id,status FROM private_raw_inputs WHERE session_file=?",
+            (str(fresh.path),),
+        ).fetchone() == (result.input_id, "unknown")
+    with pytest.raises(CompactionJournalError, match="never replay"):
+        journal.reserve_selected_summary(
+            str(fresh.path),
+            {
+                "source": {
+                    "ownerName": "beta",
+                    "ownerCreatedAt": float(people[2].created_at).hex(),
+                    "ownerPid": os.getpid(),
+                    "admissionGeneration": coverage[3],
+                },
+                "selected": {"provider": "openrouter"},
+                "settings": {"keepRecentTokens": 2000},
+            },
+            fresh_session=fresh,
+            admission_epoch=coverage[4],
+        )
+
+
+async def test_fresh_creation_fsync_unknown_never_enters_fake_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent_comms import fresh_private_session as fresh_module
+
+    root, root_id, _comms, _initial, people = _root(tmp_path, direct=True)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    runner, calls = _fake_model()
+    monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
+    expected_dir = root / "native-sessions" / stable_thread_lookup(people[2].created_at)
+    real_fsync = fresh_module._fsync_directory
+
+    def unknown_parent(path: Path) -> None:
+        if path == expected_dir:
+            raise OSError("injected fresh file parent fsync UNKNOWN")
+        real_fsync(path)
+
+    monkeypatch.setattr(fresh_module, "_fsync_directory", unknown_parent)
+    with pytest.raises(NativePiUnavailable, match="durability UNKNOWN"):
+        await run_one_sealed_claim(
+            root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=tmp_path,
+            fresh_private_enrollment=True,
+        )
+    assert not calls
+    visible = list(expected_dir.glob("enrolled-*.jsonl"))
+    assert len(visible) == 1
+    journal = CompactionJournal(root / "compaction-commits.sqlite3")
+    with pytest.raises(CompactionJournalError, match="coverage floor"):
+        journal.reserve_selected_summary(
+            str(visible[0]),
+            {
+                "source": {"ownerName": "beta"},
+                "selected": {"provider": "openrouter"},
+                "settings": {"keepRecentTokens": 2000},
+            },
+        )
 
 
 @pytest.mark.parametrize("available", [True, False])
