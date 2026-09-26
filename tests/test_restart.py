@@ -134,6 +134,37 @@ def test_direct_claim_racing_final_preflight_is_not_erased_or_signaled(tmp_path,
     assert comms.registry.require("one").active_turn.id == "raced"
 
 
+def test_explicit_start_cannot_reopen_stopped_live_restart_fence(tmp_path, monkeypatch):
+    comms, stopped = setup_owners(tmp_path, monkeypatch)
+    original = comms.registry.require("one")
+    snapshot = comms.registry.snapshot()
+    comms.registry.fence_idle_owner(
+        original, expected_epoch=snapshot.admission_generations["one"]
+    )
+    with pytest.raises(RelationViolationError, match="Cannot reactivate a stopped incarnation"):
+        comms.start("one")
+    assert comms.registry.status("one") is ThreadStatus.STOPPED
+    assert comms.registry.require("one").pid == original.pid
+    assert stopped == []
+
+
+def test_start_racing_fence_after_proof_cannot_reopen_admission(tmp_path, monkeypatch):
+    comms, stopped = setup_owners(tmp_path, monkeypatch)
+    original = comms.registry.require("one")
+    snapshot = comms.registry.snapshot()
+    expected_epoch = snapshot.admission_generations["one"]
+    def proof_and_fence(thread, wait=True):
+        if wait:
+            comms.registry.fence_idle_owner(original, expected_epoch=expected_epoch)
+        return True
+    monkeypatch.setattr(comms, "_is_local_participant", proof_and_fence)
+    with pytest.raises(RelationViolationError):
+        comms.start("one")
+    assert comms.registry.status("one") is ThreadStatus.STOPPED
+    assert comms.registry.require("one").active_turn is None
+    assert stopped == []
+
+
 def test_bulk_preflight_refuses_busy_before_stopping_any_owner(tmp_path, monkeypatch):
     comms, stopped = setup_owners(tmp_path, monkeypatch)
     busy = comms.registry.require("two")

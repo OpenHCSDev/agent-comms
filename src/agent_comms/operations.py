@@ -3182,6 +3182,10 @@ class Comms:
                         agent_args,
                     )
                     return OwnerStartResult(owner.name, owner.pid, True)
+                if not snapshot.statuses[canonical].active:
+                    raise RelationViolationError(
+                        "Cannot reactivate a stopped incarnation before its owner exits."
+                    )
                 if epoch is None:
                     raise RelationViolationError("Cannot start an owner without an incarnation.")
                 original_epoch = epoch
@@ -3207,7 +3211,9 @@ class Comms:
                 ):
                     continue
                 if not current.statuses[canonical].active:
-                    self.registry.register(fresh)
+                    raise RelationViolationError(
+                        "Cannot reactivate a stopped incarnation before its owner exits."
+                    )
                 return OwnerStartResult(canonical, fresh.pid, False)
         raise RelationViolationError(
             f"Owner changed or became unverifiable while starting {name!r}."
