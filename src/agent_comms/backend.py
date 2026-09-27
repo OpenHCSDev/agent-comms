@@ -50,7 +50,7 @@ from .image_inputs import ImageInput
 from .maintenance_barrier import MaintenanceBarrier
 from .native_pi import CAPABILITY as NATIVE_INPUT_CAPABILITY
 from .native_pi import NativeContextProof, NativePiUnavailable, _verify_context
-from .native_prompt_send import send_fenced_prompt
+from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .selected_persistent_prompt import SelectedPersistentPrompt
 from .tool_results import ToolDiff
@@ -779,6 +779,13 @@ async def stream_agent_events(
                         if event.get("type") == "done":
                             terminal_seen = True
                         yield event
+            except PromptSendUnknown:
+                # Clear the borrowed handle while still holding its writer
+                # lock. Neither a partial raw write nor a post-write failure
+                # is a replay or a reusable child.
+                if selected_prompt is not None and persistent_session is not None:
+                    await persistent_session.close()
+                raise
             finally:
                 startup.release()
                 if owner is not None:
@@ -788,6 +795,16 @@ async def stream_agent_events(
                         if not stderr_task.done():
                             stderr_task.cancel()
                         await asyncio.gather(stderr_task, return_exceptions=True)
+    except PromptSendUnknown:
+        if owner is not None:
+            await terminate_task_process(owner)
+        if not terminal_seen:
+            yield {
+                "type": "done",
+                "ok": False,
+                "reason_code": "selected_input_unknown",
+                "text": "Selected input send is UNKNOWN; never replay this input.",
+            }
     except Exception:
         # A malformed RPC row cannot certify a completed turn. Preserve no
         # raw payload/stderr in the wire response and always reap the child.
@@ -1635,7 +1652,7 @@ async def _stream_agent_events(
                     await send_fenced_prompt(
                         proc.stdin,
                         prompt_payload,
-                        selected_prompt.send_boundary,
+                        selected_prompt.one_use_boundary,
                         timeout=prompt_start_deadline - loop.time(),
                     )
                 else:

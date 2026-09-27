@@ -273,6 +273,112 @@ async def test_selected_refuses_stale_session_or_profile_without_replacement(tmp
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("grant", [False, True])
+async def test_selected_boolean_boundary_denies_before_raw_bytes(tmp_path, grant):
+    stub = _fake_pi(tmp_path)
+    persistent = backend.PersistentPiSession()
+
+    @contextmanager
+    def boundary():
+        yield grant
+
+    boundary._maintenance_wire_locked = True
+    try:
+        assert (await _run(stub, tmp_path, persistent, "ordinary"))[-1]["ok"] is True
+        selected = await _run(
+            stub,
+            tmp_path,
+            persistent,
+            "selected safe tool",
+            SelectedPersistentPrompt("9" * 32, boundary),
+        )
+        assert selected[-1]["ok"] is False
+        assert selected[-1]["reason_code"] == "selected_input_unknown"
+        assert persistent.proc is None
+        assert len((tmp_path / "prompt-log").read_text().splitlines()) == 1
+    finally:
+        await persistent.close_idle()
+
+
+@pytest.mark.asyncio
+async def test_selected_boundary_exception_denies_before_raw_bytes(tmp_path):
+    stub = _fake_pi(tmp_path)
+    persistent = backend.PersistentPiSession()
+
+    @contextmanager
+    def boundary():
+        raise RuntimeError("owner refused")
+        yield  # pragma: no cover
+
+    boundary._maintenance_wire_locked = True
+    try:
+        assert (await _run(stub, tmp_path, persistent, "ordinary"))[-1]["ok"] is True
+        denied = await _run(
+            stub,
+            tmp_path,
+            persistent,
+            "selected safe tool",
+            SelectedPersistentPrompt("9" * 32, boundary),
+        )
+        assert denied[-1]["reason_code"] == "selected_input_unknown"
+        assert persistent.proc is None
+        assert len((tmp_path / "prompt-log").read_text().splitlines()) == 1
+    finally:
+        await persistent.close_idle()
+
+
+@pytest.mark.asyncio
+async def test_selected_object_cannot_send_same_id_twice(tmp_path):
+    stub = _fake_pi(tmp_path)
+    persistent = backend.PersistentPiSession()
+
+    @contextmanager
+    def boundary():
+        yield
+
+    boundary._maintenance_wire_locked = True
+    prompt = SelectedPersistentPrompt("9" * 32, boundary)
+    try:
+        assert (await _run(stub, tmp_path, persistent, "ordinary"))[-1]["ok"] is True
+        assert (await _run(stub, tmp_path, persistent, "selected safe tool", prompt))[-1]["ok"]
+        repeated = await _run(stub, tmp_path, persistent, "selected safe tool", prompt)
+        assert repeated[-1]["reason_code"] == "selected_input_unknown"
+        assert persistent.proc is None
+        assert (tmp_path / "prompt-log").read_text().splitlines()[-1:] == ["9" * 32]
+        assert len((tmp_path / "prompt-log").read_text().splitlines()) == 2
+    finally:
+        await persistent.close_idle()
+
+
+@pytest.mark.asyncio
+async def test_selected_boundary_postwrite_error_is_unknown_and_revokes_child(tmp_path):
+    stub = _fake_pi(tmp_path)
+    persistent = backend.PersistentPiSession()
+
+    @contextmanager
+    def boundary():
+        yield
+        raise RuntimeError("post-write owner failure")
+
+    boundary._maintenance_wire_locked = True
+    try:
+        assert (await _run(stub, tmp_path, persistent, "ordinary"))[-1]["ok"] is True
+        selected = await _run(
+            stub,
+            tmp_path,
+            persistent,
+            "selected safe tool",
+            SelectedPersistentPrompt("9" * 32, boundary),
+        )
+        assert selected[-1]["reason_code"] == "selected_input_unknown"
+        assert persistent.proc is None
+        assert len((tmp_path / "pid-log").read_text().splitlines()) == 1
+        assert (tmp_path / "prompt-log").read_text().splitlines().count("9" * 32) <= 1
+    finally:
+        await persistent.close_idle()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "message",
     ["selected missing proof", "selected missing proof tool", "selected forged proof"],
