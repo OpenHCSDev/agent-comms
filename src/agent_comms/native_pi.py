@@ -100,6 +100,29 @@ class NativeContextProof:
     session_file: Path
 
 
+class NativePiTerminalFailure(NativePiUnavailable):
+    """A proved input ended in a failed terminal and its owned process was reaped."""
+
+    def __init__(self, detail: str, context: NativeContextProof, provider: str, model: str):
+        super().__init__(f"Native Pi assistant did not finish successfully: {detail}")
+        self.context = context
+        self.provider = provider
+        self.model = model
+        # Provider text may contain arbitrary response bodies. Only complete
+        # known short errors may be broadcast into a shared channel.
+        match = re.fullmatch(
+            r"(?:(?:Codex|OpenAI|Anthropic) error: )?"
+            r"(The usage limit has been reached|Insufficient credits|"
+            r"(?:401|402|403|429)(?::\s*|\s+)(?:insufficient credits|rate limit|unauthorized)|"
+            r"Model output limit reached)\.?",
+            detail,
+            flags=re.IGNORECASE,
+        )
+        self.public_message = (
+            f"{provider}/{model}: {match.group(1) if match else 'provider request failed'}."
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class NativeTurnResult:
     text: str
@@ -799,6 +822,7 @@ async def run_native_pi_turn(
         contexts: list[dict[str, Any]] = []
         chunks: list[str] = []
         final_messages: list[str] = []
+        terminal_error: str | None = None
         selected_call_id: str | None = None
         selected_args: object = None
         selected_started = False
@@ -828,9 +852,8 @@ async def run_native_pi_turn(
                 if isinstance(message, dict) and message.get("role") == "assistant":
                     content = message.get("content")
                     if message.get("errorMessage"):
-                        raise NativePiUnavailable(
-                            f"Native Pi model error: {message['errorMessage']}"
-                        )
+                        terminal_error = str(message["errorMessage"])
+                        continue
                     if not isinstance(content, list) or any(
                         not isinstance(item, dict) for item in content
                     ):
@@ -866,7 +889,11 @@ async def run_native_pi_turn(
                                 )
                         final_messages.append("".join(parts))
                     else:
-                        raise NativePiUnavailable("Native Pi assistant did not finish successfully")
+                        terminal_error = (
+                            "Model output limit reached"
+                            if message.get("stopReason") == "length"
+                            else "Provider returned an unsuccessful terminal"
+                        )
             elif kind == "tool_execution_start":
                 if (
                     tool_socket is None
@@ -916,6 +943,9 @@ async def run_native_pi_turn(
                 raise NativePiUnavailable("Native Pi session identity changed during a turn")
         if not accepted or input_event is None or not contexts:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
+        if terminal_error is not None:
+            proof = _verify_context(actual_file, input_id, session_id, input_event, contexts[-1])
+            raise NativePiTerminalFailure(terminal_error, proof, provider, model)
         if selected_call_id is not None and not selected_finished:
             raise NativePiUnavailable("Native Pi selected tool has no terminal result")
         if (
