@@ -16,10 +16,11 @@ import stat
 import sys
 import tempfile
 import time
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
 
-from .declarations import RelationViolationError, Thread
+from .declarations import RelationViolationError, Thread, ThreadStatus, _store_lock
 from .input_disposition import InputDispositions
 from .operations import Comms
 
@@ -331,3 +332,115 @@ def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
     except BaseException:
         shutil.rmtree(stage, ignore_errors=True)
         raise
+
+
+def _require_unchanged_archive_source(legacy: Comms, archive: ArchiveReceipt) -> None:
+    """Reject any old-root append or state update since the stopped archive."""
+    manifest_path = archive.path / ".archive-manifest"
+    info = manifest_path.lstat()
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or info.st_uid != os.geteuid()
+        or stat.S_IMODE(info.st_mode) != 0o600
+    ):
+        raise RelationViolationError("Cutover archive manifest is not owner-only")
+    manifest = json.loads(manifest_path.read_text())
+    files = manifest.get("files")
+    sources = _state_files(legacy.root)
+    if (
+        manifest.get("version") != 1
+        or manifest.get("source_root") != str(legacy.root.absolute())
+        or not isinstance(files, dict)
+        or set(files) != {path.name for path in sources}
+    ):
+        raise RelationViolationError("Cutover archive differs from the stopped source")
+    for source in sources:
+        before = source.lstat()
+        if not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid():
+            raise RelationViolationError("Cutover source is not an owned regular file")
+        digest = hashlib.sha256()
+        with source.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+        after = source.lstat()
+        if (
+            _file_identity(before) != _file_identity(after)
+            or files[source.name] != {"size": before.st_size, "sha256": digest.hexdigest()}
+        ):
+            raise RelationViolationError("Old root changed after its cutover archive")
+
+
+def stage_private_participants(
+    legacy: Comms,
+    private: Comms,
+    archive: ArchiveReceipt,
+    inventory: LegacyInventory,
+    selected_names: Sequence[str],
+) -> tuple[str, tuple[OwnerWitness, ...]]:
+    """Seed stopped saved-session owners into a fresh private root, without replay.
+
+    This never launches a process or copies legacy messages, ACKs, claims, or
+    UNKNOWN dispositions. A partially staged root is discarded, not retried.
+    The operator chooses which witnessed owners to stage and later start; the
+    returned witnesses retain each owner's verified agent launch settings.
+    """
+    selected = tuple(selected_names)
+    if not selected or len(set(selected)) != len(selected):
+        raise ValueError("Cutover participant selection must be nonempty and unique")
+    if (
+        legacy.root.resolve() != inventory.root.resolve()
+        or private.root.resolve() == legacy.root.resolve()
+        or private.root.resolve().is_relative_to(legacy.root.resolve())
+        or private.root.resolve().is_relative_to(archive.path.resolve())
+    ):
+        raise ValueError("Cutover source, archive, and private root must be distinct")
+    _require_unchanged_archive_source(legacy, archive)
+    snapshot = legacy.registry.snapshot()
+    if any(thread.active_turn is not None for thread in snapshot.threads.values()) or any(
+        thread.pid > 0 and legacy._process_alive(thread.pid)
+        for thread in snapshot.threads.values()
+    ):
+        raise RelationViolationError("Cutover participants require all old owners stopped")
+    witnesses = {witness.name: witness for witness in inventory.live_owners}
+    participants: list[Thread] = []
+    for name in selected:
+        thread = snapshot.threads.get(name)
+        witness = witnesses.get(name)
+        if (
+            thread is None
+            or witness is None
+            or not thread.role.executable
+            or snapshot.statuses[name] is not ThreadStatus.STOPPED
+            or (thread.pid, thread.created_at, thread.session_file, thread.worktree)
+            != (
+                witness.pid, witness.created_at, str(witness.session_file),
+                str(witness.worktree),
+            )
+        ):
+            raise RelationViolationError(f"Cutover owner {name!r} lacks its stopped witness")
+        session = witness.session_file.lstat()
+        worktree = witness.worktree.lstat()
+        if (
+            not stat.S_ISREG(session.st_mode)
+            or session.st_uid != os.geteuid()
+            or stat.S_IMODE(session.st_mode) != 0o600
+            or session.st_nlink != 1
+            or session.st_size == 0
+            or (session.st_dev, session.st_ino)
+            != (witness.session_device, witness.session_inode)
+            or not stat.S_ISDIR(worktree.st_mode)
+            or worktree.st_uid != os.geteuid()
+        ):
+            raise RelationViolationError(f"Cutover owner {name!r} lost its saved session")
+        participants.append(replace(thread, pid=0, active_turn=None))
+    if (
+        (private.root / "bus_meta.json").exists()
+        or (private.root / "bus.jsonl").exists()
+        or private.registry.snapshot().threads
+    ):
+        raise RelationViolationError("Cutover participants require a fresh private root")
+    root_id = private.initialize_private_initial_protocol()
+    with _store_lock(private._wire_lock_path):
+        for thread in participants:
+            private.registry.register(thread, ThreadStatus.STOPPED)
+    return root_id, tuple(witnesses[name] for name in selected)

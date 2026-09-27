@@ -4,16 +4,23 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
+from dataclasses import replace
 
 import pytest
 
 from agent_comms import supervised_cutover
-from agent_comms.declarations import RelationViolationError, Thread
+from agent_comms.declarations import RelationViolationError, Thread, ThreadStatus
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import Comms
-from agent_comms.supervised_cutover import archive_stopped_root
+from agent_comms.supervised_cutover import (
+    LegacyInventory,
+    OwnerWitness,
+    archive_stopped_root,
+    stage_private_participants,
+)
 
 pytestmark = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux cutover")
 
@@ -89,3 +96,71 @@ def test_archive_refuses_rival_destination_after_staging(tmp_path, monkeypatch):
     assert destination.is_dir() and destination.stat().st_ino == rival_inode[0]
     assert list(destination.iterdir()) == []
     assert not list(destination.parent.glob(".cutover-archive-*"))
+
+
+def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path):
+    legacy = Comms(tmp_path / "legacy")
+    saved = tmp_path / "saved-session.jsonl"
+    saved.write_text('{"type":"session"}\n')
+    saved.chmod(0o600)
+    process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        legacy.register(
+            Thread(
+                "sender", frozenset({"team"}), str(tmp_path), pid=process.pid,
+                session_file=str(saved), model="openai-codex/gpt-6-sol",
+            )
+        )
+        legacy.register(Thread("receiver", frozenset(), str(tmp_path), pid=0))
+        legacy.send("sender", "receiver", "old pending message")
+        InputDispositions(legacy.root).record(
+            "stage:unknown", seq=None, owner="sender", admission=1,
+            target="sender", text="uncertain old input",
+        )
+        snapshot = legacy.registry.snapshot()
+        thread = snapshot.threads["sender"]
+        info = saved.stat()
+        witness = OwnerWitness(
+            "sender", process.pid, thread.created_at,
+            snapshot.admission_generations["sender"],
+            supervised_cutover._process_start_ticks(process.pid),
+            saved, info.st_dev, info.st_ino, tmp_path, "pi", "",
+        )
+        inventory = LegacyInventory(
+            legacy.root, (witness,), (), (), (("receiver", 1),), 1
+        )
+        process.terminate()
+        process.wait(timeout=5)
+        legacy.registry.unregister("sender")
+        archive = archive_stopped_root(legacy, tmp_path / "archive" / "snapshot")
+        private = Comms(tmp_path / "private")
+        root_id, selected = stage_private_participants(
+            legacy, private, archive, inventory, ["sender"]
+        )
+        staged = private.registry.require("sender")
+        assert selected == (witness,)
+        assert staged.pid == 0 and staged.session_file == str(saved)
+        assert staged.created_at == thread.created_at
+        assert private.registry.status("sender") is ThreadStatus.STOPPED
+        assert not (private.root / "bus.jsonl").exists()
+        assert archive.pending_messages == archive.unknown_inputs == 1
+        private.registry.register(replace(staged, pid=os.getpid()), ThreadStatus.RUNNING)
+        private.register(Thread("receiver", frozenset(), str(tmp_path), pid=os.getpid()))
+        message = private.send_initial_cohort("sender", "receiver", "new private input")
+        initial = private.bus.read_initial_cohort(root_id, message.seq)
+        assert initial.audience.recipients[0].canonical_thread == "receiver"
+        assert [item.body for item in legacy.inbox("receiver")] == ["old pending message"]
+        with pytest.raises(RelationViolationError, match="fresh private root"):
+            stage_private_participants(legacy, private, archive, inventory, ["sender"])
+        another = Comms(tmp_path / "another-private")
+        InputDispositions(legacy.root).record(
+            "stage:late", seq=None, owner="sender", admission=1,
+            target="sender", text="late old input",
+        )
+        with pytest.raises(RelationViolationError, match="changed after its cutover archive"):
+            stage_private_participants(legacy, another, archive, inventory, ["sender"])
+        assert not (another.root / "bus_meta.json").exists()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
