@@ -22,9 +22,15 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .bus_publication import stable_thread_lookup
+from .cohort_schema import install_private_cohort_schema
+from .coordinated_runtime_schema import install_native_runtime_schema
+from .coordination_response import install_private_response_schema
+from .coordination_store import MutationStore
 from .declarations import RelationViolationError, Thread, ThreadStatus, _store_lock
 from .goal_waits import GoalWaits
 from .input_disposition import InputDispositions
+from .native_prompt_binding import install_prompt_binding_schema
 from .operations import Comms
 
 if TYPE_CHECKING:
@@ -492,6 +498,19 @@ def stage_private_participants(
             new_waits.record(wait)
         for thread in participants:
             private.registry.register(thread, ThreadStatus.STOPPED)
+    # A staged owner must be ready for the first private USER row before the
+    # default route is published. The foreground-only setup path normally
+    # installs these schemas, but a saved-session cutover does not use it.
+    with MutationStore(str(private.root / "coordination.sqlite3")) as store:
+        install_private_cohort_schema(store)
+        install_private_response_schema(store)
+        install_native_runtime_schema(store)
+        install_prompt_binding_schema(store)
+        for thread in participants:
+            store.register_participant(
+                stable_thread_lookup(thread.created_at), thread.name, thread.name,
+                committed=True,
+            )
     _require_unchanged_archive_source(legacy, archive)
     return root_id, tuple(witnesses[name] for name in selected)
 
