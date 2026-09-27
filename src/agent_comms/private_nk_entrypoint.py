@@ -60,6 +60,15 @@ def private_nk_launch(root: Path, environment: Mapping[str, str]) -> PrivateNkLa
 
 
 def private_nk_from_environment() -> PrivateNkLaunch | None:
-    """Use the same explicit root/environment preflight for ACP and worker."""
-    root = Path(os.environ.get("AGENT_COMMS_ROOT", "~/.agent-comms")).expanduser().absolute()
-    return private_nk_launch(root, os.environ)
+    """Use explicit process settings, or the owner-installed active route."""
+    environment = dict(os.environ)
+    if "AGENT_COMMS_ROOT" not in environment:
+        from .active_route import read_active_route
+
+        active_route = read_active_route()
+        if active_route is not None:
+            environment["AGENT_COMMS_ROOT"] = str(active_route.root)
+            environment.setdefault(ROOT_ID_ENV, active_route.wire_root_id)
+            environment.setdefault(PACKAGE_ENV, str(active_route.native_package))
+    root = Path(environment.get("AGENT_COMMS_ROOT", "~/.agent-comms")).expanduser().absolute()
+    return private_nk_launch(root, environment)

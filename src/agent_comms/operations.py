@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
+from .active_route import guard_legacy_root_write
 from .candidate_maintenance import schedule_private_candidate_after_commit
 from .channels import ChannelCatalog
 from .goal_history import GoalHistoryEntry
@@ -424,7 +425,7 @@ class Comms:
         releases: Sequence[str | Path] = (),
     ) -> Message:
         """Return one committed envelope, including optional guarded claims."""
-        with _store_lock(self._wire_lock_path):
+        with guard_legacy_root_write(self.root), _store_lock(self._wire_lock_path):
             if sender not in self.registry:
                 raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
             owner = self.registry.require(sender)
@@ -520,23 +521,45 @@ class Comms:
         """Declare a message addressed to every peer."""
         return self.send(sender, "broadcast", body)
 
+    def _user_identity_under_wire_lock(self, worktree: str) -> Thread:
+        """Choose the durable USER identity while the caller holds the wire lock."""
+        for thread in self.registry.all_threads().values():
+            if thread.role is ThreadRole.USER:
+                return thread
+        name, suffix = "user", 2
+        while self.registry.name_reserved(name):
+            name, suffix = f"user-{suffix}", suffix + 1
+        thread = Thread(name, frozenset(), worktree, role=ThreadRole.USER)
+        self.registry.register(thread)
+        return thread
+
     def user_identity(self, worktree: str) -> Thread:
         """One durable human sender, never an executor or a tag-derived agent role."""
         with _store_lock(self._wire_lock_path):
-            for thread in self.registry.all_threads().values():
-                if not thread.role.executable:
-                    return thread
-            name, suffix = "user", 2
-            while self.registry.name_reserved(name):
-                name, suffix = f"user-{suffix}", suffix + 1
-            thread = Thread(name, frozenset(), worktree, role=ThreadRole.USER)
-            self.registry.register(thread)
-            return thread
+            return self._user_identity_under_wire_lock(worktree)
 
     def send_user_message(self, target: str, body: str, *, worktree: str) -> Message:
-        user = self.user_identity(worktree)
-        with _store_lock(self._wire_lock_path):
-            return self.bus.publish(Message(user.name, target, body, MessageType.INFO))
+        """Cooperative local UI send, not cryptographic same-UID authentication."""
+        from .declarations import HumanOrigin
+
+        # The PR116 legacy retirement fence precedes identity creation and
+        # remains held through the actual bus publication on an old root.
+        with guard_legacy_root_write(self.root), _store_lock(self._wire_lock_path):
+            user = self._user_identity_under_wire_lock(worktree)
+            committed = self.bus.publish_ordinary(
+                Message(user.name, target, body, MessageType.INFO),
+                _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
+            )
+        # Never turn a committed row into an apparent failed send because a
+        # best-effort notification failed. No notification runs on UNKNOWN.
+        try:
+            schedule_private_candidate_after_commit(self.bus, committed.seq)
+        except Exception as error:
+            _LOG.warning(
+                "Candidate notification omitted after committed human send (%s)",
+                error.__class__.__name__,
+            )
+        return committed
 
     def inbox(self, name: str, target: str | None = None) -> Sequence[Message]:
         """Undelivered messages for one thread, optionally scoped to a conversation."""
@@ -1459,7 +1482,7 @@ class Comms:
     ) -> Thread:
         for tag in add | remove:
             Tag(tag)
-        with _store_lock(self._wire_lock_path):
+        with guard_legacy_root_write(self.root), _store_lock(self._wire_lock_path):
             self._require_available_new_tags(add)
             thread = self.registry.require(name)
             previous_channels = self.channel_catalog.views()
@@ -4164,7 +4187,19 @@ class Comms:
 
 
 def wire(root: Path | str | None = None) -> Comms:
-    """Build a Comms wire. Defaults to ~/.agent-comms or $AGENT_COMMS_ROOT."""
+    """Build a Comms wire from an explicit root or the active default route."""
+    active_route = None
     if root is None:
-        root = os.environ.get("AGENT_COMMS_ROOT", "~/.agent-comms")
-    return Comms(Path(root).expanduser())
+        if "AGENT_COMMS_ROOT" in os.environ:
+            root = os.environ["AGENT_COMMS_ROOT"]
+        else:
+            from .active_route import read_active_route
+
+            active_route = read_active_route()
+            root = active_route.root if active_route is not None else "~/.agent-comms"
+    comms = Comms(Path(root).expanduser())
+    if active_route is not None:
+        comms.pin_private_nk_launch(
+            active_route.root, active_route.wire_root_id, active_route.native_package
+        )
+    return comms
