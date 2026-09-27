@@ -6,7 +6,14 @@ quiescence and preserve the old wire before any route is installed.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
+import shutil
+import stat
 import sys
+import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,6 +40,14 @@ class LegacyInventory:
     dead_registry_owners: tuple[str, ...]
     active_turns: tuple[str, ...]
     pending_by_thread: tuple[tuple[str, int], ...]
+    unknown_inputs: int
+
+
+@dataclass(frozen=True, slots=True)
+class ArchiveReceipt:
+    path: Path
+    files: int
+    pending_messages: int
     unknown_inputs: int
 
 
@@ -129,3 +144,124 @@ def inventory_legacy_root(comms: Comms) -> LegacyInventory:
         tuple(pending),
         sum(row["status"] == "unknown" for row in rows.values()),
     )
+
+
+def _state_files(root: Path) -> tuple[Path, ...]:
+    """Capture top-level wire/state stores, including SQLite recovery sidecars."""
+    suffixes = (".json", ".jsonl", ".sqlite3", ".sqlite3-wal", ".sqlite3-shm", ".sqlite3-journal")
+    return tuple(sorted(path for path in root.iterdir() if path.name.endswith(suffixes)))
+
+
+def _file_identity(info: os.stat_result) -> tuple[int, int, int, int, int]:
+    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
+
+
+def _copy_checked(source: Path, target: Path) -> dict[str, object]:
+    descriptor = os.open(source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        initial = os.fstat(descriptor)
+        if not stat.S_ISREG(initial.st_mode) or initial.st_uid != os.geteuid():
+            raise RelationViolationError("Cutover state source is not an owned regular file")
+        output = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        digest = hashlib.sha256()
+        try:
+            while chunk := os.read(descriptor, 1024 * 1024):
+                digest.update(chunk)
+                view = memoryview(chunk)
+                while view:
+                    view = view[os.write(output, view) :]
+            os.fsync(output)
+        finally:
+            os.close(output)
+        current = os.fstat(descriptor)
+        path_current = source.lstat()
+        identity = _file_identity(initial)
+        if identity != _file_identity(current) or identity != _file_identity(path_current):
+            raise RelationViolationError("Cutover state changed during archive copy")
+        return {"size": initial.st_size, "sha256": digest.hexdigest()}
+    finally:
+        os.close(descriptor)
+
+
+def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
+    """Archive a stopped wire without changing its original rows or ACK cursors.
+
+    This is an immutable evidence copy, not migration or permission to replay.
+    It refuses a still-running owner and any registry transition during copy.
+    """
+    destination = Path(destination).absolute()
+    if destination.is_relative_to(comms.root.absolute()):
+        raise ValueError("Cutover archive must be outside the old root")
+    if destination.exists() or destination.is_symlink():
+        raise ValueError("Cutover archive destination already exists")
+    destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    parent = destination.parent.lstat()
+    if (
+        not stat.S_ISDIR(parent.st_mode)
+        or parent.st_uid != os.geteuid()
+        or stat.S_IMODE(parent.st_mode) != 0o700
+    ):
+        raise ValueError("Cutover archive parent must be owner-only")
+    before = comms.registry.snapshot()
+    if any(thread.active_turn is not None for thread in before.threads.values()):
+        raise RelationViolationError("Cutover archive has an active owner turn")
+    if any(
+        before.statuses[name].active and thread.pid > 0 and comms._process_alive(thread.pid)
+        for name, thread in before.threads.items()
+    ):
+        raise RelationViolationError("Cutover archive requires all old owners stopped")
+    files = _state_files(comms.root)
+    required = {"bus.jsonl", "bus_meta.json", "registry.json", "input_dispositions.json"}
+    if not required.issubset({path.name for path in files}):
+        raise RelationViolationError("Cutover archive is missing core wire or input state")
+    identities = {path: _file_identity(path.lstat()) for path in files}
+    pending = sum(len(comms.inbox(name)) for name in before.threads)
+    unknown = sum(
+        row["status"] == "unknown" for row in InputDispositions(comms.root)._read().values()
+    )
+    stage = Path(tempfile.mkdtemp(prefix=".cutover-archive-", dir=destination.parent))
+    try:
+        entries = {source.name: _copy_checked(source, stage / source.name) for source in files}
+        after = comms.registry.snapshot()
+        if (
+            before.threads != after.threads
+            or before.statuses != after.statuses
+            or before.admission_generations != after.admission_generations
+            or files != _state_files(comms.root)
+            or any(
+                _file_identity(path.lstat()) != identity for path, identity in identities.items()
+            )
+        ):
+            raise RelationViolationError("Cutover root changed during archive")
+        manifest = {
+            "version": 1,
+            "source_root": str(comms.root.absolute()),
+            "captured_at_unix": time.time(),
+            "pending_messages": pending,
+            "unknown_inputs": unknown,
+            "files": entries,
+        }
+        fd = os.open(stage / ".archive-manifest", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            payload = (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
+            view = memoryview(payload)
+            while view:
+                view = view[os.write(fd, view) :]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        directory = os.open(stage, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+        os.replace(stage, destination)
+        directory = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+        return ArchiveReceipt(destination, len(files), pending, unknown)
+    except BaseException:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise
