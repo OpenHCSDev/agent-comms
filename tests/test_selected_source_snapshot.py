@@ -17,12 +17,14 @@ from agent_comms.selected_source_snapshot import (
 )
 
 
-def _populated_source(tmp_path: Path):
+def _populated_source(tmp_path: Path, *, thinking_level: str | None = "high"):
     fresh = create_fresh_private_session(
-        tmp_path / "native-sessions" / "recipient", worktree=tmp_path
+        tmp_path / "native-sessions" / "recipient",
+        worktree=tmp_path,
+        selected_thinking_level=thinking_level,
     )
     entries = []
-    previous = None
+    previous = fresh.bootstrap_leaf_id
     for turn in range(2):
         for role in ("user", "assistant"):
             entry_id = f"{turn * 2 + int(role == 'assistant'):08x}"
@@ -89,12 +91,27 @@ def test_optional_pinned_source_snapshot_binds_two_inodes_and_exact_context(
     assert outcome.source["firstKeptEntryId"]
     assert outcome.source["revision"].split(":")[:2] == [str(fresh.device), str(fresh.inode)]
     assert outcome.source["contextDigest"] == hashlib.sha256(outcome.context_bytes).hexdigest()
+    assert outcome.source["selectedProvider"] == "openrouter"
+    assert outcome.source["selectedModelId"] == "z-ai/glm-5.3-flash"
+    assert outcome.source["selectedThinkingLevel"] == "high"
+    assert json.loads(outcome.context_bytes)["thinkingLevel"] == "high"
     assert outcome.sidecar_revision[:2] == (proof.stat().st_dev, proof.stat().st_ino)
     assert len(json.loads(outcome.context_bytes)["messages"]) == 4
     # Even a prior returned snapshot is only an observation; a later source
     # change cannot be re-captured under the same old revision.
     proof.unlink()
     with pytest.raises(SelectedSourceSnapshotError, match="unavailable"):
+        capture_selected_source_snapshot(Path(package), fresh, keep_recent_tokens=20)
+
+
+def test_optional_pinned_off_source_is_not_silently_clamped(
+    tmp_path: Path,
+) -> None:
+    package = os.environ.get("AGENT_COMMS_TEST_COPIED_PIN")
+    if package is None:
+        pytest.skip("Explicit copied pinned Pi package required; no download/provider")
+    fresh, _proof = _populated_source(tmp_path, thinking_level=None)
+    with pytest.raises(SelectedSourceSnapshotError, match="not explicitly supported"):
         capture_selected_source_snapshot(Path(package), fresh, keep_recent_tokens=20)
 
 

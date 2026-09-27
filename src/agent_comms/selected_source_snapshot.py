@@ -137,12 +137,30 @@ def _read_snapshot_result(raw: bytes, fresh: FreshPrivateSession, revision: str)
         or not context["messages"]
     ):
         raise SelectedSourceSnapshotError("Selected source context digest or content differs")
+    model = context.get("model")
+    level = context.get("thinkingLevel")
+    # These fields are projected by the verified Pi SessionManager from the
+    # saved branch, not accepted from request metadata or ambient settings.
+    if (
+        type(model) is not dict
+        or set(model) != {"provider", "modelId"}
+        or model["provider"] != "openrouter"
+        or model["modelId"] != "z-ai/glm-5.3-flash"
+        or type(level) is not str
+        or level not in {"low", "high"}
+    ):
+        raise SelectedSourceSnapshotError(
+            "Selected source model/thinking is not explicitly supported"
+        )
     result["source"] = {
         "sessionId": fresh.session_id,
         "revision": revision,
         "leafId": result["leafId"],
         "firstKeptEntryId": result["firstKeptEntryId"],
         "contextDigest": result["contextDigest"],
+        "selectedProvider": model["provider"],
+        "selectedModelId": model["modelId"],
+        "selectedThinkingLevel": level,
     }
     result["contextBytes"] = content
     return result

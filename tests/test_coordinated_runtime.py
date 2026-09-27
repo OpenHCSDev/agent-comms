@@ -129,10 +129,44 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             )
             session_file.chmod(0o600)
         assert session_file is not None
+        selected = _kwargs.get("fresh_selected")
+        if selected is not None:
+            assert selected.path == session_file
+            selected.verify_prewrite()
+            # Fake only Pi's exact two initial metadata appends. This is NOT
+            # a CLI runtime receipt, provider call, or descendant proof.
+            model_id = "f0f0f001"
+            for entry in (
+                {
+                    "type": "model_change",
+                    "id": model_id,
+                    "parentId": selected.bootstrap_leaf_id,
+                    "timestamp": "2026-09-26T00:00:00.000Z",
+                    "provider": "openrouter",
+                    "modelId": "z-ai/glm-5.3-flash",
+                },
+                {
+                    "type": "thinking_level_change",
+                    "id": "f0f0f002",
+                    "parentId": model_id,
+                    "timestamp": "2026-09-26T00:00:00.000Z",
+                    "thinkingLevel": selected.selected_thinking_level,
+                },
+            ):
+                with session_file.open("a") as stream:
+                    stream.write(json.dumps(entry, separators=(",", ":")) + "\n")
+            revision = selected.verify_selected_startup()
+        else:
+            revision = None
 
         # Model only admission in its dedicated thread, not native receipt.
         def admitted():
-            with _kwargs["prompt_send_boundary"](session_file):
+            admission = _kwargs["prompt_send_boundary"]
+            with (
+                admission(session_file, revision)
+                if selected is not None
+                else admission(session_file)
+            ):
                 calls.append((input_id, prompt))
 
         await asyncio.to_thread(admitted)
@@ -418,6 +452,101 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
             },
             fresh_session=fresh,
             admission_epoch=coverage[4],
+        )
+
+
+async def test_explicit_selected_first_source_is_fenced_before_fake_raw_send(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, root_id, _comms, _initial, _people = _root(tmp_path, direct=True)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    runner, calls = _fake_model()
+    witnessed = []
+
+    async def selected_runner(*args, **kwargs):
+        selected = kwargs["fresh_selected"]
+        assert selected is not None and selected.selected_thinking_level == "high"
+        selected.verify_prewrite()  # Before any fake raw prompt reservation/write.
+        witnessed.append(runtime._fresh_selected_revision(selected))
+        assert kwargs["session_file"] == selected.path
+        return await runner(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "run_native_pi_turn", selected_runner)
+    result = await run_one_sealed_claim(
+        root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=tmp_path,
+        fresh_private_enrollment=True,
+        selected_thinking_level="high",
+    )
+    assert result is not None and result.disposition is ClaimDisposition.COMPLETED
+    assert len(calls) == 1 and len(witnessed) == 1
+    assert witnessed[0][:2] == (result.fresh_session.device, result.fresh_session.inode)
+    assert result.fresh_session.selected_thinking_level == "high"
+    result.fresh_session.verify_saved_identity()
+    rows = [json.loads(row) for row in result.fresh_session.path.read_text().splitlines()]
+    assert [row["type"] for row in rows[:3]] == ["session", "model_change", "thinking_level_change"]
+    journal = CompactionJournal(root / "compaction-commits.sqlite3")
+    with journal._transaction() as db:
+        assert db.execute(
+            "SELECT status FROM private_raw_inputs WHERE session_file=?",
+            (str(result.fresh_session.path),),
+        ).fetchone() == ("unknown",)
+
+
+async def test_selected_startup_changed_after_state_denies_before_fake_raw_byte(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, root_id, _comms, _initial, _people = _root(tmp_path, direct=True)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    runner, calls = _fake_model()
+    seen: list[Path] = []
+
+    async def racing_runner(*args, **kwargs):
+        admission = kwargs["prompt_send_boundary"]
+        selected = kwargs["fresh_selected"]
+        assert selected is not None
+        seen.append(selected.path)
+
+        def changed_before_admission(file, revision):
+            assert file == selected.path and revision == selected.verify_selected_startup()
+            with file.open("a") as stream:
+                stream.write(
+                    json.dumps(
+                        {
+                            "type": "message",
+                            "id": "dead0001",
+                            "parentId": "f0f0f002",
+                            "message": {"role": "user"},
+                        }
+                    )
+                    + "\n"
+                )
+            return admission(file, revision)
+
+        kwargs["prompt_send_boundary"] = changed_before_admission
+        return await runner(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "run_native_pi_turn", racing_runner)
+    with pytest.raises(NativePiUnavailable, match="startup"):
+        await run_one_sealed_claim(
+            root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=tmp_path,
+            fresh_private_enrollment=True,
+            selected_thinking_level="high",
+        )
+    assert len(seen) == 1 and not calls
+    journal = CompactionJournal(root / "compaction-commits.sqlite3")
+    with journal._transaction() as db:
+        assert (
+            db.execute(
+                "SELECT count(*) FROM private_raw_inputs WHERE session_file=?",
+                (str(seen[0]),),
+            ).fetchone()[0]
+            == 0
         )
 
 

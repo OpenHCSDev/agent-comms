@@ -47,6 +47,194 @@ def test_explicit_fresh_session_has_durable_prewrite_inode(tmp_path: Path) -> No
         enrollment.verify_prewrite()
 
 
+def test_explicit_selected_bootstrap_is_prewrite_durable_and_attested(tmp_path: Path) -> None:
+    fresh = create_fresh_private_session(
+        tmp_path / "native-sessions" / "a", worktree=tmp_path, selected_thinking_level="high"
+    )
+    rows = _read_private_file(fresh.path)
+    assert len(rows) == 3
+    assert rows[0]["id"] == fresh.session_id
+    assert rows[0]["agentCommsSelectedFresh"] == {"schema": 1, "thinkingLevel": "high"}
+    assert rows[1]["type"] == "model_change"
+    assert (rows[1]["provider"], rows[1]["modelId"]) == ("openrouter", "z-ai/glm-5.3-flash")
+    assert rows[2]["type"] == "thinking_level_change"
+    assert rows[2]["thinkingLevel"] == "high"
+    assert rows[2]["parentId"] == rows[1]["id"]
+    assert rows[1]["parentId"] is None
+    assert fresh.bootstrap_leaf_id == rows[2]["id"]
+    fresh.verify_prewrite()
+    with fresh.path.open("rb+") as stream:
+        data = stream.read().replace(b'"thinkingLevel":"high"', b'"thinkingLevel":"low" ')
+        stream.seek(0)
+        stream.write(data)
+        stream.truncate()
+    with pytest.raises(NativePiUnavailable, match="bootstrap changed"):
+        fresh.verify_saved_identity()
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "none",
+        "wrong_level",
+        "wrong_parent",
+        "extra_message",
+        "partial",
+        "duplicate_key",
+        "fsync_failed",
+    ],
+)
+def test_selected_startup_requires_exact_two_durable_metadata_appends(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, damage: str
+) -> None:
+    fresh = create_fresh_private_session(
+        tmp_path / "native-sessions" / "a",
+        worktree=tmp_path,
+        selected_thinking_level="high",
+    )
+    model = {
+        "type": "model_change",
+        "id": "abc00001",
+        "parentId": fresh.bootstrap_leaf_id,
+        "timestamp": "2026-09-26T00:00:00.000Z",
+        "provider": "openrouter",
+        "modelId": "z-ai/glm-5.3-flash",
+    }
+    thinking = {
+        "type": "thinking_level_change",
+        "id": "abc00002",
+        "parentId": model["id"],
+        "timestamp": "2026-09-26T00:00:00.000Z",
+        "thinkingLevel": "high",
+    }
+    if damage == "wrong_level":
+        thinking["thinkingLevel"] = "low"
+    elif damage == "wrong_parent":
+        thinking["parentId"] = None
+    rows = [model, thinking]
+    if damage == "extra_message":
+        rows.append(
+            {
+                "type": "message",
+                "id": "abc00003",
+                "parentId": thinking["id"],
+                "timestamp": "2026-09-26T00:00:00.000Z",
+                "message": {"role": "user"},
+            }
+        )
+    with fresh.path.open("ab") as stream:
+        for row in rows:
+            encoded = json.dumps(row, separators=(",", ":"))
+            if damage == "duplicate_key" and row is model:
+                encoded = encoded.replace(
+                    '"provider":"openrouter"',
+                    '"provider":"openrouter","provider":"openrouter"',
+                )
+            stream.write(encoded.encode() + b"\n")
+        if damage == "partial":
+            stream.write(b"partial")
+    if damage == "fsync_failed":
+        from agent_comms import fresh_private_session as module
+
+        monkeypatch.setattr(module.os, "fsync", lambda _: (_ for _ in ()).throw(OSError("EIO")))
+    if damage == "none":
+        revision = fresh.verify_selected_startup()
+        assert revision[:2] == (fresh.device, fresh.inode)
+        assert revision[2] > fresh.bootstrap_size
+        with pytest.raises(NativePiUnavailable, match="earlier input"):
+            fresh.verify_prewrite()
+    else:
+        with pytest.raises(NativePiUnavailable, match="startup"):
+            fresh.verify_selected_startup()
+
+
+@pytest.mark.parametrize("level", ["off", "medium", "", 0])
+def test_selected_bootstrap_rejects_unsupported_level_before_creation(
+    tmp_path: Path, level: object
+) -> None:
+    with pytest.raises(ValueError, match="supported selected thinking"):
+        create_fresh_private_session(
+            tmp_path / "native-sessions" / "a",
+            worktree=tmp_path,
+            selected_thinking_level=level,
+        )
+    assert not (tmp_path / "native-sessions").exists()
+
+
+def test_optional_reviewed_copied_pi_reads_selected_bootstrap_level(tmp_path: Path) -> None:
+    package = os.environ.get("AGENT_COMMS_TEST_COPIED_PIN")
+    if package is None:
+        pytest.skip("Explicit copied pinned Pi package path required; no download or provider")
+    _trusted_package(Path(package))
+    fresh = create_fresh_private_session(
+        tmp_path / "native-sessions" / "a",
+        worktree=tmp_path,
+        selected_thinking_level="high",
+    )
+    module = (Path(package) / "dist/core/session-manager.js").as_uri()
+    script = (
+        f"import {{SessionManager}} from {json.dumps(module)};"
+        "const s=SessionManager.open(process.env.FRESH_FILE);"
+        "console.log(JSON.stringify({id:s.getSessionId(),file:s.getSessionFile(),"
+        "leaf:s.getLeafId(),context:s.buildSessionContext()}));"
+    )
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script],
+        cwd=tmp_path,
+        env={
+            "HOME": str(tmp_path),
+            "PATH": os.environ["PATH"],
+            "PI_OFFLINE": "1",
+            "FRESH_FILE": str(fresh.path),
+        },
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=True,
+    )
+    parsed = json.loads(result.stdout)
+    assert (parsed["id"], parsed["file"], parsed["leaf"]) == (
+        fresh.session_id,
+        str(fresh.path),
+        fresh.bootstrap_leaf_id,
+    )
+    assert parsed["context"] == {
+        "messages": [],
+        "thinkingLevel": "high",
+        "model": {"provider": "openrouter", "modelId": "z-ai/glm-5.3-flash"},
+    }
+    fresh.verify_prewrite()  # Native read cannot append to bootstrap.
+    append_script = (
+        f"import {{SessionManager}} from {json.dumps(module)};"
+        "const s=SessionManager.open(process.env.FRESH_FILE);"
+        "const id=s.appendMessage({role:'user',content:'offline fixture',timestamp:1790460000000});"
+        "console.log(JSON.stringify({id,leaf:s.getLeafId(),context:s.buildSessionContext()}));"
+    )
+    appended = subprocess.run(
+        ["node", "--input-type=module", "-e", append_script],
+        cwd=tmp_path,
+        env={
+            "HOME": str(tmp_path),
+            "PATH": os.environ["PATH"],
+            "PI_OFFLINE": "1",
+            "FRESH_FILE": str(fresh.path),
+        },
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=True,
+    )
+    new = json.loads(appended.stdout)
+    assert new["leaf"] == new["id"]
+    assert new["context"]["thinkingLevel"] == "high"
+    assert new["context"]["model"] == parsed["context"]["model"]
+    assert len(new["context"]["messages"]) == 1
+    assert _read_private_file(fresh.path)[-1]["parentId"] == fresh.bootstrap_leaf_id
+    fresh.verify_saved_identity()
+    with pytest.raises(NativePiUnavailable, match="earlier input"):
+        fresh.verify_prewrite()
+
+
 def test_optional_reviewed_copied_pi_preserves_explicit_fresh_inode(tmp_path: Path) -> None:
     package = os.environ.get("AGENT_COMMS_TEST_COPIED_PIN")
     if package is None:
@@ -97,8 +285,9 @@ def test_existing_file_and_hardlink_never_gain_fresh_authority(tmp_path: Path) -
     assert second.session_id != enrollment.session_id
 
 
+@pytest.mark.parametrize("level", [None, "high"])
 def test_uncertain_parent_fsync_does_not_return_enrollment(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, level: str | None
 ) -> None:
     from agent_comms import fresh_private_session as module
 
@@ -111,7 +300,11 @@ def test_uncertain_parent_fsync_does_not_return_enrollment(
 
     monkeypatch.setattr(module, "_fsync_directory", failed_session_fsync)
     with pytest.raises(NativePiUnavailable, match="durability UNKNOWN"):
-        create_fresh_private_session(tmp_path / "native-sessions" / "a", worktree=tmp_path)
+        create_fresh_private_session(
+            tmp_path / "native-sessions" / "a",
+            worktree=tmp_path,
+            selected_thinking_level=level,
+        )
     # A visible header after uncertain fsync is NOT returned or enrolled.
     assert len(list((tmp_path / "native-sessions" / "a").glob("enrolled-*.jsonl"))) == 1
 
