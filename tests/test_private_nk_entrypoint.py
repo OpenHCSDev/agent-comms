@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -21,7 +22,8 @@ from agent_comms import (
     worker,
 )
 from agent_comms.coordination_store import IdentityConflict, PublicationActivationBlocked
-from agent_comms.declarations import Thread
+from agent_comms.declarations import RelationViolationError, Thread
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, private_nk_launch
 from test_native_prompt_binding import _root
 from test_native_prompt_binding import tmp_path as private_root_fixture
@@ -219,6 +221,62 @@ def test_default_write_guard_orders_old_root_write_before_route_publication(tmp_
     with active_route.guard_default_route_write(root):
         (root / "read-marker").write_text("new write completed")
     assert (root / "read-marker").read_text() == "new write completed"
+
+
+def test_withdraw_route_archives_stopped_private_root(tmp_path, monkeypatch):
+    root = tmp_path / "private-wire"
+    comms = operations.Comms(root)
+    process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        comms.register(Thread("sender", frozenset(), str(tmp_path), pid=process.pid))
+        comms.register(Thread("alpha", frozenset({"team"}), str(tmp_path), pid=process.pid))
+        root_id = comms.initialize_private_initial_protocol()
+        comms.send_initial_cohort("sender", "#team", "pending private message")
+        InputDispositions(root).record(
+            "rollback:unknown", seq=None, owner="alpha", admission=1,
+            target="alpha", text="uncertain private input",
+        )
+        route_file = tmp_path / "route-state" / "active-route.json"
+        route = active_route.ActiveRoute(root, root_id, tmp_path)
+        archive = tmp_path / "archive" / "private-stopped"
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+        active_route.publish_active_route(route)
+        with pytest.raises(ValueError, match="expected private root"):
+            active_route.withdraw_active_route(
+                active_route.ActiveRoute(root, "f" * 32, tmp_path), archive
+            )
+        with pytest.raises(RelationViolationError, match="all old owners stopped"):
+            active_route.withdraw_active_route(route, archive)
+        assert route_file.exists() and not archive.exists()
+        process.terminate()
+        process.wait(timeout=5)
+        exclusive_requested = threading.Event()
+        original_flock = active_route.fcntl.flock
+
+        def observed_flock(fd, operation):
+            if operation == active_route.fcntl.LOCK_EX:
+                exclusive_requested.set()
+            return original_flock(fd, operation)
+
+        monkeypatch.setattr(active_route.fcntl, "flock", observed_flock)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            with active_route.guard_default_route_write(root):
+                withdrawing = executor.submit(active_route.withdraw_active_route, route, archive)
+                assert exclusive_requested.wait(timeout=5)
+                assert route_file.exists() and not archive.exists()
+            receipt = withdrawing.result(timeout=5)
+        assert not route_file.exists()
+        assert receipt.path == archive
+        assert (receipt.pending_messages, receipt.unknown_inputs) == (1, 1)
+        manifest = json.loads((archive / ".archive-manifest").read_text())
+        assert manifest["pending_messages"] == 1
+        assert manifest["unknown_inputs"] == 1
+        assert (archive / "bus.jsonl").read_bytes() == (root / "bus.jsonl").read_bytes()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
 
 
 def test_invalid_active_route_fails_closed(tmp_path, monkeypatch, capsys):

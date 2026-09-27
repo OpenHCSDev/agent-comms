@@ -15,8 +15,12 @@ from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from .declarations import unique_wire_object
+from .declarations import RelationViolationError, _store_lock, unique_wire_object
+
+if TYPE_CHECKING:
+    from .supervised_cutover import ArchiveReceipt
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,4 +220,58 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
         if temporary is not None:
             with suppress(FileNotFoundError):
                 os.unlink(temporary, dir_fd=directory)
+        os.close(directory)
+
+
+def withdraw_active_route(
+    expected: ActiveRoute, archive_destination: Path, path: Path | None = None,
+) -> ArchiveReceipt:
+    """Archive a stopped private root, then withdraw its exact default route.
+
+    The caller must fence explicit-root ingress and stop Toad and ACP owners.
+    An unconfirmed removal is never retried automatically.
+    """
+    from .operations import Comms
+    from .supervised_cutover import archive_stopped_root
+
+    path = active_route_path() if path is None else path
+    if path.name != "active-route.json" or not path.is_absolute():
+        raise ValueError("active comms route requires its absolute route path")
+    directory = os.open(
+        path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        fcntl.flock(directory, fcntl.LOCK_EX)
+        info = os.fstat(directory)
+        parent = path.parent.lstat()
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != os.geteuid()
+            or (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino)
+        ):
+            raise ValueError("active comms route directory changed or is not owned")
+        if stat.S_IMODE(info.st_mode) != 0o700:
+            os.fchmod(directory, 0o700)
+        if read_active_route(path) != expected:
+            raise ValueError("active comms route is not the expected private root")
+        comms = Comms(expected.root)
+        with _store_lock(comms.bus._path):
+            marker = comms.bus._private_marker_unlocked()
+        if marker["wire_root_id"] != expected.wire_root_id:
+            raise RelationViolationError("active comms route root ID changed")
+        receipt = archive_stopped_root(comms, archive_destination)
+        if read_active_route(path) != expected:
+            raise ValueError("active comms route changed during withdrawal")
+        parent = path.parent.lstat()
+        if (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino):
+            raise ValueError("active comms route directory changed during withdrawal")
+        os.unlink(path.name, dir_fd=directory)
+        try:
+            os.fsync(directory)
+        except OSError as error:
+            raise RelationViolationError(
+                "active comms route withdrawal outcome UNKNOWN after unlink"
+            ) from error
+        return receipt
+    finally:
         os.close(directory)
