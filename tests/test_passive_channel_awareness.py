@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import Thread, wire
+from agent_comms import agent_events as ae
 from agent_comms import passive_channel_awareness as passive_store
 from agent_comms.acp import CommsAgent
 from agent_comms.bus_page_index import BusPageIndex
@@ -42,9 +43,9 @@ def _fake_events(captured, *, ok=True, abort=False):
         captured.append(task)
         if abort:
             raise RuntimeError("provider never gave a terminal result")
-        yield {"type": "input_started", "id": None}
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": ok, "text": ""}
+        yield ae.InputStarted(id=None)
+        yield ae.StreamSettled()
+        yield ae.Done(ok=ok, text="")
 
     return events
 
@@ -94,7 +95,9 @@ async def test_tag_commit_survives_optional_advisory_write_failure(tmp_path, mon
         comms.update_tags(owner, remove=frozenset({"comms"}))
         ledger = comms.root / "acp_passive_channel_awareness.json"
         before = ledger.read_bytes()
-        monkeypatch.setattr(passive_store, "_atomic_write_text", _broken_advisory_write)
+        monkeypatch.setattr(
+            passive_store.PassiveAwarenessStore, "_write_unlocked", _broken_advisory_write
+        )
         updated = comms.update_tags(owner, add=frozenset({"comms"}))
         assert "comms" in updated.tags
         assert comms.registry.require(owner).tags == updated.tags
@@ -115,7 +118,9 @@ async def test_new_session_survives_optional_advisory_initialize_failure(tmp_pat
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=False, auto_wake=False)
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
-    monkeypatch.setattr(passive_store, "_atomic_write_text", _broken_advisory_write)
+    monkeypatch.setattr(
+        passive_store.PassiveAwarenessStore, "_write_unlocked", _broken_advisory_write
+    )
     try:
         owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
         assert comms.registry.require(owner).name == owner
@@ -136,7 +141,9 @@ async def test_load_session_survives_optional_advisory_initialize_failure(tmp_pa
     ledger.unlink()  # Missing legacy advisory state requires a best-effort write.
     second = CommsAgent(comms, agent_bin="pi", runtime_enabled=False, auto_wake=False)
     monkeypatch.setattr(second, "_ensure_live_drain", lambda _session: None)
-    monkeypatch.setattr(passive_store, "_atomic_write_text", _broken_advisory_write)
+    monkeypatch.setattr(
+        passive_store.PassiveAwarenessStore, "_write_unlocked", _broken_advisory_write
+    )
     try:
         await second.load_session(str(tmp_path / "owner"), owner)
         assert owner in second._sessions
@@ -191,9 +198,9 @@ async def test_native_input_start_and_nominal_terminal_are_not_context_receipts(
             with kwargs["send_boundary"](None, native_id, task) as admitted:
                 assert admitted is True
             assert kwargs["native_start"](None, native_id, task) is True
-            yield {"type": "input_started", "id": None}
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": True, "text": ""}
+            yield ae.InputStarted(id=None)
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent._run_agent_turn(owner, owner, "First owner task")
@@ -396,8 +403,8 @@ async def test_send_boundary_rejects_stale_passive_frame_before_native_start(
                 comms.update_tags(owner, remove=frozenset({"comms"}))
             with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
                 permitted.append(allowed)
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": False, "text": ""}
+            yield ae.StreamSettled()
+            yield ae.Done(ok=False, text="")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent._run_agent_turn(owner, owner, "Independently authorized task")
@@ -444,5 +451,129 @@ async def test_owner_rename_preserves_exact_incarnation_and_channel_scope(tmp_pa
         assert "Notice survives canonical rename" in agent._passive_awareness.frame(
             current, snapshot, comms.channel_catalog.targets_for(current.tags)
         )
+    finally:
+        await agent.shutdown()
+
+
+@pytest.mark.parametrize("stage", ["file_sync", "replace", "directory_sync"])
+async def test_failed_witness_publication_suppresses_frame_and_keeps_old_document(
+    tmp_path, monkeypatch, stage
+):
+    import stat
+
+    from agent_comms import locked_store
+
+    comms, agent, owner = await _agent(tmp_path, monkeypatch)
+    try:
+        comms.send("speaker", "#comms", "Unpublished witness")
+        await agent._drain_inbox(owner)
+        current = comms.registry.require(owner)
+        snapshot = comms.registry.snapshot()
+        channels = comms.channel_catalog.targets_for(current.tags)
+        awareness = agent._passive_awareness
+        before = awareness.path.read_bytes()
+        real_sync, real_replace = os.fsync, locked_store._replace_snapshot
+        failed = False
+
+        def sync(fd):
+            nonlocal failed
+            directory = stat.S_ISDIR(os.fstat(fd).st_mode)
+            if not failed and (
+                (stage == "directory_sync" and directory)
+                or (stage == "file_sync" and not directory)
+            ):
+                failed = True
+                raise OSError("injected witness sync")
+            return real_sync(fd)
+
+        def publish(source, target):
+            if stage == "replace":
+                raise OSError("injected witness replace")
+            return real_replace(source, target)
+
+        with monkeypatch.context() as scoped:
+            scoped.setattr(os, "fsync", sync)
+            scoped.setattr(locked_store, "_replace_snapshot", publish)
+            assert awareness.frame(current, snapshot, channels) == ""
+        assert awareness.path.read_bytes() == before
+        assert awareness.sources(current) == ()
+        assert "Unpublished witness" in awareness.frame(current, snapshot, channels)
+        assert awareness.sources(current)
+    finally:
+        await agent.shutdown()
+
+
+async def test_source_recheck_retains_shared_store_lock_through_exact_bus_read(
+    tmp_path, monkeypatch
+):
+    from contextlib import contextmanager
+
+    from agent_comms import locked_store
+    from agent_comms.declarations import _store_lock
+
+    comms, agent, owner = await _agent(tmp_path, monkeypatch)
+    try:
+        comms.send("speaker", "#comms", "Exact source")
+        await agent._drain_inbox(owner)
+        current = comms.registry.require(owner)
+        snapshot = comms.registry.snapshot()
+        channels = comms.channel_catalog.targets_for(current.tags)
+        awareness = agent._passive_awareness
+        modes = []
+
+        @contextmanager
+        def observed(path, *, shared=False):
+            with _store_lock(path, shared=shared):
+                modes.append(shared)
+                yield
+
+        monkeypatch.setattr(locked_store, "_store_lock", observed)
+        assert "Exact source" in awareness.frame(current, snapshot, channels)
+        assert modes == [False]
+        expected = awareness.sources(current)
+        assert modes == [False, True]
+        exact = awareness._exact
+        checked = []
+
+        def verify(index, stream, seq, channel):
+            with pytest.raises(BlockingIOError), _store_lock(awareness.path, blocking=False):
+                pass
+            with _store_lock(awareness.path, shared=True, blocking=False):
+                checked.append(seq)
+            return exact(index, stream, seq, channel)
+
+        monkeypatch.setattr(awareness, "_exact", verify)
+        assert awareness.still_current(current, snapshot, channels, expected)
+        assert checked == [row[0] for row in expected]
+        assert modes == [False, True, True]
+    finally:
+        await agent.shutdown()
+
+
+async def test_index_exit_failure_cannot_return_unpublished_frame(tmp_path, monkeypatch):
+    comms, agent, owner = await _agent(tmp_path, monkeypatch)
+    try:
+        comms.send("speaker", "#comms", "Unpublished on close failure")
+        await agent._drain_inbox(owner)
+        current = comms.registry.require(owner)
+        awareness = agent._passive_awareness
+        before = awareness.path.read_bytes()
+        original_exit = BusPageIndex.__exit__
+
+        def fail_exit(self, *args):
+            original_exit(self, *args)
+            raise OSError("index close failed")
+
+        with monkeypatch.context() as scoped:
+            scoped.setattr(BusPageIndex, "__exit__", fail_exit)
+            assert (
+                awareness.frame(
+                    current,
+                    comms.registry.snapshot(),
+                    comms.channel_catalog.targets_for(current.tags),
+                )
+                == ""
+            )
+        assert awareness.path.read_bytes() == before
     finally:
         await agent.shutdown()

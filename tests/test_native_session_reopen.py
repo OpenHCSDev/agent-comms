@@ -117,7 +117,7 @@ async def test_cancelled_retirement_keeps_marker_and_reaps_before_next_input(
                 persistent_session=persistent,
             )
         ]
-        assert events[-1]["reason_code"] == "compaction_reopen_invalid"
+        assert events[-1].reason_code == "compaction_reopen_invalid"
         assert calls == [(str(file), identity)] and not spawned
         assert file.read_bytes() == corrupt
     finally:
@@ -264,7 +264,7 @@ async def test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt(
             persistent_session=persistent,
         )
     ]
-    assert first[-1]["ok"] is False and not marker.exists()
+    assert first[-1].ok is False and not marker.exists()
     assert persistent.reopen_required == str(file)
     assert checks == [(str(file), None)]
     state_identity.write_text(identity)
@@ -285,7 +285,7 @@ async def test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt(
             send_boundary=refuse,
         )
     ]
-    assert second[-1]["ok"] is False and not marker.exists()
+    assert second[-1].ok is False and not marker.exists()
     assert checks == [(str(file), None), (str(file), None)]
     assert persistent.reopen_required == str(file), "Only a settled validated turn clears it"
     before = file.read_bytes()
@@ -308,6 +308,6 @@ async def test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt(
             persistent_session=persistent,
         )
     ]
-    assert third[-1]["reason_code"] == "compaction_reopen_invalid"
+    assert third[-1].reason_code == "compaction_reopen_invalid"
     assert not called and not marker.exists()
     assert file.read_bytes() == before.rstrip(b"\n")

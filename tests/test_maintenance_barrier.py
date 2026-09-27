@@ -266,7 +266,7 @@ async def test_real_backend_fake_rpc_never_writes_prompt_after_pause(tmp_path: P
         )
     ]
     assert ready.read_text() == "RPC_READY"  # Real RPC capability preflight ran.
-    assert result[-1]["ok"] is False
+    assert result[-1].ok is False
     assert not marker.exists()
 
 

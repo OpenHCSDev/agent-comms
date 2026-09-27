@@ -4,6 +4,7 @@ import json
 import pytest
 
 from agent_comms import MessageRoute, Thread, invoke_tool, wire
+from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 
 
@@ -33,7 +34,7 @@ async def test_sent_tool_message_is_visible_live_and_in_saved_history(
     agent._client = Client()
 
     async def events(*args, **kwargs):
-        yield {"type": "tool_start", "id": "send1", "name": "comms_send"}
+        yield ae.ToolStart(id="send1", name="comms_send")
         receipt = invoke_tool(
             comms,
             "comms_send",
@@ -59,15 +60,9 @@ async def test_sent_tool_message_is_visible_live_and_in_saved_history(
             )
             + "\n"
         )
-        yield {
-            "type": "tool_end",
-            "id": "send1",
-            "name": "comms_send",
-            "ok": True,
-            "output": json.dumps(receipt),
-        }
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True}
+        yield ae.ToolEnd(id="send1", name="comms_send", ok=True, output=json.dumps(receipt))
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
@@ -133,9 +128,9 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
                     )
                     + "\n"
                 )
-        yield {"type": "chunk", "text": "Channel answer"}
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True}
+        yield ae.Chunk(text="Channel answer")
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
@@ -178,8 +173,8 @@ async def test_coordination_context_does_not_override_scheduled_response_policy(
     async def events(_bin, _args, task, _worktree, _env, **kwargs):
         seen["task"] = task
         seen.update(kwargs)
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True}
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="")
 
     import agent_comms.acp as acp_module
 

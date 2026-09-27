@@ -25,7 +25,7 @@ classifiers = [
 ]
 keywords = ["agents", "coordination", "message-bus", "acp", "multi-agent"]
 
-dependencies = []
+dependencies = ["metaclass-registry>=0.1.0"]
 
 [project.optional-dependencies]
 acp = [

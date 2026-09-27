@@ -1,0 +1,2 @@
+src/agent_comms/goal_pauses.py:47: error: Argument 3 to "GoalPauseEvent" has incompatible type "str | None"; expected "str"  [arg-type]
+Found 1 error in 1 file (checked 8 source files)

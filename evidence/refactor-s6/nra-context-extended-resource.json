@@ -1,0 +1,27 @@
+{
+  "command": [
+    "/home/ts/code/projects/nominal-refactor-advisor/.venv/bin/python",
+    "-m",
+    "nominal_refactor_advisor",
+    "src/agent_comms/exporting.py",
+    "src/agent_comms/declared_family.py",
+    "src/agent_comms/field_codec.py",
+    "--context-root",
+    "src/agent_comms",
+    "--scan-budget-seconds",
+    "360",
+    "--json",
+    "--json-payload",
+    "loop",
+    "--parse-workers",
+    "1",
+    "--analysis-workers",
+    "1",
+    "--cache-dir",
+    "/home/ts/wt/comms-refactor-foundation-s6-20260927/.scratch/nra"
+  ],
+  "exit_code": 0,
+  "stop_reason": null,
+  "elapsed_seconds": 4.00111896800081,
+  "minimum_available_gib": 14.224510192871094
+}

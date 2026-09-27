@@ -5,6 +5,7 @@ import os
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms import wire
 from agent_comms.acp import CommsAgent
 from agent_comms.input_disposition import InputDispositions
@@ -114,9 +115,9 @@ async def test_channel_native_receipts_are_per_recipient_and_per_sequence(tmp_pa
         with kwargs["send_boundary"](None, native, text) as allowed:
             assert allowed is True
         assert kwargs["native_start"](None, native, text)
-        yield {"type": "input_started", "id": None}
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True, "text": "Received"}
+        yield ae.InputStarted(id=None)
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="Received")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
@@ -237,7 +238,7 @@ async def test_channel_batch_never_credits_omitted_or_duplicate_sequences(
         with kwargs["send_boundary"](None, "a" * 32, text) as allowed:
             assert allowed is False
         assert not kwargs["native_start"](None, "a" * 32, text)
-        yield {"type": "done", "ok": False, "text": "Refused malformed batch"}
+        yield ae.Done(ok=False, text="Refused malformed batch")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:

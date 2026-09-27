@@ -1,0 +1,15 @@
+{
+  "base": "b1e5bfd",
+  "changed_Comms_methods": [
+    "export_wire"
+  ],
+  "protected_files_unchanged": [
+    "backend.py",
+    "acp.py",
+    "agent_loop.py",
+    "manual_compaction_bridge.py",
+    "declarations.py"
+  ],
+  "old_export_lines": 435,
+  "current_export_lines": 564
+}
