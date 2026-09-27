@@ -32,13 +32,13 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
     assert active.active and reopened.goal_pause("worker") is None
 
 
-def test_model_pause_and_legacy_pause_do_not_claim_owner_action(tmp_path, monkeypatch):
+def test_model_cannot_pause_and_unattributed_legacy_pause_preserves_owner_stop(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.update_goal("worker", "set", text="Read fifty files")
     monkeypatch.setenv("PI_AGENT_ID", "worker")
-    comms.update_goal("worker", "paused", goal_id=goal.id, model_report=True)
-    assert comms.goal_pause("worker").source == "model"
+    with pytest.raises(ValueError, match="actor cannot"):
+        comms.update_goal("worker", "paused", goal_id=goal.id, model_report=True)
     from agent_comms import Goal
 
     assert "paused_by" not in asdict(Goal("legacy", "id", status="paused"))
@@ -58,8 +58,8 @@ def test_failed_pause_attribution_cannot_authorize_model_resume(tmp_path, monkey
     with pytest.raises(OSError, match="injected"):
         comms.update_goal("worker", "paused", goal_id=goal.id, owner_action=True)
     assert comms.registry.require("worker").goal.status == "paused"
-    assert comms.goal_pause("worker") is None
+    assert comms.goal_pause("worker").source == "owner"
     monkeypatch.setenv("PI_AGENT_ID", "worker")
     resume = next(tool for tool in TOOLS if tool.name == "comms_resume_goal")
-    with pytest.raises(ValueError, match="owner must resume"):
+    with pytest.raises(ValueError, match="paused by the owner"):
         resume.invoke(comms, {"goal_id": goal.id, "progress": "Resume anyway"})

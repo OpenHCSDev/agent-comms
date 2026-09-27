@@ -32,6 +32,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
+from .goal_states import ActiveGoal, PausedGoal, CompletedGoal, BlockedGoal
+
+from .goal_actions import (GoalAction, GoalActionContext, RuntimeInvocable,
+                           required_block_reason as _required_block_reason)
+
 from .active_route import guard_legacy_root_write
 from .candidate_maintenance import schedule_private_candidate_after_commit
 from .channels import ChannelCatalog
@@ -60,7 +65,6 @@ from .declarations import (
     FinishedTurnFence,
     Goal,
     GoalExecution,
-    GoalPauseSource,
     GoalWaitTarget,
     MembershipChange,
     Message,
@@ -109,15 +113,6 @@ from .transcript_routes import InputDisplay, TranscriptRoutes
 OBSERVATION_INTERVAL = 0.05
 _LOG = logging.getLogger(__name__)
 
-
-def _required_block_reason(reason: str | None) -> str:
-    """Validate a new block's own reason; prior progress is never a fallback."""
-    if type(reason) is not str or not reason.strip():
-        raise ValueError("Blocking a goal requires a nonempty reason for the needed input.")
-    normalized = reason.strip()
-    if len(normalized) > 1024:
-        raise ValueError("A blocked-goal reason must be at most 1024 characters.")
-    return normalized
 
 
 def _owner_launch_proof(name: str, pid: int, epoch: int) -> bytes:
@@ -1168,7 +1163,7 @@ class Comms:
         runtime = self.runtime_info.all()
         active = frozenset(t.name for t in snapshot.threads.values() if t.executing)
         activities = self.activity.all_current(active=active)
-        waits = GoalWaits(self.root / "goal_waits.json").snapshot()
+        waits = GoalWaits(self.root / GoalWaits.filename).snapshot()
         return tuple(
             ThreadView(
                 thread,
@@ -1429,7 +1424,7 @@ class Comms:
                     self.activity._path,
                     self.runtime_info._path,
                     self.root / "read_markers.json",
-                    self.root / "goal_waits.json",
+                    self.root / GoalWaits.filename,
                     self.transcript_reads.path,
                 )
             ),
@@ -2522,7 +2517,7 @@ class Comms:
 
     def goal_pause(self, name: str) -> GoalPauseEvent | None:
         """Return the action that paused this exact current goal revision, if known."""
-        events = GoalPauseEvents(self.root / "goal_pause_events.json")
+        events = GoalPauseEvents(self.root / GoalPauseEvents.filename)
         return events.for_goal(self.registry.require(name).goal, events.snapshot())
 
     def unresolved_inputs(self, name: str) -> list[dict[str, Any]]:
@@ -2627,7 +2622,7 @@ class Comms:
             return self.registry.goal_history(name, goal_id=goal_id)
 
     def goal_wait(self, name: str) -> GoalWait | None:
-        waits = GoalWaits(self.root / "goal_waits.json")
+        waits = GoalWaits(self.root / GoalWaits.filename)
         return waits.for_goal(self.registry.require(name).goal, waits.snapshot())
 
     def recover_closed_goal_wait(self, name: str) -> tuple[str, ...]:
@@ -2646,7 +2641,7 @@ class Comms:
             goal = owner.goal
             if goal is None or not goal.active:
                 return ()
-            waits = GoalWaits(self.root / "goal_waits.json")
+            waits = GoalWaits(self.root / GoalWaits.filename)
             rows = waits.snapshot()
             wait = rows.get(goal.id)
             if (
@@ -2719,7 +2714,7 @@ class Comms:
                 or not snapshot.statuses[canonical].active
             ):
                 return ()
-            waits = GoalWaits(self.root / "goal_waits.json").snapshot()
+            waits = GoalWaits(self.root / GoalWaits.filename).snapshot()
             released: list[str] = []
             for owner in snapshot.threads.values():
                 goal = owner.goal
@@ -2800,7 +2795,7 @@ class Comms:
                 self.registry.register(
                     replace(owner, goal=continued_goal), snapshot.statuses[owner.name]
                 )
-                GoalWaits(self.root / "goal_waits.json").clear(goal.id, wait_id=wait.wait_id)
+                GoalWaits(self.root / GoalWaits.filename).clear(goal.id, wait_id=wait.wait_id)
                 released.append(owner.name)
             return tuple(released)
 
@@ -2818,7 +2813,7 @@ class Comms:
         goal = snapshot.threads[canonical].goal
         return goal, GoalWaits.execution(
             goal,
-            GoalWaits(self.root / "goal_waits.json").snapshot(),
+            GoalWaits(self.root / GoalWaits.filename).snapshot(),
             snapshot,
         )
 
@@ -2828,7 +2823,7 @@ class Comms:
         return bool(
             goal is not None
             and goal.active
-            and GoalWaits(self.root / "goal_waits.json").clear(goal.id, wait_id=wait_id)
+            and GoalWaits(self.root / GoalWaits.filename).clear(goal.id, wait_id=wait_id)
         )
 
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
@@ -2841,8 +2836,8 @@ class Comms:
         }
         activities = self.activity.all_current()
         pending = self.bus.pending_counts_all(tuple(threads))
-        pause_events = GoalPauseEvents(self.root / "goal_pause_events.json").snapshot()
-        waits = GoalWaits(self.root / "goal_waits.json").snapshot()
+        pause_events = GoalPauseEvents(self.root / GoalPauseEvents.filename).snapshot()
+        waits = GoalWaits(self.root / GoalWaits.filename).snapshot()
         return [
             {
                 **t.to_wire(),
@@ -2907,320 +2902,20 @@ class Comms:
         info = self.agent_info_of(thread.name)
         return (info.model if info else None) or fallback
 
-    def update_goal(
-        self,
-        name: str,
-        action: str,
-        *,
-        text: str = "",
-        progress: str | None = None,
-        block_reason: str | None = None,
-        goal_id: str | None = None,
-        expected_status: str | None = None,
-        expected_goal: Goal | None = None,
-        model_report: bool = False,
-        owner_action: bool = False,
-        owner_store: GoalAttemptStore | None = None,
-        expected_owner_pid: int | None = None,
-        wait_for: Sequence[str] = (),
-        reviewed_inputs: Sequence[str] = (),
-    ) -> Goal | None:
-        """Apply a goal transition; automated callers may compare a captured goal atomically."""
+    def update_goal(self, name: str, action: str | GoalAction, **options: Any) -> Goal | None:
+        """Decode legacy ingress once; typed actions own the transition algorithm."""
+        if isinstance(action, str):
+            command, actor, owner_store = GoalAction.from_legacy(action, options)
+        else:
+            command = action
+            actor = options.pop("actor", RuntimeInvocable)
+            owner_store = options.pop("owner_store", None)
+            if options:
+                raise TypeError(f"Unexpected goal options: {tuple(options)}")
         with _store_lock(self._wire_lock_path):
-            thread = self.registry.require(name)
-            goal = thread.goal
-            if expected_owner_pid is not None and (
-                thread.pid != expected_owner_pid or not self.registry.status(thread.name).running
-            ):
-                raise ValueError("The goal owner changed; refresh its state.")
-            if (
-                owner_store is not None
-                and action != "set"
-                and not (action == "active" and owner_action and expected_owner_pid is not None)
-            ):
-                raise ValueError("Owner goal authority requires goal creation or explicit resume.")
-            # The automatic turn-end pause/block must not overwrite progress
-            # written by a separate tool process after ACP's precheck. Check
-            # the entire immutable snapshot under the same lock as the write.
-            if expected_goal is not None and goal != expected_goal:
-                raise ValueError("Goal changed during resume; refresh its state.")
-            if goal_id is not None and (goal is None or goal.id != goal_id):
-                raise ValueError("This goal was replaced or cleared; refresh its state.")
-            if expected_status is not None and (goal is None or goal.status != expected_status):
-                raise ValueError(
-                    (pause.owner_instruction if (pause := self.goal_pause(name)) else None)
-                    or "This goal is no longer active; refresh its state."
-                )
-            original_goal = goal
-            edited_pause = self.goal_pause(name) if action == "edit" else None
-            wait_targets: tuple[GoalWaitTarget, ...] = ()
-            if action == "standby":
-                if goal is None:
-                    raise ValueError("No goal is set for this thread.")
-                review = self._goal_input_review(thread, goal.id, wait_for)
-                wait_targets = review.targets
-                from .input_disposition import AcpDeliveryCursors, InputDispositions
-
-                aliases = review.owners
-                cursor = AcpDeliveryCursors(self.root).cursor(aliases)
-                dispositions = InputDispositions(self.root)
-                unknown = {row["key"]: row for row in review.unknown}
-                reviewed_keys = tuple(dict.fromkeys(reviewed_inputs))
-                if any(
-                    key not in unknown or unknown[key]["sequence"] is None for key in reviewed_keys
-                ):
-                    raise ValueError(
-                        "Review only this recipient's exact unresolved bus input keys."
-                    )
-                reviewed_sequences = {unknown[key]["sequence"] for key in reviewed_keys}
-                prior_reviews = {
-                    row["sequence"]
-                    for row in unknown.values()
-                    if goal is not None and dispositions.reviewed_for_goal(row, goal.id)
-                }
-                unresolved = {
-                    row["sequence"] for row in unknown.values() if row["sequence"] is not None
-                }
-                senders = review.senders
-                if not set(reviewed_keys) <= review.eligible_keys:
-                    raise ValueError("Review only direct inputs from these declared dependencies.")
-                pending = self.bus._history_page(
-                    lambda message: message.target in aliases
-                    and message.sender in senders
-                    and (message.seq > cursor or message.seq in unresolved)
-                    and message.seq not in reviewed_sequences | prior_reviews,
-                    before=None,
-                    after=None,
-                    limit=1,
-                    max_bytes=256 * 1024,
-                )
-                if pending.messages:
-                    sequence = pending.messages[0].seq
-                    raise ValueError(
-                        f"Dependency reply {sequence} is already pending or UNKNOWN. "
-                        f"Call comms_inbox with goal_id={goal.id!r} and "
-                        f"wait_for={list(wait_for)!r}. Inspect standby_review.messages, then "
-                        "pass only standby_review.reviewed_inputs to comms_goal to wait "
-                        "for a later reply. Do not pass excluded owner or other dependency inputs. "
-                        "This does not mark them STARTED or replay them."
-                    )
-                snapshot = self.registry.snapshot()
-                if not any(
-                    GoalWaits.target_has_active_turn(target, snapshot)
-                    and self._process_alive(
-                        snapshot.threads[snapshot.aliases.get(target.name, target.name)].pid
-                    )
-                    for target in wait_targets
-                ):
-                    names = ", ".join(f"@{target.name}" for target in wait_targets)
-                    raise ValueError(
-                        f"No declared dependency has an active turn ({names}). "
-                        "A running/ready process or queued input does not prove active work. "
-                        "Message or restart the responsible agent, inspect its status, "
-                        "then declare standby only while a target is actually working."
-                    )
-                closed = GoalWaits.closed_wait_group(
-                    thread.name,
-                    wait_targets,
-                    GoalWaits(self.root / "goal_waits.json").snapshot(),
-                    snapshot,
-                    self._process_alive,
-                )
-                if closed:
-                    names = ", ".join(f"@{name}" for name in closed)
-                    raise ValueError(
-                        f"Standby would close a dependency wait group ({names}). "
-                        "At least one agent must remain able to work or reply. "
-                        "Continue independent work or change the dependencies."
-                    )
-            elif wait_for or reviewed_inputs:
-                raise ValueError("wait_for and reviewed_inputs are only valid for standby.")
-            report_turn = thread.active_turn.id if thread.active_turn is not None else ""
-            if model_report and thread.last_goal_report_turn == report_turn:
-                raise ValueError("This goal was already reported in this turn.")
-            new_goal = (
-                Goal(text=text.strip(), id=uuid4().hex, revision=1) if action == "set" else None
-            )
-            if new_goal is not None:
-                new_goal = replace(
-                    new_goal,
-                    mention_source=bind_goal_mentions(
-                        new_goal.text,
-                        new_goal.id,
-                        new_goal.revision,
-                        thread,
-                        self.registry.snapshot(),
-                    ),
-                )
-            if owner_store is not None and new_goal is not None:
-                # The private grant exists before the visible active goal. A
-                # crash in between leaves only an unreachable ledger row.
-                owner_store.create_goal(new_goal.id)
-            if action in {"clear", "set"} and goal is not None:
-                # Revoke a protected goal before removing or replacing its
-                # registry identity. If the registry write then fails, the
-                # remaining visible goal is safely unlaunchable.
-                from .goal_attempts import GoalAttemptStore
-
-                private = self.root / "goal-private"
-                if (private / "goal_attempts.sqlite3").exists():
-                    attempts = GoalAttemptStore(private)
-                    generation = attempts.snapshot(goal.id)
-                    if generation is not None and generation.state not in {
-                        "completed",
-                        "cancelled",
-                    }:
-                        attempts.retire_goal(
-                            goal.id,
-                            expected_generation=generation.number,
-                            attempt_id=generation.attempt_id,
-                        )
-            if action == "set":
-                # A replacement has a fresh unpredictable ID; revisions are
-                # monotone within that goal's identity, not across goals.
-                goal = new_goal
-            elif action == "clear":
-                goal = None
-            elif action == "edit":
-                if goal is None:
-                    raise ValueError("No goal is set for this thread.")
-                if not text.strip():
-                    raise ValueError("A goal requires text.")
-                edited_text = text.strip()
-                edited_revision = goal.revision + 1
-                goal = replace(
-                    goal,
-                    text=edited_text,
-                    revision=edited_revision,
-                    mention_source=bind_goal_mentions(
-                        edited_text,
-                        goal.id,
-                        edited_revision,
-                        thread,
-                        self.registry.snapshot(),
-                    ),
-                )
-            elif action in {"active", "standby", "paused", "blocked", "completed"}:
-                if action == "blocked":
-                    # Do not recycle a prior progress report as the reason.
-                    reason = _required_block_reason(
-                        block_reason if block_reason is not None else progress
-                    )
-                elif block_reason is not None:
-                    raise ValueError("Only a blocked goal can have a block reason.")
-                else:
-                    reason = None
-                if goal is None:
-                    raise ValueError("No goal is set for this thread.")
-                if goal.status == "blocked" and action != "blocked":
-                    raise ValueError("Blocked goal requires an explicit retry through its owner.")
-                if goal.status == "completed" and action != "completed":
-                    raise ValueError("A completed goal cannot be resumed; set a new goal.")
-                if action == "active" and owner_store is not None:
-                    generation = owner_store.snapshot(goal.id)
-                    if generation is None:
-                        raise ValueError(
-                            "Goal launch authority is missing; inspect it before Retry."
-                        )
-                    if generation.state == "blocked" and generation.attempt_id:
-                        # A failed/uncertain attempt needs the explicit Retry
-                        # decision, not a status-only Resume. Expose that state
-                        # immediately so the UI offers the correct control.
-                        # Persist the bounded refusal explanation so a reload
-                        # never shows 'reason unavailable' on a fresh row.
-                        refusal = _required_block_reason(
-                            "The interrupted goal attempt is unresolved. Inspect it, then use "
-                            "Retry to authorize a new attempt. Your messages can still be sent."
-                        )
-                        blocked = replace(
-                            goal,
-                            status="blocked",
-                            progress=goal.progress,
-                            block_reason=refusal,
-                            revision=goal.revision + 1,
-                        )
-                        self.registry.register(
-                            replace(thread, goal=blocked), self.registry.status(thread.name)
-                        )
-                        raise ValueError(refusal)
-                    elif generation.state == "ready":
-                        pass
-                    elif not (generation.state == "reserved" and thread.active_turn is not None):
-                        raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
-                goal = replace(
-                    goal,
-                    status="active" if action == "standby" else action,
-                    progress=goal.progress if progress is None else progress,
-                    block_reason=reason,
-                    revision=goal.revision + 1,
-                    reported_turn=report_turn if model_report else goal.reported_turn,
-                )
-            else:
-                raise ValueError(f"Unknown goal action: {action}")
-            waits = GoalWaits(self.root / "goal_waits.json")
-            if action == "standby":
-                assert goal is not None
-                dispositions.review_for_goal(
-                    reviewed_keys,
-                    owners=aliases,
-                    goal_id=goal.id,
-                    goal_revision=goal.revision,
-                    turn_id=report_turn,
-                )
-                # Commit scheduling authority first. A crash before the registry
-                # progress update must leave this same goal waiting, not runnable.
-                waits.record(
-                    GoalWait(
-                        goal.id,
-                        uuid4().hex,
-                        goal.revision,
-                        self.message_high_water(),
-                        wait_targets,
-                        owner_created_at=thread.created_at,
-                        report_turn_id=thread.active_turn.id if thread.active_turn else None,
-                        report_turn_generation=(
-                            thread.turn_generation if thread.active_turn else None
-                        ),
-                        target_turn_generations=tuple(
-                            (
-                                snapshot.threads[
-                                    snapshot.aliases.get(target.name, target.name)
-                                ].turn_generation
-                                if GoalWaits.target_has_active_turn(target, snapshot)
-                                else None
-                            )
-                            for target in wait_targets
-                        ),
-                    )
-                )
-            self.registry.register(
-                replace(
-                    thread,
-                    goal=goal,
-                    last_goal_report_turn=(
-                        report_turn if model_report else thread.last_goal_report_turn
-                    ),
-                ),
-                self.registry.status(thread.name),
-            )
-            if action != "standby" and action != "edit" and original_goal is not None:
-                waits.clear(original_goal.id)
-            if action == "edit" and edited_pause is not None and goal is not None:
-                GoalPauseEvents(self.root / "goal_pause_events.json").record(
-                    GoalPauseEvent(goal.id, goal.revision, edited_pause.source)
-                )
-            if action == "paused" and goal is not None:
-                # The registry transition precedes attribution. A crash in between
-                # leaves an unknown actor, never attributes a later pause falsely.
-                source = (
-                    GoalPauseSource.OWNER
-                    if owner_action
-                    else GoalPauseSource.MODEL if model_report else GoalPauseSource.RUNTIME
-                )
-                GoalPauseEvents(self.root / "goal_pause_events.json").record(
-                    GoalPauseEvent(goal.id, goal.revision, source)
-                )
-            return goal
+            return command.apply(GoalActionContext(
+                self, self.registry.require(name), actor, owner_store
+            ))
 
     def block_goal_after_failed_turn(
         self,
@@ -3238,14 +2933,10 @@ class Comms:
                 thread.worktree != expected_worktree
                 or current is None
                 or current.id != started_goal.id
-                or current.status not in {"active", "paused", "completed"}
+                or not isinstance(current.state, (ActiveGoal, PausedGoal, CompletedGoal))
             ):
                 return current
-            if (
-                current.status == "paused"
-                and (pause := self.goal_pause(name)) is not None
-                and pause.source is GoalPauseSource.OWNER
-            ):
+            if current.state.protected:
                 # Preserve this exact owner-authored pause. The caller still
                 # records the failed private attempt and terminal diagnostic;
                 # preserving intent grants neither resume nor replay authority.
@@ -3253,9 +2944,8 @@ class Comms:
             progress = f"{current.progress}\n\n{diagnostic}" if current.progress else diagnostic
             blocked = replace(
                 current,
-                status="blocked",
+                state=BlockedGoal(_required_block_reason(diagnostic)),
                 progress=progress,
-                block_reason=_required_block_reason(diagnostic),
                 revision=current.revision + 1,
             )
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
@@ -3277,14 +2967,13 @@ class Comms:
                 thread.worktree != expected_worktree
                 or current is None
                 or current != expected_goal
-                or current.status != "completed"
+                or not isinstance(current.state, CompletedGoal)
             ):
                 return current
             blocked = replace(
                 current,
-                status="blocked",
+                state=BlockedGoal(_required_block_reason(diagnostic)),
                 progress=diagnostic,
-                block_reason=_required_block_reason(diagnostic),
                 revision=current.revision + 1,
             )
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))

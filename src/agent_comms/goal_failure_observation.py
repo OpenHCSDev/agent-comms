@@ -14,7 +14,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from .declarations import Goal, GoalPauseSource, Thread, ThreadStatus, TurnClaimFence
+from .goal_states import BlockedGoal, PausedGoal
+
+from .declarations import Goal, Thread, ThreadStatus, TurnClaimFence
 from .diagnostics import FailureReason
 from .goal_pauses import GoalPauseEvent
 from .recovery_projection import _preflight
@@ -185,7 +187,7 @@ def read_failed_turn_projection(
         or not owner_status.active
         or owner.pid <= 0
         or goal is None
-        or goal.status not in {"blocked", "paused"}
+        or not isinstance(goal.state, (BlockedGoal, PausedGoal))
     ):
         return unavailable("owner_or_goal_changed")
     if type(admission) is not int or admission <= 0:
@@ -248,13 +250,7 @@ def read_failed_turn_projection(
                 conn.execute("ROLLBACK")
     except (sqlite3.Error, OSError, ValueError, TypeError):
         return unavailable("invalid_store")
-    if goal.status == "paused":
-        if (
-            pause is not None
-            and pause.goal_id == goal.id
-            and pause.revision == goal.revision
-            and pause.source is GoalPauseSource.OWNER
-        ):
-            return FailedTurnProjection("owner_paused", "owner_pause")
-        return FailedTurnProjection("paused_uncertain", "pause_attribution_uncertain")
+    if isinstance(goal.state, PausedGoal):
+        state, explanation = goal.state.source.failure_projection()
+        return FailedTurnProjection(state, explanation)
     return FailedTurnProjection("backend_suspended", reason)

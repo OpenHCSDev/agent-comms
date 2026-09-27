@@ -6,6 +6,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 from typing import Literal
 
+from .goal_actions import GoalAction
+
 from .declarations import (
     ChannelSort,
     MessageType,
@@ -768,7 +770,7 @@ TOOLS = (
                 "status",
                 "string",
                 "Goal state",
-                choices=("active", "standby", "completed", "blocked"),
+                choices=GoalAction.model_choices(),
             ),
             ToolParameter(
                 "progress",
