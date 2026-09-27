@@ -3,17 +3,22 @@
 Keep this ABC registry-free: DeclaredFamily roots own membership, and mixing it
 into a root must never start a second registry for the same lifecycle.
 """
+
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Self
+from typing import ClassVar, Self
 
 
 class LifecycleState(ABC):
+    declared_name: ClassVar[str]
+
     @classmethod
     @abstractmethod
-    def successors(cls) -> tuple[type[Self], ...]:
+    def successors(cls) -> tuple[type[LifecycleState], ...]:
         """States reachable by an ordinary transition (including self, if allowed)."""
 
-    def may_become(self, nxt: Self) -> bool:
+    def may_become(self, nxt: LifecycleState) -> bool:
         return type(nxt) in self.successors()
 
     @classmethod

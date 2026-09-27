@@ -192,8 +192,17 @@ def test_commit_or_sync_error_never_yields_execution_success(bound, monkeypatch,
 def test_pause_projection_never_becomes_runnable(bound, source):
     store, owner, _, observation = bound
     store.record_failed(observation.reservation, "failed", observation=observation)
-    owner = replace(owner, goal=replace(owner.goal, status="paused", revision=3,
-        pause_source=(str(source) if source in (GoalPauseSource.OWNER, GoalPauseSource.MODEL) else None)))
+    owner = replace(
+        owner,
+        goal=replace(
+            owner.goal,
+            status="paused",
+            revision=3,
+            pause_source=(
+                str(source) if source in (GoalPauseSource.OWNER, GoalPauseSource.MODEL) else None
+            ),
+        ),
+    )
     pause = (
         None
         if source is None

@@ -14,6 +14,8 @@ import struct
 import sys
 from pathlib import Path
 
+from .goal_waits import GoalWaits
+
 _IN_CLOSE_WRITE = 0x00000008
 _IN_MOVED_TO = 0x00000080
 _IN_DELETE_SELF = 0x00000400
@@ -22,7 +24,12 @@ _IN_Q_OVERFLOW = 0x00004000
 _IN_IGNORED = 0x00008000
 _MASK = _IN_CLOSE_WRITE | _IN_MOVED_TO | _IN_DELETE_SELF | _IN_MOVE_SELF
 _HEADER = struct.Struct("=iIII")
-_AUTHORITY_FILES = {b"bus.jsonl", b"registry.json", b".registry-owner-guard", b"goal_waits.json"}
+_AUTHORITY_FILES = {
+    b"bus.jsonl",
+    b"registry.json",
+    b".registry-owner-guard",
+    GoalWaits.filename.encode(),
+}
 
 
 class WireChangeWatch:

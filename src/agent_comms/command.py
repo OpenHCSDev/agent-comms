@@ -1,4 +1,5 @@
 """Inbound command contract; domain roots reuse DeclaredFamily and FieldCodec."""
+
 from abc import ABC, abstractmethod
 from typing import Any, Self
 

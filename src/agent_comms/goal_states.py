@@ -1,12 +1,16 @@
 """Goal lifecycle and pause provenance: the determining domain authorities."""
+
 from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+
+if TYPE_CHECKING:
+    from .goal_actions import GoalAction
 
 
 @dataclass(frozen=True)
@@ -18,9 +22,11 @@ class PauseSource(DeclaredFamily, affix="Pause"):
     def protects_pause(self) -> bool:
         return self.instruction() is not None
 
-    def failure_projection(self) -> tuple[str, str]:
-        return ("owner_paused", "owner_pause") if self.protects_pause else (
-            "paused_uncertain", "pause_attribution_uncertain"
+    def failure_projection(self) -> tuple[Literal["owner_paused", "paused_uncertain"], str]:
+        return (
+            ("owner_paused", "owner_pause")
+            if self.protects_pause
+            else ("paused_uncertain", "pause_attribution_uncertain")
         )
 
 
@@ -44,7 +50,11 @@ class RuntimePause(PauseSource):
 class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     active: ClassVar[bool] = False
     terminal: ClassVar[bool] = False
-    toggle: ClassVar[str]
+
+    @property
+    @abstractmethod
+    def toggle(self) -> type[GoalAction] | None: ...
+
     toggle_label: ClassVar[str]
     acp_plan_status: ClassVar[str] = "in_progress"
 
@@ -89,15 +99,27 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
         return "✓", self.execution_name.title()
 
 
-@dataclass(frozen=True)
-class ActiveGoal(GoalState):
-    active = True
-    toggle = "paused"
-    toggle_label = "Pause"
+class FromOpenGoal:
+    """A state explicitly eligible as the target of an active/paused transition."""
 
+
+class OpenGoal(GoalState):
     @classmethod
     def successors(cls) -> tuple[type[GoalState], ...]:
-        return ActiveGoal, PausedGoal, BlockedGoal, CompletedGoal
+        return GoalState.members_with(FromOpenGoal)
+
+
+@dataclass(frozen=True)
+class ActiveGoal(OpenGoal, FromOpenGoal):
+    active = True
+
+    @property
+    def toggle(self) -> type[GoalAction]:
+        from .goal_actions import PausedGoalAction
+
+        return PausedGoalAction
+
+    toggle_label = "Pause"
 
     @property
     def execution_name(self) -> str:
@@ -105,9 +127,15 @@ class ActiveGoal(GoalState):
 
 
 @dataclass(frozen=True)
-class PausedGoal(GoalState):
+class PausedGoal(OpenGoal, FromOpenGoal):
     source: PauseSource = field(default_factory=OwnerPause)
-    toggle = "active"
+
+    @property
+    def toggle(self) -> type[GoalAction]:
+        from .goal_actions import ActiveGoalAction
+
+        return ActiveGoalAction
+
     toggle_label = "Resume"
 
     @classmethod
@@ -115,10 +143,6 @@ class PausedGoal(GoalState):
         if reason is not None:
             raise ValueError("A blocked goal requires a bounded explicit reason.")
         return cls(PauseSource.decode(source)() if source is not None else OwnerPause())
-
-    @classmethod
-    def successors(cls) -> tuple[type[GoalState], ...]:
-        return ActiveGoal, PausedGoal, BlockedGoal, CompletedGoal
 
     @property
     def pause_source(self) -> PauseSource:
@@ -135,15 +159,23 @@ class PausedGoal(GoalState):
 
 
 @dataclass(frozen=True)
-class BlockedGoal(GoalState):
+class BlockedGoal(GoalState, FromOpenGoal):
     block_reason: str | None = None  # legacy rows can lack a reason
-    toggle = "retry"
+
+    @property
+    def toggle(self) -> type[GoalAction]:
+        from .goal_actions import RetryGoalAction
+
+        return RetryGoalAction
+
     toggle_label = "Retry"
 
     def __post_init__(self) -> None:
         reason = self.block_reason
         if reason is not None and (
-            type(reason) is not str or not reason.strip() or reason != reason.strip()
+            type(reason) is not str
+            or not reason.strip()
+            or reason != reason.strip()
             or len(reason) > 1024
         ):
             raise ValueError("A blocked goal requires a bounded explicit reason.")
@@ -170,9 +202,13 @@ class BlockedGoal(GoalState):
 
 
 @dataclass(frozen=True)
-class CompletedGoal(GoalState):
+class CompletedGoal(GoalState, FromOpenGoal):
     terminal = True
-    toggle = ""
+
+    @property
+    def toggle(self) -> None:
+        return None
+
     toggle_label = "Completed"
 
     @classmethod
@@ -181,3 +217,26 @@ class CompletedGoal(GoalState):
 
     def transition_refusal(self) -> str:
         return "A completed goal cannot be resumed; set a new goal."
+
+
+class GoalStateProjection:
+    """Legacy dataclass field views of one typed state; no stored replicas."""
+
+    _state: GoalState
+
+    @property
+    def state(self) -> GoalState:
+        return self._state
+
+    @property
+    def status(self) -> str:
+        return self.state.declared_name
+
+    @property
+    def block_reason(self) -> str | None:
+        return self.state.reason
+
+    @property
+    def pause_source(self) -> str | None:
+        source = self.state.pause_source
+        return source.declared_name if source is not None else None

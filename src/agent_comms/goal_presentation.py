@@ -1,4 +1,5 @@
 """Behavior for the runnable/standby refinement of a goal's domain state."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

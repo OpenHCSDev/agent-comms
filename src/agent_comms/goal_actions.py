@@ -1,4 +1,5 @@
 """Goal commands own behavior; one parent owns CAS, publication and actor checks."""
+
 from __future__ import annotations
 
 from abc import abstractmethod
@@ -7,21 +8,40 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from uuid import uuid4
 
 from .command import Command
-from .declared_family import DeclaredFamily
 from .declarations import Goal, Thread
+from .declared_family import DeclaredFamily
 from .goal_mentions import bind_goal_mentions
 from .goal_pauses import GoalPauseEvent, GoalPauseEvents
-from .goal_states import ActiveGoal, BlockedGoal, CompletedGoal, GoalState, OwnerPause, PausedGoal, RuntimePause
+from .goal_states import (
+    ActiveGoal,
+    BlockedGoal,
+    CompletedGoal,
+    GoalState,
+    OwnerPause,
+    PausedGoal,
+    RuntimePause,
+)
 from .goal_waits import GoalWait, GoalWaits
 
 if TYPE_CHECKING:
-    from .operations import Comms
     from .goal_attempts import GoalAttemptStore
+    from .operations import Comms
 
 
-class ModelInvocable: pass
-class OwnerInvocable: pass
-class RuntimeInvocable: pass
+class ModelInvocable:
+    pass
+
+
+class OwnerInvocable:
+    pass
+
+
+class RuntimeInvocable:
+    pass
+
+
+class OwnerControlInvocable:
+    pass
 
 
 @dataclass(frozen=True)
@@ -34,17 +54,22 @@ class GoalPrecondition:
     def check(self, ctx: GoalActionContext) -> None:
         thread, goal = ctx.thread, ctx.thread.goal
         if self.expected_owner_pid is not None and (
-            thread.pid != self.expected_owner_pid or not ctx.comms.registry.status(thread.name).running
+            thread.pid != self.expected_owner_pid
+            or not ctx.comms.registry.status(thread.name).running
         ):
             raise ValueError("The goal owner changed; refresh its state.")
         if self.expected_goal is not None and goal != self.expected_goal:
             raise ValueError("Goal changed during resume; refresh its state.")
         if self.goal_id is not None and (goal is None or goal.id != self.goal_id):
             raise ValueError("This goal was replaced or cleared; refresh its state.")
-        if self.expected_status is not None and (goal is None or goal.status != self.expected_status):
+        if self.expected_status is not None and (
+            goal is None or goal.status != self.expected_status
+        ):
             pause = goal.state.pause_source if goal is not None else None
-            raise ValueError((pause.instruction() if pause else None)
-                or "This goal is no longer active; refresh its state.")
+            raise ValueError(
+                (pause.instruction() if pause else None)
+                or "This goal is no longer active; refresh its state."
+            )
 
 
 @dataclass(frozen=True)
@@ -72,6 +97,8 @@ class GoalActionContext:
 class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
     expect: GoalPrecondition = GoalPrecondition()
     preserve_wait: ClassVar[bool] = False
+    owner_grant: ClassVar[bool] = False
+    schedules_goal: ClassVar[bool] = False
 
     @classmethod
     def model_choices(cls) -> tuple[str, ...]:
@@ -85,14 +112,19 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
         model = options.pop("model_report", False)
         actor = OwnerInvocable if owner else ModelInvocable if model else RuntimeInvocable
         owner_store = options.pop("owner_store", None)
-        expect = GoalPrecondition(**{
-            f.name: options.pop(f.name) for f in fields(GoalPrecondition) if f.name in options
-        })
+        expect = GoalPrecondition(
+            **{f.name: options.pop(f.name) for f in fields(GoalPrecondition) if f.name in options}
+        )
         member = cls.decode(action)
         names = {f.name for f in fields(member)}
         # Legacy callers supply optional empty arguments for other commands.
         options = {k: v for k, v in options.items() if k in names or v not in (None, (), [], "")}
-        command = member.from_payload({"kind": action, **{k: list(v) if isinstance(v, tuple) else v for k, v in options.items()}})
+        command = member.from_payload(
+            {
+                "kind": action,
+                **{k: list(v) if isinstance(v, tuple) else v for k, v in options.items()},
+            }
+        )
         return replace(command, expect=expect), actor, owner_store
 
     def check_grant(self, ctx: GoalActionContext) -> None:
@@ -109,16 +141,21 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
         goal = self.change(ctx)
         self.before_publish(goal, ctx)
         ctx.comms.registry.register(
-            replace(ctx.thread, goal=goal, last_goal_report_turn=(
-                ctx.report_turn if ctx.model_report else ctx.thread.last_goal_report_turn
-            )), ctx.comms.registry.status(ctx.thread.name),
+            replace(
+                ctx.thread,
+                goal=goal,
+                last_goal_report_turn=(
+                    ctx.report_turn if ctx.model_report else ctx.thread.last_goal_report_turn
+                ),
+            ),
+            ctx.comms.registry.status(ctx.thread.name),
         )
         if not self.preserve_wait and ctx.thread.goal is not None:
             GoalWaits(ctx.comms.root / GoalWaits.filename).clear(ctx.thread.goal.id)
         if goal is not None and goal.state.pause_source is not None:
             # Audit only; current pause authority is already durable in Goal.
             GoalPauseEvents(ctx.comms.root / GoalPauseEvents.filename).record(
-                GoalPauseEvent(goal.id, goal.revision, goal.pause_source)
+                GoalPauseEvent(goal.id, goal.revision, goal.state.pause_source.declared_name)
             )
         return goal
 
@@ -140,13 +177,26 @@ class TransitionGoalAction(GoalAction):
         goal = ctx.require_goal()
         state = self.next_state(ctx)
         goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
-        return replace(goal, state=state, revision=goal.revision + 1,
+        self.before_transition(ctx)
+        return replace(
+            goal,
+            state=state,  # type: ignore[call-arg]  # Goal compatibility constructor
+            revision=goal.revision + 1,
             progress=goal.progress if self.progress is None else self.progress,
-            reported_turn=ctx.report_turn if ctx.model_report else goal.reported_turn)
+            reported_turn=ctx.report_turn if ctx.model_report else goal.reported_turn,
+        )
+
+    def before_transition(self, ctx: GoalActionContext) -> None:
+        pass
 
 
 @dataclass(frozen=True, kw_only=True)
-class ActiveGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
+class ActiveGoalAction(
+    TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
+):
+    owner_grant = True
+    schedules_goal = True
+
     def check_grant(self, ctx: GoalActionContext) -> None:
         if ctx.owner_store is not None and (
             ctx.actor is not OwnerInvocable or self.expect.expected_owner_pid is None
@@ -154,14 +204,15 @@ class ActiveGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Run
             super().check_grant(ctx)
 
     def next_state(self, ctx: GoalActionContext) -> GoalState:
+        return ActiveGoal()
+
+    def before_transition(self, ctx: GoalActionContext) -> None:
         goal, thread = ctx.require_goal(), ctx.thread
         if ctx.owner_store is not None:
             generation = ctx.owner_store.snapshot(goal.id)
             if generation is None:
-                raise ValueError(
-                    "Goal launch authority is missing; inspect it before Retry."
-                )
-            if generation.state == "blocked" and generation.attempt_id:
+                raise ValueError("Goal launch authority is missing; inspect it before Retry.")
+            if generation.lifecycle.failed and generation.attempt_id:
                 # A failed/uncertain attempt needs the explicit Retry
                 # decision, not a status-only Resume. Expose that state
                 # immediately so the UI offers the correct control.
@@ -173,20 +224,16 @@ class ActiveGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Run
                 )
                 blocked = replace(
                     goal,
-                    status="blocked",
+                    state=BlockedGoal(refusal),  # type: ignore[call-arg]
                     progress=goal.progress,
-                    block_reason=refusal,
                     revision=goal.revision + 1,
                 )
                 ctx.comms.registry.register(
                     replace(thread, goal=blocked), ctx.comms.registry.status(thread.name)
                 )
                 raise ValueError(refusal)
-            elif generation.state == "ready":
-                pass
-            elif not (generation.state == "reserved" and thread.active_turn is not None):
+            elif not generation.lifecycle.allows_resume(thread.active_turn is not None):
                 raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
-        return ActiveGoal()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -211,21 +258,15 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         dispositions = InputDispositions(ctx.comms.root)
         unknown = {row["key"]: row for row in review.unknown}
         reviewed_keys = tuple(dict.fromkeys(self.reviewed_inputs))
-        if any(
-            key not in unknown or unknown[key]["sequence"] is None for key in reviewed_keys
-        ):
-            raise ValueError(
-                "Review only this recipient's exact unresolved bus input keys."
-            )
+        if any(key not in unknown or unknown[key]["sequence"] is None for key in reviewed_keys):
+            raise ValueError("Review only this recipient's exact unresolved bus input keys.")
         reviewed_sequences = {unknown[key]["sequence"] for key in reviewed_keys}
         prior_reviews = {
             row["sequence"]
             for row in unknown.values()
             if goal is not None and dispositions.reviewed_for_goal(row, goal.id)
         }
-        unresolved = {
-            row["sequence"] for row in unknown.values() if row["sequence"] is not None
-        }
+        unresolved = {row["sequence"] for row in unknown.values() if row["sequence"] is not None}
         senders = review.senders
         if not set(reviewed_keys) <= review.eligible_keys:
             raise ValueError("Review only direct inputs from these declared dependencies.")
@@ -296,9 +337,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
                 wait_targets,
                 owner_created_at=thread.created_at,
                 report_turn_id=thread.active_turn.id if thread.active_turn else None,
-                report_turn_generation=(
-                    thread.turn_generation if thread.active_turn else None
-                ),
+                report_turn_generation=(thread.turn_generation if thread.active_turn else None),
                 target_turn_generations=tuple(
                     (
                         snapshot.threads[
@@ -324,16 +363,22 @@ class BlockedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Ru
     block_reason: str | None = None
 
     def next_state(self, ctx: GoalActionContext) -> GoalState:
-        return BlockedGoal(required_block_reason(
-            self.block_reason if self.block_reason is not None else self.progress
-        ))
+        return BlockedGoal(
+            required_block_reason(
+                self.block_reason if self.block_reason is not None else self.progress
+            )
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
-class PausedGoalAction(TransitionGoalAction, OwnerInvocable, RuntimeInvocable):
+class PausedGoalAction(
+    TransitionGoalAction, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
+):
     def next_state(self, ctx: GoalActionContext) -> GoalState:
         current = ctx.require_goal().state.pause_source
-        return PausedGoal(current or (OwnerPause() if ctx.actor is OwnerInvocable else RuntimePause()))
+        return PausedGoal(
+            current or (OwnerPause() if ctx.actor is OwnerInvocable else RuntimePause())
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -350,10 +395,7 @@ class ReplacementGoalAction(GoalAction):
             if (private / "goal_attempts.sqlite3").exists():
                 attempts = GoalAttemptStore(private)
                 generation = attempts.snapshot(goal.id)
-                if generation is not None and generation.state not in {
-                    "completed",
-                    "cancelled",
-                }:
+                if generation is not None and not generation.lifecycle.terminal:
                     attempts.retire_goal(
                         goal.id,
                         expected_generation=generation.number,
@@ -370,16 +412,21 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
 
     def change(self, ctx: GoalActionContext) -> Goal:
         goal = Goal(text=self.text.strip(), id=uuid4().hex, revision=1)
-        goal = replace(goal, mention_source=bind_goal_mentions(
-            goal.text, goal.id, goal.revision, ctx.thread, ctx.comms.registry.snapshot()
-        ))
+        goal = replace(
+            goal,
+            mention_source=bind_goal_mentions(
+                goal.text, goal.id, goal.revision, ctx.thread, ctx.comms.registry.snapshot()
+            ),
+        )
         if ctx.owner_store is not None:
             ctx.owner_store.create_goal(goal.id)
         return goal
 
 
 @dataclass(frozen=True, kw_only=True)
-class ClearGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
+class ClearGoalAction(
+    ReplacementGoalAction, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
+):
     def change(self, ctx: GoalActionContext) -> None:
         return None
 
@@ -395,9 +442,14 @@ class EditGoalAction(GoalAction, OwnerInvocable, RuntimeInvocable):
         if not text:
             raise ValueError("A goal requires text.")
         revision = goal.revision + 1
-        return replace(goal, text=text, revision=revision, mention_source=bind_goal_mentions(
-            text, goal.id, revision, ctx.thread, ctx.comms.registry.snapshot()
-        ))
+        return replace(
+            goal,
+            text=text,
+            revision=revision,
+            mention_source=bind_goal_mentions(
+                text, goal.id, revision, ctx.thread, ctx.comms.registry.snapshot()
+            ),
+        )
 
 
 def required_block_reason(reason: str | None) -> str:
@@ -408,3 +460,27 @@ def required_block_reason(reason: str | None) -> str:
     if len(normalized) > 1024:
         raise ValueError("A blocked-goal reason must be at most 1024 characters.")
     return normalized
+
+
+@dataclass(frozen=True, kw_only=True)
+class RetryGoalAction(GoalAction, OwnerInvocable):
+    """Explicit owner retry; existing store grants still fence every attempt."""
+
+    def check_grant(self, ctx: GoalActionContext) -> None:
+        if ctx.owner_store is None or self.expect.expected_owner_pid is None:
+            raise ValueError("Retry requires the executing owner's private goal authority.")
+
+    def change(self, ctx: GoalActionContext) -> Goal:
+        goal = ctx.require_goal()
+        if not isinstance(goal.state, BlockedGoal):
+            raise ValueError("The blocked goal changed; refresh its state.")
+        store = ctx.owner_store
+        assert store is not None
+        generation = store.snapshot(goal.id)
+        if generation is None:
+            # Explicit owner decision can adopt a legacy registry-only goal.
+            store.create_goal(goal.id)
+            generation = store.snapshot(goal.id)
+            assert generation is not None
+        generation.lifecycle.authorize_retry(store, generation, uuid4().hex)
+        return replace(goal, state=ActiveGoal(), revision=goal.revision + 1)  # type: ignore[call-arg]

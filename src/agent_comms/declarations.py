@@ -36,9 +36,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Self
 
-from .goal_states import ActiveGoal, BlockedGoal, CompletedGoal, GoalState, PauseSource, PausedGoal
-from .goal_presentation import ExecutionPresentation, StateExecutionPresentation, StandbyExecutionPresentation
-
 from .bus_activity_index import BusActivityIndex
 from .bus_display_index import BusDisplayIndex
 from .bus_page_index import BusPageIndex, StaleBusPageIndexError
@@ -53,6 +50,20 @@ from .bus_publication import (
     validate_initial_record,
 )
 from .bus_route_counts import BusRouteCounts
+from .goal_presentation import (
+    ExecutionPresentation,
+    StandbyExecutionPresentation,
+    StateExecutionPresentation,
+)
+from .goal_states import (
+    ActiveGoal,
+    BlockedGoal,
+    CompletedGoal,
+    GoalState,
+    GoalStateProjection,
+    PausedGoal,
+    PauseSource,
+)
 
 if TYPE_CHECKING:
     from .coordination import PublicationIntent
@@ -890,14 +901,20 @@ def channel_tag(target: str) -> str:
 
 
 # Legacy public enum is a derived boundary projection, not another source roster.
-GoalPauseSource = StrEnum("GoalPauseSource", {
-    member.declared_name.upper(): member.declared_name
-    for member in PauseSource.members_with(PauseSource)
-})
+GoalPauseSource = StrEnum(  # type: ignore[misc]  # declaration-derived compatibility enum
+    "GoalPauseSource",
+    {
+        member.declared_name.upper(): member.declared_name
+        for member in PauseSource.members_with(PauseSource)
+    },
+)
 
 
 class GoalExecutionState(StrEnum):
-    def __new__(cls, value: str, view: ExecutionPresentation):
+    view: ExecutionPresentation
+
+    def __new__(cls, value: str, view: ExecutionPresentation | None = None) -> GoalExecutionState:
+        assert view is not None  # Enum declarations supply behavior; value lookup uses EnumMeta.
         obj = str.__new__(cls, value)
         obj._value_ = value
         obj.view = view
@@ -1002,7 +1019,7 @@ class GoalMentionSource:
 
 
 @dataclass(frozen=True, init=False)
-class Goal:
+class Goal(GoalStateProjection):
     """Typed current state with the legacy dataclass field projection.
 
     ``status``, ``block_reason`` and ``pause_source`` are read-only projections,
@@ -1022,15 +1039,22 @@ class Goal:
     pause_source: str | None
 
     def __init__(
-        self, text: str, id: str, status: str = "active", progress: str = "",
-        revision: int = 0, reported_turn: str | None = None,
+        self,
+        text: str,
+        id: str,
+        status: str = "active",
+        progress: str = "",
+        revision: int = 0,
+        reported_turn: str | None = None,
         mention_source: GoalMentionSource | None = None,
-        block_reason: str | None = None, pause_source: str | None = None,
-        *, state: GoalState | None = None,
+        block_reason: str | None = None,
+        pause_source: str | None = None,
+        *,
+        state: GoalState | None = None,
     ) -> None:
-        object.__setattr__(self, "_state", state or GoalState.from_legacy(
-            status, block_reason, pause_source
-        ))
+        object.__setattr__(
+            self, "_state", state or GoalState.from_legacy(status, block_reason, pause_source)
+        )
         object.__setattr__(self, "text", text)
         object.__setattr__(self, "id", id)
         object.__setattr__(self, "progress", progress)
@@ -1041,32 +1065,19 @@ class Goal:
 
     @classmethod
     def from_registry(cls, data: Mapping, root: Path) -> Goal:
+        from .field_codec import FieldCodec
         from .goal_pauses import GoalPauseEvents
 
         values = dict(data)
-        if "pause_source" not in values and GoalState.decode(values.get("status", "active")) is PausedGoal:
+        if (
+            "pause_source" not in values
+            and GoalState.decode(values.get("status", "active")) is PausedGoal
+        ):
             events = GoalPauseEvents(root / GoalPauseEvents.filename).snapshot()
             event = events.get(f"{values['id']}:{values.get('revision', 0)}")
             if event is not None:
                 values["pause_source"] = str(event.source)
-        return cls(**values)
-
-    @property
-    def state(self) -> GoalState:
-        return self._state
-
-    @property
-    def status(self) -> str:
-        return self.state.declared_name
-
-    @property
-    def block_reason(self) -> str | None:
-        return self.state.reason
-
-    @property
-    def pause_source(self) -> str | None:
-        source = self.state.pause_source
-        return source.declared_name if source is not None else None
+        return FieldCodec.decode(cls, values)
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:
@@ -1091,7 +1102,8 @@ class Goal:
 
     @property
     def toggle_action(self) -> str:
-        return self.state.toggle
+        action = self.state.toggle
+        return action.declared_name if action else ""
 
     @property
     def toggle_label(self) -> str:
@@ -2349,7 +2361,11 @@ class ThreadRegistry:
                 session_file=data.get("session_file"),
                 model=data.get("model"),
                 thinking_level=data.get("thinking_level"),
-                goal=Goal.from_registry(data["goal"], self._path.parent) if data.get("goal") else None,
+                goal=(
+                    Goal.from_registry(data["goal"], self._path.parent)
+                    if data.get("goal")
+                    else None
+                ),
                 created_at=self._created_at(data),
                 previous_worktrees=tuple(data.get("previous_worktrees", [])),
                 auto_title_pending=bool(data.get("auto_title_pending", False)),

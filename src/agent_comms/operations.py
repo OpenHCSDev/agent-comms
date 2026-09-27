@@ -32,21 +32,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from .goal_states import ActiveGoal, PausedGoal, CompletedGoal, BlockedGoal
-
-from .goal_actions import (GoalAction, GoalActionContext, RuntimeInvocable,
-                           required_block_reason as _required_block_reason)
-
 from .active_route import guard_legacy_root_write
 from .candidate_maintenance import schedule_private_candidate_after_commit
 from .channels import ChannelCatalog
+from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
+from .goal_actions import required_block_reason as _required_block_reason
 from .goal_history import GoalHistoryEntry
-from .goal_mentions import bind_goal_mentions
 from .goal_pauses import GoalPauseEvent, GoalPauseEvents
+from .goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
 from .goal_waits import GoalInputReview, GoalWait, GoalWaits
 
 if TYPE_CHECKING:
-    from .goal_attempts import GoalAttemptStore
+    from .agent_events import GoalChanged
     from .relationships import ThreadRelationships
 from .declarations import (
     PRIVATE_OWNER_RENAME_PENDING,
@@ -112,7 +109,6 @@ from .transcript_routes import InputDisplay, TranscriptRoutes
 
 OBSERVATION_INTERVAL = 0.05
 _LOG = logging.getLogger(__name__)
-
 
 
 def _owner_launch_proof(name: str, pid: int, epoch: int) -> bytes:
@@ -2516,9 +2512,8 @@ class Comms:
         return RenameThreadResult(previous, current, True)
 
     def goal_pause(self, name: str) -> GoalPauseEvent | None:
-        """Return the action that paused this exact current goal revision, if known."""
-        events = GoalPauseEvents(self.root / GoalPauseEvents.filename)
-        return events.for_goal(self.registry.require(name).goal, events.snapshot())
+        """Project the pause source carried by the current goal."""
+        return GoalPauseEvents.for_goal(self.registry.require(name).goal)
 
     def unresolved_inputs(self, name: str) -> list[dict[str, Any]]:
         """Project durable unresolved inputs; reading never schedules another attempt."""
@@ -2802,6 +2797,19 @@ class Comms:
     def goal_execution(self, name: str) -> GoalExecution | None:
         return self._goal_snapshot(name)[1]
 
+    def goal_changed(
+        self, name: str, previous: tuple[Goal | None, GoalExecution | None] | None
+    ) -> GoalChanged | None:
+        """Announce a durable change through S1's event vocabulary.
+
+        Existing registry/history and wait persistence are the cross-process
+        authority. Each observer supplies its last successfully published view.
+        """
+        from .agent_events import GoalChanged
+
+        current = self.goal_snapshot(name)
+        return GoalChanged(*current) if current != previous else None
+
     def goal_snapshot(self, name: str) -> tuple[Goal | None, GoalExecution | None]:
         """Read current goal and its scheduling projection as one owner snapshot."""
         with _store_lock(self._wire_lock_path):
@@ -2836,7 +2844,6 @@ class Comms:
         }
         activities = self.activity.all_current()
         pending = self.bus.pending_counts_all(tuple(threads))
-        pause_events = GoalPauseEvents(self.root / GoalPauseEvents.filename).snapshot()
         waits = GoalWaits(self.root / GoalWaits.filename).snapshot()
         return [
             {
@@ -2845,9 +2852,7 @@ class Comms:
                 "is_fork": t.is_fork,
                 "pending": pending[name],
                 "goal_pause": (
-                    asdict(pause)
-                    if (pause := GoalPauseEvents.for_goal(t.goal, pause_events))
-                    else None
+                    asdict(pause) if (pause := GoalPauseEvents.for_goal(t.goal)) else None
                 ),
                 "goal_execution": (
                     asdict(execution)
@@ -2913,9 +2918,9 @@ class Comms:
             if options:
                 raise TypeError(f"Unexpected goal options: {tuple(options)}")
         with _store_lock(self._wire_lock_path):
-            return command.apply(GoalActionContext(
-                self, self.registry.require(name), actor, owner_store
-            ))
+            return command.apply(
+                GoalActionContext(self, self.registry.require(name), actor, owner_store)
+            )
 
     def block_goal_after_failed_turn(
         self,

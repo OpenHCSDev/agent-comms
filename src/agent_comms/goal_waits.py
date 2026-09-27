@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import ClassVar
-
 from dataclasses import dataclass, fields, replace
-from typing import Any
+from typing import Any, ClassVar
 
 from .declarations import (
     Goal,

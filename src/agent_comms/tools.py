@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Literal
-
-from .goal_actions import GoalAction
 
 from .declarations import (
     ChannelSort,
@@ -19,6 +17,8 @@ from .declarations import (
     ViewPredicate,
     is_channel_target,
 )
+from .goal_actions import GoalAction, GoalPrecondition, ModelInvocable
+from .goal_states import ActiveGoal
 from .operations import Comms, ForkSpec, TagAction
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
@@ -346,22 +346,24 @@ def _set_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 
 
 def _goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    wait_for = arguments.get("wait_for")
-    assert wait_for is None or isinstance(wait_for, list)
-    reviewed_inputs = arguments.get("reviewed_inputs")
-    assert reviewed_inputs is None or isinstance(reviewed_inputs, list)
     name = _executing_thread()
-    comms.update_goal(
-        name,
-        str(arguments["status"]),
-        goal_id=str(arguments["goal_id"]),
-        expected_status="active",
-        progress=str(arguments["progress"]),
-        block_reason=(str(arguments["progress"]) if arguments["status"] == "blocked" else None),
-        model_report=True,
-        wait_for=wait_for or (),
-        reviewed_inputs=reviewed_inputs or (),
+    command = GoalAction.from_payload(
+        {
+            "kind": arguments["status"],
+            "progress": arguments["progress"],
+            **{
+                key: arguments[key] for key in ("wait_for", "reviewed_inputs") if arguments.get(key)
+            },
+        }
     )
+    command = replace(
+        command,
+        expect=GoalPrecondition(
+            goal_id=str(arguments["goal_id"]),
+            expected_status=ActiveGoal.declared_name,
+        ),
+    )
+    comms.update_goal(name, command, actor=ModelInvocable)
     goal, execution = comms.goal_snapshot(name)
     return {
         "goal": asdict(goal) if goal else None,

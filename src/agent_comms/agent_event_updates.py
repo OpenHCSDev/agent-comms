@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, cast
 
 from acp.schema import (
     AgentMessageChunk,
     AgentThoughtChunk,
     ContentToolCallContent,
+    SessionInfoUpdate,
     TextContentBlock,
     ToolCallProgress,
     ToolCallStart,
@@ -38,6 +40,21 @@ class AcpEventConsumer(MroDispatch):
         self.client = client
         self.turn_id = turn_id
         self.route = route
+
+    @handles(events.GoalChanged)
+    async def goal_changed(self, event: events.GoalChanged) -> None:
+        await self.client.session_update(
+            session_id=self.session_id,
+            update=SessionInfoUpdate(
+                session_update="session_info_update",
+                field_meta={
+                    "agentComms": {
+                        "goal": asdict(event.goal) if event.goal else None,
+                        "goalExecution": asdict(event.execution) if event.execution else None,
+                    }
+                },
+            ),
+        )
 
     @handles(events.Chunk, events.Notice)
     async def text(self, event: events.Chunk | events.Notice) -> None:

@@ -1,0 +1,3 @@
+src/agent_comms/declarations.py:306: error: Module has no attribute "LK_NBRLCK"  [attr-defined]
+src/agent_comms/declarations.py:306: error: Module has no attribute "LK_NBLCK"  [attr-defined]
+Found 2 errors in 1 file (checked 10 source files)

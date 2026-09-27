@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import ClassVar
 
-from dataclasses import dataclass
-
 from .declarations import Goal
-from .goal_states import PauseSource, PausedGoal
+from .goal_states import PausedGoal, PauseSource
 from .locked_store import LockedStore
 
 
@@ -41,10 +40,12 @@ class GoalPauseEvents(LockedStore[dict[str, GoalPauseEvent]]):
         return self.read()
 
     @staticmethod
-    def for_goal(goal: Goal | None, events: dict[str, GoalPauseEvent]) -> GoalPauseEvent | None:
+    def for_goal(
+        goal: Goal | None, events: dict[str, GoalPauseEvent] | None = None
+    ) -> GoalPauseEvent | None:
         if goal is None or not isinstance(goal.state, PausedGoal):
             return None
-        return GoalPauseEvent(goal.id, goal.revision, goal.pause_source)
+        return GoalPauseEvent(goal.id, goal.revision, goal.state.source.declared_name)
 
     def record(self, event: GoalPauseEvent) -> None:
         self.update(lambda events: {**events, event.key: event})

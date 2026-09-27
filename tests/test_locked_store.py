@@ -281,15 +281,18 @@ def test_pause_store_golden_and_shared_algorithm(tmp_path):
         '{"goal:3": {"goal_id": "goal", "revision": 3, "source": "owner"}, '
         '"goal:4": {"goal_id": "goal", "revision": 4, "source": "runtime"}}'
     )
-    assert rows["goal:3"].source is GoalPauseSource.OWNER
+    assert rows["goal:3"].source == GoalPauseSource.OWNER
     assert GoalPauseEvents.for_goal(Goal("Work", "goal", "paused", revision=3), rows)
-    assert GoalPauseEvents.for_goal(Goal("Work", "goal", "paused", revision=5), rows) is None
+    assert (
+        GoalPauseEvents.for_goal(Goal("Work", "goal", "paused", revision=5), rows).source == "owner"
+    )
 
 
 def test_history_codec_preserves_sorted_golden_and_legacy_defaults():
     goal = Goal("Work", "goal")
     golden = (
-        '{"block_reason": null, "id": "goal", "mention_source": null, "progress": "", '
+        '{"block_reason": null, "id": "goal", "mention_source": null, '
+        '"pause_source": null, "progress": "", '
         '"reported_turn": null, "revision": 0, "status": "active", "text": "Work"}'
     )
     assert GoalHistoryStore._encode(goal) == golden

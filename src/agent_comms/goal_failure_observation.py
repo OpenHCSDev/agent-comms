@@ -14,11 +14,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from .goal_states import BlockedGoal, PausedGoal
-
 from .declarations import Goal, Thread, ThreadStatus, TurnClaimFence
 from .diagnostics import FailureReason
+from .field_codec import FieldCodec
 from .goal_pauses import GoalPauseEvent
+from .goal_states import BlockedGoal, PausedGoal
 from .recovery_projection import _preflight
 
 if TYPE_CHECKING:
@@ -160,7 +160,7 @@ class FailedTurnProjection:
     def to_primitive(self) -> dict[str, object]:
         # Deliberately no incident IDs, token, worktree, turn ID, diagnostics,
         # receipt bodies, canRetry, grants, or control actions.
-        return {"schema": 1, "state": self.state, "reason": self.reason}
+        return {"schema": 1, **FieldCodec.encode(self)}
 
 
 def read_failed_turn_projection(

@@ -32,7 +32,9 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
     assert active.active and reopened.goal_pause("worker") is None
 
 
-def test_model_cannot_pause_and_unattributed_legacy_pause_preserves_owner_stop(tmp_path, monkeypatch):
+def test_model_cannot_pause_and_unattributed_legacy_pause_preserves_owner_stop(
+    tmp_path, monkeypatch
+):
     comms = wire(tmp_path)
     comms.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.update_goal("worker", "set", text="Read fifty files")
