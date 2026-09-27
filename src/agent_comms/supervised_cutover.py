@@ -29,6 +29,10 @@ class OwnerWitness:
     created_at: float
     admission_generation: int
     process_start_ticks: int
+    session_file: Path
+    session_device: int
+    session_inode: int
+    worktree: Path
     agent_bin: str
     agent_args: str
 
@@ -85,12 +89,39 @@ def _owner_witness(comms: Comms, thread: Thread, generation: int) -> OwnerWitnes
         raise RelationViolationError("Live owner has no reusable agent launch settings") from error
     if not agent_bin or start != _process_start_ticks(thread.pid):
         raise RelationViolationError("Owner process changed during inventory")
+    if not thread.session_file:
+        raise RelationViolationError(f"Live owner {thread.name!r} has no saved session")
+    session_file = Path(thread.session_file)
+    worktree = Path(thread.worktree)
+    if not session_file.is_absolute() or not worktree.is_absolute():
+        raise RelationViolationError("Owner session and worktree must have absolute paths")
+    try:
+        session = session_file.lstat()
+        workspace = worktree.lstat()
+    except OSError as error:
+        raise RelationViolationError("Owner saved session or worktree is unavailable") from error
+    if (
+        not stat.S_ISREG(session.st_mode)
+        or session.st_uid != os.geteuid()
+        or stat.S_IMODE(session.st_mode) != 0o600
+        or session.st_nlink != 1
+        or session.st_size == 0
+        or not stat.S_ISDIR(workspace.st_mode)
+        or workspace.st_uid != os.geteuid()
+    ):
+        raise RelationViolationError("Owner saved session or worktree lacks handoff integrity")
+    if start != _process_start_ticks(thread.pid):
+        raise RelationViolationError("Owner process changed during session handoff inventory")
     return OwnerWitness(
         thread.name,
         thread.pid,
         thread.created_at,
         generation,
         start,
+        session_file,
+        session.st_dev,
+        session.st_ino,
+        worktree,
         agent_bin,
         agent_args,
     )
