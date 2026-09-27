@@ -23,6 +23,7 @@ import stat
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 from .coordination_store import IdentityConflict
@@ -331,8 +332,16 @@ def sidecar_connection(
             connection.close()
 
 
-def encode_request(text: str) -> str:
-    """JSON-encode like the pinned native ``_claimNativeInput`` request."""
+class NativeRequestSource(StrEnum):
+    """Exact pinned Pi prompt source lane; a caller string is not authority."""
+
+    INTERACTIVE = "interactive"
+    RPC = "rpc"
+
+
+def _encode_request_for_source(text: str, source: NativeRequestSource) -> str:
+    if type(text) is not str or type(source) is not NativeRequestSource:
+        raise TypeError("native request needs exact text and typed source lane")
     return json.dumps(
         {
             "kind": "prompt",
@@ -340,15 +349,29 @@ def encode_request(text: str) -> str:
             "images": None,
             "streamingBehavior": None,
             "expandPromptTemplates": True,
-            "source": "interactive",
+            "source": source.value,
         },
         separators=(",", ":"),
         ensure_ascii=False,
     )
 
 
-def native_request_digest(text: str) -> str:
-    """sha256 over the pinned native request envelope, not the bare text."""
+def encode_request(text: str) -> str:
+    """Historical interactive digest envelope; never silently reinterpret rows."""
+    return _encode_request_for_source(text, NativeRequestSource.INTERACTIVE)
+
+
+def native_request_digest_for_source(text: str, source: NativeRequestSource) -> str:
+    """Pure OFF-only lane-specific hash, not a reserved-input/send grant.
+
+    A future caller must persist the lane in the shared input reservation and
+    recheck it at the irreversible writer boundary; this function does neither.
+    """
     return hashlib.sha256(
-        ("pi-input-request-v1\n" + encode_request(text)).encode("utf-8")
+        ("pi-input-request-v1\n" + _encode_request_for_source(text, source)).encode("utf-8")
     ).hexdigest()
+
+
+def native_request_digest(text: str) -> str:
+    """Preserve historical interactive binding; existing UNKNOWN is unchanged."""
+    return native_request_digest_for_source(text, NativeRequestSource.INTERACTIVE)
