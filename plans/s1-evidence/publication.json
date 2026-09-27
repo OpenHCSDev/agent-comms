@@ -2,15 +2,17 @@
   "owner": "Codex S1 implementation worker",
   "worktree": "/home/ts/wt/comms-refactor-s1-events-20260927",
   "branch": "codex/refactor-s1-events-20260927",
-  "implementation_commit": "b547552f38077618dc93aec4707dc1e43bb122b9",
+  "implementation_commit": "48fd974fe52f3b2205f916ee4fcf792397c33c67",
   "draft_pr": "https://github.com/OpenHCSDev/agent-comms/pull/127",
-  "status": "Implemented and locally validated; draft for owner adoption",
-  "next_action": "Review the S1 diff, reconcile PR95 and parent-owned concurrent changes, then run prepared native-stack integration under an explicit worktree-local fixture setup.",
+  "status": "Full S1 surface implemented and validated on the published integration baseline; draft for owner adoption",
+  "next_action": "Normally merge the branch in an isolated adoption worktree, retaining newer parent live changes and published PR95 lifecycle follow-up. Review S1 alone against 60e6cc4. See HANDOFF.md.",
   "remaining_boundaries": [
-    "30 opt-in native-stack cases were skipped",
-    "S2 external Pi RPC decoding is deferred",
-    "S7 extraction of closure-owned turn orchestration is deferred",
-    "No full repository suite, CI wait, live restart, deployment, or merge"
+    "Four mounted Toad UI variants not executed",
+    "PR95 later selected-attempt lifecycle and default activation belong to its worker",
+    "S2 external Pi RPC decoding and S7 orchestration decomposition remain separate",
+    "No full repository suite, installed-wheel/live validation, CI wait, restart, deployment or merge to main"
   ],
-  "cleanup": "Owned test directories, caches, and temporary Node dependencies removed; receipts retained"
+  "cleanup": "Owned native bundle, test directories, caches and temporary Node dependencies removed; receipts retained",
+  "integrated_main": "e4cd10e",
+  "integrated_pr95": "60e6cc4ceea7b8e4a2c3a33b47fb40a5765a446a"
 }

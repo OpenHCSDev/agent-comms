@@ -3,7 +3,7 @@
 Owner: Codex S1 worker, explicitly authorized by Tristan on 2026-09-27.
 Worktree: `/home/ts/wt/comms-refactor-s1-events-20260927`
 Branch: `codex/refactor-s1-events-20260927`
-Current integration: main `e4cd10e` (PR126) merged as `acd64af`, then published PR95 `60e6cc4ceea7b8e4a2c3a33b47fb40a5765a446a` merged as `7914c9f`. Original S1 implementation: `b547552f38077618dc93aec4707dc1e43bb122b9`. Draft PR: https://github.com/OpenHCSDev/agent-comms/pull/127. `publication.json` records the latest exact implementation/adoption commit; a following receipt-only commit does not change executable source.
+Current integration: main `e4cd10e` (PR126) merged as `acd64af`, then published PR95 `60e6cc4ceea7b8e4a2c3a33b47fb40a5765a446a` merged as `7914c9f`. Original S1 implementation: `b547552f38077618dc93aec4707dc1e43bb122b9`. Draft PR: https://github.com/OpenHCSDev/agent-comms/pull/127. Current implementation/adoption commit: `48fd974fe52f3b2205f916ee4fcf792397c33c67`. `publication.json` records the exact source handoff; a following receipt-only commit does not change executable source.
 
 Latest owner directive acknowledged: complete S1 across the integrated source, with A8 and parent live ownership preserved. No dirty PR95 lifecycle work was copied. S1 is complete on the published integration baseline; the remaining boundaries below belong to other surfaces or validation environments. See `integrated-validation.md` for the resumed execution evidence.
 
