@@ -20,7 +20,7 @@ from collections.abc import Mapping
 from contextlib import closing
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, BinaryIO, cast
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedInitial
@@ -97,14 +97,15 @@ def _pending_seal(
     }
 
 
-def _write_seal(
-    bus: MessageBus, marker: dict[str, int | str | object], seal: dict[str, object]
-) -> None:
+def _write_seal(bus: MessageBus, marker: Mapping[str, int | str], seal: dict[str, object]) -> None:
     from .declarations import _atomic_write_text
 
-    marker["checkpoint_seal"] = seal
+    # The canonical marker reader returns a validated mutable dict; its
+    # historical value annotation predates the optional nested seal.
+    mutable_marker = cast(dict[str, object], marker)
+    mutable_marker["checkpoint_seal"] = seal
     _atomic_write_text(
-        bus._path.parent / "bus_meta.json", json.dumps(marker, indent=2), fsync_parent=True
+        bus._path.parent / "bus_meta.json", json.dumps(mutable_marker, indent=2), fsync_parent=True
     )
 
 
@@ -136,7 +137,7 @@ def _revision(info: os.stat_result) -> tuple[int, int, int, int, int]:
     return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
 
 
-def _tail(stream, offset: int) -> str:
+def _tail(stream: BinaryIO, offset: int) -> str:
     stream.seek(max(0, offset - _TAIL_BYTES))
     return hashlib.sha256(stream.read(min(_TAIL_BYTES, offset))).hexdigest()
 
@@ -327,7 +328,7 @@ def install_private_bus_checkpoint(bus: MessageBus) -> PrefixWitness:
             with closing(_connect(path, readonly=True)) as db:
                 witness = _saved(db)
             marker["checkpoint_version"] = _VERSION
-            marker["checkpoint_seal"] = _final_seal(witness, path)
+            cast(dict[str, object], marker)["checkpoint_seal"] = _final_seal(witness, path)
             _atomic_write_text(
                 bus._path.parent / "bus_meta.json",
                 json.dumps(marker, indent=2),
@@ -347,7 +348,7 @@ def certificate_enabled(bus_path: Path) -> bool:
 
 def _recover_pending_unlocked(
     bus: MessageBus,
-    marker: dict[str, int | str | object],
+    marker: Mapping[str, int | str],
     db: sqlite3.Connection,
     db_path: Path,
     saved: PrefixWitness,
@@ -380,7 +381,13 @@ def _recover_pending_unlocked(
         db.execute("DELETE FROM initials")
         db.execute("DELETE FROM response_keys")
 
-        def collect(offset, raw, message, receipt, initial):
+        def collect(
+            offset: int,
+            raw: bytes,
+            message: Message,
+            receipt: Mapping[str, object] | None,
+            initial: CommittedInitial | None,
+        ) -> None:
             nonlocal digest, prior_seen, prior_seq, last_seq, count, size
             count += 1
             size += len(raw)
@@ -412,12 +419,19 @@ def _recover_pending_unlocked(
                 _tail(stream, info.st_size),
                 _revision(info),
             )
-        if _witness_record(expected) != seal["expected"] or last_seq > marker["last_seq"]:
+        if _witness_record(expected) != seal["expected"] or last_seq > _marker_last_seq(marker):
             raise _failure("Private bus checkpoint pending suffix differs from intent.")
         _set_certificate(db, expected.root_id, info, last_seq, digest, expected.tail)
     _directory_sync(db_path)
     _write_seal(bus, marker, _final_seal(expected, db_path))
     return expected
+
+
+def _marker_last_seq(marker: Mapping[str, int | str]) -> int:
+    value = marker.get("last_seq")
+    if type(value) is not int:
+        raise _failure("Private bus sequence marker is invalid.")
+    return value
 
 
 def verify_private_bus_checkpoint_unlocked(
@@ -445,7 +459,7 @@ def verify_private_bus_checkpoint_unlocked(
             _check_final_seal(marker, saved, path)
             if _tail(stream, saved.offset) != saved.tail:
                 raise _failure("Private bus checkpoint prefix tail changed.")
-            if saved.through_seq > marker["last_seq"]:
+            if saved.through_seq > _marker_last_seq(marker):
                 raise _failure("Private bus checkpoint exceeds the durable sequence marker.")
             if _revision(info) == saved.revision:
                 return saved
@@ -638,8 +652,8 @@ def certified_initial_page_unlocked(
                     raise _failure("Certified initial lookup differs from bus row.")
                 initials.append(initial)
             if (
-                _revision(_path(bus._path).stat())
-                != tuple(marker["checkpoint_seal"]["db_revision"])
+                list(_revision(_path(bus._path).stat()))
+                != cast(dict[str, object], marker["checkpoint_seal"])["db_revision"]
                 or bus._private_marker_unlocked().get("checkpoint_seal")
                 != marker["checkpoint_seal"]
                 or _revision(bus._path.stat()) != witness.revision

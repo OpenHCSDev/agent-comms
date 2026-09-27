@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import os
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -14,6 +16,20 @@ from agent_comms.declarations import RelationViolationError
 from agent_comms.operations import Comms
 from maintenance_control_fixture import FixtureMaintenanceControl
 from test_coordinated_runtime import _root
+
+
+@pytest.fixture
+def tmp_path():
+    """The sealed runtime requires a real, disposable private /var/tmp root."""
+    if (
+        os.name != "posix"
+        or not Path("/var/tmp").is_dir()
+        or Path("/var").is_symlink()
+        or Path("/var/tmp").is_symlink()
+    ):
+        pytest.skip("sealed runtime requires a real, disposable /var/tmp root")
+    with tempfile.TemporaryDirectory(prefix="ac-maintenance-native-", dir="/var/tmp") as root:
+        yield Path(root)
 
 
 @pytest.mark.asyncio

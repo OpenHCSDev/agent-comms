@@ -34,7 +34,7 @@ from datetime import datetime
 from enum import Enum, StrEnum
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, Self
+from typing import TYPE_CHECKING, BinaryIO, Self, cast
 
 from .bus_activity_index import BusActivityIndex
 from .bus_display_index import BusDisplayIndex
@@ -3876,7 +3876,7 @@ class MessageBus:
         if certificate_enabled(self._path):
             private = row.get(PRIVATE_WIRE_FIELD)
             initial = (
-                validate_initial_record(row, metadata["wire_root_id"])
+                validate_initial_record(row, cast(str, metadata["wire_root_id"]))
                 if isinstance(private, dict) and "initial" in private
                 else None
             )
