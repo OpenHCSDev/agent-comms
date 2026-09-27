@@ -25,7 +25,7 @@ def main(path: Path) -> None:
     source = raw.decode()
     source = replace_once(source,
         'import { prepareCompaction } from "../../core/compaction/index.js";',
-        'import { compact, prepareCompaction, serializeConversation } from "../../core/compaction/index.js";\n'
+        'import { compact, prepareCompaction, serializeConversation, shouldCompact } from "../../core/compaction/index.js";\n'
         'import { convertToLlm } from "../../core/messages.js";\n'
         'import { AssistantMessageEventStream } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js";')
     helper = Path(__file__).with_name("native-compaction-selected-summary.mjs").read_text()
@@ -43,10 +43,16 @@ def main(path: Path) -> None:
         // The phase2 slot is reserved synchronously before ANY await. RPC stdin
         // dispatches concurrent lines, so native mutations cannot interleave.
         if (acSummarySlot && !["agent_comms_cancel_summary", "agent_comms_summarize_compaction",
-            "agent_comms_prepare_compaction", "get_state"].includes(command.type))
+            "agent_comms_prepare_compaction", "agent_comms_compaction_settings", "get_state"].includes(command.type))
             return error(id, command.type, "Selected summary in flight; mutation denied");
         switch (command.type) {''')
-    source = replace_once(source, '''            case "agent_comms_prepare_compaction": {''', '''            case "agent_comms_summarize_compaction": {
+    source = replace_once(source, '''            case "agent_comms_prepare_compaction": {''', '''            case "agent_comms_compaction_settings": {
+                if (!acValidCompactionSettingsRequest(command))
+                    return error(id, command.type, "Invalid selected compaction settings request");
+                return success(id, command.type, acSelectedCompactionSettings(command, session,
+                    acSummarySlot !== null || acOtherCommandInFlight !== 0));
+            }
+            case "agent_comms_summarize_compaction": {
                 if (!acValidSummaryRequest(command))
                     return error(id, command.type, "Invalid v1 selected-summary request");
                 const admission = acAdmitSummary(command, session,
@@ -90,7 +96,7 @@ def main(path: Path) -> None:
         '''        const acCountCommand = command?.type !== "agent_comms_prepare_compaction" &&
             command?.type !== "get_state";''',
         '''        const acCountCommand = !["agent_comms_prepare_compaction", "agent_comms_summarize_compaction",
-            "agent_comms_cancel_summary", "get_state"].includes(command?.type);''')
+            "agent_comms_cancel_summary", "agent_comms_compaction_settings", "get_state"].includes(command?.type);''')
     path.write_text(source)
 
 

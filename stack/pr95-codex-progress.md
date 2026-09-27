@@ -1,3 +1,50 @@
+# PR95 completion checkpoint — September 27, 2026
+
+Owner: PR95 continuation in `/home/ts/wt/comms-pr95-finish-codex-20260927`,
+branch `codex/pr95-finish-20260927`, preserving prior commits and recovered dirty work.
+This section supersedes the historical remaining-work checklist below.
+
+Implemented: selected-child effective-settings RPC; canonical/custom-model and
+project-trust integration; continued private-session coverage derived from the
+existing ACP starts and immutable live-recorded native results; complete-package
+runtime verification; and adaptive compaction enabled by default for verified
+native ACP owners. Ordinary turns no longer require an active goal. All original
+input admissions still bind exactly once. Unresolved inputs/operations still
+refuse compaction; no row is removed or silently promoted to settled.
+
+The normal compiled bundle is `stack/.pi-native-252003c2a59db46a`. Both normal preparation
+and the active `/var/tmp` route verifier accept the same full manifest. The actual
+services factory retains canonical/project compaction settings and disables
+tracked session/provider retries in SettingsManager, including after reload and
+project-trust changes. Tracked automatic/overflow summaries remain disabled;
+the owner journals the selected summary before its original input is sent.
+The active launcher uses the copied, verified import fence and project bootstrap.
+
+Validation is local/offline: actual Pi SDK/RPC repeated summary and clean-decline
+cycles, strict reopen, exact-once originals, private continued history, no-goal
+owner, custom model, disabled settings, corrections, and summary retention in the
+next provider context. Queue/restart gates pass. The isolated wheel includes the
+same manifest and verifies the built bundle. See `pr95-evidence/VALIDATION.md` for
+commands, counts, NRA coverage, and precise limits.
+
+Integration/deployment remains parent-owned. No live root, original UNKNOWN
+input, owner process, Toad, coordination_store.py, coordinated_runtime.py, or
+native failure-recovery test was changed. No live provider calls or CI wait.
+No idle selected child or unavailable matching context telemetry remains a clean
+trigger skip; this does not authorize a summary/retry or clear uncertain history.
+Untracked legacy private histories fail closed rather than being auto-enrolled.
+
+Merge this branch normally into PR95's integration branch. Preserve parent
+recovery changes. S8 integration needs only the nullable goal snapshot in the two
+existing ThreadRegistry compaction methods and ACP's default-on constructor;
+S4's read/routing methods are untouched. Refactor slots S8 and S4 were resumed
+in their original CLI sessions, and actual process/progress records are in
+`/home/ts/wt/comms-refactor-dispatch-20260927/README.md`.
+
+---
+
+The earlier checkpoint below is retained as implementation history.
+
 # PR95 integration checkpoint — September 27, 2026
 
 Worktree: `/home/ts/wt/comms-pr95-finish-codex-20260927`.

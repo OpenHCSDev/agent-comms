@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 const pkg=process.env.PI_NATIVE_PACKAGE_DIR;
 const originalRpc = join(pkg,'dist/modes/rpc/rpc-mode.js');
 const integrated = readFileSync(originalRpc,'utf8').includes('case "agent_comms_summarize_compaction"');
-assert.ok(integrated ? process.env.PR95_RPC_FIXTURE === '1' :
-  pkg && readFileSync(join(pkg, '.pr95-disposable-test-copy'), 'utf8') === 'owned fixture\n',
+assert.ok(pkg && (process.env.PR95_RPC_FIXTURE === '1' ||
+  readFileSync(join(pkg, '.pr95-disposable-test-copy'), 'utf8') === 'owned fixture\n'),
   'use only an owned disposable Pi fixture');
 const root=mkdtempSync(join(tmpdir(),'pr95-selected-summary-'));
 const patched=integrated ? originalRpc : join(pkg,'dist/modes/rpc',`pr95-summary-${process.pid}.js`);
@@ -34,7 +34,7 @@ for(let i=0;i<5;i++) {
  manager.appendMessage({role:'user',content:'Question '+i,timestamp:2*i});
  manager.appendMessage({role:'assistant',content:[{type:'text',text:'Answer '+i}],provider:'fake',model:'fake',api:'fake',stopReason:'stop',timestamp:2*i+1});
 }
-const settings={enabled:false,reserveTokens:1000,keepRecentTokens:10};
+const settings={enabled:process.env.PR95_EFFECTIVE_DISABLED !== '1',reserveTokens:1000,keepRecentTokens:10};
 const preparation=prepareCompaction(manager.getBranch(),settings);
 const witness=manager.captureCompactionWitness(preparation.firstKeptEntryId);
 const model={provider:'fake',id:'fake',api:'openai-completions',contextWindow:10000,maxTokens:1000};

@@ -56,8 +56,8 @@ class CompactionSource:
     thread: str
     owner_epoch: int
     turn_id: str
-    goal_id: str
-    goal_revision: int
+    goal_id: str | None
+    goal_revision: int | None
     bus_revision: str
     input_revision: str
     pending_input_key: str | None = None
@@ -100,8 +100,8 @@ class OwnerCompactionCommit:
 
     @staticmethod
     def _guard_arguments(owner: Thread, witness: dict) -> dict:
-        if owner.goal is None or owner.active_turn is None or owner.session_file is None:
-            raise ValueError("Claimed goal owner with canonical session required")
+        if owner.active_turn is None or owner.session_file is None:
+            raise ValueError("Claimed owner with canonical session required")
         keys = {"sessionId", "sessionFile", "leafId", "firstKeptEntryId", "revision"}
         if set(witness) != keys or any(
             type(value) is not str or not value for value in witness.values()
@@ -112,8 +112,8 @@ class OwnerCompactionCommit:
             raise ValueError("Native witness does not identify owner's canonical session")
         return dict(
             turn_id=owner.active_turn.id,
-            expected_goal_id=owner.goal.id,
-            expected_goal_revision=owner.goal.revision,
+            expected_goal_id=owner.goal.id if owner.goal is not None else None,
+            expected_goal_revision=owner.goal.revision if owner.goal is not None else None,
             # Legacy receipt field only, not authority. CompactionSource binds
             # actual native history plus canonical bus/input revisions below.
             correction_revision=0,
@@ -205,7 +205,7 @@ class OwnerCompactionCommit:
             return None
         if (
             type(paths) is not tuple
-            or len(paths) not in (2, 4)
+            or not paths
             or any(type(path) is not str or not Path(path).is_absolute() for path in paths)
         ):
             raise RelationViolationError("Exact effective settings paths required")

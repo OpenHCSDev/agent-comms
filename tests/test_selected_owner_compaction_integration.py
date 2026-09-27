@@ -21,8 +21,20 @@ PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(not PACKAGE, reason="Normal prepared native bundle required")
 
 
+def record_fixture_history(inputs, owner, admission):
+    for index in range(5):
+        key = f"acp:seed-{owner}-{index}"
+        text = f"Question {index}"
+        native_id = str(index + 1).zfill(32)
+        inputs.record(key, seq=None, owner=owner, admission=admission, target=owner, text=text)
+        inputs.bind(
+            key, admission=admission, turn_id=f"seed-{index}", native_id=native_id, text=text
+        )
+        inputs.started(key, turn_id=f"seed-{index}", native_id=native_id, text=text)
+
+
 @asynccontextmanager
-async def owner_fixture(tmp_path, monkeypatch, *, real_host=False):
+async def owner_fixture(tmp_path, monkeypatch, *, real_host=False, goal=True):
     package = Path(PACKAGE)
     launcher = str(package.parents[3] / "bin/pi-native")
     repo = Path(__file__).resolve().parents[1]
@@ -73,7 +85,7 @@ async def owner_fixture(tmp_path, monkeypatch, *, real_host=False):
                 pid=os.getpid(),
                 session_file=file,
                 model=fixture["model"] if real_host else "fake/fake",
-                goal=Goal("work", "goal"),
+                goal=Goal("work", "goal") if goal else None,
             )
         )
         owner, epoch = registry.live_owner_with_epoch("owner")
@@ -94,10 +106,12 @@ async def owner_fixture(tmp_path, monkeypatch, *, real_host=False):
             "agent_comms.owner_compaction_adaptive.read_compaction_decision",
             lambda *a, **kw: PiCompactionDecision(True, 1000, 10, True),
         )
+        if os.environ.get("PR95_PRIVATE_SESSION") == "1":
+            record_fixture_history(inputs, "owner", owner.active_turn.admission_generation)
         info = AgentRuntimeInfo(
             thread="owner",
             model=fixture["model"] if real_host else "fake/fake",
-            context_used=9500,
+            context_used=(fixture["contextWindow"] if real_host else 10000) - 500,
             context_size=fixture["contextWindow"] if real_host else 10000,
         )
         yield persistent, registry, inputs, file, launcher, info
@@ -170,12 +184,14 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         assert inputs.get("acp:original")["native_id"] == "a" * 32
 
 
+@pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
 @pytest.mark.parametrize("correction", [False, True])
 @pytest.mark.parametrize("real_host", [False, True])
 @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
 async def test_acp_selected_summary_handoff_uses_final_prompt_once(
-    tmp_path, monkeypatch, correction, real_host, clean_decline
+    tmp_path, monkeypatch, correction, real_host, clean_decline, private_session
 ):
+    original_key = "acp:original-proj" if private_session else "acp:original"
     from dataclasses import replace
 
     from agent_comms import backend
@@ -185,6 +201,10 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
     from agent_comms.operations import wire
     from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
 
+    if private_session:
+        if not real_host:
+            pytest.skip("Private-session coverage needs the real SDK host")
+        monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
     if clean_decline:
         monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
     async with owner_fixture(tmp_path, monkeypatch, real_host=real_host) as (
@@ -195,7 +215,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
         launcher,
         info,
     ):
-        root = tmp_path / "acp-wire"
+        root = tmp_path if private_session else tmp_path / "acp-wire"
         comms = wire(root)
         project = tmp_path / "proj"
         project.mkdir()
@@ -209,7 +229,6 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
             agent_bin=launcher,
             agent_args=[],
             runtime_enabled=True,
-            adaptive_compaction_enabled=True,
             auto_wake=False,
         )
         agent.on_connect(Client())
@@ -238,8 +257,12 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
         agent._goal_store = store
         agent._persistent_backends["proj"] = persistent
         dispositions = InputDispositions(root)
+        if private_session:
+            record_fixture_history(
+                dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
+            )
         dispositions.record(
-            "acp:original",
+            original_key,
             seq=None,
             owner="proj",
             admission=comms.registry.snapshot().admission_generations["proj"],
@@ -313,7 +336,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 "proj",
                 "proj",
                 "Continue",
-                original_keys=("acp:original",),
+                original_keys=(original_key,),
                 original_owner_input=True,
                 original_goal_id="goal-acp",
             )
@@ -321,11 +344,11 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 with pytest.raises(RelationViolationError, match="Unsettled"):
                     await turn
                 assert dispatched == []
-                assert dispositions.get("acp:original")["native_id"] is None
+                assert dispositions.get(original_key)["native_id"] is None
             else:
                 await turn
                 assert len(dispatched) == (0 if real_host else 1)
-                assert dispositions.status("acp:original") == "started"
+                assert dispositions.status(original_key) == "started"
             journal = CompactionJournal(root / "compaction-commits.sqlite3")
             attempt = journal.selected_summary(summary_ids[0])
             terminal_status = "declined-prestart" if clean_decline else "linked"
@@ -340,7 +363,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
             if real_host and not correction:
                 assert persistent.reopen_required is None
                 assert persistent.proc is not None
-                native_id = dispositions.get("acp:original")["native_id"]
+                native_id = dispositions.get(original_key)["native_id"]
                 assert native_id
                 user_entries = [
                     row
@@ -364,6 +387,14 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                     target="proj",
                     text="Continue again",
                 )
+                # The previous real response updated usage to the tiny fixture
+                # result. Supply a new observed threshold crossing for cycle two.
+                comms.set_agent_info(
+                    "proj",
+                    model=info.model,
+                    context_used=info.context_used,
+                    context_size=info.context_size,
+                )
                 await agent._run_agent_turn(
                     "proj",
                     "proj",
@@ -385,7 +416,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                     0 if clean_decline else 2
                 )
                 original_ids = {
-                    dispositions.get(key)["native_id"] for key in ("acp:original", "acp:next")
+                    dispositions.get(key)["native_id"] for key in (original_key, "acp:next")
                 }
                 assert len(original_ids) == 2
                 assert (
@@ -444,3 +475,121 @@ async def test_correction_after_native_commit_never_mints_original_admission(tmp
         entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
         assert sum(row["type"] == "compaction" for row in entries) == 1
         assert not native_input_admitted(tmp_path, file)
+
+
+async def test_selected_effective_disabled_skips_without_reserving_or_mutating(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("PR95_EFFECTIVE_DISABLED", "1")
+    async with owner_fixture(tmp_path, monkeypatch, real_host=True) as (
+        persistent,
+        registry,
+        inputs,
+        file,
+        launcher,
+        info,
+    ):
+        # Detached disk settings disagree: selected runtime owns the decision.
+        (tmp_path / "pi-settings/settings.json").write_text('{"compaction":{"enabled":true}}')
+        before = Path(file).read_bytes()
+        assert not await maybe_compact_owner_turn(
+            registry,
+            launcher,
+            "owner",
+            "turn",
+            info,
+            "acp:original",
+            persistent,
+            input_text="Continue",
+            on_admission=lambda _: pytest.fail("Disabled admission"),
+        )
+        assert Path(file).read_bytes() == before
+        assert persistent.proc is not None
+        assert not (tmp_path / "compaction-commits.sqlite3").exists()
+        assert inputs.get("acp:original")["native_id"] is None
+
+
+async def test_selected_custom_model_and_project_settings_use_actual_owner(tmp_path, monkeypatch):
+    monkeypatch.setenv("PR95_CUSTOM_MODEL", "1")
+    model_file = tmp_path / "models.json"
+    model_file.write_text(
+        json.dumps(
+            {
+                "providers": {
+                    "custom-local": {
+                        "baseUrl": "http://127.0.0.1:1/v1",
+                        "api": "openai-completions",
+                        "models": [
+                            {
+                                "id": "custom-model",
+                                "name": "Offline model",
+                                "contextWindow": 10000,
+                                "maxTokens": 1000,
+                            }
+                        ],
+                    }
+                }
+            }
+        )
+    )
+    monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path))
+    project = tmp_path / ".pi"
+    project.mkdir()
+    # These settings are untrusted by this host. A detached projectTrusted:true
+    # reader would disagree; the live SettingsManager is the deciding authority.
+    (project / "settings.json").write_text('{"compaction":{"enabled":false}}')
+    async with owner_fixture(tmp_path, monkeypatch, real_host=True) as (
+        persistent,
+        registry,
+        inputs,
+        file,
+        launcher,
+        info,
+    ):
+        admitted = []
+        assert info.model == "custom-local/custom-model"
+        assert await maybe_compact_owner_turn(
+            registry,
+            launcher,
+            "owner",
+            "turn",
+            info,
+            "acp:original",
+            persistent,
+            input_text="Continue",
+            on_admission=admitted.append,
+        )
+        assert len(admitted) == 1
+        assert inputs.get("acp:original")["native_id"] is None
+        assert (
+            sum(
+                json.loads(line)["type"] == "compaction"
+                for line in Path(file).read_text().splitlines()
+            )
+            == 1
+        )
+
+
+async def test_owner_without_goal_compacts_with_exact_turn_authority(tmp_path, monkeypatch):
+    async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
+        persistent,
+        registry,
+        inputs,
+        file,
+        launcher,
+        info,
+    ):
+        admitted = []
+        assert await maybe_compact_owner_turn(
+            registry,
+            launcher,
+            "owner",
+            "turn",
+            info,
+            "acp:original",
+            persistent,
+            input_text="Continue",
+            on_admission=admitted.append,
+        )
+        assert len(admitted) == 1
+        assert inputs.get("acp:original")["native_id"] is None

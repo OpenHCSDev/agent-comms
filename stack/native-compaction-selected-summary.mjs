@@ -4,6 +4,39 @@ const acSummaryLimits = Object.freeze({ calls: 4, deadlineMs: 90000,
     sourceBytes: 1048576, outputBytes: 262144 });
 const acSummaryId = value => typeof value === "string" && /^[0-9a-f]{32}$/.test(value);
 const acNativeSummaryResult = AssistantMessageEventStream.prototype.result;
+// Read the actual selected SettingsManager: it already owns project trust,
+// migrations and in-memory overrides. No detached reader guesses that state.
+function acValidCompactionSettingsRequest(command) {
+    const text = value => typeof value === "string" && value.length > 0 && value.length <= 4096;
+    return acExactObject(command, ["id", "type", "version", "sessionId", "sessionFile", "selected", "contextTokens"]) &&
+        command.type === "agent_comms_compaction_settings" && command.version === 1 && text(command.id) &&
+        text(command.sessionId) && text(command.sessionFile) &&
+        acExactObject(command.selected, ["provider", "modelId", "contextWindow"]) &&
+        text(command.selected.provider) && text(command.selected.modelId) &&
+        Number.isSafeInteger(command.selected.contextWindow) && command.selected.contextWindow > 0 &&
+        Number.isSafeInteger(command.contextTokens) && command.contextTokens >= 0;
+}
+function acSelectedCompactionSettings(command, session, conflict) {
+    if (conflict || session.isCompacting || !session.isIdle || session.isStreaming || session.isRetrying ||
+        session._retryAttempt || session._nativeInterruptIds || session.pendingMessageCount ||
+        session.agent.steeringQueue.messages.length || session.agent.followUpQueue.messages.length ||
+        session._pendingNextTurnMessages.length || session._pendingCustomMessages.length ||
+        session._pendingBashMessages.length) throw Error("Selected compaction settings require an idle owner");
+    const model = session.model;
+    if (command.sessionId !== session.sessionId || command.sessionFile !== session.sessionFile ||
+        !model || command.selected.provider !== model.provider || command.selected.modelId !== model.id ||
+        command.selected.contextWindow !== model.contextWindow) throw Error("Selected compaction source changed");
+    const settings = session.settingsManager.getCompactionSettings();
+    if (typeof settings.enabled !== "boolean" || !Number.isSafeInteger(settings.reserveTokens) ||
+        settings.reserveTokens < 0 || settings.reserveTokens > 10000000 ||
+        !Number.isSafeInteger(settings.keepRecentTokens) || settings.keepRecentTokens <= 0 ||
+        settings.keepRecentTokens > 10000000) throw Error("Invalid effective compaction settings");
+    return {version: 1, sessionId: session.sessionId, sessionFile: session.sessionFile,
+        selected: command.selected, contextTokens: command.contextTokens,
+        decision: {enabled: settings.enabled, reserveTokens: settings.reserveTokens,
+            keepRecentTokens: settings.keepRecentTokens,
+            trigger: shouldCompact(command.contextTokens, model.contextWindow, settings)}};
+}
 function acValidSummaryRequest(value) {
     if (!acExactObject(value, ["id", "type", "version", "operationId", "witness", "selected", "settings"]) ||
         value.type !== "agent_comms_summarize_compaction" || !acSummaryId(value.operationId)) return false;

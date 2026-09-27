@@ -598,42 +598,21 @@ send({'type':'agent_settled'})
 def test_compiled_pins_include_model_services_and_bedrock_and_reject_drift(monkeypatch) -> None:
     import agent_comms.native_pi as native
 
-    bedrock = "node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js"
     assert native.CAPABILITY == "pi-native-input-v1-live-only"
-    expected = {
-        "dist/core/agent-session-services.js": (
-            "4af410d793207f0269cf442a799b0f83933b69d728d166e49a3a6134ff7108a6"
-        ),
-        "dist/cli.js": "8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d",
-        "dist/core/agent-session.js": (
-            "b8b3deeffad82771762808c435617d03f4701c3ac14a9620f5e313545a8d6875"
-        ),
-        "dist/core/session-manager.js": (
-            "dd75fef58eaa5458a91cff9fe1cf70556ebc720afd98720eae3dcb6572cb63ca"
-        ),
-        "dist/modes/rpc/rpc-mode.js": (
-            "bd6dfca7b14cad4023c5ab56a7fc91bef3db9670c96b6ad7625df16353b42e5a"
-        ),
-        "node_modules/@earendil-works/pi-agent-core/dist/agent.js": (
-            "93ed16306399765e79c11f78897f575252d7174b85b81a01cdebb2a479e0e57f"
-        ),
-        "node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js": (
-            "e6003ded7cd11fc8bfd01e4f48cd3d5a19338b64c2e1febe81d0659c31013c11"
-        ),
-        bedrock: "13d6fec97d08f4303714aca50f3113ba0263706e961fc220ccb1cc023c520e6b",
-    }
-    assert expected == native._PATCHED_SHA
+    from agent_comms import native_package
+
     with TemporaryDirectory(prefix="agent-comms-pi-native-", dir="/var/tmp") as raw:
         package = Path(raw) / "node_modules" / "@earendil-works" / "pi-coding-agent"
-        synthetic = {}
-        for index, relative in enumerate(native._PATCHED_SHA):
-            path = package / relative
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(f"synthetic module {index}".encode())
-            synthetic[relative] = native.hashlib.sha256(path.read_bytes()).hexdigest()
-        monkeypatch.setattr(native, "_PATCHED_SHA", synthetic)
+        package.mkdir(parents=True)
+        module = package / "unlisted-dependency.js"
+        module.write_bytes(b"reviewed dependency")
+        manifest = Path(raw) / "manifest"
+        manifest.write_text(
+            native_package.TREE_PREFIX + native_package.package_tree_digest(package) + "\n"
+        )
+        monkeypatch.setattr(native_package, "MANIFEST", manifest)
         assert native._trusted_package(package) == package / "dist/cli.js"
-        (package / bedrock).write_bytes(b"altered Bedrock compiled module")
+        module.write_bytes(b"altered dependency outside former short hash list")
         with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
             native._trusted_package(package)
 
@@ -1225,10 +1204,31 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
     monkeypatch.setattr(native_pi, "_trusted_package", trusted)
     monkeypatch.setattr(sys, "argv", ["pi-comms-native", "--mode", "rpc", "--model", "owner/model"])
     executed = []
-    monkeypatch.setattr(os, "execvp", lambda executable, argv: executed.append((executable, argv)))
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "canonical"))
+    monkeypatch.delenv("AGENT_COMMS_NATIVE_CONFIG_DIR", raising=False)
+    monkeypatch.setenv("NODE_OPTIONS", "--import=/unreviewed.js")
+    monkeypatch.setattr(
+        os, "execvpe", lambda executable, argv, env: executed.append((executable, argv, env))
+    )
     assert native_pi.main() == 0
     assert verified == [launch.native_package]
-    assert executed == [("node", ["node", str(cli), "--mode", "rpc", "--model", "owner/model"])]
+    executable, argv, environment = executed[0]
+    assert executable == "node"
+    assert argv == [
+        "node",
+        "--no-global-search-paths",
+        "--import",
+        str(cli.with_name("agent-comms-import-fence.mjs")),
+        "--import",
+        str(cli.with_name("agent-comms-project-bootstrap.mjs")),
+        str(cli),
+        "--mode",
+        "rpc",
+        "--model",
+        "owner/model",
+    ]
+    assert environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] == str(tmp_path / "canonical")
+    assert "NODE_OPTIONS" not in environment
 
 
 def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch):

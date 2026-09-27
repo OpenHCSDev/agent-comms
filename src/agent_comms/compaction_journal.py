@@ -445,7 +445,7 @@ class CompactionJournal:
             raise CompactionJournalError("Selected saved session must have one private inode link")
         private_sessions = (self.path.parent / "native-sessions").resolve(strict=False)
         private = Path(canonical).is_relative_to(private_sessions)
-        if private:
+        if private and fresh_session is not None:
             # Never infer coverage from a visible file, missing marker, or an
             # enrolment SQL row alone after an uncertain fsync/restart. The
             # original O_EXCL creation object must still be in this process.
@@ -496,7 +496,7 @@ class CompactionJournal:
                 raise ValueError("Selected summary durable original input changed")
         try:
             with self._transaction() as db:
-                if private:
+                if private and fresh_session is not None:
                     assert fresh_session is not None
                     coverage = db.execute(
                         "SELECT session_id,device,inode,header_sha256,owner_name,"
@@ -518,18 +518,33 @@ class CompactionJournal:
                     ):
                         raise CompactionJournalError("Fresh private owner coverage differs")
                     fresh_session.verify_saved_identity()
+                raw_ids = frozenset(
+                    row[0]
+                    for row in db.execute(
+                        "SELECT input_id FROM private_raw_inputs WHERE session_file = ?",
+                        (canonical,),
+                    )
+                )
+                if private and fresh_session is None:
+                    from .continued_private_session import verify_continued_private_session
+
+                    try:
+                        verify_continued_private_session(
+                            self.path.parent, Path(canonical), source["source"], raw_ids
+                        )
+                    except (OSError, ValueError, sqlite3.Error, RuntimeError) as error:
+                        raise CompactionJournalError(
+                            "Private selected reservation requires reviewed "
+                            "raw-history coverage floor"
+                        ) from error
                 if db.execute(
                     "SELECT 1 FROM operations WHERE session_file = ? "
                     "AND status IN ('intent','unknown') LIMIT 1",
                     (canonical,),
                 ).fetchone():
                     raise CompactionJournalError("Unresolved native commit; no selected summary")
-                if (
-                    self._blocking_selected_summary(db, canonical)
-                    or db.execute(
-                        "SELECT 1 FROM private_raw_inputs WHERE session_file = ? LIMIT 1",
-                        (canonical,),
-                    ).fetchone()
+                if self._blocking_selected_summary(db, canonical) or (
+                    raw_ids and (not private or fresh_session is not None)
                 ):
                     raise CompactionJournalError("Blocked selected summary; never replay")
                 db.execute(

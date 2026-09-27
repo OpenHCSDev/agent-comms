@@ -8,7 +8,6 @@ No coordinator state changes or production runtime hookup occur in this module.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import os
 import re
@@ -46,32 +45,6 @@ _NATIVE_SETTINGS = (
     b'{"retry":{"enabled":false,"maxRetries":0,"provider":{"maxRetries":0}},'
     b'"compaction":{"enabled":false}}\n'
 )
-# Pinned outputs of prepare-copied-pi.sh at stock Pi 0.85.1 with the
-# merged proof-journal headroom and canonical model-configuration fixes.
-_PATCHED_SHA = {
-    "dist/core/agent-session-services.js": (
-        "4af410d793207f0269cf442a799b0f83933b69d728d166e49a3a6134ff7108a6"
-    ),
-    "dist/cli.js": "8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d",
-    "dist/core/agent-session.js": (
-        "b8b3deeffad82771762808c435617d03f4701c3ac14a9620f5e313545a8d6875"
-    ),
-    "dist/core/session-manager.js": (
-        "dd75fef58eaa5458a91cff9fe1cf70556ebc720afd98720eae3dcb6572cb63ca"
-    ),
-    "dist/modes/rpc/rpc-mode.js": (
-        "bd6dfca7b14cad4023c5ab56a7fc91bef3db9670c96b6ad7625df16353b42e5a"
-    ),
-    "node_modules/@earendil-works/pi-agent-core/dist/agent.js": (
-        "93ed16306399765e79c11f78897f575252d7174b85b81a01cdebb2a479e0e57f"
-    ),
-    "node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js": (
-        "e6003ded7cd11fc8bfd01e4f48cd3d5a19338b64c2e1febe81d0659c31013c11"
-    ),
-    "node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js": (
-        "13d6fec97d08f4303714aca50f3113ba0263706e961fc220ccb1cc023c520e6b"
-    ),
-}
 
 
 class NativePiUnavailable(RuntimeError):  # noqa: N818 - nominal fail-closed outcome
@@ -86,7 +59,33 @@ def main() -> int:
     if launch is None:
         raise NativePiUnavailable("Native owner backend requires a configured private route")
     cli = _trusted_package(launch.native_package)
-    os.execvp("node", ["node", str(cli), *sys.argv[1:]])
+    environment = dict(os.environ)
+    environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
+        Path(
+            environment.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
+            or environment.get("PI_CODING_AGENT_DIR")
+            or "~/.pi/agent"
+        )
+        .expanduser()
+        .resolve()
+    )
+    for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
+        environment.pop(name, None)
+    environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
+    os.execvpe(
+        "node",
+        [
+            "node",
+            "--no-global-search-paths",
+            "--import",
+            str(cli.with_name("agent-comms-import-fence.mjs")),
+            "--import",
+            str(cli.with_name("agent-comms-project-bootstrap.mjs")),
+            str(cli),
+            *sys.argv[1:],
+        ],
+        environment,
+    )
     return 0
 
 
@@ -199,13 +198,12 @@ def _trusted_package(package: Path) -> Path:
     root = package.parents[2]
     if root.stat().st_uid != os.geteuid() or stat.S_IMODE(root.stat().st_mode) != 0o700:
         raise NativePiUnavailable("Disposable native Pi root must be owner-only")
-    for relative, digest in _PATCHED_SHA.items():
-        path = package / relative
-        info = path.lstat()
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid():
-            raise NativePiUnavailable("Pinned native Pi module is redirected")
-        if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
-            raise NativePiUnavailable("Pinned native Pi module differs from reviewed fork")
+    from .native_package import NativePackageError, verify_native_package
+
+    try:
+        verify_native_package(package)
+    except (OSError, NativePackageError) as error:
+        raise NativePiUnavailable("Pinned native Pi package differs from reviewed fork") from error
     return package / "dist/cli.js"
 
 

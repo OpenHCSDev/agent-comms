@@ -109,7 +109,7 @@ async def test_selected_default_strategy_refuses_detached_provider_before_commit
     with pytest.raises(PiSettingsEvidenceError, match="selected live Pi|Selected live Pi"):
         await maybe_compact_owner_turn(
             registry,
-            "unused-launcher",
+            "pi-native",
             "owner",
             "turn",
             info,

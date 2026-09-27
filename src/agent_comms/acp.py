@@ -175,7 +175,7 @@ class CommsAgent:
         reply_quiet: float | None = None,
         runtime_enabled: bool = False,
         auto_wake: bool = True,
-        adaptive_compaction_enabled: bool = False,
+        adaptive_compaction_enabled: bool = True,
         adaptive_summary_strategy: Any = None,
         private_nk_native_package: Path | None = None,
         private_nk_wire_root_id: str | None = None,
@@ -198,8 +198,8 @@ class CommsAgent:
         # This is informational UI ordering, never a native input disposition.
         self._private_cursor_revisions: dict[str, int] = {}
         self._comms = comms
-        # Explicit construction-only opt-in; no inherited environment or
-        # model/tool content may enable paid compaction on a running owner.
+        # Enabled for verified native owners by default. Explicit construction
+        # may disable it; model/tool content cannot change this owner policy.
         self._adaptive_compaction_enabled = adaptive_compaction_enabled
         self._adaptive_summary_strategy = adaptive_summary_strategy
         self._sessions: dict[str, str] = {}

@@ -80,6 +80,24 @@ class PiCompactionDecision:
     keep_recent_tokens: int
     trigger: bool
 
+    @classmethod
+    def from_native(cls, data: object) -> PiCompactionDecision:
+        """Decode the native decision at its external boundary."""
+        if (
+            not isinstance(data, dict)
+            or set(data) != {"enabled", "reserveTokens", "keepRecentTokens", "trigger"}
+            or type(data["enabled"]) is not bool
+            or type(data["trigger"]) is not bool
+            or type(data["reserveTokens"]) is not int
+            or not 0 <= data["reserveTokens"] <= 10_000_000
+            or type(data["keepRecentTokens"]) is not int
+            or not 0 < data["keepRecentTokens"] <= 10_000_000
+        ):
+            raise PiSettingsEvidenceError("Invalid effective Pi compaction decision")
+        return cls(
+            data["enabled"], data["reserveTokens"], data["keepRecentTokens"], data["trigger"]
+        )
+
 
 def read_compaction_decision(
     package: Path, worktree: str, *, context_tokens: int, context_window: int
@@ -132,20 +150,7 @@ def read_compaction_decision(
         if result.returncode or len(result.stdout) > 1024:
             raise PiSettingsEvidenceError("Pi settings reader refused")
         data = json.loads(result.stdout)
-        if (
-            not isinstance(data, dict)
-            or set(data) != {"enabled", "reserveTokens", "keepRecentTokens", "trigger"}
-            or type(data["enabled"]) is not bool
-            or type(data["trigger"]) is not bool
-            or type(data["reserveTokens"]) is not int
-            or not 0 <= data["reserveTokens"] <= 10_000_000
-            or type(data["keepRecentTokens"]) is not int
-            or not 0 < data["keepRecentTokens"] <= 10_000_000
-        ):
-            raise PiSettingsEvidenceError("Invalid effective Pi compaction decision")
-        return PiCompactionDecision(
-            data["enabled"], data["reserveTokens"], data["keepRecentTokens"], data["trigger"]
-        )
+        return PiCompactionDecision.from_native(data)
     except (OSError, subprocess.TimeoutExpired, ValueError, json.JSONDecodeError) as error:
         if isinstance(error, PiSettingsEvidenceError):
             raise
