@@ -1,0 +1,5 @@
+{"record":"header","schema":"agent-comms/wire-export","version":1,"source":"agent-comms-wire","format":"jsonl","importable":true,"scope":{"kind":"dm","participants":["alice","bob"]},"limit":{"kind":"full"},"boundary":{"through_seq":4,"export_started_at":4.0}}
+{"record":"message","message":{"seq":1,"id":"01aad532ad98","from":"alice","to":"#team","ts":1.0,"type":"info","text":"hello\ncafé","sender_role":"agent"}}
+{"record":"message","message":{"seq":2,"id":"2930dbe24f7e","from":"alice","to":"#team","ts":2.0,"type":"info","text":"hello\ncafé","sender_role":"agent"}}
+{"record":"message","message":{"seq":3,"id":"d5e16edf38b2","from":"alice","to":"#team","ts":3.0,"type":"info","text":"hello\ncafé","sender_role":"agent"}}
+{"record":"message","message":{"seq":4,"id":"25bbd89c2d68","from":"alice","to":"#team","ts":4.0,"type":"info","text":"hello\ncafé","sender_role":"agent"}}
