@@ -28,6 +28,10 @@ _MAX_HISTORY = 256 * 1024
 _MAX_STDOUT = 2 * 1024 * 1024
 # Exact reviewed copied 0.85.1 preparation logic used for the cut point.
 _COMPACTION_SHA256 = "3d5f1f2a3e801c965214717b6abad1839239b4a030517bffdf0c8eff25df5c2a"
+# Explicit fileOps/footer helper imported by this candidate snapshot. Its
+# SHA4489 copied-package digest is a defensive pre-Node deny gate, not a new
+# compaction pin or proof of the remaining transitive startup import closure.
+_COMPACTION_UTILS_SHA256 = "eba26429c8ed717754bcdc3c1164715b1d2f2d68655530cf1e0df975c18f6891"
 
 # This source runs only after the existing SHA3d compaction pin has passed.
 # It is deliberately read-only: inMemory avoids SessionManager.open's writer.
@@ -42,6 +46,8 @@ const {SessionManager} = await import(
   pathToFileURL(join(root, 'dist/core/session-manager.js')));
 const {prepareCompaction, DEFAULT_COMPACTION_SETTINGS} = await import(
   pathToFileURL(join(root, 'dist/core/compaction/compaction.js')));
+const {computeFileLists, formatFileOperations} = await import(
+  pathToFileURL(join(root, 'dist/core/compaction/utils.js')));
 const raw = await (async () => {
   const {readFileSync} = await import('node:fs');
   return readFileSync(0);
@@ -82,12 +88,24 @@ if (!preparation || preparation.isSplitTurn) {
   const content = Buffer.from(JSON.stringify(manager.buildSessionContext()), 'utf8');
   if (!content.length || content.length > 1024*1024)
     throw Error('Selected source context is outside one MiB bound');
+  // compact() appends these exact file-operation bytes after model output.
+  // The four-key prepared history alone cannot bind that final footer.
+  const fileLists = computeFileLists(preparation.fileOps);
+  const fileOps = Buffer.from(JSON.stringify(fileLists), 'utf8');
+  const footer = Buffer.from(formatFileOperations(
+    fileLists.readFiles, fileLists.modifiedFiles), 'utf8');
+  if (!fileOps.length || fileOps.length > 256*1024 || footer.length > 256*1024)
+    throw Error('Selected source file operations are outside bound');
   console.log(JSON.stringify({status:'ready',sessionId:manager.getSessionId(),
     leafId:manager.getLeafId(),firstKeptEntryId:preparation.firstKeptEntryId,
     contextDigest:createHash('sha256').update(content).digest('hex'),
     contextBase64:content.toString('base64'),
     preparedHistoryDigest:createHash('sha256').update(history).digest('hex'),
-    preparedHistoryBase64:history.toString('base64')}));
+    preparedHistoryBase64:history.toString('base64'),
+    fileOpsDigest:createHash('sha256').update(fileOps).digest('hex'),
+    fileOpsByteLength:fileOps.length,fileOpsBase64:fileOps.toString('base64'),
+    footerDigest:createHash('sha256').update(footer).digest('hex'),
+    footerByteLength:footer.length,footerBase64:footer.toString('base64')}));
 }
 """
 
@@ -106,6 +124,8 @@ class SelectedSourceSnapshot:
     sidecar_revision: _FileRevision
     context_bytes: bytes
     prepared_history_bytes: bytes
+    file_ops_bytes: bytes
+    footer_bytes: bytes
 
 
 def _revision(info: os.stat_result) -> _FileRevision:
@@ -169,6 +189,16 @@ def _verify_bound_fd(path: Path, fd: int, revision: _FileRevision, digest: str) 
         raise SelectedSourceSnapshotError("Selected source FD/path/sidecar changed")
 
 
+def _expected_file_ops_footer(read_files: list[str], modified_files: list[str]) -> str:
+    """Reproduce pinned Pi's formatted footer, not a caller-supplied digest."""
+    sections = []
+    if read_files:
+        sections.append("<read-files>\n" + "\n".join(read_files) + "\n</read-files>")
+    if modified_files:
+        sections.append("<modified-files>\n" + "\n".join(modified_files) + "\n</modified-files>")
+    return "\n\n" + "\n\n".join(sections) if sections else ""
+
+
 def _read_snapshot_result(raw: bytes, fresh: FreshPrivateSession, revision: str) -> dict[str, Any]:
     if not raw or len(raw) > _MAX_STDOUT or not raw.endswith(b"\n"):
         raise SelectedSourceSnapshotError("Selected source result is incomplete or oversized")
@@ -195,6 +225,12 @@ def _read_snapshot_result(raw: bytes, fresh: FreshPrivateSession, revision: str)
             "contextBase64",
             "preparedHistoryDigest",
             "preparedHistoryBase64",
+            "fileOpsDigest",
+            "fileOpsByteLength",
+            "fileOpsBase64",
+            "footerDigest",
+            "footerByteLength",
+            "footerBase64",
         }
         or result["status"] != "ready"
         or result["sessionId"] != fresh.session_id
@@ -207,11 +243,19 @@ def _read_snapshot_result(raw: bytes, fresh: FreshPrivateSession, revision: str)
                 "contextBase64",
                 "preparedHistoryDigest",
                 "preparedHistoryBase64",
+                "fileOpsDigest",
+                "fileOpsBase64",
+                "footerDigest",
             )
         )
+        or type(result["footerBase64"]) is not str
         or any(
             len(result[key]) != 64 or any(c not in "0123456789abcdef" for c in result[key])
-            for key in ("contextDigest", "preparedHistoryDigest")
+            for key in ("contextDigest", "preparedHistoryDigest", "fileOpsDigest", "footerDigest")
+        )
+        or any(
+            type(result[key]) is not int or not 0 <= result[key] <= _MAX_HISTORY
+            for key in ("fileOpsByteLength", "footerByteLength")
         )
     ):
         raise SelectedSourceSnapshotError("Selected source returned mismatched identity")
@@ -220,6 +264,10 @@ def _read_snapshot_result(raw: bytes, fresh: FreshPrivateSession, revision: str)
         context = json.loads(content, object_pairs_hook=_unique)
         history = base64.b64decode(result["preparedHistoryBase64"], validate=True)
         prepared = json.loads(history, object_pairs_hook=_unique)
+        file_ops_bytes = base64.b64decode(result["fileOpsBase64"], validate=True)
+        file_ops = json.loads(file_ops_bytes, object_pairs_hook=_unique)
+        footer_bytes = base64.b64decode(result["footerBase64"], validate=True)
+        footer_text = footer_bytes.decode("utf-8")
     except (ValueError, UnicodeError) as error:
         raise SelectedSourceSnapshotError("Selected source context bytes are invalid") from error
     if (
@@ -246,6 +294,28 @@ def _read_snapshot_result(raw: bytes, fresh: FreshPrivateSession, revision: str)
         )
     ):
         raise SelectedSourceSnapshotError("Selected prepared history differs")
+    if (
+        not 0 < len(file_ops_bytes) <= _MAX_HISTORY
+        or len(file_ops_bytes) != result["fileOpsByteLength"]
+        or hashlib.sha256(file_ops_bytes).hexdigest() != result["fileOpsDigest"]
+        or type(file_ops) is not dict
+        or list(file_ops) != ["readFiles", "modifiedFiles"]
+        or any(
+            type(file_ops[key]) is not list
+            or any(type(path) is not str or not path for path in file_ops[key])
+            or file_ops[key] != sorted(set(file_ops[key]))
+            for key in ("readFiles", "modifiedFiles")
+        )
+        or set(file_ops["readFiles"]) & set(file_ops["modifiedFiles"])
+        or json.dumps(file_ops, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        != file_ops_bytes
+        or len(footer_bytes) != result["footerByteLength"]
+        or len(footer_bytes) > _MAX_HISTORY
+        or hashlib.sha256(footer_bytes).hexdigest() != result["footerDigest"]
+        or footer_text
+        != _expected_file_ops_footer(file_ops["readFiles"], file_ops["modifiedFiles"])
+    ):
+        raise SelectedSourceSnapshotError("Selected file operations or footer differs")
     model = context.get("model")
     level = context.get("thinkingLevel")
     # These fields are projected by the verified Pi SessionManager from the
@@ -268,12 +338,16 @@ def _read_snapshot_result(raw: bytes, fresh: FreshPrivateSession, revision: str)
         "firstKeptEntryId": result["firstKeptEntryId"],
         "contextDigest": result["contextDigest"],
         "preparedHistoryDigest": result["preparedHistoryDigest"],
+        "fileOpsDigest": result["fileOpsDigest"],
+        "footerDigest": result["footerDigest"],
         "selectedProvider": model["provider"],
         "selectedModelId": model["modelId"],
         "selectedThinkingLevel": level,
     }
     result["contextBytes"] = content
     result["preparedHistoryBytes"] = history
+    result["fileOpsBytes"] = file_ops_bytes
+    result["footerBytes"] = footer_bytes
     return result
 
 
@@ -305,6 +379,14 @@ def capture_selected_source_snapshot(
             or hashlib.sha256(compaction.read_bytes()).hexdigest() != _COMPACTION_SHA256
         ):
             raise SelectedSourceSnapshotError("Selected Pi preparation module differs")
+        utils = Path(package) / "dist/core/compaction/utils.js"
+        utils_info = utils.lstat()
+        if (
+            not stat.S_ISREG(utils_info.st_mode)
+            or utils_info.st_uid != os.geteuid()
+            or hashlib.sha256(utils.read_bytes()).hexdigest() != _COMPACTION_UTILS_SHA256
+        ):
+            raise SelectedSourceSnapshotError("Selected Pi file-operations module differs")
         _private_session_dir(file.parent)
         if file != file.resolve(strict=True):
             raise SelectedSourceSnapshotError("Selected source has redirected path")
@@ -389,6 +471,8 @@ def capture_selected_source_snapshot(
                 proof_before,
                 parsed["contextBytes"],
                 parsed["preparedHistoryBytes"],
+                parsed["fileOpsBytes"],
+                parsed["footerBytes"],
             )
     except (OSError, subprocess.TimeoutExpired, NativePiUnavailable) as error:
         raise SelectedSourceSnapshotError("Selected source cannot be safely captured") from error

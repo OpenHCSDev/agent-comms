@@ -78,6 +78,19 @@ def _populated_source(tmp_path: Path, *, thinking_level: str | None = "high"):
     return fresh, proof
 
 
+@pytest.fixture
+def fixture_utils_pin(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fake bytes test only; never import an unpinned copied Pi module."""
+    from agent_comms import selected_source_snapshot as module
+
+    utils = tmp_path / "fixture-package" / "dist/core/compaction/utils.js"
+    utils.parent.mkdir(parents=True, exist_ok=True)
+    utils.write_bytes(b"fixture utilities only; never executed")
+    monkeypatch.setattr(
+        module, "_COMPACTION_UTILS_SHA256", hashlib.sha256(utils.read_bytes()).hexdigest()
+    )
+
+
 def _require_old_reviewed_pin(package: str) -> None:
     from agent_comms.native_pi import NativePiUnavailable, _trusted_package
     from agent_comms.selected_source_snapshot import _COMPACTION_SHA256
@@ -110,6 +123,31 @@ def test_live_copied_source_mismatch_denies_before_node(
     monkeypatch.setattr(module.subprocess, "run", forbidden_node)
     with pytest.raises(SelectedSourceSnapshotError, match="preparation module differs"):
         capture_selected_source_snapshot(Path(package), fresh, keep_recent_tokens=20)
+
+
+def test_unpinned_file_operations_module_denies_before_node(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent_comms import selected_source_snapshot as module
+
+    fresh, _proof = _populated_source(tmp_path)
+    package = tmp_path / "fixture-package"
+    compaction = package / "dist/core/compaction/compaction.js"
+    compaction.parent.mkdir(parents=True)
+    compaction.write_bytes(b"fixture only; never executed")
+    utils = compaction.with_name("utils.js")
+    utils.write_bytes(b"unreviewed helper; never executed")
+    monkeypatch.setattr(module, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(
+        module, "_COMPACTION_SHA256", hashlib.sha256(compaction.read_bytes()).hexdigest()
+    )
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("Unpinned fileOps helper launched Node"),
+    )
+    with pytest.raises(SelectedSourceSnapshotError, match="file-operations module differs"):
+        capture_selected_source_snapshot(package, fresh, keep_recent_tokens=20)
 
 
 def test_optional_pinned_source_snapshot_binds_two_inodes_and_exact_context(
@@ -159,6 +197,7 @@ def test_optional_pinned_off_source_is_not_silently_clamped(
         capture_selected_source_snapshot(Path(package), fresh, keep_recent_tokens=20)
 
 
+@pytest.mark.usefixtures("fixture_utils_pin")
 def test_sidecar_change_during_provider_free_capture_refuses_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -167,7 +206,7 @@ def test_sidecar_change_during_provider_free_capture_refuses_result(
     fresh, proof = _populated_source(tmp_path)
     package = tmp_path / "fixture-package"
     compaction = package / "dist/core/compaction/compaction.js"
-    compaction.parent.mkdir(parents=True)
+    compaction.parent.mkdir(parents=True, exist_ok=True)
     compaction.write_bytes(b"fixture only; never executed")
     monkeypatch.setattr(module, "_trusted_package", lambda _: None)
     monkeypatch.setattr(
@@ -185,6 +224,7 @@ def test_sidecar_change_during_provider_free_capture_refuses_result(
         capture_selected_source_snapshot(package, fresh, keep_recent_tokens=20)
 
 
+@pytest.mark.usefixtures("fixture_utils_pin")
 def test_fake_split_cut_declines_without_any_prepared_history(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -193,7 +233,7 @@ def test_fake_split_cut_declines_without_any_prepared_history(
     fresh, _proof = _populated_source(tmp_path)
     package = tmp_path / "fixture-package"
     compaction = package / "dist/core/compaction/compaction.js"
-    compaction.parent.mkdir(parents=True)
+    compaction.parent.mkdir(parents=True, exist_ok=True)
     compaction.write_bytes(b"fixture only; never executed")
     monkeypatch.setattr(module, "_trusted_package", lambda _: None)
     monkeypatch.setattr(
@@ -208,6 +248,7 @@ def test_fake_split_cut_declines_without_any_prepared_history(
     assert capture_selected_source_snapshot(package, fresh, keep_recent_tokens=20) is None
 
 
+@pytest.mark.usefixtures("fixture_utils_pin")
 def test_same_length_sidecar_overwrite_refuses_fake_node_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -216,7 +257,7 @@ def test_same_length_sidecar_overwrite_refuses_fake_node_result(
     fresh, proof = _populated_source(tmp_path)
     package = tmp_path / "fixture-package"
     compaction = package / "dist/core/compaction/compaction.js"
-    compaction.parent.mkdir(parents=True)
+    compaction.parent.mkdir(parents=True, exist_ok=True)
     compaction.write_bytes(b"fixture only; never executed")
     monkeypatch.setattr(module, "_trusted_package", lambda _: None)
     monkeypatch.setattr(
@@ -235,6 +276,7 @@ def test_same_length_sidecar_overwrite_refuses_fake_node_result(
         capture_selected_source_snapshot(package, fresh, keep_recent_tokens=20)
 
 
+@pytest.mark.usefixtures("fixture_utils_pin")
 def test_same_length_source_overwrite_rejected_even_if_revision_clock_collides(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -243,7 +285,7 @@ def test_same_length_source_overwrite_rejected_even_if_revision_clock_collides(
     fresh, _proof = _populated_source(tmp_path)
     package = tmp_path / "fixture-package"
     compaction = package / "dist/core/compaction/compaction.js"
-    compaction.parent.mkdir(parents=True)
+    compaction.parent.mkdir(parents=True, exist_ok=True)
     compaction.write_bytes(b"fixture only; never executed")
     monkeypatch.setattr(module, "_trusted_package", lambda _: None)
     monkeypatch.setattr(
@@ -263,6 +305,7 @@ def test_same_length_source_overwrite_rejected_even_if_revision_clock_collides(
         capture_selected_source_snapshot(package, fresh, keep_recent_tokens=20)
 
 
+@pytest.mark.usefixtures("fixture_utils_pin")
 def test_replaced_source_path_refuses_fake_node_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -271,7 +314,7 @@ def test_replaced_source_path_refuses_fake_node_result(
     fresh, _proof = _populated_source(tmp_path)
     package = tmp_path / "fixture-package"
     compaction = package / "dist/core/compaction/compaction.js"
-    compaction.parent.mkdir(parents=True)
+    compaction.parent.mkdir(parents=True, exist_ok=True)
     compaction.write_bytes(b"fixture only; never executed")
     monkeypatch.setattr(module, "_trusted_package", lambda _: None)
     monkeypatch.setattr(
@@ -291,6 +334,7 @@ def test_replaced_source_path_refuses_fake_node_result(
         capture_selected_source_snapshot(package, fresh, keep_recent_tokens=20)
 
 
+@pytest.mark.usefixtures("fixture_utils_pin")
 def test_tampered_prepared_history_digest_refuses_fake_node_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -299,7 +343,7 @@ def test_tampered_prepared_history_digest_refuses_fake_node_result(
     fresh, _proof = _populated_source(tmp_path)
     package = tmp_path / "fixture-package"
     compaction = package / "dist/core/compaction/compaction.js"
-    compaction.parent.mkdir(parents=True)
+    compaction.parent.mkdir(parents=True, exist_ok=True)
     compaction.write_bytes(b"fixture only; never executed")
     monkeypatch.setattr(module, "_trusted_package", lambda _: None)
     monkeypatch.setattr(
@@ -332,12 +376,121 @@ def test_tampered_prepared_history_digest_refuses_fake_node_result(
             "contextBase64": base64.b64encode(context).decode(),
             "preparedHistoryDigest": "a" * 64,
             "preparedHistoryBase64": base64.b64encode(history).decode(),
+            "fileOpsDigest": hashlib.sha256(b'{"readFiles":[],"modifiedFiles":[]}').hexdigest(),
+            "fileOpsByteLength": len(b'{"readFiles":[],"modifiedFiles":[]}'),
+            "fileOpsBase64": base64.b64encode(b'{"readFiles":[],"modifiedFiles":[]}').decode(),
+            "footerDigest": hashlib.sha256(b"").hexdigest(),
+            "footerByteLength": 0,
+            "footerBase64": "",
         }
         return subprocess.CompletedProcess([], 0, (json.dumps(payload) + "\n").encode(), b"")
 
     monkeypatch.setattr(module.subprocess, "run", tampered)
     with pytest.raises(SelectedSourceSnapshotError, match="prepared history differs"):
         capture_selected_source_snapshot(package, fresh, keep_recent_tokens=20)
+
+
+@pytest.mark.usefixtures("fixture_utils_pin")
+def test_file_ops_and_footer_must_match_one_prepared_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent_comms.selected_source_snapshot import _read_snapshot_result
+
+    fresh, _proof = _populated_source(tmp_path)
+    context = json.dumps(
+        {
+            "messages": [{"role": "user", "content": "fixture"}],
+            "model": {"provider": "openrouter", "modelId": "z-ai/glm-5.3-flash"},
+            "thinkingLevel": "high",
+        },
+        separators=(",", ":"),
+    ).encode()
+    history = json.dumps(
+        {
+            "messagesToSummarize": [{"role": "user", "content": "fixture"}],
+            "previousSummary": None,
+            "turnPrefixMessages": [],
+            "firstKeptEntryId": "kept",
+        },
+        separators=(",", ":"),
+    ).encode()
+    file_ops = b'{"readFiles":["prior.txt"],"modifiedFiles":[]}'
+    footer = b"\n\n<read-files>\nprior.txt\n</read-files>"
+    payload = {
+        "status": "ready",
+        "sessionId": fresh.session_id,
+        "leafId": "leaf",
+        "firstKeptEntryId": "kept",
+        "contextDigest": hashlib.sha256(context).hexdigest(),
+        "contextBase64": base64.b64encode(context).decode(),
+        "preparedHistoryDigest": hashlib.sha256(history).hexdigest(),
+        "preparedHistoryBase64": base64.b64encode(history).decode(),
+        "fileOpsDigest": hashlib.sha256(file_ops).hexdigest(),
+        "fileOpsByteLength": len(file_ops),
+        "fileOpsBase64": base64.b64encode(file_ops).decode(),
+        "footerDigest": hashlib.sha256(footer).hexdigest(),
+        "footerByteLength": len(footer),
+        "footerBase64": base64.b64encode(footer).decode(),
+    }
+
+    def parse() -> dict:
+        return _read_snapshot_result((json.dumps(payload) + "\n").encode(), fresh, "revision")
+
+    ready = parse()
+    assert ready["source"]["fileOpsDigest"] == payload["fileOpsDigest"]
+    assert ready["source"]["footerDigest"] == payload["footerDigest"]
+    assert ready["fileOpsBytes"] == file_ops
+    assert ready["footerBytes"] == footer
+
+    # The full Python FD/sidecar path carries both validated byte streams,
+    # using a fake subprocess only; it never imports a different copied Pi.
+    from agent_comms import selected_source_snapshot as module
+
+    package = tmp_path / "fixture-package"
+    compaction = package / "dist/core/compaction/compaction.js"
+    compaction.parent.mkdir(parents=True, exist_ok=True)
+    compaction.write_bytes(b"fixture only; never executed")
+    monkeypatch.setattr(module, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(
+        module, "_COMPACTION_SHA256", hashlib.sha256(compaction.read_bytes()).hexdigest()
+    )
+    monkeypatch.setattr(module.shutil, "which", lambda _: "/fake/node")
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            [], 0, (json.dumps(payload) + "\n").encode(), b""
+        ),
+    )
+    snapshot = capture_selected_source_snapshot(package, fresh, keep_recent_tokens=20)
+    assert snapshot is not None
+    assert snapshot.file_ops_bytes == file_ops
+    assert snapshot.footer_bytes == footer
+    assert snapshot.source["fileOpsDigest"] == payload["fileOpsDigest"]
+    assert snapshot.source["footerDigest"] == payload["footerDigest"]
+
+    # A well-formed false footer digest must not attest a different final summary.
+    payload["footerDigest"] = "a" * 64
+    with pytest.raises(SelectedSourceSnapshotError, match="file operations or footer differs"):
+        parse()
+    payload["footerDigest"] = hashlib.sha256(footer).hexdigest()
+    payload["footerBase64"] = base64.b64encode(
+        b"\n\n<modified-files>\nprior.txt\n</modified-files>"
+    ).decode()
+    payload["footerByteLength"] = len(base64.b64decode(payload["footerBase64"]))
+    payload["footerDigest"] = hashlib.sha256(base64.b64decode(payload["footerBase64"])).hexdigest()
+    with pytest.raises(SelectedSourceSnapshotError, match="file operations or footer differs"):
+        parse()
+    payload["footerBase64"] = base64.b64encode(footer).decode()
+    payload["footerByteLength"] = len(footer)
+    payload["footerDigest"] = hashlib.sha256(footer).hexdigest()
+    payload["fileOpsBase64"] = base64.b64encode(b'{"readFiles":[],"modifiedFiles":[]}').decode()
+    payload["fileOpsByteLength"] = len(base64.b64decode(payload["fileOpsBase64"]))
+    payload["fileOpsDigest"] = hashlib.sha256(
+        base64.b64decode(payload["fileOpsBase64"])
+    ).hexdigest()
+    with pytest.raises(SelectedSourceSnapshotError, match="file operations or footer differs"):
+        parse()
 
 
 def test_missing_or_changed_sidecar_rejected_before_any_pi_source_process(
