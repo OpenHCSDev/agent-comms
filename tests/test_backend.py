@@ -39,7 +39,7 @@ emit({{"type": "message_start", "message": {{"role": "user",
 
 async def _rpc_events(
     tmp_path: Path, records: list[dict], *, current_input: bool = True
-) -> list[dict]:
+) -> list[ae.AgentEvent]:
     if current_input:
         # Most parser fixtures model an ordinary accepted prompt. They need a
         # matching user start, not a fabricated assistant final. Tests of the

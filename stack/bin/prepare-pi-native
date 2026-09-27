@@ -37,7 +37,7 @@ prepared=$(
         | sed -n 's/^PI_PACKAGE_DIR=//p'
 )
 scratch_root=${prepared%/node_modules/@earendil-works/pi-coding-agent}
-if [[ "$prepared" != /var/tmp/agent-comms-pi-native-*/node_modules/@earendil-works/pi-coding-agent \
+if [[ "$prepared" != "${TMPDIR:-/var/tmp}"/agent-comms-pi-native-*/node_modules/@earendil-works/pi-coding-agent \
       || ! -d "$prepared" ]]; then
     printf 'Native Pi preparation did not return a validated package.\n' >&2
     exit 1

@@ -208,9 +208,7 @@ class AcpEventConsumer(MroDispatch):
         reason = event.reason
         if reason not in {"manual", "threshold", "overflow", "unknown"}:
             reason = "unknown"
-        summary = ""
-        if phase == "end":
-            summary = self.agent._sanitized_compaction_summary(event.summary)
+        summary = self.agent._sanitized_compaction_summary(event.publication_summary)
         status = {"start": "running", "end": "completed", "abort": "aborted"}[phase]
         status_text = {
             "start": "",
@@ -218,7 +216,7 @@ class AcpEventConsumer(MroDispatch):
             "abort": "Context compaction aborted; usage is unknown.",
         }[phase]
         if summary:
-            status_text += f" Summary: {summary}"
+            status_text += f" {event.summary_label}{summary}"
         detail: dict[str, Any] = {
             "phase": phase,
             "status": status,

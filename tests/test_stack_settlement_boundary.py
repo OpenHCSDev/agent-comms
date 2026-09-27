@@ -20,7 +20,7 @@ async def test_native_late_followup_outlives_previous_settlement(monkeypatch, de
     native = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native:
         pytest.skip("Set AC_NATIVE_STACK_BIN to the prepared native launcher")
-    with TemporaryDirectory(prefix="ac-native-settlement-", dir="/var/tmp") as raw:
+    with TemporaryDirectory(prefix="ac-native-settlement-") as raw:
         root = Path(raw)
         agent = root / "agent"
         agent.mkdir(mode=0o700)
@@ -106,14 +106,14 @@ async def test_native_late_followup_outlives_previous_settlement(monkeypatch, de
             "off",
         ]
         if delayed_settlement:
-            extension = root / "delay-settlement.ts"
-            extension.write_text(
-                "import {existsSync} from 'node:fs';export default function(pi){let count=0;"
-                "pi.on('agent_settled',async()=>{if(++count===1){"
-                f"while(!existsSync({json.dumps(str(old_settled))})) "
-                "await new Promise(resolve=>setTimeout(resolve,10));}});};"
+            from native_event_host import install_event_host
+
+            install_event_host(
+                monkeypatch,
+                native,
+                f"http://127.0.0.1:{server.server_port}",
+                delay_settlement=old_settled,
             )
-            args += ["--extension", str(extension)]
         for key in (
             "PI_AGENT_ID",
             "PI_PARENT_ID",

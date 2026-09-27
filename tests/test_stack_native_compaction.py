@@ -110,7 +110,7 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
     native_bin = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native_bin:
         pytest.skip("Set AC_NATIVE_STACK_BIN to the prepared pinned Pi launcher")
-    with TemporaryDirectory(prefix="ac-native-compaction-", dir="/var/tmp") as raw:
+    with TemporaryDirectory(prefix="ac-native-compaction-") as raw:
         root = Path(raw)
         project = root / "project"
         (project / ".pi").mkdir(parents=True, mode=0o700)

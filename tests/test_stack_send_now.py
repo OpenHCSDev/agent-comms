@@ -46,7 +46,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
     native_bin = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native_bin:
         pytest.skip("Set AC_NATIVE_STACK_BIN to a prepared pinned native launcher")
-    with TemporaryDirectory(prefix="ac-send-now-", dir="/var/tmp") as raw:
+    with TemporaryDirectory(prefix="ac-send-now-") as raw:
         root = Path(raw)
         agent = root / "agent"
         agent.mkdir(mode=0o700)
@@ -417,7 +417,10 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 if surface == "revoked":
                     assert not started.is_set()
                 else:
-                    assert any("oversized" in e.get("text", "").lower() for e in events), events
+                    assert any(
+                        isinstance(e, (ae.Error, ae.Done)) and "oversized" in e.text.lower()
+                        for e in events
+                    ), events
                 assert queue.empty(), "Uncertain queued input must never be replayed"
                 return
             await asyncio.wait_for(started.wait(), 3)
@@ -429,8 +432,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     assert not terminal_release.exists()
                 if owner is None:
                     assert any(
-                        e.get("type") == "tool_end"
-                        and e.get("ok") is (surface == "backend_terminal_queue")
+                        isinstance(e, ae.ToolEnd) and e.ok is (surface == "backend_terminal_queue")
                         for e in events
                     )
                 else:
@@ -459,22 +461,17 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 3 if surface == "priority" else 2
             ), "No retry or duplicate prompt after explicit interruption"
             if surface == "priority":
-                assert [e.get("id") for e in events if e.get("type") == "input_started"] == [
+                assert [e.id for e in events if isinstance(e, ae.InputStarted)] == [
                     None,
                     "urgent",
                     "normal",
                 ]
                 assert "NORMAL_INPUT" not in json.dumps(requests[1]["messages"])
             if owner is None:
-                assert (
-                    sum(
-                        e.get("type") == "input_started" and e.get("id") == "urgent" for e in events
-                    )
-                    == 1
-                )
+                assert sum(isinstance(e, ae.InputStarted) and e.id == "urgent" for e in events) == 1
                 assert events[-1].ok is True, events
                 assert events[-1].text == "NEW_FINAL" * (2 if surface == "priority" else 1), events
-                assert not any(e.get("type") == "error" for e in events), events
+                assert not any(isinstance(e, ae.Error) for e in events), events
             else:
                 assert not owner._queued_inputs.get("project")
                 assert all(

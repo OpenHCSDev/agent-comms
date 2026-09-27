@@ -11,39 +11,9 @@ from uuid import uuid4
 
 from acp.schema import AgentMessageChunk, TextContentBlock
 
+from . import agent_events as events
 from . import backend, manual_compaction
 from .declarations import ActivityState
-
-
-async def _emit_compaction(agent: Any, session_id: str, phase: str, summary: str = "") -> None:
-    """Emit ACP metadata directly; published acp.py has no compaction event branch."""
-    detail: dict[str, Any] = {
-        "phase": phase,
-        "status": {"start": "running", "end": "completed", "abort": "aborted"}[phase],
-        "reason": "manual",
-        "contextUsed": None,
-        "contextState": "unknown",
-        "willRetry": False,
-    }
-    if phase in {"end", "abort"} and summary:
-        detail["summary"] = summary
-    text = {
-        "start": "",
-        "end": "Context compacted; usage is recalculating.",
-        "abort": "Context compaction aborted; usage is unknown.",
-    }[phase]
-    if phase == "end" and summary:
-        text += f" Summary: {summary}"
-    elif phase == "abort" and summary:
-        text += f" {summary}"
-    await agent._runtime.session_update(
-        session_id=session_id,
-        update=AgentMessageChunk(
-            session_update="agent_message_chunk",
-            content=TextContentBlock(type="text", text=text),
-            field_meta={"agentComms": {"compaction": detail}},
-        ),
-    )
 
 
 async def compact_context(
@@ -112,7 +82,7 @@ async def compact_context(
                 context_size=info.context_size if info else None,
             )
             started = True
-            await _emit_compaction(agent, session_id, "start")
+            await agent._emit_event(session_id, events.CompactionStart(reason="manual"))
             result = await manual_compaction.compact_session(
                 agent._agent_bin,
                 backend.args_for_thinking_level(
@@ -127,11 +97,12 @@ async def compact_context(
             # A client may receive this terminal event then raise. Do not send
             # a contradictory abort after an uncertain delivery.
             terminal_attempted = True
-            await _emit_compaction(
-                agent,
+            await agent._emit_event(
                 session_id,
-                "end" if success else "abort",
-                result.get("summary", "") if success else result.get("error", ""),
+                events.ManualCompactionEnd(
+                    aborted=not success,
+                    summary=result.get("summary", "") if success else result.get("error", ""),
+                ),
             )
             if success:
                 await agent._runtime.session_update(
@@ -146,5 +117,5 @@ async def compact_context(
         finally:
             if started and not terminal_attempted:
                 with suppress(Exception, asyncio.CancelledError):
-                    await _emit_compaction(agent, session_id, "abort")
+                    await agent._emit_event(session_id, events.ManualCompactionEnd(aborted=True))
             await agent.settle_turn(session_id, thread_name, turn_id, turn_claim, task=task)

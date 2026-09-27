@@ -21,7 +21,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
     native = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native:
         pytest.skip("Requires the prepared native Pi stack")
-    with TemporaryDirectory(prefix="ac-native-inbox-", dir="/var/tmp") as directory:
+    with TemporaryDirectory(prefix="ac-native-inbox-") as directory:
         root = Path(directory)
         requests = []
         events = []
@@ -151,7 +151,6 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             "AGENT_COMMS_MANAGED",
         ):
             monkeypatch.delenv(key, raising=False)
-        source = Path(__file__).resolve().parents[1]
         for key, value in {
             "PI_CODING_AGENT_DIR": str(config),
             "OPENROUTER_API_KEY": "local-only",
@@ -174,9 +173,15 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             "z-ai/glm-5.3-flash",
             "--thinking",
             "off",
-            "--extension",
-            str(source / "extensions/pi-agent-comms/index.ts"),
         ]
+        from native_event_host import install_event_host
+
+        install_event_host(
+            monkeypatch,
+            native,
+            f"http://127.0.0.1:{server.server_port}",
+            comms_tools=True,
+        )
         stream = backend.stream_agent_events
 
         async def collect_events(*args, **kwargs):

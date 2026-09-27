@@ -930,12 +930,11 @@ async def _stream_agent_events(
     validated_session_id: str | None = None
     if persistent_session is not None and persistent_session.reopen_required is not None:
         if session_file != persistent_session.reopen_required or not require_input_id:
-            yield {
-                "type": "done",
-                "text": "Saved native session requires explicit validated reopen.",
-                "ok": False,
-                "reason_code": "compaction_reopen_invalid",
-            }
+            yield events.Done(
+                text="Saved native session requires explicit validated reopen.",
+                ok=False,
+                reason_code="compaction_reopen_invalid",
+            )
             return
         try:
             from .native_session_reopen import validate_native_reopen
@@ -947,12 +946,11 @@ async def _stream_agent_events(
                 expected_session_id=persistent_session.reopen_session_id,
             )
         except ValueError:
-            yield {
-                "type": "done",
-                "text": "Saved native session failed strict reopen validation.",
-                "ok": False,
-                "reason_code": "compaction_reopen_invalid",
-            }
+            yield events.Done(
+                text="Saved native session failed strict reopen validation.",
+                ok=False,
+                reason_code="compaction_reopen_invalid",
+            )
             return
     if not reused and rpc_args is not None and require_input_id and startup is not None:
         await startup.acquire(finish_event)

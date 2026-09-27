@@ -1,4 +1,6 @@
-# Validation receipt
+# Original S1 validation receipt
+
+**Superseded integration status:** see [integrated-validation.md](integrated-validation.md) for the current main/PR95 tree and executed native bundle. This file retains first-publication history.
 
 All tests ran sequentially, using the existing Python environment read-only, importing this worktree's `src`. Pytest's configured xdist and coverage defaults were disabled with `-o addopts=''`. No full repository suite or CI wait was run.
 

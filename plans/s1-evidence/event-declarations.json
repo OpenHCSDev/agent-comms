@@ -151,6 +151,19 @@
       "will_retry": "bool"
     }
   },
+  "ManualCompactionEnd": {
+    "abstract": false,
+    "bases": [
+      "CompactionEnd"
+    ],
+    "fields": {
+      "reason": "str",
+      "aborted": "bool",
+      "summary": "str | None",
+      "context_used": "int | None",
+      "will_retry": "bool"
+    }
+  },
   "CompactionProgress": {
     "abstract": false,
     "bases": [

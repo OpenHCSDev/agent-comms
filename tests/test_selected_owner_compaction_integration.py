@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms.backend import PersistentPiSession, _JsonLineReader, _session_revision
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
@@ -273,9 +274,9 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
             with kwargs["send_boundary"](None, "b" * 32, task) as allowed:
                 assert allowed is False
             assert kwargs["native_start"](None, "a" * 32, task)
-            yield {"type": "input_started"}
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": True, "text": "processed"}
+            yield ae.InputStarted(id=None)
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="processed")
 
         if real_host:
             # Use the real backend subprocess/reopen/proof protocol. Replace

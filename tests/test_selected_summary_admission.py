@@ -12,6 +12,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.compaction_journal import (
@@ -511,7 +512,7 @@ async def test_acp_final_boundary_consumes_exact_ack_at_native_id_bind(tmp_path,
             observed.append(allowed)
         with kwargs["send_boundary"](None, "d" * 32, text) as allowed:
             observed.append(allowed)
-        yield {"type": "done", "ok": False, "text": "Provider-free fake"}
+        yield ae.Done(ok=False, text="Provider-free fake")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:

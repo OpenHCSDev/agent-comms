@@ -352,7 +352,7 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
             persistent_session=persistent,
         )
     ]
-    assert events[-1]["reason_code"] == "compaction_reopen_invalid"
+    assert events[-1].reason_code == "compaction_reopen_invalid"
     assert not started and session.read_bytes() == torn
 
 

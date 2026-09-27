@@ -121,6 +121,14 @@ class CompactionEvent(AgentEvent):
     def will_retry(self) -> bool:
         return False
 
+    @property
+    def publication_summary(self) -> str | None:
+        return self.summary if self.phase == "end" else None
+
+    @property
+    def summary_label(self) -> str:
+        return "Summary: "
+
 
 @dataclass(frozen=True)
 class CompactionStart(CompactionEvent):
@@ -139,6 +147,21 @@ class CompactionEnd(CompactionEvent):
     @property
     def phase(self) -> str:
         return "abort" if self.aborted else "end"
+
+
+@dataclass(frozen=True)
+class ManualCompactionEnd(CompactionEnd):
+    """An explicit manual result includes its safe failure explanation."""
+
+    reason: str = "manual"
+
+    @property
+    def publication_summary(self) -> str | None:
+        return self.summary
+
+    @property
+    def summary_label(self) -> str:
+        return "" if self.aborted else "Summary: "
 
 
 @dataclass(frozen=True)
