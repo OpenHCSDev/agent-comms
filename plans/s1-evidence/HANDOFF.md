@@ -3,7 +3,7 @@
 Owner: Codex S1 worker, explicitly authorized by Tristan on 2026-09-27.
 Worktree: `/home/ts/wt/comms-refactor-s1-events-20260927`
 Branch: `codex/refactor-s1-events-20260927`
-Base: `b1e5bfd` (`main`, including PR124). The implementation commit containing this file is the adoption point; the final publication receipt records its SHA and draft PR separately.
+Base: `b1e5bfd` (`main`, including PR124). Implementation/adoption commit: `b547552f38077618dc93aec4707dc1e43bb122b9`. Draft PR: https://github.com/OpenHCSDev/agent-comms/pull/127. `publication.json` records the exact source handoff; any following receipt-only commit does not change the implementation.
 
 ## Implemented slice
 
