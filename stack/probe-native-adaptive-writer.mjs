@@ -37,23 +37,13 @@ if (mode === 'hold-lock') {
   let appended = 0;
   const refusals = [];
   for (let index = 0; index < 3; index += 1) {
-    // Blocker-3/4 policy: lock CONTENTION (no bytes written) may be retried
-    // with a strict bound; staleness or uncertain writes are never retried.
-    const maxAttempts = 200;
-    for (let attempt = 0; ; attempt += 1) {
-      try {
-        writer.appendMessage(message(`burst ${process.pid} ${index}`));
-        appended += 1;
-        break;
-      } catch (error) {
-        const text = String(error);
-        if (text.includes('writer lock unavailable') && attempt < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 2));
-          continue; // Pure pre-write contention; bounded retry is safe.
-        }
-        refusals.push(text);
-        break; // Fail closed: never retry staleness or uncertain writes.
-      }
+    // Any failed mutator retires this manager, including pre-write contention.
+    // Never retry on the same object or silently construct a replacement here.
+    try {
+      writer.appendMessage(message(`burst ${process.pid} ${index}`));
+      appended += 1;
+    } catch (error) {
+      refusals.push(String(error));
     }
     if (refusals.length > 0) break;
   }

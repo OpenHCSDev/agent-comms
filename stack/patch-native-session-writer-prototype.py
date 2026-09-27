@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """LOCAL-ONLY experiment: guarded native compaction append in a disposable pinned Pi copy.
 
-Not wired into prepare-pi-native, the installed package, ACP, or PR48 runtime.
-The caller-controlled ownerRequired switch now requires a Python-issued
+Default mode is a disposable probe. Canonical preparation selects --production
+then applies the journal and writer-coverage successors; no live activation or
+ACP adaptive wiring is implied. The original prototype ownerRequired switch requires a Python-issued
 OwnerCompactionAttestation (blocker-1 registry recheck output) bound to the
 witness fence; JS cannot recheck the registry after handoff, so Python must
 re-attest at commit time. This is NOT yet a full live bridge and grants no

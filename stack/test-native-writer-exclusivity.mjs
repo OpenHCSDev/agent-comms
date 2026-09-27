@@ -1,6 +1,6 @@
 // Blocker-3 contract: a single-writer rule backed by the shared per-session lock.
 // Four concurrent processes race to append to one native session; exactly one
-// may commit its burst, every other append must refuse BEFORE mutation, and the
+// may commit a prefix of its burst, other writers refuse BEFORE mutation, and the
 // resulting file must stay valid JSONL with no torn or interleaved lines.
 // Provider-free and runtime-dormant; requires the disposable prototype package.
 import assert from 'node:assert/strict';
@@ -60,7 +60,8 @@ try {
   // Blocker-3 invariant: the shared lock plus load-time revision check admits
   // exactly one aligned writer; every other aligned writer refuses entirely.
   assert.equal(winners.length, 1, `exactly one writer may commit: ${JSON.stringify(outcomes)}`);
-  assert.equal(winners[0].appended, 3, `winner completes its burst: ${JSON.stringify(outcomes)}`);
+  assert.ok(winners[0].appended >= 1 && winners[0].appended <= 3,
+    `winner may retire on later contention, never retry: ${JSON.stringify(outcomes)}`);
   assert.equal(losers.length, outcomes.length - 1);
   assert.ok(losers.every(outcome => outcome.refusals.length > 0), 'losers must refuse, not hang');
   assert.ok(

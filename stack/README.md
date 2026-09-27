@@ -19,11 +19,22 @@ thread. Link that script into your `PATH` if you want the short command name.
 It attaches to the current owner and does not send a prompt.
 
 `prepare-pi-native` verifies the installed Pi 0.85.1 bytes, builds a pinned
-local copy with native input IDs and bounded compaction, and checks the resulting files. Each
+local copy with native input IDs, bounded compaction and writer-fenced session
+storage. Preparation and launch verify a complete-package content commitment,
+including dependencies and resolution metadata (see
+[`native-package-provenance.md`](native-package-provenance.md)). Each
 manifest gets its own copy, so preparing an update leaves running workers on
 their previous package until they restart. The copy
 retains the stock Bedrock transport; the script does not change the installed
 Pi or make a provider call. Set `PI_STOCK_DIR` if Pi is installed elsewhere.
+Ambient `NODE_OPTIONS`/`NODE_PATH` are removed; the managed-project bootstrap is
+copied into and loaded from the verified package. Native v3 files with complete,
+valid ancestry are required; legacy or damaged files are refused without repair.
+This prepares code, **not adaptive activation**: old workers must be retired and
+the remaining runtime/publication/recovery gates reviewed first. Operator
+failure handling and exact-ID no-replay rules are documented in
+[`compaction-operator-recovery.md`](compaction-operator-recovery.md); that
+runbook is not an activation procedure.
 The `toad-comms` launcher uses this copy so a direct prompt can produce the
 required native user-start receipt. Existing Pi session directories and files
 must be private (0700 directory, 0600 file) before a tracked prompt; the native

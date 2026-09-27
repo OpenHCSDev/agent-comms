@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import errno
 import os
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 
 
@@ -49,6 +49,38 @@ def _open_lock(path: Path) -> int:
     except BaseException:
         os.close(fd)
         raise
+
+
+class SessionWriterBusyError(RuntimeError):
+    """A native executor already owns the session; do not start another writer."""
+
+
+@contextmanager
+def idle_session_writer_fence(session_file: str) -> Iterator[int]:
+    """Claim an idle executor slot before wire/registry/native-entry locks.
+
+    This is the SAME lock used by stream_agent_events, not a second writer
+    namespace. Nonblocking admission prevents a registry↔executor deadlock.
+    Pass the descriptor to a trusted child and close (never LOCK_UN) so parent
+    death cannot release the executor slot while that child can still mutate.
+    An idle persistent Pi process must additionally be closed by the runtime
+    before using this external-writer bridge; the lock alone cannot reload it.
+    """
+    if os.name != "posix":
+        raise NotImplementedError("Inherited idle-session authority requires POSIX")
+    fd = _open_lock(_lock_path(session_file))
+    try:
+        try:
+            _try_lock(fd)
+        except OSError as error:
+            if error.errno not in {errno.EACCES, errno.EAGAIN}:
+                raise
+            raise SessionWriterBusyError(
+                "Native executor active; compaction not dispatched"
+            ) from error
+        yield fd
+    finally:
+        os.close(fd)
 
 
 @asynccontextmanager

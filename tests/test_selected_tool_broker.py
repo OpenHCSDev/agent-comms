@@ -56,7 +56,7 @@ def test_strict_bounded_request_and_no_model_admission() -> None:
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool storage requires POSIX dirfd")
-def test_default_off_and_pinned_extension_staging(
+def test_default_off_and_packaged_extension_selection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     tmp_path.chmod(0o700)
@@ -68,6 +68,9 @@ def test_default_off_and_pinned_extension_staging(
     assert "--no-tools" in default.argv and "--no-builtin-tools" not in default.argv
     assert "-e" not in default.argv
     mode = broker.SelectedToolMode(lambda _: None)
+    (tmp_path / "dist").mkdir()
+    packaged = tmp_path / "dist/selected_claimed_write.mjs"
+    packaged.write_bytes(Path(broker.__file__).with_name("selected_claimed_write.mjs").read_bytes())
     selected = native_pi.prepare_native_pi_rpc_launch(
         tmp_path, worktree=tmp_path, session_dir=sessions, selected_tool_mode=mode
     )
@@ -75,10 +78,10 @@ def test_default_off_and_pinned_extension_staging(
     assert "--no-builtin-tools" in selected.argv
     assert selected.argv[selected.argv.index("--tools") + 1] == "selected_claimed_write"
     extension = Path(selected.argv[selected.argv.index("-e") + 1])
-    assert extension == sessions / "selected-claim-extension.mjs"
-    assert extension.stat().st_mode & 0o777 == 0o600
+    assert extension == packaged
+    assert not (sessions / "selected-claim-extension.mjs").exists()
     extension.write_text("evil changed extension", encoding="utf-8")
-    with pytest.raises(broker.SelectedToolDenied, match="pinned"):
+    with pytest.raises(broker.SelectedToolDenied, match="reviewed"):
         native_pi.prepare_native_pi_rpc_launch(
             tmp_path, worktree=tmp_path, session_dir=sessions, selected_tool_mode=mode
         )

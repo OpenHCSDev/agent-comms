@@ -15,6 +15,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_pi import (
     CAPABILITY,
     NativePiTerminalFailure,
@@ -597,42 +598,21 @@ send({'type':'agent_settled'})
 def test_compiled_pins_include_model_services_and_bedrock_and_reject_drift(monkeypatch) -> None:
     import agent_comms.native_pi as native
 
-    bedrock = "node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js"
     assert native.CAPABILITY == "pi-native-input-v1-live-only"
-    expected = {
-        "dist/core/agent-session-services.js": (
-            "4af410d793207f0269cf442a799b0f83933b69d728d166e49a3a6134ff7108a6"
-        ),
-        "dist/cli.js": "8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d",
-        "dist/core/agent-session.js": (
-            "b8b3deeffad82771762808c435617d03f4701c3ac14a9620f5e313545a8d6875"
-        ),
-        "dist/core/session-manager.js": (
-            "dd75fef58eaa5458a91cff9fe1cf70556ebc720afd98720eae3dcb6572cb63ca"
-        ),
-        "dist/modes/rpc/rpc-mode.js": (
-            "bd6dfca7b14cad4023c5ab56a7fc91bef3db9670c96b6ad7625df16353b42e5a"
-        ),
-        "node_modules/@earendil-works/pi-agent-core/dist/agent.js": (
-            "93ed16306399765e79c11f78897f575252d7174b85b81a01cdebb2a479e0e57f"
-        ),
-        "node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js": (
-            "e6003ded7cd11fc8bfd01e4f48cd3d5a19338b64c2e1febe81d0659c31013c11"
-        ),
-        bedrock: "13d6fec97d08f4303714aca50f3113ba0263706e961fc220ccb1cc023c520e6b",
-    }
-    assert expected == native._PATCHED_SHA
+    from agent_comms import native_package
+
     with TemporaryDirectory(prefix="agent-comms-pi-native-", dir="/var/tmp") as raw:
         package = Path(raw) / "node_modules" / "@earendil-works" / "pi-coding-agent"
-        synthetic = {}
-        for index, relative in enumerate(native._PATCHED_SHA):
-            path = package / relative
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(f"synthetic module {index}".encode())
-            synthetic[relative] = native.hashlib.sha256(path.read_bytes()).hexdigest()
-        monkeypatch.setattr(native, "_PATCHED_SHA", synthetic)
+        package.mkdir(parents=True)
+        module = package / "unlisted-dependency.js"
+        module.write_bytes(b"reviewed dependency")
+        manifest = Path(raw) / "manifest"
+        manifest.write_text(
+            native_package.TREE_PREFIX + native_package.package_tree_digest(package) + "\n"
+        )
+        monkeypatch.setattr(native_package, "MANIFEST", manifest)
         assert native._trusted_package(package) == package / "dist/cli.js"
-        (package / bedrock).write_bytes(b"altered Bedrock compiled module")
+        module.write_bytes(b"altered dependency outside former short hash list")
         with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
             native._trusted_package(package)
 
@@ -643,6 +623,234 @@ def test_obsolete_copied_fork_is_rejected_before_process() -> None:
         pytest.skip("Set AC_NATIVE_OLD_COPIED_PACKAGE for copied-fork negative")
     with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
         _trusted_package(Path(old))
+
+
+@pytest.mark.parametrize("alias", ["original", "copy", "hardlink", "with_message"])
+async def test_selected_header_marker_denies_path_only_legacy_reopen_before_spawn(
+    tmp_path: Path, monkeypatch, alias: str
+) -> None:
+    import agent_comms.native_pi as native
+
+    fresh = create_fresh_private_session(
+        tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
+    )
+    file = fresh.path
+    if alias == "copy":
+        file = fresh.path.parent / "copy.jsonl"
+        file.write_bytes(fresh.path.read_bytes())
+        file.chmod(0o600)
+    elif alias == "hardlink":
+        file = fresh.path.parent / "alias.jsonl"
+        os.link(fresh.path, file)
+    elif alias == "with_message":
+        with file.open("a") as stream:
+            stream.write(json.dumps({"type": "message", "id": "00000001"}) + "\n")
+
+    async def forbidden(*_args, **_kwargs):
+        raise AssertionError("marked selected source must not spawn via legacy path")
+
+    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", forbidden)
+    with pytest.raises(NativePiUnavailable, match="cannot reopen without exact first-start token"):
+        await run_native_pi_turn(
+            tmp_path,
+            input_id=INPUT_ID,
+            prompt="do not send",
+            worktree=tmp_path,
+            session_dir=file.parent,
+            session_file=file,
+        )
+    if alias in {"original", "copy"}:
+        fresh.verify_prewrite()
+    elif alias == "with_message":
+        fresh.verify_saved_identity()
+
+
+async def test_selected_first_source_is_default_off_before_any_real_cli_spawn(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import agent_comms.native_pi as native
+
+    fresh = create_fresh_private_session(
+        tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
+    )
+
+    async def forbidden(*_args, **_kwargs):
+        raise AssertionError("unreviewed selected CLI must never spawn")
+
+    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", forbidden)
+    with pytest.raises(NativePiUnavailable, match="builtins are unreviewed"):
+        await run_native_pi_turn(
+            tmp_path,
+            input_id=INPUT_ID,
+            prompt="do not send",
+            worktree=tmp_path,
+            session_dir=fresh.path.parent,
+            session_file=fresh.path,
+            maintenance_root=tmp_path,
+            prompt_send_boundary=lambda _: None,
+            fresh_selected=fresh,
+        )
+    fresh.verify_prewrite()
+
+
+@pytest.mark.parametrize(
+    "damage", ["low_runtime", "wrong_model", "wrong_session", "changed_inode", "valid_preflight"]
+)
+async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
+    tmp_path: Path, monkeypatch, damage: str
+) -> None:
+    """Fake RPC only; no real CLI factory, provider, prompt, or terminal authority."""
+    import agent_comms.native_pi as native
+
+    fresh = create_fresh_private_session(
+        tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
+    )
+    sent: list[dict] = []
+    launched: list[tuple[str, ...]] = []
+    launch_envs: list[dict[str, str]] = []
+    boundary_seen = False
+
+    class Stdin:
+        def write(self, raw):
+            sent.append(json.loads(raw))
+
+        async def drain(self):
+            return None
+
+        def close(self):
+            pass
+
+    class Process:
+        def __init__(self, state):
+            self.stdin = Stdin()
+            self.stdout = asyncio.StreamReader()
+            self.stderr = asyncio.StreamReader()
+            self.returncode = 0
+            self.stdout.feed_data((json.dumps(state) + "\n").encode())
+            self.stdout.feed_eof()
+            self.stderr.feed_eof()
+
+        async def wait(self):
+            return 0
+
+    async def launch(*argv, **kwargs):
+        launched.append(argv)
+        launch_envs.append(kwargs["env"])
+        if damage == "changed_inode":
+            # Keep the original inode allocated; unlink may immediately reuse it.
+            fresh.path.rename(fresh.path.with_suffix(".original"))
+            fresh.path.write_text('{"type":"session","id":"replacement"}\n')
+            fresh.path.chmod(0o600)
+        else:
+            for row in (
+                {
+                    "type": "model_change",
+                    "id": "f0f0f001",
+                    "parentId": fresh.bootstrap_leaf_id,
+                    "timestamp": "2026-09-26T00:00:00.000Z",
+                    "provider": "openrouter",
+                    "modelId": "z-ai/glm-5.3-flash",
+                },
+                {
+                    "type": "thinking_level_change",
+                    "id": "f0f0f002",
+                    "parentId": "f0f0f001",
+                    "timestamp": "2026-09-26T00:00:00.000Z",
+                    "thinkingLevel": "high",
+                },
+            ):
+                with fresh.path.open("a") as stream:
+                    stream.write(json.dumps(row, separators=(",", ":")) + "\n")
+        state = {
+            "type": "response",
+            "id": "native-capability",
+            "command": "get_state",
+            "success": True,
+            "data": {
+                "nativeInputProofCapability": CAPABILITY,
+                "sessionId": fresh.session_id,
+                "sessionFile": str(fresh.path),
+                "model": {"provider": "openrouter", "id": "z-ai/glm-5.3-flash"},
+                "thinkingLevel": "high",
+                "messageCount": 0,
+                "pendingMessageCount": 0,
+                "isStreaming": False,
+                "isCompacting": False,
+            },
+        }
+        data = state["data"]
+        if damage == "low_runtime":
+            data["thinkingLevel"] = "low"
+        elif damage == "wrong_model":
+            data["model"]["id"] = "unreviewed/model"
+        elif damage == "wrong_session":
+            data["sessionId"] = "other-session"
+        return Process(state)
+
+    class BoundaryReachedError(RuntimeError):
+        pass
+
+    def boundary(_file, revision):
+        nonlocal boundary_seen
+        assert _file == fresh.path
+        assert revision == fresh.verify_selected_startup()
+        boundary_seen = True
+        raise BoundaryReachedError("fake prewrite boundary reached; never send prompt")
+
+    async def fake_prompt_send(_stdin, _payload, admission, *, timeout):
+        assert timeout > 0
+        admission()  # The real raw writer is deliberately never entered.
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "fake-ambient-sentinel-not-a-key")
+    monkeypatch.setenv("HTTP_PROXY", "fake-ambient-proxy-sentinel")
+    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+    monkeypatch.setattr(native, "_require_reviewed_selected_source_cli", lambda: None)
+    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", launch)
+    monkeypatch.setattr(native, "send_fenced_prompt", fake_prompt_send)
+    monkeypatch.setattr(native.MaintenanceBarrier, "assert_open_unlocked", lambda _: None)
+    reason = (
+        "fake prewrite boundary"
+        if damage == "valid_preflight"
+        else "saved inode changed"
+        if damage == "changed_inode"
+        else "runtime or inode differs"
+    )
+    expected = BoundaryReachedError if damage == "valid_preflight" else NativePiUnavailable
+    with pytest.raises(expected, match=reason):
+        await run_native_pi_turn(
+            tmp_path,
+            input_id=INPUT_ID,
+            prompt="never send this fake prompt",
+            worktree=tmp_path,
+            session_dir=fresh.path.parent,
+            session_file=fresh.path,
+            maintenance_root=tmp_path,
+            prompt_send_boundary=boundary,
+            fresh_selected=fresh,
+        )
+    assert len(launched) == 1
+    argv = launched[0]
+    assert argv[argv.index("--provider") + 1] == "openrouter"
+    assert argv[argv.index("--model") + 1] == "z-ai/glm-5.3-flash"
+    assert argv[argv.index("--thinking") + 1] == "high"
+    assert "--no-prompt-templates" in argv and "--no-themes" in argv
+    assert len(launch_envs) == 1
+    assert set(launch_envs[0]) == {
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "PATH",
+        "LANG",
+        "TMPDIR",
+        "PI_OFFLINE",
+        "PI_CODING_AGENT_DIR",
+        "AGENT_COMMS_SELECTED_SOURCE_COPY",
+    }
+    assert launch_envs[0]["AGENT_COMMS_SELECTED_SOURCE_COPY"] == "1"
+    assert launch_envs[0]["PI_OFFLINE"] == "1"
+    assert sent == [{"type": "get_state", "id": "native-capability"}]
+    assert boundary_seen is (damage == "valid_preflight")
 
 
 async def test_old_live_capability_is_rejected_before_prompt(tmp_path: Path, monkeypatch):
@@ -996,10 +1204,31 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
     monkeypatch.setattr(native_pi, "_trusted_package", trusted)
     monkeypatch.setattr(sys, "argv", ["pi-comms-native", "--mode", "rpc", "--model", "owner/model"])
     executed = []
-    monkeypatch.setattr(os, "execvp", lambda executable, argv: executed.append((executable, argv)))
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "canonical"))
+    monkeypatch.delenv("AGENT_COMMS_NATIVE_CONFIG_DIR", raising=False)
+    monkeypatch.setenv("NODE_OPTIONS", "--import=/unreviewed.js")
+    monkeypatch.setattr(
+        os, "execvpe", lambda executable, argv, env: executed.append((executable, argv, env))
+    )
     assert native_pi.main() == 0
     assert verified == [launch.native_package]
-    assert executed == [("node", ["node", str(cli), "--mode", "rpc", "--model", "owner/model"])]
+    executable, argv, environment = executed[0]
+    assert executable == "node"
+    assert argv == [
+        "node",
+        "--no-global-search-paths",
+        "--import",
+        str(cli.with_name("agent-comms-import-fence.mjs")),
+        "--import",
+        str(cli.with_name("agent-comms-project-bootstrap.mjs")),
+        str(cli),
+        "--mode",
+        "rpc",
+        "--model",
+        "owner/model",
+    ]
+    assert environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] == str(tmp_path / "canonical")
+    assert "NODE_OPTIONS" not in environment
 
 
 def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch):

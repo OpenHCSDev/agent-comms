@@ -41,8 +41,8 @@ class OwnerCompactionAttestation:
     thread: str
     owner_epoch: int
     turn_id: str
-    goal_id: str
-    goal_revision: int
+    goal_id: str | None
+    goal_revision: int | None
     correction_revision: int
     session_file: str
     session_leaf: str

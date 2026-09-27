@@ -26,6 +26,10 @@ async def test_fake_rpc_tool_event_and_terminal_gate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variant: str
 ) -> None:
     fake = tmp_path / "fake_selected_rpc.py"
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist/selected_claimed_write.mjs").write_bytes(
+        Path(broker.__file__).with_name("selected_claimed_write.mjs").read_bytes()
+    )
     fake.write_text("""import json, os, socket, sys
 from pathlib import Path
 session_dir = Path(sys.argv[1]); variant = sys.argv[2]
