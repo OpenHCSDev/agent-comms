@@ -52,6 +52,10 @@ def _check(journal: CompactionJournal, saved: Path, witness: TypedRawInputWitnes
 def test_old_unknown_remains_unmodified_permanent_typed_denial(tmp_path: Path) -> None:
     journal, saved = _setup(tmp_path)
     journal.reserve_private_raw_input(saved, "a" * 32)
+    # Preserve frozen PR95's ID-only first-send semantics for an all-NULL
+    # historic marker; entering the context does not write any raw byte.
+    with journal.ordinary_input_send_fence(saved, private_input_id="a" * 32):
+        pass
     with sqlite3.connect(journal.path) as db:
         before = db.execute("SELECT * FROM private_raw_inputs").fetchall()
         assert before == [("a" * 32, str(saved), "unknown", *([None] * 9))]
@@ -129,6 +133,37 @@ def test_typed_marker_mismatch_refuses_without_mutation_or_byte(tmp_path: Path) 
     with sqlite3.connect(journal.path) as db:
         assert db.execute("SELECT * FROM private_raw_inputs").fetchone()[0:3] == before[0][0:3]
         assert db.execute("SELECT status FROM private_raw_inputs").fetchone() == ("unknown",)
+
+
+@pytest.mark.parametrize(
+    "missing_column",
+    (
+        "session_device",
+        "session_inode",
+        "source_lane",
+        "request_digest",
+        "owner_name",
+        "owner_generation",
+        "claim_id",
+        "route_target",
+        "source_envelope_digest",
+    ),
+)
+def test_partially_null_typed_row_cannot_downgrade_to_id_only_fence(
+    tmp_path: Path, missing_column: str
+) -> None:
+    journal, saved = _setup(tmp_path)
+    witness = _reserve(journal, saved)
+    with sqlite3.connect(journal.path) as db:
+        # Disposable direct SQL mutation only: not external forgery authority.
+        db.execute(f"UPDATE private_raw_inputs SET {missing_column}=NULL")
+    with (
+        pytest.raises(CompactionJournalError, match="Typed raw marker requires"),
+        journal.ordinary_input_send_fence(saved, private_input_id=witness.input_id),
+    ):
+        pytest.fail("partially NULL typed row downgraded to ID-only fence")
+    with pytest.raises(CompactionJournalError, match="source/claim/target/inode mismatch"):
+        _check(journal, saved, witness)
 
 
 def test_returned_marker_cannot_transfer_to_another_journal(tmp_path: Path) -> None:

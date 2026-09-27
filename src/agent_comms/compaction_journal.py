@@ -805,13 +805,15 @@ class CompactionJournal:
                 typed_witness is None
                 and private_input_id is not None
                 and db.execute(
-                    "SELECT source_lane FROM private_raw_inputs WHERE input_id=?",
+                    "SELECT session_device,session_inode,source_lane,request_digest,"
+                    "owner_name,owner_generation,claim_id,route_target,source_envelope_digest "
+                    "FROM private_raw_inputs WHERE input_id=?",
                     (private_input_id,),
                 ).fetchone()
-                != (None,)
+                != (None,) * 9
             ):
-                # Never downgrade a new typed reservation to the old ID-only
-                # raw fence. Historic NULL rows retain old PR95 behavior.
+                # Only an all-NULL historic row has PR95's ID-only semantics.
+                # A partially populated/malformed typed row must never downgrade.
                 raise CompactionJournalError("Typed raw marker requires its returned witness")
             if typed_witness is not None:
                 if (
