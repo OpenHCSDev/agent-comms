@@ -309,3 +309,151 @@ def test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded(tmp_path, mode
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "BOUNDED_UNKNOWN_REAPED" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("held_store", "revoke"),
+    [
+        ("wire", False),
+        ("bus.jsonl", False),
+        ("registry.json", False),
+        ("sql", False),
+        ("wire", True),
+    ],
+)
+async def test_short_admission_contention_sends_once_after_release(
+    tmp_path, monkeypatch, held_store, revoke
+):
+    """A busy store before admission is not an attempted native prompt."""
+    import sqlite3
+    import threading
+
+    from agent_comms import coordinated_runtime as runtime
+    from agent_comms.declarations import _store_lock
+
+    root, root_id, comms, _initial, people = _root(tmp_path, direct=True)
+    owner = people[2]
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
+    create = asyncio.create_subprocess_exec
+    received = tmp_path / "received.json"
+    session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
+
+    async def launch(*args, **kwargs):
+        return await create(
+            sys.executable, "-c", _CHILD, str(session), str(received), "no", **kwargs
+        )
+
+    monkeypatch.setattr(native_pi.asyncio, "create_subprocess_exec", launch)
+    write = native_prompt_send._write_fenced
+    admissions = []
+
+    def probe(fd, payload, boundary, cancelled, deadline):
+        held, release = threading.Event(), threading.Event()
+
+        def contend():
+            if held_store == "sql":
+                with sqlite3.connect(root / "coordination.sqlite3") as db:
+                    db.execute("BEGIN IMMEDIATE")
+                    held.set()
+                    assert release.wait(3)
+            else:
+                with _store_lock(root / held_store):
+                    if revoke:
+                        comms.registry.unregister(owner.name)
+                    held.set()
+                    assert release.wait(3)
+
+        competitor = threading.Thread(target=contend)
+        competitor.start()
+        assert held.wait(3)
+        timer = threading.Timer(0.1, release.set)
+        timer.start()
+
+        @contextmanager
+        def scope():
+            with boundary():
+                admissions.append(payload)
+                yield
+
+        try:
+            return write(fd, payload, scope, cancelled, deadline)
+        finally:
+            release.set()
+            competitor.join(3)
+            timer.cancel()
+
+    monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
+    # The child intentionally exits after reading the prompt; this tests raw
+    # admission only, not a native context or successful model response.
+    with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+        )
+    if revoke:
+        assert not received.exists() or not received.read_text()
+        assert admissions == []
+        return
+    assert received.exists() and received.read_text()
+    assert json.loads(received.read_text())["type"] == "prompt"
+    assert admissions == [received.read_bytes()]
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+def test_busy_admission_obeys_writer_deadline_and_cancellation_without_bytes(cancel):
+    import threading
+    import time
+
+    calls = []
+    cancelled = threading.Event()
+
+    @contextmanager
+    def busy():
+        calls.append(1)
+        raise native_prompt_send.PromptAdmissionBusy("held by another owner")
+        yield  # pragma: no cover - a refused context never admits its body
+
+    read_fd, write_fd = os.pipe2(os.O_NONBLOCK)
+    timer = threading.Timer(0.04, cancelled.set) if cancel else None
+    try:
+        if timer:
+            timer.start()
+        start = time.monotonic()
+        deadline = start + (2 if cancel else 0.04)
+        with pytest.raises(native_prompt_send.PromptSendUnknown, match="before writing"):
+            native_prompt_send._write_fenced(write_fd, b"prompt\n", busy, cancelled, deadline)
+        assert time.monotonic() - start < 1
+        assert len(calls) > 1
+        with pytest.raises(BlockingIOError):
+            os.read(read_fd, 10)
+    finally:
+        if timer:
+            timer.cancel()
+            timer.join()
+        os.close(read_fd)
+        os.close(write_fd)
+
+
+def test_admitted_write_never_reenters_after_busy_post_write_failure():
+    import threading
+    import time
+
+    entered = []
+
+    @contextmanager
+    def boundary():
+        entered.append(1)
+        yield
+        raise native_prompt_send.PromptAdmissionBusy("post-write failure is not retryable")
+
+    read_fd, write_fd = os.pipe2(os.O_NONBLOCK)
+    try:
+        with pytest.raises(native_prompt_send.PromptSendUnknown, match="post-write"):
+            native_prompt_send._write_fenced(
+                write_fd, b"one prompt\n", boundary, threading.Event(), time.monotonic() + 1
+            )
+        assert entered == [1]
+        assert os.read(read_fd, 100) == b"one prompt\n"
+    finally:
+        os.close(read_fd)
+        os.close(write_fd)

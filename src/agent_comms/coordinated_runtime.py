@@ -19,7 +19,7 @@ import sqlite3
 import threading
 import time
 from collections.abc import Callable, Iterator
-from contextlib import AbstractContextManager, contextmanager, suppress
+from contextlib import AbstractContextManager, ExitStack, contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -79,6 +79,7 @@ from .native_prompt_binding import (
     expected_prompt_matches_journal,
     read_expected_prompt_binding,
 )
+from .native_prompt_send import PromptAdmissionBusy
 from .native_source_cursor import advance_current_native_cursor
 from .operations import Comms
 from .optional_awareness_projection import OptionalAwarenessProjection
@@ -323,7 +324,8 @@ def _native_send_boundary(
 
     Entered only by the native adapter's isolated raw-pipe writer (never an
     event loop). The reservation already forbids recovery/retry; this closure additionally
-    forbids a second use within this process, including a failed admission.
+    forbids a second admitted use within this process. Contended exclusion
+    acquisition has no admission effect and can wait within the raw writer budget.
     """
     once = threading.Lock()
     store_path = store.path
@@ -342,15 +344,22 @@ def _native_send_boundary(
             pass
         else:
             raise IdentityConflict("native send admission requires the isolated raw writer")
-        if not once.acquire(blocking=False):
-            raise IdentityConflict("native send admission cannot be reused")
-        # Never share a SQLite connection across threads, and never wait for
-        # flock/SQLite/sidecar contention while an owner event loop may wait on us.
-        with (
-            MutationStore(str(store_path), lock_timeout=0) as store,
-            _response_boundary(bus, blocking=False) as registry,
-            store._transaction() as db,
-        ):
+        # Release partial exclusion before asking the raw writer to wait. Only
+        # lock acquisition is repeatable: identity checks, journal reservations,
+        # raw bytes and commit outcomes below remain one-use and unreplayable.
+        with ExitStack() as authority:
+            try:
+                store = authority.enter_context(MutationStore(str(store_path), lock_timeout=0))
+                registry = authority.enter_context(_response_boundary(bus, blocking=False))
+                db = authority.enter_context(store._transaction())
+            except BlockingIOError as error:
+                raise PromptAdmissionBusy("Native admission exclusion is busy") from error
+            except sqlite3.OperationalError as error:
+                if error.sqlite_errorcode & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+                    raise PromptAdmissionBusy("Native admission database is busy") from error
+                raise
+            if not once.acquire(blocking=False):
+                raise IdentityConflict("native send admission cannot be reused")
             # Rename may begin after reservation but before the isolated raw
             # send. Its wire-locked durable intent must fence the last
             # irreversible boundary, not just the outer turn entry.
@@ -1541,14 +1550,20 @@ async def run_one_sealed_claim(
         raise
     except NativePiUnavailable as error:
         if input_id is not None:
-            _require_registry_owner(comms, owner, owner_epoch)
-            _publish_native_failure(
-                comms,
-                owner,
-                initial,
-                input_id,
-                f"{error}; the input is uncertain.",
-            )
+            try:
+                _require_registry_owner(comms, owner, owner_epoch)
+            except StaleFence:
+                # The original failure remains the result. A revoked owner
+                # cannot publish a notice under its successor's identity.
+                pass
+            else:
+                _publish_native_failure(
+                    comms,
+                    owner,
+                    initial,
+                    input_id,
+                    f"{error}; the input is uncertain.",
+                )
         raise
     finally:
         try:
