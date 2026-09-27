@@ -53,14 +53,18 @@ from .coordination_store import (
 )
 from .declarations import (
     MessageBus,
+    MessageType,
     RelationViolationError,
     Thread,
     _require_no_private_owner_rename,
     _store_lock,
 )
+from .diagnostics import record_terminal_failure
 from .envelope_claim_transitions import WakeAdmission
 from .native_pi import (
     NativeContextProof,
+    NativePiTerminalFailure,
+    NativePiUnavailable,
     NativeTurnResult,
     _private_session_dir,
     _read_native_context_evidence,
@@ -952,6 +956,8 @@ async def run_one_sealed_claim(
         raise IdentityConflict("private initial wire root changed")
     store = MutationStore(str(root / "coordination.sqlite3"))
     owned_turn_id: str | None = None
+    fence: OwnerFence | None = None
+    input_id: str | None = None
     try:
         with store._read_transaction():
             _assert_schema(store._connection)
@@ -1368,9 +1374,80 @@ async def run_one_sealed_claim(
             published.execution.exact_target,
             cursor_status,
         )
+    except NativePiTerminalFailure as error:
+        # The native adapter observed agent_settled, verified its input proof,
+        # and reaped its own child before raising this nominal final outcome.
+        # Retire only this failed attempt; future messages remain serviceable.
+        _require_registry_owner(comms, owner, owner_epoch)
+        _verify_live_turn(
+            store,
+            NativeTurnResult("", error.context),
+            input_id,
+            session_dir,
+            expected_digest=full_digest if fence is not None else triage_digest,
+            wire_root_id=wire_root_id,
+            claim=pending,
+            stage="full" if fence is not None else "triage",
+            owner=owner,
+            generation=person.generation,
+            fence=fence,
+        )
+        if fence is not None:
+            snapshot = store.snapshot(fence.execution_id)
+            assert snapshot.attempt is not None
+            final = store.advance_attempt(
+                fence,
+                snapshot.attempt.phase,
+                expected_pointer_revision=snapshot.pointer_revision,
+                backend_done=True,
+                process_dead=True,
+                reason_code="native_terminal_failure",
+            ).value
+            store.settle_nonpublication(
+                final.fence,
+                expected_pointer_revision=final.snapshot.pointer_revision,
+                success=False,
+                reason_code="native_terminal_failure",
+            )
+        _publish_native_failure(comms, owner, initial, error.context.input_id, error.public_message)
+        raise
+    except NativePiUnavailable as error:
+        if input_id is not None:
+            _require_registry_owner(comms, owner, owner_epoch)
+            _publish_native_failure(
+                comms,
+                owner,
+                initial,
+                input_id,
+                f"{error}; the input is uncertain.",
+            )
+        raise
     finally:
         try:
             if owned_turn_id is not None:
                 comms.registry.finish_claimed_turn(owner_name, owned_turn_id)
         finally:
             store.close()
+
+
+def _publish_native_failure(
+    comms: Comms, owner: Thread, initial: CommittedInitial, input_id: str, description: str
+) -> None:
+    """Use the existing durable alert path; a notice never creates another wake."""
+    diagnostic = record_terminal_failure(
+        comms.root,
+        turn_id=input_id,
+        thread=owner.name,
+        event={},
+        sequences=(initial.message.seq,),
+    )
+    target = derive_exact_reply_target(initial.message)
+    assert target is not None
+    comms.send(
+        owner.name,
+        target,
+        f"Message processing failed: {description} "
+        f"No automatic retry. [Open diagnostic]({diagnostic.as_uri()})",
+        MessageType.ALERT,
+        notice=True,
+    )
