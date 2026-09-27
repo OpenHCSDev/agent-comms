@@ -182,6 +182,7 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
         root_id, selected = stage_private_participants(
             legacy, private, archive, inventory, ["sender", "receiver"]
         )
+        assert private.bus._private_marker_unlocked()["claim_envelopes_version"] == 1
         staged = private.registry.require("sender")
         assert selected == (witness, receiver_witness)
         assert staged.pid == 0 and staged.session_file == str(saved)

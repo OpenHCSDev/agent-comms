@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+from agent_comms import claim_admission
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.claim_admission import (
     publish_selected_resource_claim,
@@ -38,7 +39,9 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         root.mkdir(mode=0o700)
         worktree = Path(dirname) / "work"
         worktree.mkdir(mode=0o700)
-        resource = worktree / "module.py"
+        parent = worktree / "pkg"
+        parent.mkdir(mode=0o700)
+        resource = parent / "module.py"
         resource.write_text("value = 1\n")
         comms = Comms(root)
         for name, created in (("sender", 17021.0), ("Alice", 17022.0), ("Bob", 17023.0)):
@@ -141,6 +144,54 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 )
             assert resource.read_bytes() == b"value = 1\n"
             intent.unlink()  # Fixture-only return to the positive pre-rename case.
+            outside = Path(dirname) / "outside"
+            outside.mkdir(mode=0o700)
+            external = outside / "module.py"
+            external.write_bytes(b"outside untouched\n")
+            displaced = worktree / "displaced-pkg"
+            actual_projection = comms.bus._claim_projection_unlocked
+
+            def swap_after_projection(marker):
+                projection = actual_projection(marker)
+                parent.rename(displaced)
+                parent.symlink_to(outside, target_is_directory=True)
+                return projection
+
+            # Swap *after* canonicalization and durable claim projection:
+            # old absolute stat/open followed the parent symlink despite
+            # final-component O_NOFOLLOW.
+            with monkeypatch.context() as patch:
+                patch.setattr(comms.bus, "_claim_projection_unlocked", swap_after_projection)
+                with pytest.raises(IdentityConflict, match="directory or file changed"):
+                    write_selected_claimed_file(
+                        comms, store, admission, "Alice", selected_owner, b"escaped\n"
+                    )
+            assert external.read_bytes() == b"outside untouched\n"
+            assert (displaced / "module.py").read_bytes() == b"value = 1\n"
+            parent.unlink()
+            displaced.rename(parent)
+
+            actual_open = os.open
+
+            def swap_after_open(path, flags, *args, **kwargs):
+                fd = actual_open(path, flags, *args, **kwargs)
+                if path == "module.py" and kwargs.get("dir_fd") is not None:
+                    parent.rename(displaced)
+                    parent.symlink_to(outside, target_is_directory=True)
+                return fd
+
+            # A parent rename after obtaining the leaf fd but before truncate
+            # must be detected against the pinned chain and must not mutate.
+            with monkeypatch.context() as patch:
+                patch.setattr(claim_admission.os, "open", swap_after_open)
+                with pytest.raises(IdentityConflict, match="parent directory changed"):
+                    write_selected_claimed_file(
+                        comms, store, admission, "Alice", selected_owner, b"late escape\n"
+                    )
+            assert external.read_bytes() == b"outside untouched\n"
+            assert (displaced / "module.py").read_bytes() == b"value = 1\n"
+            parent.unlink()
+            displaced.rename(parent)
             write_selected_claimed_file(
                 comms, store, admission, "Alice", selected_owner, b"value = 2\n"
             )

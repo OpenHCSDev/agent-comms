@@ -55,7 +55,22 @@ def test_explicit_owner_entrypoint_requires_exact_root_and_package(tmp_path, mon
     assert exact is not None
     assert exact.wire_root_id == root_id and exact.native_package == tmp_path
     assert exact.validated_root == root
+    assert exact.selected_tool_intent is None
     assert not (root / "native-sessions").exists()
+
+
+def test_fresh_private_claim_root_enables_owner_selected_tool(tmp_path, monkeypatch):
+    from agent_comms.selected_tool_broker import SelectedToolIntent
+
+    root = tmp_path / "claim-wire"
+    root.mkdir(mode=0o700)
+    comms = operations.Comms(root)
+    root_id = comms.initialize_private_initial_protocol()
+    comms.initialize_private_claim_protocol()
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    selected = private_nk_launch(root, {ROOT_ID_ENV: root_id, PACKAGE_ENV: str(tmp_path)})
+    assert selected is not None
+    assert type(selected.selected_tool_intent) is SelectedToolIntent
 
 
 async def test_worker_rejects_partial_private_configuration_before_wire(tmp_path, monkeypatch):

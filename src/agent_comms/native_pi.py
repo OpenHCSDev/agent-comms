@@ -24,6 +24,12 @@ from uuid import uuid4
 from .declarations import RelationViolationError, _store_lock
 from .maintenance_barrier import MaintenanceBarrier
 from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
+from .selected_tool_broker import (
+    SelectedToolMode,
+    SelectedToolSocket,
+    stage_selected_extension,
+    verify_selected_terminal,
+)
 
 CAPABILITY = "pi-native-input-v1-live-only"
 _INPUT_ID = re.compile(r"[0-9a-f]{32}\Z")
@@ -79,6 +85,7 @@ class NativeContextProof:
 class NativeTurnResult:
     text: str
     context: NativeContextProof
+    selected_tool_call_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -448,6 +455,7 @@ def prepare_native_pi_rpc_launch(
     session_file: Path | None = None,
     provider: str = "openrouter",
     model: str = "z-ai/glm-5.3-flash",
+    selected_tool_mode: SelectedToolMode | None = None,
 ) -> NativePiRpcLaunch:
     """Verify compiled Pi bytes and commit private no-retry policy before spawning.
 
@@ -458,6 +466,8 @@ def prepare_native_pi_rpc_launch(
     """
     if provider != "openrouter" or model != "z-ai/glm-5.3-flash":
         raise NativePiUnavailable("Only the reviewed native OpenRouter model may be launched")
+    if selected_tool_mode is not None and type(selected_tool_mode) is not SelectedToolMode:
+        raise NativePiUnavailable("Selected tool requires a trusted nominal mode")
     cli = _trusted_package(package)
     worktree = Path(worktree).absolute()
     session_dir = Path(session_dir).absolute()
@@ -468,13 +478,18 @@ def prepare_native_pi_rpc_launch(
         session_file = _session_location(session_dir, str(session_file))
         _read_private_file(session_file)
     agent_dir = _private_agent_dir(session_dir)
+    extension = stage_selected_extension(session_dir) if selected_tool_mode is not None else None
     argv = [
         "node",
         str(cli),
         "--mode",
         "rpc",
         "--no-approve",
-        "--no-tools",
+        *(
+            ("--no-tools",)
+            if extension is None
+            else ("--no-builtin-tools", "--tools", "selected_claimed_write")
+        ),
         "--no-extensions",
         "--no-skills",
         "--no-context-files",
@@ -485,6 +500,8 @@ def prepare_native_pi_rpc_launch(
         "--model",
         model,
     ]
+    if extension is not None:
+        argv.extend(("-e", str(extension)))
     if session_file is not None:
         argv.extend(("--session", str(session_file)))
     env = os.environ.copy()
@@ -494,6 +511,8 @@ def prepare_native_pi_rpc_launch(
         "PI_AGENT_TAGS",
         "AGENT_COMMS_THREAD",
         "AGENT_COMMS_TAGS",
+        "AGENT_COMMS_SELECTED_TOOL_SOCKET",
+        "AGENT_COMMS_SELECTED_TOOL_TOKEN",
     ):
         env.pop(name, None)
     env["PI_OFFLINE"] = "1"
@@ -514,6 +533,7 @@ async def run_native_pi_turn(
     timeout: float = 90.0,
     prompt_send_boundary: Callable[[], AbstractContextManager[None]] | None = None,
     maintenance_root: Path | None = None,
+    selected_tool_mode: SelectedToolMode | None = None,
 ) -> NativeTurnResult:
     """One tracked real Pi RPC prompt in an isolated, persisted session.
 
@@ -531,18 +551,34 @@ async def run_native_pi_turn(
         session_file=session_file,
         provider=provider,
         model=model,
+        selected_tool_mode=selected_tool_mode,
     )
     session_dir, session_file = launch.session_dir, launch.session_file
-    process = await asyncio.create_subprocess_exec(
-        *launch.argv,
-        cwd=str(launch.cwd),
-        env=launch.env,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        limit=_MAX_LINE + 1,
-        start_new_session=True,
-    )
+    tool_socket: SelectedToolSocket | None = None
+    if selected_tool_mode is not None:
+        tool_socket = SelectedToolSocket(
+            session_dir, os.urandom(32).hex(), selected_tool_mode.action
+        )
+        await tool_socket.start()
+        launch.env["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(tool_socket.path)
+        launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = tool_socket.token
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *launch.argv,
+            cwd=str(launch.cwd),
+            env=launch.env,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            limit=_MAX_LINE + 1,
+            start_new_session=True,
+        )
+    except BaseException:
+        if tool_socket is not None:
+            await tool_socket.close()
+        raise
+    if tool_socket is not None:
+        tool_socket.expected_pid = process.pid
     stdin, stdout, stderr = process.stdin, process.stdout, process.stderr
     assert stdin is not None and stdout is not None and stderr is not None
     stderr_task = asyncio.create_task(stderr.read(_MAX_LINE))
@@ -625,6 +661,10 @@ async def run_native_pi_turn(
         contexts: list[dict[str, Any]] = []
         chunks: list[str] = []
         final_messages: list[str] = []
+        selected_call_id: str | None = None
+        selected_args: object = None
+        selected_started = False
+        selected_finished = False
         while True:
             event = await next_event()
             kind = event.get("type")
@@ -650,22 +690,82 @@ async def run_native_pi_turn(
                 if isinstance(message, dict) and message.get("role") == "assistant":
                     content = message.get("content")
                     if (
-                        message.get("stopReason") != "stop"
-                        or not isinstance(content, list)
+                        not isinstance(content, list)
+                        or any(not isinstance(item, dict) for item in content)
                         or message.get("errorMessage")
                     ):
-                        raise NativePiUnavailable("Native Pi assistant did not finish successfully")
-                    parts: list[str] = []
-                    for item in content:
-                        if not isinstance(item, dict):
-                            raise NativePiUnavailable("Native Pi assistant content is malformed")
-                        if item.get("type") == "text" and type(item.get("text")) is str:
-                            parts.append(item["text"])
-                        elif item.get("type") != "thinking":
-                            raise NativePiUnavailable(
-                                "Native Pi assistant returned non-text content"
+                        raise NativePiUnavailable("Native Pi assistant content is malformed")
+                    if message.get("stopReason") == "toolUse" and tool_socket is not None:
+                        calls = [item for item in content if item.get("type") == "toolCall"]
+                        if (
+                            selected_call_id is not None
+                            or len(calls) != 1
+                            or calls[0].get("name") != "selected_claimed_write"
+                            or type(calls[0].get("id")) is not str
+                            or any(
+                                item.get("type") not in {"toolCall", "text", "thinking"}
+                                for item in content
                             )
-                    final_messages.append("".join(parts))
+                        ):
+                            raise NativePiUnavailable("Native Pi returned an unapproved tool call")
+                        selected_call_id = calls[0]["id"]
+                        selected_args = calls[0].get("arguments")
+                        chunks.clear()  # Intermediate text is not the final response.
+                    elif message.get("stopReason") == "stop":
+                        if selected_call_id is not None and not selected_finished:
+                            raise NativePiUnavailable(
+                                "Native Pi returned text before tool terminal"
+                            )
+                        parts: list[str] = []
+                        for item in content:
+                            if item.get("type") == "text" and type(item.get("text")) is str:
+                                parts.append(item["text"])
+                            elif item.get("type") != "thinking":
+                                raise NativePiUnavailable(
+                                    "Native Pi assistant returned non-text content"
+                                )
+                        final_messages.append("".join(parts))
+                    else:
+                        raise NativePiUnavailable("Native Pi assistant did not finish successfully")
+            elif kind == "tool_execution_start":
+                if (
+                    tool_socket is None
+                    or selected_started
+                    or selected_call_id is None
+                    or event.get("toolName") != "selected_claimed_write"
+                    or event.get("toolCallId") != selected_call_id
+                    or event.get("args") != selected_args
+                ):
+                    raise NativePiUnavailable("Native Pi began an unapproved tool execution")
+                # A tool-time write cannot wait for final turn settlement, but
+                # must not occur on mere get_state, prompt ACK, or a spoofed
+                # tool event. The live input/context pair and durable journal
+                # must already corroborate this exact tracked user input.
+                if not accepted or input_event is None or not contexts:
+                    raise NativePiUnavailable("Native Pi tool preceded tracked context proof")
+                _verify_context(actual_file, input_id, session_id, input_event, contexts[-1])
+                tool_socket.approve_tool_start(selected_call_id, event.get("args"))
+                if selected_call_id not in tool_socket._approved:
+                    raise NativePiUnavailable("Native Pi tool arguments are invalid")
+                selected_started = True
+            elif kind == "tool_execution_end":
+                if (
+                    tool_socket is None
+                    or not selected_started
+                    or selected_finished
+                    or event.get("toolName") != "selected_claimed_write"
+                    or event.get("toolCallId") != selected_call_id
+                    or event.get("isError") is not False
+                    or tool_socket.completed_call_id != selected_call_id
+                ):
+                    raise NativePiUnavailable("Native Pi selected tool did not finish successfully")
+                try:
+                    verify_selected_terminal(session_dir, input_id, selected_call_id)
+                except (OSError, ValueError) as error:
+                    raise NativePiUnavailable(
+                        "Native Pi tool lacks an owner terminal receipt"
+                    ) from error
+                selected_finished = True
             elif kind == "agent_settled":
                 break
             elif kind == "response" and event.get("command") in {
@@ -676,6 +776,8 @@ async def run_native_pi_turn(
                 raise NativePiUnavailable("Native Pi session identity changed during a turn")
         if not accepted or input_event is None or not contexts:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
+        if selected_call_id is not None and not selected_finished:
+            raise NativePiUnavailable("Native Pi selected tool has no terminal result")
         if (
             len(final_messages) != 1
             or not final_messages[0]
@@ -683,7 +785,7 @@ async def run_native_pi_turn(
         ):
             raise NativePiUnavailable("Native Pi has no unique authoritative completed response")
         proof = _verify_context(actual_file, input_id, session_id, input_event, contexts[-1])
-        return NativeTurnResult(final_messages[0].strip(), proof)
+        return NativeTurnResult(final_messages[0].strip(), proof, selected_call_id)
     except PromptSendUnknown as error:
         raise NativePiUnavailable("Native Pi prompt send is UNKNOWN; no retry") from error
     except (TimeoutError, OSError) as error:
@@ -721,6 +823,8 @@ async def run_native_pi_turn(
                 await process.wait()
             stderr_task.cancel()
             await asyncio.gather(stderr_task, return_exceptions=True)
+            if tool_socket is not None:
+                await tool_socket.close()
 
         # Repeated caller cancellation must not abandon the child or its reader.
         cleanup_task = asyncio.create_task(cleanup())
