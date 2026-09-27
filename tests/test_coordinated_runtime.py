@@ -1217,6 +1217,53 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
     assert len(calls) == 1
 
 
+async def test_distinct_raw_admission_objects_cannot_resend_reserved_input(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The SQL owner CAS, not a callback instance, consumes this one-shot input.
+
+    This is a negative baseline only: persistent ACP selected admission also
+    needs same-session raw UNKNOWN journaling and independent review.
+    """
+    root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    original_boundary = runtime._native_send_boundary
+    captured: list[tuple[tuple, dict]] = []
+    raw_writes: list[str] = []
+
+    def capture(*args, **kwargs):
+        captured.append((args, kwargs))
+        return original_boundary(*args, **kwargs)
+
+    async def duplicate(*_args, **kwargs):
+        def attempt():
+            with kwargs["prompt_send_boundary"]():
+                raw_writes.append("first")
+            assert len(captured) == 1
+            args, options = captured[0]
+            second = original_boundary(*args, **options)
+            with pytest.raises(StaleFence, match="reservation changed"), second():
+                raw_writes.append("second")
+
+        await asyncio.to_thread(attempt)
+        raise NativePiUnavailable("fake stops after cross-object denial")
+
+    monkeypatch.setattr(runtime, "_native_send_boundary", capture)
+    monkeypatch.setattr(runtime, "run_native_pi_turn", duplicate)
+    with pytest.raises(NativePiUnavailable, match="fake stops"):
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+        )
+    assert raw_writes == ["first"]
+    assert comms.registry.require("beta").active_turn is None
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        rows = store._connection.execute(
+            "SELECT input_id, sent_owner_admission_epoch FROM native_runtime_inputs"
+        ).fetchall()
+    assert len(rows) == 1
+    assert rows[0]["sent_owner_admission_epoch"] is not None
+
+
 async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(
     tmp_path: Path, monkeypatch
 ) -> None:
