@@ -6,6 +6,8 @@ quiescence and preserve the old wire before any route is installed.
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -214,6 +216,44 @@ def _copy_checked(source: Path, target: Path) -> dict[str, object]:
         os.close(descriptor)
 
 
+def _publish_archive_noreplace(stage: Path, destination: Path) -> None:
+    """Publish one complete archive directory without replacing a rival."""
+    if not sys.platform.startswith("linux"):
+        raise ValueError("Cutover archive publication requires Linux renameat2")
+    directory = os.open(
+        destination.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        parent = destination.parent.lstat()
+        info = os.fstat(directory)
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != os.geteuid()
+            or stat.S_IMODE(info.st_mode) != 0o700
+            or (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino)
+        ):
+            raise ValueError("Cutover archive parent changed before publication")
+        try:
+            renameat2 = ctypes.CDLL(None, use_errno=True).renameat2
+        except AttributeError as error:
+            raise ValueError("Cutover archive cannot guarantee no-replace publication") from error
+        renameat2.argtypes = (
+            ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint
+        )
+        renameat2.restype = ctypes.c_int
+        # Linux RENAME_NOREPLACE=1. Both names are relative to the checked
+        # owner-only parent fd, so no path-based replace can race this step.
+        if renameat2(directory, os.fsencode(stage.name), directory,
+                     os.fsencode(destination.name), 1) != 0:
+            code = ctypes.get_errno()
+            if code in (errno.EEXIST, errno.ENOTEMPTY):
+                raise ValueError("Cutover archive destination already exists")
+            raise OSError(code, os.strerror(code), str(destination))
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
 def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
     """Archive a stopped wire without changing its original rows or ACK cursors.
 
@@ -236,10 +276,8 @@ def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
     before = comms.registry.snapshot()
     if any(thread.active_turn is not None for thread in before.threads.values()):
         raise RelationViolationError("Cutover archive has an active owner turn")
-    if any(
-        before.statuses[name].active and thread.pid > 0 and comms._process_alive(thread.pid)
-        for name, thread in before.threads.items()
-    ):
+    if any(thread.pid > 0 and comms._process_alive(thread.pid)
+           for thread in before.threads.values()):
         raise RelationViolationError("Cutover archive requires all old owners stopped")
     files = _state_files(comms.root)
     required = {"bus.jsonl", "bus_meta.json", "registry.json", "input_dispositions.json"}
@@ -262,6 +300,8 @@ def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
             or any(
                 _file_identity(path.lstat()) != identity for path, identity in identities.items()
             )
+            or any(thread.pid > 0 and comms._process_alive(thread.pid)
+                   for thread in after.threads.values())
         ):
             raise RelationViolationError("Cutover root changed during archive")
         manifest = {
@@ -286,12 +326,7 @@ def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
             os.fsync(directory)
         finally:
             os.close(directory)
-        os.replace(stage, destination)
-        directory = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        _publish_archive_noreplace(stage, destination)
         return ArchiveReceipt(destination, len(files), pending, unknown)
     except BaseException:
         shutil.rmtree(stage, ignore_errors=True)
