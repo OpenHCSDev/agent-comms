@@ -230,6 +230,18 @@ def test_retained_turn_requires_exact_receipt_then_uses_same_keyed_gateway(
         assert case.store.snapshot("exec").attempt.process_dead is False
         with MutationStore(str(case.comms.root / "coordination.sqlite3")) as duplicate_connection:
             duplicate_connection._test_retained_turns = True
+            # A lost ACK with the prior revision is NOT crash-idempotent. It
+            # must refuse without reissuing input, mutating the receipt, or
+            # publishing a response; only the returned current fence is safe.
+            with pytest.raises(StaleRevision, match="revision"):
+                record_test_turn_settled(
+                    duplicate_connection,
+                    case.fence,
+                    RetainedTurnReceipt(case.retained_identity, 1, "a" * 64),
+                )
+            assert duplicate_connection.snapshot("exec").attempt.revision == settled.revision
+            assert duplicate_connection.snapshot("exec").obligation.state is ObligationState.PENDING
+            assert case.comms.bus.latest_sequence() == case.origin_seq
             duplicate = record_test_turn_settled(
                 duplicate_connection,
                 settled,
