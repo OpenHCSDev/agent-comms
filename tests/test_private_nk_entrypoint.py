@@ -12,6 +12,7 @@ import pytest
 from agent_comms import (
     acp,
     active_route,
+    cli,
     cohort_foreground,
     operations,
     private_nk_entrypoint,
@@ -132,7 +133,7 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     assert private_nk_entrypoint.private_nk_from_environment() is None
 
 
-def test_invalid_active_route_fails_closed(tmp_path, monkeypatch):
+def test_invalid_active_route_fails_closed(tmp_path, monkeypatch, capsys):
     route_file = tmp_path / "active-route.json"
     route_file.write_text("{")
     route_file.chmod(0o600)
@@ -142,6 +143,8 @@ def test_invalid_active_route_fails_closed(tmp_path, monkeypatch):
         operations.wire()
     with pytest.raises(ValueError, match="invalid JSON"):
         private_nk_entrypoint.private_nk_from_environment()
+    assert cli.main(["threads"]) == 1
+    assert "invalid JSON" in json.loads(capsys.readouterr().out)["error"]
 
 
 @pytest.mark.parametrize("entrypoint", ["acp", "worker"])

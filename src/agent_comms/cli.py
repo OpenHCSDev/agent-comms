@@ -52,7 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--root",
         default=None,
-        help="Comms root directory (default $AGENT_COMMS_ROOT or ~/.agent-comms)",
+        help="Comms root directory (default $AGENT_COMMS_ROOT, active route, or ~/.agent-comms)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -206,9 +206,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    comms: Comms = wire(Path(args.root).expanduser() if args.root else None)
-
     try:
+        comms: Comms = wire(Path(args.root).expanduser() if args.root else None)
         if args.command == "tools":
             from .tools import tool_catalog
 

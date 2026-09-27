@@ -12,6 +12,8 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
+from .declarations import unique_wire_object
+
 
 @dataclass(frozen=True, slots=True)
 class ActiveRoute:
@@ -45,12 +47,13 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
     finally:
         os.close(fd)
     try:
-        value = json.loads(raw)
+        value = json.loads(raw, object_pairs_hook=unique_wire_object)
     except (ValueError, UnicodeError) as error:
         raise ValueError("active comms route is invalid JSON") from error
     if (
         not isinstance(value, dict)
         or set(value) != {"version", "root", "wire_root_id", "native_package"}
+        or type(value["version"]) is not int
         or value["version"] != 1
     ):
         raise ValueError("active comms route has an unsupported shape")
