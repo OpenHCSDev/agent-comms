@@ -1,0 +1,49 @@
+{
+  "observed_at": "2026-09-27T22:37:02.733405+00:00",
+  "session": "01a0e4f3-fd49-7381-8e9f-86627340b30c",
+  "cwd": "/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927",
+  "branch": "codex/refactor-a8-relationship-awareness-20260927",
+  "base_sha": "a6f9e5414e092b64dd6082946a485c4fc1dc806b",
+  "processes": [
+    {
+      "Name": "codex",
+      "State": "S (sleeping)",
+      "Pid": "1910618",
+      "PPid": "1786010",
+      "VmRSS": "586048 kB"
+    },
+    {
+      "Name": "codex-code-mode",
+      "State": "S (sleeping)",
+      "Pid": "1911921",
+      "PPid": "1910618",
+      "VmRSS": "28948 kB"
+    },
+    {
+      "Name": "timeout",
+      "State": "S (sleeping)",
+      "Pid": "1931922",
+      "PPid": "1910618",
+      "VmRSS": "4316 kB"
+    },
+    {
+      "Name": "python",
+      "State": "D (disk sleep)",
+      "Pid": "1931939",
+      "PPid": "1931922",
+      "VmRSS": "71328 kB"
+    },
+    {
+      "Name": "python",
+      "State": "R (running)",
+      "Pid": "1931960",
+      "PPid": "1910618",
+      "VmRSS": "15800 kB"
+    }
+  ],
+  "python": "/home/ts/.agent-comms/.venv/bin/python",
+  "pythonpath": "src:/home/ts/code/projects/metaclass-registry/src",
+  "temporary_socket_root": "/tmp/ac-a8-ra-20260927",
+  "nra_source": "/home/ts/code/projects/nominal-refactor-advisor",
+  "nra_sha": "52fe8b4666a20583f0ddf8ed3b7a9e89857e4809"
+}

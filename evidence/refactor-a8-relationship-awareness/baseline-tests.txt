@@ -1,0 +1,1281 @@
+.............FFF..FFFFFFFFFFFFFF                                         [100%]
+=================================== FAILURES ===================================
+________ test_tag_commit_survives_optional_advisory_stat_failure[False] ________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_tag_commit_survives_optio0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6ee93dd0>
+via_register = False
+
+    @pytest.mark.parametrize("via_register", [False, True])
+    async def test_tag_commit_survives_optional_advisory_stat_failure(
+        tmp_path, monkeypatch, via_register
+    ):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:61:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6ee5c0e0>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-4fd9006af850cbe046f78a40-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+________ test_tag_commit_survives_optional_advisory_stat_failure[True] _________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_tag_commit_survives_optio1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6feeec90>
+via_register = True
+
+    @pytest.mark.parametrize("via_register", [False, True])
+    async def test_tag_commit_survives_optional_advisory_stat_failure(
+        tmp_path, monkeypatch, via_register
+    ):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:61:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6eea91c0>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-d5dab59a224c916b3e14ac7c-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+___________ test_tag_commit_survives_optional_advisory_write_failure ___________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_tag_commit_survives_optio2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6ff70450>
+
+    async def test_tag_commit_survives_optional_advisory_write_failure(tmp_path, monkeypatch):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:93:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6eea9080>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-fdb564799274a9e8fd3a1ede-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+_ test_unmentioned_channel_notice_only_on_unrelated_natural_turn_and_after_ui_ack _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_unmentioned_channel_notic0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6effcdd0>
+
+    async def test_unmentioned_channel_notice_only_on_unrelated_natural_turn_and_after_ui_ack(
+        tmp_path, monkeypatch
+    ):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:154:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6ff41580>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-dbb428b3f580e19e7d4d75db-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+____ test_native_input_start_and_nominal_terminal_are_not_context_receipts _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_native_input_start_and_no0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6efa6e50>
+
+    async def test_native_input_start_and_nominal_terminal_are_not_context_receipts(
+        tmp_path, monkeypatch
+    ):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:183:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6ff41260>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-c52e31171d29cbf089a193db-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+_______ test_mentioned_recipient_not_passive_and_scope_loss_fails_closed _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_mentioned_recipient_not_p0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6d9ae750>
+
+    async def test_mentioned_recipient_not_passive_and_scope_loss_fails_closed(tmp_path, monkeypatch):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:211:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6ff423e0>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-971ebda26809be4e0ba46372-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+______ test_oversized_warm_index_row_does_not_starve_short_notice[False] _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_oversized_warm_index_row_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6ff5b1d0>
+oversized_first = False
+
+    @pytest.mark.parametrize("oversized_first", [False, True])
+    async def test_oversized_warm_index_row_does_not_starve_short_notice(
+        tmp_path, monkeypatch, oversized_first
+    ):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:240:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6ff42fc0>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-57a60d501582624597ffb9ea-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+_______ test_oversized_warm_index_row_does_not_starve_short_notice[True] _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_oversized_warm_index_row_1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6db9cb50>
+oversized_first = True
+
+    @pytest.mark.parametrize("oversized_first", [False, True])
+    async def test_oversized_warm_index_row_does_not_starve_short_notice(
+        tmp_path, monkeypatch, oversized_first
+    ):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:240:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6ee5fe20>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-c24222b5bdba2127c4fd6c89-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+____ test_previously_selected_source_becoming_oversized_still_fails_closed _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_previously_selected_sourc0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6d733150>
+
+    async def test_previously_selected_source_becoming_oversized_still_fails_closed(
+        tmp_path, monkeypatch
+    ):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:268:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6ff41620>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-9973f635282eac9bc2b2b554-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+____ test_tail_fairness_repeats_but_shows_newest_and_reports_omitted_range _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_tail_fairness_repeats_but0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6ee91e50>
+
+    async def test_tail_fairness_repeats_but_shows_newest_and_reports_omitted_range(
+        tmp_path, monkeypatch
+    ):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:288:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6ff43060>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-b0d5f9442572c09e3bccce1c-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+_______ test_advisory_projection_requires_warm_index_and_never_scans_bus _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_advisory_projection_requi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6ff70bd0>
+
+    async def test_advisory_projection_requires_warm_index_and_never_scans_bus(tmp_path, monkeypatch):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:310:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6ff419e0>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-4fbd97ca05075fa49d6647ee-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+_______ test_uncertain_backend_failure_does_not_advance_advisory_cursor ________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_uncertain_backend_failure0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6efbb2d0>
+
+    async def test_uncertain_backend_failure_does_not_advance_advisory_cursor(tmp_path, monkeypatch):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:331:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6ff40e00>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-1cf0c515aa074dabe7ddba3b-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+___ test_overwritten_source_and_owner_replacement_fail_closed_after_capture ____
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_overwritten_source_and_ow0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6efbadd0>
+
+    async def test_overwritten_source_and_owner_replacement_fail_closed_after_capture(
+        tmp_path, monkeypatch
+    ):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:351:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6ff43380>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-33e8cb1c53bdef1a8bd8951f-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+_ test_send_boundary_rejects_stale_passive_frame_before_native_start[source_overwrite] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_send_boundary_rejects_sta0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6ee62290>
+interference = 'source_overwrite'
+
+    @pytest.mark.parametrize("interference", ["source_overwrite", "membership_revocation"])
+    async def test_send_boundary_rejects_stale_passive_frame_before_native_start(
+        tmp_path, monkeypatch, interference
+    ):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:384:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6ff413a0>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-9f340fdcec526a609c80ea71-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+_ test_send_boundary_rejects_stale_passive_frame_before_native_start[membership_revocation] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_send_boundary_rejects_sta1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6ff70a50>
+interference = 'membership_revocation'
+
+    @pytest.mark.parametrize("interference", ["source_overwrite", "membership_revocation"])
+    async def test_send_boundary_rejects_stale_passive_frame_before_native_start(
+        tmp_path, monkeypatch, interference
+    ):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:384:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6ff43240>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-438b686eb4dc1561fe349f6c-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+__ test_scope_removed_then_restored_outside_api_still_invalidates_old_source ___
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_scope_removed_then_restor0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6ff70bd0>
+
+    async def test_scope_removed_then_restored_outside_api_still_invalidates_old_source(
+        tmp_path, monkeypatch
+    ):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:415:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6ff40cc0>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-71909346b652f03a86a12915-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+_______ test_owner_rename_preserves_exact_incarnation_and_channel_scope ________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/baseline/test_owner_rename_preserves_ex0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c6ee06490>
+
+    async def test_owner_rename_preserves_exact_incarnation_and_channel_scope(tmp_path, monkeypatch):
+>       comms, agent, owner = await _agent(tmp_path, monkeypatch)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_passive_channel_awareness.py:435:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/test_passive_channel_awareness.py:35: in _agent
+    owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:419: in new_session
+    await self._runtime.start()
+src/agent_comms/runtime.py:149: in start
+    self.server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function start_unix_server.<locals>.factory at 0x7f7c6ff42f20>
+path = '/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/tmp/ac-fb3cf50e8edd28e6af4d5617-1898477.sock'
+sock = <socket.socket [closed] fd=-1, family=1, type=1, proto=0>, backlog = 100
+ssl = None, ssl_handshake_timeout = None, ssl_shutdown_timeout = None
+start_serving = True
+
+    async def create_unix_server(
+            self, protocol_factory, path=None, *,
+            sock=None, backlog=100, ssl=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+
+        if ssl_handshake_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+
+        if ssl_shutdown_timeout is not None and not ssl:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+
+        if path is not None:
+            if sock is not None:
+                raise ValueError(
+                    'path and sock can not be specified at the same time')
+
+            path = os.fspath(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Check for abstract socket. `str` and `bytes` paths are supported.
+            if path[0] not in (0, '\x00'):
+                try:
+                    if stat.S_ISSOCK(os.stat(path).st_mode):
+                        os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as err:
+                    # Directory may have permissions only to create socket.
+                    logger.error('Unable to check or remove stale UNIX socket '
+                                 '%r: %r', path, err)
+
+            try:
+>               sock.bind(path)
+E               OSError: AF_UNIX path too long
+
+../../.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/lib/python3.11/asyncio/unix_events.py:317: OSError
+=========================== short test summary info ============================
+FAILED tests/test_passive_channel_awareness.py::test_tag_commit_survives_optional_advisory_stat_failure[False]
+FAILED tests/test_passive_channel_awareness.py::test_tag_commit_survives_optional_advisory_stat_failure[True]
+FAILED tests/test_passive_channel_awareness.py::test_tag_commit_survives_optional_advisory_write_failure
+FAILED tests/test_passive_channel_awareness.py::test_unmentioned_channel_notice_only_on_unrelated_natural_turn_and_after_ui_ack
+FAILED tests/test_passive_channel_awareness.py::test_native_input_start_and_nominal_terminal_are_not_context_receipts
+FAILED tests/test_passive_channel_awareness.py::test_mentioned_recipient_not_passive_and_scope_loss_fails_closed
+FAILED tests/test_passive_channel_awareness.py::test_oversized_warm_index_row_does_not_starve_short_notice[False]
+FAILED tests/test_passive_channel_awareness.py::test_oversized_warm_index_row_does_not_starve_short_notice[True]
+FAILED tests/test_passive_channel_awareness.py::test_previously_selected_source_becoming_oversized_still_fails_closed
+FAILED tests/test_passive_channel_awareness.py::test_tail_fairness_repeats_but_shows_newest_and_reports_omitted_range
+FAILED tests/test_passive_channel_awareness.py::test_advisory_projection_requires_warm_index_and_never_scans_bus
+FAILED tests/test_passive_channel_awareness.py::test_uncertain_backend_failure_does_not_advance_advisory_cursor
+FAILED tests/test_passive_channel_awareness.py::test_overwritten_source_and_owner_replacement_fail_closed_after_capture
+FAILED tests/test_passive_channel_awareness.py::test_send_boundary_rejects_stale_passive_frame_before_native_start[source_overwrite]
+FAILED tests/test_passive_channel_awareness.py::test_send_boundary_rejects_stale_passive_frame_before_native_start[membership_revocation]
+FAILED tests/test_passive_channel_awareness.py::test_scope_removed_then_restored_outside_api_still_invalidates_old_source
+FAILED tests/test_passive_channel_awareness.py::test_owner_rename_preserves_exact_incarnation_and_channel_scope
+17 failed, 15 passed in 4.40s

@@ -1,0 +1,4 @@
+src/agent_comms/passive_channel_awareness.py:187: error: Unpacked dict entry 0 has incompatible type "Any | None"; expected "SupportsKeysAndGetItem[Any, Any]"  [dict-item]
+src/agent_comms/passive_channel_awareness.py:212: error: Unpacked dict entry 0 has incompatible type "Any | None"; expected "SupportsKeysAndGetItem[Any, Any]"  [dict-item]
+src/agent_comms/passive_channel_awareness.py:385: error: Unpacked dict entry 0 has incompatible type "dict[str, Any] | None"; expected "SupportsKeysAndGetItem[str, Any]"  [dict-item]
+Found 3 errors in 1 file (checked 3 source files)
