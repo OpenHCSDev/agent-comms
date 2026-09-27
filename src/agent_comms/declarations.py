@@ -2103,6 +2103,56 @@ class RegistrySnapshot:
 class ThreadRegistry:
     """Persists threads and manages status transitions and presence."""
 
+    def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
+        """Restore selected missing identities without importing execution authority.
+
+Current declarations always win. An explicit identity collision refuses
+the whole selection before writing; callers can inspect and select the
+unambiguous records. Saved sessions and metadata retain their original
+provenance, but old PIDs, active turns and admission epochs do not travel.
+No bus, delivery cursor, pending input or coordinator row is copied.
+"""
+        selected = tuple(dict.fromkeys(names))
+        with _store_lock(self._path):
+            self._load_unlocked()
+            additions: list[Thread] = []
+            identities = {thread.created_at: name for name, thread in self._threads.items()}
+            for name in selected:
+                thread = source.threads[name]
+                existing = self._threads.get(name)
+                if existing is not None:
+                    if existing.created_at != thread.created_at:
+                        raise RelationViolationError(f"Restoration identity conflicts for {name!r}")
+                    continue
+                if name in self._aliases or thread.created_at in identities:
+                    raise RelationViolationError(f"Restoration identity conflicts for {name!r}")
+                identities[thread.created_at] = name
+                additions.append(replace(thread, pid=0, active_turn=None))
+            restored = {thread.name: thread for thread in additions}
+            available = self._threads | restored
+            aliases = {
+                alias: canonical
+                for alias, canonical in source.aliases.items()
+                if canonical in available
+                and available[canonical].created_at == source.threads[canonical].created_at
+                and alias not in available
+                and alias not in self._aliases
+            }
+            for thread in additions:
+                self._threads[thread.name] = thread
+                self._statuses[thread.name] = (
+                    ThreadStatus.ARCHIVED
+                    if source.statuses[thread.name] is ThreadStatus.ARCHIVED
+                    else ThreadStatus.STOPPED
+                )
+                self._last_seen[thread.name] = source.last_seen.get(thread.name, 0.0)
+                self._bump_admission_unlocked(thread.name)
+                self._bump_owner_epoch_unlocked(thread.name)
+            if additions or aliases:
+                self._aliases.update(aliases)
+                self._save_unlocked()
+            return tuple(restored)
+
     def __init__(self, store_path: Path):
         self._path = store_path
         self._threads: dict[str, Thread] = {}
