@@ -186,6 +186,7 @@ def test_default_write_guard_orders_old_root_write_before_route_publication(tmp_
     legacy = tmp_path / ".agent-comms"
     legacy.mkdir(mode=0o700)
     route_file = tmp_path / "route-state" / "active-route.json"
+    route_file.parent.mkdir(mode=0o755)
     route = active_route.ActiveRoute(root, root_id, tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
@@ -201,6 +202,7 @@ def test_default_write_guard_orders_old_root_write_before_route_publication(tmp_
     monkeypatch.setattr(active_route.fcntl, "flock", observed_flock)
     with ThreadPoolExecutor(max_workers=1) as executor:
         with active_route.guard_default_route_write(legacy):
+            assert route_file.parent.stat().st_mode & 0o777 == 0o700
             publishing = executor.submit(active_route.publish_active_route, route)
             assert exclusive_requested.wait(timeout=5)
             assert not route_file.exists()

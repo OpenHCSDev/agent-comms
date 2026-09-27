@@ -118,10 +118,11 @@ def guard_default_route_write(expected_root: Path) -> Iterator[None]:
         if (
             not stat.S_ISDIR(info.st_mode)
             or info.st_uid != os.geteuid()
-            or stat.S_IMODE(info.st_mode) != 0o700
             or (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino)
         ):
-            raise ValueError("active comms route directory changed or is not owner-only")
+            raise ValueError("active comms route directory changed or is not owned")
+        if stat.S_IMODE(info.st_mode) != 0o700:
+            os.fchmod(directory, 0o700)
         route = read_active_route(path)
         current_root = route.root if route is not None else Path.home() / ".agent-comms"
         if expected_root.expanduser().resolve(strict=True) != current_root.resolve(strict=True):
