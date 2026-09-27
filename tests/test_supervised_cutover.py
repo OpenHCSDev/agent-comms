@@ -43,3 +43,11 @@ def test_archive_refuses_live_owner_then_preserves_pending_and_unknown(tmp_path)
     assert (destination / "bus.jsonl").stat().st_mode & 0o777 == 0o600
     with pytest.raises(ValueError, match="already exists"):
         archive_stopped_root(comms, destination)
+
+
+def test_archive_refuses_path_redirected_back_into_source(tmp_path):
+    comms = Comms(tmp_path / "wire")
+    alias = tmp_path / "source-alias"
+    alias.symlink_to(comms.root, target_is_directory=True)
+    with pytest.raises(ValueError, match="outside the old root"):
+        archive_stopped_root(comms, alias / "snapshot")
