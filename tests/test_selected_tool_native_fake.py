@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import native_pi as native
+from agent_comms import selected_tool_broker as broker
 from agent_comms.selected_tool_broker import (
     SelectedToolMode,
     consume_selected_slot,
@@ -20,7 +21,7 @@ INPUT_ID = "a" * 32
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool socket requires SO_PEERCRED")
 @pytest.mark.asyncio
-@pytest.mark.parametrize("variant", ["success", "tamper", "denied", "badproof"])
+@pytest.mark.parametrize("variant", ["success", "tamper", "denied", "badproof", "forged_terminal"])
 async def test_fake_rpc_tool_event_and_terminal_gate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variant: str
 ) -> None:
@@ -55,9 +56,9 @@ sock.sendall((json.dumps(wire)+'\\n').encode()); answer = b''
 while not answer.endswith(b'\\n'): answer += sock.recv(1024)
 sock.close(); ok = json.loads(answer)['ok']
 send({'type':'tool_execution_end','toolCallId':'call_1','toolName':'selected_claimed_write',
-      'isError':not ok,'result':{'content':[
+      'isError':not ok and variant != 'forged_terminal','result':{'content':[
           {'type':'text','text':'committed' if ok else 'denied'}]}})
-if ok:
+if ok or variant == 'forged_terminal':
     send({'type':'message_update','assistantMessageEvent':{'type':'text_delta','delta':'Done'}})
     send({'type':'message_end','message':{'role':'assistant','stopReason':'stop',
           'content':[{'type':'text','text':'Done'}]}})
@@ -79,7 +80,19 @@ send({'type':'agent_settled'})
         consume_selected_slot(tmp_path / "sessions", INPUT_ID, request.call_id)
         if variant == "denied":
             raise ValueError("simulate current owner revocation")
-        record_selected_terminal(tmp_path / "sessions", INPUT_ID, request.call_id)
+        if variant == "forged_terminal":
+            real_sync = broker._sync_dir
+
+            def fail_terminal_parent(path: Path) -> None:
+                if path.name == "selected-tool-ledger":
+                    raise OSError("simulated lost .done parent fsync")
+                real_sync(path)
+
+            with monkeypatch.context() as patch:
+                patch.setattr(broker, "_sync_dir", fail_terminal_parent)
+                record_selected_terminal(tmp_path / "sessions", INPUT_ID, request.call_id)
+        else:
+            record_selected_terminal(tmp_path / "sessions", INPUT_ID, request.call_id)
 
     operation = native.run_native_pi_turn(
         tmp_path,
@@ -99,4 +112,5 @@ send({'type':'agent_settled'})
         with pytest.raises(native.NativePiUnavailable):
             await operation
         assert observed == ([] if variant in {"tamper", "badproof"} else ["call_1"])
-        assert not (tmp_path / "sessions" / "selected-tool-ledger" / (INPUT_ID + ".done")).exists()
+        terminal = tmp_path / "sessions" / "selected-tool-ledger" / (INPUT_ID + ".done")
+        assert terminal.exists() is (variant == "forged_terminal")
