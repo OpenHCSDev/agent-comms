@@ -2,92 +2,103 @@
 
 Worktree: `/home/ts/wt/comms-pr95-finish-codex-20260927`.
 Branch: `codex/pr95-finish-20260927`.
-Starts at original PR95 `4a10699`; normally merges current main through PR123.
-Original PR95 and the saved PR48/Pi owner worktrees are preserved.
+Original PR95 and saved PR48/Pi-owner worktrees are preserved. Main is normally
+merged through PR124; parent PR126 will be merged after publication.
 
 ## Implemented
 
-- `SelectedSummarySlot.run_selected_summary` now exchanges the existing v1
-  summary protocol with the owner's already selected, idle Pi process.
-  It checks saved session and sidecar revisions, keeps both borrow locks,
-  durably reserves the operation before writing, and returns native summary,
-  file operations, and usage. It never starts another provider process or
-  sends the original user input.
-- Timeouts, malformed responses, cancellation, and saved-source changes
-  leave a durable UNKNOWN and retire the borrowed child. A complete response
-  leaves its reservation for exact commit linkage. A decline is data; it
-  does not silently reopen original-input admission. No automatic retry.
-- The existing JSONL reader supports a caller-supplied record bound, including
-  fragments retained across cancellation. Ordinary event readers keep their
-  existing behavior.
-- Imported the existing native readiness/summary implementation and patchers
-  from `feat/pr95-selected-pi-summary-20260926` (`db39f98`). Its synthetic-stream
-  fixture now also exercises the Python adapter against actual patched Pi RPC.
-  There is no replacement native summarizer implementation.
-- Native package resolution recognizes the installed `pi-comms-native`
-  entrypoint and its aliases using the existing route owner. Full package
-  verification still applies. Manual compaction cannot route that entrypoint
-  through the unrelated legacy writer.
+- `b74774f` implemented the selected-summary RPC exchange with the owner's
+  existing idle Pi child, durable reservation before stdin, bounded reads,
+  native usage/file operations, and UNKNOWN retirement without retry.
+- Normal `stack/bin/prepare-pi-native` now includes readiness and selected-summary
+  RPC patches plus the parent's `patch-native-model-config.py` from PR126.
+  The combined file manifest and whole-package commitment are updated; normal
+  preparation succeeds. Canonical auth/models and isolated retry settings retain
+  their separate directories. Parent still owns the Python runtime route changes.
+- `maybe_compact_owner_turn` invokes this selected exchange through the existing
+  owner compaction runtime. `SelectedNativeSummary` owns reservation linkage and
+  original-input admission; ordinary NativeSummary behavior remains unchanged.
+- The owner bridge checks the reservation/source, commits through its existing
+  native writer, embeds the selected operation/source digest in the commit, and
+  links the durable committed result before returning the existing one-use
+  admission token. Owner/input/settings/session revisions are checked again.
+- ACP installs that returned token at its existing final native-ID bind boundary.
+  Compaction now observes the final prompt after passive-awareness augmentation,
+  so the bound digest matches the actual input. Parent cursor methods are intact.
+- New offline integration host uses the actual prepared Pi SDK/RPC with synthetic
+  model output and prohibited network access. It exercises selected summary,
+  native commit, strict fresh reopen, original input proof, settlement and backend
+  reuse. This is local protocol evidence, not configured credential/provider or
+  real-model retention evidence.
 
-## Evidence
+## Local verification
 
-- Focused Python suite: 66 passing tests, including actual Python-to-patched-Pi
-  RPC with native `compact()` and a synthetic stream, real subprocess pipes,
-  and durable SQLite. No provider/network calls.
-- Existing native summary suite: 42 cases passed against an owned copied Pi
-  package with the existing production writer patch. Source stayed unchanged;
-  tested success, bounded map/synthesis, cancellation, mutation exclusion,
-  retries disabled, and uncertain stream termination.
-- Ruff on changed production Python and tests; `git diff --check` pass.
-- No shared checkout, live runtime, live provider, or owner process was changed.
-  No UNKNOWN inputs were replayed. CI was not awaited.
+The earlier RPC slice passed 66 Python tests and 42 native synthetic-stream cases.
+Current focused unit selection: **89 passed, 1 optional fixture test skipped**.
+Native integration: **6 passed**; adaptive/runtime: **14 passed**; strict reopen:
+**10 passed**. Total current selection: **119 passed, 1 skipped**. An initial
+combined run hit its 60-second deadline after 28 passing cases; the complete
+smaller runs above supersede that incomplete result.
+Ruff and diff whitespace pass. No live provider, install/restart, shared checkout
+edit, or UNKNOWN replay. CI was not awaited.
 
-Reproduce the Python slice with `PYTHONPATH=src python -m pytest -q -o addopts=''`
-and the files `test_selected_summary_exchange.py`, `test_selected_pi_route.py`,
-`test_selected_summary_journal.py`, `test_selected_pi_summary_rpc.py`,
-`test_native_owner_launcher_resolution.py`, `test_manual_compaction_bridge.py`,
-and `test_selected_summary_guardian_combined.py` under `tests/`.
-For the optional combined native test, set `PI_NATIVE_PACKAGE_DIR` to an owned
-copy of the current Pi package after applying
-`patch-native-session-writer-prototype.py --production` to its session manager.
-Create `.pr95-disposable-test-copy` in that package containing `owned fixture`
-and a newline. Keep `TMPDIR`/pytest `--basetemp` inside an owned worktree.
-`node stack/test-native-selected-compaction-summary.mjs` runs the native matrix.
-Never use a running package as this fixture: the fixture stages patched RPC
-files next to the package's original RPC module and cleans them afterwards.
+Reproduce normal preparation:
+
+```sh
+stack/bin/prepare-pi-native
+```
+
+Set `PI_COMPACTION_TEST_PACKAGE` to the resulting
+`stack/.pi-native-<manifest-sha256-first-16>/node_modules/@earendil-works/pi-coding-agent`.
+With `PYTHONPATH=src`, run pytest with `-o addopts=''`, a persistent worktree
+`--basetemp`, and these bounded groups separately:
+
+- `tests/test_selected_owner_compaction_integration.py`
+- `tests/test_owner_compaction_adaptive.py tests/test_owner_compaction_runtime.py`
+- `tests/test_native_session_reopen.py`
+
+The new integration test verifies a duplicate send is denied, a correction
+before commit leaves the original unbound, and a correction after native commit
+prevents minting admission. Successful real SDK/RPC reopen stores exactly one
+original input and retains a settled reusable child.
 
 ## Remaining requirements — PR95 is not complete or live
 
-1. Build one consistent native bundle: the current live copied package fails
-   PR95's complete-tree commitment, and its session manager lacks
-   `captureCompactionWitness`. Its seven-file N/K pin passing does not supply
-   the PR95 writer. The copied fixture needed the existing production writer
-   patch before native summary tests could run. Native summary/readiness RPC
-   patchers are now present on this branch but are not installed by the normal
-   package preparation path yet. Update that path and its resulting manifests.
-2. Connect this exchange to `maybe_compact_owner_turn` and the existing owner
-   commit bridge. The current owner bridge does not bind
-   `selectedSummaryOperationId`/source digest into a native commit. Add that
-   integration so a successful reserved summary can link one committed result,
-   publish its metadata, and admit its original input exactly once. Merely
-   calling this adapter from ACP would leave a blocking reservation.
-3. Finish usable session coverage: selected source capture still pins the older
-   preparation module; fresh-only private enrollment and the raw-history floor
-   exclude ordinary continued sessions. Preserve existing uncertain attempts;
-   do not erase journal rows to enable compaction.
-4. Verify selected configured-model/route behavior and cancellation/retirement
-   through the complete owner path. The tests here use synthetic streams and
-   are not credential/extension parity evidence or real model retention tests.
-5. Enable the completed adaptive owner route by default, run repeated compaction
-   retention/correction/queued-input cases, then parent performs normal merge,
-   installed-runtime checks, and activation once bus work is stable.
+1. Finish the selected-attempt lifecycle. A returned one-use token now permits
+   the original turn, but the historical linked row still blocks later ordinary
+   inputs and additional summaries. Bind retirement to the actual native input
+   outcome without recreating admission from terminal-looking SQLite rows.
+2. Continue ordinary private sessions safely: fresh-only enrollment and the raw
+   UNKNOWN coverage floor still exclude continued `native-sessions` histories.
+   Preserve unresolved inputs and existing journals; never delete rows to bypass.
+3. A selected clean prestart decline currently raises with the reservation
+   intact; wire its existing decline admission path after source revalidation.
+   Other errors and UNKNOWN remain blocked, with no automatic replay.
+4. Effective project/custom-model configuration is still excluded by the adaptive
+   owner admission; integrate the parent-owned runtime settings/model route.
+   No active goal or no existing idle child is currently a trigger skip.
+5. Enable the completed route by default, verify repeated compaction/retention
+   and queued inputs, then parent performs merge, installation and live checks.
+   Adaptive activation remains off until these substantive gaps are closed.
 
 ## Integration
 
-From a PR95 integration worktree, fetch and normally merge
-`origin/codex/pr95-finish-20260927`. This contains the original PR95 history
-and a normal main merge; no force push or branch replacement is required.
-The changes do not touch `acp.py`, Toad, or the parent's cursor methods.
-Backend changes are confined to `_JsonLineReader.readline`'s optional bound.
-The source lease saved in the PR48 worktree remains untouched; it is not a
-substitute for completing ordinary-session compaction.
+Fetch and normally merge `origin/codex/pr95-finish-20260927` into PR95's integration
+worktree. This retains original PR95 and main ancestry; no force push required.
+If integrating only the current slice, apply it after `b74774f` and main PR124.
+
+PR126 parent's patcher was copied unchanged into this branch. Preserve parent
+`native_pi.py`, `coordinated_runtime.py`, source configuration environment and
+additional channel tools/relevance changes. Merge main normally once PR126 lands.
+The normal combined bundle's `agent-session-services.js` hash is
+`4af410d793207f0269cf442a799b0f83933b69d728d166e49a3a6134ff7108a6`.
+Its RPC includes both selected-summary operations and native input proofs.
+
+Only ACP's selected-admission map comments, existing compaction call, and ordering
+relative to passive-awareness augmentation changed here; cursor methods did not.
+S1's parallel event refactor also touches `_run_agent_turn`: preserve this
+compaction placement/callback when merging, adapting test event fixtures to its
+new event classes. Backend changes since `b74774f` are absent.
+
+Source leases saved in the PR48 worktree remain untouched. No deployment or
+activation is implied by this checkpoint.

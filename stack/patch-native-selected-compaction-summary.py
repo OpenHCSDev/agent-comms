@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Exact-byte disposable Pi RPC phase2 summary patch, after phase1 readiness.
+"""Pinned Pi RPC selected-summary patch, after native readiness.
 
-Default OFF: no caller dispatch or installation. Requires independent review.
+Normal preparation includes this operation for the existing selected owner.
 """
 from __future__ import annotations
 

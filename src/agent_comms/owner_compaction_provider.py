@@ -14,10 +14,16 @@ import shutil
 from dataclasses import dataclass
 from math import isfinite
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .native_package import verify_native_package
 from .owner_compaction_prepare import NativePreparation
+
+if TYPE_CHECKING:
+    from .compaction_journal import CompactionOperation
+    from .declarations import Thread
+    from .owner_compaction_commit import CompactionSource, OwnerCompactionCommit
+    from .selected_summary_admission import SelectedSummaryAdmission
 
 _SUMMARIZE = r"""
 import {lstatSync, realpathSync} from 'node:fs';
@@ -151,6 +157,20 @@ class NativeSummary:
     text: str
     details: dict[str, list[str]]
     usage: dict[str, Any]
+
+    def commit_options(self) -> dict[str, Any]:
+        """Additional owner-commit binding supplied by a selected summary."""
+        return {}
+
+    def admit_original(
+        self,
+        bridge: OwnerCompactionCommit,
+        owner: Thread,
+        epoch: int,
+        operation: CompactionOperation,
+        source: CompactionSource,
+    ) -> SelectedSummaryAdmission | None:
+        return None
 
 
 async def summarize_native(

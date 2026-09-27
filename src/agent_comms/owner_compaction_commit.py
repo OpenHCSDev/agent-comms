@@ -1,8 +1,8 @@
 """Owner-scoped commit/journal bridge for isolated native integration.
 
-Not wired into ACP or the deployed package. Only the trusted owner process may
-call this API; model/tool JSON cannot supply an attestation or child command.
-Runtime ingress integration, publication and canonical deployment remain activation gates.
+ACP calls this bridge after capturing its pending original input. Only the
+trusted owner process may call it; model/tool JSON cannot supply an attestation
+or child command. The bridge commits before issuing a one-use input admission.
 """
 
 from __future__ import annotations
@@ -15,10 +15,16 @@ import stat
 import struct
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
-from .compaction_journal import CompactionJournal, CompactionJournalError, CompactionOperation
+from .backend import _session_revision
+from .compaction_journal import (
+    CompactionJournal,
+    CompactionJournalError,
+    CompactionOperation,
+    SelectedSummaryAttempt,
+)
 from .declarations import (
     Message,
     RelationViolationError,
@@ -37,6 +43,7 @@ from .owner_compaction_process import (
     run_authority_child,
 )
 from .owner_compaction_provider import valid_native_usage
+from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 from .session_fence import idle_session_writer_fence
 
 
@@ -372,6 +379,7 @@ class OwnerCompactionCommit:
         source: CompactionSource,
         details: dict[str, list[str]] | None = None,
         usage: dict | None = None,
+        selected_attempt: SelectedSummaryAttempt | None = None,
         timeout: float = 5,
     ) -> CompactionOperation:
         """Journal intent under authority, dispatch once, persist observed outcome."""
@@ -466,6 +474,32 @@ class OwnerCompactionCommit:
                 owner=asdict(receipt),
                 source=asdict(source),
             )
+            if selected_attempt is not None:
+                if (
+                    self.journal.selected_summary(selected_attempt.operation_id) != selected_attempt
+                    or selected_attempt.status != "reserved"
+                    or selected_attempt.session_file != witness["sessionFile"]
+                ):
+                    raise CompactionJournalError(
+                        "Selected summary reservation changed before commit"
+                    )
+                selected_source = json.loads(selected_attempt.source_json)["source"]
+                if (
+                    selected_source.get("ownerName") != owner.name
+                    or selected_source.get("ownerPid") != owner.pid
+                    or selected_source.get("ownerCreatedAt") != float(owner.created_at).hex()
+                    or selected_source.get("turnId") != source.turn_id
+                    or selected_source.get("ingressKey") != source.pending_input_key
+                    or selected_source.get("reservedRevision")
+                    != json.loads(json.dumps(_session_revision(witness["sessionFile"])))
+                ):
+                    raise CompactionJournalError("Selected summary owner or saved source differs")
+                intent.update(
+                    selectedSummaryOperationId=selected_attempt.operation_id,
+                    selectedSummarySourceDigest=hashlib.sha256(
+                        selected_attempt.source_json.encode()
+                    ).hexdigest(),
+                )
             commit_id = self.journal.begin(witness["sessionFile"], intent)
             request = dict(
                 action="commit",
@@ -496,6 +530,48 @@ class OwnerCompactionCommit:
                 publication=evidence["status"] == "committed",
             )
             return self.journal.get(commit_id)
+
+    def admit_selected_original(
+        self,
+        owner: Thread,
+        epoch: int,
+        operation: CompactionOperation,
+        source: CompactionSource,
+        identity: SelectedAdmissionIdentity,
+    ) -> SelectedSummaryAdmission:
+        """Link one committed result after rechecking the same owner and ingress."""
+        if operation.status != "committed":
+            raise CompactionJournalError("Selected native commit is not complete")
+        intent = json.loads(operation.intent_json)
+        witness = intent["witness"]
+        with self._boundary(owner, epoch, witness, pending_input_key=source.pending_input_key) as (
+            receipt,
+            _fd,
+            _retained,
+        ):
+            if source != self._source(
+                receipt, witness, source.pending_input_key, source.settings_paths
+            ):
+                raise RelationViolationError("Selected source changed before original admission")
+            current = self.journal.get(operation.commit_id)
+            if current != operation:
+                raise CompactionJournalError("Selected native commit changed")
+            revision = _session_revision(witness["sessionFile"])
+            evidence = json.loads(operation.evidence_json or "null")
+            if (
+                revision is None
+                or not isinstance(evidence, dict)
+                or evidence.get("revision") != ":".join(map(str, revision[0]))
+                or revision[1] != identity.reserved_revision[1]
+            ):
+                raise CompactionJournalError("Selected native result is unavailable")
+            admission = self.journal.link_selected_summary_commit(
+                intent["selectedSummaryOperationId"],
+                operation.commit_id,
+                admission=replace(identity, session_revision=revision),
+            )
+            assert admission is not None
+            return admission
 
     def reconcile(
         self, owner: Thread, epoch: int, commit_id: str, *, timeout: float = 5

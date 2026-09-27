@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exact-byte, disposable Pi RPC readiness patch. Never install in the live pin.
+"""Pinned Pi RPC readiness patch used by normal native preparation.
 
 The strict dry-run response does not resolve auth or authorize a summary/write.
 """

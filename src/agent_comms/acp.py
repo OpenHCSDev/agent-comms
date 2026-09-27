@@ -226,7 +226,7 @@ class CommsAgent:
         self._steering_goal_ids: dict[str, dict[str, str | None]] = {}
         self._turn_input_keys: dict[str, set[str]] = {}
         self._turn_original_input_keys: dict[str, tuple[str, ...]] = {}
-        # No producer populates this default-OFF, process-local handoff map.
+        # Adaptive selected summaries hand off their returned owner admission here.
         # A terminal journal row can never recreate an admission after restart.
         self._selected_summary_admissions: dict[str, SelectedSummaryAdmission] = {}
         self._turn_input_text: dict[str, str] = {}
@@ -2883,7 +2883,7 @@ class CommsAgent:
                     # The only selected bypass is a post-fsync-ACK ephemeral
                     # one-shot, consumed at this same durable native-ID bind
                     # point under the wire lock, before any stdin.write. No
-                    # producer installs one yet; never infer it from SQLite.
+                    # admission is reconstructed from SQLite.
                     if (
                         current is None
                         or current.session_file is None
@@ -3107,46 +3107,6 @@ class CommsAgent:
             # Existing local ACP owner session only. If delivery is uncertain,
             # the keyed metadata remains pending; never invent a bus recipient.
             await publish_pending_local(self, session_id, thread_name)
-            if (
-                self._adaptive_compaction_enabled
-                and original_owner_input
-                and len(original_keys) == 1
-                and thread.session_file is not None
-                and backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
-            ):
-                from .owner_compaction_adaptive import maybe_compact_owner_turn
-
-                try:
-                    committed = await maybe_compact_owner_turn(
-                        self._comms.registry,
-                        self._agent_bin,
-                        thread_name,
-                        turn_id,
-                        self._comms.agent_info_of(thread_name),
-                        original_keys[0],
-                        self._persistent_backends.setdefault(
-                            session_id, backend.PersistentPiSession()
-                        ),
-                        summary_strategy=self._adaptive_summary_strategy,
-                    )
-                except Exception:
-                    # A selected adaptive operation may already have paid or
-                    # written. Do not turn a fault into ordinary input fallback.
-                    if goal is not None and goal.active:
-                        self._comms.block_goal_after_failed_turn(
-                            thread_name,
-                            started_goal=goal,
-                            expected_worktree=thread.worktree,
-                            diagnostic=(
-                                "Adaptive native compaction did not establish a "
-                                "safe outcome; inspect the exact commit journal."
-                            ),
-                        )
-                    raise
-                if committed:
-                    # Local metadata-only outbox; uncertain subscriber delivery
-                    # leaves its exact row pending, never broadcasts a summary.
-                    await publish_pending_local(self, session_id, thread_name)
             # ACP delivery/ACK/UI updates above are not model context. This
             # bounded projection is prepared ONLY inside an already authorized
             # natural turn, from a separate owner-bound source cursor. It never
@@ -3179,6 +3139,51 @@ class CommsAgent:
                             # the already-authorized owner task remains intact.
                             passive_frame = ""
                             passive_sources = ()
+            if (
+                self._adaptive_compaction_enabled
+                and original_owner_input
+                and len(original_keys) == 1
+                and thread.session_file is not None
+                and backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
+            ):
+                from .owner_compaction_adaptive import maybe_compact_owner_turn
+
+                def admit_original(admission: SelectedSummaryAdmission) -> None:
+                    self._selected_summary_admissions[session_id] = admission
+
+                try:
+                    committed = await maybe_compact_owner_turn(
+                        self._comms.registry,
+                        self._agent_bin,
+                        thread_name,
+                        turn_id,
+                        self._comms.agent_info_of(thread_name),
+                        original_keys[0],
+                        self._persistent_backends.setdefault(
+                            session_id, backend.PersistentPiSession()
+                        ),
+                        summary_strategy=self._adaptive_summary_strategy,
+                        input_text=task,
+                        on_admission=admit_original,
+                    )
+                except Exception:
+                    # A selected adaptive operation may already have paid or
+                    # written. Do not turn a fault into ordinary input fallback.
+                    if goal is not None and goal.active:
+                        self._comms.block_goal_after_failed_turn(
+                            thread_name,
+                            started_goal=goal,
+                            expected_worktree=thread.worktree,
+                            diagnostic=(
+                                "Adaptive native compaction did not establish a "
+                                "safe outcome; inspect the exact commit journal."
+                            ),
+                        )
+                    raise
+                if committed:
+                    # Local metadata-only outbox; uncertain subscriber delivery
+                    # leaves its exact row pending, never broadcasts a summary.
+                    await publish_pending_local(self, session_id, thread_name)
             session_file = thread.session_file
             fork_session = False
             if not session_file and thread.parent:

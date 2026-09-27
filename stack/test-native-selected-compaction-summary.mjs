@@ -7,15 +7,20 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 const pkg=process.env.PI_NATIVE_PACKAGE_DIR;
-assert.ok(pkg && readFileSync(join(pkg, '.pr95-disposable-test-copy'), 'utf8') === 'owned fixture\n',
+const originalRpc = join(pkg,'dist/modes/rpc/rpc-mode.js');
+const integrated = readFileSync(originalRpc,'utf8').includes('case "agent_comms_summarize_compaction"');
+assert.ok(integrated ? process.env.PR95_RPC_FIXTURE === '1' :
+  pkg && readFileSync(join(pkg, '.pr95-disposable-test-copy'), 'utf8') === 'owned fixture\n',
   'use only an owned disposable Pi fixture');
 const root=mkdtempSync(join(tmpdir(),'pr95-selected-summary-'));
-const patched=join(pkg,'dist/modes/rpc',`pr95-summary-${process.pid}.js`);
+const patched=integrated ? originalRpc : join(pkg,'dist/modes/rpc',`pr95-summary-${process.pid}.js`);
 try {
-  copyFileSync(join(pkg,'dist/modes/rpc/rpc-mode.js'),patched);
+  if (!integrated) {
+  copyFileSync(originalRpc,patched);
   for(const script of ['patch-native-compaction-readiness.py','patch-native-selected-compaction-summary.py']) {
     const run=spawnSync('python3',[fileURLToPath(new URL(script,import.meta.url)),patched],{encoding:'utf8'});
     assert.equal(run.status,0,run.stderr);
+  }
   }
   const childSource=`
 import {runRpcMode} from ${JSON.stringify(patched)};
@@ -357,4 +362,7 @@ void runRpcMode(host);
   }
   console.log(JSON.stringify({ok:true,cases:42,calls:calls(),longCalls,cappedCalls,sourceCalls}));
   }
-} finally {rmSync(patched,{force:true});rmSync(root,{force:true,recursive:true})}
+} finally {
+  if (!integrated) rmSync(patched,{force:true});
+  if (process.env.PR95_KEEP_SOURCE !== '1') rmSync(root,{force:true,recursive:true});
+}

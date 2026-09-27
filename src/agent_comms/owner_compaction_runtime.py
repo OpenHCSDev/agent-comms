@@ -11,11 +11,33 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from .backend import PersistentPiSession
-from .compaction_journal import CompactionOperation
+from .compaction_journal import CompactionOperation, SelectedSummaryAttempt
 from .declarations import Thread
-from .owner_compaction_commit import OwnerCompactionCommit
+from .owner_compaction_commit import CompactionSource, OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import NativeSummary
+from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
+
+
+@dataclass(frozen=True)
+class SelectedNativeSummary(NativeSummary):
+    """Selected output owns the reservation-to-commit-to-input binding."""
+
+    attempt: SelectedSummaryAttempt
+    identity: SelectedAdmissionIdentity
+
+    def commit_options(self) -> dict:
+        return {"selected_attempt": self.attempt}
+
+    def admit_original(
+        self,
+        bridge: OwnerCompactionCommit,
+        owner: Thread,
+        epoch: int,
+        operation: CompactionOperation,
+        source: CompactionSource,
+    ) -> SelectedSummaryAdmission:
+        return bridge.admit_selected_original(owner, epoch, operation, source, self.identity)
 
 
 @dataclass(frozen=True)
@@ -39,6 +61,7 @@ async def compact_owner_once(
     pending_input_key: str | None = None,
     settings_paths: tuple[str, ...] | None = None,
     allow_split_turn: bool = True,
+    on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
 ) -> CompactionOperation | None:
     """Exactly one native writer attempt, without input or summary replay.
 
@@ -92,13 +115,22 @@ async def compact_owner_once(
             source=source,
             details=details,
             usage=usage,
+            **(result.commit_options() if isinstance(result, NativeSummary) else {}),
         )
     finally:
         # No queued follow-up or replay. The submitted worker remains owned
         # by its Future; executor threads retire after this one operation.
         executor.shutdown(wait=False)
     try:
-        return await asyncio.shield(asyncio.wrap_future(committing))
+        operation = await asyncio.shield(asyncio.wrap_future(committing))
+        if isinstance(result, NativeSummary):
+            admission = result.admit_original(bridge, owner, epoch, operation, source)
+            if admission is not None:
+                if on_admission is None:
+                    admission.invalidate()
+                    raise ValueError("Selected summary requires its original-input owner")
+                on_admission(admission)
+        return operation
     except asyncio.CancelledError:
         # The wrapper may itself become cancelled during loop shutdown, but
         # the concurrent Future cannot report completion while its native
