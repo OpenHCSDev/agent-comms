@@ -9,6 +9,7 @@ import sqlite3
 import subprocess
 import sys
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -84,6 +85,33 @@ def test_archive_refuses_path_redirected_back_into_source(tmp_path):
     alias.symlink_to(comms.root, target_is_directory=True)
     with pytest.raises(ValueError, match="outside the old root"):
         archive_stopped_root(comms, alias / "snapshot")
+
+
+def test_private_archive_keeps_nested_pi_journal_without_legacy_dispositions(tmp_path):
+    root = tmp_path / "private"
+    root.mkdir(mode=0o700)
+    comms = Comms(root)
+    comms.registry.register(
+        Thread("owner", frozenset(), str(tmp_path), pid=0), ThreadStatus.STOPPED
+    )
+    comms.initialize_private_initial_protocol()
+    comms.send_user_message("owner", "pending", worktree=str(tmp_path))
+    session = root / "native-sessions" / "recipient" / "session.jsonl"
+    session.parent.mkdir(parents=True, mode=0o700)
+    session.write_text('{"type":"session"}\n')
+    session.chmod(0o600)
+    proof = Path(str(session) + ".input-proof")
+    proof.write_text('{"type":"context_committed"}\n')
+    proof.chmod(0o600)
+    assert not (root / "input_dispositions.json").exists()
+
+    archive = archive_stopped_root(comms, tmp_path / "archive" / "private")
+    assert archive.unknown_inputs == 0
+    assert (archive.path / session.relative_to(root)).read_bytes() == session.read_bytes()
+    assert (archive.path / proof.relative_to(root)).read_bytes() == proof.read_bytes()
+    session.write_text('{"type":"changed"}\n')
+    with pytest.raises(RelationViolationError, match="changed after its cutover archive"):
+        supervised_cutover._require_unchanged_archive_source(comms, archive)
 
 
 def test_archive_refuses_rival_destination_after_staging(tmp_path, monkeypatch):
