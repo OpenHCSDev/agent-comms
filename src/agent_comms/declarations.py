@@ -80,6 +80,19 @@ class ClaimEnvelopeUnknownError(RelationViolationError):
     """A claim row may be visible after failed durability; never replay automatically."""
 
 
+class HumanInitialUnknownError(RelationViolationError):
+    """A private USER initial may be committed; inspect its ID, never retry."""
+
+    def __init__(self, wire_root_id: str, wire_seq: int, message_id: str) -> None:
+        self.wire_root_id = wire_root_id
+        self.wire_seq = wire_seq
+        self.message_id = message_id
+        super().__init__(
+            "Private human send outcome UNKNOWN; inspect the committed bus by "
+            f"root/seq/id ({wire_root_id}/{wire_seq}/{message_id}); do not retry."
+        )
+
+
 def _claim_transition_wire(transition: ClaimTransition) -> dict[str, object]:
     value: dict[str, object] = {
         "owner": transition.owner,
@@ -3070,6 +3083,19 @@ class ThreadRegistry:
 # relation: sender and target must resolve to registered threads.
 
 
+@dataclass(frozen=True, slots=True)
+class HumanOrigin:
+    """Cooperative local UI origin, checked against the registered USER under lock.
+
+    This is not a cryptographic credential against another process of this UID.
+    It never grants an executable owner, claim, tool, or selected source authority.
+    """
+
+    sender: str
+    created_at: float
+    worktree: str
+
+
 class MessageBus:
     """Routes messages between registered threads."""
 
@@ -3400,6 +3426,12 @@ class MessageBus:
 
     def publish(self, message: Message) -> Message:
         """Commit an ordinary row; refuse legacy appends after private cutover."""
+        from .active_route import guard_legacy_root_write
+
+        with guard_legacy_root_write(self._path.parent):
+            return self._publish_legacy(message)
+
+    def _publish_legacy(self, message: Message) -> Message:
         if message.claim_transition is not None:
             raise RelationViolationError("Claim envelopes require the gated private sender.")
         sender, target = self._validate_publish_request(message)
@@ -3424,14 +3456,20 @@ class MessageBus:
             _append_jsonl(self._path, stored.to_wire())
         return stored
 
-    def publish_ordinary(self, message: Message) -> Message:
+    def publish_ordinary(
+        self, message: Message, *, _human_origin: HumanOrigin | None = None
+    ) -> Message:
         """Ordinary Comms send on either a legacy or explicitly marked private root.
 
         A private marker is never installed here and an old public row is never
-        retroactively assigned an audience. Only the new private-aware writer
-        uses this entry point: direct legacy ``publish`` still refuses cutover.
+        retroactively assigned an audience. Only the private-aware writer uses
+        this entry point: direct legacy ``publish`` still refuses cutover. A
+        typed local USER origin is valid only at the explicit human operation;
+        generic private publication still rejects USER senders.
         The caller retains the ordinary Comms wire lock throughout publication.
         """
+        if _human_origin is not None and type(_human_origin) is not HumanOrigin:
+            raise RelationViolationError("Human origin must be a typed local USER identity.")
         with _store_lock(self._path):
             meta = self._path.parent / "bus_meta.json"
             metadata = json.loads(meta.read_text()) if meta.exists() else {}
@@ -3440,7 +3478,9 @@ class MessageBus:
             if "writer_protocol_version" in metadata:
                 # Exact marker/root/private-registry validation and frozen N/K
                 # decisions remain owned by the existing private publisher.
-                return self.publish_initial_cohort(message, _bus_locked=True)
+                return self.publish_initial_cohort(
+                    message, _bus_locked=True, _human_origin=_human_origin
+                )
         # Legacy publish rechecks its barrier under its own lock: if a fresh-root
         # cutover raced the dispatch, it refuses rather than appending a legacy row.
         return self.publish(message)
@@ -3894,7 +3934,12 @@ class MessageBus:
                 ) from error
 
     def publish_initial_cohort(
-        self, message: Message, *, control: str = "ordinary", _bus_locked: bool = False
+        self,
+        message: Message,
+        *,
+        control: str = "ordinary",
+        _bus_locked: bool = False,
+        _human_origin: HumanOrigin | None = None,
     ) -> Message:
         """Commit public envelope and FULL N private decisions in the SAME fsynced row.
 
@@ -3906,6 +3951,8 @@ class MessageBus:
 
         if self._private_initial_writes is not True:
             raise RelationViolationError("Private initial publication is disabled.")
+        if _human_origin is not None and type(_human_origin) is not HumanOrigin:
+            raise RelationViolationError("Human initial requires a typed local USER origin.")
         if message.claim_transition is not None:
             raise RelationViolationError("An initial cohort cannot carry resource claims.")
         classification = ControlClassification(control)
@@ -3941,14 +3988,22 @@ class MessageBus:
             ):
                 raise RelationViolationError("Registry creation identities collide.")
             sender = snapshot.aliases.get(message.sender, message.sender)
-            if (
-                sender not in snapshot.threads
-                or not snapshot.threads[sender].role.executable
-                or not snapshot.statuses[sender].visible
+            sender_thread = snapshot.threads.get(sender)
+            if sender_thread is None or not snapshot.statuses[sender].visible:
+                raise RelationViolationError("Initial sender must be visible and registered.")
+            if _human_origin is None:
+                if not sender_thread.role.executable:
+                    raise RelationViolationError(
+                        "Initial sender must be a visible registered executable."
+                    )
+            elif (
+                sender_thread.role is not ThreadRole.USER
+                or message.sender != sender_thread.name
+                or _human_origin.sender != sender_thread.name
+                or _human_origin.created_at != sender_thread.created_at
+                or _human_origin.worktree != sender_thread.worktree
             ):
-                raise RelationViolationError(
-                    "Initial sender must be a visible registered executable."
-                )
+                raise RelationViolationError("Local USER origin differs from registered identity.")
             if message.target == BuiltinChannel.ANY.value or self._channels.is_view_target(
                 message.target
             ):
@@ -4000,6 +4055,35 @@ class MessageBus:
                 sequence=max(int(metadata["last_seq"]), previous_sequence) + 1,
                 snapshot=snapshot,
             )
+            if _human_origin is not None:
+                # The marker reserves a sequence before the row. A crash after
+                # reservation can leave NO row carrying the human message ID.
+                # Never admit another human input while such an UNKNOWN gap is
+                # present, even if another ordinary sender subsequently skips
+                # over that sequence. This intentionally favors safety over
+                # availability until explicit operator reconciliation exists.
+                expected_sequence = 1
+                duplicate = False
+                for previous, _, _ in self._verified_private_rows_unlocked(metadata):
+                    if previous.seq != expected_sequence:
+                        raise RelationViolationError(
+                            "Private bus sequence gap has UNKNOWN outcome; "
+                            "human send blocked, do not retry."
+                        )
+                    expected_sequence += 1
+                    duplicate |= (
+                        previous.sender == sender
+                        and previous.message_id == stored.message_id
+                    )
+                if int(metadata["last_seq"]) != expected_sequence - 1:
+                    raise RelationViolationError(
+                        "Private bus sequence reservation has UNKNOWN outcome; "
+                        "human send blocked, do not retry."
+                    )
+                if duplicate:
+                    raise RelationViolationError(
+                        "Human initial ID already exists; inspect its receipt, do not retry."
+                    )
             revision = hashlib.sha256(
                 repr(
                     (
@@ -4047,7 +4131,17 @@ class MessageBus:
             validate_initial_record(row, str(metadata["wire_root_id"]))
             if before_revisions != tuple(file_revision(path) for path in source_paths):
                 raise RelationViolationError("Send-time registry/catalog revision changed.")
-            self._append_private_unlocked(metadata, row)
+            if _human_origin is None:
+                self._append_private_unlocked(metadata, row)
+            else:
+                try:
+                    self._append_private_unlocked(metadata, row)
+                except BaseException as error:
+                    # Even cancellation/interrupt after entry can follow a durable
+                    # reservation or row. Never claim absence or retry this ID.
+                    raise HumanInitialUnknownError(
+                        str(metadata["wire_root_id"]), stored.seq, stored.message_id
+                    ) from error
             return stored
 
     def read_initial_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedInitial:

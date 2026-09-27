@@ -17,6 +17,7 @@ import shlex
 import sys
 import time
 from collections.abc import Sequence
+from contextlib import ExitStack
 from dataclasses import asdict
 from pathlib import Path
 
@@ -52,7 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--root",
         default=None,
-        help="Comms root directory (default $AGENT_COMMS_ROOT or ~/.agent-comms)",
+        help="Comms root directory (default $AGENT_COMMS_ROOT, active route, or ~/.agent-comms)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -206,9 +207,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    comms: Comms = wire(Path(args.root).expanduser() if args.root else None)
-
+    route_guard = ExitStack()
     try:
+        comms: Comms = wire(Path(args.root).expanduser() if args.root else None)
+        if not args.root and "AGENT_COMMS_ROOT" not in os.environ:
+            from .active_route import guard_default_route_write
+
+            route_guard.enter_context(guard_default_route_write(comms.root))
         if args.command == "tools":
             from .tools import tool_catalog
 
@@ -396,6 +401,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _fail(f"unknown command {args.command!r}")
     except Exception as exc:
         return _fail(str(exc))
+    finally:
+        route_guard.close()
     return 0
 
 
