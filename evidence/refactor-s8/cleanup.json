@@ -1,0 +1,9 @@
+{
+  "time": "2026-09-27T22:17:09.354720+00:00",
+  "removed_owned_disposable_paths": [
+    ".artifacts",
+    ".ruff_cache",
+    "src/agent_comms/__pycache__"
+  ],
+  "retained": "All evidence/refactor-s8 receipts, golden fixtures, source commits and handoff; no shared-root artifacts touched."
+}

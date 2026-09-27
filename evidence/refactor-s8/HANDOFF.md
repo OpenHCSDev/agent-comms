@@ -1,6 +1,6 @@
 # S8 goal lifecycle/action handoff — 2026-09-27
 
-Owner: authorized Codex S8 worker. Worktree `/home/ts/wt/comms-refactor-s8-goals-20260927`; branch `codex/refactor-s8-goals-20260927`. Publication receipt follows in `publication.json`. No live goal was resumed, input replayed, owner restarted, or deployment/PR merge performed. No extra workers, models or paid providers were used.
+Owner: authorized Codex S8 worker. Worktree `/home/ts/wt/comms-refactor-s8-goals-20260927`; branch `codex/refactor-s8-goals-20260927`. Draft PR https://github.com/OpenHCSDev/agent-comms/pull/134. Tested implementation head `f20433aa95cc914686c1ffed09f44b768fb964a3`; exact fork/base receipt in `publication.json`. A following receipt-only commit changes no executable source. No live goal was resumed, input replayed, owner restarted, or deployment/PR merge performed. No extra workers, models or paid providers were used.
 
 Exact owner directive: "and makenthem be aggressive in yhebrefactor, large highvleverage butes, no incrmental busywork, we have itblaidbout clewrly".
 
@@ -56,7 +56,7 @@ NRA checkout `52fe8b4666a20583f0ddf8ed3b7a9e89857e4809`; actual CLI, operation c
 
 The initial full scan timed out; a subsequent bounded compact global baseline and final scans completed all 79 detectors with zero omissions and no cache. They use the complete package as context, single parser/analysis workers, and a 150-second internal/165-second external bound. `nra-acceptance.json` is the final authority; prior scans show the two successor-roster findings that were fixed. GoalExecutionState case recovery and FailedTurnProjection's serializer mirror disappear. GoalPauseSource has no remaining case recovery (the baseline detector did not report it separately). Remaining raw/grouped findings belong to other surfaces; see `nra-assessment.json`. No package-wide zero-findings claim.
 
-Available RAM stayed above 8 GiB (about 14–24 GiB observed); disk headroom stayed about 40–42 GiB. `process-evidence.json` records the resumed owning Codex PID 1823525 in this worktree. Disposable test/codetool caches can be removed after all processes exit; durable receipts and fixtures are retained.
+Available RAM stayed above 8 GiB (about 14–24 GiB observed); disk headroom stayed about 40–42 GiB. `process-evidence.json` records the resumed owning Codex PID 1823525 in this worktree. All owned disposable test/codetool caches were removed after their processes exited; durable receipts and fixtures are retained. Exact removed paths are in `cleanup.json`.
 
 ## Adoption and limits
 
