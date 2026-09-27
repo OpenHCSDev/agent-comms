@@ -128,10 +128,11 @@ class PrivateRegistryGuard:
                 return
             cursor = cursor.parent
 
-    def _open(self) -> int:
+    def _open(self, *, writable: bool = True) -> int:
         self._trusted_root()
         try:
-            fd = os.open(self.path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+            flags = os.O_RDWR if writable else os.O_RDONLY
+            fd = os.open(self.path, flags | getattr(os, "O_NOFOLLOW", 0))
         except OSError as error:
             _reject(f"file is missing or redirected: {error.__class__.__name__}")
         info = os.fstat(fd)
@@ -173,7 +174,9 @@ class PrivateRegistryGuard:
         os.fsync(fd)
 
     def verify(self) -> tuple[int, bytes]:
-        fd = self._open()
+        # A read-only check must not emit IN_CLOSE_WRITE and wake the wire
+        # watcher again; private ACP drains verify this guard on every wake.
+        fd = self._open(writable=False)
         try:
             seq, phase, digest, _ = self._latest(fd)
             if phase != _COMMITTED or seq == 0:
