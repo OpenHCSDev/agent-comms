@@ -198,3 +198,9 @@ viewport fixture gates initial automatic ACK while arranging divider-only
 geometry, since the initial body paint is now legitimately acknowledged. The
 follow pilot waits for committed layout after async participant hydration.
 Final publication revisions and the Toad PR are recorded in CHECKPOINT.md.
+
+Final coordinated publication: core draft PR137 at source a410de9 and Toad draft
+https://github.com/OpenHCSDev/toad/pull/77 at source e9a0542. Both remote heads
+verified. Parent must integrate both source changes before pin refresh/activation.
+The full S4 surface and its mounted integration are complete; CI/live activation
+remain intentionally outside this worker's assignment.
