@@ -10,7 +10,6 @@ from .declarations import (
     ChannelSort,
     MessageType,
     SavedView,
-    ThreadRole,
     ThreadSort,
     ViewKind,
     ViewMatch,
@@ -276,7 +275,7 @@ def _dismiss(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
         }
     mentioned: tuple[str, ...] = ()
     for message in bus_messages:
-        if not is_channel_target(message.target) and message.sender_role is not ThreadRole.AGENT:
+        if not is_channel_target(message.target) and not message.sender_role.executable:
             continue
         if message.target != target and message.sender != target:
             continue

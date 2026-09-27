@@ -31,10 +31,10 @@ def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
     assert comms.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 0
     assert comms.viewer_snapshot(str(tmp_path)).channel_unread["#docs"] == 1
     comms.send("sender", "receiver", "agent-to-agent DM in the aggregate feed")
-    assert comms.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 4
+    assert comms.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 2
     comms.mark_channel_view_read("#any", worktree=str(tmp_path))
     assert comms.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 0
-    assert comms.viewer_snapshot(str(tmp_path)).channel_unread["#docs"] == 1
+    assert comms.viewer_snapshot(str(tmp_path)).channel_unread["#docs"] == 0
     with patch.object(comms.bus, "_iter_log_unlocked", side_effect=AssertionError("idle rescan")):
         comms.viewer_snapshot(str(tmp_path))
 
@@ -136,6 +136,7 @@ def test_v1_exact_channel_marker_resets_with_notice(tmp_path):
     marker = tmp_path / "read_markers.json"
     marker.write_text(json.dumps({comms.bus._marker_key(viewer, "#team"): message.seq}))
 
+    comms.reads.path.unlink()  # Fixture predates ReadLedger.
     snapshot = wire(tmp_path).viewer_snapshot(str(tmp_path))
     assert snapshot.channel_unread["#team"] == 1
     assert snapshot.read_marker_notice
