@@ -801,6 +801,18 @@ class CompactionJournal:
                 (private_input_id,),
             ).fetchone() != (canonical, "unknown"):
                 raise CompactionJournalError("Exact durable private raw prewrite marker required")
+            if (
+                typed_witness is None
+                and private_input_id is not None
+                and db.execute(
+                    "SELECT source_lane FROM private_raw_inputs WHERE input_id=?",
+                    (private_input_id,),
+                ).fetchone()
+                != (None,)
+            ):
+                # Never downgrade a new typed reservation to the old ID-only
+                # raw fence. Historic NULL rows retain old PR95 behavior.
+                raise CompactionJournalError("Typed raw marker requires its returned witness")
             if typed_witness is not None:
                 if (
                     type(typed_witness) is not TypedRawInputWitness

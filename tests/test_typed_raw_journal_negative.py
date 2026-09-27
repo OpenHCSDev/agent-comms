@@ -230,6 +230,11 @@ def test_parent_fsync_lost_ack_leaves_unknown_without_returned_witness(
 def test_exact_returned_witness_is_single_use_and_new_input_remains_unknown(tmp_path: Path) -> None:
     journal, saved = _setup(tmp_path)
     first = _reserve(journal, saved)
+    with (
+        pytest.raises(CompactionJournalError, match="Typed raw marker requires"),
+        journal.ordinary_input_send_fence(saved, private_input_id=first.input_id),
+    ):
+        pytest.fail("typed marker downgraded to ID-only fence")
     _check(journal, saved, first)  # no native byte is written
     with pytest.raises(CompactionJournalError, match="returned exact typed"):
         _check(journal, saved, first)
