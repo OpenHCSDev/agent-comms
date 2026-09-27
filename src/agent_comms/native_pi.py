@@ -27,7 +27,7 @@ from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
 from .selected_tool_broker import (
     SelectedToolMode,
     SelectedToolSocket,
-    stage_selected_extension,
+    selected_extension,
     verify_selected_terminal,
 )
 
@@ -563,7 +563,7 @@ def prepare_native_pi_rpc_launch(
                 "Selected fresh source cannot reopen without exact first-start token"
             )
     agent_dir = _private_agent_dir(session_dir)
-    extension = stage_selected_extension(session_dir) if selected_tool_mode is not None else None
+    extension = selected_extension(package) if selected_tool_mode is not None else None
     argv = [
         "node",
         str(cli),
