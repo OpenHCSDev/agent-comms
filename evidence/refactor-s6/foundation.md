@@ -29,5 +29,7 @@ registry implementation. Paper inspected: paper1_typing_discipline/latex_jsait/
 content/03_model_oopsla.tex: stable identity must survive world extension;
 structural observations cannot distinguish clone cases. Here class identity and
 collision-checked durable names carry the distinction; consumer shape tests do not.
-The initial complete package scan exceeded a 165-second external bound (exit 124,
-no JSON output); no global architectural or semantic-equivalence proof claimed.
+The initial complete package scan exited 124. The retained nra-before.json
+reports NRA's internal 20-second startup deadline (the shell also had a 165-second
+ceiling). Its output was still empty at the early observation. No global
+architectural or semantic-equivalence proof was claimed from that attempt.

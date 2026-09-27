@@ -89,8 +89,9 @@ All evidence is under `evidence/refactor-s6/`.
   Subsequent unchanged-source `nra-context-final-cached.json` reports exact_cache,
   complete=true, 79 analyzed detectors, 0 omitted. This proves the configured
   detector coverage, not correctness of every package behavior.
-- Failed/partial attempts remain documented: initial full scan externally timed
-  out at 165s with no JSON; default contextual scan hit NRA's internal 20s deadline;
+- Failed/partial attempts remain documented: initial full scan hit NRA's
+  internal 20s startup deadline (nra-before.json; shell ceiling was 165s); default
+  contextual scan also hit NRA's internal 20s deadline;
   a changed-source loop reused only 43/79 detectors. An explicit full payload
   resolved that coverage gap. The guarded scan observed >=14.22 GiB available RAM.
 - The first integration environment lacked the new dependency in its subprocess;
