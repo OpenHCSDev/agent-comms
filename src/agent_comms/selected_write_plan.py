@@ -96,7 +96,10 @@ class SelectedWritePlans:
                 raise IdentityConflict("Selected write intent has unsafe identity")
             with os.fdopen(fd, "rb") as stream:
                 fd = -1
-                return json.loads(stream.read())
+                record = json.loads(stream.read())
+                if type(record) is not dict:
+                    raise IdentityConflict("Selected write intent is not an object")
+                return record
         finally:
             if fd >= 0:
                 os.close(fd)

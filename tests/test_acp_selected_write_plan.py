@@ -30,6 +30,11 @@ from agent_comms.operations import Comms
 from agent_comms.selected_write_plan import SelectedWritePlans
 from test_coordinated_runtime import _fake_model
 
+pytestmark = pytest.mark.skipif(
+    sys.platform != "linux" or Path("/var").is_symlink() or Path("/var/tmp").is_symlink(),
+    reason="selected private root requires a physical POSIX /var/tmp",
+)
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
