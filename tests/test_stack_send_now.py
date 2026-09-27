@@ -12,6 +12,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms import backend
 
 
@@ -341,11 +342,11 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 interrupt_boundary=lambda *_: nullcontext(surface != "revoked"),
             ):
                 events.append(event)
-                if event.get("type") == "chunk" and "OLD_PARTIAL" in event.get("text", ""):
+                if isinstance(event, ae.Chunk) and "OLD_PARTIAL" in event.text:
                     first_chunk.set()
-                if terminal and event.get("type") == "tool_start":
+                if terminal and isinstance(event, ae.ToolStart):
                     first_chunk.set()
-                if event.get("type") == "input_started" and event.get("id") == "urgent":
+                if isinstance(event, ae.InputStarted) and event.id == "urgent":
                     started.set()
 
         task = asyncio.create_task(collect())
@@ -411,7 +412,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 return
             if surface in {"revoked", "oversized"}:
                 await asyncio.wait_for(task, 10)
-                assert events[-1]["ok"] is False, events
+                assert events[-1].ok is False, events
                 assert len(requests) == 1
                 if surface == "revoked":
                     assert not started.is_set()
@@ -471,10 +472,8 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     )
                     == 1
                 )
-                assert events[-1]["ok"] is True, events
-                assert events[-1]["text"] == "NEW_FINAL" * (
-                    2 if surface == "priority" else 1
-                ), events
+                assert events[-1].ok is True, events
+                assert events[-1].text == "NEW_FINAL" * (2 if surface == "priority" else 1), events
                 assert not any(e.get("type") == "error" for e in events), events
             else:
                 assert not owner._queued_inputs.get("project")

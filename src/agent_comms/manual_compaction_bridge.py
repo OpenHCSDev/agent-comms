@@ -133,9 +133,4 @@ async def compact_context(
             if started and not terminal_attempted:
                 with suppress(Exception, asyncio.CancelledError):
                     await _emit_compaction(agent, session_id, "abort")
-            if agent._active_turns.get(session_id) == turn_id:
-                agent._active_turns.pop(session_id, None)
-            if agent._turn_tasks.get(session_id) is task:
-                agent._turn_tasks.pop(session_id, None)
-            agent._comms.finish_turn(thread_name, turn_id, expected=turn_claim)
-            await agent._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
+            await agent.settle_turn(session_id, thread_name, turn_id, turn_claim, task=task)

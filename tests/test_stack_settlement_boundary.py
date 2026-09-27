@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms import backend
 
 
@@ -156,9 +157,9 @@ async def test_native_late_followup_outlives_previous_settlement(monkeypatch, de
                     native_start=lambda *_: True,
                 ):
                     events.append(event)
-                    if event.get("type") == "settled":
+                    if isinstance(event, ae.StreamSettled):
                         finish_event.set()
-                    if event.get("type") == "provider_usage" and not injected:
+                    if isinstance(event, ae.ProviderUsage) and not injected:
                         injected = True
                         await queue.put(
                             {
@@ -174,20 +175,20 @@ async def test_native_late_followup_outlives_previous_settlement(monkeypatch, de
                         old_settled.touch()
                         release_task = asyncio.create_task(release_response())
             final = events[-1]
-            starts = [event.get("id") for event in events if event.get("type") == "input_started"]
+            starts = [event.id for event in events if isinstance(event, ae.InputStarted)]
             assert len(requests) == 2 and starts == [None, "late"], (len(requests), starts, events)
-            assert final.get("ok") is True, events
+            assert final.ok is True, events
             settled_indices = [
-                i for i, event in enumerate(events) if event.get("type") == "settled"
+                i for i, event in enumerate(events) if isinstance(event, ae.StreamSettled)
             ]
             final_chunk = next(
                 i
                 for i, event in enumerate(events)
-                if event.get("type") == "chunk" and "FINAL_2" in event.get("text", "")
+                if isinstance(event, ae.Chunk) and "FINAL_2" in event.text
             )
             assert len(settled_indices) == 1 and settled_indices[0] > final_chunk, events
             assert json.dumps(requests[1]).count("LATE_FOLLOWUP") == 1
-            assert "FINAL_2" in final.get("text", ""), events
+            assert "FINAL_2" in final.text, events
         finally:
             release_second.set()
             old_settled.touch()

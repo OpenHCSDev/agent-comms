@@ -15,6 +15,7 @@ from uuid import uuid4
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.declarations import ActivityState
@@ -402,7 +403,7 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             server.shutdown()
             server.server_close()
             worker.join(timeout=2)
-        kinds = [event["type"] for event in events]
+        kinds = [type(event) for event in events]
         if case == "acp_success":
             rows = InputDispositions(comms.root)._read()
             assert len(rows) == 1
@@ -441,12 +442,12 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             assert not any("[agent error]" in text for text in texts)
             assert '"type":"compaction"' in session.read_text()
             return
-        assert "input_started" in kinds
-        assert events[-1]["type"] == "done"
+        assert ae.InputStarted in kinds
+        assert isinstance(events[-1], ae.Done)
         if case == "post_compaction_tool_rounds":
-            assert events[-1]["ok"] is True
+            assert events[-1].ok is True
             assert len(normal_requests) == 4
-            assert sum(event["type"] == "compaction_end" for event in events) == 1
+            assert sum(isinstance(event, ae.CompactionEnd) for event in events) == 1
             for index, messages in enumerate(normal_requests):
                 serialized = json.dumps(messages)
                 resurrected = "LEGACY_DISCARDED_HISTORY" in serialized
@@ -464,13 +465,13 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                 )
                 for n in range(index):
                     assert f"TOOL_ROUND_{n}" in serialized
-            assert len([event for event in events if event["type"] == "provider_usage"]) == len(
+            assert len([event for event in events if isinstance(event, ae.ProviderUsage)]) == len(
                 calls
             )
             return
         if case == "compacted_resume":
-            assert events[-1]["ok"] is True
-            assert "compaction_start" not in kinds
+            assert events[-1].ok is True
+            assert ae.CompactionStart not in kinds
             assert reasoning_efforts == ["high"]
             assert len(calls) == 1
             assert (
@@ -482,8 +483,8 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             )
             return
         if case == "summary_failure":
-            assert events[-1]["ok"] is False
-            assert "compaction" in str(events[-1]["text"]).lower()
+            assert events[-1].ok is False
+            assert "compaction" in str(events[-1].text).lower()
             # Independent map requests may already be in flight. Failure must
             # neither retry one nor schedule a replacement or final synthesis.
             assert 1 <= len(calls) <= 4
@@ -500,18 +501,18 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             )
             return
         if case == "oversized_current":
-            assert events[-1]["ok"] is False
-            assert "oversized" in str(events[-1]["text"]).lower()
+            assert events[-1].ok is False
+            assert "oversized" in str(events[-1].text).lower()
             assert calls == []  # A single uncompactable user input costs no summary call.
             return
         if case == "oversized_summary":
-            assert events[-1]["ok"] is False
-            assert "oversized" in str(events[-1]["text"]).lower()
+            assert events[-1].ok is False
+            assert "oversized" in str(events[-1].text).lower()
             assert len(calls) == 1  # Committed summary, then refusal before the user prompt.
             return
-        assert kinds.index("input_started") < kinds.index("compaction_start")
-        assert kinds.index("compaction_start") < kinds.index("compaction_end")
-        assert events[-1]["ok"] is True
+        assert kinds.index(ae.InputStarted) < kinds.index(ae.CompactionStart)
+        assert kinds.index(ae.CompactionStart) < kinds.index(ae.CompactionEnd)
+        assert events[-1].ok is True
         assert len(calls) > 1
         summary_efforts = (
             reasoning_efforts[1:-1] if case == "tool_outputs" else reasoning_efforts[:-1]
@@ -538,20 +539,20 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
         # Phase-start notifications repeat the last completed response counter;
         # they must not be mistaken for an additional provider summary.
         completed_indices = [
-            event["chunk_index"]
+            event.chunk_index
             for event in events
-            if event["type"] == "compaction_progress" and event["chunk_index"] > 0
+            if isinstance(event, ae.CompactionProgress) and event.chunk_index > 0
         ]
         assert completed_indices == sorted(completed_indices)
         assert sorted(set(completed_indices)) == list(range(1, len(summary_efforts) + 1))
-        assert len([event for event in events if event["type"] == "provider_usage"]) == len(calls)
-        source_progress = [event for event in events if event["type"] == "compaction_progress"]
-        assert source_progress[0]["chunk_index"] == 0
-        assert source_progress[0]["source_bytes_done"] == 0
-        assert source_progress[-1]["source_bytes_done"] == source_progress[-1]["source_bytes_total"]
+        assert len([event for event in events if isinstance(event, ae.ProviderUsage)]) == len(calls)
+        source_progress = [event for event in events if isinstance(event, ae.CompactionProgress)]
+        assert source_progress[0].chunk_index == 0
+        assert source_progress[0].source_bytes_done == 0
+        assert source_progress[-1].source_bytes_done == source_progress[-1].source_bytes_total
         assert all(
-            event["source_bytes_total"] == source_progress[0]["source_bytes_total"]
-            and event["source_bytes_done"]
-            >= (source_progress[index - 1]["source_bytes_done"] if index else 0)
+            event.source_bytes_total == source_progress[0].source_bytes_total
+            and event.source_bytes_done
+            >= (source_progress[index - 1].source_bytes_done if index else 0)
             for index, event in enumerate(source_progress)
         )

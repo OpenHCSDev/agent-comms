@@ -17,6 +17,7 @@ import pytest
 from acp import RequestError
 from acp.schema import ConfigOptionUpdate, SessionInfoUpdate
 
+from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.backend import NATIVE_INPUT_CAPABILITY
 from agent_comms.declarations import ActivityState, UnregisteredThreadError
@@ -336,12 +337,11 @@ class TestHandlers:
                 assert command["type"] == "set_model"
                 assert command["provider"] == "test" and command["modelId"] == "two"
                 assert agent._comms.registry.require("proj").model == "test/one"
-                future = agent._model_requests[command["id"]]
+                result = ae.ModelChanged(command["id"], accepted, "model unavailable")
+                agent._setting_requests.resolve(result)
                 if accepted:
-                    future.set_result(None)
                     await request
                 else:
-                    future.set_exception(RuntimeError("model unavailable"))
                     with pytest.raises(RequestError):
                         await request
             assert agent._comms.registry.require("proj").model == "test/two"
@@ -349,7 +349,7 @@ class TestHandlers:
             request = asyncio.create_task(agent.set_config_option("thinking_level", "proj", "high"))
             command = await asyncio.wait_for(inbox.get(), timeout=1)
             assert command["type"] == "set_thinking_level" and command["level"] == "high"
-            agent._thinking_requests[command["id"]].set_result(None)
+            agent._setting_requests.resolve(ae.ThinkingChanged(command["id"], True))
             await request
             assert agent._comms.registry.require("proj").thinking_level == "high"
         finally:
@@ -683,16 +683,8 @@ class TestAgentTurn:
                 sent.append(update)
 
         async def events(*args, **kwargs):
-            yield {
-                "type": "agent_info",
-                "session_name": "Agent-chosen title",
-                "model": "test/model",
-            }
-            yield {
-                "type": "agent_info",
-                "session_name": "Agent-chosen title",
-                "model": "test/model",
-            }
+            yield ae.AgentInfo(session_name="Agent-chosen title", model="test/model")
+            yield ae.AgentInfo(session_name="Agent-chosen title", model="test/model")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         agent._client = FakeClient()
@@ -726,12 +718,8 @@ class TestAgentTurn:
             queue = kwargs["steering_queue"]
             while not queue.empty():
                 steered.append(queue.get_nowait())
-            yield {
-                "type": "agent_info",
-                "session_file": str(session_file),
-                "model": "test/model",
-            }
-            yield {"type": "settled"}
+            yield ae.AgentInfo(session_file=str(session_file), model="test/model")
+            yield ae.StreamSettled()
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         agent._client = FakeClient()
@@ -761,7 +749,7 @@ class TestAgentTurn:
         async def events(*args, **kwargs):
             monkeypatch.setenv("PI_AGENT_ID", "proj")
             wired.rename_self("renamed-proj")
-            yield {"type": "tool_end", "id": "rename", "ok": True, "output": "renamed"}
+            yield ae.ToolEnd(id="rename", ok=True, output="renamed", name="tool")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         agent._client = FakeClient()
@@ -790,9 +778,9 @@ class TestAgentTurn:
         message = "Codex error: The usage limit has been reached"
 
         async def events(*args, **kwargs):
-            yield {"type": "error", "text": message}
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": False, "text": message}
+            yield ae.Error(text=message)
+            yield ae.StreamSettled()
+            yield ae.Done(ok=False, text=message)
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         agent._client = FakeClient()
@@ -813,9 +801,15 @@ class TestAgentTurn:
         assert message not in goal.progress
         assert not wired.registry.require("proj").executing
 
-    @pytest.mark.parametrize("event_type", ["error", "done"])
+    @pytest.mark.parametrize(
+        "event",
+        [
+            ae.Error("Pi preflight ended before attestation"),
+            ae.Done("Pi preflight ended before attestation", False),
+        ],
+    )
     async def test_unstarted_user_input_failure_carries_exact_text_for_restore(
-        self, wired, tmp_path, event_type
+        self, wired, tmp_path, event
     ):
         agent = self._agent_with_stub(tmp_path, wired)
         sent: list = []
@@ -837,7 +831,7 @@ class TestAgentTurn:
         agent._turn_input_text["proj"] = "lost prompt"
         await agent._emit_event(
             "proj",
-            {"type": event_type, "ok": False, "text": "Pi preflight ended before attestation"},
+            event,
             FakeClient(),
         )
 
@@ -851,9 +845,7 @@ class TestAgentTurn:
             key, admission=1, turn_id="turn", native_id="a" * 32, text="lost prompt"
         )
         agent._dispositions.started(key, turn_id="turn", native_id="a" * 32, text="lost prompt")
-        await agent._emit_event(
-            "proj", {"type": "error", "text": "later steering failure"}, FakeClient()
-        )
+        await agent._emit_event("proj", ae.Error(text="later steering failure"), FakeClient())
         assert "inputFailed" not in sent[-1].field_meta["agentComms"]
 
     @pytest.mark.parametrize("completed_in_turn", [False, True])
@@ -867,7 +859,7 @@ class TestAgentTurn:
         secret = "provider stderr SECRET_PRIVATE_937"
 
         async def events(*args, **kwargs):
-            yield {"type": "error", "text": secret}
+            yield ae.Error(text=secret)
             if completed_in_turn:
                 wired.update_goal(
                     "proj",
@@ -876,7 +868,7 @@ class TestAgentTurn:
                     progress="Verified complete",
                     model_report=True,
                 )
-            yield {"type": "settled"}
+            yield ae.StreamSettled()
             # EOF without done: never let the live drain retry an active goal.
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
@@ -918,12 +910,12 @@ class TestAgentTurn:
             nonlocal turns
             turns += 1
             if turns == 1:
-                yield {"type": "error", "text": "busy"}
-                yield {"type": "done", "ok": True, "text": "A succeeded"}
+                yield ae.Error(text="busy")
+                yield ae.Done(ok=True, text="A succeeded")
             elif turns == 2:
-                yield {"type": "done", "ok": False, "text": "busy"}
+                yield ae.Done(ok=False, text="busy")
             else:
-                yield {"type": "error", "text": "busy"}
+                yield ae.Error(text="busy")
                 await asyncio.Event().wait()
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
@@ -953,8 +945,8 @@ class TestAgentTurn:
                 pass
 
         async def events(*args, **kwargs):
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": True, "text": "did the work"}
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="did the work")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         agent._client = FakeClient()
@@ -986,14 +978,14 @@ class TestAgentTurn:
             # Real RPC may accept the user prompt, emit agent_settled and
             # stats, then exit 0 without any assistant/provider work.
             if empty_kind == "whitespace":
-                yield {"type": "chunk", "text": " \n\t"}
+                yield ae.Chunk(text=" \n\t")
             elif empty_kind == "thinking":
-                yield {"type": "thinking", "text": "Consider the task"}
+                yield ae.Thinking(text="Consider the task")
             elif empty_kind == "unfinished_tool":
-                yield {"type": "tool_start", "id": "unfinished", "name": "read"}
-            yield {"type": "settled"}
-            yield {"type": "agent_info", "context_used": None, "context_size": 1000}
-            yield {"type": "done", "ok": True, "text": ""}
+                yield ae.ToolStart(id="unfinished", name="read")
+            yield ae.StreamSettled()
+            yield ae.AgentInfo(context_used=None, context_size=1000)
+            yield ae.Done(ok=True, text="")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         agent._client = FakeClient()
@@ -1026,9 +1018,9 @@ class TestAgentTurn:
         self._authorize_test_goal(agent, wired, initial)
 
         async def events(*args, **kwargs):
-            yield {"type": "settled"}
+            yield ae.StreamSettled()
             if outcome != "missing_done":
-                yield {"type": "done", "ok": outcome == "success", "text": "work"}
+                yield ae.Done(ok=outcome == "success", text="work")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         original_update = wired.update_goal
@@ -1090,8 +1082,8 @@ class TestAgentTurn:
         assert original is not None
 
         async def events(*args, **kwargs):
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": False, "text": "backend unavailable"}
+            yield ae.StreamSettled()
+            yield ae.Done(ok=False, text="backend unavailable")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         original_block = wired.block_goal_after_failed_turn
@@ -1152,9 +1144,9 @@ class TestAgentTurn:
                 expected_status="active",
                 progress="independently verified newer progress",
             )
-            yield {"type": "settled"}
+            yield ae.StreamSettled()
             if outcome == "failed":
-                yield {"type": "done", "ok": False, "text": "backend unavailable"}
+                yield ae.Done(ok=False, text="backend unavailable")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent._run_agent_turn("proj", "proj", "work")
@@ -1181,12 +1173,7 @@ class TestAgentTurn:
         self._authorize_test_goal(agent, wired, initial)
 
         async def events(*args, **kwargs):
-            yield {
-                "type": "tool_start",
-                "id": "goal-progress",
-                "name": "comms_goal",
-                "title": "Report progress",
-            }
+            yield ae.ToolStart(id="goal-progress", name="comms_goal", title="Report progress")
             wired.update_goal(
                 "proj",
                 "active",
@@ -1195,9 +1182,9 @@ class TestAgentTurn:
                 progress="Completed a verified step",
                 model_report=True,
             )
-            yield {"type": "tool_end", "id": "goal-progress", "name": "comms_goal", "ok": True}
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": True, "text": "reported"}
+            yield ae.ToolEnd(id="goal-progress", name="comms_goal", ok=True)
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="reported")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent._run_agent_turn("proj", "proj", "Work toward the active goal")
@@ -1230,14 +1217,13 @@ class TestAgentTurn:
             wired.update_goal(
                 "proj", "completed", goal_id=goal.id, progress="Verified done", model_report=True
             )
-            yield {"type": "tool_end", "id": "goal", "name": "comms_goal", "ok": True}
-            yield {
-                "type": "provider_usage",
-                "response_id": "1",
-                "usage": {"input": 5, "output": 2, "totalTokens": 7, "cost": {"total": 0.01}},
-            }
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": True, "text": "done"}
+            yield ae.ToolEnd(id="goal", name="comms_goal", ok=True)
+            yield ae.ProviderUsage(
+                response_id="1",
+                usage={"input": 5, "output": 2, "totalTokens": 7, "cost": {"total": 0.01}},
+            )
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="done")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         agent._schedule_goal("proj")
@@ -1266,22 +1252,20 @@ class TestAgentTurn:
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
 
         async def events(*args, **kwargs):
-            yield {
-                "type": "provider_usage",
-                "response_id": "1",
-                "usage": {"input": 3, "output": 1, "totalTokens": 4, "cost": {"total": 0.01}},
-            }
+            yield ae.ProviderUsage(
+                response_id="1",
+                usage={"input": 3, "output": 1, "totalTokens": 4, "cost": {"total": 0.01}},
+            )
             wired.update_goal("proj", "set", text="Finish the release")
-            yield {"type": "tool_end", "id": "set-goal", "name": "comms_set_goal", "ok": True}
-            yield {
-                "type": "provider_usage",
-                "response_id": "2",
-                "usage": {"input": 2, "output": 2, "totalTokens": 4, "cost": {"total": 0.02}},
-            }
+            yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
+            yield ae.ProviderUsage(
+                response_id="2",
+                usage={"input": 2, "output": 2, "totalTokens": 4, "cost": {"total": 0.02}},
+            )
             if owner_paused:
                 wired.update_goal("proj", "paused", owner_action=True)
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": True, "text": "Goal set"}
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="Goal set")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent._run_agent_turn("proj", "proj", "Set a goal")
@@ -1327,9 +1311,9 @@ class TestAgentTurn:
             wired.update_goal(
                 "proj", "completed", goal_id=goal.id, progress="Premature", model_report=True
             )
-            yield {"type": "tool_end", "id": "goal", "name": "comms_goal", "ok": True}
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": False, "text": "failed"}
+            yield ae.ToolEnd(id="goal", name="comms_goal", ok=True)
+            yield ae.StreamSettled()
+            yield ae.Done(ok=False, text="failed")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         agent._schedule_goal("proj")
@@ -1358,9 +1342,9 @@ class TestAgentTurn:
 
         async def events(*args, **kwargs):
             wired.update_goal("proj", "set", text="Do not replay")
-            yield {"type": "tool_end", "id": "set-goal", "name": "comms_set_goal", "ok": True}
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": False, "text": "provider failed"}
+            yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
+            yield ae.StreamSettled()
+            yield ae.Done(ok=False, text="provider failed")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent._run_agent_turn("proj", "proj", "Set a goal")
@@ -1603,8 +1587,8 @@ class TestAgentTurn:
             calls += 1
             entered.set()
             await release.wait()
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": False, "text": "failed"}
+            yield ae.StreamSettled()
+            yield ae.Done(ok=False, text="failed")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         first = asyncio.create_task(agent._run_agent_turn("proj", "proj", "first"))
@@ -1629,7 +1613,7 @@ class TestAgentTurn:
         terminated = []
 
         async def events(*args, **kwargs):
-            yield {"type": "provider_usage", "response_id": "1", "usage": {"totalTokens": 5}}
+            yield ae.ProviderUsage(response_id="1", usage={"totalTokens": 5})
             await asyncio.Event().wait()
 
         async def terminate(task):
@@ -2136,9 +2120,9 @@ class TestFailureFeedback:
         message = "Codex error: The usage limit has been reached"
 
         async def events(*args, **kwargs):
-            yield {"type": "error", "text": message}
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": False, "text": message}
+            yield ae.Error(text=message)
+            yield ae.StreamSettled()
+            yield ae.Done(ok=False, text=message)
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
@@ -2176,9 +2160,9 @@ class TestFailureFeedback:
         monkeypatch.setattr(wired, "record_turn_routing", lambda *args: routed.append(args))
 
         async def events(*args, **kwargs):
-            yield {"type": "chunk", "text": "unfinished secret answer"}
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": False, "text": "provider failed SECRET_PRIVATE_938"}
+            yield ae.Chunk(text="unfinished secret answer")
+            yield ae.StreamSettled()
+            yield ae.Done(ok=False, text="provider failed SECRET_PRIVATE_938")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent._run_agent_turn(
@@ -2210,8 +2194,8 @@ class TestFailureFeedback:
         monkeypatch.setattr(wired, "record_turn_routing", lambda *args: routed.append(args))
 
         async def events(*args, **kwargs):
-            yield {"type": "chunk", "text": "unfinished secret answer"}
-            yield {"type": "settled"}
+            yield ae.Chunk(text="unfinished secret answer")
+            yield ae.StreamSettled()
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent._run_agent_turn(
@@ -2237,9 +2221,9 @@ class TestFailureFeedback:
         monkeypatch.setattr(wired, "record_turn_routing", lambda *args: routed.append(args))
 
         async def events(*args, **kwargs):
-            yield {"type": "chunk", "text": "complete answer"}
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": True, "text": "complete answer"}
+            yield ae.Chunk(text="complete answer")
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="complete answer")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent._run_agent_turn(
@@ -2263,14 +2247,14 @@ class TestFailureFeedback:
         origin = Message(human.name, "#team", "please help", MessageType.INFO)
 
         async def events(*args, **kwargs):
-            yield {"type": "chunk", "text": "Working"}
-            yield {"type": "committed_progress", "text": "Working"}
+            yield ae.Chunk(text="Working")
+            yield ae.CommittedProgress(text="Working")
             progress = wired.channel_history("#team")
             assert [message.body for message in progress] == ["Working"]
             assert progress[0].notice and not progress[0].starts_turn
-            yield {"type": "chunk", "text": "Done"}
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": True, "text": "WorkingDone"}
+            yield ae.Chunk(text="Done")
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="WorkingDone")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent._run_agent_turn(
@@ -2342,8 +2326,8 @@ class TestFailureFeedback:
         origin = Message(human.name, "#team", "please help", MessageType.INFO)
 
         async def events(*args, **kwargs):
-            yield {"type": "chunk", "text": "unfinished"}
-            yield {"type": "done", "ok": False, "text": "failed"}
+            yield ae.Chunk(text="unfinished")
+            yield ae.Done(ok=False, text="failed")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent._run_agent_turn(
@@ -2447,7 +2431,7 @@ class TestQueueControl:
 
         async def events(*args, **kwargs):
             ran.append("turn")
-            yield {"type": "settled"}
+            yield ae.StreamSettled()
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])

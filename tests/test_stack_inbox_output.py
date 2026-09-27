@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms import backend, wire
 from agent_comms.acp import CommsAgent
 from agent_comms.input_disposition import InputDispositions
@@ -246,12 +247,14 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             assert "OLD_UNKNOWN_BODY_0000:" in excerpt
             assert "OLD_UNKNOWN_BODY_0001:" not in excerpt
             assert len(set(artifacts)) == 1
-            assert not any(event["type"].startswith("compaction") for event in events)
-            assert not any(event["type"] == "error" for event in events)
-            terminal = [event for event in events if event["type"] == "done"]
-            assert len(terminal) == 1 and terminal[0]["ok"] is True
-            assert terminal[0]["text"] == "INBOX_INSPECTED_TWICE"
-            assert len([event for event in events if event["type"] == "input_started"]) == 1
+            assert not any(
+                isinstance(event, (ae.CompactionEvent, ae.CompactionProgress)) for event in events
+            )
+            assert not any(isinstance(event, ae.Error) for event in events)
+            terminal = [event for event in events if isinstance(event, ae.Done)]
+            assert len(terminal) == 1 and terminal[0].ok is True
+            assert terminal[0].text == "INBOX_INSPECTED_TWICE"
+            assert len([event for event in events if isinstance(event, ae.InputStarted)]) == 1
             saved_rows = agent._dispositions._read()
             assert {key: saved_rows[key] for key in old_rows} == old_rows
             transcript = Path(comms.registry.require("parent").session_file)
