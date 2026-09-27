@@ -612,10 +612,6 @@ class CommsAgent:
         display_text = options.get("userText") or self._prompt_text(prompt)
         defer_display = options.get("deferDisplay") is True
         if "selectedExistingFileWrite" in options:
-            if self._private_selected_tool_intent is not None:
-                raise RequestError.invalid_params(
-                    {"reason": "operator preplan and selected tool are separate activation modes"}
-                )
             request = options["selectedExistingFileWrite"]
             if (
                 type(request) is not dict

@@ -1143,11 +1143,13 @@ async def run_one_sealed_claim(
             if planned is not None:
                 if (
                     selected_existing_file_write is not None
-                    or selected_tool_intent is not None
                     or selected_write_plan_applied is None
                     or selected_write_plan_check is None
                 ):
                     raise IdentityConflict("Selected write has conflicting or incomplete authority")
+                # A bound controller's exact plan owns this selected claim.
+                # Do not offer the model a second write route on the same turn.
+                selected_tool_intent = None
                 selected_existing_file_write = SelectedExistingFileWrite(
                     planned.resource, planned.contents
                 )

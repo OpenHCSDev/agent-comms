@@ -1,8 +1,4 @@
-"""Provider-free runner contract; broker/native implementation lives in PR108.
-
-A nominal in-memory stub tests the FULL boundary only. These tests do not
-prove Pi tool execution, authenticated IPC, or a positive file write.
-"""
+"""Provider-free runner contract for the selected owner tool boundary."""
 
 from __future__ import annotations
 
@@ -23,6 +19,7 @@ from agent_comms.coordination_store import IdentityConflict, MutationStore, Stal
 from agent_comms.declarations import RelationViolationError, _store_lock
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.operations import Comms
+from agent_comms.selected_tool_broker import SelectedToolIntent, SelectedToolRequest
 from test_coordinated_runtime import _fake_model, _root
 
 
@@ -41,8 +38,7 @@ def private_root():
 
 @pytest.fixture
 def nominal_broker_stub(monkeypatch):
-    # The runner must NOT import this module on a default/triage path. Its
-    # real nominal types and owner action are owned by the separate PR108.
+    # Keep this stub focused on owner binding; broker and native tests cover IPC.
     broker = types.ModuleType("agent_comms.selected_tool_broker")
 
     @dataclass(frozen=True)
@@ -130,9 +126,7 @@ async def test_operator_plan_and_tool_intent_are_exclusive(
 
 
 @pytest.mark.asyncio
-async def test_default_full_has_exact_no_tools_prompt_and_no_broker_import(
-    private_root, monkeypatch
-):
+async def test_default_full_has_exact_no_tools_prompt(private_root, monkeypatch):
     root, root_id, _comms, _initial, _ = _root(private_root, direct=True)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model()
@@ -155,7 +149,35 @@ async def test_default_full_has_exact_no_tools_prompt_and_no_broker_import(
     )
     assert "selected_claimed_write" not in calls[0][1]
     assert "selected_tool_mode" not in kwargs_seen[0]
-    assert "agent_comms.selected_tool_broker" not in sys.modules
+
+
+@pytest.mark.asyncio
+async def test_real_owner_selected_tool_writes_existing_file_once(private_root, monkeypatch):
+    root, root_id, comms, _initial, _people = _root(private_root, direct=True, claims=True)
+    path = private_root / "notes.txt"
+    path.write_text("before", encoding="utf-8")
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model()
+
+    async def selected_model(*args, **kwargs):
+        result = await fake(*args, **kwargs)
+        mode = kwargs["selected_tool_mode"]
+        mode.action(SelectedToolRequest("call_1", "notes.txt", b"after"))
+        return replace(result, selected_tool_call_id="call_1")
+
+    monkeypatch.setattr(runtime, "run_native_pi_turn", selected_model)
+    result = await runtime.run_one_sealed_claim(
+        root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=private_root,
+        selected_tool_intent=SelectedToolIntent(),
+    )
+    assert result is not None and result.response_message_id
+    assert len(calls) == 1
+    assert path.read_text(encoding="utf-8") == "after"
+    assert (root / "native-sessions").is_dir()
+    assert comms.full_history()[-1].body == "42"
 
 
 @pytest.mark.asyncio

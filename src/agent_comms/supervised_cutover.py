@@ -251,13 +251,21 @@ def _publish_archive_noreplace(stage: Path, destination: Path) -> None:
         except AttributeError as error:
             raise ValueError("Cutover archive cannot guarantee no-replace publication") from error
         renameat2.argtypes = (
-            ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
         )
         renameat2.restype = ctypes.c_int
         # Linux RENAME_NOREPLACE=1. Both names are relative to the checked
         # owner-only parent fd, so no path-based replace can race this step.
-        if renameat2(directory, os.fsencode(stage.name), directory,
-                     os.fsencode(destination.name), 1) != 0:
+        if (
+            renameat2(
+                directory, os.fsencode(stage.name), directory, os.fsencode(destination.name), 1
+            )
+            != 0
+        ):
             code = ctypes.get_errno()
             if code in (errno.EEXIST, errno.ENOTEMPTY):
                 raise ValueError("Cutover archive destination already exists")
@@ -289,8 +297,9 @@ def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
     before = comms.registry.snapshot()
     if any(thread.active_turn is not None for thread in before.threads.values()):
         raise RelationViolationError("Cutover archive has an active owner turn")
-    if any(thread.pid > 0 and comms._process_alive(thread.pid)
-           for thread in before.threads.values()):
+    if any(
+        thread.pid > 0 and comms._process_alive(thread.pid) for thread in before.threads.values()
+    ):
         raise RelationViolationError("Cutover archive requires all old owners stopped")
     files = _state_files(comms.root)
     required = {"bus.jsonl", "bus_meta.json", "registry.json", "input_dispositions.json"}
@@ -313,8 +322,10 @@ def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
             or any(
                 _file_identity(path.lstat()) != identity for path, identity in identities.items()
             )
-            or any(thread.pid > 0 and comms._process_alive(thread.pid)
-                   for thread in after.threads.values())
+            or any(
+                thread.pid > 0 and comms._process_alive(thread.pid)
+                for thread in after.threads.values()
+            )
         ):
             raise RelationViolationError("Cutover root changed during archive")
         manifest = {
@@ -375,10 +386,10 @@ def _require_unchanged_archive_source(legacy: Comms, archive: ArchiveReceipt) ->
             while chunk := stream.read(1024 * 1024):
                 digest.update(chunk)
         after = source.lstat()
-        if (
-            _file_identity(before) != _file_identity(after)
-            or files[source.name] != {"size": before.st_size, "sha256": digest.hexdigest()}
-        ):
+        if _file_identity(before) != _file_identity(after) or files[source.name] != {
+            "size": before.st_size,
+            "sha256": digest.hexdigest(),
+        }:
             raise RelationViolationError("Old root changed after its cutover archive")
 
 
@@ -410,8 +421,7 @@ def stage_private_participants(
     _require_unchanged_archive_source(legacy, archive)
     snapshot = legacy.registry.snapshot()
     if any(thread.active_turn is not None for thread in snapshot.threads.values()) or any(
-        thread.pid > 0 and legacy._process_alive(thread.pid)
-        for thread in snapshot.threads.values()
+        thread.pid > 0 and legacy._process_alive(thread.pid) for thread in snapshot.threads.values()
     ):
         raise RelationViolationError("Cutover participants require all old owners stopped")
     witnesses = {witness.name: witness for witness in inventory.live_owners}
@@ -426,7 +436,9 @@ def stage_private_participants(
             or snapshot.statuses[name] is not ThreadStatus.STOPPED
             or (thread.pid, thread.created_at, thread.session_file, thread.worktree)
             != (
-                witness.pid, witness.created_at, str(witness.session_file),
+                witness.pid,
+                witness.created_at,
+                str(witness.session_file),
                 str(witness.worktree),
             )
         ):
@@ -439,8 +451,7 @@ def stage_private_participants(
             or stat.S_IMODE(session.st_mode) != 0o600
             or session.st_nlink != 1
             or session.st_size == 0
-            or (session.st_dev, session.st_ino)
-            != (witness.session_device, witness.session_inode)
+            or (session.st_dev, session.st_ino) != (witness.session_device, witness.session_inode)
             or not stat.S_ISDIR(worktree.st_mode)
             or worktree.st_uid != os.geteuid()
         ):
@@ -492,6 +503,9 @@ def stage_private_participants(
     ):
         raise RelationViolationError("Cutover participants require a fresh private root")
     root_id = private.initialize_private_initial_protocol()
+    # A claim read barrier can only be installed while the private bus is
+    # empty. Selected owner writes on this route need it before any USER row.
+    private.initialize_private_claim_protocol()
     with _store_lock(private._wire_lock_path):
         new_waits = GoalWaits(private.root / "goal_waits.json")
         for wait in migrated_waits:
@@ -508,7 +522,9 @@ def stage_private_participants(
         install_prompt_binding_schema(store)
         for thread in participants:
             store.register_participant(
-                stable_thread_lookup(thread.created_at), thread.name, thread.name,
+                stable_thread_lookup(thread.created_at),
+                thread.name,
+                thread.name,
                 committed=True,
             )
     _require_unchanged_archive_source(legacy, archive)

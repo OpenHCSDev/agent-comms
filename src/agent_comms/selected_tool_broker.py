@@ -33,7 +33,7 @@ _MAX_REQUEST = _MAX_CONTENT + 8192
 _INPUT_ID = re.compile(r"[0-9a-f]{32}\Z")
 _CALL_ID = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
 _TOKEN = re.compile(r"[0-9a-f]{64}\Z")
-_TOOL_SOURCE_SHA = "b6577147072d959632ed2318bd11645b019d6bccc76ab6d24fc112ac2da43e58"
+_TOOL_SOURCE_SHA = "722dcd9f79359528c9183f52fb9c04a93fed852e590981534f79a5a99c593896"
 
 
 @dataclass(frozen=True, slots=True)
@@ -337,7 +337,9 @@ class SelectedToolSocket:
     ) -> None:
         if type(token) is not str or not _TOKEN.fullmatch(token):
             raise ValueError("Selected tool transport requires a random 256-bit token")
-        self.path = Path(directory).absolute() / "selected-tool.sock"
+        # Linux AF_UNIX pathnames are short. The per-recipient private session
+        # directory already scopes this socket, so one byte is sufficient.
+        self.path = Path(directory).absolute() / "s"
         self.token = token
         self.action = action
         self.expected_pid: int | None = None

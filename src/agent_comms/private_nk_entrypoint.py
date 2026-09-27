@@ -11,9 +11,15 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .cohort_foreground import _preflight
 from .coordination_store import PublicationActivationBlocked
+from .declarations import _store_lock
+from .operations import Comms
+
+if TYPE_CHECKING:
+    from .selected_tool_broker import SelectedToolIntent
 
 ROOT_ID_ENV = "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"
 PACKAGE_ENV = "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE"
@@ -24,6 +30,7 @@ class PrivateNkLaunch:
     validated_root: Path
     wire_root_id: str
     native_package: Path
+    selected_tool_intent: SelectedToolIntent | None
 
 
 def private_nk_launch(root: Path, environment: Mapping[str, str]) -> PrivateNkLaunch | None:
@@ -56,7 +63,15 @@ def private_nk_launch(root: Path, environment: Mapping[str, str]) -> PrivateNkLa
     validated_root = Path(root).expanduser().absolute()  # capture cwd once
     native_package = Path(package)
     _preflight(validated_root, root_id, native_package, True)
-    return PrivateNkLaunch(validated_root, root_id, native_package)
+    comms = Comms(validated_root)
+    with _store_lock(comms.bus._path):
+        marker = comms.bus._private_marker_unlocked()
+    selected_tool_intent = None
+    if marker.get("claim_envelopes_version") == 1:
+        from .selected_tool_broker import SelectedToolIntent
+
+        selected_tool_intent = SelectedToolIntent()
+    return PrivateNkLaunch(validated_root, root_id, native_package, selected_tool_intent)
 
 
 def private_nk_from_environment() -> PrivateNkLaunch | None:

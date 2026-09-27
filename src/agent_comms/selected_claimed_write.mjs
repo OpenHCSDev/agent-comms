@@ -10,7 +10,7 @@ export default function registerSelectedClaimedWrite(pi) {
   pi.registerTool({
     name: TOOL,
     label: "Owner-mediated existing-file replacement",
-    description: "Request one bounded UTF-8 replacement of an existing worktree file. The owner must independently verify a current selected wake and durable resource claim. This does not grant permission from prompt text. No create, shell, generic edit, or retry on uncertainty.",
+    description: "Request one bounded UTF-8 replacement of an existing worktree file. You may make one request; the owner independently verifies the selected wake and resource claim before any write. Your request grants no authority. No create, shell, generic edit, or retry on uncertainty.",
     parameters: {
       type: "object",
       properties: {

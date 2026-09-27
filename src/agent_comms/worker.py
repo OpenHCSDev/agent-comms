@@ -23,6 +23,7 @@ async def run() -> None:
         runtime_enabled=True,
         private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
         private_nk_native_package=private_nk.native_package if private_nk else None,
+        private_selected_tool_intent=private_nk.selected_tool_intent if private_nk else None,
     )
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
