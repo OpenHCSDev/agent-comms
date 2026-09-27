@@ -15,12 +15,12 @@
     "reason": "all_context_detectors_use_compact_global_projections"
   },
   "timing": {
-    "parse_seconds": 12.441,
-    "analysis_seconds": 1.046,
+    "parse_seconds": 0.992,
+    "analysis_seconds": 0.69,
     "planning_seconds": 0.0,
     "source_index_seconds": 0.0,
-    "analysis_cache_status": "miss",
-    "total_seconds": 13.487
+    "analysis_cache_status": "partial",
+    "total_seconds": 1.682
   },
   "semantic_refactor_gate": {
     "boundary_evidence": [],
@@ -38,6 +38,6 @@
     "source_index_payload_seconds": 0.0,
     "semantic_refactor_gate_seconds": 0.0,
     "finding_recipe_plan_seconds": 0.0,
-    "total_seconds": 0.003
+    "total_seconds": 0.002
   }
 }

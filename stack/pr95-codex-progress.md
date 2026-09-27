@@ -2,6 +2,8 @@
 
 Owner: PR95 continuation in `/home/ts/wt/comms-pr95-finish-codex-20260927`,
 branch `codex/pr95-finish-20260927`, preserving prior commits and recovered dirty work.
+Implementation: `351a4930b3bf0bdebeed9178f0e5bee286a9e1c0`, published as
+[draft PR135](https://github.com/OpenHCSDev/agent-comms/pull/135) into PR95.
 This section supersedes the historical remaining-work checklist below.
 
 Implemented: selected-child effective-settings RPC; canonical/custom-model and

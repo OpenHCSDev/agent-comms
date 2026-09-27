@@ -1,5 +1,8 @@
 # PR95 local completion evidence
 
+Implementation: `351a4930b3bf0bdebeed9178f0e5bee286a9e1c0`. The final NRA
+report was rerun against this committed implementation.
+
 Baseline: `10d5351`, with the eleven recovered dirty tracked files preserved and
 completed. Publication adds the effective configuration, continued coverage,
 complete native verifier, ordinary-owner support, and default activation slice.
