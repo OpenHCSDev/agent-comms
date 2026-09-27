@@ -255,10 +255,11 @@ def test_text_export_is_non_importable_and_prefixes_multiline_body(tmp_path):
     assert receipt.bytes_written == len(output.encode())
 
 
-def test_text_full_export_labels_invalid_timestamp_instead_of_failing(tmp_path):
+@pytest.mark.parametrize("timestamp", [math.nan, math.inf, -math.inf])
+def test_text_full_export_labels_invalid_timestamp_instead_of_failing(tmp_path, timestamp):
     destination = tmp_path / "invalid-time.txt"
     receipt = exporter(format=WireExportFormat.TEXT, through=1).export(
-        [message(1, "legacy", timestamp=math.nan)], destination
+        [message(1, "legacy", timestamp=timestamp)], destination
     )
     assert "[invalid-time]" in destination.read_text()
     assert receipt.exported_messages == 1

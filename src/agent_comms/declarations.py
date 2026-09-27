@@ -34,7 +34,7 @@ from datetime import datetime
 from enum import Enum, StrEnum
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, Self
+from typing import TYPE_CHECKING, Any, BinaryIO, Self
 
 from .bus_activity_index import BusActivityIndex
 from .bus_page_index import BusPageIndex, StaleBusPageIndexError
@@ -49,6 +49,7 @@ from .bus_publication import (
     validate_initial_record,
 )
 from .bus_route_counts import BusRouteCounts
+from .field_codec import FieldCodec
 from .goal_presentation import (
     ExecutionPresentation,
     StandbyExecutionPresentation,
@@ -63,7 +64,6 @@ from .goal_states import (
     PausedGoal,
     PauseSource,
 )
-from .field_codec import FieldCodec
 from .read_basis import DisplayBasis
 from .response_policy import ResponsePolicy
 
@@ -1721,6 +1721,20 @@ class ResponseEligibility:
         self.policy.validate_recipients(self.recipients)
 
 
+class MessageWireCodec(FieldCodec):
+    """Preserve legacy non-finite wire timestamps for history and export.
+
+    Message.from_wire retains these timestamps so export policy can count,
+    exclude or label them. The common document codec remains strict JSON.
+    """
+
+    @classmethod
+    def encode(cls, value: object) -> Any:
+        if type(value) is float:
+            return value
+        return super().encode(value)
+
+
 @dataclass(frozen=True, slots=True)
 class Message:
     """Declares one inter-thread message.
@@ -1801,7 +1815,7 @@ class Message:
         return digest
 
     def to_wire(self) -> dict:
-        result = FieldCodec.encode(self)
+        result = MessageWireCodec.encode(self)
         result = {"seq": self.seq, "id": self.message_id, **result}
         if self.claim_transition is not None:
             result["claim_transition"] = _claim_transition_wire(self.claim_transition)
