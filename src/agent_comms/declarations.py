@@ -2116,6 +2116,7 @@ class MessagePage:
     display_scope: ChannelDisplayScope | None = None
     display_basis: DMDisplayBasis | None = None
     historical_display: HistoricalDisplay | None = None
+    history_revision: tuple[int, int, int, int] | None = None
 
     @property
     def oldest_cursor(self) -> int | HistoryCursor | None:

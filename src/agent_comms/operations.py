@@ -650,6 +650,7 @@ class Comms:
 
         if not self.bus.history_sources() and not isinstance(before or after, HistoryCursor):
             return live_page(before=before, after=after, limit=limit, max_bytes=max_bytes)
+        history_revision = file_revision(self.bus.history_manifest)
         if before is not None and after is not None:
             raise ValueError("Choose one history paging direction")
         cursor = before if before is not None else after
@@ -657,7 +658,8 @@ class Comms:
         if not historical:
             page = live_page(before=before, after=after, limit=limit, max_bytes=max_bytes)
             if page.messages or after is not None:
-                return replace(page, has_older=page.has_older or bool(self.bus.history_sources()))
+                return replace(page, has_older=page.has_older or bool(self.bus.history_sources()),
+                               history_revision=history_revision)
         history = self.bus.historical_page(
             matches,
             before=before if historical and before is not None else None,
@@ -684,11 +686,13 @@ class Comms:
             return replace(
                 history,
                 historical_display=display,
+                history_revision=history_revision,
                 has_newer=history.has_newer or bool(latest.messages),
             )
         if historical and after is not None:
-            return live_page(after=0, limit=limit, max_bytes=max_bytes)
-        return history
+            return replace(live_page(after=0, limit=limit, max_bytes=max_bytes),
+                           history_revision=history_revision)
+        return replace(history if historical else page, history_revision=history_revision)
 
     def dm_display_page(
         self,

@@ -1,5 +1,8 @@
 # Integrated historical views — implementation handoff
 
+Core draft: https://github.com/OpenHCSDev/agent-comms/pull/144
+Toad companion: https://github.com/OpenHCSDev/toad/pull/79
+
 Owner: historical-views Codex worker. No live deployment, owner restart, provider call,
 or original-root mutation was performed. Parent owns installation/activation.
 
@@ -39,6 +42,10 @@ or original-root mutation was performed. Parent owns installation/activation.
 
 Core/read/display selection: **71 passed**. Transcript/catalog regression selection:
 **102 passed**. See `core.txt`, `regression.txt`, `real-sources.json`, and the Toad PR evidence.
+
+`verify_preserved_sources.py` reproduces the read-only source audit using explicit
+`--active-root`, fresh `--fixture-root` and repeatable `--source` arguments. The saved
+report used the captured active fixture with 22 current rows (8,442 rows in #any).
 
 The preserved-data check copies active presentation/bus metadata into a fixture under
 this worktree, then attaches `/home/ts/.agent-comms` and
@@ -84,7 +91,8 @@ feature extensions of existing owners, not a proved behavior-preserving codemod.
 5. Verify normal #comms/#nra/#any scroll backwards and forwards, historical sender link,
    Saved sessions picker, current DM and current channel send/receipt. Compare live
    bus/native-input state before/after the read checks: browsing must not publish work.
-   Existing restored executable identities remain governed by PR136/139. Ambiguous
+   Already-open upgraded views observe the attachment revision without waiting for a
+   new live message. Existing restored executable identities remain governed by PR136/139. Ambiguous
    identities are visible as historical declarations and sessions, with no authority
    transfer to a current owner. User-directed new execution is a separate explicit action.
 6. Roll back display attachment by restoring the manifest and catalog backups (or

@@ -3,7 +3,7 @@
     "source": "/home/ts/.agent-comms",
     "identity_count": 104,
     "bytes": 7531950,
-    "attach_seconds": 0.251
+    "attach_seconds": 0.158
   },
   {
     "source": "/var/tmp/agent-comms-live-20260927-6_d_vdul",
@@ -15,19 +15,19 @@
     "channel": "#any",
     "messages": 8442,
     "pages": 44,
-    "read_seconds": 1.522
+    "read_seconds": 1.949
   },
   {
     "channel": "#comms",
     "messages": 7595,
     "pages": 40,
-    "read_seconds": 2.953
+    "read_seconds": 3.342
   },
   {
     "channel": "#nra",
     "messages": 242,
     "pages": 2,
-    "read_seconds": 0.226
+    "read_seconds": 0.228
   },
   {
     "channel": "#openhcs",
