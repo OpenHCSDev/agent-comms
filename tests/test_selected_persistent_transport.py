@@ -69,6 +69,7 @@ async def _run(
     text: str,
     selected: SelectedPersistentPrompt | None = None,
     args: tuple[str, ...] = (),
+    cwd: Path | None = None,
 ):
     return [
         event
@@ -76,7 +77,7 @@ async def _run(
             stub,
             args,
             text,
-            str(root),
+            str(cwd or root),
             session_file=str(root / "session.jsonl"),
             persistent_session=persistent,
             selected_prompt=selected,
@@ -191,6 +192,49 @@ async def test_selected_refuses_missing_owner_before_spawn(tmp_path):
         assert refused[-1]["reason_code"] == "selected_persistent_owner_unavailable"
         assert not (tmp_path / "pid-log").exists()
         assert persistent.proc is None
+    finally:
+        await persistent.close_idle()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("drift", ["session_revision", "profile", "worktree"])
+async def test_selected_refuses_stale_session_or_profile_without_replacement(tmp_path, drift):
+    stub = _fake_pi(tmp_path)
+    persistent = backend.PersistentPiSession()
+
+    @contextmanager
+    def boundary():
+        raise AssertionError("stale selected owner must never receive bytes")
+        yield
+
+    boundary._maintenance_wire_locked = True
+    try:
+        baseline = await _run(stub, tmp_path, persistent, "ordinary")
+        assert baseline[-1]["ok"] is True
+        child = persistent.proc
+        assert child is not None and child.returncode is None
+        args = ()
+        cwd = tmp_path
+        if drift == "session_revision":
+            (tmp_path / "session.jsonl").write_text("outside writer changed branch\n")
+        elif drift == "profile":
+            args = ("--model", "other")
+        else:
+            cwd = tmp_path / "other-worktree"
+            cwd.mkdir()
+        denied = await _run(
+            stub,
+            tmp_path,
+            persistent,
+            "selected safe tool",
+            SelectedPersistentPrompt("e" * 32, boundary),
+            args=args,
+            cwd=cwd,
+        )
+        assert denied[-1]["reason_code"] == "selected_persistent_owner_unavailable"
+        assert persistent.proc is child and child.returncode is None
+        assert len((tmp_path / "prompt-log").read_text().splitlines()) == 1
+        assert (tmp_path / "pid-log").read_text().splitlines() == [str(child.pid)]
     finally:
         await persistent.close_idle()
 
