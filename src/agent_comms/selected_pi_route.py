@@ -117,8 +117,7 @@ def _read_response(raw: bytes, request: dict[str, Any]) -> SelectedPiDryRun:
     except (UnicodeError, ValueError) as error:
         raise SelectedPiProbeUnknownError("Invalid selected Pi response") from error
     if (
-        type(response) is not dict
-        or set(response) != {"id", "type", "command", "success", "data"}
+        set(response) != {"id", "type", "command", "success", "data"}
         or response["id"] != request["id"]
         or response["type"] != "response"
         or response["command"] != _COMMAND
@@ -245,8 +244,7 @@ def _read_settings_response(raw: bytes, request: dict[str, Any]) -> PiCompaction
         raise SelectedPiProbeUnknownError("Incomplete selected settings response")
     response = PiRpcChannel.decode_record(raw, strict=True, max_bytes=16384).wire
     if (
-        type(response) is not dict
-        or set(response) != {"id", "type", "command", "success", "data"}
+        set(response) != {"id", "type", "command", "success", "data"}
         or response["id"] != request["id"]
         or response["type"] != "response"
         or response["command"] != request["type"]

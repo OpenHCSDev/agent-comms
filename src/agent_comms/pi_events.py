@@ -629,7 +629,7 @@ class Response(PiEvent):
         return PiCommand.response_owner(self.command)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        owner = type(session.response_command) if session.response_command else self.command_type
+        owner = session.response_command or self.command_type
         async for event in owner.on_response(self, session):
             yield event
 

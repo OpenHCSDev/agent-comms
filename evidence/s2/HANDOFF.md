@@ -99,3 +99,19 @@ ownership and removed dispatch are the actual factoring. Authored AST/source
 migration was needed for async ownership/control transfer; it is not represented
 as an NRA equivalence proof. Full-context NRA evidence and executable local
 behavior checks are reported separately.
+
+Final integration receipt:
+- Parent PR142 merged normally, with no conflict and no direct edits to its files.
+- Its native send/admission selection passes **20 tests** on the combined tree
+  (`merged-admission.txt`). Ruff and `git diff --check` pass.
+- Final structural receipt: 108 methods, maximum 99 lines, maximum nesting 5.
+- Native reader migration is stable for parent branch integration. The parent's
+  independent OwnerToolSocket/CodingToolSocket policy work may require an import
+  or event-loop merge; this branch contains no competing tool executor.
+- Boundary-count receipt compares the whole migrated scope: string-key reads
+  172→161, `.get` calls 311→252, `type` calls 91→88, boolean chains of four or
+  more 56→55. Raw native proof validations remain deliberately intact.
+- The final removal of redundant root-object checks trusts PiRpcChannel's
+  dictionary guarantee. Strict selected-route/summary and nominal tests pass
+  (`strict-final.txt`). Completed NRA cache was removed; logs, replay results,
+  failed-run evidence and all work remain in the persistent worktree.

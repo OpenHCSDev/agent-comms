@@ -56,55 +56,55 @@
   {
     "module": "backend",
     "method": "receive_record",
-    "lines": 58,
+    "lines": 56,
     "depth": 4
   },
   {
     "module": "backend",
     "method": "attest_input",
-    "lines": 101,
+    "lines": 99,
     "depth": 4
   },
   {
     "module": "backend",
     "method": "guard_identity",
-    "lines": 42,
+    "lines": 40,
     "depth": 1
   },
   {
     "module": "backend",
     "method": "observe_progress",
-    "lines": 70,
+    "lines": 68,
     "depth": 4
   },
   {
     "module": "backend",
     "method": "settle_or_continue",
-    "lines": 26,
+    "lines": 24,
     "depth": 3
   },
   {
     "module": "backend",
     "method": "prepare_launch",
-    "lines": 56,
-    "depth": 2
-  },
-  {
-    "module": "backend",
-    "method": "validate_reopen",
-    "lines": 53,
-    "depth": 2
-  },
-  {
-    "module": "backend",
-    "method": "spawn_child",
     "lines": 54,
     "depth": 2
   },
   {
     "module": "backend",
+    "method": "validate_reopen",
+    "lines": 51,
+    "depth": 2
+  },
+  {
+    "module": "backend",
+    "method": "spawn_child",
+    "lines": 52,
+    "depth": 2
+  },
+  {
+    "module": "backend",
     "method": "initialize_output",
-    "lines": 39,
+    "lines": 37,
     "depth": 3
   },
   {
@@ -128,13 +128,13 @@
   {
     "module": "backend",
     "method": "finish_result",
-    "lines": 78,
+    "lines": 76,
     "depth": 4
   },
   {
     "module": "backend",
     "method": "handle_timeout",
-    "lines": 65,
+    "lines": 63,
     "depth": 2
   },
   {
@@ -242,7 +242,7 @@
   {
     "module": "pi_events",
     "method": "apply",
-    "lines": 19,
+    "lines": 17,
     "depth": 2
   },
   {
@@ -260,32 +260,32 @@
   {
     "module": "pi_events",
     "method": "apply",
+    "lines": 10,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 16,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 52,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 29,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
     "lines": 12,
-    "depth": 1
-  },
-  {
-    "module": "pi_events",
-    "method": "apply",
-    "lines": 18,
-    "depth": 1
-  },
-  {
-    "module": "pi_events",
-    "method": "apply",
-    "lines": 54,
-    "depth": 1
-  },
-  {
-    "module": "pi_events",
-    "method": "apply",
-    "lines": 31,
-    "depth": 1
-  },
-  {
-    "module": "pi_events",
-    "method": "apply",
-    "lines": 14,
-    "depth": 1
+    "depth": 0
   },
   {
     "module": "pi_events",
@@ -296,13 +296,13 @@
   {
     "module": "pi_events",
     "method": "apply",
-    "lines": 97,
+    "lines": 95,
     "depth": 3
   },
   {
     "module": "pi_events",
     "method": "apply",
-    "lines": 63,
+    "lines": 61,
     "depth": 4
   },
   {
@@ -314,7 +314,7 @@
   {
     "module": "pi_events",
     "method": "apply",
-    "lines": 75,
+    "lines": 73,
     "depth": 5
   },
   {
@@ -338,7 +338,7 @@
   {
     "module": "pi_events",
     "method": "apply",
-    "lines": 30,
+    "lines": 28,
     "depth": 3
   },
   {
@@ -374,8 +374,8 @@
   {
     "module": "pi_events",
     "method": "apply",
-    "lines": 15,
-    "depth": 1
+    "lines": 13,
+    "depth": 0
   },
   {
     "module": "pi_events",
@@ -386,14 +386,14 @@
   {
     "module": "pi_events",
     "method": "apply",
-    "lines": 8,
+    "lines": 6,
     "depth": 1
   },
   {
     "module": "pi_events",
     "method": "apply",
-    "lines": 15,
-    "depth": 1
+    "lines": 13,
+    "depth": 0
   },
   {
     "module": "pi_events",
@@ -404,14 +404,14 @@
   {
     "module": "pi_events",
     "method": "apply",
-    "lines": 22,
+    "lines": 20,
     "depth": 1
   },
   {
     "module": "pi_events",
     "method": "apply",
-    "lines": 17,
-    "depth": 1
+    "lines": 15,
+    "depth": 0
   },
   {
     "module": "pi_events",
@@ -428,8 +428,8 @@
   {
     "module": "pi_events",
     "method": "apply",
-    "lines": 10,
-    "depth": 1
+    "lines": 8,
+    "depth": 0
   },
   {
     "module": "pi_events",
@@ -488,19 +488,19 @@
   {
     "module": "pi_commands",
     "method": "on_response",
-    "lines": 23,
-    "depth": 2
-  },
-  {
-    "module": "pi_commands",
-    "method": "on_response",
-    "lines": 33,
-    "depth": 2
-  },
-  {
-    "module": "pi_commands",
-    "method": "on_response",
     "lines": 21,
+    "depth": 2
+  },
+  {
+    "module": "pi_commands",
+    "method": "on_response",
+    "lines": 31,
+    "depth": 2
+  },
+  {
+    "module": "pi_commands",
+    "method": "on_response",
+    "lines": 19,
     "depth": 2
   },
   {
@@ -512,14 +512,14 @@
   {
     "module": "pi_commands",
     "method": "on_response",
-    "lines": 10,
-    "depth": 1
+    "lines": 8,
+    "depth": 0
   },
   {
     "module": "pi_commands",
     "method": "on_response",
-    "lines": 10,
-    "depth": 1
+    "lines": 8,
+    "depth": 0
   },
   {
     "module": "turn_inputs",

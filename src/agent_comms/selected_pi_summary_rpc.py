@@ -43,8 +43,7 @@ def _summary_response(
             raise ValueError("Incomplete bounded selected summary")
         response = PiRpcChannel.decode_record(raw, strict=True, max_bytes=_MAX_RESPONSE).wire
         if (
-            type(response) is not dict
-            or set(response) != {"id", "type", "command", "success", "data"}
+            set(response) != {"id", "type", "command", "success", "data"}
             or response["id"] != request["id"]
             or response["type"] != "response"
             or response["command"] != request["type"]
