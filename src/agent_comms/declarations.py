@@ -50,6 +50,20 @@ from .bus_publication import (
     validate_initial_record,
 )
 from .bus_route_counts import BusRouteCounts
+from .goal_presentation import (
+    ExecutionPresentation,
+    StandbyExecutionPresentation,
+    StateExecutionPresentation,
+)
+from .goal_states import (
+    ActiveGoal,
+    BlockedGoal,
+    CompletedGoal,
+    GoalState,
+    GoalStateProjection,
+    PausedGoal,
+    PauseSource,
+)
 
 if TYPE_CHECKING:
     from .coordination import PublicationIntent
@@ -887,18 +901,31 @@ def channel_tag(target: str) -> str:
 # own parent. Every Thread in the system derives its semantics from this type.
 
 
-class GoalPauseSource(StrEnum):
-    OWNER = "owner"
-    MODEL = "model"
-    RUNTIME = "runtime"
+# Legacy public enum is a derived boundary projection, not another source roster.
+GoalPauseSource = StrEnum(  # type: ignore[misc]  # declaration-derived compatibility enum
+    "GoalPauseSource",
+    {
+        member.declared_name.upper(): member.declared_name
+        for member in PauseSource.members_with(PauseSource)
+    },
+)
 
 
 class GoalExecutionState(StrEnum):
-    RUNNABLE = "runnable"
-    STANDBY = "standby"
-    PAUSED = "paused"
-    BLOCKED = "blocked"
-    COMPLETED = "completed"
+    view: ExecutionPresentation
+
+    def __new__(cls, value: str, view: ExecutionPresentation | None = None) -> GoalExecutionState:
+        assert view is not None  # Enum declarations supply behavior; value lookup uses EnumMeta.
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj.view = view
+        return obj
+
+    RUNNABLE = (ActiveGoal().execution_name, StateExecutionPresentation(ActiveGoal))
+    STANDBY = ("standby", StandbyExecutionPresentation())
+    PAUSED = (PausedGoal.declared_name, StateExecutionPresentation(PausedGoal))
+    BLOCKED = (BlockedGoal.declared_name, StateExecutionPresentation(BlockedGoal))
+    COMPLETED = (CompletedGoal.declared_name, StateExecutionPresentation(CompletedGoal))
 
 
 @dataclass(frozen=True, slots=True)
@@ -916,18 +943,8 @@ class GoalExecution:
     block_reason: str | None = None
 
     def presentation(self, title: str) -> ThreadPresentation:
-        if self.state is GoalExecutionState.STANDBY:
-            names = ", ".join(f"@{target.name}" for target in self.wait_for)
-            idle = ", ".join(f"@{target.name}" for target in self.inactive_wait_for)
-            suffix = f"; no active turn: {idle}" if idle else ""
-            return ThreadPresentation(title, "◌", f"Standby · waiting for {names}{suffix}")
-        if self.state is GoalExecutionState.BLOCKED:
-            reason = (
-                " ".join(self.block_reason.split()) if self.block_reason else "reason unavailable"
-            )
-            summary = reason[:157] + "…" if len(reason) > 160 else reason
-            return ThreadPresentation(title, "!", f"Blocked · {summary}")
-        return ThreadPresentation(title, "✓", self.state.value.title())
+        glyph, summary = self.state.view.render(self)
+        return ThreadPresentation(title, glyph, summary)
 
     @classmethod
     def from_wire(cls, data: Mapping) -> GoalExecution:
@@ -1002,40 +1019,74 @@ class GoalMentionSource:
         object.__setattr__(self, "bindings", bindings)
 
 
-@dataclass(frozen=True, slots=True)
-class Goal:
-    """One durable objective shared by its executing owner and all clients."""
+@dataclass(frozen=True, init=False)
+class Goal(GoalStateProjection):
+    """Typed current state with the legacy dataclass field projection.
+
+    ``status``, ``block_reason`` and ``pause_source`` are read-only projections,
+    never independent writable state. Keeping them as dataclass fields preserves
+    existing asdict/replace callers at runtime and model boundaries. The private
+    state is deliberately not a serialized field or a competing stored value.
+    """
 
     text: str
     id: str
-    status: str = "active"
-    progress: str = ""
-    # Older registry rows omit this field and start at revision zero. Every
-    # later goal transition advances it, even when status/progress return to
-    # identical values, so a captured Goal cannot pass a stale CAS after ABA.
-    revision: int = 0
-    reported_turn: str | None = None
-    mention_source: GoalMentionSource | None = None
-    # Legacy blocked rows omit this field; never invent their reason from progress.
-    block_reason: str | None = None
+    status: str
+    progress: str
+    revision: int
+    reported_turn: str | None
+    mention_source: GoalMentionSource | None
+    block_reason: str | None
+    pause_source: str | None
+
+    def __init__(
+        self,
+        text: str,
+        id: str,
+        status: str = "active",
+        progress: str = "",
+        revision: int = 0,
+        reported_turn: str | None = None,
+        mention_source: GoalMentionSource | None = None,
+        block_reason: str | None = None,
+        pause_source: str | None = None,
+        *,
+        state: GoalState | None = None,
+    ) -> None:
+        object.__setattr__(
+            self, "_state", state or GoalState.from_legacy(status, block_reason, pause_source)
+        )
+        object.__setattr__(self, "text", text)
+        object.__setattr__(self, "id", id)
+        object.__setattr__(self, "progress", progress)
+        object.__setattr__(self, "revision", revision)
+        object.__setattr__(self, "reported_turn", reported_turn)
+        object.__setattr__(self, "mention_source", mention_source)
+        self.__post_init__()
+
+    @classmethod
+    def from_registry(cls, data: Mapping, root: Path) -> Goal:
+        from .field_codec import FieldCodec
+        from .goal_pauses import GoalPauseEvents
+
+        values = dict(data)
+        if (
+            "pause_source" not in values
+            and GoalState.decode(values.get("status", "active")) is PausedGoal
+        ):
+            events = GoalPauseEvents(root / GoalPauseEvents.filename).snapshot()
+            event = events.get(f"{values['id']}:{values.get('revision', 0)}")
+            if event is not None:
+                values["pause_source"] = str(event.source)
+        return FieldCodec.decode(cls, values)
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:
             raise ValueError("A goal requires text and an identity.")
-        if self.status not in {"active", "paused", "blocked", "completed"}:
-            raise ValueError("Unknown goal status.")
         if type(self.revision) is not int or not 0 <= self.revision < 1 << 63:
             raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
         if self.reported_turn is not None and not isinstance(self.reported_turn, str):
             raise ValueError("Goal reported turn must be a string or null.")
-        if self.block_reason is not None and (
-            self.status != "blocked"
-            or type(self.block_reason) is not str
-            or not self.block_reason.strip()
-            or self.block_reason != self.block_reason.strip()
-            or len(self.block_reason) > 1024
-        ):
-            raise ValueError("A blocked goal requires a bounded explicit reason.")
         source = self.mention_source
         if isinstance(source, dict):
             source = GoalMentionSource(**source)
@@ -1048,25 +1099,16 @@ class Goal:
 
     @property
     def active(self) -> bool:
-        return self.status == "active"
+        return self.state.active
 
     @property
     def toggle_action(self) -> str:
-        return {
-            "active": "paused",
-            "paused": "active",
-            "blocked": "retry",
-            "completed": "",
-        }[self.status]
+        action = self.state.toggle
+        return action.declared_name if action else ""
 
     @property
     def toggle_label(self) -> str:
-        return {
-            "active": "Pause",
-            "paused": "Resume",
-            "blocked": "Retry",
-            "completed": "Completed",
-        }[self.status]
+        return self.state.toggle_label
 
     @property
     def summary(self) -> str:
@@ -1461,7 +1503,7 @@ class ThreadView:
             self.status.active
             and not self.activity.state.busy
             and self.goal_execution is not None
-            and self.goal_execution.state is GoalExecutionState.STANDBY
+            and self.goal_execution.state.view.waiting
         ):
             return self.goal_execution.presentation(self.thread.title or self.thread.name)
         return self.status.presentation(self.thread.title or self.thread.name, self.activity)
@@ -2370,7 +2412,11 @@ No bus, delivery cursor, pending input or coordinator row is copied.
                 session_file=data.get("session_file"),
                 model=data.get("model"),
                 thinking_level=data.get("thinking_level"),
-                goal=Goal(**data["goal"]) if data.get("goal") else None,
+                goal=(
+                    Goal.from_registry(data["goal"], self._path.parent)
+                    if data.get("goal")
+                    else None
+                ),
                 created_at=self._created_at(data),
                 previous_worktrees=tuple(data.get("previous_worktrees", [])),
                 auto_title_pending=bool(data.get("auto_title_pending", False)),

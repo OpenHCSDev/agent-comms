@@ -15,6 +15,7 @@ from .mro_dispatch import MroDispatch, handles
 from .tool_results import ToolDiff
 
 if TYPE_CHECKING:
+    from .declarations import Goal, GoalExecution
     from .operations import Comms
 
 
@@ -24,6 +25,22 @@ class AgentEvent(ABC):
     @abstractmethod
     def __init__(self) -> None:
         """Concrete dataclass declarations supply their own payload constructor."""
+
+
+@dataclass(frozen=True)
+class GoalChanged(AgentEvent):
+    """Current goal authority observed after durable registry/history publication.
+
+    Cross-process notification uses the existing registry watcher/poll; the
+    authoritative snapshot supplies this event, never a tool's spelling.
+    """
+
+    goal: Goal | None
+    execution: GoalExecution | None
+
+    @property
+    def signature(self) -> tuple[Goal | None, GoalExecution | None]:
+        return self.goal, self.execution
 
 
 @dataclass(frozen=True)

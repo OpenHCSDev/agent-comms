@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, fields, replace
-from typing import Any
+from typing import Any, ClassVar
 
 from .declarations import (
     Goal,
@@ -89,6 +89,8 @@ class GoalInputReview:
 
 @dataclass(frozen=True, slots=True)
 class GoalWaits(LockedStore[dict[str, GoalWait]]):
+    filename: ClassVar[str] = "goal_waits.json"
+
     @property
     def record_type(self) -> type[dict[str, GoalWait]]:
         return dict[str, GoalWait]
@@ -240,7 +242,7 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
             )
             return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets, inactive)
         return GoalExecution(
-            GoalExecutionState.RUNNABLE if goal.active else GoalExecutionState(goal.status),
+            GoalExecutionState(goal.state.execution_name),
             goal.id,
-            block_reason=goal.block_reason if goal.status == "blocked" else None,
+            block_reason=goal.state.reason,
         )

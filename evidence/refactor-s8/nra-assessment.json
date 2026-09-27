@@ -1,0 +1,23 @@
+{
+  "scan_status": {
+    "mode": "exact_compact_global",
+    "analyzed_detector_count": 79,
+    "omitted_detector_count": 0,
+    "complete": true,
+    "reason": "all_context_detectors_use_compact_global_projections"
+  },
+  "raw_count": 9,
+  "remaining_authorities": [
+    "ControlClassification",
+    "DisplayOrder",
+    "Message",
+    "ResponsePolicy",
+    "SavedView",
+    "ThreadRole",
+    "ThreadStatus",
+    "ViewPredicate",
+    "WireExportScopeKind"
+  ],
+  "goal_findings": [],
+  "limits": "Remaining authorities are owned by other surfaces. This is not a zero-findings package claim."
+}

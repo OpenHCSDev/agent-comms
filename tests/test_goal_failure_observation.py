@@ -192,7 +192,17 @@ def test_commit_or_sync_error_never_yields_execution_success(bound, monkeypatch,
 def test_pause_projection_never_becomes_runnable(bound, source):
     store, owner, _, observation = bound
     store.record_failed(observation.reservation, "failed", observation=observation)
-    owner = replace(owner, goal=replace(owner.goal, status="paused", revision=3))
+    owner = replace(
+        owner,
+        goal=replace(
+            owner.goal,
+            status="paused",
+            revision=3,
+            pause_source=(
+                str(source) if source in (GoalPauseSource.OWNER, GoalPauseSource.MODEL) else None
+            ),
+        ),
+    )
     pause = (
         None
         if source is None
@@ -207,7 +217,7 @@ def test_pause_projection_never_becomes_runnable(bound, source):
         store.path, owner=owner, owner_status=ThreadStatus.IDLE, admission=3, pause=pause
     )
     assert projection.state == (
-        "owner_paused" if source is GoalPauseSource.OWNER else "paused_uncertain"
+        "paused_uncertain" if source is GoalPauseSource.MODEL else "owner_paused"
     )
     assert "canRetry" not in projection.to_primitive()
     assert store.path.read_bytes() == before

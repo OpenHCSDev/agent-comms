@@ -82,7 +82,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
                 assert current.active and current.id == goal.id
                 assert store.snapshot(goal.id).number == 2
                 comms.update_goal(session, "completed", goal_id=goal.id, model_report=True)
-                yield ae.ToolEnd(id="report", name="comms_goal", ok=True)
+                yield ae.ToolEnd(id="report", name="alternate_goal_report", ok=True)
                 yield ae.StreamSettled()
                 yield ae.Done(ok=True, text="Goal completed")
                 continued.set()

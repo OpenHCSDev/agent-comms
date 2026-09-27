@@ -1,0 +1,10 @@
+src/agent_comms/declarations.py:306: error: Module has no attribute "LK_NBRLCK"  [attr-defined]
+src/agent_comms/declarations.py:306: error: Module has no attribute "LK_NBLCK"  [attr-defined]
+src/agent_comms/declarations.py:896: error: Second argument of StrEnum() must be string, tuple, list or dict literal for mypy to determine Enum members  [misc]
+src/agent_comms/declarations.py:942: error: Missing positional argument "view" in call to "GoalExecutionState"  [call-arg]
+src/agent_comms/declarations.py:1075: error: Returning Any from function declared to return "GoalState"  [no-any-return]
+src/agent_comms/declarations.py:1075: error: "Goal" has no attribute "_state"; maybe "state"?  [attr-defined]
+src/agent_comms/declarations.py:1077: error: Name "status" already defined on line 1024  [no-redef]
+src/agent_comms/declarations.py:1081: error: Name "block_reason" already defined on line 1029  [no-redef]
+src/agent_comms/declarations.py:1085: error: Name "pause_source" already defined on line 1030  [no-redef]
+Found 9 errors in 1 file (checked 1 source file)

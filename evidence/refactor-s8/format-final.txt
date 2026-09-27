@@ -1,0 +1,17 @@
+E501 Line too long (123 > 100)
+    --> src/agent_comms/acp.py:1240:101
+     |
+1238 |         name = self._sessions.get(session_id)
+1239 |         if name and (goal := self._comms.registry.require(name).goal) and goal.active:
+1240 |             self._comms.update_goal(name, PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)
+     |                                                                                                     ^^^^^^^^^^^^^^^^^^^^^^^
+1241 |         task = self._turn_tasks.get(session_id)
+1242 |         if task is not None:
+     |
+
+Found 3 errors (2 fixed, 1 remaining).
+reformatted tests/test_goal_nominal.py
+reformatted src/agent_comms/acp.py
+
+All done! ✨ 🍰 ✨
+2 files reformatted, 1 file left unchanged.

@@ -87,6 +87,17 @@ from .declarations import (
     is_channel_target,
 )
 from .diagnostics import record_terminal_failure, terminal_failure_reason
+from .goal_actions import (
+    BlockedGoalAction,
+    EditGoalAction,
+    GoalAction,
+    GoalPrecondition,
+    OwnerControlInvocable,
+    OwnerInvocable,
+    PausedGoalAction,
+    RetryGoalAction,
+    SetGoalAction,
+)
 from .goal_attempts import (
     Generation,
     GoalAttemptError,
@@ -96,6 +107,7 @@ from .goal_attempts import (
     UnresolvedAttempt,
 )
 from .goal_failure_observation import FailedTurnObservation
+from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .input_disposition import AcpDeliveryCursors, InputDispositions
 from .mro_dispatch import MroDispatch, handles
 from .native_source_cursor import advance_current_native_cursor, read_current_native_cursor
@@ -1225,7 +1237,11 @@ class CommsAgent:
             return
         name = self._sessions.get(session_id)
         if name and (goal := self._comms.registry.require(name).goal) and goal.active:
-            self._comms.update_goal(name, "paused", goal_id=goal.id, owner_action=True)
+            self._comms.update_goal(
+                name,
+                PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                actor=OwnerInvocable,
+            )
         task = self._turn_tasks.get(session_id)
         if task is not None:
             task.cancel()
@@ -1710,24 +1726,13 @@ class CommsAgent:
         )
 
     async def _sync_goal_execution(self, session_id: str, thread_name: str) -> None:
-        goal, execution = self._comms.goal_snapshot(thread_name)
-        signature = (goal, execution)
-        previous = self._goal_execution_signatures
-        if session_id in previous and previous[session_id] == signature:
-            return
-        await self._runtime.session_update(
-            session_id=session_id,
-            update=SessionInfoUpdate(
-                session_update="session_info_update",
-                field_meta={
-                    "agentComms": {
-                        "goal": asdict(goal) if goal else None,
-                        "goalExecution": asdict(execution) if execution else None,
-                    }
-                },
-            ),
+        event = self._comms.goal_changed(
+            thread_name, self._goal_execution_signatures.get(session_id)
         )
-        previous[session_id] = signature
+        if event is None:
+            return
+        await self._emit_event(session_id, event)
+        self._goal_execution_signatures[session_id] = event.signature
 
     def _private_session_mode(self) -> bool:
         marker = self._private_nk_marker()
@@ -2235,7 +2240,7 @@ class CommsAgent:
                 return
             try:
                 generation = store.snapshot(goal.id)
-                if generation is None or generation.state != "ready":
+                if generation is None or not generation.lifecycle.ready:
                     self._comms.block_goal_after_failed_turn(
                         thread.name,
                         started_goal=goal,
@@ -2303,10 +2308,9 @@ class CommsAgent:
         name = self._require_session(session_id)
         goal = self._comms.update_goal(
             name,
-            "set",
-            text=text,
+            SetGoalAction(text=text, expect=GoalPrecondition(expected_owner_pid=os.getpid())),
+            actor=OwnerInvocable,
             owner_store=self._open_goal_store(),
-            expected_owner_pid=os.getpid(),
         )
         assert goal is not None
         self._schedule_goal(session_id)
@@ -2324,11 +2328,15 @@ class CommsAgent:
         # snapshot and the executing owner. Do not acquire its lock twice.
         edited = self._comms.update_goal(
             name,
-            "edit",
-            text=text,
-            goal_id=goal_id,
-            expected_goal=goal,
-            expected_owner_pid=os.getpid(),
+            EditGoalAction(
+                text=text,
+                expect=GoalPrecondition(
+                    goal_id=goal_id,
+                    expected_goal=goal,
+                    expected_owner_pid=os.getpid(),
+                ),
+            ),
+            actor=OwnerInvocable,
         )
         assert edited is not None
         await self._sync_thread_config(session_id)
@@ -2338,7 +2346,8 @@ class CommsAgent:
         self, session_id: str, status: str, goal_id: str, expected_revision: int
     ) -> Goal | None:
         """Apply an explicit UI pause, resume, or clear through the current owner."""
-        if status not in {"active", "paused", "clear"}:
+        action = GoalAction.decode(status)
+        if not issubclass(action, OwnerControlInvocable):
             raise ValueError("Goal updates support only active, paused, or clear.")
         name = self._require_session(session_id)
         goal = self._comms.registry.require(name).goal
@@ -2347,68 +2356,46 @@ class CommsAgent:
         try:
             updated = self._comms.update_goal(
                 name,
-                status,
-                goal_id=goal_id,
-                expected_goal=goal,
-                expected_owner_pid=os.getpid(),
-                owner_action=True,
-                owner_store=self._open_goal_store() if status == "active" else None,
+                action(
+                    expect=GoalPrecondition(
+                        goal_id=goal_id,
+                        expected_goal=goal,
+                        expected_owner_pid=os.getpid(),
+                    )
+                ),
+                actor=OwnerInvocable,
+                owner_store=self._open_goal_store() if action.owner_grant else None,
             )
         finally:
             # Resume can discover that a paused attempt failed. Publish the
             # reconciled BLOCKED state even when the action returns an error.
             await self._sync_thread_config(session_id)
-        if status == "active":
+        if action.schedules_goal:
             self._schedule_goal(session_id)
         return updated
 
     async def retry_goal(self, session_id: str, goal_id: str, expected_revision: int) -> Goal:
         """Record an explicit UI retry in the executing owner's private ledger."""
         name = self._require_session(session_id)
-        with _store_lock(self._comms._wire_lock_path):
-            thread = self._comms.registry.require(name)
-            if thread.pid != os.getpid() or not self._comms.registry.status(name).running:
-                raise ValueError("The goal owner changed; refresh its state.")
-            goal = thread.goal
-            if (
-                goal is None
-                or goal.id != goal_id
-                or goal.revision != expected_revision
-                or goal.status != "blocked"
-            ):
-                raise ValueError("The blocked goal changed; refresh its state.")
-            if self._pending_goal_origins.get(name) == goal_id:
-                raise ValueError("Wait for the goal origin turn to finish.")
-            resumed = replace(goal, status="active", block_reason=None, revision=goal.revision + 1)
-            store = self._open_goal_store()
-            generation = store.snapshot(goal_id)
-            if generation is None:
-                # Older UI clients wrote only the registry goal. This explicit
-                # human Retry may create the missing ledger; it never silently
-                # replays a prior unknown provider attempt.
-                store.create_goal(goal_id)
-                generation = store.snapshot(goal_id)
-                assert generation is not None
-            if generation.state == "blocked" and generation.attempt_id:
-                store.authorize_retry(
-                    goal_id,
-                    expected_generation=generation.number,
-                    attempt_id=generation.attempt_id,
-                    user_decision_id=uuid4().hex,
+        thread = self._comms.registry.require(name)
+        goal = thread.goal
+        if goal is None or goal.id != goal_id or goal.revision != expected_revision:
+            raise ValueError("The blocked goal changed; refresh its state.")
+        if self._pending_goal_origins.get(name) == goal_id:
+            raise ValueError("Wait for the goal origin turn to finish.")
+        resumed = self._comms.update_goal(
+            name,
+            RetryGoalAction(
+                expect=GoalPrecondition(
+                    goal_id=goal_id,
+                    expected_goal=goal,
+                    expected_owner_pid=os.getpid(),
                 )
-            elif generation.state == "ready" and generation.attempt_id is None:
-                # A previous explicit retry may have durably created READY
-                # before the registry update, then crashed with its grant.
-                store.authorize_ready_recovery(
-                    goal_id,
-                    expected_generation=generation.number,
-                    user_decision_id=uuid4().hex,
-                )
-            else:
-                raise ValueError("The goal attempt is unresolved; inspect it before retrying.")
-            self._comms.registry.register(
-                replace(thread, goal=resumed), self._comms.registry.status(name)
-            )
+            ),
+            actor=OwnerInvocable,
+            owner_store=self._open_goal_store(),
+        )
+        assert resumed is not None
         # READY records the accepted owner decision even during an unrelated
         # turn. The scheduler's existing busy fences defer launch until that
         # turn finishes; reserved/claimed attempts remain unretryable above.
@@ -2628,7 +2615,7 @@ class CommsAgent:
             admission = self._comms.registry.snapshot().admission_generations[thread_name]
             with _store_lock(self._comms._wire_lock_path):
                 generation = store.snapshot(goal.id)
-                if generation is None or generation.state != "ready":
+                if generation is None or not generation.lifecycle.ready:
                     if autonomous_goal:
                         return
                     raise _goal_attempt_unavailable()
@@ -3058,7 +3045,6 @@ class CommsAgent:
         terminal_ok: bool | None = None
         terminal_failure: dict[str, Any] = {}
         successful_tool_observed = False
-        goal_tool_ok = False
         goal_attempt_resolved = False
         originated_goal_ids: set[str] = set()
         originated_attempts: dict[str, LaunchPermit] = {}
@@ -3434,11 +3420,9 @@ class CommsAgent:
 
                 @handles(events.ToolEnd)
                 async def tool_ended(self, event: events.ToolEnd) -> None:
-                    nonlocal thread_name, goal_tool_ok, successful_tool_observed
+                    nonlocal thread_name, successful_tool_observed
                     if event.ok:
                         successful_tool_observed = True
-                    if event.name == "comms_goal" and event.ok is True:
-                        goal_tool_ok = True
                     thread_name = await agent._sync_session_identity(session_id)
                     if event.name == "comms_set_goal" and event.ok is True:
                         current_goal = agent._comms.registry.require(thread_name).goal
@@ -3531,18 +3515,17 @@ class CommsAgent:
                 assert self._goal_store is not None
                 current_goal = self._comms.registry.require(thread_name).goal
                 verified_report = (
-                    goal_tool_ok
-                    and current_goal is not None
+                    current_goal is not None
                     and current_goal.id == goal.id
                     and current_goal.reported_turn == turn_id
                 )
                 if terminal_ok is True and current_goal is not None and current_goal.id == goal.id:
                     witness = f"native-terminal:{turn_id}"
-                    if current_goal.status == "completed" and verified_report:
+                    if isinstance(current_goal.state, CompletedGoal) and verified_report:
                         witness = f"registry-revision:{current_goal.revision}"
                         self._goal_store.record_verified_completion(goal_permit, witness)
                         goal_attempt_resolved = True
-                    elif current_goal.active or current_goal.status == "paused":
+                    elif current_goal.active or isinstance(current_goal.state, PausedGoal):
                         # A successful in-flight turn may finish after owner pause.
                         # Preserve success; the scheduler will not launch while paused.
                         self._goal_store.record_verified_progress(goal_permit, witness)
@@ -3650,7 +3633,7 @@ class CommsAgent:
                     terminal_ok is True
                     and current is not None
                     and current.id == originated_id
-                    and current.status in {"active", "paused", "completed"}
+                    and isinstance(current.state, (ActiveGoal, PausedGoal, CompletedGoal))
                 )
                 assert self._goal_store is not None
                 resolved_origin_permit = originated_attempts.get(originated_id)
@@ -3658,7 +3641,7 @@ class CommsAgent:
                     if (
                         valid_origin
                         and current is not None
-                        and current.status in {"active", "paused"}
+                        and isinstance(current.state, (ActiveGoal, PausedGoal))
                     ):
                         self._goal_store.record_verified_progress(
                             resolved_origin_permit, f"origin-final:{turn_id}"
@@ -3666,8 +3649,7 @@ class CommsAgent:
                     elif (
                         valid_origin
                         and current is not None
-                        and current.status == "completed"
-                        and goal_tool_ok
+                        and isinstance(current.state, CompletedGoal)
                         and current.reported_turn == turn_id
                     ):
                         self._goal_store.record_verified_completion(
@@ -3682,7 +3664,7 @@ class CommsAgent:
                         valid_origin = False
                 elif not valid_origin:
                     generation = self._goal_store.snapshot(originated_id)
-                    if generation is not None and generation.state in {"ready", "reserved"}:
+                    if generation is not None and generation.lifecycle.allows_resume(True):
                         self._goal_store.retire_goal(
                             originated_id,
                             expected_generation=generation.number,
@@ -3692,14 +3674,14 @@ class CommsAgent:
                     not valid_origin
                     and current is not None
                     and current.id == originated_id
-                    and current.status in {"active", "completed"}
+                    and isinstance(current.state, (ActiveGoal, CompletedGoal))
                 ):
                     self._comms.update_goal(
                         thread_name,
-                        "blocked",
-                        goal_id=originated_id,
-                        expected_goal=current,
-                        progress="Goal origin turn did not finish successfully.",
+                        BlockedGoalAction(
+                            expect=GoalPrecondition(goal_id=originated_id, expected_goal=current),
+                            progress="Goal origin turn did not finish successfully.",
+                        ),
                     )
                 if self._pending_goal_origins.get(thread_name) == originated_id:
                     self._pending_goal_origins.pop(thread_name, None)

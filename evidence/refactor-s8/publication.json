@@ -1,0 +1,22 @@
+{
+  "baseRefName": "codex/refactor-s1-events-20260927",
+  "headRefName": "codex/refactor-s8-goals-20260927",
+  "headRefOid": "f20433aa95cc914686c1ffed09f44b768fb964a3",
+  "headRepositoryOwner": {
+    "id": "MDQ6VXNlcjU2ODgwMDUy",
+    "name": "Tristan Simas",
+    "login": "trissim"
+  },
+  "isDraft": true,
+  "number": 134,
+  "url": "https://github.com/OpenHCSDev/agent-comms/pull/134",
+  "implementation_commits": [
+    "738476f",
+    "f20433aa95cc914686c1ffed09f44b768fb964a3"
+  ],
+  "normal_integration_commits": [
+    "568b05e",
+    "2d6a757"
+  ],
+  "publication_note": "This captures the tested implementation head; the following receipt-only commit changes documentation, not executable source."
+}
