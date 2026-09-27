@@ -37,6 +37,15 @@ _TOOL_SOURCE_SHA = "b6577147072d959632ed2318bd11645b019d6bccc76ab6d24fc112ac2da4
 
 
 @dataclass(frozen=True, slots=True)
+class SelectedToolIntent:
+    """Trusted, explicit pre-turn opt-in; no tool call or write authority.
+
+    The owner must create a distinct bound SelectedToolMode only after reserving
+    the exact FULL input. Do not construct this from injected/model text.
+    """
+
+
+@dataclass(frozen=True, slots=True)
 class SelectedToolMode:
     """Trusted owner callback, never parsed from a model call or injected text."""
 
