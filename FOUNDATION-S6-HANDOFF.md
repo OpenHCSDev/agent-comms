@@ -4,6 +4,10 @@ Owner: foundation/S6 Codex worker. Assigned branch:
 `codex/refactor-foundation-s6-20260927`; persistent worktree:
 `/home/ts/wt/comms-refactor-foundation-s6-20260927`.
 
+Draft PR: https://github.com/OpenHCSDev/agent-comms/pull/125
+Implementation commit: `ea13fb1` (following foundation `19323fb`, `c4c4d57`).
+The final documentation-only checkpoint follows this implementation commit.
+
 ## Adoption and current state
 
 Base is main `b1e5bfd5c39ea69c507833e8ed5efc96a7fb038b` (verified remote main
