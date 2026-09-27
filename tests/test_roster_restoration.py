@@ -109,3 +109,73 @@ def test_catalog_restore_preserves_current_preferences_and_historical_channels(t
     new.channel_catalog.restore_missing(old.channel_catalog)
     assert new.channel_catalog.resolve("#comms") == before
     assert new.channel_catalog.resolve("#nra").any_mode
+
+
+@pytest.mark.parametrize("repair_existing", [False, True])
+def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
+    tmp_path, repair_existing
+):
+    from agent_comms.bus_publication import stable_thread_lookup
+    from agent_comms.cohort_schema import install_private_cohort_schema
+    from agent_comms.coordination_cohort import accept_initial_cohort
+    from agent_comms.coordination_store import MutationStore
+
+    old, current = Comms(tmp_path / "old"), Comms(tmp_path / "current")
+    live = Thread("live", frozenset({"comms"}), str(tmp_path), pid=os.getpid())
+    missing = Thread("missing", frozenset({"comms"}), str(tmp_path), pid=os.getpid())
+    old.register(missing)
+    current.register(live)
+    root_id = current.initialize_private_initial_protocol()
+    source = old.registry.snapshot()
+    with MutationStore(str(current.root / "coordination.sqlite3")) as store:
+        install_private_cohort_schema(store)
+        live_before = store.register_participant(
+            stable_thread_lookup(live.created_at), live.name, live.name, committed=True
+        ).value
+        if repair_existing:
+            current.registry.restore_stopped(source, (missing.name,))
+        message = (
+            current.send_user_message("#comms", "@live Reply once", worktree=str(tmp_path))
+            if repair_existing
+            else None
+        )
+        bus_before = current.bus._path.read_bytes() if message else None
+        current.restore_stopped(source, (missing.name,))
+        snapshot = current.registry.snapshot()
+        assert snapshot.statuses[missing.name] is ThreadStatus.STOPPED
+        assert snapshot.threads[missing.name].pid == 0
+        assert snapshot.threads[live.name] == live
+        assert store.participant(stable_thread_lookup(live.created_at)) == live_before
+        assert (
+            store.participant(stable_thread_lookup(missing.created_at)).pointer.execution_id is None
+        )
+        if bus_before is not None:
+            assert current.bus._path.read_bytes() == bus_before
+        else:
+            message = current.send_user_message(
+                "#comms", "@live Reply once", worktree=str(tmp_path)
+            )
+        accept_initial_cohort(current.bus, root_id, message.seq, store)
+        assert tuple(
+            store._connection.execute(
+                "SELECT member_count, claim_count, sealed FROM claim_batch_receipts "
+                "WHERE wire_seq=?",
+                (message.seq,),
+            ).fetchone()
+        ) == (2, 1, 1)
+        assert [
+            tuple(row)
+            for row in store._connection.execute(
+                "SELECT recipient, disposition FROM wake_claims WHERE wire_seq=?", (message.seq,)
+            ).fetchall()
+        ] == [(live.name, "full_pending")]
+        snapshot = current.registry.snapshot()
+        assert current.restore_stopped(source, (missing.name,)) == ()
+        assert current.registry.snapshot() == snapshot
+
+
+def test_public_restoration_does_not_create_coordinator(tmp_path):
+    old, current = Comms(tmp_path / "old"), Comms(tmp_path / "current")
+    old.register(Thread("missing", frozenset({"comms"}), str(tmp_path)))
+    assert current.restore_stopped(old.registry.snapshot(), ("missing",)) == ("missing",)
+    assert not (current.root / "coordination.sqlite3").exists()
