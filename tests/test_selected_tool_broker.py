@@ -25,6 +25,15 @@ def _wire(token: str, **changes: object) -> bytes:
     return (json.dumps(data, ensure_ascii=False) + "\n").encode("utf-8")
 
 
+def test_pre_turn_intent_is_distinct_from_owner_bound_mode() -> None:
+    intent = broker.SelectedToolIntent()
+    assert type(intent) is broker.SelectedToolIntent
+    assert not isinstance(intent, broker.SelectedToolMode)
+    assert not hasattr(intent, "action")
+    with pytest.raises(TypeError):
+        broker.SelectedToolMode(None)  # type: ignore[arg-type]
+
+
 def test_strict_bounded_request_and_no_model_admission() -> None:
     token = secrets.token_hex(32)
     assert broker.parse_selected_request(_wire(token), token) == broker.SelectedToolRequest(
