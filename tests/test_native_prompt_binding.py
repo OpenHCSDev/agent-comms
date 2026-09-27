@@ -880,21 +880,16 @@ def _all_bindings(store):
 
 def test_native_request_digest_matches_real_pinned_module():
     """Cross-check our digest against the REAL compiled _claimNativeInput."""
+    import os
     import shutil
     import subprocess
 
-    module = None
-    for candidate in (
-        "/dev/shm/pr48-production-native-33YdZB/node_modules/@earendil-works/"
-        "pi-coding-agent/dist/core/agent-session.js",
-        "/home/ts/.local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent/"
-        "dist/core/agent-session.js",
-    ):
-        if Path(candidate).exists():
-            module = candidate
-            break
-    if module is None or shutil.which("node") is None:
-        pytest.skip("real pinned native module or node unavailable")
+    package = os.environ.get("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE")
+    if package is None or shutil.which("node") is None:
+        pytest.skip("configured private native package or node unavailable")
+    module = Path(package) / "dist/core/agent-session.js"
+    if not module.is_file():
+        pytest.skip("configured private native module unavailable")
     script = f"""
 import('{module}').then(m => {{
   const fn = m.AgentSession.prototype._claimNativeInput;
@@ -905,7 +900,7 @@ import('{module}').then(m => {{
     images: null,
     streamingBehavior: null,
     expandPromptTemplates: true,
-    source: 'interactive',
+    source: 'rpc',
   }});
   console.log([...ctx._nativeInputClaims.values()][0]);
 }}).catch(e => {{ console.error(e.message); process.exit(1); }});
