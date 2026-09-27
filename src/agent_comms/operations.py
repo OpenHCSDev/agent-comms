@@ -580,13 +580,23 @@ class Comms:
 
     # ─── IRC views ────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _complete_history(page_reader):
+        """Materialize only for callers explicitly requesting the full history."""
+        page = page_reader(limit=1000)
+        pages = [page.messages]
+        while page.has_older:
+            page = page_reader(before=page.oldest_cursor, limit=1000)
+            pages.append(page.messages)
+        return [message for rows in reversed(pages) for message in rows]
+
     def dm_history(self, a: str, b: str) -> Sequence[Message]:
         """Full conversation between two threads, in seq order."""
-        return self.bus.dm_history(a, b)
+        return self._complete_history(lambda **kwargs: self.dm_history_page(a, b, **kwargs))
 
     def channel_history(self, target: str) -> Sequence[Message]:
         """Full history of one channel (``#all`` or a tag channel)."""
-        return self.bus.channel_history(target)
+        return self._complete_history(lambda **kwargs: self.channel_history_page(target, **kwargs))
 
     def dm_history_page(
         self,
@@ -599,11 +609,175 @@ class Comms:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         """Bounded DM history for any client adapter."""
-        return self.bus.dm_history_page(
-            a, b, before=before, after=after, limit=limit, max_bytes=max_bytes
+        def matches(message, snapshot):
+            def names(name):
+                return snapshot.aliases.get(name, name)
+
+            return {names(message.sender), names(message.target)} == {names(a), names(b)}
+
+        return self._integrated_display_page(
+            lambda **kwargs: self.bus.dm_history_page(a, b, **kwargs),
+            matches,
+            worktree=None,
+            before=before,
+            after=after,
+            limit=limit,
+            max_bytes=max_bytes,
         )
 
+    def attach_history(self, source_root: Path):
+        """Attach preserved history without admitting any historical execution."""
+        source = self.bus.attach_history(Path(source_root))
+        catalog = ChannelCatalog(Path(source.root) / "channels.json", source.registry())
+        self.channel_catalog.restore_missing(catalog)
+        return source
+
+    def historical_threads(self, name: str | None = None):
+        from .historical_views import HistoricalThread
+
+        return tuple(
+            HistoricalThread(source, thread)
+            for source in self.bus.history_sources()
+            for thread in source.registry().snapshot().threads.values()
+            if name is None or thread.name == name
+        )
+
+    def _integrated_display_page(
+        self, live_page, matches, *, worktree, before, after, limit, max_bytes
+    ):
+        from .historical_views import HistoricalDisplay, HistoryCursor
+
+        if not self.bus.history_sources() and not isinstance(before or after, HistoryCursor):
+            return live_page(before=before, after=after, limit=limit, max_bytes=max_bytes)
+        if before is not None and after is not None:
+            raise ValueError("Choose one history paging direction")
+        cursor = before if before is not None else after
+        historical = isinstance(cursor, HistoryCursor)
+        if not historical:
+            page = live_page(before=before, after=after, limit=limit, max_bytes=max_bytes)
+            if page.messages or after is not None:
+                return replace(page, has_older=page.has_older or bool(self.bus.history_sources()))
+        history = self.bus.historical_page(
+            matches,
+            before=before if historical and before is not None else None,
+            after=after if historical and after is not None else None,
+            limit=limit,
+            max_bytes=max_bytes,
+        )
+        if history.messages:
+            display = None
+            if worktree is not None:
+                viewer = self.user_identity(worktree)
+                display = HistoricalDisplay(
+                    viewer.name,
+                    viewer.created_at,
+                    history.messages[0].source,
+                    tuple(m.seq for m in history.messages),
+                )
+            latest = live_page(limit=1)
+            return replace(
+                history,
+                historical_display=display,
+                has_newer=history.has_newer or bool(latest.messages),
+            )
+        if historical and after is not None:
+            return live_page(after=0, limit=limit, max_bytes=max_bytes)
+        return history
+
     def dm_display_page(
+        self,
+        peer: str,
+        *,
+        worktree: str,
+        before=None,
+        after=None,
+        limit: int = 100,
+        max_bytes: int = 256 * 1024,
+    ) -> MessagePage:
+        viewer = self.user_identity(worktree).name
+
+        def matches(message, snapshot):
+            # A view spans older incarnations by name, but each row retains its
+            # original source identity. Source aliases never rewrite live ones.
+            def canonical(name):
+                return snapshot.aliases.get(name, name)
+
+            return {canonical(message.sender), canonical(message.target)} == {
+                canonical(viewer),
+                canonical(peer),
+            }
+
+        historical_only = peer not in self.registry and bool(self.historical_threads(peer))
+        def live_page(**kwargs):
+            if historical_only:
+                return MessagePage((), False, False)
+            return self._live_dm_display_page(peer, worktree=worktree, **kwargs)
+        return self._integrated_display_page(
+            live_page,
+            matches,
+            worktree=worktree,
+            before=before,
+            after=after,
+            limit=limit,
+            max_bytes=max_bytes,
+        )
+
+    def channel_display_page(
+        self,
+        target: str,
+        *,
+        worktree: str | None = None,
+        before=None,
+        after=None,
+        limit: int = 100,
+        max_bytes: int = 256 * 1024,
+    ) -> MessagePage:
+        if not self.bus.history_sources():
+            return self._live_channel_display_page(
+                target,
+                worktree=worktree,
+                before=before,
+                after=after,
+                limit=limit,
+                max_bytes=max_bytes,
+            )
+        channel = self.channel_catalog.views(self.registry.snapshot().threads).get(target)
+        if channel is None:
+            raise ValueError(f"Unknown channel: {target!r}")
+
+        def matches(message, snapshot):
+            members = frozenset(
+                name
+                for name, thread in snapshot.threads.items()
+                if channel.any_mode and channel.exact and channel.tags <= thread.tags
+            )
+            members |= frozenset(
+                name for name, owner in snapshot.aliases.items() if owner in members
+            )
+            targets = channel.builtin.history_targets if channel.builtin else frozenset({target})
+            return ChannelDisplayScope(target, targets, channel.any_mode, members).includes(message)
+
+        return self._integrated_display_page(
+            lambda **kwargs: self._live_channel_display_page(target, worktree=worktree, **kwargs),
+            matches,
+            worktree=worktree,
+            before=before,
+            after=after,
+            limit=limit,
+            max_bytes=max_bytes,
+        )
+
+    def mark_historical_view_read(self, displayed) -> None:
+        """Record only painted historical membership in the existing human ledger."""
+        viewer = self.registry.require(displayed.viewer)
+        if viewer.created_at != displayed.viewer_created_at or viewer.role.executable:
+            raise ValueError("Historical viewer changed; refresh history")
+        if displayed.source not in self.bus.history_sources():
+            raise ValueError("Historical source detached; refresh history")
+        displayed.source.validate()
+        self.reads.mark_historical(displayed)
+
+    def _live_dm_display_page(
         self,
         peer: str,
         *,
@@ -714,8 +888,15 @@ class Comms:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         """Bounded channel history for any client adapter."""
-        return self.bus.channel_history_page(
-            target, before=before, after=after, limit=limit, max_bytes=max_bytes
+        targets = self.channel_catalog.history_targets(target)
+        return self._integrated_display_page(
+            lambda **kwargs: self.bus.channel_history_page(target, **kwargs),
+            lambda message, snapshot: targets is None or message.target in targets,
+            worktree=None,
+            before=before,
+            after=after,
+            limit=limit,
+            max_bytes=max_bytes,
         )
 
     def _display_basis_revision(self) -> tuple:
@@ -827,7 +1008,7 @@ class Comms:
                 return
         raise RuntimeError("Display scope changed during snapshot; retry the request.")
 
-    def channel_display_page(
+    def _live_channel_display_page(
         self,
         target: str,
         *,
@@ -881,7 +1062,7 @@ class Comms:
 
     def full_history(self) -> Sequence[Message]:
         """Every message on the wire, in seq order (the combined view)."""
-        return self.bus.full_history()
+        return self._complete_history(self.full_history_page)
 
     def full_history_page(
         self,
@@ -891,8 +1072,14 @@ class Comms:
         limit: int = 100,
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
-        return self.bus.full_history_page(
-            before=before, after=after, limit=limit, max_bytes=max_bytes
+        return self._integrated_display_page(
+            self.bus.full_history_page,
+            lambda message, snapshot: True,
+            worktree=None,
+            before=before,
+            after=after,
+            limit=limit,
+            max_bytes=max_bytes,
         )
 
     def export_wire(
@@ -1291,6 +1478,7 @@ class Comms:
                     self.channel_catalog.metadata_path,
                     self.channel_catalog.saved_views_path,
                     self.bus._path,
+                    self.bus.history_manifest,
                     self.activity._path,
                     self.runtime_info._path,
                     self.reads.path,
@@ -1616,6 +1804,7 @@ class Comms:
         max_messages: int = 20,
         max_bytes: int = 64 * 1024,
         through: TranscriptCursor | None = None,
+        historical_source: str | None = None,
     ) -> TranscriptPage:
         """Read one adjacent page with exclusive, file-bound byte cursors."""
         if before is not None and after is not None:
@@ -1625,9 +1814,20 @@ class Comms:
         # A mounted inherited window remains pinned to its ancestor and byte
         # boundary when the child persists its own session. New unpinned reads
         # select the child's file; existing scroll cursors keep working.
-        thread, session_file, inherited = self._thread_transcript_source(
-            name, through.session_file if through is not None else None
-        )
+        routes_owner = self.transcript_routes
+        if historical_source is None:
+            thread, session_file, inherited = self._thread_transcript_source(
+                name, through.session_file if through is not None else None
+            )
+        else:
+            source = next(
+                (item for item in self.bus.history_sources() if item.key == historical_source), None
+            )
+            if source is None:
+                raise ValueError("Historical source detached; refresh history")
+            thread = source.registry().require(name)
+            session_file, inherited = thread.session_file or "", False
+            routes_owner = TranscriptRoutes(Path(source.root) / "transcript_routes.json")
         cursor = before or after
         if cursor and (cursor.session_file != session_file or cursor.offset < 0):
             raise ValueError("Transcript changed; reload the latest page.")
@@ -1643,7 +1843,7 @@ class Comms:
                 raise ValueError("Cursor is outside the transcript window.")
         start = end = cursor.offset if cursor else size
         records: list[tuple[TranscriptEvent, ...]] = []
-        routes = self.transcript_routes.for_session(session_file)
+        routes = routes_owner.for_session(session_file)
         used = 0
 
         def forward() -> Generator[tuple[int, int, bytes], None, None]:

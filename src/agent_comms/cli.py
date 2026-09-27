@@ -294,16 +294,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.with_thread:
                 if not args.me:
                     return _fail("history --with requires --as (your thread)")
-                _emit({"dm": [m.to_wire() for m in comms.dm_history(args.me, args.with_thread)]})
+                _emit(
+                    {
+                        "dm": [
+                            m.to_display_wire() for m in comms.dm_history(args.me, args.with_thread)
+                        ]
+                    }
+                )
             elif args.channel:
                 _emit(
                     {
                         "channel": args.channel,
-                        "messages": [m.to_wire() for m in comms.channel_history(args.channel)],
+                        "messages": [
+                            m.to_display_wire() for m in comms.channel_history(args.channel)
+                        ],
                     }
                 )
             else:
-                _emit({"everything": [m.to_wire() for m in comms.full_history()]})
+                _emit({"everything": [m.to_display_wire() for m in comms.full_history()]})
         elif args.command == "repair-input-routing":
             _emit(comms.repair_input_routing(dry_run=not args.apply))
         elif args.command == "threads":

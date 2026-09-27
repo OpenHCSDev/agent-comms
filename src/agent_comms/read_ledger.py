@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, slots=True)
 class ReadDocument:
     messages: dict[str, tuple[int, ...]] = field(default_factory=dict)
+    historical_messages: dict[str, tuple[int, ...]] = field(default_factory=dict)
     bus_identity: tuple[int, int] | None = None
     transcripts: dict[str, int] = field(default_factory=dict)
     migrated: bool = False
@@ -111,6 +112,26 @@ class ReadLedger(LockedStore[ReadDocument]):
                 replace(document, messages=messages, bus_identity=displayed.bus_identity)
                 if messages != document.messages or document.bus_identity != displayed.bus_identity
                 else document
+            )
+
+        self.update(advance)
+
+    def mark_historical(self, displayed) -> None:
+        key = json.dumps(
+            [
+                displayed.viewer,
+                displayed.viewer_created_at,
+                displayed.source.key,
+                displayed.source.bus_identity,
+            ]
+        )
+
+        def advance(document):
+            seen = tuple(
+                sorted(set(document.historical_messages.get(key, ())) | set(displayed.sequences))
+            )
+            return replace(
+                document, historical_messages={**document.historical_messages, key: seen}
             )
 
         self.update(advance)
