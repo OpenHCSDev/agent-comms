@@ -14,13 +14,40 @@ import select
 import threading
 import time
 from collections.abc import Callable
-from contextlib import AbstractContextManager, suppress
+from contextlib import AbstractContextManager, ExitStack, suppress
 
 _MAX_SEND_SECONDS = 5.0
 
 
 class PromptSendUnknown(RuntimeError):  # noqa: N818 - nominal UNKNOWN outcome
     """The prompt send has no successful completion receipt; never resend."""
+
+
+class PromptAdmissionBusy(RuntimeError):  # noqa: N818 - nominal pre-admission outcome
+    """Exclusion was unavailable before admission, mutation or any prompt byte."""
+
+
+def _enter_admission(
+    boundary: Callable[[], AbstractContextManager[None]],
+    cancelled: threading.Event,
+    deadline: float,
+) -> ExitStack:
+    """Wait only for pre-admission contention, using the existing writer budget."""
+    while True:
+        budget = deadline - time.monotonic()
+        if cancelled.is_set() or budget <= 0:
+            raise PromptSendUnknown("Native prompt admission ended before writing any bytes")
+        scope = ExitStack()
+        try:
+            scope.enter_context(boundary())
+        except PromptAdmissionBusy:
+            scope.close()
+            cancelled.wait(min(budget, 0.01))
+        except BaseException:
+            scope.close()
+            raise
+        else:
+            return scope
 
 
 def _write_fenced(
@@ -34,7 +61,7 @@ def _write_fenced(
     # the owner loop is synchronously waiting to stop this registry incarnation.
     written = 0
     try:
-        with boundary():
+        with _enter_admission(boundary, cancelled, deadline):
             remaining = memoryview(payload)
             while remaining:
                 budget = deadline - time.monotonic()
@@ -73,8 +100,9 @@ async def send_fenced_prompt(
 
     Cancellation is signalled to the independent writer and joined before this
     function exits. A dedicated thread avoids default-executor queue starvation.
-    Admission must fail nonblocking on store-lock contention and use thread-local
-    database connections; it must never depend on callbacks on the owner loop.
+    Each admission probe is nonblocking and uses thread-local database connections.
+    Contention can wait within this writer's budget, without retaining partial
+    locks or depending on callbacks on the owner loop. No admitted send is retried.
     """
     if os.name != "posix" or not payload or timeout <= 0:
         raise PromptSendUnknown("Fenced prompt requires a live bounded POSIX pipe")
