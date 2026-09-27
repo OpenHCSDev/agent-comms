@@ -101,8 +101,9 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
 def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
     """Atomically install the first private default after owner cutover.
 
-    Existing routes are never overwritten by a stale cutover. Readers see
-    either the historical absent route or one complete, fsynced private route.
+    Existing routes are never overwritten by a stale cutover. Publication
+    uses the same no-replace hardlink pattern as the private store initializer;
+    a reader fails closed during the brief two-link staging window.
     """
     from .cohort_foreground import _preflight
 
@@ -164,7 +165,17 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
         parent = path.parent.lstat()
         if (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino):
             raise ValueError("active comms route directory changed before publication")
-        os.replace(temporary, path.name, src_dir_fd=directory, dst_dir_fd=directory)
+        try:
+            os.link(
+                temporary,
+                path.name,
+                src_dir_fd=directory,
+                dst_dir_fd=directory,
+                follow_symlinks=False,
+            )
+        except FileExistsError as error:
+            raise ValueError("active comms route is already installed") from error
+        os.unlink(temporary, dir_fd=directory)
         temporary = None
         os.fsync(directory)
     finally:

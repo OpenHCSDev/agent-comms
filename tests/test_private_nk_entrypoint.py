@@ -157,6 +157,28 @@ def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, mo
     assert route_file.read_bytes() == original
 
 
+def test_publish_route_refuses_rival_installed_after_absent_check(tmp_path, monkeypatch):
+    root, root_id, _, _, _ = _root(tmp_path)
+    directory = tmp_path / "route-state"
+    directory.mkdir(mode=0o700)
+    route_file = directory / "active-route.json"
+    route = active_route.ActiveRoute(root, root_id, tmp_path)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    rival = b'{"rival":"preserve these bytes"}\n'
+    original_link = os.link
+
+    def rival_before_link(source, target, **kwargs):
+        route_file.write_bytes(rival)
+        route_file.chmod(0o600)
+        return original_link(source, target, **kwargs)
+
+    monkeypatch.setattr(active_route.os, "link", rival_before_link)
+    with pytest.raises(ValueError, match="already installed"):
+        active_route.publish_active_route(route, route_file)
+    assert route_file.read_bytes() == rival
+    assert not list(directory.glob(".active-route-*.tmp"))
+
+
 def test_invalid_active_route_fails_closed(tmp_path, monkeypatch, capsys):
     route_file = tmp_path / "active-route.json"
     route_file.write_text("{")
