@@ -203,7 +203,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
                                     "images": None,
                                     "streamingBehavior": None,
                                     "expandPromptTemplates": True,
-                                    "source": "interactive",
+                                    "source": "rpc",
                                 },
                                 ensure_ascii=False,
                                 separators=(",", ":"),

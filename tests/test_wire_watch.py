@@ -1,12 +1,38 @@
 """An idle owner wakes for durable wire changes without a 20 Hz scan."""
 
 import asyncio
+import os
 
 import pytest
 
 from agent_comms.acp import CommsAgent
-from agent_comms.operations import wire
+from agent_comms.declarations import Thread
+from agent_comms.operations import Comms, wire
+from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.wire_watch import open_wire_watcher
+
+
+@pytest.mark.asyncio
+async def test_private_guard_read_does_not_wake_its_own_wire_watcher(tmp_path):
+    comms = Comms(tmp_path)
+    comms.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    root_id = comms.initialize_private_initial_protocol()
+    guard = PrivateRegistryGuard(comms.registry._path, root_id)
+    watcher = open_wire_watcher(tmp_path)
+    if watcher is None:
+        pytest.skip("Native file notifications are unavailable")
+    try:
+        for _ in range(10):
+            guard.verify()
+        await asyncio.sleep(0.05)
+        assert not watcher.changed.is_set()
+
+        # The watch is active: a writable close of the same guard is work.
+        descriptor = os.open(guard.path, os.O_WRONLY)
+        os.close(descriptor)
+        await asyncio.wait_for(watcher.changed.wait(), timeout=1)
+    finally:
+        watcher.close()
 
 
 @pytest.mark.asyncio
