@@ -1,4 +1,4 @@
-"""Read-only, Linux-specific owner inventory for a supervised root migration.
+"""Linux owner inventory and stopped-root archive for a supervised migration.
 
 This is a witness, not a stop permission. The operator must recapture it after
 quiescence and preserve the old wire before any route is installed.
@@ -190,7 +190,7 @@ def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
     It refuses a still-running owner and any registry transition during copy.
     """
     destination = Path(destination).absolute()
-    if destination.is_relative_to(comms.root.absolute()):
+    if destination.parent.resolve().is_relative_to(comms.root.resolve()):
         raise ValueError("Cutover archive must be outside the old root")
     if destination.exists() or destination.is_symlink():
         raise ValueError("Cutover archive destination already exists")
