@@ -8,6 +8,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms.declarations import Goal, GoalPauseSource, Thread, ThreadStatus, TurnClaimFence
 from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_attempts import (
@@ -191,7 +192,17 @@ def test_commit_or_sync_error_never_yields_execution_success(bound, monkeypatch,
 def test_pause_projection_never_becomes_runnable(bound, source):
     store, owner, _, observation = bound
     store.record_failed(observation.reservation, "failed", observation=observation)
-    owner = replace(owner, goal=replace(owner.goal, status="paused", revision=3))
+    owner = replace(
+        owner,
+        goal=replace(
+            owner.goal,
+            status="paused",
+            revision=3,
+            pause_source=(
+                str(source) if source in (GoalPauseSource.OWNER, GoalPauseSource.MODEL) else None
+            ),
+        ),
+    )
     pause = (
         None
         if source is None
@@ -206,7 +217,7 @@ def test_pause_projection_never_becomes_runnable(bound, source):
         store.path, owner=owner, owner_status=ThreadStatus.IDLE, admission=3, pause=pause
     )
     assert projection.state == (
-        "owner_paused" if source is GoalPauseSource.OWNER else "paused_uncertain"
+        "paused_uncertain" if source is GoalPauseSource.MODEL else "owner_paused"
     )
     assert "canRetry" not in projection.to_primitive()
     assert store.path.read_bytes() == before
@@ -320,15 +331,14 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
         if owner_pauses:
             wired.update_goal("project", "paused", goal_id=goal.id, owner_action=True)
             pause_bytes = (wired.root / "goal_pause_events.json").read_bytes()
-        yield {"type": "settled"}
+        yield ae.StreamSettled()
         if outcome != "eof":
-            yield {
-                "type": "done",
-                "ok": False,
-                "text": "private provider text",
-                "reason_code": "assistant_final_stop_missing",
-                "diagnostic": {"exit_code": 0},
-            }
+            yield ae.Done(
+                ok=False,
+                text="private provider text",
+                reason_code="assistant_final_stop_missing",
+                diagnostic={"exit_code": 0},
+            )
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", failed_events)
     try:

@@ -29,8 +29,8 @@ def test_dm_page_requires_deliberate_baseline_before_omitted_older_unread(tmp_pa
     assert len(page.messages) == 5 and page.has_older
     assert page.display_basis is not None and page.display_basis.older_unread
     before = (
-        (tmp_path / "read_markers.json").read_bytes()
-        if (tmp_path / "read_markers.json").exists()
+        (tmp_path / "read_ledger.json").read_bytes()
+        if (tmp_path / "read_ledger.json").exists()
         else None
     )
     with pytest.raises(ValueError, match="contiguous"):
@@ -41,8 +41,8 @@ def test_dm_page_requires_deliberate_baseline_before_omitted_older_unread(tmp_pa
             expected_display_basis=page.display_basis,
         )
     after = (
-        (tmp_path / "read_markers.json").read_bytes()
-        if (tmp_path / "read_markers.json").exists()
+        (tmp_path / "read_ledger.json").read_bytes()
+        if (tmp_path / "read_ledger.json").exists()
         else None
     )
     assert before == after
@@ -81,9 +81,9 @@ def test_deliberate_baseline_and_painted_page_ack_only_peer_through_bound(tmp_pa
     assert reopened.pending_count("executor", "peer") == 1
     assert reopened.pending_count("executor", "#all") == 1
     # No global marker is created by this human DM read transition.
-    markers = json.loads((tmp_path / "read_markers.json").read_text())
-    assert markers.get(viewer, 0) == 0
-    assert markers[comms.bus._marker_key(viewer, "peer")] == painted
+    seen = reopened.reads.seen_sequences(viewer, reopened.registry.snapshot())
+    assert painted in seen and painted + 1 not in seen
+    assert not (tmp_path / "read_markers.json").exists()
 
 
 def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_path: Path):
@@ -104,7 +104,7 @@ def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_pa
     comms.delete("peer")
     comms.rename_managed_thread("other", "peer", owner_pid=os.getpid())
     before = comms.pending_count(viewer, "peer")
-    marker_path = tmp_path / "read_markers.json"
+    marker_path = tmp_path / "read_ledger.json"
     markers_before = marker_path.read_bytes() if marker_path.exists() else None
     assert before == 3
     with pytest.raises(ValueError, match="registry changed|incarnation changed"):
@@ -145,23 +145,21 @@ def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path
     assert first.pending_count(first.user_identity(str(first.root)).name, "peer") == 1
 
 
-def test_changed_marker_basis_rejects_implicit_page_ack(tmp_path: Path):
+def test_independent_read_is_idempotent_and_never_retargets_page(tmp_path: Path):
     comms = wire(tmp_path)
     comms.register(_thread(tmp_path, "peer"))
     viewer = comms.user_identity(str(tmp_path)).name
     comms.send("peer", viewer, "painted")
     page = comms.dm_display_page("peer", worktree=str(tmp_path))
-    assert page.display_basis is not None
     comms.mark_user_view_read("peer", worktree=str(tmp_path))
-    marker_before = (tmp_path / "read_markers.json").read_bytes()
-    with pytest.raises(ValueError, match="marker changed"):
-        comms.mark_dm_view_read(
-            "peer",
-            worktree=str(tmp_path),
-            through=page.newest_seq,
-            expected_display_basis=page.display_basis,
-        )
-    assert (tmp_path / "read_markers.json").read_bytes() == marker_before
+    comms.send("peer", viewer, "unpainted after explicit mark")
+    comms.mark_dm_view_read(
+        "peer",
+        worktree=str(tmp_path),
+        through=page.newest_seq,
+        expected_display_basis=page.display_basis,
+    )
+    assert comms.pending_count(viewer, "peer") == 1
 
 
 @pytest.fixture
@@ -207,7 +205,7 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root
             raise OSError("injected parent fsync denial")
         original(fd)
 
-    marker_before = (tmp_path / "read_markers.json").read_bytes()
+    marker_before = (tmp_path / "read_ledger.json").read_bytes()
     monkeypatch.setattr(declarations_module.os, "fsync", deny_parent)
     with pytest.raises(OSError, match="injected parent fsync denial"):
         comms.mark_dm_view_read(
@@ -216,7 +214,7 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root
             through=next_page.newest_seq,
             expected_display_basis=next_page.display_basis,
         )
-    assert (tmp_path / "read_markers.json").read_bytes() == marker_before
+    assert (tmp_path / "read_ledger.json").read_bytes() == marker_before
     assert comms.pending_count(viewer, "peer") == 1
     # A failure at the *final* post-replace sync remains UNKNOWN: absent a
     # separate durable marker commit witness, the row may already be visible.

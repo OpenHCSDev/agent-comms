@@ -10,7 +10,8 @@ from pathlib import Path
 from threading import RLock
 from weakref import WeakValueDictionary
 
-from .declarations import _atomic_write_text, _store_lock, file_revision
+from .declarations import file_revision
+from .read_ledger import ReadLedger
 
 _INDEX_VERSION = 1
 
@@ -32,7 +33,8 @@ class TranscriptReadState:
     """
 
     def __init__(self, path: Path):
-        self.path = path
+        self.path = path.with_name(ReadLedger.filename)
+        self.reads = ReadLedger(self.path)
         self._index_path = path.with_name("transcript_reply_index.sqlite3")
         self._connection: sqlite3.Connection | None = None
         self._database_inode: int | None = None
@@ -143,17 +145,10 @@ class TranscriptReadState:
             )
         return ReplyIndex(revision, through, total)
 
-    @staticmethod
-    def _key(viewer: str, source: str, inode: int) -> str:
-        return json.dumps([viewer, str(Path(source).resolve()), inode])
-
-    def _markers(self) -> dict[str, int]:
-        return json.loads(self.path.read_text()) if self.path.exists() else {}
-
     def counts(
         self, viewer: str, sources: Mapping[str, str], is_reply: Callable[[Mapping], bool]
     ) -> dict[str, int]:
-        with self._lock, _store_lock(self.path):
+        with self._lock:
             try:
                 return self._counts_locked(viewer, sources, is_reply)
             except sqlite3.DatabaseError:
@@ -165,7 +160,6 @@ class TranscriptReadState:
     def _counts_locked(
         self, viewer: str, sources: Mapping[str, str], is_reply: Callable[[Mapping], bool]
     ) -> dict[str, int]:
-        markers = self._markers()
         result = {}
         for name, source in sources.items():
             try:
@@ -176,7 +170,7 @@ class TranscriptReadState:
             if index.revision is None:
                 result[name] = 0
                 continue
-            seen = markers.get(self._key(viewer, source, index.revision[0]), 0)
+            seen = self.reads.transcript_seen(viewer, source, index.revision[0])
             if seen > index.through:
                 seen = 0  # A truncated/rebuilt source is a new conversation tail.
             row = (
@@ -195,13 +189,7 @@ class TranscriptReadState:
         revision = file_revision(Path(source)) if source else None
         if revision is None or not 0 <= through <= revision[1]:
             raise ValueError("Transcript changed; refresh before marking it read.")
-        with _store_lock(self.path):
-            markers = self._markers()
-            key = self._key(viewer, source, revision[0])
-            previous = markers.get(key, 0)
-            if previous > revision[1] or previous < through:
-                markers[key] = through
-                _atomic_write_text(self.path, json.dumps(markers))
+        self.reads.mark_transcript(viewer, source, revision[0], through, revision[1])
 
 
 _shared_lock = RLock()

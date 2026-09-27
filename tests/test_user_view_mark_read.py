@@ -47,7 +47,7 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
     assert comms.viewer_snapshot(str(tmp_path)).channel_unread["#any"] > 0
     comms.mark_user_view_read("#any", worktree=str(tmp_path))
     assert comms.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 0
-    assert comms.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 1
+    assert comms.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 0
     assert comms.pending_count("receiver", "#ci") == 2
 
     comms.send("receiver", viewer, "Human DM from a peer with no transcript")

@@ -34,10 +34,9 @@ from datetime import datetime
 from enum import Enum, StrEnum
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, Self
+from typing import TYPE_CHECKING, Any, BinaryIO, Self
 
 from .bus_activity_index import BusActivityIndex
-from .bus_display_index import BusDisplayIndex
 from .bus_page_index import BusPageIndex, StaleBusPageIndexError
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
@@ -50,6 +49,23 @@ from .bus_publication import (
     validate_initial_record,
 )
 from .bus_route_counts import BusRouteCounts
+from .field_codec import FieldCodec
+from .goal_presentation import (
+    ExecutionPresentation,
+    StandbyExecutionPresentation,
+    StateExecutionPresentation,
+)
+from .goal_states import (
+    ActiveGoal,
+    BlockedGoal,
+    CompletedGoal,
+    GoalState,
+    GoalStateProjection,
+    PausedGoal,
+    PauseSource,
+)
+from .read_basis import DisplayBasis
+from .response_policy import ResponsePolicy
 
 if TYPE_CHECKING:
     from .coordination import PublicationIntent
@@ -272,10 +288,15 @@ def _verify_claim_bus_before_read_unlocked(bus_path: Path) -> None:
 
 @contextmanager
 def _store_lock(
-    store_path: Path, *, blocking: bool = True, max_bus_bytes: int | None = None
+    store_path: Path,
+    *,
+    blocking: bool = True,
+    max_bus_bytes: int | None = None,
+    shared: bool = False,
 ) -> Iterator[int]:
-    """Hold a canonical wire lock; yield its inheritable descriptor.
+    """Hold a canonical store lock; yield its inheritable descriptor.
 
+    Shared document readers can coexist; updates retain exclusive ownership.
     A bounded projection refuses over-budget bus bytes before its durability
     scan. POSIX release is by last close, not LOCK_UN: an inherited descriptor
     retains authority if its parent dies before native mutation finishes.
@@ -293,9 +314,8 @@ def _store_lock(
             lock_file.seek(0)
             while True:
                 try:
-                    msvcrt.locking(  # type: ignore[attr-defined]
-                        lock_file.fileno(), msvcrt.LK_NBLCK, 1  # type: ignore[attr-defined]
-                    )
+                    mode = msvcrt.LK_NBRLCK if shared else msvcrt.LK_NBLCK
+                    msvcrt.locking(lock_file.fileno(), mode, 1)  # type: ignore[attr-defined]
                     break
                 except OSError as error:
                     if not blocking or error.errno not in {errno.EACCES, errno.EDEADLK}:
@@ -304,7 +324,8 @@ def _store_lock(
         else:
             import fcntl
 
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+            mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
+            fcntl.flock(lock_file.fileno(), mode | (0 if blocking else fcntl.LOCK_NB))
         try:
             # The shared claim bus durability guard may parse the entire log.
             # A bounded projection must refuse over-budget bytes *before* that
@@ -852,7 +873,56 @@ class MessageType(Enum):
     ALERT = "alert"
 
 
-GLOBAL_CHANNEL = "#all"
+class BuiltinChannel(StrEnum):
+    ANY = "#any"
+    NONE = "#none"
+    ALL = "#all"
+
+    @property
+    def aliases(self) -> tuple[str, ...]:
+        return ("broadcast",) if self is self.ALL else ()
+
+    @property
+    def names(self) -> frozenset[str]:
+        return frozenset((self.value, *self.aliases))
+
+    @classmethod
+    def lookup(cls, name: str) -> BuiltinChannel | None:
+        return next((channel for channel in cls if name in channel.names), None)
+
+    @classmethod
+    def canonical(cls, name: str) -> str:
+        channel = cls.lookup(name)
+        return channel.value if channel is not None else name
+
+    @classmethod
+    def is_alias(cls, name: str) -> bool:
+        channel = cls.lookup(name)
+        return channel is not None and name != channel.value
+
+    @classmethod
+    def exact_stored_target(cls, name: str) -> bool:
+        channel = cls.lookup(name)
+        return channel is None or (not channel.aggregate and name == channel.value)
+
+    @classmethod
+    def aggregate_target(cls, name: str) -> bool:
+        channel = cls.lookup(name)
+        return channel is not None and channel.aggregate
+
+    @property
+    def aggregate(self) -> bool:
+        return self is self.ANY
+
+    def matches(self, tags: frozenset[str]) -> bool:
+        return self is not self.NONE or not tags
+
+    @property
+    def history_targets(self) -> frozenset[str] | None:
+        return None if self.aggregate else self.names
+
+
+GLOBAL_CHANNEL = BuiltinChannel.ALL.value
 PRIVATE_OWNER_RENAME_PENDING = ".private-owner-rename.pending"
 
 
@@ -863,7 +933,7 @@ def _require_no_private_owner_rename(root: Path) -> None:
         raise RelationViolationError("Private owner rename is pending; inspect both authorities.")
 
 
-BROADCAST_ALIASES = frozenset({GLOBAL_CHANNEL, "broadcast"})
+BROADCAST_ALIASES = BuiltinChannel.ALL.names
 _TAG_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")
 
 
@@ -882,18 +952,31 @@ def channel_tag(target: str) -> str:
 # own parent. Every Thread in the system derives its semantics from this type.
 
 
-class GoalPauseSource(StrEnum):
-    OWNER = "owner"
-    MODEL = "model"
-    RUNTIME = "runtime"
+# Legacy public enum is a derived boundary projection, not another source roster.
+GoalPauseSource = StrEnum(  # type: ignore[misc]  # declaration-derived compatibility enum
+    "GoalPauseSource",
+    {
+        member.declared_name.upper(): member.declared_name
+        for member in PauseSource.members_with(PauseSource)
+    },
+)
 
 
 class GoalExecutionState(StrEnum):
-    RUNNABLE = "runnable"
-    STANDBY = "standby"
-    PAUSED = "paused"
-    BLOCKED = "blocked"
-    COMPLETED = "completed"
+    view: ExecutionPresentation
+
+    def __new__(cls, value: str, view: ExecutionPresentation | None = None) -> GoalExecutionState:
+        assert view is not None  # Enum declarations supply behavior; value lookup uses EnumMeta.
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj.view = view
+        return obj
+
+    RUNNABLE = (ActiveGoal().execution_name, StateExecutionPresentation(ActiveGoal))
+    STANDBY = ("standby", StandbyExecutionPresentation())
+    PAUSED = (PausedGoal.declared_name, StateExecutionPresentation(PausedGoal))
+    BLOCKED = (BlockedGoal.declared_name, StateExecutionPresentation(BlockedGoal))
+    COMPLETED = (CompletedGoal.declared_name, StateExecutionPresentation(CompletedGoal))
 
 
 @dataclass(frozen=True, slots=True)
@@ -911,18 +994,8 @@ class GoalExecution:
     block_reason: str | None = None
 
     def presentation(self, title: str) -> ThreadPresentation:
-        if self.state is GoalExecutionState.STANDBY:
-            names = ", ".join(f"@{target.name}" for target in self.wait_for)
-            idle = ", ".join(f"@{target.name}" for target in self.inactive_wait_for)
-            suffix = f"; no active turn: {idle}" if idle else ""
-            return ThreadPresentation(title, "◌", f"Standby · waiting for {names}{suffix}")
-        if self.state is GoalExecutionState.BLOCKED:
-            reason = (
-                " ".join(self.block_reason.split()) if self.block_reason else "reason unavailable"
-            )
-            summary = reason[:157] + "…" if len(reason) > 160 else reason
-            return ThreadPresentation(title, "!", f"Blocked · {summary}")
-        return ThreadPresentation(title, "✓", self.state.value.title())
+        glyph, summary = self.state.view.render(self)
+        return ThreadPresentation(title, glyph, summary)
 
     @classmethod
     def from_wire(cls, data: Mapping) -> GoalExecution:
@@ -997,40 +1070,74 @@ class GoalMentionSource:
         object.__setattr__(self, "bindings", bindings)
 
 
-@dataclass(frozen=True, slots=True)
-class Goal:
-    """One durable objective shared by its executing owner and all clients."""
+@dataclass(frozen=True, init=False)
+class Goal(GoalStateProjection):
+    """Typed current state with the legacy dataclass field projection.
+
+    ``status``, ``block_reason`` and ``pause_source`` are read-only projections,
+    never independent writable state. Keeping them as dataclass fields preserves
+    existing asdict/replace callers at runtime and model boundaries. The private
+    state is deliberately not a serialized field or a competing stored value.
+    """
 
     text: str
     id: str
-    status: str = "active"
-    progress: str = ""
-    # Older registry rows omit this field and start at revision zero. Every
-    # later goal transition advances it, even when status/progress return to
-    # identical values, so a captured Goal cannot pass a stale CAS after ABA.
-    revision: int = 0
-    reported_turn: str | None = None
-    mention_source: GoalMentionSource | None = None
-    # Legacy blocked rows omit this field; never invent their reason from progress.
-    block_reason: str | None = None
+    status: str
+    progress: str
+    revision: int
+    reported_turn: str | None
+    mention_source: GoalMentionSource | None
+    block_reason: str | None
+    pause_source: str | None
+
+    def __init__(
+        self,
+        text: str,
+        id: str,
+        status: str = "active",
+        progress: str = "",
+        revision: int = 0,
+        reported_turn: str | None = None,
+        mention_source: GoalMentionSource | None = None,
+        block_reason: str | None = None,
+        pause_source: str | None = None,
+        *,
+        state: GoalState | None = None,
+    ) -> None:
+        object.__setattr__(
+            self, "_state", state or GoalState.from_legacy(status, block_reason, pause_source)
+        )
+        object.__setattr__(self, "text", text)
+        object.__setattr__(self, "id", id)
+        object.__setattr__(self, "progress", progress)
+        object.__setattr__(self, "revision", revision)
+        object.__setattr__(self, "reported_turn", reported_turn)
+        object.__setattr__(self, "mention_source", mention_source)
+        self.__post_init__()
+
+    @classmethod
+    def from_registry(cls, data: Mapping, root: Path) -> Goal:
+        from .field_codec import FieldCodec
+        from .goal_pauses import GoalPauseEvents
+
+        values = dict(data)
+        if (
+            "pause_source" not in values
+            and GoalState.decode(values.get("status", "active")) is PausedGoal
+        ):
+            events = GoalPauseEvents(root / GoalPauseEvents.filename).snapshot()
+            event = events.get(f"{values['id']}:{values.get('revision', 0)}")
+            if event is not None:
+                values["pause_source"] = str(event.source)
+        return FieldCodec.decode(cls, values)
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:
             raise ValueError("A goal requires text and an identity.")
-        if self.status not in {"active", "paused", "blocked", "completed"}:
-            raise ValueError("Unknown goal status.")
         if type(self.revision) is not int or not 0 <= self.revision < 1 << 63:
             raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
         if self.reported_turn is not None and not isinstance(self.reported_turn, str):
             raise ValueError("Goal reported turn must be a string or null.")
-        if self.block_reason is not None and (
-            self.status != "blocked"
-            or type(self.block_reason) is not str
-            or not self.block_reason.strip()
-            or self.block_reason != self.block_reason.strip()
-            or len(self.block_reason) > 1024
-        ):
-            raise ValueError("A blocked goal requires a bounded explicit reason.")
         source = self.mention_source
         if isinstance(source, dict):
             source = GoalMentionSource(**source)
@@ -1043,52 +1150,20 @@ class Goal:
 
     @property
     def active(self) -> bool:
-        return self.status == "active"
+        return self.state.active
 
     @property
     def toggle_action(self) -> str:
-        return {
-            "active": "paused",
-            "paused": "active",
-            "blocked": "retry",
-            "completed": "",
-        }[self.status]
+        action = self.state.toggle
+        return action.declared_name if action else ""
 
     @property
     def toggle_label(self) -> str:
-        return {
-            "active": "Pause",
-            "paused": "Resume",
-            "blocked": "Retry",
-            "completed": "Completed",
-        }[self.status]
+        return self.state.toggle_label
 
     @property
     def summary(self) -> str:
         return f"Goal · {self.status}: {self.text}"
-
-
-class BuiltinChannel(StrEnum):
-    ANY = "#any"
-    NONE = "#none"
-    ALL = "#all"
-
-    @classmethod
-    def lookup(cls, name: str) -> BuiltinChannel | None:
-        return next((channel for channel in cls if channel.value == name), None)
-
-    @property
-    def aggregate(self) -> bool:
-        return self is self.ANY
-
-    def matches(self, tags: frozenset[str]) -> bool:
-        return self is not self.NONE or not tags
-
-    @property
-    def history_targets(self) -> frozenset[str] | None:
-        if self.aggregate:
-            return None
-        return frozenset({self.value, "broadcast"}) if self is self.ALL else frozenset({self.value})
 
 
 @dataclass(frozen=True, slots=True)
@@ -1166,6 +1241,18 @@ class Channel:
     def builtin(self) -> BuiltinChannel | None:
         return BuiltinChannel.lookup(self.name)
 
+    @classmethod
+    def aggregate_target(cls, name: str) -> bool:
+        channel = cls.lookup(name)
+        return channel is not None and channel.aggregate
+
+    @classmethod
+    def members_for(cls, name: str, threads: Mapping[str, Thread]) -> tuple[str, ...] | None:
+        channel = cls.lookup(name)
+        if channel is None:
+            return None
+        return tuple(thread.name for thread in threads.values() if channel.matches(thread.tags))
+
     @property
     def aggregate(self) -> bool:
         return self.builtin is not None and self.builtin.aggregate
@@ -1208,11 +1295,11 @@ class ViewPredicate:
         return bool(self.tags & tags)
 
     def to_wire(self) -> dict[str, object]:
-        return {"match": self.match.value, "tags": sorted(self.tags)}
+        return FieldCodec.encode(self)
 
     @classmethod
     def from_wire(cls, value: Mapping) -> Self:
-        return cls(ViewMatch(str(value["match"])), frozenset(map(str, value["tags"])))
+        return FieldCodec.decode(cls, dict(value))
 
 
 @dataclass(frozen=True, slots=True)
@@ -1241,21 +1328,11 @@ class SavedView:
         return self.predicate.matches(tags)
 
     def to_wire(self) -> dict[str, object]:
-        return {
-            "name": self.name,
-            "kind": self.kind.value,
-            "predicate": self.predicate.to_wire(),
-            "created_at": self.created_at,
-        }
+        return FieldCodec.encode(self)
 
     @classmethod
     def from_wire(cls, name: str, value: Mapping) -> Self:
-        return cls(
-            name,
-            ViewKind(str(value["kind"])),
-            ViewPredicate.from_wire(value["predicate"]),
-            float(value.get("created_at", 0)),
-        )
+        return FieldCodec.decode(cls, {"created_at": 0.0, **value, "name": name})
 
 
 class ThreadRole(StrEnum):
@@ -1456,7 +1533,7 @@ class ThreadView:
             self.status.active
             and not self.activity.state.busy
             and self.goal_execution is not None
-            and self.goal_execution.state is GoalExecutionState.STANDBY
+            and self.goal_execution.state.view.waiting
         ):
             return self.goal_execution.presentation(self.thread.title or self.thread.name)
         return self.status.presentation(self.thread.title or self.thread.name, self.activity)
@@ -1570,7 +1647,7 @@ class ChannelActivity:
             max(self.last_message, message.timestamp),
             (
                 max(self.last_user_input, message.timestamp)
-                if message.sender_role is ThreadRole.USER
+                if not message.sender_role.executable
                 else self.last_user_input
             ),
         )
@@ -1632,26 +1709,30 @@ class MembershipChange(StrEnum):
     LEFT = "left"
 
 
-class ResponsePolicy(StrEnum):
-    """Who may answer one message; delivery and history remain independent."""
-
-    DIRECT = "direct"
-    COLLECTIVE = "collective"
-    MENTIONED_ONLY = "mentioned_only"
-    INFORMATIONAL = "informational"
-
-
 @dataclass(frozen=True, slots=True)
 class ResponseEligibility:
     policy: ResponsePolicy
     recipients: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "policy", ResponsePolicy(self.policy))
+        object.__setattr__(self, "policy", ResponsePolicy.resolve(self.policy))
         if len(self.recipients) != len(set(self.recipients)):
             raise ValueError("Response eligibility recipients must be unique.")
-        if self.policy in {ResponsePolicy.INFORMATIONAL, ResponsePolicy.DIRECT} and self.recipients:
-            raise ValueError(f"{self.policy.value} eligibility cannot declare channel recipients.")
+        self.policy.validate_recipients(self.recipients)
+
+
+class MessageWireCodec(FieldCodec):
+    """Preserve legacy non-finite wire timestamps for history and export.
+
+    Message.from_wire retains these timestamps so export policy can count,
+    exclude or label them. The common document codec remains strict JSON.
+    """
+
+    @classmethod
+    def encode(cls, value: object) -> Any:
+        if type(value) is float:
+            return value
+        return super().encode(value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1662,17 +1743,25 @@ class Message:
     time; the hash-derived ``message_id`` is identity only and is not ordered.
     """
 
-    sender: str
-    target: str
-    body: str
-    type: MessageType
-    timestamp: float = field(default_factory=time.time)
-    seq: int = 0
-    sender_role: ThreadRole = ThreadRole.AGENT
-    membership: MembershipChange | None = None
-    notice: bool = False
-    mentions: tuple[ThreadMention, ...] = ()
-    claim_transition: ClaimTransition | None = None
+    sender: str = field(metadata={"wire_name": "from", "wire_order": 2})
+    target: str = field(metadata={"wire_name": "to", "wire_order": 3})
+    body: str = field(metadata={"wire_name": "text", "wire_order": 6})
+    type: MessageType = field(metadata={"wire_order": 5})
+    timestamp: float = field(
+        default_factory=time.time, metadata={"wire_name": "ts", "wire_order": 4}
+    )
+    seq: int = field(default=0, metadata={"wire_order": 0})
+    sender_role: ThreadRole = field(default=ThreadRole.AGENT, metadata={"wire_order": 7})
+    membership: MembershipChange | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_order": 8}
+    )
+    notice: bool = field(default=False, metadata={"wire_omit_default": True, "wire_order": 9})
+    mentions: tuple[ThreadMention, ...] = field(
+        default=(), metadata={"wire_omit_default": True, "wire_order": 10}
+    )
+    claim_transition: ClaimTransition | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_order": 11}
+    )
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "sender_role", ThreadRole(self.sender_role))
@@ -1701,7 +1790,7 @@ class Message:
             for mention in self.mentions
         ):
             raise ValueError("Mention ranges must identify text in the message body.")
-        if not is_channel_target(self.target) and self.target != "broadcast":
+        if not is_channel_target(self.target) and not BuiltinChannel.is_alias(self.target):
             # DM: a thread name; sending to yourself is not a conversation.
             if self.sender == self.target:
                 raise RelationViolationError(f"Thread {self.sender!r} cannot message itself.")
@@ -1726,28 +1815,11 @@ class Message:
         return digest
 
     def to_wire(self) -> dict:
-        return {
-            "seq": self.seq,
-            "id": self.message_id,
-            "from": self.sender,
-            "to": self.target,
-            "ts": self.timestamp,
-            "type": self.type.value,
-            "text": self.body,
-            "sender_role": self.sender_role.value,
-            **({"membership": self.membership.value} if self.membership is not None else {}),
-            **({"notice": True} if self.notice else {}),
-            **(
-                {"mentions": [asdict(mention) for mention in self.mentions]}
-                if self.mentions
-                else {}
-            ),
-            **(
-                {"claim_transition": _claim_transition_wire(self.claim_transition)}
-                if self.claim_transition is not None
-                else {}
-            ),
-        }
+        result = MessageWireCodec.encode(self)
+        result = {"seq": self.seq, "id": self.message_id, **result}
+        if self.claim_transition is not None:
+            result["claim_transition"] = _claim_transition_wire(self.claim_transition)
+        return result
 
     @classmethod
     def from_wire(cls, data: Mapping) -> Message:
@@ -1774,7 +1846,7 @@ class Message:
         """Typed response semantics without changing the stored target."""
         if self.notice or self.membership is not None:
             return ResponsePolicy.INFORMATIONAL
-        if not (is_channel_target(self.target) or self.target in BROADCAST_ALIASES):
+        if not (is_channel_target(self.target) or BuiltinChannel.lookup(self.target) is not None):
             return ResponsePolicy.DIRECT
         if self.mentions:
             return ResponsePolicy.MENTIONED_ONLY
@@ -1792,26 +1864,16 @@ class Message:
         outside the channel cannot acquire delivery by being named.
         """
         policy = self.response_policy
-        if policy is ResponsePolicy.COLLECTIVE:
-            recipients = tuple(dict.fromkeys(audience))
-        elif policy is ResponsePolicy.MENTIONED_ONLY:
-            aliases = aliases or {}
-            selected = frozenset(
-                aliases.get(mention.thread, mention.thread) for mention in self.mentions
-            )
-            recipients = tuple(name for name in dict.fromkeys(audience) if name in selected)
-        else:
-            recipients = ()
-        return ResponseEligibility(policy, recipients)
+        return ResponseEligibility(policy, policy.recipients(self, audience, aliases=aliases))
 
     @property
     def starts_turn(self) -> bool:
         """Whether every delivered recipient may start a turn."""
-        return self.response_policy in {ResponsePolicy.DIRECT, ResponsePolicy.COLLECTIVE}
+        return self.response_policy.starts_turn
 
     def starts_turn_for(self, name: str, *, aliases: Mapping[str, str] | None = None) -> bool:
         """Whether this message enters one canonical recipient's model context."""
-        channel = is_channel_target(self.target) or self.target in BROADCAST_ALIASES
+        channel = is_channel_target(self.target) or BuiltinChannel.lookup(self.target) is not None
         if not channel:
             return self.starts_turn
         return name in self.response_eligibility((name,), aliases=aliases).recipients
@@ -1904,25 +1966,7 @@ class ScheduledTurn:
     def incoming(
         cls, message: Message, *, aliases: Mapping[str, str] | None = None
     ) -> ScheduledTurn:
-        policy = message.response_policy
-        if policy is ResponsePolicy.COLLECTIVE:
-            guidance = "collective; channel members may respond"
-        elif policy is ResponsePolicy.MENTIONED_ONLY:
-            aliases = aliases or {}
-            names = ", ".join(
-                dict.fromkeys(
-                    f"@{aliases.get(mention.thread, mention.thread)}"
-                    for mention in message.mentions
-                )
-            )
-            guidance = (
-                f"mentioned_only; only resolved mentioned identities may respond: {names}; "
-                "unmentioned observers dismiss quietly"
-            )
-        elif policy is ResponsePolicy.INFORMATIONAL:
-            guidance = "informational; observe and dismiss without replying"
-        else:
-            guidance = "direct; reply to the sender"
+        guidance = message.response_policy.guidance(message, aliases=aliases)
         scope = (
             f"; delivery and history remain {message.target}"
             if is_channel_target(message.target)
@@ -1939,14 +1983,14 @@ class ScheduledTurn:
         """Combine compatible channel turns, keeping each direct input separate."""
         if not pending:
             return [], []
-        if pending[0].origin and pending[0].origin.response_policy is ResponsePolicy.DIRECT:
+        if pending[0].origin and pending[0].origin.response_policy.separate_turn:
             return pending[:1], pending[1:]
         boundary = next(
             (
                 index
                 for index, turn in enumerate(pending)
                 if turn.reply_target != pending[0].reply_target
-                or (turn.origin and turn.origin.response_policy is ResponsePolicy.DIRECT)
+                or (turn.origin and turn.origin.response_policy.separate_turn)
             ),
             len(pending),
         )
@@ -1966,11 +2010,9 @@ class DMDisplayBasis:
     worktree: str
     requested_peer: str
     viewer: str
-    viewer_epoch: int
     viewer_created_at: float
     viewer_names: frozenset[str]
     peer: str
-    peer_epoch: int
     peer_created_at: float
     peer_names: frozenset[str]
     registry_revision: tuple[int, int, int, int] | None
@@ -1978,6 +2020,69 @@ class DMDisplayBasis:
     bus_identity: tuple[int, int] | None
     newest_seq: int | None
     older_unread: bool
+    displayed: DisplayBasis
+
+    @property
+    def viewer_epoch(self) -> float:
+        """Legacy observer spelling; identity is creation time, never a turn counter."""
+        return self.viewer_created_at
+
+    @property
+    def peer_epoch(self) -> float:
+        """Legacy observer spelling retained for clients comparing page identities."""
+        return self.peer_created_at
+
+    def validate_for(
+        self,
+        root: Path,
+        worktree: str,
+        peer: str,
+        through: int,
+        snapshot: RegistrySnapshot,
+        bus_identity: tuple[int, int] | None,
+    ) -> None:
+        if (
+            self.root != str(root.resolve())
+            or self.worktree != str(Path(worktree).resolve())
+            or self.requested_peer != peer
+            or self.newest_seq is None
+            or self.older_unread
+            or not 0 <= through <= self.newest_seq
+        ):
+            raise ValueError("Painted DM read does not match a contiguous displayed page.")
+        info = root.stat()
+        if (info.st_dev, info.st_ino) != self.root_identity:
+            raise ValueError("DM root was replaced; refresh the page.")
+        selected = next(
+            (thread for thread in snapshot.threads.values() if not thread.role.executable), None
+        )
+        viewer = snapshot.threads.get(self.viewer)
+        target = snapshot.threads.get(self.peer)
+
+        def names(canonical: str) -> frozenset[str]:
+            return frozenset(
+                {
+                    canonical,
+                    *(alias for alias, owner in snapshot.aliases.items() if owner == canonical),
+                }
+            )
+
+        if (
+            selected is None
+            or selected.name != self.viewer
+            or viewer is None
+            or viewer.role.executable
+            or target is None
+            or snapshot.aliases.get(peer, peer) != self.peer
+            or viewer.created_at != self.viewer_created_at
+            or target.created_at != self.peer_created_at
+            or names(self.viewer) != self.viewer_names
+            or names(self.peer) != self.peer_names
+        ):
+            raise ValueError("DM viewer/peer incarnation changed; refresh the page.")
+        if bus_identity != self.bus_identity:
+            raise ValueError("DM bus was replaced; refresh the page.")
+        self.displayed.validate(self.viewer, snapshot, bus_identity)
 
 
 @dataclass(frozen=True, slots=True)
@@ -2038,16 +2143,6 @@ class PendingCounts:
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelReadScope:
-    channel: str
-    targets: frozenset[str] | None
-    after: int
-
-    def unread(self, message: Message) -> bool:
-        return message.seq > self.after and (self.targets is None or message.target in self.targets)
-
-
-@dataclass(frozen=True, slots=True)
 class ChannelDisplayScope:
     """One captured local display predicate; it never changes delivery or history ownership."""
 
@@ -2055,9 +2150,21 @@ class ChannelDisplayScope:
     targets: frozenset[str] | None
     any_mode: bool = False
     participant_names: frozenset[str] = frozenset()
+    # Legacy UI fields retained for call compatibility; never consulted as read authority.
     after: int = 0
     basis_revision: tuple = ()
     expanded_after: int = 0
+    seen_sequences: frozenset[int] = frozenset()
+    displayed: DisplayBasis | None = field(default=None, compare=False)
+
+    def same_projection(self, other: ChannelDisplayScope) -> bool:
+        """Read progress and unrelated store revisions do not change inclusion."""
+        return (
+            self.channel == other.channel
+            and self.targets == other.targets
+            and self.any_mode == other.any_mode
+            and self.participant_names == other.participant_names
+        )
 
     def includes(self, message: Message) -> bool:
         if self.targets is None or message.target in self.targets:
@@ -2068,23 +2175,20 @@ class ChannelDisplayScope:
             message.sender in self.participant_names
             or (
                 not is_channel_target(message.target)
-                and message.target != "broadcast"
+                and not BuiltinChannel.is_alias(message.target)
                 and message.target in self.participant_names
             )
             or any(mention.thread in self.participant_names for mention in message.mentions)
         )
 
     def unread(self, message: Message) -> bool:
-        if not self.includes(message):
-            return False
-        exact_route = self.targets is None or message.target in self.targets
-        return message.seq > (self.after if exact_route else self.expanded_after)
+        return self.includes(message) and message.seq not in self.seen_sequences
 
 
 @dataclass(frozen=True, slots=True)
 class ViewUnread:
     revision: tuple | None
-    scopes: tuple[ChannelReadScope | ChannelDisplayScope, ...]
+    scopes: tuple[ChannelDisplayScope, ...]
     counts: Mapping[str, int]
     verified_display_boundary: bool = False
 
@@ -2365,7 +2469,11 @@ No bus, delivery cursor, pending input or coordinator row is copied.
                 session_file=data.get("session_file"),
                 model=data.get("model"),
                 thinking_level=data.get("thinking_level"),
-                goal=Goal(**data["goal"]) if data.get("goal") else None,
+                goal=(
+                    Goal.from_registry(data["goal"], self._path.parent)
+                    if data.get("goal")
+                    else None
+                ),
                 created_at=self._created_at(data),
                 previous_worktrees=tuple(data.get("previous_worktrees", [])),
                 auto_title_pending=bool(data.get("auto_title_pending", False)),
@@ -3243,7 +3351,9 @@ class MessageBus:
         private_claim_writes: bool = False,
     ):
         from .channels import ChannelCatalog
+        from .read_ledger import ReadLedger
 
+        self.reads = ReadLedger(bus_path.parent / ReadLedger.filename)
         self._path = bus_path
         self._registry = registry
         self._private_response_writes = private_response_writes
@@ -3254,9 +3364,6 @@ class MessageBus:
         self._view_unread_cache: dict[str, ViewUnread] = {}
         self._channel_activity_revision: tuple | None = None
         self._channel_activity: dict[str, ChannelActivity] = {}
-        self._display_activity_revision: tuple | None = None
-        self._display_activity: dict[str, ChannelActivity] = {}
-        self._display_activity_verified = False
 
     def view_unread_counts(
         self,
@@ -3268,19 +3375,10 @@ class MessageBus:
         """Human view cursors are independent of executors consuming their inboxes."""
         viewer = self._registry.require(viewer).name
         if display_scopes is None:
-            markers = self._read_markers()
-            scopes: tuple[ChannelReadScope | ChannelDisplayScope, ...] = tuple(
-                ChannelReadScope(
-                    channel.name,
-                    self._channels.history_targets(channel.name),
-                    (
-                        markers.get(self._view_marker_key(viewer, channel.name, "exact"), 0)
-                        if channel.exact and channel.builtin is None
-                        else max(
-                            markers.get(viewer, 0),
-                            markers.get(self._marker_key(viewer, channel.name), 0),
-                        )
-                    ),
+            seen = self.reads.seen_sequences(viewer, self._registry.snapshot())
+            scopes = tuple(
+                ChannelDisplayScope(
+                    channel.name, self._channels.history_targets(channel.name), seen_sequences=seen
                 )
                 for channel in self._channels.views().values()
             )
@@ -3301,150 +3399,11 @@ class MessageBus:
         self._view_unread_cache[viewer] = ViewUnread(revision, scopes, counts)
         return dict(counts)
 
-    def display_view_metrics(
-        self,
-        records: Iterator[tuple[Message, int]],
-        scopes: tuple[ChannelDisplayScope, ...],
-        activity_scopes: tuple[ChannelDisplayScope, ...],
-        viewer: str,
-        viewer_names: frozenset[str],
-        bus_revision: tuple[int, int, int, int] | None,
-    ) -> tuple[Mapping[str, ChannelActivity], Mapping[str, int]]:
-        """Activity and human unread from one validated, already-opened bus boundary.
-
-        The caller supplies a canonical viewer and alias closure from the same
-        captured registry as the scopes. Never recanonicalize during this scan.
-        Caches may be reused or published only for an unchanged bus revision.
-        """
-        activity_key = (bus_revision, activity_scopes)
-        unread_key = (bus_revision, viewer_names)
-        cached_unread = self._view_unread_cache.get(viewer)
-        if (
-            bus_revision is not None
-            and self._display_activity_revision == activity_key
-            and self._display_activity_verified
-            and cached_unread is not None
-            and cached_unread.revision == unread_key
-            and cached_unread.verified_display_boundary
-            and cached_unread.scopes == scopes
-        ):
-            return dict(self._display_activity), dict(cached_unread.counts)
-
-        def scope_key(scope: ChannelDisplayScope) -> list[object]:
-            return [
-                scope.channel,
-                sorted(scope.targets) if scope.targets is not None else None,
-                scope.any_mode,
-                sorted(scope.participant_names),
-                scope.after,
-                scope.expanded_after,
-            ]
-
-        def apply(record: Mapping, metrics: tuple[dict, dict]) -> None:
-            message = Message.from_wire(record)
-            clocks, unread = metrics
-            for scope in activity_scopes:
-                if scope.includes(message):
-                    last_message, last_user = clocks[scope.channel]
-                    clocks[scope.channel] = (
-                        max(last_message, message.timestamp),
-                        (
-                            max(last_user, message.timestamp)
-                            if message.sender_role is ThreadRole.USER
-                            else last_user
-                        ),
-                    )
-            if message.sender not in viewer_names:
-                for scope in scopes:
-                    if scope.unread(message):
-                        unread[scope.channel] += 1
-
-        initial = (
-            {scope.channel: (0.0, 0.0) for scope in activity_scopes},
-            dict.fromkeys((scope.channel for scope in scopes), 0),
-        )
-        projected = BusDisplayIndex(self._path, viewer).snapshot(
-            bus_revision,
-            [
-                [scope_key(scope) for scope in scopes],
-                [scope_key(scope) for scope in activity_scopes],
-                sorted(viewer_names),
-            ],
-            initial,
-            apply,
-        )
-        if projected is not None:
-            activity = {name: ChannelActivity(*clocks) for name, clocks in projected[0].items()}
-            counts = projected[1]
-        else:
-            activity = {scope.channel: ChannelActivity() for scope in activity_scopes}
-            counts = dict.fromkeys((scope.channel for scope in scopes), 0)
-            for message, _ in records:
-                for scope in activity_scopes:
-                    if scope.includes(message):
-                        activity[scope.channel] = activity[scope.channel].observe(message)
-                if message.sender in viewer_names:
-                    continue
-                for scope in scopes:
-                    if scope.unread(message):
-                        counts[scope.channel] += 1
-        if bus_revision is not None and file_revision(self._path) == bus_revision:
-            self._display_activity = activity
-            self._display_activity_revision = activity_key
-            self._display_activity_verified = True
-            self._view_unread_cache[viewer] = ViewUnread(
-                unread_key, scopes, counts, verified_display_boundary=True
-            )
-        return activity, counts
-
     def mark_view_read(
-        self,
-        viewer: str,
-        target: str,
-        through: int,
-        *,
-        captured_keys: tuple[str, ...] | None = None,
+        self, viewer: str, target: str, through: int, *, displayed: DisplayBasis
     ) -> None:
-        if captured_keys is not None:
-            # A painted page's keys were derived from its validated display
-            # basis. Re-reading registry membership here could acknowledge a
-            # DM that became visible after the page was painted.
-            markers = {key: through for key in captured_keys}
-        else:
-            viewer = self._registry.require(viewer).name
-            channel = self._channels.resolve(target)
-            if channel.exact and channel.builtin is None:
-                markers = {self._view_marker_key(viewer, channel.name, "exact"): through}
-                if channel.any_mode:
-                    basis = self.any_participant_basis(channel, self._registry.snapshot())
-                    markers[self._view_marker_key(viewer, channel.name, "any", basis)] = through
-            else:
-                markers = {self._marker_key(viewer, channel.name): through}
-        current = self._read_markers()
-        if any(current.get(key, 0) < sequence for key, sequence in markers.items()):
-            self._write_markers(markers)
-
-    @staticmethod
-    def _view_marker_key(
-        viewer: str,
-        channel: str,
-        mode: str,
-        participants: tuple[tuple[str, float], ...] = (),
-    ) -> str:
-        return json.dumps(["view2", viewer, channel, mode, participants])
-
-    @staticmethod
-    def any_participant_basis(
-        channel: Channel, snapshot: RegistrySnapshot
-    ) -> tuple[tuple[str, float], ...]:
-        members = {name for name, thread in snapshot.threads.items() if channel.tags <= thread.tags}
-        names = members | {alias for alias, owner in snapshot.aliases.items() if owner in members}
-        return tuple(
-            sorted(
-                (name, snapshot.threads[snapshot.aliases.get(name, name)].created_at)
-                for name in names
-            )
-        )
+        """Compatibility entry point; only an actual display basis advances reads."""
+        self.reads.mark_displayed(viewer, displayed.through(through))
 
     def channel_activity(self) -> Mapping[str, ChannelActivity]:
         """Aggregate channel history clocks once per wire revision, not per viewer."""
@@ -3477,7 +3436,7 @@ class MessageBus:
             message.sender,
             message.target,
             message.timestamp,
-            message.sender_role is ThreadRole.USER,
+            not message.sender_role.executable,
             message.membership is None and not message.notice,
         )
 
@@ -3509,7 +3468,7 @@ class MessageBus:
 
         if not exists(message.sender):
             raise UnregisteredThreadError(f"Sender {message.sender!r} is not a registered thread.")
-        if message.target == BuiltinChannel.ANY.value or (
+        if BuiltinChannel.aggregate_target(message.target) or (
             is_channel_target(message.target) and self._channels.is_view_target(message.target)
         ):
             raise RelationViolationError(
@@ -3517,13 +3476,17 @@ class MessageBus:
             )
         if (
             not is_channel_target(message.target)
-            and message.target != "broadcast"
+            and not BuiltinChannel.is_alias(message.target)
             and not exists(message.target)
         ):
             raise UnregisteredThreadError(f"Target {message.target!r} is not a registered thread.")
         sender = canonical(message.sender)
         target = message.target
-        if not is_channel_target(target) and target != "broadcast" and canonical(target) == sender:
+        if (
+            not is_channel_target(target)
+            and not BuiltinChannel.is_alias(target)
+            and canonical(target) == sender
+        ):
             raise RelationViolationError(f"Thread {sender!r} cannot message itself.")
         return sender, target
 
@@ -3552,7 +3515,7 @@ class MessageBus:
         return replace(
             message,
             sender=sender,
-            target=GLOBAL_CHANNEL if target == "broadcast" else target,
+            target=BuiltinChannel.canonical(target),
             seq=sequence,
             sender_role=snapshot.threads[sender].role,
             mentions=ThreadMention.find(message.body, resolve_mention),
@@ -4090,7 +4053,7 @@ class MessageBus:
         if message.claim_transition is not None:
             raise RelationViolationError("An initial cohort cannot carry resource claims.")
         classification = ControlClassification(control)
-        if classification is not ControlClassification.ORDINARY:
+        if not classification.supports_initial:
             raise RelationViolationError("System-control initial issuer is not available.")
         with nullcontext() if _bus_locked else _store_lock(self._path):
             _require_no_private_owner_rename(self._path.parent)
@@ -4131,18 +4094,18 @@ class MessageBus:
                         "Initial sender must be a visible registered executable."
                     )
             elif (
-                sender_thread.role is not ThreadRole.USER
+                sender_thread.role.executable
                 or message.sender != sender_thread.name
                 or _human_origin.sender != sender_thread.name
                 or _human_origin.created_at != sender_thread.created_at
                 or _human_origin.worktree != sender_thread.worktree
             ):
                 raise RelationViolationError("Local USER origin differs from registered identity.")
-            if message.target == BuiltinChannel.ANY.value or self._channels.is_view_target(
+            if BuiltinChannel.aggregate_target(message.target) or self._channels.is_view_target(
                 message.target
             ):
                 raise RelationViolationError("A saved/aggregate view is not routable.")
-            target = GLOBAL_CHANNEL if message.target == "broadcast" else message.target
+            target = BuiltinChannel.canonical(message.target)
             tags, explicit_channels = self._channels.read()
             if not is_channel_target(target):
                 if snapshot.aliases.get(target, target) != target:
@@ -4161,7 +4124,7 @@ class MessageBus:
                     raise RelationViolationError("A thread cannot message itself.")
                 names = [target]
             else:
-                if target == "#all" or target == "#none":
+                if BuiltinChannel.lookup(target) is not None:
                     channel = Channel(target)
                 else:
                     tag = target.removeprefix("#")
@@ -4206,8 +4169,7 @@ class MessageBus:
                         )
                     expected_sequence += 1
                     duplicate |= (
-                        previous.sender == sender
-                        and previous.message_id == stored.message_id
+                        previous.sender == sender and previous.message_id == stored.message_id
                     )
                 if int(metadata["last_seq"]) != expected_sequence - 1:
                     raise RelationViolationError(
@@ -4369,7 +4331,7 @@ class MessageBus:
             executable = registry_snapshot.threads[sender].role.executable
         if not executable:
             raise RelationViolationError("Keyed response sender must be executable.")
-        canonical_target = GLOBAL_CHANNEL if target == "broadcast" else target
+        canonical_target = BuiltinChannel.canonical(target)
         if intent.publication_key != canonical_publication_key(
             intent.execution_id, canonical_target
         ):
@@ -4413,6 +4375,13 @@ class MessageBus:
         delivery = self._delivery_scope(name)
         name = delivery.actor
         matches = self._scope_filter(delivery, target)
+        if self.reads.human(self._registry.require(name).role):
+            seen = self.reads.seen_sequences(name, self._registry.snapshot())
+            return [
+                message
+                for message in self._load_log()
+                if delivery.delivers(message) and matches(message) and message.seq not in seen
+            ]
         markers = self._read_markers()
         global_read = markers.get(name, 0)
         with _store_lock(self._path):
@@ -4432,9 +4401,9 @@ class MessageBus:
     def pending_count(self, name: str, target: str | None = None) -> int:
         """Count unread messages without retaining their bodies."""
         counts = self.pending_counts(name)
-        if target is None or target == "#any":
+        if target is None or BuiltinChannel.aggregate_target(target):
             return sum(counts.values())
-        if is_channel_target(target) or target == "broadcast":
+        if is_channel_target(target) or BuiltinChannel.is_alias(target):
             targets = self._channels.history_targets(target)
             return sum(
                 count for scope, count in counts.items() if targets is None or scope in targets
@@ -4446,7 +4415,7 @@ class MessageBus:
     ) -> Callable[[Message], bool]:
         if target is None:
             return lambda message: True
-        if is_channel_target(target) or target == "broadcast":
+        if is_channel_target(target) or BuiltinChannel.is_alias(target):
             targets = self._channels.history_targets(target)
             return lambda message: targets is None or message.target in targets
         peer = self._registry.require(target).name
@@ -4454,12 +4423,27 @@ class MessageBus:
 
     def pending_counts(self, name: str) -> Mapping[str, int]:
         """Count one thread's unread messages by conversation in one log pass."""
+        if self.reads.human(self._registry.require(name).role):
+            delivery = self._delivery_scope(name)
+            revision = tuple(
+                file_revision(path)
+                for path in (self._path, self._registry._path, self._channels.path, self.reads.path)
+            )
+            cached = self._pending_cache.get(name)
+            if cached is not None and cached.revision == revision and cached.delivery == delivery:
+                return dict(cached.counts)
+            counts: dict[str, int] = {}
+            for message in self.inbox(name):
+                conversation = delivery.conversation(message)
+                counts[conversation] = counts.get(conversation, 0) + 1
+            self._pending_cache[name] = PendingCounts(revision, delivery, counts)
+            return counts
         revision = tuple(
             file_revision(path)
             for path in (
                 self._path,
                 self._channels.path,
-                self._path.parent / "read_markers.json",
+                self.reads.path.with_name(self.reads.legacy_filename),
             )
         )
         delivery = self._delivery_scope(name)
@@ -4535,7 +4519,7 @@ class MessageBus:
             raise RelationViolationError("Message target cannot be empty.")
         if not isinstance(body, str) or not body:
             raise ValueError("Message body cannot be empty.")
-        if target != "broadcast" and not is_channel_target(target):
+        if not BuiltinChannel.is_alias(target) and not is_channel_target(target):
             if sender == target:
                 raise RelationViolationError(f"Thread {sender!r} cannot message itself.")
             allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
@@ -4560,6 +4544,18 @@ class MessageBus:
         wire row only once. This is a read projection, never a read ACK.
         """
         snapshot = self._registry.snapshot()
+        humans = tuple(
+            name
+            for name in names
+            if snapshot.aliases.get(name, name) in snapshot.threads
+            and self.reads.human(snapshot.threads[snapshot.aliases.get(name, name)].role)
+        )
+        if humans:
+            counts = {name: sum(self.pending_counts(name).values()) for name in humans}
+            executors = tuple(name for name in names if name not in humans)
+            if executors:
+                counts.update(self.pending_counts_all(executors))
+            return counts
         actors: dict[str, str] = {}
         deliveries: dict[str, DeliveryScope] = {}
         for name in names:
@@ -4702,6 +4698,11 @@ class MessageBus:
 
     def mark_delivered(self, name: str, target: str | None = None) -> int:
         """Mark unread messages delivered and return the count without retaining them."""
+        if self.reads.human(self._registry.require(name).role):
+            messages = self.inbox(name, target)
+            basis = self.reads.capture(name, messages, self._registry.snapshot(), self._path)
+            self.reads.mark_displayed(basis.viewer, basis)
+            return len(messages)
         delivery = self._delivery_scope(name)
         name = delivery.actor
         matches = self._scope_filter(delivery, target)
@@ -4735,6 +4736,13 @@ class MessageBus:
         canonical = self._registry.require(name).name
         if sequence < 0:
             raise ValueError("Delivery sequence cannot be negative.")
+        if self.reads.human(self._registry.require(canonical).role):
+            messages = (message for message in self.inbox(canonical) if message.seq <= sequence)
+            displayed = self.reads.capture(
+                canonical, messages, self._registry.snapshot(), self._path
+            )
+            self.reads.mark_displayed(canonical, displayed)
+            return
         self._write_markers({canonical: sequence})
 
     def dm_history(self, a: str, b: str) -> Sequence[Message]:
@@ -4753,7 +4761,7 @@ class MessageBus:
 
     def channel_history(self, target: str) -> Sequence[Message]:
         """Full history of one channel (``#all`` or a tag channel)."""
-        if not (is_channel_target(target) or target == "broadcast"):
+        if not (is_channel_target(target) or BuiltinChannel.is_alias(target)):
             raise ValueError(f"{target!r} is not a channel target.")
         targets = self._channels.history_targets(target)
         return [msg for msg in self._load_log() if targets is None or msg.target in targets]
@@ -4806,7 +4814,7 @@ class MessageBus:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         """Return one bounded page from a channel in ascending order."""
-        if not (is_channel_target(target) or target == "broadcast"):
+        if not (is_channel_target(target) or BuiltinChannel.is_alias(target)):
             raise ValueError(f"{target!r} is not a channel target.")
         targets = self._channels.history_targets(target)
         return self._history_page(
@@ -4837,23 +4845,6 @@ class MessageBus:
                 limit=limit,
                 max_bytes=max_bytes,
             )
-
-    def channel_display_activity(
-        self, scopes: tuple[ChannelDisplayScope, ...]
-    ) -> Mapping[str, ChannelActivity]:
-        """The same display predicate owns activity even without a new wire row."""
-        revision = (file_revision(self._path), scopes)
-        if revision != self._display_activity_revision:
-            activity = {scope.channel: ChannelActivity() for scope in scopes}
-            with self._record_snapshot() as (_, records):
-                for message, _ in records:
-                    for scope in scopes:
-                        if scope.includes(message):
-                            activity[scope.channel] = activity[scope.channel].observe(message)
-            self._display_activity = activity
-            self._display_activity_revision = revision
-            self._display_activity_verified = False
-        return dict(self._display_activity)
 
     def _history_page(
         self,
@@ -5149,7 +5140,7 @@ class MessageBus:
             return sequence if sequence else self._max_sequence_unlocked()
 
     def _read_markers(self) -> dict[str, int]:
-        marker_path = self._path.parent / "read_markers.json"
+        marker_path = self.reads.path.with_name(self.reads.legacy_filename)
         with _store_lock(marker_path):
             return self._read_markers_unlocked(marker_path)
 
@@ -5161,45 +5152,12 @@ class MessageBus:
         return markers
 
     def _write_markers(self, markers: dict[str, int]) -> None:
-        marker_path = self._path.parent / "read_markers.json"
+        marker_path = self.reads.path.with_name(self.reads.legacy_filename)
         with _store_lock(marker_path):
             current = self._read_markers_unlocked(marker_path)
             for name, sequence in markers.items():
                 current[name] = max(sequence, current.get(name, 0))
             _atomic_write_text(marker_path, json.dumps(current, indent=2))
-
-    def _mark_dm_painted_bound(
-        self,
-        viewer: str,
-        peer: str,
-        through: int,
-        *,
-        expected_marker_revision: tuple[int, int, int, int] | None,
-    ) -> None:
-        """Write one human DM marker, never the global/executor cursor.
-
-        Caller holds the registry identity lock while this marker lock is
-        acquired. A concurrent deliberate Mark Read changes the marker basis
-        and must cause this painted-page CAS to fail, not silently retarget.
-        """
-        marker_path = self._path.parent / "read_markers.json"
-        with _store_lock(marker_path):
-            if file_revision(marker_path) != expected_marker_revision:
-                raise ValueError("DM read marker changed; refresh the displayed page.")
-            current = self._read_markers_unlocked(marker_path)
-            key = self._marker_key(viewer, peer)
-            if current.get(key, 0) >= through:
-                return
-            # On POSIX, prove the directory can sync before changing the
-            # marker. The final post-replace sync is still required there.
-            if os.name == "posix":
-                parent_fd = os.open(marker_path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-                try:
-                    os.fsync(parent_fd)
-                finally:
-                    os.close(parent_fd)
-            current[key] = through
-            _atomic_write_text(marker_path, json.dumps(current, indent=2), fsync_parent=True)
 
     def _load_log(self) -> list[Message]:
         with _store_lock(self._path):
@@ -5254,7 +5212,7 @@ class MessageBus:
 
     def rename_thread(self, old_name: str, new_name: str) -> None:
         """Move read markers to canonical names without rewriting message history."""
-        marker_path = self._path.parent / "read_markers.json"
+        marker_path = self.reads.path.with_name(self.reads.legacy_filename)
         with _store_lock(marker_path):
             markers = self._read_markers_unlocked(marker_path)
             renamed: dict[str, int] = {}
@@ -5327,7 +5285,7 @@ class MessageBus:
                 "".join(f"{json.dumps(message.to_wire())}\n" for message in retained),
             )
 
-        marker_path = self._path.parent / "read_markers.json"
+        marker_path = self.reads.path.with_name(self.reads.legacy_filename)
         with _store_lock(marker_path):
             markers = self._read_markers_unlocked(marker_path)
 

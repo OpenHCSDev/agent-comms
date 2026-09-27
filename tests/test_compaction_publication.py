@@ -10,6 +10,7 @@ import sys
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms import compaction_publication
 from agent_comms.acp import CommsAgent
 from agent_comms.compaction_journal import CompactionJournal
@@ -100,7 +101,7 @@ async def test_pending_metadata_projects_before_next_owner_input_send(owner, tmp
         ), "Local metadata projection must precede native provider send"
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
             assert allowed is True
-        yield {"type": "done", "ok": False, "text": "No provider invoked"}
+        yield ae.Done(ok=False, text="No provider invoked")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     agent.on_connect(Client())

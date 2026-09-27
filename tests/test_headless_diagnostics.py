@@ -6,6 +6,7 @@ import os
 import pytest
 
 from agent_comms import Thread, wire
+from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.diagnostics import record_terminal_failure
 
@@ -59,13 +60,12 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
         return original_send(*args, **kwargs)
 
     async def events(*args, **kwargs):
-        yield {
-            "type": "done",
-            "ok": False,
-            "text": "SECRET native stderr",
-            "reason_code": "native_preflight_timeout",
-            "diagnostic": {"wait_ms": 5000},
-        }
+        yield ae.Done(
+            ok=False,
+            text="SECRET native stderr",
+            reason_code="native_preflight_timeout",
+            diagnostic={"wait_ms": 5000},
+        )
 
     monkeypatch.setattr(comms, "send", publish)
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)

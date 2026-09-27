@@ -7,103 +7,328 @@ import json
 import math
 import os
 import tempfile
+from abc import abstractmethod
 from collections import deque
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-from enum import StrEnum
 from pathlib import Path
-from typing import BinaryIO, ClassVar
+from typing import Any, BinaryIO, ClassVar, cast
 
 from .bus_publication import reject_private_wire_fields
-from .declarations import Message
+from .channels import ChannelCatalog
+from .declarations import BuiltinChannel, Message, RelationViolationError, ThreadRegistry
+from .declared_family import DeclaredFamily, _FamilyMeta
+from .field_codec import FieldCodec
 
 
-class WireExportFormat(StrEnum):
-    """Representations of committed wire envelopes."""
+class _FormatMeta(_FamilyMeta):
+    """Keep the enum-era constructor, constants and CLI iteration at the boundary."""
 
-    JSONL = "jsonl"
-    TEXT = "text"
+    def __call__(self, *args: Any, **kwargs: Any) -> WireExportFormat:
+        if self is WireExportFormat:
+            return WireExportFormat.parse(*args, **kwargs)
+        return cast(WireExportFormat, super().__call__(*args, **kwargs))
+
+    def __iter__(self) -> Iterator[WireExportFormat]:
+        return (member() for member in WireExportFormat.members_with(WireExportFormat))
+
+    def __getattr__(self, name: str) -> WireExportFormat:
+        if name.isupper():
+            try:
+                return WireExportFormat.decode(name.lower())()
+            except ValueError:
+                pass
+        raise AttributeError(name)
+
+
+class WireExportFormat(DeclaredFamily, metaclass=_FormatMeta, affix="Format"):
+    """A representation owns both header and row rendering."""
+
+    importable: ClassVar[bool] = False
+
+    @classmethod
+    def parse(cls, value: str | WireExportFormat) -> WireExportFormat:
+        """Decode once at a string boundary; typed instances retain their identity."""
+        return value if isinstance(value, WireExportFormat) else cls.decode(value)()
 
     @property
-    def importable(self) -> bool:
-        return self is self.JSONL
+    def value(self) -> str:
+        return self.declared_name
+
+    def __str__(self) -> str:
+        return self.value
+
+    @abstractmethod
+    def header(self, metadata: Mapping[str, object]) -> bytes:
+        """Render the durable metadata record."""
+
+    @abstractmethod
+    def row(self, message: Message, stored: Mapping[str, object]) -> bytes:
+        """Render a parsed message and its lossless stored envelope."""
+
+    @staticmethod
+    def json_record(record: Mapping[str, object]) -> str:
+        return json.dumps(record, ensure_ascii=False, separators=(",", ":"))
 
 
-class WireExportScopeKind(StrEnum):
-    EVERYTHING = "everything"
-    CHANNEL = "channel"
-    DM = "dm"
+@dataclass(frozen=True)
+class JsonlFormat(WireExportFormat):
+    importable: ClassVar[bool] = True
+
+    def header(self, metadata: Mapping[str, object]) -> bytes:
+        return (self.json_record(metadata) + "\n").encode()
+
+    def row(self, message: Message, stored: Mapping[str, object]) -> bytes:
+        return (self.json_record({"record": "message", "message": stored}) + "\n").encode()
+
+
+@dataclass(frozen=True)
+class TextFormat(WireExportFormat):
+    def header(self, metadata: Mapping[str, object]) -> bytes:
+        return (
+            f"# agent-comms wire export v{metadata['version']} (non-importable text view)\n"
+            f"# metadata: {self.json_record(metadata)}\n"
+        ).encode()
+
+    def row(self, message: Message, stored: Mapping[str, object]) -> bytes:
+        timestamp = (
+            datetime.fromtimestamp(message.timestamp, UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            if math.isfinite(message.timestamp) and message.timestamp > 0
+            else "invalid-time"
+        )
+        attributes = [
+            f"seq={message.seq}",
+            f"id={message.message_id}",
+            f"type={message.type.value}",
+            f"role={message.sender_role.value}",
+        ]
+        if message.notice:
+            attributes.append("notice=true")
+        if message.membership is not None:
+            attributes.append(f"membership={message.membership.value}")
+        if message.mentions:
+            attributes.append("mentions=" + ",".join(f"@{m.thread}" for m in message.mentions))
+        body = "\n".join(f"  | {line}" for line in message.body.split("\n"))
+        return (
+            f"[{timestamp}] [{' '.join(attributes)}] "
+            f"<{message.sender} -> {message.target}>\n{body}\n"
+        ).encode()
+
+
+@dataclass(frozen=True)
+class ResolvedExportScope:
+    """One canonical scope and its alias/catalog-resolved predicate snapshot."""
+
+    scope: WireExportScope
+    matches: Callable[[Message], bool]
+
+
+class WireExportScope(DeclaredFamily, affix="Scope"):
+    """The authoritative conversation, resolved under the wire snapshot lock."""
+
+    @staticmethod
+    def everything() -> WireExportScope:
+        return EverythingScope()
+
+    @staticmethod
+    def for_channel(channel: str) -> WireExportScope:
+        return ChannelScope(channel)
+
+    @staticmethod
+    def for_dm(first: str, second: str) -> WireExportScope:
+        return DmScope((first, second))
+
+    def to_wire(self) -> dict[str, object]:
+        return FieldCodec.encode(self)
+
+    @abstractmethod
+    def resolve(self, catalog: ChannelCatalog, registry: ThreadRegistry) -> ResolvedExportScope:
+        """Capture canonical names and a predicate without mutating read state."""
 
 
 @dataclass(frozen=True, slots=True)
-class WireExportScope:
-    """The authoritative conversation selected by the operations layer."""
+class EverythingScope(WireExportScope):
+    def resolve(self, catalog: ChannelCatalog, registry: ThreadRegistry) -> ResolvedExportScope:
+        return ResolvedExportScope(self, lambda message: True)
 
-    kind: WireExportScopeKind
-    channel: str | None = None
-    participants: tuple[str, ...] = ()
+
+@dataclass(frozen=True, slots=True)
+class ChannelScope(WireExportScope):
+    channel: str
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "kind", WireExportScopeKind(self.kind))
-        if self.kind is WireExportScopeKind.EVERYTHING:
-            if self.channel is not None or self.participants:
-                raise ValueError("The everything wire-export scope has no channel or participants.")
-        elif self.kind is WireExportScopeKind.CHANNEL:
-            if not self.channel or not self.channel.startswith("#") or self.participants:
-                raise ValueError("A channel wire-export scope requires one #channel.")
-            if self.channel == "#any":
-                raise ValueError("#any is an aggregate projection, not an exportable conversation.")
-        elif (
-            self.channel is not None
+        if not isinstance(self.channel, str) or not self.channel.startswith("#"):
+            raise ValueError("A channel wire-export scope requires one #channel.")
+        builtin = BuiltinChannel.lookup(self.channel)
+        if builtin is not None and builtin.aggregate:
+            raise ValueError(
+                f"{self.channel} is an aggregate projection, not an exportable conversation."
+            )
+
+    def resolve(self, catalog: ChannelCatalog, registry: ThreadRegistry) -> ResolvedExportScope:
+        if catalog.is_view_target(self.channel):
+            raise RelationViolationError(
+                f"Saved view {self.channel!r} has no authoritative wire history."
+            )
+        targets = catalog.history_targets(self.channel)
+        if targets is None:
+            raise RelationViolationError(
+                f"View {self.channel!r} is an aggregate, not an exportable conversation."
+            )
+        return ResolvedExportScope(self, lambda message: message.target in targets)
+
+
+@dataclass(frozen=True, slots=True)
+class DmScope(WireExportScope):
+    participants: tuple[str, str]
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.participants, tuple)
             or len(self.participants) != 2
-            or any(not participant for participant in self.participants)
+            or any(not isinstance(name, str) or not name for name in self.participants)
             or self.participants[0] == self.participants[1]
         ):
             raise ValueError("A DM wire-export scope requires two distinct participants.")
 
-    @classmethod
-    def everything(cls) -> WireExportScope:
-        return cls(WireExportScopeKind.EVERYTHING)
+    def resolve(self, catalog: ChannelCatalog, registry: ThreadRegistry) -> ResolvedExportScope:
+        first = registry.require(self.participants[0]).name
+        second = registry.require(self.participants[1]).name
+        canonical = DmScope((first, second))
+        first_names = registry.aliases_for(first)
+        second_names = registry.aliases_for(second)
 
-    @classmethod
-    def for_channel(cls, channel: str) -> WireExportScope:
-        return cls(WireExportScopeKind.CHANNEL, channel=channel)
+        def matches(message: Message) -> bool:
+            return (message.sender in first_names and message.target in second_names) or (
+                message.sender in second_names and message.target in first_names
+            )
 
-    @classmethod
-    def for_dm(cls, first: str, second: str) -> WireExportScope:
-        return cls(WireExportScopeKind.DM, participants=(first, second))
+        return ResolvedExportScope(canonical, matches)
+
+
+@dataclass
+class ExportSelectionStats:
+    """Selection counters shared by the traversal and limit hooks."""
+
+    source_messages: int = 0
+    time_filtered: int = 0
+    invalid_time: int = 0
+    oversized: int = 0
+
+
+class WireExportLimit(DeclaredFamily, affix="Limit"):
+    """Shared filtering algorithm with declaration-owned retention hooks."""
+
+    @staticmethod
+    def full() -> WireExportLimit:
+        return FullLimit()
+
+    @staticmethod
+    def max_bytes(value: int) -> WireExportLimit:
+        return MaxBytesLimit(value)
+
+    @staticmethod
+    def recent(cutoff: float) -> WireExportLimit:
+        return RecentLimit(cutoff)
 
     def to_wire(self) -> dict[str, object]:
-        return {
-            "kind": self.kind.value,
-            **({"channel": self.channel} if self.channel is not None else {}),
-            **({"participants": list(self.participants)} if self.participants else {}),
-        }
+        return FieldCodec.encode(self)
 
+    def byte_ceiling(self) -> int | None:
+        return None
 
-class WireExportLimitKind(StrEnum):
-    FULL = "full"
-    MAX_BYTES = "max_bytes"
-    RECENT = "recent"
+    def time_cutoff(self) -> float | None:
+        return None
+
+    def validate_header(self, size: int) -> None:
+        ceiling = self.byte_ceiling()
+        if ceiling is not None and size > ceiling:
+            raise ValueError("The wire-export byte ceiling is too small for required metadata.")
+
+    def select(
+        self,
+        rows: Iterable[WireExportRow],
+        header_size: int,
+        started_at: float,
+        stats: ExportSelectionStats,
+    ) -> Iterable[WireExportRow]:
+        cutoff = self.time_cutoff()
+
+        def filtered() -> Iterable[WireExportRow]:
+            for row in rows:
+                if cutoff is not None:
+                    timestamp = row.message.timestamp
+                    if not math.isfinite(timestamp) or timestamp <= 0:
+                        stats.invalid_time += 1
+                        continue
+                    if not cutoff <= timestamp <= started_at:
+                        stats.time_filtered += 1
+                        continue
+                yield row
+
+        return self.retain(filtered(), header_size, stats)
+
+    @abstractmethod
+    def retain(
+        self,
+        rows: Iterable[WireExportRow],
+        header_size: int,
+        stats: ExportSelectionStats,
+    ) -> Iterable[WireExportRow]:
+        """Select an ascending stream; buffering is owned by the bound's declaration."""
 
 
 @dataclass(frozen=True, slots=True)
-class WireExportLimit:
-    """One explicit, mutually exclusive wire-history bound."""
+class FullLimit(WireExportLimit):
+    def retain(
+        self,
+        rows: Iterable[WireExportRow],
+        header_size: int,
+        stats: ExportSelectionStats,
+    ) -> Iterable[WireExportRow]:
+        return rows
 
-    kind: WireExportLimitKind
-    value: int | float | None = None
+
+@dataclass(frozen=True, slots=True)
+class MaxBytesLimit(WireExportLimit):
+    value: int
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "kind", WireExportLimitKind(self.kind))
-        if self.kind is WireExportLimitKind.FULL:
-            if self.value is not None:
-                raise ValueError("A full wire export has no bound value.")
-        elif self.kind is WireExportLimitKind.MAX_BYTES:
-            if isinstance(self.value, bool) or not isinstance(self.value, int) or self.value <= 0:
-                raise ValueError("The wire-export byte ceiling must be a positive integer.")
-        elif (
+        if isinstance(self.value, bool) or not isinstance(self.value, int) or self.value <= 0:
+            raise ValueError("The wire-export byte ceiling must be a positive integer.")
+
+    def byte_ceiling(self) -> int:
+        return self.value
+
+    def retain(
+        self,
+        rows: Iterable[WireExportRow],
+        header_size: int,
+        stats: ExportSelectionStats,
+    ) -> Iterable[WireExportRow]:
+        retained: deque[WireExportRow] = deque()
+        retained_bytes = 0
+        for row in rows:
+            row_size = len(row.data)
+            if header_size + row_size > self.value:
+                retained.clear()
+                retained_bytes = 0
+                stats.oversized += 1
+                continue
+            retained.append(row)
+            retained_bytes += row_size
+            while header_size + retained_bytes > self.value:
+                retained_bytes -= len(retained.popleft().data)
+        return retained
+
+
+@dataclass(frozen=True, slots=True)
+class RecentLimit(FullLimit):
+    value: float
+
+    def __post_init__(self) -> None:
+        if (
             isinstance(self.value, bool)
             or not isinstance(self.value, (int, float))
             or not math.isfinite(self.value)
@@ -113,23 +338,8 @@ class WireExportLimit:
                 "The recent wire-export cutoff must be a finite non-negative timestamp."
             )
 
-    @classmethod
-    def full(cls) -> WireExportLimit:
-        return cls(WireExportLimitKind.FULL)
-
-    @classmethod
-    def max_bytes(cls, value: int) -> WireExportLimit:
-        return cls(WireExportLimitKind.MAX_BYTES, value)
-
-    @classmethod
-    def recent(cls, cutoff: float) -> WireExportLimit:
-        return cls(WireExportLimitKind.RECENT, cutoff)
-
-    def to_wire(self) -> dict[str, object]:
-        return {
-            "kind": self.kind.value,
-            **({"value": self.value} if self.value is not None else {}),
-        }
+    def time_cutoff(self) -> float:
+        return self.value
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,7 +394,7 @@ class WireExportReceipt:
 
 
 @dataclass(frozen=True, slots=True)
-class _WireRow:
+class WireExportRow:
     message: Message
     data: bytes
 
@@ -208,7 +418,6 @@ class WireTranscriptExporter:
 
     SCHEMA: ClassVar[str] = "agent-comms/wire-export"
     VERSION: ClassVar[int] = 1
-    _TEXT_TIME_FORMAT: ClassVar[str] = "%Y-%m-%dT%H:%M:%S.%fZ"
 
     def __init__(
         self,
@@ -218,7 +427,7 @@ class WireTranscriptExporter:
         limit: WireExportLimit,
         boundary: WireExportBoundary,
     ) -> None:
-        self.format = WireExportFormat(format)
+        self.format = WireExportFormat.parse(format)
         self.scope = scope
         self.limit = limit
         self.boundary = boundary
@@ -232,8 +441,7 @@ class WireTranscriptExporter:
     ) -> WireExportReceipt:
         """Consume ascending envelopes once and atomically publish the artifact."""
         header = self._header()
-        if self.limit.kind is WireExportLimitKind.MAX_BYTES and len(header) > self._byte_ceiling():
-            raise ValueError("The wire-export byte ceiling is too small for required metadata.")
+        self.limit.validate_header(len(header))
 
         destination = Path(destination)
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -244,65 +452,23 @@ class WireTranscriptExporter:
             prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent
         )
         temporary_path = Path(temporary)
-        source_messages = exported = time_filtered = invalid_time = oversized = 0
+        stats = ExportSelectionStats()
+        exported = 0
         first_selected: Message | None = None
         last_selected: Message | None = None
-        previous_sequence = -1
         try:
             with os.fdopen(descriptor, "wb") as output:
                 writer = _ArtifactWriter(output)
-                if self.limit.kind is WireExportLimitKind.MAX_BYTES:
-                    retained: deque[_WireRow] = deque()
-                    retained_bytes = 0
-                    for envelope in envelopes:
-                        row = self._row(envelope)
-                        previous_sequence = self._validate_sequence(row.message, previous_sequence)
-                        if row.message.seq > self.boundary.through_seq:
-                            break
-                        source_messages += 1
-                        row_size = len(row.data)
-                        if len(header) + row_size > self._byte_ceiling():
-                            retained.clear()
-                            retained_bytes = 0
-                            oversized += 1
-                            continue
-                        retained.append(row)
-                        retained_bytes += row_size
-                        while len(header) + retained_bytes > self._byte_ceiling():
-                            retained_bytes -= len(retained.popleft().data)
-                    writer.write(header)
-                    for row in retained:
-                        writer.write(row.data)
-                    exported = len(retained)
-                    if retained:
-                        first_selected = retained[0].message
-                        last_selected = retained[-1].message
-                else:
-                    writer.write(header)
-                    cutoff = self._recent_cutoff()
-                    for envelope in envelopes:
-                        row = self._row(envelope)
-                        previous_sequence = self._validate_sequence(row.message, previous_sequence)
-                        if row.message.seq > self.boundary.through_seq:
-                            break
-                        source_messages += 1
-                        if cutoff is not None:
-                            if (
-                                not math.isfinite(row.message.timestamp)
-                                or row.message.timestamp <= 0
-                            ):
-                                invalid_time += 1
-                                continue
-                            if not (
-                                cutoff <= row.message.timestamp <= self.boundary.export_started_at
-                            ):
-                                time_filtered += 1
-                                continue
-                        writer.write(row.data)
-                        exported += 1
-                        if first_selected is None:
-                            first_selected = row.message
-                        last_selected = row.message
+                writer.write(header)
+                rows = self._rows(envelopes, stats)
+                for row in self.limit.select(
+                    rows, len(header), self.boundary.export_started_at, stats
+                ):
+                    writer.write(row.data)
+                    exported += 1
+                    if first_selected is None:
+                        first_selected = row.message
+                    last_selected = row.message
                 output.flush()
                 os.fsync(output.fileno())
                 bytes_written = writer.size
@@ -312,19 +478,19 @@ class WireTranscriptExporter:
         finally:
             temporary_path.unlink(missing_ok=True)
 
-        omitted = source_messages - exported
+        omitted = stats.source_messages - exported
         return WireExportReceipt(
             destination=str(destination),
             format=self.format,
             scope=self.scope,
             limit=self.limit,
             boundary=self.boundary,
-            source_messages=source_messages,
+            source_messages=stats.source_messages,
             exported_messages=exported,
             omitted_messages=omitted,
-            time_filtered_messages=time_filtered,
-            invalid_time_messages=invalid_time,
-            oversized_messages=oversized,
+            time_filtered_messages=stats.time_filtered,
+            invalid_time_messages=stats.invalid_time,
+            oversized_messages=stats.oversized,
             bytes_written=bytes_written,
             output_sha256=output_sha256,
             truncated=omitted > 0,
@@ -347,15 +513,23 @@ class WireTranscriptExporter:
             "limit": self.limit.to_wire(),
             "boundary": self.boundary.to_wire(),
         }
-        encoded = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
-        if self.format is WireExportFormat.JSONL:
-            return (encoded + "\n").encode()
-        return (
-            f"# agent-comms wire export v{self.VERSION} (non-importable text view)\n"
-            f"# metadata: {encoded}\n"
-        ).encode()
+        return self.format.header(metadata)
 
-    def _row(self, envelope: Message | Mapping[str, object]) -> _WireRow:
+    def _rows(
+        self,
+        envelopes: Iterable[Message | Mapping[str, object]],
+        stats: ExportSelectionStats,
+    ) -> Iterable[WireExportRow]:
+        previous_sequence = -1
+        for envelope in envelopes:
+            row = self._row(envelope)
+            previous_sequence = self._validate_sequence(row.message, previous_sequence)
+            if row.message.seq > self.boundary.through_seq:
+                break
+            stats.source_messages += 1
+            yield row
+
+    def _row(self, envelope: Message | Mapping[str, object]) -> WireExportRow:
         if isinstance(envelope, Message):
             message = envelope
             stored: Mapping[str, object] = message.to_wire()
@@ -363,58 +537,13 @@ class WireTranscriptExporter:
             reject_private_wire_fields(envelope)
             stored = envelope
             message = Message.from_wire(stored)
-        if self.format is WireExportFormat.JSONL:
-            data = (
-                json.dumps(
-                    {"record": "message", "message": stored},
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                )
-                + "\n"
-            ).encode()
-        else:
-            timestamp = (
-                datetime.fromtimestamp(message.timestamp, UTC).strftime(self._TEXT_TIME_FORMAT)
-                if math.isfinite(message.timestamp) and message.timestamp > 0
-                else "invalid-time"
-            )
-            attributes = [
-                f"seq={message.seq}",
-                f"id={message.message_id}",
-                f"type={message.type.value}",
-                f"role={message.sender_role.value}",
-            ]
-            if message.notice:
-                attributes.append("notice=true")
-            if message.membership is not None:
-                attributes.append(f"membership={message.membership.value}")
-            if message.mentions:
-                attributes.append(
-                    "mentions=" + ",".join(f"@{mention.thread}" for mention in message.mentions)
-                )
-            body = "\n".join(f"  | {line}" for line in message.body.split("\n"))
-            data = (
-                f"[{timestamp}] [{' '.join(attributes)}] "
-                f"<{message.sender} -> {message.target}>\n{body}\n"
-            ).encode()
-        return _WireRow(message, data)
+        return WireExportRow(message, self.format.row(message, stored))
 
     @staticmethod
     def _validate_sequence(message: Message, previous: int) -> int:
         if message.seq <= previous:
             raise ValueError("Wire-export envelopes must have unique ascending sequences.")
         return message.seq
-
-    def _byte_ceiling(self) -> int:
-        assert self.limit.kind is WireExportLimitKind.MAX_BYTES
-        assert isinstance(self.limit.value, int)
-        return self.limit.value
-
-    def _recent_cutoff(self) -> float | None:
-        if self.limit.kind is not WireExportLimitKind.RECENT:
-            return None
-        assert isinstance(self.limit.value, (int, float))
-        return float(self.limit.value)
 
     @staticmethod
     def _publish(temporary: Path, destination: Path, *, overwrite: bool) -> None:

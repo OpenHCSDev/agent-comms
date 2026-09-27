@@ -2,6 +2,7 @@
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.declarations import ActivityState
 from agent_comms.operations import wire
@@ -26,23 +27,23 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
         assert detail in view.presentation.summary
 
     async def events(*args, **kwargs):
-        yield {"type": "tool_start", "id": "old-tool", "name": "read", "title": "Read project"}
+        yield ae.ToolStart(id="old-tool", name="read", title="Read project")
         activity(ActivityState.WORKING, "Read project")
-        yield {"type": "compaction_start", "reason": "threshold"}
+        yield ae.CompactionStart(reason="threshold")
         activity(ActivityState.WORKING, "Compacting context")
-        yield {"type": "compaction_progress", "chunk_index": 2}
+        yield ae.CompactionProgress(chunk_index=2)
         activity(ActivityState.WORKING, "Compacting context")
-        yield {"type": "tool_end", "id": "old-tool", "name": "read", "ok": True}
+        yield ae.ToolEnd(id="old-tool", name="read", ok=True)
         activity(ActivityState.WORKING, "Compacting context")
-        yield {"type": "tool_start", "id": "next-tool", "name": "read", "title": "Read next file"}
+        yield ae.ToolStart(id="next-tool", name="read", title="Read next file")
         activity(ActivityState.WORKING, "Compacting context")
-        yield {"type": "compaction_end", "aborted": aborted, "summary": "saved summary"}
+        yield ae.CompactionEnd(aborted=aborted, summary="saved summary")
         activity(ActivityState.WORKING, "Read next file")
-        yield {"type": "tool_end", "id": "next-tool", "name": "read", "ok": True}
+        yield ae.ToolEnd(id="next-tool", name="read", ok=True)
         assert comms.activity_of("project").state is ActivityState.THINKING
-        yield {"type": "settled"}
+        yield ae.StreamSettled()
         assert comms.activity_of("project").state is ActivityState.IDLE
-        yield {"type": "done", "ok": not aborted, "text": "Done"}
+        yield ae.Done(ok=not aborted, text="Done")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
@@ -61,7 +62,7 @@ async def test_compaction_eof_still_finishes_activity(tmp_path, monkeypatch):
     await agent.new_session(str(tmp_path / "project"))
 
     async def events(*args, **kwargs):
-        yield {"type": "compaction_start", "reason": "threshold"}
+        yield ae.CompactionStart(reason="threshold")
         assert comms.activity_of("project").detail == "Compacting context"
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)

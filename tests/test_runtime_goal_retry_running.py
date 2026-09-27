@@ -6,6 +6,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms import wire
 from agent_comms.acp import CommsAgent
 from agent_comms.goal_attempts import GoalAttemptStore
@@ -65,25 +66,25 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
             with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
                 assert allowed is True
             assert kwargs["native_start"](None, native_id, args[2])
-            yield {"type": "input_started", "id": None}
+            yield ae.InputStarted(id=None)
             if number == 1:
                 entered.set()
                 await release.wait()
-                yield {"type": "settled"}
+                yield ae.StreamSettled()
                 settled.set()
                 await finish.wait()
                 if outcome == "exception":
                     raise RuntimeError("Current user turn failed")
                 if outcome != "eof":
-                    yield {"type": "done", "ok": outcome == "success", "text": "Current turn ended"}
+                    yield ae.Done(ok=outcome == "success", text="Current turn ended")
             else:
                 current = comms.registry.require(session).goal
                 assert current.active and current.id == goal.id
                 assert store.snapshot(goal.id).number == 2
                 comms.update_goal(session, "completed", goal_id=goal.id, model_report=True)
-                yield {"type": "tool_end", "id": "report", "name": "comms_goal", "ok": True}
-                yield {"type": "settled"}
-                yield {"type": "done", "ok": True, "text": "Goal completed"}
+                yield ae.ToolEnd(id="report", name="alternate_goal_report", ok=True)
+                yield ae.StreamSettled()
+                yield ae.Done(ok=True, text="Goal completed")
                 continued.set()
         finally:
             active_backends -= 1

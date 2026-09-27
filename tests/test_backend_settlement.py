@@ -5,6 +5,7 @@ import sys
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms import backend
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="executes a POSIX script")
@@ -88,24 +89,24 @@ for line in sys.stdin:
         ):
             events.append(event)
             inject = (
-                event["type"] == "agent_info" and event.get("context_used") == 2
+                isinstance(event, ae.AgentInfo) and event.context_used == 2
                 if inject_during_stats
-                else event["type"] == "provider_usage" and event["usage"]["totalTokens"] == 1
+                else isinstance(event, ae.ProviderUsage) and event.usage["totalTokens"] == 1
             )
             if inject and not injected:
                 injected = True
                 queue.put_nowait({"type": "prompt", "message": "second", "_input_id": "late"})
                 if not inject_during_stats:
                     await asyncio.sleep(0.025)
-            if event["type"] == "settled":
+            if isinstance(event, ae.StreamSettled):
                 finish_event.set()
 
     try:
         await asyncio.wait_for(collect(), 3)
-        assert events[-1]["ok"], events[-1]
+        assert events[-1].ok, events[-1]
         assert starts == ["first", "second"]
-        usages = [i for i, e in enumerate(events) if e["type"] == "provider_usage"]
-        settlements = [i for i, e in enumerate(events) if e["type"] == "settled"]
+        usages = [i for i, e in enumerate(events) if isinstance(e, ae.ProviderUsage)]
+        settlements = [i for i, e in enumerate(events) if isinstance(e, ae.StreamSettled)]
         assert len(usages) == 2
         assert len(settlements) == 1 and settlements[0] > usages[-1]
         assert persistent.proc is not None and persistent.proc.returncode is None

@@ -189,7 +189,7 @@ def validate_initial_record(record: Mapping[str, object], wire_root_id: str) -> 
     ):
         raise ValueError("Unsupported or wrong-root initial sideband.")
     control = ControlClassification(raw["control"])
-    if control is not ControlClassification.ORDINARY:
+    if not control.supports_initial:
         raise ValueError("Unsupported initial control issuer in codec v1.")
     audience_raw = raw["audience"]
     if not isinstance(audience_raw, dict) or set(audience_raw) != {

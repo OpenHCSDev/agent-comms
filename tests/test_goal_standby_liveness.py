@@ -8,6 +8,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import Thread, wire
+from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.declarations import ThreadStatus
 from agent_comms.goal_waits import GoalWaits
@@ -376,15 +377,15 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
     terminal = []
     original_emit = agent._emit_event
 
-    async def capture_emit(session_id, event):
-        if event.get("type") == "settled":
+    async def capture_emit(session_id, event, **kwargs):
+        if isinstance(event, (ae.StreamSettled, ae.TurnSettled)):
             terminal.append("settled")
-        await original_emit(session_id, event)
+        await original_emit(session_id, event, **kwargs)
 
     async def events(*_args, **_kwargs):
         comms.update_goal("owner", "standby", goal_id=goal.id, wait_for=[child])
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True, "text": ""}
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="")
 
     original_history_page = comms.bus._history_page
 
@@ -449,16 +450,16 @@ async def test_acp_delayed_old_callback_after_new_finish_before_reply(tmp_path, 
     release_old = asyncio.Event()
     real_emit = agent._emit_event
 
-    async def delayed_emit(session_id, event):
-        if event.get("type") == "settled" and not old_settled.is_set():
+    async def delayed_emit(session_id, event, **kwargs):
+        if isinstance(event, (ae.StreamSettled, ae.TurnSettled)) and not old_settled.is_set():
             old_settled.set()
             await release_old.wait()
-        await real_emit(session_id, event)
+        await real_emit(session_id, event, **kwargs)
 
     async def events(*_args, **_kwargs):
         comms.update_goal("owner", "standby", goal_id=goal.id, wait_for=[child])
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True, "text": ""}
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr(agent, "_emit_event", delayed_emit)
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
@@ -501,11 +502,11 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
         # The active child turn began before model events are streamed.
         comms.update_goal("owner", "standby", goal_id=goal.id, wait_for=[child])
         if reply:
-            yield {"type": "chunk", "text": "Reported"}
-        yield {"type": "settled"}
+            yield ae.Chunk(text="Reported")
+        yield ae.StreamSettled()
         assert comms.registry.require("owner").goal.active
         assert comms.goal_wait("owner") is not None
-        yield {"type": "done", "ok": True, "text": "Reported" if reply else ""}
+        yield ae.Done(ok=True, text="Reported" if reply else "")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:

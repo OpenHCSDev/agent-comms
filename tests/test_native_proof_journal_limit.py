@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 import sys
 from contextlib import contextmanager
+from dataclasses import asdict
 from pathlib import Path
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.diagnostics import FailureReason, record_terminal_failure
 
@@ -55,12 +57,12 @@ assert sys.stdin.readline() == ""  # refused at send_boundary before any prompt
             send_boundary=refuse_native_send,
         )
     ]
-    assert [event["type"] for event in events].count("notice") == 1
+    assert [type(event) for event in events].count(ae.Notice) == 1
     assert "byte size is only an advisory" in next(
-        event["text"] for event in events if event["type"] == "notice"
+        event.text for event in events if isinstance(event, ae.Notice)
     )
-    assert events[-1]["ok"] is False
-    assert events[-1]["diagnostic"].get("reason") != FailureReason.PROOF_JOURNAL_REJECTED
+    assert events[-1].ok is False
+    assert events[-1].diagnostic.get("reason") != FailureReason.PROOF_JOURNAL_REJECTED
     assert proof.stat().st_size == proof_bytes
 
 
@@ -85,14 +87,14 @@ sys.exit(1)
         )
     ]
     terminal = events[-1]
-    assert terminal["ok"] is False
-    assert terminal["diagnostic"]["reason"] == FailureReason.PROOF_JOURNAL_REJECTED
-    assert terminal["diagnostic"]["proof_journal_bytes"] == proof.stat().st_size
-    assert "rejected its native input proof journal before this prompt was sent" in terminal["text"]
-    assert "decoded-content limit or incomplete final row" in terminal["text"]
-    assert "Truncated or oversized" not in terminal["text"]
+    assert terminal.ok is False
+    assert terminal.diagnostic["reason"] == FailureReason.PROOF_JOURNAL_REJECTED
+    assert terminal.diagnostic["proof_journal_bytes"] == proof.stat().st_size
+    assert "rejected its native input proof journal before this prompt was sent" in terminal.text
+    assert "decoded-content limit or incomplete final row" in terminal.text
+    assert "Truncated or oversized" not in terminal.text
     record = record_terminal_failure(
-        tmp_path, turn_id="a" * 32, thread="owner", event=terminal, sequences=()
+        tmp_path, turn_id="a" * 32, thread="owner", event=asdict(terminal), sequences=()
     )
     persisted = json.loads(record.read_text())
     assert persisted["reason"] == FailureReason.PROOF_JOURNAL_REJECTED
@@ -122,10 +124,10 @@ sys.exit(1)
         )
     ]
     terminal = events[-1]
-    assert terminal["diagnostic"]["reason"] == FailureReason.PROOF_JOURNAL_REJECTED
-    assert terminal["diagnostic"]["proof_journal_bytes"] == proof_bytes
-    assert "decoded-content limit or incomplete final row" in terminal["text"]
-    assert "exceeded" not in terminal["text"]
+    assert terminal.diagnostic["reason"] == FailureReason.PROOF_JOURNAL_REJECTED
+    assert terminal.diagnostic["proof_journal_bytes"] == proof_bytes
+    assert "decoded-content limit or incomplete final row" in terminal.text
+    assert "exceeded" not in terminal.text
 
 
 @pytest.mark.asyncio
@@ -140,5 +142,5 @@ async def test_foreign_preflight_exit_is_not_misclassified(tmp_path):
             stub, [], "never send this prompt", str(tmp_path), session_file=str(session)
         )
     ]
-    assert events[-1]["diagnostic"]["reason"] == FailureReason.PREFLIGHT_EXIT
-    assert "proof journal" not in events[-1]["text"]
+    assert events[-1].diagnostic["reason"] == FailureReason.PREFLIGHT_EXIT
+    assert "proof journal" not in events[-1].text

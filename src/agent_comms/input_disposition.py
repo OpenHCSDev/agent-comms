@@ -14,7 +14,6 @@ from typing import Any
 from .declarations import (
     Message,
     RelationViolationError,
-    ResponsePolicy,
     Thread,
     _atomic_write_text,
     _store_lock,
@@ -30,12 +29,7 @@ class InputDispositions:
     @staticmethod
     def bus_key(message: Message, owner: Thread) -> str:
         """A channel sequence has one attempt per stable recipient incarnation."""
-        suffix = (
-            ""
-            if message.response_policy is ResponsePolicy.DIRECT
-            else f":owner:{float(owner.created_at).hex()}"
-        )
-        return f"bus:{message.seq}{suffix}"
+        return message.response_policy.disposition_key(message, owner)
 
     def _read(self) -> dict[str, dict[str, Any]]:
         try:

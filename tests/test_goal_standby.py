@@ -8,6 +8,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import GoalExecution, GoalExecutionState, Thread
+from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.declarations import GoalWaitTarget, _store_lock
 from agent_comms.goal_attempts import GoalAttemptStore, StaleAttempt
@@ -47,7 +48,7 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
         with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
             assert allowed is True
         assert kwargs["native_start"](None, native_id, args[2])
-        yield {"type": "input_started", "id": None}
+        yield ae.InputStarted(id=None)
         if len(calls) == 1:
             result = report.invoke(
                 comms,
@@ -61,15 +62,9 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
             assert result["goal"]["status"] == "active"
             assert result["goal_execution"]["state"] == "standby"
             assert [target["name"] for target in result["goal_execution"]["wait_for"]] == ["child"]
-            yield {
-                "type": "tool_end",
-                "id": "wait",
-                "name": "comms_goal",
-                "ok": True,
-                "output": json.dumps(result),
-            }
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True, "text": "Waiting" if len(calls) == 1 else "Received"}
+            yield ae.ToolEnd(id="wait", name="comms_goal", ok=True, output=json.dumps(result))
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="Waiting" if len(calls) == 1 else "Received")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:

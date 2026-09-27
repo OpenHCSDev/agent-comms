@@ -23,7 +23,7 @@ import stat
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Generator, Iterator, Mapping, Sequence
+from collections.abc import Generator, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import asdict, dataclass, fields, replace
 from enum import Enum
@@ -35,13 +35,15 @@ from uuid import uuid4
 from .active_route import guard_legacy_root_write
 from .candidate_maintenance import schedule_private_candidate_after_commit
 from .channels import ChannelCatalog
+from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
+from .goal_actions import required_block_reason as _required_block_reason
 from .goal_history import GoalHistoryEntry
-from .goal_mentions import bind_goal_mentions
 from .goal_pauses import GoalPauseEvent, GoalPauseEvents
+from .goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
 from .goal_waits import GoalInputReview, GoalWait, GoalWaits
 
 if TYPE_CHECKING:
-    from .goal_attempts import GoalAttemptStore
+    from .agent_events import GoalChanged
     from .relationships import ThreadRelationships
 from .declarations import (
     PRIVATE_OWNER_RENAME_PENDING,
@@ -60,7 +62,6 @@ from .declarations import (
     FinishedTurnFence,
     Goal,
     GoalExecution,
-    GoalPauseSource,
     GoalWaitTarget,
     MembershipChange,
     Message,
@@ -98,7 +99,6 @@ from .exporting import (
     WireExportLimit,
     WireExportReceipt,
     WireExportScope,
-    WireExportScopeKind,
     WireTranscriptExporter,
 )
 from .importing import ImportFormat, ImportLimits, ImportReceipt
@@ -108,16 +108,6 @@ from .transcript_routes import InputDisplay, TranscriptRoutes
 
 OBSERVATION_INTERVAL = 0.05
 _LOG = logging.getLogger(__name__)
-
-
-def _required_block_reason(reason: str | None) -> str:
-    """Validate a new block's own reason; prior progress is never a fallback."""
-    if type(reason) is not str or not reason.strip():
-        raise ValueError("Blocking a goal requires a nonempty reason for the needed input.")
-    normalized = reason.strip()
-    if len(normalized) > 1024:
-        raise ValueError("A blocked-goal reason must be at most 1024 characters.")
-    return normalized
 
 
 def _owner_launch_proof(name: str, pid: int, epoch: int) -> bytes:
@@ -346,6 +336,7 @@ class Comms:
         private_initial_writes: bool = True,
         private_claim_writes: bool = True,
     ) -> None:
+        from .presentation import BusPresentation
         from .view_unread import transcript_read_state
 
         self.root = Path(root).expanduser()
@@ -362,10 +353,13 @@ class Comms:
             private_initial_writes=private_initial_writes,
             private_claim_writes=private_claim_writes,
         )
+        self.reads = self.bus.reads
+        self.reads.migrate()
+        self.presentation = BusPresentation(self.bus._path)
         self.ledger = SharedLedger(self.root / "ledger.json")
         self.activity = ActivityLog(self.root / "activity.jsonl")
         self.runtime_info = RuntimeInfoStore(self.root / "runtime_info.json")
-        self.transcript_reads = transcript_read_state(self.root / "thread_read_markers.json")
+        self.transcript_reads = transcript_read_state(self.reads.path)
         self._wire_lock_path = self.root / "wire"
         self.maintenance = MaintenanceBarrier(self.registry._path)
         self._private_nk_launch: tuple[Path, str, Path] | None = None
@@ -519,12 +513,12 @@ class Comms:
 
     def broadcast(self, sender: str, body: str) -> str:
         """Declare a message addressed to every peer."""
-        return self.send(sender, "broadcast", body)
+        return self.send(sender, BuiltinChannel.ALL.value, body)
 
     def _user_identity_under_wire_lock(self, worktree: str) -> Thread:
         """Choose the durable USER identity while the caller holds the wire lock."""
         for thread in self.registry.all_threads().values():
-            if thread.role is ThreadRole.USER:
+            if self.reads.human(thread.role):
                 return thread
         name, suffix = "user", 2
         while self.registry.name_reserved(name):
@@ -624,10 +618,10 @@ class Comms:
         Fetching is not paint proof. A UI may use the basis only after proving
         that the corresponding inbound tail was contiguous and visibly painted.
         """
-        if not isinstance(peer, str) or is_channel_target(peer) or peer == "broadcast":
+        if not isinstance(peer, str) or is_channel_target(peer) or BuiltinChannel.is_alias(peer):
             raise ValueError("A DM page requires a registered peer.")
         viewer = self.user_identity(worktree).name
-        marker_path = self.bus._path.parent / "read_markers.json"
+        marker_path = self.reads.path
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
             revision = file_revision(self.registry._path)
@@ -637,7 +631,7 @@ class Comms:
             peer_thread = snapshot.threads.get(peer_name)
             if (
                 viewer_thread is None
-                or viewer_thread.role is not ThreadRole.USER
+                or not self.reads.human(viewer_thread.role)
                 or peer_thread is None
                 or viewer_name == peer_name
             ):
@@ -665,15 +659,11 @@ class Comms:
             )
             older_unread = False
             if page.has_older and page.oldest_seq is not None:
-                markers = self.bus._read_markers()
-                baseline = max(
-                    markers.get(viewer_name, 0),
-                    markers.get(self.bus._marker_key(viewer_name, peer_name), 0),
-                )
+                seen = self.reads.seen_sequences(viewer_name, snapshot)
                 with self.bus._record_snapshot(need_sequence=False) as (_, records):
                     older_unread = any(
                         message.seq < page.oldest_seq
-                        and message.seq > baseline
+                        and message.seq not in seen
                         and message.sender in peer_names
                         and message.target in viewer_names
                         for message, _ in records
@@ -698,11 +688,9 @@ class Comms:
                     worktree=str(Path(worktree).resolve()),
                     requested_peer=peer,
                     viewer=viewer_name,
-                    viewer_epoch=snapshot.owner_epochs[viewer_name],
                     viewer_created_at=viewer_thread.created_at,
                     viewer_names=viewer_names,
                     peer=peer_name,
-                    peer_epoch=snapshot.owner_epochs[peer_name],
                     peer_created_at=peer_thread.created_at,
                     peer_names=peer_names,
                     registry_revision=revision,
@@ -710,6 +698,9 @@ class Comms:
                     bus_identity=bus_identity,
                     newest_seq=page.newest_seq,
                     older_unread=older_unread,
+                    displayed=self.reads.capture(
+                        viewer_name, page.messages, snapshot, self.bus._path
+                    ),
                 ),
             )
 
@@ -737,7 +728,7 @@ class Comms:
                 self.channel_catalog.metadata_path,
                 self.channel_catalog.pins_path,
                 self.channel_catalog.saved_views_path,
-                self.bus._path.parent / "read_markers.json",
+                self.reads.path,
             )
         )
 
@@ -747,7 +738,7 @@ class Comms:
         channels = self.channel_catalog.views(registry.threads)
         order = self.channel_catalog.list_order
         pins = self.channel_catalog.pinned_threads_snapshot()
-        markers = self.bus._read_markers() if viewer is not None else {}
+        seen = self.reads.seen_sequences(viewer, registry) if viewer is not None else frozenset()
         canonical_viewer = registry.aliases.get(viewer, viewer) if viewer is not None else None
         viewer_names = (
             frozenset(
@@ -764,7 +755,6 @@ class Comms:
             else frozenset()
         )
         scopes: list[ChannelDisplayScope] = []
-        reset_channels: list[str] = []
         for channel in channels.values():
             members = frozenset(
                 name
@@ -779,50 +769,19 @@ class Comms:
                 if channel.builtin is not None
                 else frozenset({channel.name})
             )
-            expanded_after = 0
-            if canonical_viewer is not None and channel.exact and channel.builtin is None:
-                exact_key = self.bus._view_marker_key(canonical_viewer, channel.name, "exact")
-                after = markers.get(exact_key, 0)
-                if channel.any_mode:
-                    participant_basis = self.bus.any_participant_basis(channel, registry)
-                    expanded_after = markers.get(
-                        self.bus._view_marker_key(
-                            canonical_viewer, channel.name, "any", participant_basis
-                        ),
-                        0,
-                    )
-                if (
-                    self.bus._marker_key(canonical_viewer, channel.name) in markers
-                    and exact_key not in markers
-                ):
-                    reset_channels.append(channel.name)
-            else:
-                after = (
-                    max(
-                        markers.get(canonical_viewer, 0),
-                        markers.get(self.bus._marker_key(canonical_viewer, channel.name), 0),
-                    )
-                    if canonical_viewer is not None
-                    else 0
-                )
             scopes.append(
                 ChannelDisplayScope(
                     channel.name,
                     targets,
                     channel.any_mode,
                     participant_names,
-                    after,
+                    0,
                     revision,
-                    expanded_after,
+                    0,
+                    seen,
                 )
             )
-        notice = (
-            "Read positions were reset for "
-            + ", ".join(sorted(reset_channels))
-            + "; reopen the channel to review its messages."
-            if reset_channels
-            else None
-        )
+        notice = self.reads.read().notice
         return (
             registry,
             channels,
@@ -892,6 +851,11 @@ class Comms:
                 limit=limit,
                 max_bytes=max_bytes,
             )
+            if viewer is not None:
+                scope = replace(
+                    scope,
+                    displayed=self.reads.capture(viewer, page.messages, basis[0], self.bus._path),
+                )
             return replace(page, display_scope=scope)
 
     def message_high_water(self) -> int:
@@ -945,51 +909,13 @@ class Comms:
         started_at = time.time() if export_started_at is None else export_started_at
         with ExitStack() as stack:
             with _store_lock(self._wire_lock_path):
-                matches: Callable[[Message], bool]
-                if scope.kind is WireExportScopeKind.EVERYTHING:
-                    canonical_scope = scope
-
-                    def matches_everything(_message: Message) -> bool:
-                        return True
-
-                    matches = matches_everything
-                elif scope.kind is WireExportScopeKind.CHANNEL:
-                    assert scope.channel is not None
-                    if self.channel_catalog.is_view_target(scope.channel):
-                        raise RelationViolationError(
-                            f"Saved view {scope.channel!r} has no authoritative wire history."
-                        )
-                    targets = self.channel_catalog.history_targets(scope.channel)
-                    if targets is None:
-                        raise RelationViolationError(
-                            f"View {scope.channel!r} is an aggregate, not an "
-                            "exportable conversation."
-                        )
-                    canonical_scope = scope
-
-                    def matches_channel(message: Message) -> bool:
-                        return message.target in targets
-
-                    matches = matches_channel
-                else:
-                    first = self.registry.require(scope.participants[0]).name
-                    second = self.registry.require(scope.participants[1]).name
-                    canonical_scope = WireExportScope.for_dm(first, second)
-                    first_names = self.registry.aliases_for(first)
-                    second_names = self.registry.aliases_for(second)
-
-                    def matches_dm(message: Message) -> bool:
-                        return (
-                            message.sender in first_names and message.target in second_names
-                        ) or (message.sender in second_names and message.target in first_names)
-
-                    matches = matches_dm
+                resolved = scope.resolve(self.channel_catalog, self.registry)
                 through, messages = stack.enter_context(self.bus.full_history_snapshot())
 
-            selected = (message for message in messages if matches(message))
+            selected = (message for message in messages if resolved.matches(message))
             return WireTranscriptExporter(
                 format=format,
-                scope=canonical_scope,
+                scope=resolved.scope,
                 limit=limit,
                 boundary=WireExportBoundary(through, started_at),
             ).export(selected, Path(destination).expanduser(), overwrite=overwrite)
@@ -1168,7 +1094,7 @@ class Comms:
         runtime = self.runtime_info.all()
         active = frozenset(t.name for t in snapshot.threads.values() if t.executing)
         activities = self.activity.all_current(active=active)
-        waits = GoalWaits(self.root / "goal_waits.json").snapshot()
+        waits = GoalWaits(self.root / GoalWaits.filename).snapshot()
         return tuple(
             ThreadView(
                 thread,
@@ -1221,7 +1147,7 @@ class Comms:
                 replace(scope, after=0, basis_revision=scope.basis_revision[:-1])
                 for scope in scopes
             )
-            display_activity, display_unread = self.bus.display_view_metrics(
+            display_activity, display_unread = self.presentation.display_view_metrics(
                 records, scopes, activity_scopes, captured_viewer, viewer_names, bus_revision
             )
             channels = self._channel_views_for(
@@ -1282,32 +1208,29 @@ class Comms:
     ) -> None:
         viewer = self.user_identity(worktree).name
         with _store_lock(self._wire_lock_path):
-            captured_keys = None
-            if through is not None:
-                if expected_scope is None or expected_scope.channel != target:
+            revision = self._display_basis_revision()
+            basis = self._capture_display_basis(viewer, revision)
+            current = next((scope for scope in basis[2] if scope.channel == target), None)
+            if current is None:
+                raise ValueError(f"Unknown channel: {target!r}")
+            if through is None:
+                # Explicit Mark Read selects the entire current view, unlike painted-page ACK.
+                messages = (
+                    message for message in self.bus.full_history() if current.includes(message)
+                )
+                displayed = self.reads.capture(viewer, messages, basis[0], self.bus._path)
+                through = self.bus.latest_sequence()
+            else:
+                if expected_scope is None or expected_scope.displayed is None:
                     raise ValueError("Channel display scope missing; refresh the displayed page.")
-                revision = self._display_basis_revision()
-                basis = self._capture_display_basis(viewer, revision)
-                current = next((scope for scope in basis[2] if scope.channel == target), None)
-                if current != expected_scope or self._display_basis_revision() != revision:
+                if (
+                    not current.same_projection(expected_scope)
+                    or self._display_basis_revision() != revision
+                ):
                     raise ValueError("Channel display changed; refresh the displayed page.")
-                channel = basis[1][target]
-                if channel.exact and channel.builtin is None:
-                    keys = [self.bus._view_marker_key(viewer, target, "exact")]
-                    if channel.any_mode:
-                        participant_basis = self.bus.any_participant_basis(channel, basis[0])
-                        keys.append(
-                            self.bus._view_marker_key(viewer, target, "any", participant_basis)
-                        )
-                    captured_keys = tuple(keys)
-                else:
-                    captured_keys = (self.bus._marker_key(viewer, target),)
-            self.bus.mark_view_read(
-                viewer,
-                target,
-                self.bus.latest_sequence() if through is None else through,
-                captured_keys=captured_keys,
-            )
+                displayed = expected_scope.displayed
+                displayed.validate(viewer, basis[0], self.reads.bus_identity(self.bus._path))
+            self.bus.mark_view_read(viewer, target, through, displayed=displayed)
 
     def mark_dm_view_read(
         self,
@@ -1326,75 +1249,17 @@ class Comms:
         proof = expected_display_basis
         if type(proof) is not DMDisplayBasis or type(through) is not int:
             raise ValueError("Painted DM read requires a typed page basis and integer bound.")
-        if (
-            proof.root != str(self.root.resolve())
-            or proof.worktree != str(Path(worktree).resolve())
-            or proof.requested_peer != peer
-            or proof.newest_seq is None
-            or proof.older_unread
-            or not 0 <= through <= proof.newest_seq
-        ):
-            raise ValueError("Painted DM read does not match a contiguous displayed page.")
         with _store_lock(self._wire_lock_path), _store_lock(self.registry._path):
-            root_info = self.root.stat()
-            if (root_info.st_dev, root_info.st_ino) != proof.root_identity:
-                raise ValueError("DM root was replaced; refresh the page.")
-            if file_revision(self.registry._path) != proof.registry_revision:
-                raise ValueError("DM registry changed; refresh the page.")
             snapshot = self.registry._snapshot_unlocked()
-            # Match user_identity(worktree)'s current first-human selection
-            # without reentering the registry lock or creating a new user.
-            selected_viewer = next(
-                (thread for thread in snapshot.threads.values() if not thread.role.executable),
-                None,
-            )
-            viewer = snapshot.threads.get(proof.viewer)
-            target = snapshot.threads.get(proof.peer)
-            if (
-                selected_viewer is None
-                or selected_viewer.name != proof.viewer
-                or viewer is None
-                or viewer.role is not ThreadRole.USER
-                or target is None
-                or snapshot.aliases.get(peer, peer) != proof.peer
-                or viewer.created_at != proof.viewer_created_at
-                or target.created_at != proof.peer_created_at
-                or snapshot.owner_epochs.get(proof.viewer) != proof.viewer_epoch
-                or snapshot.owner_epochs.get(proof.peer) != proof.peer_epoch
-                or frozenset(
-                    {
-                        proof.viewer,
-                        *(
-                            name
-                            for name, owner in snapshot.aliases.items()
-                            if owner == proof.viewer
-                        ),
-                    }
-                )
-                != proof.viewer_names
-                or frozenset(
-                    {
-                        proof.peer,
-                        *(name for name, owner in snapshot.aliases.items() if owner == proof.peer),
-                    }
-                )
-                != proof.peer_names
-            ):
-                raise ValueError("DM viewer/peer incarnation changed; refresh the page.")
-            try:
-                bus_info = self.bus._path.stat()
-            except FileNotFoundError:
-                bus_identity = None
-            else:
-                bus_identity = (bus_info.st_dev, bus_info.st_ino)
-            if bus_identity != proof.bus_identity:
-                raise ValueError("DM bus was replaced; refresh the page.")
-            self.bus._mark_dm_painted_bound(
-                proof.viewer,
-                proof.peer,
+            proof.validate_for(
+                self.root,
+                worktree,
+                peer,
                 through,
-                expected_marker_revision=proof.marker_revision,
+                snapshot,
+                self.reads.bus_identity(self.bus._path),
             )
+            self.reads.mark_displayed(proof.viewer, proof.displayed.through(through))
 
     def mark_user_view_read(self, target: str, *, worktree: str) -> None:
         """Explicit human 'Mark inbox read' for a channel, DM, or native thread.
@@ -1428,9 +1293,9 @@ class Comms:
                     self.bus._path,
                     self.activity._path,
                     self.runtime_info._path,
-                    self.root / "read_markers.json",
-                    self.root / "goal_waits.json",
-                    self.transcript_reads.path,
+                    self.reads.path,
+                    self.root / GoalWaits.filename,
+                    self.reads.path.with_name(self.reads.legacy_filename),
                 )
             ),
             int(time.time()),
@@ -2550,9 +2415,8 @@ class Comms:
         return RenameThreadResult(previous, current, True)
 
     def goal_pause(self, name: str) -> GoalPauseEvent | None:
-        """Return the action that paused this exact current goal revision, if known."""
-        events = GoalPauseEvents(self.root / "goal_pause_events.json")
-        return events.for_goal(self.registry.require(name).goal, events.snapshot())
+        """Project the pause source carried by the current goal."""
+        return GoalPauseEvents.for_goal(self.registry.require(name).goal)
 
     def unresolved_inputs(self, name: str) -> list[dict[str, Any]]:
         """Project durable unresolved inputs; reading never schedules another attempt."""
@@ -2656,7 +2520,7 @@ class Comms:
             return self.registry.goal_history(name, goal_id=goal_id)
 
     def goal_wait(self, name: str) -> GoalWait | None:
-        waits = GoalWaits(self.root / "goal_waits.json")
+        waits = GoalWaits(self.root / GoalWaits.filename)
         return waits.for_goal(self.registry.require(name).goal, waits.snapshot())
 
     def recover_closed_goal_wait(self, name: str) -> tuple[str, ...]:
@@ -2675,7 +2539,7 @@ class Comms:
             goal = owner.goal
             if goal is None or not goal.active:
                 return ()
-            waits = GoalWaits(self.root / "goal_waits.json")
+            waits = GoalWaits(self.root / GoalWaits.filename)
             rows = waits.snapshot()
             wait = rows.get(goal.id)
             if (
@@ -2748,7 +2612,7 @@ class Comms:
                 or not snapshot.statuses[canonical].active
             ):
                 return ()
-            waits = GoalWaits(self.root / "goal_waits.json").snapshot()
+            waits = GoalWaits(self.root / GoalWaits.filename).snapshot()
             released: list[str] = []
             for owner in snapshot.threads.values():
                 goal = owner.goal
@@ -2829,12 +2693,25 @@ class Comms:
                 self.registry.register(
                     replace(owner, goal=continued_goal), snapshot.statuses[owner.name]
                 )
-                GoalWaits(self.root / "goal_waits.json").clear(goal.id, wait_id=wait.wait_id)
+                GoalWaits(self.root / GoalWaits.filename).clear(goal.id, wait_id=wait.wait_id)
                 released.append(owner.name)
             return tuple(released)
 
     def goal_execution(self, name: str) -> GoalExecution | None:
         return self._goal_snapshot(name)[1]
+
+    def goal_changed(
+        self, name: str, previous: tuple[Goal | None, GoalExecution | None] | None
+    ) -> GoalChanged | None:
+        """Announce a durable change through S1's event vocabulary.
+
+        Existing registry/history and wait persistence are the cross-process
+        authority. Each observer supplies its last successfully published view.
+        """
+        from .agent_events import GoalChanged
+
+        current = self.goal_snapshot(name)
+        return GoalChanged(*current) if current != previous else None
 
     def goal_snapshot(self, name: str) -> tuple[Goal | None, GoalExecution | None]:
         """Read current goal and its scheduling projection as one owner snapshot."""
@@ -2847,7 +2724,7 @@ class Comms:
         goal = snapshot.threads[canonical].goal
         return goal, GoalWaits.execution(
             goal,
-            GoalWaits(self.root / "goal_waits.json").snapshot(),
+            GoalWaits(self.root / GoalWaits.filename).snapshot(),
             snapshot,
         )
 
@@ -2857,7 +2734,7 @@ class Comms:
         return bool(
             goal is not None
             and goal.active
-            and GoalWaits(self.root / "goal_waits.json").clear(goal.id, wait_id=wait_id)
+            and GoalWaits(self.root / GoalWaits.filename).clear(goal.id, wait_id=wait_id)
         )
 
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
@@ -2870,8 +2747,7 @@ class Comms:
         }
         activities = self.activity.all_current()
         pending = self.bus.pending_counts_all(tuple(threads))
-        pause_events = GoalPauseEvents(self.root / "goal_pause_events.json").snapshot()
-        waits = GoalWaits(self.root / "goal_waits.json").snapshot()
+        waits = GoalWaits(self.root / GoalWaits.filename).snapshot()
         return [
             {
                 **t.to_wire(),
@@ -2879,9 +2755,7 @@ class Comms:
                 "is_fork": t.is_fork,
                 "pending": pending[name],
                 "goal_pause": (
-                    asdict(pause)
-                    if (pause := GoalPauseEvents.for_goal(t.goal, pause_events))
-                    else None
+                    asdict(pause) if (pause := GoalPauseEvents.for_goal(t.goal)) else None
                 ),
                 "goal_execution": (
                     asdict(execution)
@@ -2936,320 +2810,20 @@ class Comms:
         info = self.agent_info_of(thread.name)
         return (info.model if info else None) or fallback
 
-    def update_goal(
-        self,
-        name: str,
-        action: str,
-        *,
-        text: str = "",
-        progress: str | None = None,
-        block_reason: str | None = None,
-        goal_id: str | None = None,
-        expected_status: str | None = None,
-        expected_goal: Goal | None = None,
-        model_report: bool = False,
-        owner_action: bool = False,
-        owner_store: GoalAttemptStore | None = None,
-        expected_owner_pid: int | None = None,
-        wait_for: Sequence[str] = (),
-        reviewed_inputs: Sequence[str] = (),
-    ) -> Goal | None:
-        """Apply a goal transition; automated callers may compare a captured goal atomically."""
+    def update_goal(self, name: str, action: str | GoalAction, **options: Any) -> Goal | None:
+        """Decode legacy ingress once; typed actions own the transition algorithm."""
+        if isinstance(action, str):
+            command, actor, owner_store = GoalAction.from_legacy(action, options)
+        else:
+            command = action
+            actor = options.pop("actor", RuntimeInvocable)
+            owner_store = options.pop("owner_store", None)
+            if options:
+                raise TypeError(f"Unexpected goal options: {tuple(options)}")
         with _store_lock(self._wire_lock_path):
-            thread = self.registry.require(name)
-            goal = thread.goal
-            if expected_owner_pid is not None and (
-                thread.pid != expected_owner_pid or not self.registry.status(thread.name).running
-            ):
-                raise ValueError("The goal owner changed; refresh its state.")
-            if (
-                owner_store is not None
-                and action != "set"
-                and not (action == "active" and owner_action and expected_owner_pid is not None)
-            ):
-                raise ValueError("Owner goal authority requires goal creation or explicit resume.")
-            # The automatic turn-end pause/block must not overwrite progress
-            # written by a separate tool process after ACP's precheck. Check
-            # the entire immutable snapshot under the same lock as the write.
-            if expected_goal is not None and goal != expected_goal:
-                raise ValueError("Goal changed during resume; refresh its state.")
-            if goal_id is not None and (goal is None or goal.id != goal_id):
-                raise ValueError("This goal was replaced or cleared; refresh its state.")
-            if expected_status is not None and (goal is None or goal.status != expected_status):
-                raise ValueError(
-                    (pause.owner_instruction if (pause := self.goal_pause(name)) else None)
-                    or "This goal is no longer active; refresh its state."
-                )
-            original_goal = goal
-            edited_pause = self.goal_pause(name) if action == "edit" else None
-            wait_targets: tuple[GoalWaitTarget, ...] = ()
-            if action == "standby":
-                if goal is None:
-                    raise ValueError("No goal is set for this thread.")
-                review = self._goal_input_review(thread, goal.id, wait_for)
-                wait_targets = review.targets
-                from .input_disposition import AcpDeliveryCursors, InputDispositions
-
-                aliases = review.owners
-                cursor = AcpDeliveryCursors(self.root).cursor(aliases)
-                dispositions = InputDispositions(self.root)
-                unknown = {row["key"]: row for row in review.unknown}
-                reviewed_keys = tuple(dict.fromkeys(reviewed_inputs))
-                if any(
-                    key not in unknown or unknown[key]["sequence"] is None for key in reviewed_keys
-                ):
-                    raise ValueError(
-                        "Review only this recipient's exact unresolved bus input keys."
-                    )
-                reviewed_sequences = {unknown[key]["sequence"] for key in reviewed_keys}
-                prior_reviews = {
-                    row["sequence"]
-                    for row in unknown.values()
-                    if goal is not None and dispositions.reviewed_for_goal(row, goal.id)
-                }
-                unresolved = {
-                    row["sequence"] for row in unknown.values() if row["sequence"] is not None
-                }
-                senders = review.senders
-                if not set(reviewed_keys) <= review.eligible_keys:
-                    raise ValueError("Review only direct inputs from these declared dependencies.")
-                pending = self.bus._history_page(
-                    lambda message: message.target in aliases
-                    and message.sender in senders
-                    and (message.seq > cursor or message.seq in unresolved)
-                    and message.seq not in reviewed_sequences | prior_reviews,
-                    before=None,
-                    after=None,
-                    limit=1,
-                    max_bytes=256 * 1024,
-                )
-                if pending.messages:
-                    sequence = pending.messages[0].seq
-                    raise ValueError(
-                        f"Dependency reply {sequence} is already pending or UNKNOWN. "
-                        f"Call comms_inbox with goal_id={goal.id!r} and "
-                        f"wait_for={list(wait_for)!r}. Inspect standby_review.messages, then "
-                        "pass only standby_review.reviewed_inputs to comms_goal to wait "
-                        "for a later reply. Do not pass excluded owner or other dependency inputs. "
-                        "This does not mark them STARTED or replay them."
-                    )
-                snapshot = self.registry.snapshot()
-                if not any(
-                    GoalWaits.target_has_active_turn(target, snapshot)
-                    and self._process_alive(
-                        snapshot.threads[snapshot.aliases.get(target.name, target.name)].pid
-                    )
-                    for target in wait_targets
-                ):
-                    names = ", ".join(f"@{target.name}" for target in wait_targets)
-                    raise ValueError(
-                        f"No declared dependency has an active turn ({names}). "
-                        "A running/ready process or queued input does not prove active work. "
-                        "Message or restart the responsible agent, inspect its status, "
-                        "then declare standby only while a target is actually working."
-                    )
-                closed = GoalWaits.closed_wait_group(
-                    thread.name,
-                    wait_targets,
-                    GoalWaits(self.root / "goal_waits.json").snapshot(),
-                    snapshot,
-                    self._process_alive,
-                )
-                if closed:
-                    names = ", ".join(f"@{name}" for name in closed)
-                    raise ValueError(
-                        f"Standby would close a dependency wait group ({names}). "
-                        "At least one agent must remain able to work or reply. "
-                        "Continue independent work or change the dependencies."
-                    )
-            elif wait_for or reviewed_inputs:
-                raise ValueError("wait_for and reviewed_inputs are only valid for standby.")
-            report_turn = thread.active_turn.id if thread.active_turn is not None else ""
-            if model_report and thread.last_goal_report_turn == report_turn:
-                raise ValueError("This goal was already reported in this turn.")
-            new_goal = (
-                Goal(text=text.strip(), id=uuid4().hex, revision=1) if action == "set" else None
+            return command.apply(
+                GoalActionContext(self, self.registry.require(name), actor, owner_store)
             )
-            if new_goal is not None:
-                new_goal = replace(
-                    new_goal,
-                    mention_source=bind_goal_mentions(
-                        new_goal.text,
-                        new_goal.id,
-                        new_goal.revision,
-                        thread,
-                        self.registry.snapshot(),
-                    ),
-                )
-            if owner_store is not None and new_goal is not None:
-                # The private grant exists before the visible active goal. A
-                # crash in between leaves only an unreachable ledger row.
-                owner_store.create_goal(new_goal.id)
-            if action in {"clear", "set"} and goal is not None:
-                # Revoke a protected goal before removing or replacing its
-                # registry identity. If the registry write then fails, the
-                # remaining visible goal is safely unlaunchable.
-                from .goal_attempts import GoalAttemptStore
-
-                private = self.root / "goal-private"
-                if (private / "goal_attempts.sqlite3").exists():
-                    attempts = GoalAttemptStore(private)
-                    generation = attempts.snapshot(goal.id)
-                    if generation is not None and generation.state not in {
-                        "completed",
-                        "cancelled",
-                    }:
-                        attempts.retire_goal(
-                            goal.id,
-                            expected_generation=generation.number,
-                            attempt_id=generation.attempt_id,
-                        )
-            if action == "set":
-                # A replacement has a fresh unpredictable ID; revisions are
-                # monotone within that goal's identity, not across goals.
-                goal = new_goal
-            elif action == "clear":
-                goal = None
-            elif action == "edit":
-                if goal is None:
-                    raise ValueError("No goal is set for this thread.")
-                if not text.strip():
-                    raise ValueError("A goal requires text.")
-                edited_text = text.strip()
-                edited_revision = goal.revision + 1
-                goal = replace(
-                    goal,
-                    text=edited_text,
-                    revision=edited_revision,
-                    mention_source=bind_goal_mentions(
-                        edited_text,
-                        goal.id,
-                        edited_revision,
-                        thread,
-                        self.registry.snapshot(),
-                    ),
-                )
-            elif action in {"active", "standby", "paused", "blocked", "completed"}:
-                if action == "blocked":
-                    # Do not recycle a prior progress report as the reason.
-                    reason = _required_block_reason(
-                        block_reason if block_reason is not None else progress
-                    )
-                elif block_reason is not None:
-                    raise ValueError("Only a blocked goal can have a block reason.")
-                else:
-                    reason = None
-                if goal is None:
-                    raise ValueError("No goal is set for this thread.")
-                if goal.status == "blocked" and action != "blocked":
-                    raise ValueError("Blocked goal requires an explicit retry through its owner.")
-                if goal.status == "completed" and action != "completed":
-                    raise ValueError("A completed goal cannot be resumed; set a new goal.")
-                if action == "active" and owner_store is not None:
-                    generation = owner_store.snapshot(goal.id)
-                    if generation is None:
-                        raise ValueError(
-                            "Goal launch authority is missing; inspect it before Retry."
-                        )
-                    if generation.state == "blocked" and generation.attempt_id:
-                        # A failed/uncertain attempt needs the explicit Retry
-                        # decision, not a status-only Resume. Expose that state
-                        # immediately so the UI offers the correct control.
-                        # Persist the bounded refusal explanation so a reload
-                        # never shows 'reason unavailable' on a fresh row.
-                        refusal = _required_block_reason(
-                            "The interrupted goal attempt is unresolved. Inspect it, then use "
-                            "Retry to authorize a new attempt. Your messages can still be sent."
-                        )
-                        blocked = replace(
-                            goal,
-                            status="blocked",
-                            progress=goal.progress,
-                            block_reason=refusal,
-                            revision=goal.revision + 1,
-                        )
-                        self.registry.register(
-                            replace(thread, goal=blocked), self.registry.status(thread.name)
-                        )
-                        raise ValueError(refusal)
-                    elif generation.state == "ready":
-                        pass
-                    elif not (generation.state == "reserved" and thread.active_turn is not None):
-                        raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
-                goal = replace(
-                    goal,
-                    status="active" if action == "standby" else action,
-                    progress=goal.progress if progress is None else progress,
-                    block_reason=reason,
-                    revision=goal.revision + 1,
-                    reported_turn=report_turn if model_report else goal.reported_turn,
-                )
-            else:
-                raise ValueError(f"Unknown goal action: {action}")
-            waits = GoalWaits(self.root / "goal_waits.json")
-            if action == "standby":
-                assert goal is not None
-                dispositions.review_for_goal(
-                    reviewed_keys,
-                    owners=aliases,
-                    goal_id=goal.id,
-                    goal_revision=goal.revision,
-                    turn_id=report_turn,
-                )
-                # Commit scheduling authority first. A crash before the registry
-                # progress update must leave this same goal waiting, not runnable.
-                waits.record(
-                    GoalWait(
-                        goal.id,
-                        uuid4().hex,
-                        goal.revision,
-                        self.message_high_water(),
-                        wait_targets,
-                        owner_created_at=thread.created_at,
-                        report_turn_id=thread.active_turn.id if thread.active_turn else None,
-                        report_turn_generation=(
-                            thread.turn_generation if thread.active_turn else None
-                        ),
-                        target_turn_generations=tuple(
-                            (
-                                snapshot.threads[
-                                    snapshot.aliases.get(target.name, target.name)
-                                ].turn_generation
-                                if GoalWaits.target_has_active_turn(target, snapshot)
-                                else None
-                            )
-                            for target in wait_targets
-                        ),
-                    )
-                )
-            self.registry.register(
-                replace(
-                    thread,
-                    goal=goal,
-                    last_goal_report_turn=(
-                        report_turn if model_report else thread.last_goal_report_turn
-                    ),
-                ),
-                self.registry.status(thread.name),
-            )
-            if action != "standby" and action != "edit" and original_goal is not None:
-                waits.clear(original_goal.id)
-            if action == "edit" and edited_pause is not None and goal is not None:
-                GoalPauseEvents(self.root / "goal_pause_events.json").record(
-                    GoalPauseEvent(goal.id, goal.revision, edited_pause.source)
-                )
-            if action == "paused" and goal is not None:
-                # The registry transition precedes attribution. A crash in between
-                # leaves an unknown actor, never attributes a later pause falsely.
-                source = (
-                    GoalPauseSource.OWNER
-                    if owner_action
-                    else GoalPauseSource.MODEL if model_report else GoalPauseSource.RUNTIME
-                )
-                GoalPauseEvents(self.root / "goal_pause_events.json").record(
-                    GoalPauseEvent(goal.id, goal.revision, source)
-                )
-            return goal
 
     def block_goal_after_failed_turn(
         self,
@@ -3267,14 +2841,10 @@ class Comms:
                 thread.worktree != expected_worktree
                 or current is None
                 or current.id != started_goal.id
-                or current.status not in {"active", "paused", "completed"}
+                or not isinstance(current.state, (ActiveGoal, PausedGoal, CompletedGoal))
             ):
                 return current
-            if (
-                current.status == "paused"
-                and (pause := self.goal_pause(name)) is not None
-                and pause.source is GoalPauseSource.OWNER
-            ):
+            if current.state.protected:
                 # Preserve this exact owner-authored pause. The caller still
                 # records the failed private attempt and terminal diagnostic;
                 # preserving intent grants neither resume nor replay authority.
@@ -3282,9 +2852,8 @@ class Comms:
             progress = f"{current.progress}\n\n{diagnostic}" if current.progress else diagnostic
             blocked = replace(
                 current,
-                status="blocked",
+                state=BlockedGoal(_required_block_reason(diagnostic)),
                 progress=progress,
-                block_reason=_required_block_reason(diagnostic),
                 revision=current.revision + 1,
             )
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
@@ -3306,14 +2875,13 @@ class Comms:
                 thread.worktree != expected_worktree
                 or current is None
                 or current != expected_goal
-                or current.status != "completed"
+                or not isinstance(current.state, CompletedGoal)
             ):
                 return current
             blocked = replace(
                 current,
-                status="blocked",
+                state=BlockedGoal(_required_block_reason(diagnostic)),
                 progress=diagnostic,
-                block_reason=_required_block_reason(diagnostic),
                 revision=current.revision + 1,
             )
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))

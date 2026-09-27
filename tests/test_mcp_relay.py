@@ -12,6 +12,7 @@ import pytest
 from acp.schema import PromptResponse
 
 from agent_comms import acp as acp_module
+from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.operations import wire
@@ -30,23 +31,23 @@ async def test_live_projection_requires_owning_acp_turn_and_session(tmp_path):
 
     observer = Observer()
     receipt = {"inputId": "a" * 32}  # Backend validation is tested separately.
-    event = {"type": "mcp_live_status", "receipt": receipt, "turn_id": "turn-1"}
+    event = ae.McpLiveStatus(receipt)
     try:
         owner._active_turns["session-1"] = "turn-1"
-        await owner._emit_event("session-1", event, observer)
+        await owner._emit_event("session-1", event, observer, turn_id="turn-1")
         assert len(updates) == 1
         assert updates[0]["session_id"] == "session-1"
         meta = updates[0]["update"].model_dump(by_alias=True)["_meta"]["agentComms"]
         assert meta == {"turnId": "turn-1", "mcpClient": receipt}
         owner._active_turns.pop("session-1")  # Settled: no receipt may escape.
-        await owner._emit_event("session-1", event, observer)
+        await owner._emit_event("session-1", event, observer, turn_id="turn-1")
         owner._active_turns["session-1"] = "turn-2"
         # A stale receipt arriving FIRST in a successor turn still loses.
-        await owner._emit_event("session-1", event, observer)
-        await owner._emit_event("session-2", event, observer)
-        await owner._emit_event("session-1", {**event, "turn_id": None}, observer)
+        await owner._emit_event("session-1", event, observer, turn_id="turn-1")
+        await owner._emit_event("session-2", event, observer, turn_id="turn-1")
+        await owner._emit_event("session-1", event, observer, turn_id=None)
         assert len(updates) == 1
-        await owner._emit_event("session-1", {**event, "turn_id": "turn-2"}, observer)
+        await owner._emit_event("session-1", event, observer, turn_id="turn-2")
         assert len(updates) == 2
         assert (
             updates[-1]["update"].model_dump(by_alias=True)["_meta"]["agentComms"]["turnId"]
@@ -114,7 +115,7 @@ send({{"type": "agent_settled"}})
         **answer,
     }
     assert len(requests) == (0 if choice is None else 1)
-    assert events[-1]["type"] == "done"
+    assert isinstance(events[-1], ae.Done)
 
 
 async def collect_backend(program, cwd, controller):
@@ -258,8 +259,8 @@ send({{"type":"extension_ui_request","id":"late","method":"setStatus",
             program, [], "fixture", str(tmp_path), finish_event=asyncio.Event()
         )
     ]
-    assert any(event["type"] == "settled" for event in events)
-    assert not any(event["type"] == "mcp_live_status" for event in events)
+    assert any(isinstance(event, ae.StreamSettled) for event in events)
+    assert not any(isinstance(event, ae.McpLiveStatus) for event in events)
 
 
 async def test_explicit_owner_cancellation_is_not_swallowed_by_socket_permission():

@@ -6,6 +6,7 @@ import sys
 import pytest
 
 from agent_comms import Thread, TranscriptEvent, backend, wire
+from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.tool_results import ToolDiff, tool_result_content
 
@@ -86,8 +87,8 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path):
     events = [
         event async for event in backend.stream_agent_events(str(stub), [], "task", str(tmp_path))
     ]
-    live = next(event for event in events if event["type"] == "tool_end")
-    assert live["diff"].text == patch
+    live = next(event for event in events if isinstance(event, ae.ToolEnd))
+    assert live.diff.text == patch
 
     session = tmp_path / "session.jsonl"
     session.write_text(
@@ -110,7 +111,7 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path):
     page = comms.thread_transcript_page("worker", max_messages=1)
     assert len(page.events) == 1
     saved = TranscriptEvent.from_wire(page.events[0].to_wire())
-    assert saved.diff == live["diff"]
+    assert saved.diff == live.diff
 
     class Client:
         transcript_snapshots = False
@@ -140,7 +141,7 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path):
     client.transcript_diffs = True
     await agent._replay_transcript("worker", "worker", client)
     snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
-    assert TranscriptEvent.from_wire(snapshot[0]).diff == live["diff"]
+    assert TranscriptEvent.from_wire(snapshot[0]).diff == live.diff
     client.transcript_snapshots = False
     client.transcript_diffs = False
     await agent._replay_transcript("worker", "worker", client, snapshots=True)
@@ -148,7 +149,7 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path):
     assert "diff" not in snapshot[0]
     await agent._replay_transcript("worker", "worker", client, snapshots=True, diffs=True)
     snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
-    assert TranscriptEvent.from_wire(snapshot[0]).diff == live["diff"]
+    assert TranscriptEvent.from_wire(snapshot[0]).diff == live.diff
 
 
 def test_older_transcript_wire_payload_has_no_diff():

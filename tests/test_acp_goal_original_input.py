@@ -9,6 +9,7 @@ import json
 import pytest
 from acp import RequestError
 
+from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import wire
@@ -63,10 +64,10 @@ async def test_idle_owner_original_input_continues_active_goal(tmp_path, monkeyp
             + "\n"
         )
         assert kwargs["native_start"](None, native_id, args[2])
-        yield {"type": "input_started", "id": None}
-        yield {"type": "chunk", "text": "Read the requested file."}
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True, "text": "Read the requested file."}
+        yield ae.InputStarted(id=None)
+        yield ae.Chunk(text="Read the requested file.")
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="Read the requested file.")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
@@ -105,7 +106,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
     async def events(*args, **kwargs):
         nonlocal backend_calls
         backend_calls += 1
-        yield {"type": "done", "ok": False, "text": "Must not reach backend"}
+        yield ae.Done(ok=False, text="Must not reach backend")
 
     monkeypatch.setattr(agent, "_emit_input_disposition", activate_after_admission)
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
@@ -138,7 +139,7 @@ async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monke
         comms.registry.unregister("project")
         with kwargs["send_boundary"](None, "b" * 32, args[2]) as allowed:
             boundaries.append(allowed)
-        yield {"type": "done", "ok": False, "text": "Owner stopped before send"}
+        yield ae.Done(ok=False, text="Owner stopped before send")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:

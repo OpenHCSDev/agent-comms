@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.backend import PersistentPiSession
@@ -412,9 +413,9 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
             assert allowed is True
             dispatched.append(native_id)
         assert kwargs["native_start"](None, native_id, task)
-        yield {"type": "input_started"}
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True, "text": "processed"}
+        yield ae.InputStarted(id=None)
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="processed")
 
     monkeypatch.setattr(backend, "stream_agent_events", fake_native_stream)
     assert comms.registry.require("proj").role.executable

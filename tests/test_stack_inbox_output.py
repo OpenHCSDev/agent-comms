@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms import backend, wire
 from agent_comms.acp import CommsAgent
 from agent_comms.input_disposition import InputDispositions
@@ -20,7 +21,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
     native = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native:
         pytest.skip("Requires the prepared native Pi stack")
-    with TemporaryDirectory(prefix="ac-native-inbox-", dir="/var/tmp") as directory:
+    with TemporaryDirectory(prefix="ac-native-inbox-") as directory:
         root = Path(directory)
         requests = []
         events = []
@@ -150,7 +151,6 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             "AGENT_COMMS_MANAGED",
         ):
             monkeypatch.delenv(key, raising=False)
-        source = Path(__file__).resolve().parents[1]
         for key, value in {
             "PI_CODING_AGENT_DIR": str(config),
             "OPENROUTER_API_KEY": "local-only",
@@ -173,9 +173,15 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             "z-ai/glm-5.3-flash",
             "--thinking",
             "off",
-            "--extension",
-            str(source / "extensions/pi-agent-comms/index.ts"),
         ]
+        from native_event_host import install_event_host
+
+        install_event_host(
+            monkeypatch,
+            native,
+            f"http://127.0.0.1:{server.server_port}",
+            comms_tools=True,
+        )
         stream = backend.stream_agent_events
 
         async def collect_events(*args, **kwargs):
@@ -246,12 +252,14 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             assert "OLD_UNKNOWN_BODY_0000:" in excerpt
             assert "OLD_UNKNOWN_BODY_0001:" not in excerpt
             assert len(set(artifacts)) == 1
-            assert not any(event["type"].startswith("compaction") for event in events)
-            assert not any(event["type"] == "error" for event in events)
-            terminal = [event for event in events if event["type"] == "done"]
-            assert len(terminal) == 1 and terminal[0]["ok"] is True
-            assert terminal[0]["text"] == "INBOX_INSPECTED_TWICE"
-            assert len([event for event in events if event["type"] == "input_started"]) == 1
+            assert not any(
+                isinstance(event, (ae.CompactionEvent, ae.CompactionProgress)) for event in events
+            )
+            assert not any(isinstance(event, ae.Error) for event in events)
+            terminal = [event for event in events if isinstance(event, ae.Done)]
+            assert len(terminal) == 1 and terminal[0].ok is True
+            assert terminal[0].text == "INBOX_INSPECTED_TWICE"
+            assert len([event for event in events if isinstance(event, ae.InputStarted)]) == 1
             saved_rows = agent._dispositions._read()
             assert {key: saved_rows[key] for key in old_rows} == old_rows
             transcript = Path(comms.registry.require("parent").session_file)

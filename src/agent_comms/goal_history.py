@@ -15,11 +15,12 @@ import stat
 import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 from .declarations import Goal
+from .field_codec import FieldCodec
 
 
 class GoalHistoryError(RuntimeError):
@@ -121,13 +122,13 @@ class GoalHistoryStore:
 
     @staticmethod
     def _encode(goal: Goal | None) -> str | None:
-        return json.dumps(asdict(goal), sort_keys=True) if goal is not None else None
+        return json.dumps(FieldCodec.encode(goal), sort_keys=True) if goal is not None else None
 
     @staticmethod
     def _decode(raw: str | None) -> Goal | None:
         try:
             value = json.loads(raw) if raw is not None else None
-            return Goal(**value) if value is not None else None
+            return FieldCodec.decode(Goal, value) if value is not None else None
         except (TypeError, ValueError) as error:
             raise GoalHistoryError("Goal history contains an invalid goal snapshot.") from error
 

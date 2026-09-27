@@ -157,3 +157,29 @@ async def test_bridge_busy_then_cancel_never_replays(tmp_path, monkeypatch):
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         await owner.shutdown()
+
+
+async def test_bridge_releases_waiters_after_settlement_publication(tmp_path, monkeypatch):
+    owner, updates = await _owner(tmp_path)
+    released = []
+    release = owner._comms.release_waits_after_terminal_turn
+
+    async def compact(*_args, **_kwargs):
+        return {"ok": True, "summary": "local summary"}
+
+    def observed_release(fence):
+        assert fence is not None
+        assert any(
+            item.get("turnSettled") is True and item.get("turnId") == fence.turn_id
+            for item in _metadata(updates)
+        )
+        released.append(fence)
+        release(fence)
+
+    monkeypatch.setattr("agent_comms.manual_compaction.compact_session", compact)
+    monkeypatch.setattr(owner._comms, "release_waits_after_terminal_turn", observed_release)
+    try:
+        assert (await compact_context(owner, "project"))["ok"] is True
+        assert len(released) == 1
+    finally:
+        await owner.shutdown()

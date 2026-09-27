@@ -2,30 +2,23 @@
 
 from __future__ import annotations
 
-import json
-from dataclasses import asdict, dataclass
-from pathlib import Path
+from dataclasses import dataclass
+from typing import ClassVar
 
-from .declarations import Goal, GoalPauseSource, _atomic_write_text, _store_lock
+from .declarations import Goal
+from .goal_states import PausedGoal, PauseSource
+from .locked_store import LockedStore
 
 
 @dataclass(frozen=True, slots=True)
 class GoalPauseEvent:
     goal_id: str
     revision: int
-    source: GoalPauseSource
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "source", GoalPauseSource(self.source))
+    source: str
 
     @property
     def owner_instruction(self) -> str | None:
-        if self.source is GoalPauseSource.OWNER:
-            return (
-                "This goal was paused by the owner. Do not resume or continue it; "
-                "wait for the owner to explicitly resume it using the goal controls."
-            )
-        return None
+        return PauseSource.decode(self.source)().instruction()
 
     @property
     def key(self) -> str:
@@ -33,28 +26,26 @@ class GoalPauseEvent:
 
 
 @dataclass(frozen=True, slots=True)
-class GoalPauseEvents:
-    path: Path
+class GoalPauseEvents(LockedStore[dict[str, GoalPauseEvent]]):
+    filename: ClassVar[str] = "goal_pause_events.json"
+
+    @property
+    def record_type(self) -> type[dict[str, GoalPauseEvent]]:
+        return dict[str, GoalPauseEvent]
+
+    def empty(self) -> dict[str, GoalPauseEvent]:
+        return {}
 
     def snapshot(self) -> dict[str, GoalPauseEvent]:
-        try:
-            rows = json.loads(self.path.read_text())
-        except FileNotFoundError:
-            return {}
-        return {key: GoalPauseEvent(**row) for key, row in rows.items()}
+        return self.read()
 
     @staticmethod
-    def for_goal(goal: Goal | None, events: dict[str, GoalPauseEvent]) -> GoalPauseEvent | None:
-        if goal is None or goal.status != "paused":
+    def for_goal(
+        goal: Goal | None, events: dict[str, GoalPauseEvent] | None = None
+    ) -> GoalPauseEvent | None:
+        if goal is None or not isinstance(goal.state, PausedGoal):
             return None
-        return events.get(f"{goal.id}:{goal.revision}")
+        return GoalPauseEvent(goal.id, goal.revision, goal.state.source.declared_name)
 
     def record(self, event: GoalPauseEvent) -> None:
-        with _store_lock(self.path):
-            events = self.snapshot()
-            events[event.key] = event
-            _atomic_write_text(
-                self.path,
-                json.dumps({key: asdict(value) for key, value in events.items()}),
-                fsync_parent=True,
-            )
+        self.update(lambda events: {**events, event.key: event})

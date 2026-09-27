@@ -1,5 +1,6 @@
 import asyncio
 
+from agent_comms import agent_events as ae
 from agent_comms import backend, wire
 from agent_comms.acp import CommsAgent
 
@@ -24,14 +25,14 @@ async def test_queued_and_steered_followups_both_reach_the_next_boundary(tmp_pat
 
     async def events(*args, **kwargs):
         active.set()
-        yield {"type": "chunk", "text": "Original response"}
+        yield ae.Chunk(text="Original response")
         queue = kwargs["steering_queue"]
         commands.append(await queue.get())
         commands.append(await queue.get())
-        yield {"type": "input_started", "id": commands[1]["_input_id"]}
-        yield {"type": "input_started", "id": commands[0]["_input_id"]}
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True}
+        yield ae.InputStarted(id=commands[1]["_input_id"])
+        yield ae.InputStarted(id=commands[0]["_input_id"])
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr(backend, "stream_agent_events", events)
     turn = asyncio.create_task(agent.prompt("project", [{"type": "text", "text": "original"}]))
@@ -77,7 +78,7 @@ async def test_cancellation_restores_unprocessed_user_queue(tmp_path, monkeypatc
     async def events(*args, **kwargs):
         active.set()
         await asyncio.sleep(60)
-        yield {"type": "done", "ok": True}
+        yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr(backend, "stream_agent_events", events)
     turn = asyncio.create_task(agent.prompt("project", [{"type": "text", "text": "original"}]))

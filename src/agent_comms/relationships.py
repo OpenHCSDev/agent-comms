@@ -10,7 +10,8 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
+from pathlib import Path
 from threading import RLock
 from typing import TYPE_CHECKING, Any
 
@@ -20,11 +21,12 @@ from .declarations import (
     Thread,
     ThreadSort,
     ThreadView,
-    _atomic_write_text,
     _store_lock,
     file_revision,
     is_channel_target,
 )
+from .field_codec import FieldCodec
+from .locked_store import LockedStore
 
 if TYPE_CHECKING:
     from .operations import Comms
@@ -109,6 +111,34 @@ class ContactProjection:
     diagnostics: tuple[GoalMentionDiagnostic, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class RelationshipOrder:
+    owner: str
+    owner_created: float
+    group: str
+    order: ThreadSort
+
+
+class RelationshipStore(LockedStore[dict[str, Any]]):
+    """Versioned external envelope; retain unknown document and order keys."""
+
+    filename = "relationships.json"
+    json_indent = 2
+    json_suffix = "\n"
+
+    @property
+    def record_type(self) -> type[dict[str, Any]]:
+        return dict[str, Any]
+
+    def empty(self) -> dict[str, Any]:
+        return {"version": 1, "collaborations": [], "orders": []}
+
+    def _decode(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict) or data.get("version") != 1:
+            raise ValueError("Unsupported relationship store version")
+        return super()._decode(data)
+
+
 class ThreadRelationships:
     """One root-scoped service, retained by Comms; no timers or owner actions."""
 
@@ -117,7 +147,7 @@ class ThreadRelationships:
 
     def __init__(self, comms: Comms):
         self.comms = comms
-        self.path = comms.root / "relationships.json"
+        self.store = RelationshipStore(comms.root / RelationshipStore.filename)
         self._lock = RLock()
         self._recent_revision: tuple[int, int, int, int] | None = None
         self._recent: tuple[Message, ...] = ()
@@ -130,24 +160,16 @@ class ThreadRelationships:
             self.comms.revision().expiry_tick,
         )
 
-    def _load(self) -> dict[str, Any]:
-        try:
-            state = json.loads(self.path.read_text())
-        except FileNotFoundError:
-            return {"version": 1, "collaborations": [], "orders": []}
-        if not isinstance(state, dict) or state.get("version") != 1:
-            raise ValueError("Unsupported relationship store version")
-        return state
-
-    def _save(self, state: dict[str, Any]) -> None:
-        _atomic_write_text(self.path, json.dumps(state, indent=2) + "\n", fsync_parent=True)
+    @property
+    def path(self) -> Path:
+        return self.store.path
 
     def _canonical_edges(
         self, state: dict[str, Any], registry: RegistrySnapshot
     ) -> list[Collaboration]:
         edges = []
         for raw in state["collaborations"]:
-            edge = Collaboration(**raw)
+            edge = FieldCodec.decode(Collaboration, raw)
             owner = registry.aliases.get(edge.owner, edge.owner)
             peer = registry.aliases.get(edge.peer, edge.peer)
             first, second = registry.threads.get(owner), registry.threads.get(peer)
@@ -222,10 +244,10 @@ class ThreadRelationships:
         return result
 
     def collaborations(self, owner: str) -> tuple[Collaboration, ...]:
-        with _store_lock(self.comms._wire_lock_path), _store_lock(self.path):
+        with _store_lock(self.comms._wire_lock_path):
             registry = self.comms.registry.snapshot()
             thread = self.comms.registry.require(owner)
-            edges = self._unique_edges(self._canonical_edges(self._load(), registry))
+            edges = self._unique_edges(self._canonical_edges(self.store.read(), registry))
             return tuple(
                 self._orient(edge, thread) for edge in edges if self._incident(edge, thread)
             )
@@ -298,7 +320,7 @@ class ThreadRelationships:
         self, owner: str
     ) -> tuple[tuple[GoalDerivedContact, ...], tuple[GoalMentionDiagnostic, ...]]:
         """Read-only mutual view; never changes an explicit contact or delivery."""
-        with _store_lock(self.comms._wire_lock_path), _store_lock(self.path):
+        with _store_lock(self.comms._wire_lock_path):
             registry = self.comms.registry.snapshot()
             thread = self.comms.registry.require(owner)
             contacts, diagnostics = self._goal_contacts(registry)
@@ -313,10 +335,10 @@ class ThreadRelationships:
 
     def contact_projection(self, owner: str) -> ContactProjection:
         """Combine manual and bound-goal contacts without reading a bus row."""
-        with _store_lock(self.comms._wire_lock_path), _store_lock(self.path):
+        with _store_lock(self.comms._wire_lock_path):
             registry = self.comms.registry.snapshot()
             thread = self.comms.registry.require(owner)
-            edges = self._unique_edges(self._canonical_edges(self._load(), registry))
+            edges = self._unique_edges(self._canonical_edges(self.store.read(), registry))
             explicit = tuple(
                 self._orient(edge, thread) for edge in edges if self._incident(edge, thread)
             )
@@ -367,98 +389,110 @@ class ThreadRelationships:
             raise ValueError("Expected add, update or remove")
         if len(note) > 2000:
             raise ValueError("Collaboration notes are limited to 2000 characters")
-        with _store_lock(self.comms._wire_lock_path), _store_lock(self.path):
+        with _store_lock(self.comms._wire_lock_path):
             first = self.comms.registry.require(owner)
             if not first.role.executable:
                 raise ValueError("Collaborations relate agent threads")
             registry = self.comms.registry.snapshot()
             canonical_peer = registry.aliases.get(peer, peer)
-            state = self._load()
-            edges = self._canonical_edges(state, registry)
-            pair = [
-                edge for edge in edges if {edge.owner, edge.peer} == {first.name, canonical_peer}
-            ]
-            second_live = registry.threads.get(canonical_peer)
-            active = [
-                edge
-                for edge in pair
-                if self._incident(edge, first)
-                and second_live is not None
-                and self._counterpart(edge, first) == (second_live.name, second_live.created_at)
-            ]
-            unavailable = [
-                edge for edge in pair if self._incident(edge, first) and edge not in active
-            ]
-            existing: Collaboration | None = next(iter(active or unavailable), None)
-            if action == "remove":
-                # Either participant can end the single shared relationship.
-                # Prefer a live incarnation, leaving historical notes intact.
-                # A reused caller name cannot remove another incarnation's row.
-                if existing is not None:
-                    identity = self._pair_identity(existing)
-                    state["collaborations"] = [
-                        asdict(edge) for edge in edges if self._pair_identity(edge) != identity
-                    ]
-                    self._save(state)
-                return None
-            second = self.comms.registry.require(peer)
-            if not second.role.executable:
-                raise ValueError("Collaborations relate agent threads")
-            if first.name == second.name:
-                raise ValueError("A thread cannot collaborate with itself")
-            if unavailable and not active:
-                raise ValueError(
-                    "Peer identity was replaced; explicitly remove the unavailable "
-                    "collaboration before adding a new one"
+            result: Collaboration | None = None
+
+            def change(state: dict[str, Any]) -> dict[str, Any]:
+                nonlocal result
+                edges = self._canonical_edges(state, registry)
+                pair = [
+                    edge
+                    for edge in edges
+                    if {edge.owner, edge.peer} == {first.name, canonical_peer}
+                ]
+                second_live = registry.threads.get(canonical_peer)
+                active = [
+                    edge
+                    for edge in pair
+                    if self._incident(edge, first)
+                    and second_live is not None
+                    and self._counterpart(edge, first) == (second_live.name, second_live.created_at)
+                ]
+                unavailable = [
+                    edge for edge in pair if self._incident(edge, first) and edge not in active
+                ]
+                existing: Collaboration | None = next(iter(active or unavailable), None)
+                if action == "remove":
+                    # Either participant can end the single shared relationship.
+                    # Prefer a live incarnation, leaving historical notes intact.
+                    # A reused caller name cannot remove another incarnation's row.
+                    if existing is not None:
+                        identity = self._pair_identity(existing)
+                        return {
+                            **state,
+                            "collaborations": [
+                                FieldCodec.encode(edge)
+                                for edge in edges
+                                if self._pair_identity(edge) != identity
+                            ],
+                        }
+                    return state
+                second = self.comms.registry.require(peer)
+                if not second.role.executable:
+                    raise ValueError("Collaborations relate agent threads")
+                if first.name == second.name:
+                    raise ValueError("A thread cannot collaborate with itself")
+                if unavailable and not active:
+                    raise ValueError(
+                        "Peer identity was replaced; explicitly remove the unavailable "
+                        "collaboration before adding a new one"
+                    )
+                if action == "update" and not active:
+                    raise ValueError("Collaboration does not exist")
+                if action == "add" and active:
+                    result = self._orient(self._unique_edges(active)[0], first)
+                    return state
+                now = time.time()
+                existing = active[0] if active else None
+                result = Collaboration(
+                    existing.owner if existing else first.name,
+                    existing.peer if existing else second.name,
+                    existing.owner_created if existing else first.created_at,
+                    existing.peer_created if existing else second.created_at,
+                    note,
+                    min(edge.created_at for edge in active) if active else now,
+                    now,
                 )
-            if action == "update" and not active:
-                raise ValueError("Collaboration does not exist")
-            if action == "add" and active:
-                return self._orient(self._unique_edges(active)[0], first)
-            now = time.time()
-            existing = active[0] if active else None
-            result = Collaboration(
-                existing.owner if existing else first.name,
-                existing.peer if existing else second.name,
-                existing.owner_created if existing else first.created_at,
-                existing.peer_created if existing else second.created_at,
-                note,
-                min(edge.created_at for edge in active) if active else now,
-                now,
-            )
-            edges = [edge for edge in edges if edge not in active]
-            edges.append(result)
-            state["collaborations"] = [asdict(edge) for edge in edges]
-            self._save(state)
-            return self._orient(result, first)
+                edges = [edge for edge in edges if edge not in active]
+                edges.append(result)
+                result = self._orient(result, first)
+                return {**state, "collaborations": [FieldCodec.encode(edge) for edge in edges]}
+
+            self.store.update(change)
+            return result
 
     def set_order(self, owner: str, group: str, order: ThreadSort | str) -> ThreadSort:
         if group not in {"children", "collaborating"}:
             raise ValueError("This relationship group has no selectable sort")
         if isinstance(order, str):
             order = ThreadSort(order)
-        with _store_lock(self.comms._wire_lock_path), _store_lock(self.path):
+        with _store_lock(self.comms._wire_lock_path):
             thread = self.comms.registry.require(owner)
             registry = self.comms.registry.snapshot()
-            state = self._load()
-            state["orders"] = [
-                row
-                for row in state["orders"]
-                if not (
-                    registry.aliases.get(row["owner"], row["owner"]) == thread.name
-                    and row["owner_created"] == thread.created_at
-                    and row["group"] == group
+
+            def change(state: dict[str, Any]) -> dict[str, Any]:
+                rows = [
+                    row
+                    for row in state["orders"]
+                    if not (
+                        registry.aliases.get(row["owner"], row["owner"]) == thread.name
+                        and row["owner_created"] == thread.created_at
+                        and row["group"] == group
+                    )
+                ]
+                rows.append(
+                    FieldCodec.encode(
+                        RelationshipOrder(thread.name, thread.created_at, group, order)
+                    )
                 )
-            ]
-            state["orders"].append(
-                {
-                    "owner": thread.name,
-                    "owner_created": thread.created_at,
-                    "group": group,
-                    "order": order.value,
-                }
-            )
-            self._save(state)
+                return {**state, "orders": rows}
+
+            self.store.update(change)
         return order
 
     def _recent_messages(self) -> tuple[tuple[Message, ...], bool]:
@@ -492,10 +526,10 @@ class ThreadRelationships:
 
     def snapshot(self, owner: str) -> ThreadCommsSnapshot:
         # One coherent identity/metadata basis; wire payload work is bounded.
-        with _store_lock(self.comms._wire_lock_path), _store_lock(self.path):
+        with _store_lock(self.comms._wire_lock_path):
             thread = self.comms.registry.require(owner)
             registry = self.comms.registry.snapshot()
-            state = self._load()
+            state = self.store.read()
             edges = self._canonical_edges(state, registry)
             goal_contacts, goal_diagnostics = self._goal_contacts(registry)
             delivery = self.comms.bus._delivery_scope(thread.name)

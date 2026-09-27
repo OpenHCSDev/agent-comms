@@ -20,9 +20,11 @@ import sys
 from contextlib import suppress
 from pathlib import Path
 
+from . import agent_events as events
 from . import backend
 from .declarations import GLOBAL_CHANNEL, ActivityState, Message, is_channel_target
-from .operations import wire
+from .mro_dispatch import handles
+from .operations import Comms, wire
 
 DEFAULT_AGENT_BIN = "pi"
 DEFAULT_AGENT_ARGS = [
@@ -35,6 +37,34 @@ DEFAULT_AGENT_ARGS = [
 ]
 POLL_INTERVAL = 1.0
 MAX_REPLY_CHARS = 4000
+
+
+class ParticipantEventConsumer(events.AgentEventConsumer):
+    def __init__(self, comms: Comms, name: str, task: str) -> None:
+        self._comms = comms
+        self._name = name
+        self.task = task
+        self.reply_parts: list[str] = []
+
+    @property
+    def comms(self) -> Comms:
+        return self._comms
+
+    @property
+    def thread_name(self) -> str:
+        return self._name
+
+    def update_activity(self, state: ActivityState, detail: str) -> None:
+        self.comms.set_activity(self.thread_name, state, detail)
+
+    @handles(events.Chunk)
+    async def chunk(self, event: events.Chunk) -> None:
+        self.reply_parts.append(event.text)
+
+    @handles(events.ToolEnd)
+    async def tool_end(self, event: events.ToolEnd) -> None:
+        if event.ok:
+            self.update_activity(ActivityState.THINKING, self.task[:80])
 
 
 class Participant:
@@ -130,7 +160,7 @@ class Participant:
             "PI_AGENT_ID": name,
             "AGENT_COMMS_ROOT": str(self._comms.root),
         }
-        reply_parts: list[str] = []
+        consumer = ParticipantEventConsumer(self._comms, name, message.body)
         try:
             async for event in backend.stream_agent_events(
                 self._agent_bin,
@@ -139,24 +169,10 @@ class Participant:
                 worktree,
                 env_extra,
             ):
-                kind = event.get("type")
-                if kind == "chunk":
-                    reply_parts.append(event.get("text") or "")
-                elif kind == "agent_info":
-                    self._comms.set_agent_info(
-                        name,
-                        model=event.get("model"),
-                        session_name=event.get("session_name"),
-                        context_used=event.get("context_used"),
-                        context_size=event.get("context_size"),
-                    )
-                elif kind == "tool_start":
-                    self._comms.set_activity(name, ActivityState.WORKING, event.get("title", ""))
-                elif kind == "tool_end" and event.get("ok"):
-                    self._comms.set_activity(name, ActivityState.THINKING, message.body[:80])
+                await consumer.dispatch(event)
         except OSError as exc:
             print(f"agent launch failed: {exc}", file=sys.stderr, flush=True)
-        return "".join(reply_parts).strip()
+        return "".join(consumer.reply_parts).strip()
 
 
 def main() -> int:

@@ -7,6 +7,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import Thread, wire
+from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.declarations import ScheduledTurn
 
@@ -56,10 +57,10 @@ async def test_new_nondependency_direct_dm_interrupts_active_goal_without_attemp
         assert agent._dispositions.started(
             row["key"], turn_id=row["turn_id"], native_id=native, text=task
         )
-        yield {"type": "input_started", "id": None}
-        yield {"type": "chunk", "text": "Answer to outsider"}
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True, "text": "Answer to outsider"}
+        yield ae.InputStarted(id=None)
+        yield ae.Chunk(text="Answer to outsider")
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="Answer to outsider")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", fake_events)
     original_schedule = agent._schedule_wake
@@ -113,9 +114,9 @@ async def test_failed_direct_turn_leaves_goal_and_standby_wait_untouched(tmp_pat
         assert agent._dispositions.started(
             row["key"], turn_id=row["turn_id"], native_id=native, text=task
         )
-        yield {"type": "input_started", "id": None}
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": False, "text": "Direct turn failed"}
+        yield ae.InputStarted(id=None)
+        yield ae.StreamSettled()
+        yield ae.Done(ok=False, text="Direct turn failed")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", failed_events)
     try:
@@ -153,10 +154,10 @@ async def test_benign_wait_replacement_does_not_strand_queued_interrupt(tmp_path
             assert agent._dispositions.started(
                 row["key"], turn_id=row["turn_id"], native_id=native, text=task
             )
-            yield {"type": "input_started", "id": None}
-            yield {"type": "chunk", "text": "Still answering"}
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": True, "text": "Still answering"}
+            yield ae.InputStarted(id=None)
+            yield ae.Chunk(text="Still answering")
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="Still answering")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         pending = agent._pending_turns.pop(session)[0]
@@ -211,7 +212,7 @@ async def test_historical_unknown_is_not_replayed_and_dependency_path_is_distinc
 
         async def forbidden_events(*args, **kwargs):
             called.append(True)
-            yield {"type": "done", "ok": True, "text": "unexpected"}
+            yield ae.Done(ok=True, text="unexpected")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", forbidden_events)
         await agent._run_agent_turn(
@@ -254,8 +255,8 @@ async def test_new_owner_admission_refuses_old_direct_input_at_send_boundary(tmp
         async def fake_events(*args, **kwargs):
             with kwargs["send_boundary"](None, "b" * 32, args[2]) as allowed:
                 seen.append(allowed)
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": False, "text": "not started"}
+            yield ae.StreamSettled()
+            yield ae.Done(ok=False, text="not started")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", fake_events)
         await agent._run_agent_turn(
@@ -340,10 +341,10 @@ async def test_queue_survives_progress_bump_and_rebinds_at_dispatch(tmp_path, mo
             assert agent._dispositions.started(
                 row["key"], turn_id=row["turn_id"], native_id=native, text=task
             )
-            yield {"type": "input_started", "id": None}
-            yield {"type": "chunk", "text": "Answer after the bump"}
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": True, "text": "Answer after the bump"}
+            yield ae.InputStarted(id=None)
+            yield ae.Chunk(text="Answer after the bump")
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="Answer after the bump")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         monkeypatch.setattr(agent, "_schedule_wake", original_schedule)
@@ -379,8 +380,8 @@ async def test_change_after_dispatch_denies_without_retry(tmp_path, monkeypatch,
                 comms.update_goal(session, "standby", goal_id=goal.id, wait_for=["dependency"])
             with kwargs["send_boundary"](None, "e" * 32, task) as allowed:
                 seen.append(allowed)
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": False, "text": "not started"}
+            yield ae.StreamSettled()
+            yield ae.Done(ok=False, text="not started")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent._run_agent_turn(
@@ -422,7 +423,7 @@ async def test_goal_cleared_or_paused_drops_queued_interrupt_without_crash(
 
         async def forbidden_events(*args, **kwargs):
             called.append(True)
-            yield {"type": "done", "ok": True, "text": "unexpected"}
+            yield ae.Done(ok=True, text="unexpected")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", forbidden_events)
         monkeypatch.setattr(agent, "_schedule_wake", original_schedule)

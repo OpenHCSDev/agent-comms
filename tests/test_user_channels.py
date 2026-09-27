@@ -4,6 +4,7 @@ from uuid import uuid4
 import pytest
 
 from agent_comms import ThreadRole, wire
+from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 
 
@@ -29,9 +30,9 @@ async def test_user_channel_wakes_members_and_returns_answers_without_feedback(
         _native_receipt(args, kwargs)
         name = args[4]["AGENT_COMMS_THREAD"]
         calls.append(name)
-        yield {"type": "chunk", "text": f"{name} received it"}
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True}
+        yield ae.Chunk(text=f"{name} received it")
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
@@ -76,9 +77,9 @@ async def test_channel_requests_keep_their_reply_destinations(tmp_path, monkeypa
 
     async def events(*args, **kwargs):
         _native_receipt(args, kwargs)
-        yield {"type": "chunk", "text": "Reply: " + args[2].splitlines()[-1]}
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True}
+        yield ae.Chunk(text="Reply: " + args[2].splitlines()[-1])
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
@@ -104,8 +105,8 @@ async def test_human_channel_mention_wakes_only_named_member(tmp_path, monkeypat
     async def events(*args, **kwargs):
         _native_receipt(args, kwargs)
         calls.append(args[4]["AGENT_COMMS_THREAD"])
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True}
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
@@ -131,8 +132,8 @@ async def test_agent_channel_mention_wakes_only_named_member(tmp_path, monkeypat
     async def events(*args, **kwargs):
         _native_receipt(args, kwargs)
         calls.append((args[4]["AGENT_COMMS_THREAD"], args[2]))
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True}
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:

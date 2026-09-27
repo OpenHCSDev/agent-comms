@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from .coordination import MAX_IDENTIFIER_CHARS
-from .declarations import Message
+from .declarations import BuiltinChannel, Message
 
 AUDIENCE_VERSION: Final = 1
 MAX_RECIPIENTS: Final = 4096
@@ -93,7 +93,7 @@ class FrozenAudience:
         for name in ("message_id", "exact_target", "sender_lookup", "source_revision"):
             _bounded_text(getattr(self, name), name)
         _bounded_text(self.sender_name, "sender_name", thread_name=True)
-        if self.exact_target in {"#any", "broadcast"}:
+        if not BuiltinChannel.exact_stored_target(self.exact_target):
             raise ValueError("aggregate views and broadcast aliases are not exact stored targets")
         if type(self.recipients) is not tuple or len(self.recipients) > MAX_RECIPIENTS:
             raise ValueError("recipients must be a bounded immutable tuple")
@@ -172,11 +172,15 @@ def freeze_audience(
     if prepared_message.sender != sender_name:
         raise ValueError("sender_name must be the externally captured canonical message sender")
     _bounded_text(source_revision, "source_revision")
-    if prepared_message.target in {"#any", "broadcast"}:
+    if not BuiltinChannel.exact_stored_target(prepared_message.target):
         raise ValueError("only exact stored routable targets may be frozen")
     if type(prepared_message.seq) is not int or not 0 < prepared_message.seq <= MAX_WIRE_SEQ:
         raise ValueError("the prepared message must have an assigned wire sequence")
-    wire = _canonical_json(prepared_message.to_wire(), limit=MAX_WIRE_ENVELOPE_BYTES)
+    try:
+        encoded_message = prepared_message.to_wire()
+    except (TypeError, ValueError) as error:
+        raise ValueError("audience data cannot be canonically encoded") from error
+    wire = _canonical_json(encoded_message, limit=MAX_WIRE_ENVELOPE_BYTES)
     recipients = tuple(
         sorted(externally_captured_recipients, key=lambda item: item.recipient_lookup)
     )

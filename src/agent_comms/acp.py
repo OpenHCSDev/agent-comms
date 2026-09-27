@@ -37,7 +37,6 @@ from acp import RequestError, run_agent
 from acp.schema import (
     AgentCapabilities,
     AgentMessageChunk,
-    AgentThoughtChunk,
     ConfigOptionUpdate,
     ContentToolCallContent,
     Implementation,
@@ -54,14 +53,13 @@ from acp.schema import (
     SetSessionConfigOptionResponse,
     TerminalAuthMethod,
     TextContentBlock,
-    ToolCallProgress,
-    ToolCallStart,
     ToolCallUpdate,
-    UsageUpdate,
     UserMessageChunk,
 )
 
+from . import agent_events as events
 from . import backend
+from .agent_event_updates import AcpEventConsumer
 from .bus_publication import stable_thread_lookup, unique_wire_object
 from .cohort_foreground import _accept_visible_initials, _preflight
 from .coordinated_runtime import run_one_sealed_claim
@@ -83,11 +81,23 @@ from .declarations import (
     MessageType,
     ScheduledTurn,
     Thread,
+    TurnClaimFence,
     TurnRouting,
     _store_lock,
     is_channel_target,
 )
 from .diagnostics import record_terminal_failure, terminal_failure_reason
+from .goal_actions import (
+    BlockedGoalAction,
+    EditGoalAction,
+    GoalAction,
+    GoalPrecondition,
+    OwnerControlInvocable,
+    OwnerInvocable,
+    PausedGoalAction,
+    RetryGoalAction,
+    SetGoalAction,
+)
 from .goal_attempts import (
     Generation,
     GoalAttemptError,
@@ -97,10 +107,13 @@ from .goal_attempts import (
     UnresolvedAttempt,
 )
 from .goal_failure_observation import FailedTurnObservation
+from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .input_disposition import AcpDeliveryCursors, InputDispositions
+from .mro_dispatch import MroDispatch, handles
 from .native_source_cursor import advance_current_native_cursor, read_current_native_cursor
 from .operations import OBSERVATION_INTERVAL, Comms, wire
 from .passive_channel_awareness import PassiveChannelAwareness
+from .pending_requests import PendingRequests
 from .runtime import (
     ACP_PERMISSION_TIMEOUT_SECONDS,
     UNBOUND_CONTROLLER,
@@ -111,7 +124,6 @@ from .runtime import (
 )
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 from .selected_write_plan import PlannedWrite, SelectedWritePlans
-from .tool_results import tool_result_content
 from .wire_watch import open_wire_watcher
 
 if TYPE_CHECKING:
@@ -268,8 +280,7 @@ class CommsAgent:
         self._goal_execution_signatures: dict[str, tuple[Goal | None, GoalExecution | None]] = {}
         self._transcript_snapshots = False
         self._transcript_diffs = False
-        self._model_requests: dict[str, asyncio.Future[None]] = {}
-        self._thinking_requests: dict[str, asyncio.Future[None]] = {}
+        self._setting_requests = PendingRequests()
         self._thinking_catalog: dict[tuple[str | None, tuple[int, int]], list[str]] = {}
         self._reply_window = (
             reply_window
@@ -1112,16 +1123,7 @@ class CommsAgent:
                     await self._drain_inbox(session_id)
                     await self._collect_replies(session_id, thread_name, sent_seq)
                 finally:
-                    self._active_turns.pop(session_id, None)
-                    terminal_fence = self._comms.finish_turn(
-                        thread_name, turn_id, expected=turn_claim
-                    )
-                    try:
-                        await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
-                    finally:
-                        # Relay output, if any, is committed before the waiter
-                        # observes that this dependency finished silently.
-                        self._comms.release_waits_after_terminal_turn(terminal_fence)
+                    await self.settle_turn(session_id, thread_name, turn_id, turn_claim)
             self._debug_log("prompt:returning")
             return PromptResponse(stop_reason="end_turn")
         except asyncio.CancelledError:
@@ -1235,7 +1237,11 @@ class CommsAgent:
             return
         name = self._sessions.get(session_id)
         if name and (goal := self._comms.registry.require(name).goal) and goal.active:
-            self._comms.update_goal(name, "paused", goal_id=goal.id, owner_action=True)
+            self._comms.update_goal(
+                name,
+                PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                actor=OwnerInvocable,
+            )
         task = self._turn_tasks.get(session_id)
         if task is not None:
             task.cancel()
@@ -1270,7 +1276,7 @@ class CommsAgent:
                     "provider": value.split("/", 1)[0],
                     "modelId": value.split("/", 1)[1],
                 },
-                self._model_requests,
+                events.ModelChanged,
                 "Model change timed out",
             )
             self._comms.set_thread_model(thread_name, value)
@@ -1288,7 +1294,7 @@ class CommsAgent:
             await self._set_active_backend_option(
                 session_id,
                 {"type": "set_thinking_level", "level": value},
-                self._thinking_requests,
+                events.ThinkingChanged,
                 "Thinking level change timed out",
             )
             self._comms.set_thread_thinking_level(thread_name, value)
@@ -1309,7 +1315,7 @@ class CommsAgent:
         self,
         session_id: str,
         command: dict[str, Any],
-        requests: dict[str, asyncio.Future[None]],
+        result_type: type[events.SettingChangeResult],
         timeout_message: str,
     ) -> None:
         if session_id not in self._active_turns or not (
@@ -1317,15 +1323,14 @@ class CommsAgent:
         ):
             return
         request_id = uuid4().hex
-        future = asyncio.get_running_loop().create_future()
-        requests[request_id] = future
+        future = self._setting_requests.add(result_type, request_id)
         inbox.put_nowait({"id": request_id, **command})
         try:
             await asyncio.wait_for(future, timeout=10)
         except (TimeoutError, RuntimeError) as error:
             raise RequestError.invalid_params({"reason": str(error) or timeout_message}) from error
         finally:
-            requests.pop(request_id, None)
+            self._setting_requests.discard(result_type, request_id)
 
     async def authenticate(self, method_id: str, **kwargs: Any) -> None:
         raise RequestError.auth_required({"reason": "agent-comms requires no authentication"})
@@ -1721,24 +1726,13 @@ class CommsAgent:
         )
 
     async def _sync_goal_execution(self, session_id: str, thread_name: str) -> None:
-        goal, execution = self._comms.goal_snapshot(thread_name)
-        signature = (goal, execution)
-        previous = self._goal_execution_signatures
-        if session_id in previous and previous[session_id] == signature:
-            return
-        await self._runtime.session_update(
-            session_id=session_id,
-            update=SessionInfoUpdate(
-                session_update="session_info_update",
-                field_meta={
-                    "agentComms": {
-                        "goal": asdict(goal) if goal else None,
-                        "goalExecution": asdict(execution) if execution else None,
-                    }
-                },
-            ),
+        event = self._comms.goal_changed(
+            thread_name, self._goal_execution_signatures.get(session_id)
         )
-        previous[session_id] = signature
+        if event is None:
+            return
+        await self._emit_event(session_id, event)
+        self._goal_execution_signatures[session_id] = event.signature
 
     def _private_session_mode(self) -> bool:
         marker = self._private_nk_marker()
@@ -2246,7 +2240,7 @@ class CommsAgent:
                 return
             try:
                 generation = store.snapshot(goal.id)
-                if generation is None or generation.state != "ready":
+                if generation is None or not generation.lifecycle.ready:
                     self._comms.block_goal_after_failed_turn(
                         thread.name,
                         started_goal=goal,
@@ -2314,10 +2308,9 @@ class CommsAgent:
         name = self._require_session(session_id)
         goal = self._comms.update_goal(
             name,
-            "set",
-            text=text,
+            SetGoalAction(text=text, expect=GoalPrecondition(expected_owner_pid=os.getpid())),
+            actor=OwnerInvocable,
             owner_store=self._open_goal_store(),
-            expected_owner_pid=os.getpid(),
         )
         assert goal is not None
         self._schedule_goal(session_id)
@@ -2335,11 +2328,15 @@ class CommsAgent:
         # snapshot and the executing owner. Do not acquire its lock twice.
         edited = self._comms.update_goal(
             name,
-            "edit",
-            text=text,
-            goal_id=goal_id,
-            expected_goal=goal,
-            expected_owner_pid=os.getpid(),
+            EditGoalAction(
+                text=text,
+                expect=GoalPrecondition(
+                    goal_id=goal_id,
+                    expected_goal=goal,
+                    expected_owner_pid=os.getpid(),
+                ),
+            ),
+            actor=OwnerInvocable,
         )
         assert edited is not None
         await self._sync_thread_config(session_id)
@@ -2349,7 +2346,8 @@ class CommsAgent:
         self, session_id: str, status: str, goal_id: str, expected_revision: int
     ) -> Goal | None:
         """Apply an explicit UI pause, resume, or clear through the current owner."""
-        if status not in {"active", "paused", "clear"}:
+        action = GoalAction.decode(status)
+        if not issubclass(action, OwnerControlInvocable):
             raise ValueError("Goal updates support only active, paused, or clear.")
         name = self._require_session(session_id)
         goal = self._comms.registry.require(name).goal
@@ -2358,68 +2356,46 @@ class CommsAgent:
         try:
             updated = self._comms.update_goal(
                 name,
-                status,
-                goal_id=goal_id,
-                expected_goal=goal,
-                expected_owner_pid=os.getpid(),
-                owner_action=True,
-                owner_store=self._open_goal_store() if status == "active" else None,
+                action(
+                    expect=GoalPrecondition(
+                        goal_id=goal_id,
+                        expected_goal=goal,
+                        expected_owner_pid=os.getpid(),
+                    )
+                ),
+                actor=OwnerInvocable,
+                owner_store=self._open_goal_store() if action.owner_grant else None,
             )
         finally:
             # Resume can discover that a paused attempt failed. Publish the
             # reconciled BLOCKED state even when the action returns an error.
             await self._sync_thread_config(session_id)
-        if status == "active":
+        if action.schedules_goal:
             self._schedule_goal(session_id)
         return updated
 
     async def retry_goal(self, session_id: str, goal_id: str, expected_revision: int) -> Goal:
         """Record an explicit UI retry in the executing owner's private ledger."""
         name = self._require_session(session_id)
-        with _store_lock(self._comms._wire_lock_path):
-            thread = self._comms.registry.require(name)
-            if thread.pid != os.getpid() or not self._comms.registry.status(name).running:
-                raise ValueError("The goal owner changed; refresh its state.")
-            goal = thread.goal
-            if (
-                goal is None
-                or goal.id != goal_id
-                or goal.revision != expected_revision
-                or goal.status != "blocked"
-            ):
-                raise ValueError("The blocked goal changed; refresh its state.")
-            if self._pending_goal_origins.get(name) == goal_id:
-                raise ValueError("Wait for the goal origin turn to finish.")
-            resumed = replace(goal, status="active", block_reason=None, revision=goal.revision + 1)
-            store = self._open_goal_store()
-            generation = store.snapshot(goal_id)
-            if generation is None:
-                # Older UI clients wrote only the registry goal. This explicit
-                # human Retry may create the missing ledger; it never silently
-                # replays a prior unknown provider attempt.
-                store.create_goal(goal_id)
-                generation = store.snapshot(goal_id)
-                assert generation is not None
-            if generation.state == "blocked" and generation.attempt_id:
-                store.authorize_retry(
-                    goal_id,
-                    expected_generation=generation.number,
-                    attempt_id=generation.attempt_id,
-                    user_decision_id=uuid4().hex,
+        thread = self._comms.registry.require(name)
+        goal = thread.goal
+        if goal is None or goal.id != goal_id or goal.revision != expected_revision:
+            raise ValueError("The blocked goal changed; refresh its state.")
+        if self._pending_goal_origins.get(name) == goal_id:
+            raise ValueError("Wait for the goal origin turn to finish.")
+        resumed = self._comms.update_goal(
+            name,
+            RetryGoalAction(
+                expect=GoalPrecondition(
+                    goal_id=goal_id,
+                    expected_goal=goal,
+                    expected_owner_pid=os.getpid(),
                 )
-            elif generation.state == "ready" and generation.attempt_id is None:
-                # A previous explicit retry may have durably created READY
-                # before the registry update, then crashed with its grant.
-                store.authorize_ready_recovery(
-                    goal_id,
-                    expected_generation=generation.number,
-                    user_decision_id=uuid4().hex,
-                )
-            else:
-                raise ValueError("The goal attempt is unresolved; inspect it before retrying.")
-            self._comms.registry.register(
-                replace(thread, goal=resumed), self._comms.registry.status(name)
-            )
+            ),
+            actor=OwnerInvocable,
+            owner_store=self._open_goal_store(),
+        )
+        assert resumed is not None
         # READY records the accepted owner decision even during an unrelated
         # turn. The scheduler's existing busy fences defer launch until that
         # turn finishes; reserved/claimed attempts remain unretryable above.
@@ -2639,7 +2615,7 @@ class CommsAgent:
             admission = self._comms.registry.snapshot().admission_generations[thread_name]
             with _store_lock(self._comms._wire_lock_path):
                 generation = store.snapshot(goal.id)
-                if generation is None or generation.state != "ready":
+                if generation is None or not generation.lifecycle.ready:
                     if autonomous_goal:
                         return
                     raise _goal_attempt_unavailable()
@@ -3069,7 +3045,6 @@ class CommsAgent:
         terminal_ok: bool | None = None
         terminal_failure: dict[str, Any] = {}
         successful_tool_observed = False
-        goal_tool_ok = False
         goal_attempt_resolved = False
         originated_goal_ids: set[str] = set()
         originated_attempts: dict[str, LaunchPermit] = {}
@@ -3190,6 +3165,299 @@ class CommsAgent:
                 session_file = self._comms.registry.require(thread.parent).session_file
                 fork_session = bool(session_file)
             image_options: dict[str, Any] = {"images": images} if images else {}
+            agent = self
+
+            class TurnEventPublication(MroDispatch):
+                @handles(events.InputStarted, events.Done, events.StreamSettled)
+                async def sync_goals(self, event: events.InputStarted) -> None:
+                    await agent._sync_goal_execution(session_id, thread_name)
+
+                @handles(events.ToolEnd)
+                async def tool_result(self, event: events.ToolEnd) -> None:
+                    await agent._sync_goal_execution(session_id, thread_name)
+                    sent = await asyncio.to_thread(
+                        agent._comms.sent_tool_message,
+                        event.name,
+                        event.output,
+                        bool(event.ok),
+                    )
+                    if sent is not None:
+                        await agent._emit_event(
+                            session_id,
+                            {
+                                "type": "sent",
+                                "text": sent.body,
+                                "route": MessageRoute(sent.sender, (sent.target,)),
+                            },
+                        )
+
+            class TurnEventConsumer(events.AgentEventConsumer):
+                @property
+                def comms(self) -> Comms:
+                    return agent._comms
+
+                @property
+                def thread_name(self) -> str:
+                    return thread_name
+
+                def update_activity(self, state: ActivityState, detail: str) -> None:
+                    update_turn_activity(state, detail)
+
+                @handles(events.SteeringInterrupted)
+                async def steering_interrupted(self, event: events.SteeringInterrupted) -> None:
+                    reply_parts.clear()
+
+                @handles(events.InputRefused)
+                async def input_refused(self, event: events.InputRefused) -> None:
+                    input_id = event.id
+                    if input_id is not None:
+                        agent._forwarded_inputs.get(session_id, set()).discard(input_id)
+                        refused_key = agent._steering_input_keys.get(session_id, {}).get(input_id)
+                        if refused_key is not None:
+                            # This input was denied before stdin.write. Keep
+                            # its persisted UNKNOWN row visible, but do not
+                            # count it as an unstarted sent follow-up.
+                            agent._turn_input_keys.get(session_id, set()).discard(refused_key)
+                            await agent.emit_input_delivery_changed(session_id)
+                        if agent._queued_inputs.get(session_id, {}).pop(input_id, None):
+                            await agent._emit_queue_state(session_id)
+
+                @handles(events.ProviderUsage)
+                async def provider_usage(self, event: events.ProviderUsage) -> None:
+                    response_id = str(event.response_id)
+                    usage = event.usage
+                    current_goal = agent._comms.registry.require(thread_name).goal
+                    current_goal_id = current_goal.id if current_goal is not None else None
+                    permit = originated_attempts.get(current_goal_id or "")
+                    if (
+                        permit is None
+                        and goal_permit is not None
+                        and (current_goal_id == goal_permit.reservation.goal_id)
+                    ):
+                        permit = goal_permit
+                    if permit is not None:
+                        assert agent._goal_store is not None
+                        agent._goal_store.record_provider_usage(permit, response_id, usage)
+                    else:
+                        unattributed_usage.append((response_id, usage))
+
+                @handles(events.CompactionStart)
+                async def compaction_started(self, event: events.CompactionStart) -> None:
+                    nonlocal compaction_resume_activity
+                    if compaction_resume_activity is None:
+                        current_activity = agent._comms.activity_of(thread_name)
+                        compaction_resume_activity = (
+                            current_activity.state,
+                            current_activity.detail,
+                        )
+                    agent._comms.set_activity(
+                        thread_name, ActivityState.WORKING, "Compacting context"
+                    )
+
+                @handles(events.CompactionEnd)
+                async def compaction_ended(self, event: events.CompactionEnd) -> None:
+                    nonlocal compaction_resume_activity
+                    if compaction_resume_activity is not None:
+                        agent._comms.set_activity(thread_name, *compaction_resume_activity)
+                        compaction_resume_activity = None
+
+                @handles(events.CompactionEvent)
+                async def invalidate_context(self, event: events.CompactionEvent) -> None:
+                    info = agent._comms.agent_info_of(thread_name)
+                    agent._comms.set_agent_info(
+                        thread_name,
+                        model=info.model if info else None,
+                        session_name=info.session_name if info else None,
+                        context_used=None,
+                        context_size=info.context_size if info else None,
+                    )
+
+                @handles(events.Chunk)
+                async def chunk(self, event: events.Chunk) -> None:
+                    if reply_targets:
+                        reply_parts.append(event.text)
+
+                @handles(events.CommittedProgress)
+                async def committed_progress(self, event: events.CommittedProgress) -> None:
+                    if reply_targets:
+                        progress = event.text
+                        if progress and "".join(reply_parts) == progress:
+                            # Pi committed this assistant message before tool work.
+                            # Publish it once as visible, non-waking progress; the
+                            # final reply contains only subsequent assistant text.
+                            for target in reply_targets:
+                                agent._comms.send(thread_name, target, progress, notice=True)
+                            reply_parts.clear()
+
+                @handles(events.Done)
+                async def done(self, event: events.Done) -> events.Done:
+                    nonlocal terminal_failure, terminal_ok
+                    terminal_failure = asdict(event)
+                    unknown_attempts = any(
+                        agent._dispositions.status(key) != "started"
+                        for key in agent._turn_input_keys.get(session_id, set())
+                    )
+                    if event.ok is True and (
+                        agent._forwarded_inputs.get(session_id) or unknown_attempts
+                    ):
+                        # A final assistant stop can prove the original turn,
+                        # not an ACKed follow-up lacking its own user start.
+                        event = replace(
+                            event,
+                            ok=False,
+                            text=(
+                                "An identified follow-up input was not started; "
+                                "inspect local diagnostics."
+                            ),
+                        )
+                    if terminal_ok is not None:
+                        terminal_ok = False
+                    elif event.ok is True:
+                        terminal_ok = True
+                    else:
+                        terminal_ok = False
+                    if (
+                        goal is not None
+                        and goal.active
+                        and (not direct_interrupt)
+                        and (agent._comms.registry.require(thread_name).worktree == thread.worktree)
+                    ):
+                        current_goal = agent._comms.registry.require(thread_name).goal
+                        failed = not event.ok
+                        # An RPC stream can settle and exit successfully after
+                        # accepting a user prompt without assistant output or tool
+                        # activity. This is not a productive goal turn.
+                        empty_success = (
+                            not failed
+                            and not successful_tool_observed
+                            and not str(event.text or "").strip()
+                        )
+                        if (
+                            current_goal
+                            and current_goal.id == goal.id
+                            and current_goal.active
+                            and (failed or empty_success)
+                        ):
+                            # Block the latest same-ID goal under the wire lock,
+                            # retaining any newer progress from a concurrent update.
+                            agent._comms.block_goal_after_failed_turn(
+                                thread_name,
+                                started_goal=goal,
+                                expected_worktree=thread.worktree,
+                                diagnostic=(
+                                    "Backend turn failed; "
+                                    "inspect local diagnostics before resuming."
+                                    if failed
+                                    else "Backend reported success without assistant output "
+                                    "or tool activity; inspect the session before resuming."
+                                ),
+                            )
+                    return event
+
+                @handles(events.InputStarted)
+                async def input_started(self, event: events.InputStarted) -> None:
+                    input_id = event.id
+                    started_keys = (
+                        original_keys
+                        if input_id is None
+                        else (
+                            (steering_key,)
+                            if input_id is not None
+                            and (
+                                steering_key := agent._steering_input_keys.get(session_id, {}).get(
+                                    input_id
+                                )
+                            )
+                            else ()
+                        )
+                    )
+                    for key in started_keys:
+                        row = agent._dispositions.get(key)
+                        if row is not None and row["status"] == "started":
+                            await agent._emit_input_disposition(session_id, row)
+                    if input_id is not None:
+                        agent._forwarded_inputs.get(session_id, set()).discard(input_id)
+                    item = agent._queued_inputs.get(session_id, {}).pop(input_id or "", None)
+                    await agent._emit_input_started(
+                        session_id,
+                        (
+                            item.text
+                            if item and item.echo
+                            else initial_display_text if input_id is None else None
+                        ),
+                        input_id,
+                        queued_item=item,
+                    )
+                    await agent._emit_queue_state(session_id)
+
+                @handles(events.SettingChangeResult)
+                async def setting_result(self, event: events.SettingChangeResult) -> None:
+                    agent._setting_requests.resolve(event)
+
+                async def before_agent_info(self, event: events.AgentInfo) -> None:
+                    session_file = event.session_file
+                    if (
+                        session_file
+                        and agent._comms.registry.require(thread_name).session_file != session_file
+                    ):
+                        agent._comms.attach_session(thread_name, str(session_file))
+
+                async def after_agent_info(self, event: events.AgentInfo) -> None:
+                    if event.model and agent._comms.registry.require(thread_name).model is None:
+                        agent._comms.set_thread_model(thread_name, event.model)
+                        await agent._runtime.session_update(
+                            session_id=session_id,
+                            update=ConfigOptionUpdate(
+                                session_update="config_option_update",
+                                config_options=await agent._config_options(thread_name),
+                            ),
+                        )
+                    if (
+                        event.thinking_level
+                        and agent._comms.registry.require(thread_name).thinking_level is None
+                    ):
+                        agent._comms.set_thread_thinking_level(thread_name, event.thinking_level)
+
+                @handles(events.ToolEnd)
+                async def tool_ended(self, event: events.ToolEnd) -> None:
+                    nonlocal thread_name, successful_tool_observed
+                    if event.ok:
+                        successful_tool_observed = True
+                    thread_name = await agent._sync_session_identity(session_id)
+                    if event.name == "comms_set_goal" and event.ok is True:
+                        current_goal = agent._comms.registry.require(thread_name).goal
+                        if current_goal is not None:
+                            store = agent._open_goal_store()
+                            if store.snapshot(current_goal.id) is None:
+                                store.create_goal(current_goal.id)
+                                originated_goal_ids.add(current_goal.id)
+                                grant = store.ready_grant(current_goal.id, 1)
+                                reservation = store.reserve(current_goal.id, 1, ready_grant=grant)
+                                origin_permit = store.claim_launch(reservation)
+                                originated_attempts[current_goal.id] = origin_permit
+                                for response_id, usage in unattributed_usage:
+                                    store.record_provider_usage(origin_permit, response_id, usage)
+                                unattributed_usage.clear()
+                                agent._pending_goal_origins[thread_name] = current_goal.id
+                    update_turn_activity(ActivityState.THINKING, task[:80])
+
+                @handles(events.StreamSettled)
+                async def stream_settled(self, event: events.StreamSettled) -> None:
+                    nonlocal compaction_resume_activity, terminal_fence, settled
+                    compaction_resume_activity = None
+                    terminal_fence = agent.finish_turn_stream(
+                        session_id, thread_name, turn_id, turn_claim
+                    )
+                    settled = True
+                    finish_event.set()
+
+                async def consume(self, event: events.AgentEvent) -> None:
+                    event = await self.dispatch(event)
+                    await agent._emit_event(session_id, event, turn_id=turn_id, route=routing.reply)
+                    await publication.dispatch(event)
+
+            publication = TurnEventPublication()
+            consumer = TurnEventConsumer()
             async for event in backend.stream_agent_events(
                 self._agent_bin,
                 (
@@ -3222,270 +3490,7 @@ class CommsAgent:
                     session_id, turn_id, controller, request
                 ),
             ):
-                kind = event.get("type")
-                if kind == "steering_interrupted":
-                    reply_parts.clear()
-                if kind == "input_refused":
-                    input_id = event.get("id")
-                    if isinstance(input_id, str):
-                        self._forwarded_inputs.get(session_id, set()).discard(input_id)
-                        refused_key = self._steering_input_keys.get(session_id, {}).get(input_id)
-                        if refused_key is not None:
-                            # This input was denied before stdin.write. Keep
-                            # its persisted UNKNOWN row visible, but do not
-                            # count it as an unstarted sent follow-up.
-                            self._turn_input_keys.get(session_id, set()).discard(refused_key)
-                            await self.emit_input_delivery_changed(session_id)
-                        if self._queued_inputs.get(session_id, {}).pop(input_id, None):
-                            await self._emit_queue_state(session_id)
-                if kind == "provider_usage":
-                    response_id = str(event["response_id"])
-                    usage = event["usage"]
-                    current_goal = self._comms.registry.require(thread_name).goal
-                    current_goal_id = current_goal.id if current_goal is not None else None
-                    permit = originated_attempts.get(current_goal_id or "")
-                    if (
-                        permit is None
-                        and goal_permit is not None
-                        and (current_goal_id == goal_permit.reservation.goal_id)
-                    ):
-                        permit = goal_permit
-                    if permit is not None:
-                        assert self._goal_store is not None
-                        self._goal_store.record_provider_usage(permit, response_id, usage)
-                    else:
-                        unattributed_usage.append((response_id, usage))
-                    continue
-                if kind in {"compaction_start", "compaction_end"}:
-                    if kind == "compaction_start":
-                        if compaction_resume_activity is None:
-                            current_activity = self._comms.activity_of(thread_name)
-                            compaction_resume_activity = (
-                                current_activity.state,
-                                current_activity.detail,
-                            )
-                        self._comms.set_activity(
-                            thread_name, ActivityState.WORKING, "Compacting context"
-                        )
-                    elif compaction_resume_activity is not None:
-                        self._comms.set_activity(thread_name, *compaction_resume_activity)
-                        compaction_resume_activity = None
-                    # A previous usage sample is not authoritative after Pi
-                    # starts compaction, even if the attempt later aborts.
-                    info = self._comms.agent_info_of(thread_name)
-                    self._comms.set_agent_info(
-                        thread_name,
-                        model=info.model if info else None,
-                        session_name=info.session_name if info else None,
-                        context_used=None,
-                        context_size=info.context_size if info else None,
-                    )
-                if reply_targets and kind == "chunk":
-                    reply_parts.append(str(event.get("text") or ""))
-                elif reply_targets and kind == "committed_progress":
-                    progress = event.get("text")
-                    if type(progress) is str and progress and "".join(reply_parts) == progress:
-                        # Pi committed this assistant message before tool work.
-                        # Publish it once as visible, non-waking progress; the
-                        # final reply contains only subsequent assistant text.
-                        for target in reply_targets:
-                            self._comms.send(thread_name, target, progress, notice=True)
-                        reply_parts.clear()
-                if kind == "tool_end" and event.get("ok") is True:
-                    successful_tool_observed = True
-                if kind == "done":
-                    terminal_failure = event
-                    unknown_attempts = any(
-                        self._dispositions.status(key) != "started"
-                        for key in self._turn_input_keys.get(session_id, set())
-                    )
-                    if event.get("ok") is True and (
-                        self._forwarded_inputs.get(session_id) or unknown_attempts
-                    ):
-                        # A final assistant stop can prove the original turn,
-                        # not an ACKed follow-up lacking its own user start.
-                        event = {
-                            **event,
-                            "ok": False,
-                            "text": (
-                                "An identified follow-up input was not started; "
-                                "inspect local diagnostics."
-                            ),
-                        }
-                    if terminal_ok is not None:
-                        terminal_ok = False
-                    elif event.get("ok") is True:
-                        terminal_ok = True
-                    else:
-                        terminal_ok = False
-                if kind == "input_started":
-                    input_id = event.get("id")
-                    started_keys = (
-                        original_keys
-                        if input_id is None
-                        else (
-                            (steering_key,)
-                            if isinstance(input_id, str)
-                            and (
-                                steering_key := self._steering_input_keys.get(session_id, {}).get(
-                                    input_id
-                                )
-                            )
-                            else ()
-                        )
-                    )
-                    for key in started_keys:
-                        row = self._dispositions.get(key)
-                        if row is not None and row["status"] == "started":
-                            await self._emit_input_disposition(session_id, row)
-                    if isinstance(input_id, str):
-                        self._forwarded_inputs.get(session_id, set()).discard(input_id)
-                    item = self._queued_inputs.get(session_id, {}).pop(input_id or "", None)
-                    await self._emit_input_started(
-                        session_id,
-                        (
-                            item.text
-                            if item and item.echo
-                            else initial_display_text if input_id is None else None
-                        ),
-                        input_id,
-                        queued_item=item,
-                    )
-                    await self._emit_queue_state(session_id)
-                if (
-                    kind == "done"
-                    and goal is not None
-                    and goal.active
-                    and not direct_interrupt
-                    and self._comms.registry.require(thread_name).worktree == thread.worktree
-                ):
-                    current_goal = self._comms.registry.require(thread_name).goal
-                    failed = not event.get("ok")
-                    # An RPC stream can settle and exit successfully after
-                    # accepting a user prompt without assistant output or tool
-                    # activity. This is not a productive goal turn.
-                    empty_success = (
-                        not failed
-                        and not successful_tool_observed
-                        and not str(event.get("text") or "").strip()
-                    )
-                    if (
-                        current_goal
-                        and current_goal.id == goal.id
-                        and current_goal.active
-                        and (failed or empty_success)
-                    ):
-                        # Block the latest same-ID goal under the wire lock,
-                        # retaining any newer progress from a concurrent update.
-                        self._comms.block_goal_after_failed_turn(
-                            thread_name,
-                            started_goal=goal,
-                            expected_worktree=thread.worktree,
-                            diagnostic=(
-                                "Backend turn failed; inspect local diagnostics before resuming."
-                                if failed
-                                else "Backend reported success without assistant output "
-                                "or tool activity; inspect the session before resuming."
-                            ),
-                        )
-                if kind == "model_changed":
-                    future = self._model_requests.get(event.get("id", ""))
-                    if future is not None and not future.done():
-                        if event.get("ok"):
-                            future.set_result(None)
-                        else:
-                            future.set_exception(RuntimeError(str(event.get("error"))))
-                elif kind == "thinking_changed":
-                    future = self._thinking_requests.get(event.get("id", ""))
-                    if future is not None and not future.done():
-                        if event.get("ok"):
-                            future.set_result(None)
-                        else:
-                            future.set_exception(RuntimeError(str(event.get("error"))))
-                elif kind == "agent_info":
-                    session_name = event.get("session_name")
-                    session_file = event.get("session_file")
-                    if (
-                        session_file
-                        and self._comms.registry.require(thread_name).session_file != session_file
-                    ):
-                        self._comms.attach_session(thread_name, str(session_file))
-                    self._comms.set_agent_info(
-                        thread_name,
-                        model=event.get("model"),
-                        session_name=session_name,
-                        context_used=event.get("context_used"),
-                        context_size=event.get("context_size"),
-                    )
-                    if (
-                        event.get("model")
-                        and self._comms.registry.require(thread_name).model is None
-                    ):
-                        self._comms.set_thread_model(thread_name, event["model"])
-                        await self._runtime.session_update(
-                            session_id=session_id,
-                            update=ConfigOptionUpdate(
-                                session_update="config_option_update",
-                                config_options=await self._config_options(thread_name),
-                            ),
-                        )
-                    if (
-                        event.get("thinking_level")
-                        and self._comms.registry.require(thread_name).thinking_level is None
-                    ):
-                        self._comms.set_thread_thinking_level(thread_name, event["thinking_level"])
-                elif kind == "tool_start":
-                    update_turn_activity(ActivityState.WORKING, event.get("title", ""))
-                elif kind == "tool_end":
-                    if event.get("name") == "comms_goal" and event.get("ok") is True:
-                        goal_tool_ok = True
-                    thread_name = await self._sync_session_identity(session_id)
-                    if event.get("name") == "comms_set_goal" and event.get("ok") is True:
-                        current_goal = self._comms.registry.require(thread_name).goal
-                        if current_goal is not None:
-                            store = self._open_goal_store()
-                            if store.snapshot(current_goal.id) is None:
-                                store.create_goal(current_goal.id)
-                                originated_goal_ids.add(current_goal.id)
-                                grant = store.ready_grant(current_goal.id, 1)
-                                reservation = store.reserve(current_goal.id, 1, ready_grant=grant)
-                                origin_permit = store.claim_launch(reservation)
-                                originated_attempts[current_goal.id] = origin_permit
-                                for response_id, usage in unattributed_usage:
-                                    store.record_provider_usage(origin_permit, response_id, usage)
-                                unattributed_usage.clear()
-                                self._pending_goal_origins[thread_name] = current_goal.id
-                    update_turn_activity(ActivityState.THINKING, task[:80])
-                elif kind == "settled":
-                    compaction_resume_activity = None
-                    terminal_fence = self._comms.finish_turn(
-                        thread_name, turn_id, expected=turn_claim
-                    )
-                    settled = True
-                    finish_event.set()
-                    self._active_turns.pop(session_id, None)
-                await self._emit_event(
-                    session_id, {**event, "turn_id": turn_id, "route": routing.reply}
-                )
-                if kind == "tool_end":
-                    await self._sync_goal_execution(session_id, thread_name)
-                    sent = await asyncio.to_thread(
-                        self._comms.sent_tool_message,
-                        event.get("name", ""),
-                        event.get("output", ""),
-                        bool(event.get("ok")),
-                    )
-                    if sent is not None:
-                        await self._emit_event(
-                            session_id,
-                            {
-                                "type": "sent",
-                                "text": sent.body,
-                                "route": MessageRoute(sent.sender, (sent.target,)),
-                            },
-                        )
-                if kind in {"input_started", "done", "settled"}:
-                    await self._sync_goal_execution(session_id, thread_name)
+                await consumer.consume(event)
             if terminal_ok is None and goal is not None and goal.active and not direct_interrupt:
                 # An EOF without a done event is a failed turn, not a signal to
                 # schedule the still-active goal again on the next live drain.
@@ -3510,18 +3515,17 @@ class CommsAgent:
                 assert self._goal_store is not None
                 current_goal = self._comms.registry.require(thread_name).goal
                 verified_report = (
-                    goal_tool_ok
-                    and current_goal is not None
+                    current_goal is not None
                     and current_goal.id == goal.id
                     and current_goal.reported_turn == turn_id
                 )
                 if terminal_ok is True and current_goal is not None and current_goal.id == goal.id:
                     witness = f"native-terminal:{turn_id}"
-                    if current_goal.status == "completed" and verified_report:
+                    if isinstance(current_goal.state, CompletedGoal) and verified_report:
                         witness = f"registry-revision:{current_goal.revision}"
                         self._goal_store.record_verified_completion(goal_permit, witness)
                         goal_attempt_resolved = True
-                    elif current_goal.active or current_goal.status == "paused":
+                    elif current_goal.active or isinstance(current_goal.state, PausedGoal):
                         # A successful in-flight turn may finish after owner pause.
                         # Preserve success; the scheduler will not launch while paused.
                         self._goal_store.record_verified_progress(goal_permit, witness)
@@ -3629,7 +3633,7 @@ class CommsAgent:
                     terminal_ok is True
                     and current is not None
                     and current.id == originated_id
-                    and current.status in {"active", "paused", "completed"}
+                    and isinstance(current.state, (ActiveGoal, PausedGoal, CompletedGoal))
                 )
                 assert self._goal_store is not None
                 resolved_origin_permit = originated_attempts.get(originated_id)
@@ -3637,7 +3641,7 @@ class CommsAgent:
                     if (
                         valid_origin
                         and current is not None
-                        and current.status in {"active", "paused"}
+                        and isinstance(current.state, (ActiveGoal, PausedGoal))
                     ):
                         self._goal_store.record_verified_progress(
                             resolved_origin_permit, f"origin-final:{turn_id}"
@@ -3645,8 +3649,7 @@ class CommsAgent:
                     elif (
                         valid_origin
                         and current is not None
-                        and current.status == "completed"
-                        and goal_tool_ok
+                        and isinstance(current.state, CompletedGoal)
                         and current.reported_turn == turn_id
                     ):
                         self._goal_store.record_verified_completion(
@@ -3661,7 +3664,7 @@ class CommsAgent:
                         valid_origin = False
                 elif not valid_origin:
                     generation = self._goal_store.snapshot(originated_id)
-                    if generation is not None and generation.state in {"ready", "reserved"}:
+                    if generation is not None and generation.lifecycle.allows_resume(True):
                         self._goal_store.retire_goal(
                             originated_id,
                             expected_generation=generation.number,
@@ -3671,14 +3674,14 @@ class CommsAgent:
                     not valid_origin
                     and current is not None
                     and current.id == originated_id
-                    and current.status in {"active", "completed"}
+                    and isinstance(current.state, (ActiveGoal, CompletedGoal))
                 ):
                     self._comms.update_goal(
                         thread_name,
-                        "blocked",
-                        goal_id=originated_id,
-                        expected_goal=current,
-                        progress="Goal origin turn did not finish successfully.",
+                        BlockedGoalAction(
+                            expect=GoalPrecondition(goal_id=originated_id, expected_goal=current),
+                            progress="Goal origin turn did not finish successfully.",
+                        ),
                     )
                 if self._pending_goal_origins.get(thread_name) == originated_id:
                     self._pending_goal_origins.pop(thread_name, None)
@@ -3731,17 +3734,54 @@ class CommsAgent:
                         "do not invent extra work."
                     )
                 )
-            if not settled:
-                terminal_fence = self._comms.finish_turn(thread_name, turn_id, expected=turn_claim)
-                self._active_turns.pop(session_id, None)
-                try:
-                    await self._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
-                finally:
-                    self._comms.release_waits_after_terminal_turn(terminal_fence)
-            else:
-                # `settled` precedes terminal `done` in native RPC. Reconcile
-                # only after the terminal reply or failure notice was published.
-                self._comms.release_waits_after_terminal_turn(terminal_fence)
+            await self.settle_turn(
+                session_id,
+                thread_name,
+                turn_id,
+                turn_claim,
+                stream_settled=settled,
+                terminal_fence=terminal_fence,
+            )
+
+    def finish_turn_stream(
+        self,
+        session_id: str,
+        thread_name: str,
+        turn_id: str,
+        claim: TurnClaimFence,
+    ) -> FinishedTurnFence | None:
+        """Clear only this turn; waiter release follows committed terminal output."""
+        fence = self._comms.finish_turn(thread_name, turn_id, expected=claim)
+        if self._active_turns.get(session_id) == turn_id:
+            self._active_turns.pop(session_id, None)
+        return fence
+
+    async def settle_turn(
+        self,
+        session_id: str,
+        thread_name: str,
+        turn_id: str,
+        claim: TurnClaimFence,
+        *,
+        stream_settled: bool = False,
+        terminal_fence: FinishedTurnFence | None = None,
+        task: asyncio.Task[Any] | None = None,
+    ) -> None:
+        """Settle after terminal publication, releasing waiters even if the UI fails.
+
+        Native StreamSettled has already finished and published the stream. Its
+        fence is retained until Done and relay output are committed. Manual
+        compaction and relay turns take both phases here.
+        """
+        if task is not None and self._turn_tasks.get(session_id) is task:
+            self._turn_tasks.pop(session_id, None)
+        if not stream_settled:
+            terminal_fence = self.finish_turn_stream(session_id, thread_name, turn_id, claim)
+        try:
+            if not stream_settled:
+                await self._emit_event(session_id, events.TurnSettled(turn_id))
+        finally:
+            self._comms.release_waits_after_terminal_turn(terminal_fence)
 
     def _started_event(self, thread_name: str, turn_id: str) -> dict[str, Any]:
         """Project one owner-authored turn without inventing presentation timestamps."""
@@ -3766,7 +3806,7 @@ class CommsAgent:
         event = (
             self._started_event(thread_name, active.id)
             if active is not None
-            else {"type": "settled", "turn_id": ""}
+            else events.NoActiveTurn()
         )
         await self._emit_event(session_id, event, client=client)
 
@@ -3829,9 +3869,20 @@ class CommsAgent:
     # and VS Code render these natively; the same events also feed the
     # wire-level activity log for headless clients.
 
-    async def _emit_event(self, session_id: str, event: dict[str, Any], client: Any = None) -> None:
-        """Forward one backend/wire event to the ACP client."""
+    async def _emit_event(
+        self,
+        session_id: str,
+        event: events.AgentEvent | dict[str, Any],
+        client: Any = None,
+        *,
+        turn_id: str | None = None,
+        route: MessageRoute | None = None,
+    ) -> None:
+        """Publish typed backend events or existing wire/transcript messages."""
         client = client or self._runtime
+        if isinstance(event, events.AgentEvent):
+            await AcpEventConsumer(self, session_id, client, turn_id, route).dispatch(event)
+            return
         kind = event.get("type")
         if kind == "user":
             text = event.get("text") or ""
@@ -3843,183 +3894,32 @@ class CommsAgent:
                         content=TextContentBlock(type="text", text=text),
                     ),
                 )
-        elif kind in {"chunk", "assistant", "notice", "sent"}:
+        elif kind in {"assistant", "notice", "sent"}:
             text = event.get("text") or ""
             if text:
                 await self._emit_text(session_id, text, client, event.get("route"))
-        elif kind == "tool_start":
-            start_update = ToolCallStart(
-                session_update="tool_call",
-                tool_call_id=event["id"],
-                title=event.get("title") or event.get("name") or "tool",
-                kind=cast(Any, backend.tool_kind(event.get("name") or "other")),
-                status="in_progress",
-            )
-            if event.get("args") is not None:
-                start_update.raw_input = event["args"]
-            await client.session_update(
-                session_id=session_id,
-                update=start_update,
-            )
-        elif kind == "tool_progress":
-            progress_update = ToolCallProgress(
-                session_update="tool_call_update",
-                tool_call_id=event["id"],
-                status="in_progress",
-            )
-            output = event.get("output") or ""
-            if output:
-                progress_update.content = [
-                    ContentToolCallContent(
-                        type="content",
-                        content=TextContentBlock(type="text", text=output),
-                    )
-                ]
-            await client.session_update(session_id=session_id, update=progress_update)
-        elif kind == "tool_end":
-            end_update = ToolCallProgress(
-                session_update="tool_call_update",
-                tool_call_id=event["id"],
-                status="completed" if event.get("ok") else "failed",
-                content=[
-                    ContentToolCallContent.model_validate(item)
-                    for item in tool_result_content(
-                        event["id"], event.get("output") or "", event.get("diff")
-                    )
-                ],
-            )
-            await client.session_update(session_id=session_id, update=end_update)
-        elif kind == "thinking":
-            await client.session_update(
-                session_id=session_id,
-                update=AgentThoughtChunk(
-                    session_update="agent_thought_chunk",
-                    content=TextContentBlock(type="text", text=event.get("text") or ""),
-                ),
-            )
-        elif kind == "mcp_live_status":
-            # The native input ID belongs to Pi, not ACP. Carry the owning
-            # ACP turn separately so queued updates cannot attach to a later
-            # turn. session_update's session_id is the outer session fence.
-            turn_id = event.get("turn_id")
-            if not turn_id or self._active_turns.get(session_id) != turn_id:
-                return
-            await client.session_update(
-                session_id=session_id,
-                update=AgentMessageChunk(
-                    session_update="agent_message_chunk",
-                    content=TextContentBlock(type="text", text=""),
-                    field_meta={"agentComms": {"turnId": turn_id, "mcpClient": event["receipt"]}},
-                ),
-            )
-        elif kind == "agent_info":
-            used = event.get("context_used")
-            size = event.get("context_size")
-            if used is not None and size:
-                await client.session_update(
-                    session_id=session_id,
-                    update=UsageUpdate(
-                        session_update="usage_update",
-                        used=used,
-                        size=size,
-                    ),
-                )
-        elif kind == "compaction_progress":
-            chunk_index = event.get("chunk_index")
-            done = event.get("source_bytes_done")
-            total = event.get("source_bytes_total")
-            measured = type(done) is int and type(total) is int and 0 <= done <= total and total > 0
-            if type(chunk_index) is int and (chunk_index > 0 or chunk_index == 0 and measured):
-                await client.session_update(
-                    session_id=session_id,
-                    update=AgentMessageChunk(
-                        session_update="agent_message_chunk",
-                        content=TextContentBlock(type="text", text=""),
-                        field_meta={
-                            "agentComms": {
-                                "compaction": {
-                                    "phase": "progress",
-                                    "status": "running",
-                                    "chunkIndex": chunk_index,
-                                    **(
-                                        {"sourceBytesDone": done, "sourceBytesTotal": total}
-                                        if measured
-                                        else {}
-                                    ),
-                                    **(
-                                        {"summaryPhase": event["summary_phase"]}
-                                        if isinstance(event.get("summary_phase"), str)
-                                        and event["summary_phase"]
-                                        else {}
-                                    ),
-                                }
-                            }
-                        },
-                    ),
-                )
-        elif kind in {"compaction_start", "compaction_end"}:
-            phase = (
-                "start"
-                if kind == "compaction_start"
-                else "end" if event.get("aborted") is False else "abort"
-            )
-            reason = event.get("reason")
-            if reason not in {"manual", "threshold", "overflow", "unknown"}:
-                reason = "unknown"
-            summary = ""
-            if phase == "end":
-                summary = self._sanitized_compaction_summary(event.get("summary"))
-            status = {"start": "running", "end": "completed", "abort": "aborted"}[phase]
-            status_text = {
-                "start": "",
-                "end": "Context compacted; usage is recalculating.",
-                "abort": "Context compaction aborted; usage is unknown.",
-            }[phase]
-            if summary:
-                status_text += f" Summary: {summary}"
-            detail: dict[str, Any] = {
-                "phase": phase,
-                "status": status,
-                "reason": reason,
-                "contextUsed": None,
-                "contextState": "unknown",
-                "willRetry": event.get("will_retry") is True,
-            }
-            if summary:
-                detail["summary"] = summary
-            await client.session_update(
-                session_id=session_id,
-                update=AgentMessageChunk(
-                    session_update="agent_message_chunk",
-                    content=TextContentBlock(type="text", text=status_text),
-                    field_meta={"agentComms": {"compaction": detail}},
-                ),
-            )
-        elif kind in {"started", "settled"}:
+        elif kind == "started":
             lifecycle = {
-                "turnStarted" if kind == "started" else "turnSettled": True,
+                "turnStarted": True,
                 "turnId": event.get("turn_id"),
             }
-            if kind == "started":
-                lifecycle.update(
-                    {
-                        **(
-                            {"startedAt": event["started_at"]}
-                            if event.get("started_at") is not None
-                            else {}
-                        ),
-                        **(
-                            {"activity": event["activity"]}
-                            if event.get("activity") is not None
-                            else {}
-                        ),
-                        **(
-                            {"activityDetail": event["activity_detail"]}
-                            if event.get("activity_detail") is not None
-                            else {}
-                        ),
-                    }
-                )
+            lifecycle.update(
+                {
+                    **(
+                        {"startedAt": event["started_at"]}
+                        if event.get("started_at") is not None
+                        else {}
+                    ),
+                    **(
+                        {"activity": event["activity"]} if event.get("activity") is not None else {}
+                    ),
+                    **(
+                        {"activityDetail": event["activity_detail"]}
+                        if event.get("activity_detail") is not None
+                        else {}
+                    ),
+                }
+            )
             await client.session_update(
                 session_id=session_id,
                 update=AgentMessageChunk(
@@ -4028,37 +3928,6 @@ class CommsAgent:
                     field_meta={"agentComms": lifecycle},
                 ),
             )
-        elif kind == "error":
-            text = str(event.get("text") or "Backend failed")
-            self._emitted_errors[session_id] = text
-            failed_input = None
-            input_text = self._turn_input_text.get(session_id)
-            if input_text and any(
-                self._dispositions.status(key) != "started"
-                for key in self._turn_original_input_keys.get(session_id, ())
-            ):
-                failed_input = {"text": input_text, "reason": text}
-            await client.session_update(
-                session_id=session_id,
-                update=AgentMessageChunk(
-                    session_update="agent_message_chunk",
-                    content=TextContentBlock(type="text", text=f"[agent error] {text}"),
-                    field_meta={
-                        "agentComms": {
-                            **({"inputFailed": failed_input} if failed_input else {}),
-                            "route": None,
-                        }
-                    },
-                ),
-            )
-        elif kind == "done":
-            prior_error = self._emitted_errors.pop(session_id, None)
-            if not event.get("ok") and event.get("text"):
-                text = str(event["text"])
-                # An explicit error event in this turn already showed the failure.
-                if prior_error != text:
-                    await self._emit_event(session_id, {"type": "error", "text": text}, client)
-                    self._emitted_errors.pop(session_id, None)
 
     @staticmethod
     def _sanitized_compaction_summary(value: Any) -> str:

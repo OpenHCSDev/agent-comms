@@ -5,6 +5,7 @@ import json
 import pytest
 
 from agent_comms import Thread
+from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.goal_attempts import UnresolvedAttempt
 from test_acp import TestAgentTurn as GoalFixture
@@ -57,15 +58,14 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
     async def failed_events(*args, **kwargs):
         if pause_timing == "before_terminal":
             owner_pause()
-        yield {"type": "settled"}
+        yield ae.StreamSettled()
         if outcome == "failed_done":
-            yield {
-                "type": "done",
-                "ok": False,
-                "text": "Provider failed",
-                "reason_code": "assistant_final_stop_missing",
-                "diagnostic": {"exit_code": 0},
-            }
+            yield ae.Done(
+                ok=False,
+                text="Provider failed",
+                reason_code="assistant_final_stop_missing",
+                diagnostic={"exit_code": 0},
+            )
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", failed_events)
     try:

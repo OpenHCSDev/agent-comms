@@ -31,6 +31,7 @@ from .goal_failure_observation import (
     create_observation_table,
     record_observation,
 )
+from .goal_generation import GenerationState
 
 
 class GoalAttemptError(RuntimeError):
@@ -59,12 +60,23 @@ UnresolvedAttempt = UnresolvedAttemptError
 StaleAttempt = StaleAttemptError
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, init=False)
 class Generation:
     goal_id: str
     number: int
-    state: str
+    lifecycle: GenerationState
     attempt_id: str | None
+
+    def __init__(self, goal_id: str, number: int, state: str, attempt_id: str | None):
+        object.__setattr__(self, "goal_id", goal_id)
+        object.__setattr__(self, "number", number)
+        object.__setattr__(self, "lifecycle", GenerationState.decode(state)())
+        object.__setattr__(self, "attempt_id", attempt_id)
+
+    @property
+    def state(self) -> str:
+        """Persisted/public spelling, derived from the lifecycle owner."""
+        return self.lifecycle.declared_name
 
 
 @dataclass(frozen=True, slots=True)
@@ -456,7 +468,11 @@ class GoalAttemptStore:
             ready_grant = self._ready_grants.get((goal_id, expected_generation))
         if ready_grant is None:
             current = self.snapshot(goal_id)
-            if current is None or current.number != expected_generation or current.state != "ready":
+            if (
+                current is None
+                or current.number != expected_generation
+                or not current.lifecycle.ready
+            ):
                 raise ReservationConflict("Goal generation is not ready or already reserved.")
             raise UnresolvedAttempt("No acknowledged ready grant; explicit recovery is required.")
         digest = self._grant_digest(ready_grant)
@@ -719,7 +735,7 @@ class GoalAttemptStore:
         current = self.snapshot(goal_id)
         if current is None or current.number != expected_generation:
             raise StaleAttempt("Goal generation changed before resume.")
-        if current.state != "ready" or current.attempt_id is not None:
+        if not current.lifecycle.ready or current.attempt_id is not None:
             raise UnresolvedAttempt("Explicit attempt resolution is required before resume.")
         self.ready_grant(goal_id, expected_generation)
         return current
