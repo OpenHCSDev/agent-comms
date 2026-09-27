@@ -2190,6 +2190,35 @@ class Comms:
             snapshot.notices,
         )
 
+    def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
+        """Restore historical declarations and their private delivery identities.
+
+        Registry restoration owns collision checks and strips execution authority.
+        On a private bus, stopped subscribers still belong to frozen audiences;
+        their coordinator identities must exist before any cohort can be accepted.
+        Repeating this operation repairs an interrupted coordinator registration
+        without replacing existing owners or importing historical delivery state.
+        """
+        from .bus_publication import stable_thread_lookup
+        from .coordination_store import MutationStore
+
+        selected = tuple(dict.fromkeys(names))
+        with _store_lock(self._wire_lock_path):
+            restored = self.registry.restore_stopped(source, selected)
+            with _store_lock(self.registry._path):
+                private = self.registry._private_guard_unlocked() is not None
+            if private:
+                with MutationStore(str(self.root / "coordination.sqlite3")) as store:
+                    for name in selected:
+                        thread = self.registry.require(name)
+                        store.register_participant(
+                            stable_thread_lookup(thread.created_at),
+                            thread.name,
+                            thread.name,
+                            committed=True,
+                        )
+            return restored
+
     def register(self, thread: Thread) -> None:
         """Declare a thread in the registry.
 
