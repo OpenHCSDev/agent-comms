@@ -17,7 +17,10 @@ wheels = [
 [[package]]
 name = "agent-comms"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/agent-comms.git?rev=3683792f1eb51045474788a7e705a0c5c0e9f455#3683792f1eb51045474788a7e705a0c5c0e9f455" }
+source = { git = "https://github.com/OpenHCSDev/agent-comms.git?rev=492bff06205d932407e7f3a9f8975ba13f7e1e8e#492bff06205d932407e7f3a9f8975ba13f7e1e8e" }
+dependencies = [
+    { name = "metaclass-registry" },
+]
 
 [package.optional-dependencies]
 acp = [
@@ -36,8 +39,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=3683792f1eb51045474788a7e705a0c5c0e9f455" },
-    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=0894005f3cc7de82d002a374de03e92347c898fb" },
+    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=492bff06205d932407e7f3a9f8975ba13f7e1e8e" },
+    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=32de1614f9ddd03037bf3cbcda75a163a0e3906b" },
     { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=4fa6a9c440eaaa7dfaad45a33af146fc4b7e922e" },
 ]
 
@@ -184,7 +187,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?rev=0894005f3cc7de82d002a374de03e92347c898fb#0894005f3cc7de82d002a374de03e92347c898fb" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?rev=32de1614f9ddd03037bf3cbcda75a163a0e3906b#32de1614f9ddd03037bf3cbcda75a163a0e3906b" }
 dependencies = [
     { name = "agent-comms", extra = ["acp"] },
     { name = "aiosqlite" },
@@ -445,6 +448,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
+]
+
+[[package]]
+name = "metaclass-registry"
+version = "0.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f8/88/03ec6ae94b07046603fec60f0b071f66f80fb7963dafaab2e454d94e87a8/metaclass_registry-0.2.1.tar.gz", hash = "sha256:96d1e76970121e1afc6cc3a90fcefc2eed8d5bf40a5eced20953ea2d0bbf5849", size = 29401, upload-time = "2026-08-25T10:37:53.636Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2e/ea/2f7997f6695e4b8e20f3476fec2fec398a232738342cbd4bea3d44b47796/metaclass_registry-0.2.1-py3-none-any.whl", hash = "sha256:dddfa7c04d896b72b6a24744794913db42a911e770fea6bac78a4036f2a392a4", size = 22046, upload-time = "2026-08-25T10:37:52.326Z" },
 ]
 
 [[package]]
