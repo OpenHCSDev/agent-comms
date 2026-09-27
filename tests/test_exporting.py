@@ -11,12 +11,12 @@ from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
 from agent_comms.cli import main
 from agent_comms.declarations import Message, MessageType, RelationViolationError
 from agent_comms.exporting import (
+    EverythingScope,
+    FullLimit,
     WireExportBoundary,
     WireExportFormat,
     WireExportLimit,
-    WireExportLimitKind,
     WireExportScope,
-    WireExportScopeKind,
     WireTranscriptExporter,
 )
 
@@ -68,10 +68,10 @@ def test_wire_export_declarations_are_explicit_and_fail_loud():
         WireExportLimit.max_bytes(0)
     with pytest.raises(ValueError, match="finite non-negative"):
         WireExportLimit.recent(float("nan"))
-    with pytest.raises(ValueError, match="no bound value"):
-        WireExportLimit(WireExportLimitKind.FULL, 1)
-    with pytest.raises(ValueError, match="no channel or participants"):
-        WireExportScope(WireExportScopeKind.EVERYTHING, channel="#all")
+    with pytest.raises(TypeError):
+        FullLimit(1)
+    with pytest.raises(TypeError):
+        EverythingScope(channel="#all")
     with pytest.raises(ValueError, match="cannot be negative"):
         WireExportBoundary(-1, 1.0)
 

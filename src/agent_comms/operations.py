@@ -23,7 +23,7 @@ import stat
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Generator, Iterator, Mapping, Sequence
+from collections.abc import Generator, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import asdict, dataclass, fields, replace
 from enum import Enum
@@ -98,7 +98,6 @@ from .exporting import (
     WireExportLimit,
     WireExportReceipt,
     WireExportScope,
-    WireExportScopeKind,
     WireTranscriptExporter,
 )
 from .importing import ImportFormat, ImportLimits, ImportReceipt
@@ -945,51 +944,13 @@ class Comms:
         started_at = time.time() if export_started_at is None else export_started_at
         with ExitStack() as stack:
             with _store_lock(self._wire_lock_path):
-                matches: Callable[[Message], bool]
-                if scope.kind is WireExportScopeKind.EVERYTHING:
-                    canonical_scope = scope
-
-                    def matches_everything(_message: Message) -> bool:
-                        return True
-
-                    matches = matches_everything
-                elif scope.kind is WireExportScopeKind.CHANNEL:
-                    assert scope.channel is not None
-                    if self.channel_catalog.is_view_target(scope.channel):
-                        raise RelationViolationError(
-                            f"Saved view {scope.channel!r} has no authoritative wire history."
-                        )
-                    targets = self.channel_catalog.history_targets(scope.channel)
-                    if targets is None:
-                        raise RelationViolationError(
-                            f"View {scope.channel!r} is an aggregate, not an "
-                            "exportable conversation."
-                        )
-                    canonical_scope = scope
-
-                    def matches_channel(message: Message) -> bool:
-                        return message.target in targets
-
-                    matches = matches_channel
-                else:
-                    first = self.registry.require(scope.participants[0]).name
-                    second = self.registry.require(scope.participants[1]).name
-                    canonical_scope = WireExportScope.for_dm(first, second)
-                    first_names = self.registry.aliases_for(first)
-                    second_names = self.registry.aliases_for(second)
-
-                    def matches_dm(message: Message) -> bool:
-                        return (
-                            message.sender in first_names and message.target in second_names
-                        ) or (message.sender in second_names and message.target in first_names)
-
-                    matches = matches_dm
+                resolved = scope.resolve(self.channel_catalog, self.registry)
                 through, messages = stack.enter_context(self.bus.full_history_snapshot())
 
-            selected = (message for message in messages if matches(message))
+            selected = (message for message in messages if resolved.matches(message))
             return WireTranscriptExporter(
                 format=format,
-                scope=canonical_scope,
+                scope=resolved.scope,
                 limit=limit,
                 boundary=WireExportBoundary(through, started_at),
             ).export(selected, Path(destination).expanduser(), overwrite=overwrite)
