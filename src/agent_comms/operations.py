@@ -346,6 +346,7 @@ class Comms:
         private_initial_writes: bool = True,
         private_claim_writes: bool = True,
     ) -> None:
+        from .presentation import BusPresentation
         from .view_unread import transcript_read_state
 
         self.root = Path(root).expanduser()
@@ -362,10 +363,13 @@ class Comms:
             private_initial_writes=private_initial_writes,
             private_claim_writes=private_claim_writes,
         )
+        self.reads = self.bus.reads
+        self.reads.migrate()
+        self.presentation = BusPresentation(self.bus._path)
         self.ledger = SharedLedger(self.root / "ledger.json")
         self.activity = ActivityLog(self.root / "activity.jsonl")
         self.runtime_info = RuntimeInfoStore(self.root / "runtime_info.json")
-        self.transcript_reads = transcript_read_state(self.root / "thread_read_markers.json")
+        self.transcript_reads = transcript_read_state(self.reads.path)
         self._wire_lock_path = self.root / "wire"
         self.maintenance = MaintenanceBarrier(self.registry._path)
         self._private_nk_launch: tuple[Path, str, Path] | None = None
@@ -519,12 +523,12 @@ class Comms:
 
     def broadcast(self, sender: str, body: str) -> str:
         """Declare a message addressed to every peer."""
-        return self.send(sender, "broadcast", body)
+        return self.send(sender, BuiltinChannel.ALL.value, body)
 
     def _user_identity_under_wire_lock(self, worktree: str) -> Thread:
         """Choose the durable USER identity while the caller holds the wire lock."""
         for thread in self.registry.all_threads().values():
-            if thread.role is ThreadRole.USER:
+            if self.reads.human(thread.role):
                 return thread
         name, suffix = "user", 2
         while self.registry.name_reserved(name):
@@ -624,10 +628,10 @@ class Comms:
         Fetching is not paint proof. A UI may use the basis only after proving
         that the corresponding inbound tail was contiguous and visibly painted.
         """
-        if not isinstance(peer, str) or is_channel_target(peer) or peer == "broadcast":
+        if not isinstance(peer, str) or is_channel_target(peer) or BuiltinChannel.is_alias(peer):
             raise ValueError("A DM page requires a registered peer.")
         viewer = self.user_identity(worktree).name
-        marker_path = self.bus._path.parent / "read_markers.json"
+        marker_path = self.reads.path
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
             revision = file_revision(self.registry._path)
@@ -637,7 +641,7 @@ class Comms:
             peer_thread = snapshot.threads.get(peer_name)
             if (
                 viewer_thread is None
-                or viewer_thread.role is not ThreadRole.USER
+                or not self.reads.human(viewer_thread.role)
                 or peer_thread is None
                 or viewer_name == peer_name
             ):
@@ -665,15 +669,11 @@ class Comms:
             )
             older_unread = False
             if page.has_older and page.oldest_seq is not None:
-                markers = self.bus._read_markers()
-                baseline = max(
-                    markers.get(viewer_name, 0),
-                    markers.get(self.bus._marker_key(viewer_name, peer_name), 0),
-                )
+                seen = self.reads.seen_sequences(viewer_name, snapshot)
                 with self.bus._record_snapshot(need_sequence=False) as (_, records):
                     older_unread = any(
                         message.seq < page.oldest_seq
-                        and message.seq > baseline
+                        and message.seq not in seen
                         and message.sender in peer_names
                         and message.target in viewer_names
                         for message, _ in records
@@ -698,11 +698,9 @@ class Comms:
                     worktree=str(Path(worktree).resolve()),
                     requested_peer=peer,
                     viewer=viewer_name,
-                    viewer_epoch=snapshot.owner_epochs[viewer_name],
                     viewer_created_at=viewer_thread.created_at,
                     viewer_names=viewer_names,
                     peer=peer_name,
-                    peer_epoch=snapshot.owner_epochs[peer_name],
                     peer_created_at=peer_thread.created_at,
                     peer_names=peer_names,
                     registry_revision=revision,
@@ -710,6 +708,9 @@ class Comms:
                     bus_identity=bus_identity,
                     newest_seq=page.newest_seq,
                     older_unread=older_unread,
+                    displayed=self.reads.capture(
+                        viewer_name, page.messages, snapshot, self.bus._path
+                    ),
                 ),
             )
 
@@ -737,7 +738,7 @@ class Comms:
                 self.channel_catalog.metadata_path,
                 self.channel_catalog.pins_path,
                 self.channel_catalog.saved_views_path,
-                self.bus._path.parent / "read_markers.json",
+                self.reads.path,
             )
         )
 
@@ -747,7 +748,7 @@ class Comms:
         channels = self.channel_catalog.views(registry.threads)
         order = self.channel_catalog.list_order
         pins = self.channel_catalog.pinned_threads_snapshot()
-        markers = self.bus._read_markers() if viewer is not None else {}
+        seen = self.reads.seen_sequences(viewer, registry) if viewer is not None else frozenset()
         canonical_viewer = registry.aliases.get(viewer, viewer) if viewer is not None else None
         viewer_names = (
             frozenset(
@@ -764,7 +765,6 @@ class Comms:
             else frozenset()
         )
         scopes: list[ChannelDisplayScope] = []
-        reset_channels: list[str] = []
         for channel in channels.values():
             members = frozenset(
                 name
@@ -779,50 +779,19 @@ class Comms:
                 if channel.builtin is not None
                 else frozenset({channel.name})
             )
-            expanded_after = 0
-            if canonical_viewer is not None and channel.exact and channel.builtin is None:
-                exact_key = self.bus._view_marker_key(canonical_viewer, channel.name, "exact")
-                after = markers.get(exact_key, 0)
-                if channel.any_mode:
-                    participant_basis = self.bus.any_participant_basis(channel, registry)
-                    expanded_after = markers.get(
-                        self.bus._view_marker_key(
-                            canonical_viewer, channel.name, "any", participant_basis
-                        ),
-                        0,
-                    )
-                if (
-                    self.bus._marker_key(canonical_viewer, channel.name) in markers
-                    and exact_key not in markers
-                ):
-                    reset_channels.append(channel.name)
-            else:
-                after = (
-                    max(
-                        markers.get(canonical_viewer, 0),
-                        markers.get(self.bus._marker_key(canonical_viewer, channel.name), 0),
-                    )
-                    if canonical_viewer is not None
-                    else 0
-                )
             scopes.append(
                 ChannelDisplayScope(
                     channel.name,
                     targets,
                     channel.any_mode,
                     participant_names,
-                    after,
+                    0,
                     revision,
-                    expanded_after,
+                    0,
+                    seen,
                 )
             )
-        notice = (
-            "Read positions were reset for "
-            + ", ".join(sorted(reset_channels))
-            + "; reopen the channel to review its messages."
-            if reset_channels
-            else None
-        )
+        notice = self.reads.read().notice
         return (
             registry,
             channels,
@@ -892,6 +861,11 @@ class Comms:
                 limit=limit,
                 max_bytes=max_bytes,
             )
+            if viewer is not None:
+                scope = replace(
+                    scope,
+                    displayed=self.reads.capture(viewer, page.messages, basis[0], self.bus._path),
+                )
             return replace(page, display_scope=scope)
 
     def message_high_water(self) -> int:
@@ -1221,7 +1195,7 @@ class Comms:
                 replace(scope, after=0, basis_revision=scope.basis_revision[:-1])
                 for scope in scopes
             )
-            display_activity, display_unread = self.bus.display_view_metrics(
+            display_activity, display_unread = self.presentation.display_view_metrics(
                 records, scopes, activity_scopes, captured_viewer, viewer_names, bus_revision
             )
             channels = self._channel_views_for(
@@ -1282,32 +1256,26 @@ class Comms:
     ) -> None:
         viewer = self.user_identity(worktree).name
         with _store_lock(self._wire_lock_path):
-            captured_keys = None
-            if through is not None:
-                if expected_scope is None or expected_scope.channel != target:
+            revision = self._display_basis_revision()
+            basis = self._capture_display_basis(viewer, revision)
+            current = next((scope for scope in basis[2] if scope.channel == target), None)
+            if current is None:
+                raise ValueError(f"Unknown channel: {target!r}")
+            if through is None:
+                # Explicit Mark Read selects the entire current view, unlike painted-page ACK.
+                messages = (
+                    message for message in self.bus.full_history() if current.includes(message)
+                )
+                displayed = self.reads.capture(viewer, messages, basis[0], self.bus._path)
+                through = self.bus.latest_sequence()
+            else:
+                if expected_scope is None or expected_scope.displayed is None:
                     raise ValueError("Channel display scope missing; refresh the displayed page.")
-                revision = self._display_basis_revision()
-                basis = self._capture_display_basis(viewer, revision)
-                current = next((scope for scope in basis[2] if scope.channel == target), None)
                 if current != expected_scope or self._display_basis_revision() != revision:
                     raise ValueError("Channel display changed; refresh the displayed page.")
-                channel = basis[1][target]
-                if channel.exact and channel.builtin is None:
-                    keys = [self.bus._view_marker_key(viewer, target, "exact")]
-                    if channel.any_mode:
-                        participant_basis = self.bus.any_participant_basis(channel, basis[0])
-                        keys.append(
-                            self.bus._view_marker_key(viewer, target, "any", participant_basis)
-                        )
-                    captured_keys = tuple(keys)
-                else:
-                    captured_keys = (self.bus._marker_key(viewer, target),)
-            self.bus.mark_view_read(
-                viewer,
-                target,
-                self.bus.latest_sequence() if through is None else through,
-                captured_keys=captured_keys,
-            )
+                displayed = expected_scope.displayed
+                displayed.validate(viewer, basis[0], self.reads.bus_identity(self.bus._path))
+            self.bus.mark_view_read(viewer, target, through, displayed=displayed)
 
     def mark_dm_view_read(
         self,
@@ -1326,75 +1294,17 @@ class Comms:
         proof = expected_display_basis
         if type(proof) is not DMDisplayBasis or type(through) is not int:
             raise ValueError("Painted DM read requires a typed page basis and integer bound.")
-        if (
-            proof.root != str(self.root.resolve())
-            or proof.worktree != str(Path(worktree).resolve())
-            or proof.requested_peer != peer
-            or proof.newest_seq is None
-            or proof.older_unread
-            or not 0 <= through <= proof.newest_seq
-        ):
-            raise ValueError("Painted DM read does not match a contiguous displayed page.")
         with _store_lock(self._wire_lock_path), _store_lock(self.registry._path):
-            root_info = self.root.stat()
-            if (root_info.st_dev, root_info.st_ino) != proof.root_identity:
-                raise ValueError("DM root was replaced; refresh the page.")
-            if file_revision(self.registry._path) != proof.registry_revision:
-                raise ValueError("DM registry changed; refresh the page.")
             snapshot = self.registry._snapshot_unlocked()
-            # Match user_identity(worktree)'s current first-human selection
-            # without reentering the registry lock or creating a new user.
-            selected_viewer = next(
-                (thread for thread in snapshot.threads.values() if not thread.role.executable),
-                None,
-            )
-            viewer = snapshot.threads.get(proof.viewer)
-            target = snapshot.threads.get(proof.peer)
-            if (
-                selected_viewer is None
-                or selected_viewer.name != proof.viewer
-                or viewer is None
-                or viewer.role is not ThreadRole.USER
-                or target is None
-                or snapshot.aliases.get(peer, peer) != proof.peer
-                or viewer.created_at != proof.viewer_created_at
-                or target.created_at != proof.peer_created_at
-                or snapshot.owner_epochs.get(proof.viewer) != proof.viewer_epoch
-                or snapshot.owner_epochs.get(proof.peer) != proof.peer_epoch
-                or frozenset(
-                    {
-                        proof.viewer,
-                        *(
-                            name
-                            for name, owner in snapshot.aliases.items()
-                            if owner == proof.viewer
-                        ),
-                    }
-                )
-                != proof.viewer_names
-                or frozenset(
-                    {
-                        proof.peer,
-                        *(name for name, owner in snapshot.aliases.items() if owner == proof.peer),
-                    }
-                )
-                != proof.peer_names
-            ):
-                raise ValueError("DM viewer/peer incarnation changed; refresh the page.")
-            try:
-                bus_info = self.bus._path.stat()
-            except FileNotFoundError:
-                bus_identity = None
-            else:
-                bus_identity = (bus_info.st_dev, bus_info.st_ino)
-            if bus_identity != proof.bus_identity:
-                raise ValueError("DM bus was replaced; refresh the page.")
-            self.bus._mark_dm_painted_bound(
-                proof.viewer,
-                proof.peer,
+            proof.validate_for(
+                self.root,
+                worktree,
+                peer,
                 through,
-                expected_marker_revision=proof.marker_revision,
+                snapshot,
+                self.reads.bus_identity(self.bus._path),
             )
+            self.reads.mark_displayed(proof.viewer, proof.displayed.through(through))
 
     def mark_user_view_read(self, target: str, *, worktree: str) -> None:
         """Explicit human 'Mark inbox read' for a channel, DM, or native thread.
@@ -1428,9 +1338,9 @@ class Comms:
                     self.bus._path,
                     self.activity._path,
                     self.runtime_info._path,
-                    self.root / "read_markers.json",
+                    self.reads.path,
                     self.root / "goal_waits.json",
-                    self.transcript_reads.path,
+                    self.reads.path.with_name(self.reads.legacy_filename),
                 )
             ),
             int(time.time()),

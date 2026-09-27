@@ -12,7 +12,7 @@ from enum import StrEnum
 
 from .audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
 from .coordination import MessageAudience, WakeMode
-from .declarations import Message, is_channel_target
+from .declarations import BuiltinChannel, Message, is_channel_target
 
 
 class ControlClassification(StrEnum):
@@ -20,6 +20,14 @@ class ControlClassification(StrEnum):
 
     ORDINARY = "ordinary"
     SYSTEM_CONTROL = "system_control"
+
+    @property
+    def passive(self) -> bool:
+        return self is self.SYSTEM_CONTROL
+
+    @property
+    def supports_initial(self) -> bool:
+        return self is self.ORDINARY
 
 
 class NoWakeReason(StrEnum):
@@ -54,7 +62,11 @@ class WakeDecision:
 
 
 def _require_stored(message: Message) -> None:
-    if not isinstance(message, Message) or message.seq <= 0 or message.target == "broadcast":
+    if (
+        not isinstance(message, Message)
+        or message.seq <= 0
+        or BuiltinChannel.is_alias(message.target)
+    ):
         raise ValueError("Wake and response routes require a stored canonical Message.")
 
 
@@ -112,15 +124,11 @@ def _member_decision(
         audience = MessageAudience.MENTIONED
     else:
         audience = MessageAudience.COLLECTIVE
-    if (
-        message.notice
-        or message.membership is not None
-        or control is ControlClassification.SYSTEM_CONTROL
-    ):
+    if message.notice or message.membership is not None or control.passive:
         mode = WakeMode.PASSIVE
-    elif audience is MessageAudience.DIRECT:
+    elif not channel:
         mode = WakeMode.FULL
-    elif audience is MessageAudience.MENTIONED:
+    elif effective_mentions:
         if recipient.canonical_thread not in effective_mentions:
             return NoWakeDecision(recipient.recipient_lookup)
         mode = WakeMode.FULL

@@ -1,0 +1,56 @@
+{
+  "baseline_commit": "eca634a",
+  "baseline": {
+    "scan_status": {
+      "mode": "exact_compact_global",
+      "analyzed_detector_count": 79,
+      "omitted_detector_count": 0,
+      "complete": true,
+      "reason": "all_context_detectors_use_compact_global_projections"
+    },
+    "finding_count": 28
+  },
+  "final": {
+    "scan_status": {
+      "mode": "exact_compact_global",
+      "analyzed_detector_count": 79,
+      "omitted_detector_count": 0,
+      "complete": true,
+      "reason": "all_context_detectors_use_compact_global_projections"
+    },
+    "finding_count": 23
+  },
+  "resolved_labels": [
+    "ControlClassification semantic descent boundary",
+    "MessageAudience semantic descent boundary",
+    "ResponsePolicy semantic descent boundary",
+    "SavedView semantic descent boundary",
+    "ThreadRole semantic descent boundary",
+    "ViewPredicate semantic descent boundary"
+  ],
+  "remaining_labels": [
+    "AttemptPhase semantic descent boundary",
+    "AvailableRecoveryProjection semantic descent boundary",
+    "ClaimDisposition semantic descent boundary",
+    "DisplayOrder semantic descent boundary",
+    "ExecutionRecord semantic descent boundary",
+    "ExecutionStatus semantic descent boundary",
+    "FailedTurnProjection semantic descent boundary",
+    "GoalExecutionState semantic descent boundary",
+    "ImageInput semantic descent boundary",
+    "Message semantic descent boundary",
+    "ObligationState semantic descent boundary",
+    "ObligationState semantic descent boundary",
+    "PrefixWitness semantic descent boundary",
+    "ProjectedAttempt semantic descent boundary",
+    "ProjectedConnectivity semantic descent boundary",
+    "ProjectedExecution semantic descent boundary",
+    "ProjectedRecovery semantic descent boundary",
+    "RecoveryKind semantic descent boundary",
+    "ThreadStatus semantic descent boundary",
+    "WakeMode semantic descent boundary",
+    "WireExportLimitKind semantic descent boundary",
+    "WireExportScopeKind semantic descent boundary"
+  ],
+  "limits": "Complete package context, no native equivalence proof; authored behavior validated by tests. No findings in new S4 modules. Message importing.py Pi payload is a different domain; DisplayOrder stays separate typed thread/channel orders."
+}

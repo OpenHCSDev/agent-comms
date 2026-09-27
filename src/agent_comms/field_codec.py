@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import types
-from dataclasses import Field, fields, is_dataclass
+from dataclasses import MISSING, Field, fields, is_dataclass
 from enum import Enum
 from typing import Any, TypeVar, Union, cast, get_args, get_origin, get_type_hints, overload
 
@@ -33,7 +33,13 @@ class FieldCodec:
             raise TypeError("Wire field names must be nonempty strings.")
         if len(set(keys)) != len(keys) or (issubclass(cls, DeclaredFamily) and "kind" in keys):
             raise TypeError("Conflicting wire field names.")
-        return declared
+        return [
+            item
+            for _, item in sorted(
+                enumerate(declared),
+                key=lambda row: (row[1][0].metadata.get("wire_order", row[0]), row[0]),
+            )
+        ]
 
     @overload
     @classmethod
@@ -50,6 +56,11 @@ class FieldCodec:
             result.update(
                 (key, cls.encode(getattr(value, field.name)))
                 for field, key in cls._fields(type(value))
+                if not (
+                    field.metadata.get("wire_omit_default")
+                    and field.default is not MISSING
+                    and getattr(value, field.name) == field.default
+                )
             )
             return result
         if isinstance(value, Enum):
@@ -58,6 +69,8 @@ class FieldCodec:
             return value
         if type(value) is float and math.isfinite(value):
             return value
+        if isinstance(value, frozenset):
+            return [cls.encode(item) for item in sorted(value)]
         if isinstance(value, (list, tuple)):
             return [cls.encode(item) for item in value]
         if isinstance(value, dict) and all(type(key) is str for key in value):
@@ -81,6 +94,10 @@ class FieldCodec:
                 except (TypeError, ValueError):
                     pass
             raise ValueError(f"Value does not match {target}")
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
         if origin in (list, tuple):
             if not isinstance(data, list):
                 raise ValueError("Expected a JSON array.")

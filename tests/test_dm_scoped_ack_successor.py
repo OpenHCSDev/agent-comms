@@ -33,9 +33,9 @@ def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_pa
     comms.send("peer", viewer, "before rename")
     old = comms.dm_display_page("peer", worktree=str(tmp_path))
     comms.rename_managed_thread("peer", "renamed", owner_pid=os.getpid())
-    markers = tmp_path / "read_markers.json"
+    markers = tmp_path / "read_ledger.json"
     marker_before = markers.read_bytes() if markers.exists() else None
-    with pytest.raises(ValueError, match="registry changed"):
+    with pytest.raises(ValueError, match="incarnation changed"):
         _mark(comms, "peer", tmp_path, old)
     assert (markers.read_bytes() if markers.exists() else None) == marker_before
     assert comms.pending_count(viewer, "renamed") == 1
@@ -57,22 +57,20 @@ def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Pa
     comms.send("peer", viewer, "old peer painted")
     old = comms.dm_display_page("peer", worktree=str(tmp_path))
     assert old.display_basis is not None
-    old_epoch = old.display_basis.peer_epoch
     comms.registry.unregister("peer")
     comms.delete("peer")
     comms.register(_peer(tmp_path, "peer"))
     comms.send("peer", viewer, "new peer unseen")
     before = comms.pending_count(viewer, "peer")
-    markers = tmp_path / "read_markers.json"
+    markers = tmp_path / "read_ledger.json"
     marker_before = markers.read_bytes() if markers.exists() else None
     assert before == 1
-    with pytest.raises(ValueError, match="registry changed"):
+    with pytest.raises(ValueError, match="incarnation changed"):
         _mark(comms, "peer", tmp_path, old)
     assert (markers.read_bytes() if markers.exists() else None) == marker_before
     assert comms.pending_count(viewer, "peer") == 1
     fresh = comms.dm_display_page("peer", worktree=str(tmp_path))
     assert fresh.display_basis is not None
-    assert fresh.display_basis.peer_epoch > old_epoch
     assert fresh.display_basis.peer_created_at != old.display_basis.peer_created_at
 
 
@@ -96,7 +94,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
     comms.send("peer", viewer, "new viewer unseen")
     before = comms.pending_count(viewer, "peer")
     assert before == 1
-    with pytest.raises(ValueError, match="registry changed"):
+    with pytest.raises(ValueError, match="incarnation changed"):
         _mark(comms, "peer", tmp_path, page)
     assert comms.pending_count(viewer, "peer") == before
 
@@ -117,7 +115,7 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
     comms.send("peer", "new_user", "new viewer unseen")
     before = comms.pending_count("new_user", "peer")
     assert before == 1
-    marker_path = tmp_path / "read_markers.json"
+    marker_path = tmp_path / "read_ledger.json"
     marker_before = marker_path.read_bytes() if marker_path.exists() else None
     with pytest.raises(ValueError, match="registry changed|viewer/peer incarnation changed"):
         _mark(comms, "peer", tmp_path, page)
@@ -134,7 +132,10 @@ def test_marker_changed_during_page_fails_before_basis_issued(tmp_path: Path, mo
 
     def interpose(*args, **kwargs):
         page = original(*args, **kwargs)
-        comms.bus._write_markers({comms.bus._marker_key(viewer, "peer"): 1})
+        comms.reads.mark_displayed(
+            viewer,
+            comms.reads.capture(viewer, page.messages, comms.registry.snapshot(), comms.bus._path),
+        )
         return page
 
     monkeypatch.setattr(comms.bus, "dm_history_page", interpose)

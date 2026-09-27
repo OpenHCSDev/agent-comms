@@ -522,7 +522,7 @@ class ChannelCatalog:
             self._created_at.pop(current, None)
 
     def resolve(self, target: str) -> Channel:
-        target = "#all" if target == "broadcast" else target
+        target = BuiltinChannel.canonical(target)
         tags, explicit = self.read()
         if BuiltinChannel.lookup(target):
             return Channel(
@@ -548,7 +548,7 @@ class ChannelCatalog:
         _, explicit = self.read()
         exact = frozenset(f"#{tag}" for tag in tags)
         return (
-            frozenset({"broadcast", *(kind.value for kind in BuiltinChannel if kind.matches(tags))})
+            frozenset(name for kind in BuiltinChannel if kind.matches(tags) for name in kind.names)
             | exact
             | frozenset(name for name, channel in explicit.items() if channel.matches(tags))
         )
