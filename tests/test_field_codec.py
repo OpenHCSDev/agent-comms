@@ -79,3 +79,28 @@ def test_tuple_shape_and_strict_bool():
         FieldCodec.decode(tuple[str, str], ["one"])
     with pytest.raises(ValueError):
         FieldCodec.decode(bool, 1)
+
+
+def test_reserved_family_tag_cannot_be_shadowed_by_a_field():
+    class Local(DeclaredFamily):
+        pass
+
+    @dataclass
+    class Invalid(Local):
+        kind: str
+
+    with pytest.raises(TypeError, match="Conflicting"):
+        FieldCodec.encode(Invalid("shadow"))
+
+
+def test_defaults_nested_optional_and_nonfinite_decode():
+    from dataclasses import replace
+
+    record = Record(CountChoice(4), ("a", "b"), {}, optional=2.5)
+    assert FieldCodec.decode(Record, FieldCodec.encode(record)) == record
+    assert (
+        FieldCodec.decode(Record, FieldCodec.encode(replace(record, optional=None))).optional
+        is None
+    )
+    with pytest.raises(ValueError):
+        FieldCodec.decode(float, float("nan"))

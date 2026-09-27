@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import math
 import types
-from dataclasses import fields, is_dataclass
+from dataclasses import Field, fields, is_dataclass
 from enum import Enum
-from typing import Any, TypeVar, Union, get_args, get_origin, get_type_hints
+from typing import Any, TypeVar, Union, cast, get_args, get_origin, get_type_hints, overload
 
 from .declared_family import DeclaredFamily
 
@@ -22,7 +22,7 @@ class FieldCodec:
     """
 
     @staticmethod
-    def _fields(cls):
+    def _fields(cls: Any) -> list[tuple[Field[Any], str]]:
         declared = [
             (field, field.metadata.get("wire_name", field.name))
             for field in fields(cls)
@@ -35,8 +35,16 @@ class FieldCodec:
             raise TypeError("Conflicting wire field names.")
         return declared
 
+    @overload
     @classmethod
-    def encode(cls, value):
+    def encode(cls, value: DeclaredFamily) -> dict[str, Any]: ...
+
+    @overload
+    @classmethod
+    def encode(cls, value: object) -> Any: ...
+
+    @classmethod
+    def encode(cls, value: object) -> Any:
         if is_dataclass(value) and not isinstance(value, type):
             result = {"kind": value.declared_name} if isinstance(value, DeclaredFamily) else {}
             result.update(
@@ -57,7 +65,11 @@ class FieldCodec:
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
     @classmethod
-    def decode(cls, target: type[T], data) -> T:
+    def decode(cls, target: type[T], data: object) -> T:
+        return cast(T, cls._decode(target, data))
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
         if target is Any:
             cls.encode(data)  # still require JSON-compatible data
             return data
@@ -86,7 +98,10 @@ class FieldCodec:
         if isinstance(target, type) and issubclass(target, DeclaredFamily):
             if not isinstance(data, dict):
                 raise ValueError("Expected a family object.")
-            target = target.decode(data.get("kind"))
+            name = data.get("kind")
+            if not isinstance(name, str):
+                raise ValueError("Expected a string family kind.")
+            target = target.decode(name)
             data = {key: value for key, value in data.items() if key != "kind"}
         if isinstance(target, type) and is_dataclass(target):
             if not isinstance(data, dict):
