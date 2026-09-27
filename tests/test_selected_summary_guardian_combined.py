@@ -69,7 +69,7 @@ async def test_exact_reserved_operation_fake_rpc_never_grants_original_input(tmp
         journal.reserve_selected_summary(
             str(session), {"source": {"w": "x"}, "selected": {"p": "x"}, "settings": {"s": "x"}}
         )
-    with pytest.raises(SelectedChildUnknown, match="disabled"):
+    with pytest.raises(TypeError, match="provider"):
         await slot.run_selected_summary(provider="paid", model="selected")
 
 

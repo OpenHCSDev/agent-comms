@@ -38,7 +38,7 @@ async def test_dedicated_fake_rpc_exact_echo_and_no_original_input(tmp_path: Pat
     assert response["operation"] == "compaction-123"
     assert response["incarnation"] == json.loads((tmp_path / "one").read_text())["token"]
     assert json.loads((tmp_path / "one").read_text())["status"] == "unknown"
-    with pytest.raises(SelectedChildUnknown, match="disabled"):
+    with pytest.raises(TypeError, match="provider"):
         await slot.run_selected_summary(provider="paid", model="selected")
 
 

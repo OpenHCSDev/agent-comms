@@ -37,7 +37,23 @@ class NativeReopenError(ValueError):
 
 def package_for_launcher(launcher: str) -> Path:
     """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
-    executable = Path(launcher).resolve(strict=True)
+    executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+    if executable.name == "pi-comms-native":
+        from .coordination_store import PublicationActivationBlocked
+        from .native_pi import NativePiUnavailable
+        from .private_nk_entrypoint import private_nk_from_environment
+
+        try:
+            launch = private_nk_from_environment()
+        except (NativePiUnavailable, PublicationActivationBlocked) as error:
+            raise NativeReopenError("Native owner route is unavailable") from error
+        if launch is None:
+            raise NativeReopenError("Native owner backend requires a configured private route")
+        # Use the launcher's route owner, then apply the same complete-tree
+        # commitment as the legacy launcher. A path or seven-file probe alone
+        # cannot select different preparation/commit helpers after compaction.
+        verify_native_package(launch.native_package)
+        return launch.native_package
     if executable.name != "pi-native" or executable.parent.name != "bin":
         raise NativeReopenError("Canonical native launcher required for saved-session reopen")
     stack = executable.parent.parent
