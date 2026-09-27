@@ -33,17 +33,14 @@ class StatsRequest:
         self.state_id = f"agent-comms-stats-state-{secrets.token_hex(16)}"
         self.usage_id = f"agent-comms-stats-usage-{secrets.token_hex(16)}"
         try:
-            state_request = {"type": "get_state"}
-            usage_request = {"type": "get_session_stats"}
-            if session.persistent_session is not None:
-                state_request["id"] = self.state_id
-                usage_request["id"] = self.usage_id
-            session.proc.stdin.write(
-                session.reader.encode(commands.PiCommand.from_wire(state_request))
+            state_request = commands.GetState(
+                id=self.state_id if session.persistent_session else None
             )
-            session.proc.stdin.write(
-                session.reader.encode(commands.PiCommand.from_wire(usage_request))
+            usage_request = commands.GetSessionStats(
+                id=self.usage_id if session.persistent_session else None
             )
+            session.proc.stdin.write(session.reader.encode(state_request))
+            session.proc.stdin.write(session.reader.encode(usage_request))
             await session.proc.stdin.drain()
         except (BrokenPipeError, ConnectionResetError):
             pass

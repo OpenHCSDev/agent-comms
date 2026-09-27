@@ -119,8 +119,6 @@ class Prompt(PiCommand):
                 yield events.Error(text=session.error_message)
                 session.finished = True
                 return
-        if False:
-            yield
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -157,8 +155,6 @@ class GetState(PiCommand, SessionSnapshot):
                 context_used=session.usage.used,
                 context_size=session.usage.size,
             )
-        if False:
-            yield
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -183,8 +179,6 @@ class GetSessionStats(PiCommand, SessionSnapshot):
             if session.persistent_session is None:
                 session.finished = True
                 return
-        if False:
-            yield
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -228,8 +222,6 @@ class SetModel(PiCommand):
             ok=bool(response.get("success")),
             error=response.get("error", "Model change failed"),
         )
-        if False:
-            yield
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -245,8 +237,6 @@ class SetThinkingLevel(PiCommand):
             ok=bool(response.get("success")),
             error=response.get("error", "Thinking level change failed"),
         )
-        if False:
-            yield
 
 
 @dataclass(frozen=True, kw_only=True)

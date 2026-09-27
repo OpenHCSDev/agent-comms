@@ -1,0 +1,650 @@
+[
+  {
+    "module": "backend",
+    "method": "__init__",
+    "lines": 46,
+    "depth": 0
+  },
+  {
+    "module": "backend",
+    "method": "stderr_tail",
+    "lines": 6,
+    "depth": 1
+  },
+  {
+    "module": "backend",
+    "method": "read_rpc_line",
+    "lines": 33,
+    "depth": 3
+  },
+  {
+    "module": "backend",
+    "method": "abort_stalled_rpc",
+    "lines": 30,
+    "depth": 4
+  },
+  {
+    "module": "backend",
+    "method": "turn_state",
+    "lines": 29,
+    "depth": 0
+  },
+  {
+    "module": "backend",
+    "method": "context_info",
+    "lines": 8,
+    "depth": 0
+  },
+  {
+    "module": "backend",
+    "method": "run",
+    "lines": 74,
+    "depth": 2
+  },
+  {
+    "module": "backend",
+    "method": "record_failure",
+    "lines": 3,
+    "depth": 1
+  },
+  {
+    "module": "backend",
+    "method": "fail_reason",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "backend",
+    "method": "receive_record",
+    "lines": 58,
+    "depth": 4
+  },
+  {
+    "module": "backend",
+    "method": "attest_input",
+    "lines": 101,
+    "depth": 4
+  },
+  {
+    "module": "backend",
+    "method": "guard_identity",
+    "lines": 42,
+    "depth": 1
+  },
+  {
+    "module": "backend",
+    "method": "observe_progress",
+    "lines": 70,
+    "depth": 4
+  },
+  {
+    "module": "backend",
+    "method": "settle_or_continue",
+    "lines": 26,
+    "depth": 3
+  },
+  {
+    "module": "backend",
+    "method": "prepare_launch",
+    "lines": 56,
+    "depth": 2
+  },
+  {
+    "module": "backend",
+    "method": "validate_reopen",
+    "lines": 53,
+    "depth": 2
+  },
+  {
+    "module": "backend",
+    "method": "spawn_child",
+    "lines": 54,
+    "depth": 2
+  },
+  {
+    "module": "backend",
+    "method": "initialize_output",
+    "lines": 39,
+    "depth": 3
+  },
+  {
+    "module": "backend",
+    "method": "initialize_rpc",
+    "lines": 65,
+    "depth": 3
+  },
+  {
+    "module": "backend",
+    "method": "retain_or_close",
+    "lines": 63,
+    "depth": 3
+  },
+  {
+    "module": "backend",
+    "method": "finish_diagnostics",
+    "lines": 25,
+    "depth": 1
+  },
+  {
+    "module": "backend",
+    "method": "finish_result",
+    "lines": 78,
+    "depth": 4
+  },
+  {
+    "module": "backend",
+    "method": "handle_timeout",
+    "lines": 65,
+    "depth": 2
+  },
+  {
+    "module": "pi_rpc",
+    "method": "unique_fields",
+    "lines": 7,
+    "depth": 2
+  },
+  {
+    "module": "pi_rpc",
+    "method": "__init__",
+    "lines": 4,
+    "depth": 0
+  },
+  {
+    "module": "pi_rpc",
+    "method": "readline",
+    "lines": 21,
+    "depth": 3
+  },
+  {
+    "module": "pi_rpc",
+    "method": "decode_record",
+    "lines": 9,
+    "depth": 1
+  },
+  {
+    "module": "pi_rpc",
+    "method": "receive",
+    "lines": 7,
+    "depth": 1
+  },
+  {
+    "module": "pi_rpc",
+    "method": "encode",
+    "lines": 5,
+    "depth": 0
+  },
+  {
+    "module": "pi_rpc",
+    "method": "command_bytes",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_rpc",
+    "method": "correlate",
+    "lines": 7,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "from_wire",
+    "lines": 11,
+    "depth": 2
+  },
+  {
+    "module": "pi_events",
+    "method": "__getitem__",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "__iter__",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "__len__",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 3,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "invalidates_stop",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "retry_progress",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "observe_abort",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "invalidates_stop",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 19,
+    "depth": 2
+  },
+  {
+    "module": "pi_events",
+    "method": "retry_progress",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "invalidates_stop",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 12,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 18,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 54,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 31,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 14,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "observe_abort",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 97,
+    "depth": 3
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 63,
+    "depth": 4
+  },
+  {
+    "module": "pi_events",
+    "method": "retry_progress",
+    "lines": 4,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 75,
+    "depth": 5
+  },
+  {
+    "module": "pi_events",
+    "method": "invalidates_stop",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "retry_progress",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "observe_abort",
+    "lines": 5,
+    "depth": 2
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 30,
+    "depth": 3
+  },
+  {
+    "module": "pi_events",
+    "method": "retry_progress",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "delta_progress",
+    "lines": 9,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "observe_abort",
+    "lines": 3,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "command_type",
+    "lines": 4,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 4,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 15,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "observe_abort",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 8,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 15,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "observe_abort",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 22,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 17,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "retry_progress",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "observe_abort",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_events",
+    "method": "apply",
+    "lines": 10,
+    "depth": 1
+  },
+  {
+    "module": "pi_events",
+    "method": "observe_abort",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_commands",
+    "method": "steer",
+    "lines": 11,
+    "depth": 0
+  },
+  {
+    "module": "pi_commands",
+    "method": "steer",
+    "lines": 4,
+    "depth": 0
+  },
+  {
+    "module": "pi_commands",
+    "method": "to_rpc",
+    "lines": 4,
+    "depth": 0
+  },
+  {
+    "module": "pi_commands",
+    "method": "from_wire",
+    "lines": 8,
+    "depth": 1
+  },
+  {
+    "module": "pi_commands",
+    "method": "response_owner",
+    "lines": 5,
+    "depth": 1
+  },
+  {
+    "module": "pi_commands",
+    "method": "on_response",
+    "lines": 5,
+    "depth": 1
+  },
+  {
+    "module": "pi_commands",
+    "method": "to_rpc",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_commands",
+    "method": "steer",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_commands",
+    "method": "on_response",
+    "lines": 23,
+    "depth": 2
+  },
+  {
+    "module": "pi_commands",
+    "method": "on_response",
+    "lines": 33,
+    "depth": 2
+  },
+  {
+    "module": "pi_commands",
+    "method": "on_response",
+    "lines": 21,
+    "depth": 2
+  },
+  {
+    "module": "pi_commands",
+    "method": "steer",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "pi_commands",
+    "method": "on_response",
+    "lines": 10,
+    "depth": 1
+  },
+  {
+    "module": "pi_commands",
+    "method": "on_response",
+    "lines": 10,
+    "depth": 1
+  },
+  {
+    "module": "turn_inputs",
+    "method": "forward",
+    "lines": 15,
+    "depth": 2
+  },
+  {
+    "module": "turn_inputs",
+    "method": "interrupt",
+    "lines": 34,
+    "depth": 2
+  },
+  {
+    "module": "turn_inputs",
+    "method": "send_prompt",
+    "lines": 45,
+    "depth": 3
+  },
+  {
+    "module": "turn_inputs",
+    "method": "mark_started",
+    "lines": 28,
+    "depth": 3
+  },
+  {
+    "module": "turn_inputs",
+    "method": "restore",
+    "lines": 9,
+    "depth": 1
+  },
+  {
+    "module": "turn_phase",
+    "method": "model_progress",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "turn_phase",
+    "method": "on",
+    "lines": 7,
+    "depth": 2
+  },
+  {
+    "module": "turn_phase",
+    "method": "may_finish",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "turn_phase",
+    "method": "model_progress",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "turn_phase",
+    "method": "stalled",
+    "lines": 3,
+    "depth": 0
+  },
+  {
+    "module": "turn_phase",
+    "method": "start",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "turn_phase",
+    "method": "may_finish",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "turn_phase",
+    "method": "stalled",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "turn_failure",
+    "method": "supersedes",
+    "lines": 2,
+    "depth": 0
+  },
+  {
+    "module": "turn_stats",
+    "method": "request",
+    "lines": 20,
+    "depth": 1
+  },
+  {
+    "module": "turn_usage",
+    "method": "positive_tokens",
+    "lines": 5,
+    "depth": 1
+  },
+  {
+    "module": "turn_usage",
+    "method": "invalidate",
+    "lines": 3,
+    "depth": 0
+  },
+  {
+    "module": "turn_usage",
+    "method": "charge",
+    "lines": 3,
+    "depth": 0
+  },
+  {
+    "module": "turn_usage",
+    "method": "observe",
+    "lines": 3,
+    "depth": 0
+  },
+  {
+    "module": "turn_usage",
+    "method": "confirm",
+    "lines": 3,
+    "depth": 0
+  },
+  {
+    "module": "turn_usage",
+    "method": "rollback",
+    "lines": 3,
+    "depth": 0
+  }
+]

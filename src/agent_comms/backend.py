@@ -915,34 +915,7 @@ class TurnSession:
                         abort_payload = PiRpcChannel.decode_record(response)
                     except json.JSONDecodeError:
                         continue
-                    abort_kind = abort_payload.get("type")
-                    if isinstance(abort_payload, pi.MessageStart) and (
-                        not self.session_identity_uncertain
-                    ):
-                        matched, input_id = self.inputs.mark_started(self, abort_payload)
-                        if matched:
-                            self.started_during_abort.append(input_id)
-                    elif isinstance(abort_payload, (pi.ToolExecutionStart, pi.ToolExecutionUpdate)):
-                        self.tool_ever_started = True
-                    elif isinstance(abort_payload, pi.MessageUpdate):
-                        delta = abort_payload.get("assistantMessageEvent") or {}
-                        if delta.get("type") in {
-                            "text_delta",
-                            "thinking_delta",
-                            "toolcall_start",
-                            "toolcall_delta",
-                            "toolcall_end",
-                        } and (delta.get("delta") or delta.get("type", "").startswith("toolcall")):
-                            self.output_started = True
-                    elif isinstance(
-                        abort_payload,
-                        (
-                            pi.CompactionStart,
-                            pi.SummarizationRetryScheduled,
-                            pi.SummarizationRetryAttemptStart,
-                        ),
-                    ):
-                        self.compaction_started = True
+                    abort_payload.observe_abort(self)
                     if (
                         isinstance(abort_payload, pi.Response)
                         and abort_payload.get("command") == "abort"
@@ -1029,12 +1002,6 @@ class TurnSession:
             if self.skip:
                 continue
             async for event in self.guard_identity():
-                yield event
-            if self.finished:
-                break
-            if self.skip:
-                continue
-            async for event in self.serve_extension_ui():
                 yield event
             if self.finished:
                 break
@@ -1137,12 +1104,8 @@ class TurnSession:
         except json.JSONDecodeError:
             self.skip = True
             return
-        if False:
-            yield
 
     async def attest_input(self) -> AsyncIterator[events.AgentEvent]:
-        self.kind = self.payload.get("type")
-        self.command = self.payload.get("command")
         if self.require_input_id and (not self.native_capability_confirmed):
             if (
                 not isinstance(self.payload, pi.Response)
@@ -1197,7 +1160,12 @@ class TurnSession:
                 and self.proof_journal_bytes >= _NATIVE_PROOF_JOURNAL_WARN_BYTES
             ):
                 yield events.Notice(
-                    text="[agent-comms warning] Pi native input proof journal measures at least 96 MiB. Pi checks decoded content against a 128 MiB startup limit; byte size is only an advisory. Preserve the session and journal; arrange a reviewed checkpoint or upgrade before further growth."
+                    text=(
+                        "[agent-comms warning] Pi native input proof journal measures at least "
+                        "96 MiB. Pi checks decoded content against a 128 MiB startup limit; "
+                        "byte size is only an advisory. Preserve the session and journal; "
+                        "arrange a reviewed checkpoint or upgrade before further growth."
+                    )
                 )
             self.prompt_start_deadline = self.loop.time() + PROMPT_START_TIMEOUT_SECONDS
             assert self.proc.stdin is not None
@@ -1236,8 +1204,6 @@ class TurnSession:
                 await _terminate_process(self.proc)
                 self.finished = True
                 return
-        if False:
-            yield
 
     async def guard_identity(self) -> AsyncIterator[events.AgentEvent]:
         self.data = self.payload.get("data")
@@ -1279,105 +1245,6 @@ class TurnSession:
             await self.abort_stalled_rpc()
             self.finished = True
             return
-        if False:
-            yield
-
-    async def serve_extension_ui(self) -> AsyncIterator[events.AgentEvent]:
-        if isinstance(self.payload, pi.ExtensionUiRequest):
-            if self.payload.get("method") == "setStatus":
-                if (
-                    not self.live_status_seen
-                    and (not self.agent_settled_seen)
-                    and (not self.stats.requested)
-                    and self.require_input_id
-                    and self.native_capability_confirmed
-                    and self.initial_prompt_acknowledged
-                    and self.initial_input_started
-                    and self.initial_session_observed
-                    and isinstance(self.initial_session_id, str)
-                    and bool(self.initial_session_id)
-                    and (not self.session_identity_uncertain)
-                    and (not self.inputs.uncertain)
-                ):
-                    self.receipt = _pi_mcp_live_receipt(self.payload, self.original_input_id)
-                    if self.receipt is not None:
-                        self.live_status_seen = True
-                        yield events.McpLiveStatus(receipt=self.receipt)
-                self.skip = True
-                return
-            self.request_id = self.payload.get("id")
-            self.method = self.payload.get("method")
-            if (
-                type(self.request_id) is not str
-                or not self.request_id
-                or len(self.request_id) > 128
-            ):
-                self.record_failure(
-                    failures.ExtensionUiFailed("Pi extension UI request lacked a bounded ID.")
-                )
-                await _terminate_process(self.proc)
-                self.finished = True
-                return
-            if self.method not in {"confirm", "select", "input", "editor"}:
-                self.skip = True
-                return
-            self.choice: dict[str, Any] | None = None
-            if (
-                self.request_id not in self.ui_seen
-                and len(self.ui_seen) < 64
-                and (self.ui_request is not None)
-                and self.initial_prompt_acknowledged
-                and self.initial_input_started
-                and self.initial_session_observed
-                and isinstance(self.initial_session_id, str)
-                and self.initial_session_id
-                and (not self.session_identity_uncertain)
-                and (not self.inputs.uncertain)
-            ):
-                self.ui_seen.add(self.request_id)
-                with suppress(Exception):
-                    self.choice = await asyncio.wait_for(self.ui_request(self.payload), timeout=15)
-            self.response: dict[str, Any] = {
-                "type": "extension_ui_response",
-                "id": self.request_id,
-                "cancelled": True,
-            }
-            if self.method == "confirm" and isinstance(self.choice, dict):
-                self.response = {
-                    "type": "extension_ui_response",
-                    "id": self.request_id,
-                    "confirmed": self.choice.get("confirmed") is True,
-                }
-            elif self.method == "select" and isinstance(self.choice, dict):
-                self.options = self.payload.get("options")
-                if (
-                    isinstance(self.options, list)
-                    and type(self.choice.get("value")) is str
-                    and (self.choice["value"] in self.options)
-                ):
-                    self.response = {
-                        "type": "extension_ui_response",
-                        "id": self.request_id,
-                        "value": self.choice["value"],
-                    }
-            try:
-                if self.proc.stdin is None or self.proc.returncode is not None:
-                    raise BrokenPipeError
-                self.proc.stdin.write((json.dumps(self.response) + "\n").encode())
-                await asyncio.wait_for(self.proc.stdin.drain(), timeout=2)
-            except (BrokenPipeError, ConnectionResetError, TimeoutError):
-                self.record_failure(
-                    failures.ExtensionUiFailed(
-                        "Pi extension UI response could not reach the requesting child."
-                    )
-                )
-                await _terminate_process(self.proc)
-                self.finished = True
-                return
-            self.skip = True
-            return
-        if False:
-            yield
 
     async def observe_progress(self) -> AsyncIterator[events.AgentEvent]:
         self.now = self.loop.time()
@@ -1447,8 +1314,6 @@ class TurnSession:
             self.last_model_progress = self.now
             if not self.active_tools:
                 self.phase = self.phase.model_progress()
-        if False:
-            yield
 
     async def settle_or_continue(self) -> AsyncIterator[events.AgentEvent]:
         if self.persistent_session is not None and (self.stats.complete or self.stats.failed):
@@ -1474,8 +1339,6 @@ class TurnSession:
             yield events.StreamSettled()
             self.finished = True
             return
-        if False:
-            yield
 
     async def prepare_launch(self) -> AsyncIterator[events.AgentEvent]:
         if shutil.which(self.agent_bin) is None and (not Path(self.agent_bin).is_file()):
@@ -1501,25 +1364,15 @@ class TurnSession:
             self.argv = [self.agent_bin, *self.rpc_args]
             if self.session_file:
                 self.argv += ["--fork" if self.fork_session else "--session", self.session_file]
-            self.prompt_payload = (
-                json.dumps(
-                    {
-                        "id": self.prompt_id,
-                        "type": "prompt",
-                        "inputId": self.original_input_id,
-                        "message": self.task,
-                        **(
-                            {"images": [image.to_rpc() for image in self.images]}
-                            if self.images
-                            else {}
-                        ),
-                    }
+            self.prompt_payload = PiRpcChannel.command_bytes(
+                commands.Prompt(
+                    id=self.prompt_id,
+                    input_id=self.original_input_id,
+                    message=self.task,
+                    images=[image.to_rpc() for image in self.images] if self.images else None,
                 )
-                + "\n"
-            ).encode()
-            self.stdin_payload = (
-                json.dumps({"type": "get_state", "id": self.preflight_id}) + "\n"
-            ).encode()
+            )
+            self.stdin_payload = PiRpcChannel.command_bytes(commands.GetState(id=self.preflight_id))
             if not self.require_input_id:
                 self.stdin_payload += self.prompt_payload
         else:
@@ -1541,8 +1394,6 @@ class TurnSession:
             tuple(sorted(self.env.items())),
             auth_revision(),
         )
-        if False:
-            yield
 
     async def validate_reopen(self) -> AsyncIterator[events.AgentEvent]:
         self.reused = False
@@ -1595,8 +1446,6 @@ class TurnSession:
             and (self.startup is not None)
         ):
             await self.startup.acquire(self.finish_event)
-        if False:
-            yield
 
     async def spawn_child(self) -> AsyncIterator[events.AgentEvent]:
         self.launch_started_at = self.loop.time()
@@ -1650,8 +1499,6 @@ class TurnSession:
                 await self.proc.stdin.drain()
             except (BrokenPipeError, ConnectionResetError):
                 pass
-        if False:
-            yield
 
     async def initialize_output(self) -> AsyncIterator[events.AgentEvent]:
         self.text_parts: list[str] = []
@@ -1690,21 +1537,14 @@ class TurnSession:
             )
             self.finished = True
             return
-        if False:
-            yield
 
     async def initialize_rpc(self) -> AsyncIterator[events.AgentEvent]:
         self.steering_task: asyncio.Task[None] | None = None
-        self.inputs.pending: list[tuple[str | None, str, str | dict[str, Any], str]] = []
-        self.inputs.accepted: set[str] = set()
-        self.inputs.changed = asyncio.Event()
         self.explicit_interrupt = False
         self.rejected_commands: list[events.AgentEvent] = []
         self.rejected_signal = asyncio.Event()
         self.session_identity_uncertain = False
-        self.inputs.uncertain = False
         self.final_assistant_stop = False
-        self.inputs.generation = 0
         if self.steering_queue is not None and self.proc.stdin is not None:
             self.stdin = self.proc.stdin
             if not self.require_input_id:
@@ -1717,27 +1557,12 @@ class TurnSession:
         self.initial_session_id: str | None = None
         self.initial_session_file: str | None = None
         self.initial_session_observed = False
-        self.usage.used: int | None = None
-        self.usage.size: int | None = None
-        self.usage.confirmed: int | None = None
-        self.usage.provisional = False
-        self.usage.response_index = 0
-        self.usage.compaction_recorded = False
         self.initial_prompt_acknowledged = False
         self.native_capability_confirmed = not self.require_input_id
         self.prompt_start_deadline: float | None = None
         self.initial_input_started = False
         self.live_status_seen = False
-        self.stats.requested = False
-        self.stats.state_id = f"agent-comms-stats-state-{secrets.token_hex(16)}"
-        self.stats.usage_id = f"agent-comms-stats-usage-{secrets.token_hex(16)}"
-        self.stats.responses: set[str] = set()
-        self.stats.complete = False
-        self.stats.failed = False
-        self.stats.busy = False
-        self.stats.generation = 0
         self.settlement_count = 0
-        self.stats.settlement_count = 0
         self.agent_settled_seen = False
         self.reader = (
             self.persistent_session.reader
@@ -1769,7 +1594,6 @@ class TurnSession:
         self.active_tools: set[str] = set()
         self.tool_ever_started = False
         self.output_started = False
-        self.inputs.started = False
         self.compaction_started = False
         self.retry_recovery_pending = False
         self.retry_recovery_reason = "provider_auto_retry_progress"
@@ -1857,7 +1681,10 @@ class TurnSession:
             self.diagnostic["proof_journal_bytes"] = self.proof_journal_bytes
             self.record_failure(
                 failures.InputIdUnavailable(
-                    f"Pi rejected its native input proof journal before this prompt was sent (measured {self.proof_journal_bytes} bytes; decoded-content limit or incomplete final row). Preserve the session and journal; arrange a reviewed recovery. Uncertain inputs must not be replayed."
+                    "Pi rejected its native input proof journal before this prompt was sent "
+                    f"(measured {self.proof_journal_bytes} bytes; decoded-content limit or "
+                    "incomplete final row). Preserve the session and journal; arrange a "
+                    "reviewed recovery. Uncertain inputs must not be replayed."
                 )
             )
         if self.owner is not None:
@@ -1911,6 +1738,7 @@ class TurnSession:
             self.record_failure(
                 failures.FinalStopMissing(
                     self.fail_reason
+                    or self.error_message
                     or "Pi RPC run ended without an authoritative final assistant stop."
                 )
             )
@@ -1923,12 +1751,11 @@ class TurnSession:
             )
         self.terminal_reason_code = self.failure.code if self.failure else None
         yield events.Done(
-            text=_IDENTITY_FAILURE_TEXT
-            if self.session_identity_uncertain
+            text=self.failure.text
+            if self.failure is not None
             else "".join(self.text_parts).strip()
             if self.success
             else self.error_message
-            or self.fail_reason
             or (
                 "Image prompt failed; backend diagnostics withheld."
                 if (self.image_input_sent or self.inherited_image_sensitive) and self.error_text
@@ -1943,8 +1770,6 @@ class TurnSession:
                 **({"exit_code": self.proc.returncode} if self.proc.returncode is not None else {}),
             },
         )
-        if False:
-            yield
 
     async def handle_timeout(self) -> AsyncIterator[events.AgentEvent]:
         if self.require_input_id and (not self.native_capability_confirmed):
@@ -1962,11 +1787,13 @@ class TurnSession:
             self.session_size = self.session_bytes if self.session_bytes is not None else "unknown"
             self.record_failure(
                 failures.InputIdUnavailable(
-                    f"Pi native input-ID capability preflight timed out (phase=await_get_state, elapsed_ms={self.elapsed_ms}, wait_ms={self.wait_ms}, budget_ms={round(self.preflight_budget * 1000)}, spawn_ms={self.spawn_ms}, session_bytes={self.session_size})."
+                    "Pi native input-ID capability preflight timed out "
+                    f"(phase=await_get_state, elapsed_ms={self.elapsed_ms}, "
+                    f"wait_ms={self.wait_ms}, budget_ms={round(self.preflight_budget * 1000)}, "
+                    f"spawn_ms={self.spawn_ms}, session_bytes={self.session_size})."
                 )
             )
             await _terminate_process(self.proc)
-            self.finished = True
             self.finished = True
             return
         if (
@@ -1979,10 +1806,8 @@ class TurnSession:
             )
             await _terminate_process(self.proc)
             self.finished = True
-            self.finished = True
             return
         if self.stats.requested:
-            self.finished = True
             self.finished = True
             return
         self.elapsed_ms = round((self.loop.time() - self.last_model_progress) * 1000)
@@ -1993,8 +1818,8 @@ class TurnSession:
             )
         yield self.turn_state("aborting", self.reason_code, self.elapsed_ms, event_phase="shutdown")
         await self.abort_stalled_rpc()
-        for self.input_id in self.started_during_abort:
-            yield events.InputStarted(id=self.input_id)
+        for input_id in self.started_during_abort:
+            yield events.InputStarted(id=input_id)
         self.failed_elapsed_ms = round((self.loop.time() - self.last_model_progress) * 1000)
         yield self.turn_state(
             "failed", self.reason_code, self.failed_elapsed_ms, event_phase="shutdown"
@@ -2009,5 +1834,3 @@ class TurnSession:
         self.finished = True
         self.finished = True
         return
-        if False:
-            yield

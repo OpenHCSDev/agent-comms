@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
+from uuid import uuid4
 
 from .pending_requests import PendingRequests
 from .pi_commands import PiCommand
@@ -76,7 +77,7 @@ class PiRpcChannel:
 
     def encode(self, command: PiCommand) -> bytes:
         """Register before writing; correlated proof still requires its native input ID."""
-        key = command.id or command.declared_name
+        key = command.id or uuid4().hex
         self.pending.add(type(command), key, request=command)
         return self.command_bytes(command)
 
@@ -86,4 +87,8 @@ class PiRpcChannel:
 
     def correlate(self, response) -> PiCommand | None:
         owner = response.command_type
-        return self.pending.take(owner, response.get("id") or owner.declared_name, response)
+        return (
+            self.pending.take(owner, response.id, response)
+            if response.id
+            else self.pending.take_anonymous(owner, response)
+        )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import ClassVar
 
 from . import pi_events as pi
@@ -10,6 +11,9 @@ from .declared_family import DeclaredFamily
 
 class StallExempt:
     """Model progress does not end this excursion; its own events do."""
+
+    def model_progress(self) -> TurnPhase:
+        return self
 
 
 class TurnPhase(DeclaredFamily, affix="Phase"):
@@ -22,9 +26,12 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
         for member in TurnPhase.members_with(TurnPhase):
             if isinstance(event, member.start):
                 return member()
-        if isinstance(event, self.end) and not active_tools:
+        if isinstance(event, self.end) and self.may_finish(active_tools):
             return ModelWaitPhase()
         return self
+
+    def may_finish(self, active_tools: set[str]) -> bool:
+        return True
 
     def model_progress(self) -> TurnPhase:
         return ModelWaitPhase()
@@ -35,8 +42,10 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
 
 
 class Excursion(TurnPhase):
-    def model_progress(self) -> TurnPhase:
-        return self
+    @property
+    @abstractmethod
+    def start(self) -> tuple[type[pi.PiEvent], ...]:
+        """Concrete excursions declare their entry events."""
 
 
 class PromptAcceptancePhase(TurnPhase):
@@ -51,26 +60,29 @@ class SettlingStatsPhase(TurnPhase):
     pass
 
 
-class CompactionPhase(Excursion, StallExempt):
+class CompactionPhase(StallExempt, Excursion):
     start = (pi.CompactionStart, pi.CompactionProgress)
     end = (pi.CompactionEnd,)
     stall_reason = "compaction_no_progress"
     pauses_input_clock = True
 
 
-class ProviderRetryPhase(Excursion, StallExempt):
+class ProviderRetryPhase(StallExempt, Excursion):
     start = (pi.AutoRetryStart,)
     end = (pi.AutoRetryEnd,)
     stall_reason = "retry_no_progress"
 
 
-class SummarizationRetryPhase(Excursion, StallExempt):
+class SummarizationRetryPhase(StallExempt, Excursion):
     start = (pi.SummarizationRetryScheduled, pi.SummarizationRetryAttemptStart)
     end = (pi.SummarizationRetryFinished,)
     stall_reason = "summarization_retry_no_progress"
 
 
 class ToolRunningPhase(Excursion):
+    def may_finish(self, active_tools: set[str]) -> bool:
+        return not active_tools
+
     start = (pi.ToolExecutionStart,)
     end = (pi.ToolExecutionEnd,)
 

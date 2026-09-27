@@ -1,10 +1,14 @@
 """Pi's open event vocabulary, decoded by the RPC channel before execution."""
 
 from __future__ import annotations
+
 import asyncio
+import json
 from collections.abc import AsyncIterator, Iterator, Mapping
+from contextlib import suppress
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any
+
 from . import agent_events as events
 from . import turn_failure as failures
 from .declared_family import DeclaredFamily
@@ -56,6 +60,9 @@ class PiEvent(DeclaredFamily, Mapping[str, Any]):
     def retry_progress(self) -> bool:
         return False
 
+    def observe_abort(self, session: TurnSession) -> None:
+        pass
+
 
 class UnknownPiEvent(PiEvent):
     """Unrecognized events remain ignorable, never admission evidence."""
@@ -90,8 +97,6 @@ class AgentSettled(PiEvent):
                 yield events.StreamSettled()
             if session.persistent_session is None and session.finish_event is None:
                 await session.stats.request(session)
-        if False:
-            yield
 
     @property
     def retry_progress(self) -> bool:
@@ -112,10 +117,7 @@ class AutoRetryEnd(PiEvent):
     success: Any = field(default=None, metadata={"wire_name": "success"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from . import turn_phase as phases
-
         session.last_model_progress = session.now
-        session.phase = phases.ModelWaitPhase()
         if self.success:
             session.error_message = None
         else:
@@ -124,8 +126,6 @@ class AutoRetryEnd(PiEvent):
             yield session.turn_state(
                 "failed", "provider_retry_exhausted", 0, event_phase="model_wait"
             )
-        if False:
-            yield
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -149,8 +149,6 @@ class AutoRetryStart(PiEvent):
             event_phase="model_wait",
             attempt=(session.current, session.maximum),
         )
-        if False:
-            yield
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -161,11 +159,9 @@ class CompactionEnd(PiEvent):
     will_retry: Any = field(default=None, metadata={"wire_name": "willRetry"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from . import turn_phase as phases
         from .backend import PROMPT_START_TIMEOUT_SECONDS, _terminate_process, compaction_summary
 
         session.last_model_progress = session.now
-        session.phase = phases.ModelWaitPhase()
         session.result = self.result
         session.completed = self.aborted is False and isinstance(session.result, dict)
         if (
@@ -214,8 +210,6 @@ class CompactionEnd(PiEvent):
             yield session.turn_state(
                 "retrying", "overflow_compaction_retry", 0, event_phase="model_wait"
             )
-        if False:
-            yield
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -255,8 +249,6 @@ class CompactionProgress(PiEvent):
                 if isinstance(self.summary_phase, str) and self.summary_phase
                 else None,
             )
-        if False:
-            yield
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -275,8 +267,9 @@ class CompactionStart(PiEvent):
             if session.reason in {"manual", "threshold", "overflow"}
             else "unknown"
         )
-        if False:
-            yield
+
+    def observe_abort(self, session: TurnSession) -> None:
+        session.compaction_started = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -286,7 +279,101 @@ class ContextCommitted(PiEvent):
 
 
 class ExtensionUiRequest(PiEvent):
-    pass
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        from .backend import _pi_mcp_live_receipt, _terminate_process
+
+        if self.get("method") == "setStatus":
+            if (
+                not session.live_status_seen
+                and (not session.agent_settled_seen)
+                and (not session.stats.requested)
+                and session.require_input_id
+                and session.native_capability_confirmed
+                and session.initial_prompt_acknowledged
+                and session.initial_input_started
+                and session.initial_session_observed
+                and isinstance(session.initial_session_id, str)
+                and bool(session.initial_session_id)
+                and (not session.session_identity_uncertain)
+                and (not session.inputs.uncertain)
+            ):
+                session.receipt = _pi_mcp_live_receipt(self, session.original_input_id)
+                if session.receipt is not None:
+                    session.live_status_seen = True
+                    yield events.McpLiveStatus(receipt=session.receipt)
+            session.skip = True
+            return
+        session.request_id = self.get("id")
+        session.method = self.get("method")
+        if (
+            type(session.request_id) is not str
+            or not session.request_id
+            or len(session.request_id) > 128
+        ):
+            session.record_failure(
+                failures.ExtensionUiFailed("Pi extension UI request lacked a bounded ID.")
+            )
+            await _terminate_process(session.proc)
+            session.finished = True
+            return
+        if session.method not in {"confirm", "select", "input", "editor"}:
+            session.skip = True
+            return
+        session.choice: dict[str, Any] | None = None
+        if (
+            session.request_id not in session.ui_seen
+            and len(session.ui_seen) < 64
+            and (session.ui_request is not None)
+            and session.initial_prompt_acknowledged
+            and session.initial_input_started
+            and session.initial_session_observed
+            and isinstance(session.initial_session_id, str)
+            and session.initial_session_id
+            and (not session.session_identity_uncertain)
+            and (not session.inputs.uncertain)
+        ):
+            session.ui_seen.add(session.request_id)
+            with suppress(Exception):
+                session.choice = await asyncio.wait_for(session.ui_request(self.wire), timeout=15)
+        session.response: dict[str, Any] = {
+            "type": "extension_ui_response",
+            "id": session.request_id,
+            "cancelled": True,
+        }
+        if session.method == "confirm" and isinstance(session.choice, dict):
+            session.response = {
+                "type": "extension_ui_response",
+                "id": session.request_id,
+                "confirmed": session.choice.get("confirmed") is True,
+            }
+        elif session.method == "select" and isinstance(session.choice, dict):
+            session.options = self.get("options")
+            if (
+                isinstance(session.options, list)
+                and type(session.choice.get("value")) is str
+                and (session.choice["value"] in session.options)
+            ):
+                session.response = {
+                    "type": "extension_ui_response",
+                    "id": session.request_id,
+                    "value": session.choice["value"],
+                }
+        try:
+            if session.proc.stdin is None or session.proc.returncode is not None:
+                raise BrokenPipeError
+            session.proc.stdin.write((json.dumps(session.response) + "\n").encode())
+            await asyncio.wait_for(session.proc.stdin.drain(), timeout=2)
+        except (BrokenPipeError, ConnectionResetError, TimeoutError):
+            session.record_failure(
+                failures.ExtensionUiFailed(
+                    "Pi extension UI response could not reach the requesting child."
+                )
+            )
+            await _terminate_process(session.proc)
+            session.finished = True
+            return
+        session.skip = True
+        return
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -305,13 +392,11 @@ class MessageEnd(PiEvent):
             session.content = session.message.get("content")
             session.committed_text = (
                 "".join(
-                    (
-                        part["text"]
-                        for part in session.content
-                        if isinstance(part, dict)
-                        and part.get("type") == "text"
-                        and (type(part.get("text")) is str)
-                    )
+                    part["text"]
+                    for part in session.content
+                    if isinstance(part, dict)
+                    and part.get("type") == "text"
+                    and (type(part.get("text")) is str)
                 )
                 if isinstance(session.content, list)
                 else ""
@@ -362,8 +447,6 @@ class MessageEnd(PiEvent):
                     session.usage.used = session.usage.confirmed
                     yield session.context_info()
                 session.usage.provisional = False
-        if False:
-            yield
 
     accepts_prompt = True
     output_progress = True
@@ -391,11 +474,9 @@ class MessageStart(PiEvent):
                 session.user_text = session.content
             elif isinstance(session.content, list):
                 session.user_text = "\n".join(
-                    (
-                        part.get("text", "")
-                        for part in session.content
-                        if isinstance(part, dict) and part.get("type") == "text"
-                    )
+                    part.get("text", "")
+                    for part in session.content
+                    if isinstance(part, dict) and part.get("type") == "text"
                 )
             else:
                 session.user_text = None
@@ -454,8 +535,6 @@ class MessageStart(PiEvent):
                 await session.abort_stalled_rpc()
                 session.finished = True
                 return
-        if False:
-            yield
 
     accepts_prompt = True
     output_progress = True
@@ -467,6 +546,12 @@ class MessageStart(PiEvent):
     @property
     def retry_progress(self) -> bool:
         return (self.message or {}).get("role") == "assistant"
+
+    def observe_abort(self, session: TurnSession) -> None:
+        if not session.session_identity_uncertain:
+            matched, identity = session.inputs.mark_started(session, self)
+            if matched:
+                session.started_during_abort.append(identity)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -505,8 +590,6 @@ class MessageUpdate(PiEvent):
                 yield events.Thinking(text=session.piece)
         elif session.delta_type in {"toolcall_start", "toolcall_delta", "toolcall_end"}:
             session.output_started = True
-        if False:
-            yield
 
     accepts_prompt = True
     output_progress = True
@@ -526,6 +609,10 @@ class MessageUpdate(PiEvent):
             "toolcall_end",
         } and bool(delta.get("delta") or delta.get("type", "").startswith("toolcall"))
 
+    def observe_abort(self, session: TurnSession) -> None:
+        if self.delta_progress:
+            session.output_started = True
+
 
 @dataclass(frozen=True, kw_only=True)
 class Response(PiEvent):
@@ -542,7 +629,8 @@ class Response(PiEvent):
         return PiCommand.response_owner(self.command)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        async for event in self.command_type.on_response(self, session):
+        owner = type(session.response_command) if session.response_command else self.command_type
+        async for event in owner.on_response(self, session):
             yield event
 
 
@@ -572,8 +660,9 @@ class SummarizationRetryAttemptStart(PiEvent):
             event_phase="model_wait",
             attempt=(session.current, session.maximum),
         )
-        if False:
-            yield
+
+    def observe_abort(self, session: TurnSession) -> None:
+        session.compaction_started = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -582,16 +671,11 @@ class SummarizationRetryFinished(PiEvent):
     success: Any = field(default=None, metadata={"wire_name": "success"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from . import turn_phase as phases
-
         session.last_model_progress = session.now
-        session.phase = phases.ModelWaitPhase()
         if self.success or self.result:
             yield session.turn_state(
                 "recovered", "summarization_retry_succeeded", 0, event_phase="model_wait"
             )
-        if False:
-            yield
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -612,8 +696,9 @@ class SummarizationRetryScheduled(PiEvent):
             event_phase="model_wait",
             attempt=(session.current, session.maximum),
         )
-        if False:
-            yield
+
+    def observe_abort(self, session: TurnSession) -> None:
+        session.compaction_started = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -624,7 +709,6 @@ class ToolExecutionEnd(PiEvent):
     tool_name: Any = field(default=None, metadata={"wire_name": "toolName"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from . import turn_phase as phases
         from .backend import _result_text
         from .tool_results import ToolDiff
 
@@ -636,7 +720,7 @@ class ToolExecutionEnd(PiEvent):
         session.active_tools.discard(session.tool_id)
         session.last_model_progress = session.loop.time()
         if not session.active_tools:
-            session.phase = phases.ModelWaitPhase()
+            pass
         yield events.ToolEnd(
             id=session.tool_id,
             name=session.name,
@@ -644,8 +728,6 @@ class ToolExecutionEnd(PiEvent):
             output=session.output,
             diff=ToolDiff.from_result(session.name, session.result, session.is_ok),
         )
-        if False:
-            yield
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -669,14 +751,15 @@ class ToolExecutionStart(PiEvent):
             title=_tool_title(session.name, session.args),
             args=session.args,
         )
-        if False:
-            yield
 
     tool_progress = True
 
     @property
     def retry_progress(self) -> bool:
         return True
+
+    def observe_abort(self, session: TurnSession) -> None:
+        session.tool_ever_started = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -693,5 +776,6 @@ class ToolExecutionUpdate(PiEvent):
             name=self.tool_name or "tool",
             output=_result_text(self.partial_result),
         )
-        if False:
-            yield
+
+    def observe_abort(self, session: TurnSession) -> None:
+        session.tool_ever_started = True

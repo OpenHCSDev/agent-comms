@@ -727,12 +727,15 @@ async def run_native_pi_turn(
         remaining = deadline - asyncio.get_running_loop().time()
         if remaining <= 0:
             raise NativePiUnavailable("Native Pi turn deadline expired")
-        raw = await asyncio.wait_for(channel.readline(max_bytes=_MAX_LINE), timeout=remaining)
+        try:
+            raw = await asyncio.wait_for(channel.readline(max_bytes=_MAX_LINE), timeout=remaining)
+        except ValueError as error:
+            raise NativePiUnavailable("Native Pi RPC record is incomplete") from error
         if not raw or len(raw) > _MAX_LINE or not raw.endswith(b"\n"):
             raise NativePiUnavailable("Native Pi RPC record is incomplete")
         try:
             event = PiRpcChannel.decode_record(raw, strict=True, max_bytes=_MAX_LINE)
-        except (UnicodeError, ValueError) as error:
+        except (UnicodeError, ValueError, TypeError) as error:
             raise NativePiUnavailable("Native Pi RPC JSON is invalid") from error
         return event
 
@@ -829,7 +832,6 @@ async def run_native_pi_turn(
         selected_finished = False
         while True:
             event = await next_event()
-            kind = event.get("type")
             if isinstance(event, pi.Response) and event.get("id") == "native-prompt":
                 if accepted or event.get("command") != "prompt" or event.get("success") is not True:
                     raise NativePiUnavailable("Native Pi did not accept the tracked prompt")
