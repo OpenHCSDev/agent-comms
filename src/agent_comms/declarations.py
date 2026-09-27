@@ -4055,15 +4055,35 @@ class MessageBus:
                 sequence=max(int(metadata["last_seq"]), previous_sequence) + 1,
                 snapshot=snapshot,
             )
-            # A prior uncertain append may already have committed this ID.
-            # Never turn the retry into a second human input/claim.
-            if _human_origin is not None and any(
-                previous.sender == sender and previous.message_id == stored.message_id
-                for previous, _, _ in self._verified_private_rows_unlocked(metadata)
-            ):
-                raise RelationViolationError(
-                    "Human initial ID already exists; inspect its receipt, do not retry."
-                )
+            if _human_origin is not None:
+                # The marker reserves a sequence before the row. A crash after
+                # reservation can leave NO row carrying the human message ID.
+                # Never admit another human input while such an UNKNOWN gap is
+                # present, even if another ordinary sender subsequently skips
+                # over that sequence. This intentionally favors safety over
+                # availability until explicit operator reconciliation exists.
+                expected_sequence = 1
+                duplicate = False
+                for previous, _, _ in self._verified_private_rows_unlocked(metadata):
+                    if previous.seq != expected_sequence:
+                        raise RelationViolationError(
+                            "Private bus sequence gap has UNKNOWN outcome; "
+                            "human send blocked, do not retry."
+                        )
+                    expected_sequence += 1
+                    duplicate |= (
+                        previous.sender == sender
+                        and previous.message_id == stored.message_id
+                    )
+                if int(metadata["last_seq"]) != expected_sequence - 1:
+                    raise RelationViolationError(
+                        "Private bus sequence reservation has UNKNOWN outcome; "
+                        "human send blocked, do not retry."
+                    )
+                if duplicate:
+                    raise RelationViolationError(
+                        "Human initial ID already exists; inspect its receipt, do not retry."
+                    )
             revision = hashlib.sha256(
                 repr(
                     (

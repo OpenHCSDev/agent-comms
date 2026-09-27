@@ -173,6 +173,48 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
     assert len(comms.bus.full_history()) == 1
 
 
+def test_reservation_only_unknown_blocks_same_id_and_later_gap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    comms, _, root_id, _ = _root(tmp_path)
+    original_open = os.open
+    captured = {}
+    original_append = comms.bus._append_private_unlocked
+
+    def fail_bus_open(path, *args, **kwargs):
+        if Path(path) == comms.bus._path:
+            raise OSError("bus open failed after durable marker reservation")
+        return original_open(path, *args, **kwargs)
+
+    def capture_then_append(metadata, row):
+        captured.update(row)
+        original_append(metadata, row)
+
+    monkeypatch.setattr(os, "open", fail_bus_open)
+    monkeypatch.setattr(comms.bus, "_append_private_unlocked", capture_then_append)
+    with pytest.raises(HumanInitialUnknownError, match="UNKNOWN") as raised:
+        comms.send_user_message("alice", "first input", worktree=str(tmp_path))
+    assert raised.value.wire_root_id == root_id
+    assert captured["id"] == raised.value.message_id
+    assert comms.bus.full_history() == []
+    assert comms.bus._private_marker_unlocked()["last_seq"] == 1
+    monkeypatch.setattr(os, "open", original_open)
+    second = Comms(comms.root)
+    user = second.registry.require(captured["from"])
+    same = Message(user.name, "alice", "first input", MessageType.INFO, timestamp=captured["ts"])
+    with pytest.raises(RelationViolationError, match="reservation has UNKNOWN"):
+        second.bus.publish_ordinary(
+            same,
+            _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
+        )
+    assert second.bus.full_history() == []
+    later_agent = second.send_initial_cohort("alice", "bob", "unrelated agent input")
+    assert later_agent.seq == 2
+    with pytest.raises(RelationViolationError, match="sequence gap has UNKNOWN"):
+        second.send_user_message("alice", "new human input", worktree=str(tmp_path))
+    assert len(second.bus.full_history()) == 1
+
+
 def test_cancellation_after_append_entry_is_typed_unknown(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
