@@ -756,6 +756,7 @@ async def run_native_pi_turn(
                     or event.get("toolName") != "selected_claimed_write"
                     or event.get("toolCallId") != selected_call_id
                     or event.get("isError") is not False
+                    or tool_socket.completed_call_id != selected_call_id
                 ):
                     raise NativePiUnavailable("Native Pi selected tool did not finish successfully")
                 try:

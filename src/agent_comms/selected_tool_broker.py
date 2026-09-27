@@ -341,6 +341,9 @@ class SelectedToolSocket:
         self.token = token
         self.action = action
         self.expected_pid: int | None = None
+        # Live owner-side completion only. A visible .done file after failed
+        # fsync is not a durable receipt and must never be promoted by itself.
+        self.completed_call_id: str | None = None
         self._server: asyncio.AbstractServer | None = None
         self._approved: dict[str, tuple[str, bytes]] = {}
         self._approval_changed = asyncio.Event()
@@ -417,6 +420,7 @@ class SelectedToolSocket:
             # Sync action owns the durable consumption and writer call. A
             # second socket may queue but cannot pass the one-slot ledger.
             self.action(request)
+            self.completed_call_id = request.call_id
             response = {"ok": True}
         except Exception:
             # Do not leak details about root, path, admission or file content.

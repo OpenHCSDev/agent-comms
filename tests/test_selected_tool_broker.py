@@ -202,6 +202,53 @@ def test_writer_order_and_unknown_after_writer(
     assert trace == ["claim", "write", "terminal"]
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="selected tool storage requires POSIX dirfd")
+@pytest.mark.parametrize("failed_stage", ["claim_append_unknown", "partial_file_unknown"])
+def test_post_reservation_effect_unknown_is_never_retried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failed_stage: str
+) -> None:
+    tmp_path.chmod(0o700)
+    input_id = secrets.token_hex(16)
+    request = broker.SelectedToolRequest("call_1", "notes.txt", b"replacement")
+    admission = WakeAdmission(
+        wire_root_id="a" * 32,
+        source_seq=1,
+        source_message_id="source",
+        wake_claim_id="cohort-v1:" + "b" * 64,
+        wake_revision=1,
+        recipient_lookup="c" * 32,
+        execution_id="execution",
+        operation_id="d" * 32,
+        owner_admission_generation=1,
+        turn_id="turn",
+        participant_generation=1,
+        attempt_ordinal=1,
+    )
+    observed: list[str] = []
+
+    def claim(*_args: object) -> object:
+        observed.append("claim")
+        if failed_stage == "claim_append_unknown":
+            raise OSError("simulated lost bus fsync after visible append")
+        return object()
+
+    def write(*_args: object) -> None:
+        observed.append("write")
+        raise OSError("simulated partial file write")
+
+    monkeypatch.setattr(broker, "publish_selected_resource_claim", claim)
+    monkeypatch.setattr(broker, "write_selected_claimed_file", write)
+    with pytest.raises(OSError):
+        broker.perform_selected_write(None, None, admission, "owner", tmp_path, input_id, request)  # type: ignore[arg-type]
+    assert observed == (["claim"] if failed_stage == "claim_append_unknown" else ["claim", "write"])
+    ledger = tmp_path / "selected-tool-ledger"
+    assert (ledger / input_id).exists()
+    assert not (ledger / (input_id + ".done")).exists()
+    with pytest.raises(broker.SelectedToolDenied, match="already consumed"):
+        broker.perform_selected_write(None, None, admission, "owner", tmp_path, input_id, request)  # type: ignore[arg-type]
+    assert observed == (["claim"] if failed_stage == "claim_append_unknown" else ["claim", "write"])
+
+
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool socket requires SO_PEERCRED")
 def test_fake_socket_requires_pid_token_matching_emitted_call(tmp_path: Path) -> None:
     tmp_path.chmod(0o700)
