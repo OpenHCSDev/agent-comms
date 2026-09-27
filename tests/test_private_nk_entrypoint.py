@@ -2,15 +2,35 @@
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
-from agent_comms import acp, cohort_foreground, operations, private_nk_entrypoint, worker
-from agent_comms.coordination_store import IdentityConflict, PublicationActivationBlocked
-from agent_comms.declarations import Thread
+from agent_comms import (
+    acp,
+    active_route,
+    cli,
+    cohort_foreground,
+    operations,
+    private_nk_entrypoint,
+    supervised_cutover,
+    worker,
+)
+from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_store import (
+    IdentityConflict,
+    MutationStore,
+    PublicationActivationBlocked,
+)
+from agent_comms.declarations import Message, MessageType, RelationViolationError, Thread
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, private_nk_launch
 from test_native_prompt_binding import _root
 from test_native_prompt_binding import tmp_path as private_root_fixture
@@ -90,6 +110,444 @@ def test_environment_launch_uses_selected_root_not_cwd(tmp_path, monkeypatch):
     assert selected.native_package == tmp_path and seen == [tmp_path]
     assert selected.validated_root == root
     assert os.environ["AGENT_COMMS_ROOT"] == str(root)
+
+
+def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_path, monkeypatch):
+    root, root_id, _, _, _ = _root(tmp_path)
+    route_file = tmp_path / "active-route.json"
+    route_file.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "root": str(root),
+                "wire_root_id": root_id,
+                "native_package": str(tmp_path),
+            }
+        )
+    )
+    route_file.chmod(0o600)
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    for name in ("AGENT_COMMS_ROOT", ROOT_ID_ENV, PACKAGE_ENV):
+        monkeypatch.delenv(name, raising=False)
+    routed = operations.wire()
+    assert routed.root == root
+    assert routed._private_nk_launch == (root, root_id, tmp_path)
+    selected = private_nk_entrypoint.private_nk_from_environment()
+    assert selected is not None
+    assert (selected.validated_root, selected.wire_root_id, selected.native_package) == (
+        root,
+        root_id,
+        tmp_path,
+    )
+    legacy = tmp_path / "explicit-legacy"
+    monkeypatch.setenv("AGENT_COMMS_ROOT", str(legacy))
+    assert operations.wire().root == legacy
+    assert private_nk_entrypoint.private_nk_from_environment() is None
+
+
+def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, monkeypatch):
+    root, root_id, _, _, _ = _root(tmp_path)
+    route_file = tmp_path / "route-state" / "active-route.json"
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
+    active_route.publish_active_route(active_route.ActiveRoute(root, root_id, tmp_path))
+    comms = operations.wire()
+    saved = tmp_path / "saved-session.jsonl"
+    saved.write_text('{"type":"session"}\n')
+    saved.chmod(0o600)
+    comms.register(
+        Thread("resumable", frozenset(), str(tmp_path), pid=0, session_file=str(saved))
+    )
+    launched: list[subprocess.Popen] = []
+    captured: list[dict[str, str]] = []
+    original_popen = subprocess.Popen
+
+    def provider_free_child(_argv, **kwargs):
+        captured.append(kwargs["env"])
+        process = original_popen(
+            [
+                sys.executable, "-c",
+                "import os,time; os.read(int(os.environ['AGENT_COMMS_RESERVATION_FD']),32); "
+                "time.sleep(10)",
+            ],
+            **kwargs,
+        )
+        launched.append(process)
+        return process
+
+    monkeypatch.setattr(operations.subprocess, "Popen", provider_free_child)
+    try:
+        result = comms.start("resumable")
+        assert result.pid == launched[0].pid
+        assert captured[0]["AGENT_COMMS_ROOT"] == str(root)
+        assert captured[0][ROOT_ID_ENV] == root_id
+        assert captured[0][PACKAGE_ENV] == str(tmp_path)
+    finally:
+        for process in launched:
+            process.terminate()
+            process.wait(timeout=5)
+
+
+def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, monkeypatch):
+    root, root_id, _, _, _ = _root(tmp_path)
+    directory = tmp_path / "route-state"
+    directory.mkdir(mode=0o755)
+    route_file = directory / "active-route.json"
+    route = active_route.ActiveRoute(root, root_id, tmp_path)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    for name in ("AGENT_COMMS_ROOT", ROOT_ID_ENV, PACKAGE_ENV):
+        monkeypatch.delenv(name, raising=False)
+
+    assert active_route.read_active_route() is None
+    active_route.publish_active_route(route)
+    assert directory.stat().st_mode & 0o777 == 0o700
+    assert route_file.stat().st_mode & 0o777 == 0o600
+    assert active_route.read_active_route() == route
+    assert operations.wire().root == root
+    assert private_nk_entrypoint.private_nk_from_environment().validated_root == root
+    original = route_file.read_bytes()
+    with pytest.raises(ValueError, match="already installed"):
+        active_route.publish_active_route(route)
+    assert route_file.read_bytes() == original
+
+
+def test_publish_route_refuses_rival_installed_after_absent_check(tmp_path, monkeypatch):
+    root, root_id, _, _, _ = _root(tmp_path)
+    directory = tmp_path / "route-state"
+    directory.mkdir(mode=0o700)
+    route_file = directory / "active-route.json"
+    route = active_route.ActiveRoute(root, root_id, tmp_path)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    rival = b'{"rival":"preserve these bytes"}\n'
+    original_link = os.link
+
+    def rival_before_link(source, target, **kwargs):
+        route_file.write_bytes(rival)
+        route_file.chmod(0o600)
+        return original_link(source, target, **kwargs)
+
+    monkeypatch.setattr(active_route.os, "link", rival_before_link)
+    with pytest.raises(ValueError, match="already installed"):
+        active_route.publish_active_route(route, route_file)
+    assert route_file.read_bytes() == rival
+    assert not list(directory.glob(".active-route-*.tmp"))
+
+
+def test_default_write_guard_orders_old_root_write_before_route_publication(tmp_path, monkeypatch):
+    root, root_id, _, _, _ = _root(tmp_path)
+    legacy = tmp_path / ".agent-comms"
+    legacy.mkdir(mode=0o700)
+    route_file = tmp_path / "route-state" / "active-route.json"
+    route_file.parent.mkdir(mode=0o755)
+    route = active_route.ActiveRoute(root, root_id, tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    exclusive_requested = threading.Event()
+    original_flock = active_route.fcntl.flock
+
+    def observed_flock(fd, operation):
+        if operation == active_route.fcntl.LOCK_EX:
+            exclusive_requested.set()
+        return original_flock(fd, operation)
+
+    monkeypatch.setattr(active_route.fcntl, "flock", observed_flock)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with active_route.guard_default_route_write(legacy):
+            assert route_file.parent.stat().st_mode & 0o777 == 0o700
+            publishing = executor.submit(active_route.publish_active_route, route)
+            assert exclusive_requested.wait(timeout=5)
+            assert not route_file.exists()
+            (legacy / "read-marker").write_text("old write completed")
+        publishing.result(timeout=5)
+    assert route_file.exists()
+    assert (legacy / "read-marker").read_text() == "old write completed"
+    with (
+        pytest.raises(ValueError, match="route changed before write"),
+        active_route.guard_default_route_write(legacy),
+    ):
+        (legacy / "read-marker").write_text("late write")
+    assert (legacy / "read-marker").read_text() == "old write completed"
+    with active_route.guard_default_route_write(root):
+        (root / "read-marker").write_text("new write completed")
+    assert (root / "read-marker").read_text() == "new write completed"
+
+
+def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypatch):
+    root, root_id, _, _, _ = _root(tmp_path)
+    legacy = operations.Comms(tmp_path / ".agent-comms")
+    for name in ("sender", "receiver"):
+        legacy.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+    route_file = tmp_path / "route-state" / "active-route.json"
+    route = active_route.ActiveRoute(root, root_id, tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(cli, "wire", lambda _root=None: legacy)
+    monkeypatch.setattr(cli, "_emit", lambda _payload: None)
+    entered_send = threading.Event()
+    release_send = threading.Event()
+    exclusive_requested = threading.Event()
+    original_send = legacy.send
+    original_flock = active_route.fcntl.flock
+
+    def delayed_send(*args):
+        entered_send.set()
+        assert release_send.wait(timeout=5)
+        return original_send(*args)
+
+    def observed_flock(fd, operation):
+        if operation == active_route.fcntl.LOCK_EX:
+            exclusive_requested.set()
+        return original_flock(fd, operation)
+
+    monkeypatch.setattr(legacy, "send", delayed_send)
+    monkeypatch.setattr(active_route.fcntl, "flock", observed_flock)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        sending = executor.submit(
+            cli.main, ["send", "--from", "sender", "--to", "receiver", "--body", "old"]
+        )
+        assert entered_send.wait(timeout=5)
+        publishing = executor.submit(active_route.publish_active_route, route)
+        assert exclusive_requested.wait(timeout=5)
+        assert not route_file.exists()
+        release_send.set()
+        assert sending.result(timeout=5) == 0
+        publishing.result(timeout=5)
+    assert route_file.exists()
+    assert [message.body for message in legacy.inbox("receiver")] == ["old"]
+    assert cli.main(["send", "--from", "sender", "--to", "receiver", "--body", "late"]) == 1
+    assert [message.body for message in legacy.inbox("receiver")] == ["old"]
+
+
+def test_withdraw_route_archives_stopped_private_root(tmp_path, monkeypatch):
+    root = tmp_path / "private-wire"
+    comms = operations.Comms(root)
+    process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        comms.register(Thread("sender", frozenset(), str(tmp_path), pid=process.pid))
+        comms.register(Thread("alpha", frozenset({"team"}), str(tmp_path), pid=process.pid))
+        root_id = comms.initialize_private_initial_protocol()
+        comms.send_initial_cohort("sender", "#team", "pending private message")
+        InputDispositions(root).record(
+            "rollback:unknown", seq=None, owner="alpha", admission=1,
+            target="alpha", text="uncertain private input",
+        )
+        route_file = tmp_path / "route-state" / "active-route.json"
+        route = active_route.ActiveRoute(root, root_id, tmp_path)
+        archive = tmp_path / "archive" / "private-stopped"
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+        active_route.publish_active_route(route)
+        with pytest.raises(ValueError, match="expected private root"):
+            active_route.withdraw_active_route(
+                active_route.ActiveRoute(root, "f" * 32, tmp_path), archive
+            )
+        with pytest.raises(RelationViolationError, match="all old owners stopped"):
+            active_route.withdraw_active_route(route, archive)
+        assert route_file.exists() and not archive.exists()
+        process.terminate()
+        process.wait(timeout=5)
+        exclusive_requested = threading.Event()
+        original_flock = active_route.fcntl.flock
+
+        def observed_flock(fd, operation):
+            if operation == active_route.fcntl.LOCK_EX:
+                exclusive_requested.set()
+            return original_flock(fd, operation)
+
+        monkeypatch.setattr(active_route.fcntl, "flock", observed_flock)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            with active_route.guard_default_route_write(root):
+                withdrawing = executor.submit(active_route.withdraw_active_route, route, archive)
+                assert exclusive_requested.wait(timeout=5)
+                assert route_file.exists() and not archive.exists()
+            receipt = withdrawing.result(timeout=5)
+        assert not route_file.exists()
+        assert receipt.path == archive
+        assert (receipt.pending_messages, receipt.unknown_inputs) == (1, 1)
+        manifest = json.loads((archive / ".archive-manifest").read_text())
+        assert manifest["pending_messages"] == 1
+        assert manifest["unknown_inputs"] == 1
+        assert (archive / "bus.jsonl").read_bytes() == (root / "bus.jsonl").read_bytes()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+
+
+def test_activate_archive_stage_and_route_as_one_default_lock(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
+    route_file = tmp_path / "route-state" / "active-route.json"
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    legacy = operations.Comms(tmp_path / ".agent-comms")
+    saved = tmp_path / "saved-session.jsonl"
+    saved.write_text('{"type":"session"}\n')
+    saved.chmod(0o600)
+    process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        legacy.register(
+            Thread("sender", frozenset({"team"}), str(tmp_path), pid=process.pid,
+                   session_file=str(saved))
+        )
+        legacy.register(Thread("receiver", frozenset(), str(tmp_path), pid=0))
+        legacy.register(Thread("observer", frozenset(), str(tmp_path), pid=0))
+        legacy.send("sender", "receiver", "old pending")
+        InputDispositions(legacy.root).record(
+            "cutover:unknown", seq=None, owner="sender", admission=1,
+            target="sender", text="uncertain old input",
+        )
+        snapshot = legacy.registry.snapshot()
+        sender = snapshot.threads["sender"]
+        saved_info = saved.stat()
+        witness = supervised_cutover.OwnerWitness(
+            "sender", process.pid, sender.created_at,
+            snapshot.admission_generations["sender"],
+            supervised_cutover._process_start_ticks(process.pid),
+            saved, saved_info.st_dev, saved_info.st_ino, tmp_path, "pi", "",
+        )
+        inventory = supervised_cutover.LegacyInventory(
+            legacy.root, (witness,), (), (), (("receiver", 1),), 1
+        )
+        process.terminate()
+        process.wait(timeout=5)
+        legacy.registry.unregister("sender")
+        private = operations.Comms(tmp_path / "fresh-private")
+        copied = threading.Event()
+        release = threading.Event()
+        shared_requested = threading.Event()
+        requests = 0
+        requests_lock = threading.Lock()
+        original_archive = supervised_cutover.archive_stopped_root
+        original_flock = active_route.fcntl.flock
+
+        def pause_after_archive(*args, **kwargs):
+            receipt = original_archive(*args, **kwargs)
+            copied.set()
+            assert release.wait(timeout=5)
+            return receipt
+
+        def observed_flock(fd, operation):
+            nonlocal requests
+            if operation == active_route.fcntl.LOCK_SH:
+                with requests_lock:
+                    requests += 1
+                    if requests == 4:
+                        shared_requested.set()
+            return original_flock(fd, operation)
+
+        monkeypatch.setattr(supervised_cutover, "archive_stopped_root", pause_after_archive)
+        monkeypatch.setattr(active_route.fcntl, "flock", observed_flock)
+        monkeypatch.setattr(cli, "wire", lambda _root=None: legacy)
+        monkeypatch.setattr(cli, "_emit", lambda _payload: None)
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            activating = executor.submit(
+                supervised_cutover.activate_stopped_legacy_route,
+                legacy, private, inventory, ["sender"],
+                tmp_path / "archive" / "snapshot", tmp_path, route_file,
+            )
+            assert copied.wait(timeout=5)
+            sending = executor.submit(
+                cli.main,
+                ["send", "--from", "observer", "--to", "receiver", "--body", "late"],
+            )
+            direct = executor.submit(legacy.send, "observer", "receiver", "direct late")
+            raw = executor.submit(
+                legacy.bus.publish,
+                Message("observer", "receiver", "raw late", MessageType.INFO),
+            )
+            human = executor.submit(
+                legacy.send_user_message, "receiver", "human late", worktree=str(tmp_path)
+            )
+            assert shared_requested.wait(timeout=5)
+            assert not route_file.exists()
+            assert not any(task.done() for task in (sending, direct, raw, human))
+            release.set()
+            archive, route, selected = activating.result(timeout=5)
+            assert sending.result(timeout=5) == 1
+            for task in (direct, raw, human):
+                with pytest.raises(ValueError, match="route changed before write"):
+                    task.result(timeout=5)
+        assert active_route.read_active_route(route_file) == route
+        assert selected == (witness,)
+        assert archive.pending_messages == archive.unknown_inputs == 1
+        assert private.registry.require("sender").pid == 0
+        assert not (private.root / "bus.jsonl").exists()
+        assert [item.body for item in legacy.inbox("receiver")] == ["old pending"]
+        assert operations.wire()._private_nk_launch == (
+            private.root, route.wire_root_id, tmp_path,
+        )
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+
+
+def test_invalid_active_route_fails_closed(tmp_path, monkeypatch, capsys):
+    route_file = tmp_path / "active-route.json"
+    route_file.write_text("{")
+    route_file.chmod(0o600)
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
+    with pytest.raises(ValueError, match="invalid JSON"):
+        operations.wire()
+    with pytest.raises(ValueError, match="invalid JSON"):
+        private_nk_entrypoint.private_nk_from_environment()
+    assert cli.main(["threads"]) == 1
+    assert "invalid JSON" in json.loads(capsys.readouterr().out)["error"]
+
+
+def test_route_publication_reports_unknown_after_link(tmp_path, monkeypatch):
+    root = tmp_path / "private"
+    root.mkdir(mode=0o700)
+    path = tmp_path / "route-state" / "active-route.json"
+    route = active_route.ActiveRoute(root, "a" * 32, tmp_path)
+    monkeypatch.setattr(cohort_foreground, "_preflight", lambda *_: None)
+    real_fsync = os.fsync
+
+    def fail_after_link(fd):
+        if path.exists() and Path(os.readlink(f"/proc/self/fd/{fd}")) == path.parent:
+            raise OSError(5, "injected route directory sync failure")
+        return real_fsync(fd)
+
+    monkeypatch.setattr(active_route.os, "fsync", fail_after_link)
+    with pytest.raises(active_route.RoutePublicationUnknownError, match="UNKNOWN after link"):
+        active_route.publish_active_route(route, path)
+    assert active_route.read_active_route(path) == route
+
+
+def test_active_route_refuses_symlink_and_concurrent_replacement(tmp_path, monkeypatch):
+    directory = tmp_path / "private"
+    directory.mkdir(mode=0o700)
+    target = directory / "target.json"
+    target.write_text("{}")
+    target.chmod(0o600)
+    link = directory / "active-route.json"
+    link.symlink_to(target)
+    with pytest.raises(OSError):
+        active_route.read_active_route(link)
+    link.unlink()
+    link.write_text("{}")
+    link.chmod(0o600)
+    replacement = directory / "replacement.json"
+    replacement.write_text("{}")
+    replacement.chmod(0o600)
+    original_read = os.read
+
+    def replace_after_read(fd, count):
+        data = original_read(fd, count)
+        os.replace(replacement, link)
+        return data
+
+    monkeypatch.setattr(active_route.os, "read", replace_after_read)
+    with pytest.raises(ValueError, match="changed while reading"):
+        active_route.read_active_route(link)
 
 
 @pytest.mark.parametrize("entrypoint", ["acp", "worker"])
@@ -186,3 +644,31 @@ def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path
         comms._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi")
     assert seen == [(str(root), root_id, str(tmp_path))]
     assert not (other / "registry.json").exists()
+
+
+def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_path, monkeypatch):
+    root, root_id, comms, _, _ = _root(tmp_path)
+    comms.pin_private_nk_launch(root, root_id, tmp_path)
+    comms.register(Thread("late-owner", frozenset(), str(tmp_path)))
+    late = comms.registry.require("late-owner")
+    lookup = stable_thread_lookup(late.created_at)
+    message = comms.send_initial_cohort("sender", "late-owner", "fresh private task")
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        with pytest.raises(IdentityConflict, match="not registered"):
+            store.participant(lookup)
+
+    class StopBeforeSpawn(Exception):
+        pass
+
+    def intercept(_argv, *, env, **_kwargs):
+        assert env["AGENT_COMMS_ROOT"] == str(root)
+        with MutationStore(str(root / "coordination.sqlite3")) as store:
+            participant = store.participant(lookup)
+            assert participant.committed and participant.owner_thread == "late-owner"
+        raise StopBeforeSpawn
+
+    monkeypatch.setattr(operations.subprocess, "Popen", intercept)
+    with pytest.raises(StopBeforeSpawn):
+        comms.start("late-owner", agent_bin="pi")
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        assert accept_initial_cohort(comms.bus, root_id, message.seq, store).value.member_count == 1
