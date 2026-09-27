@@ -214,7 +214,8 @@ def require_retained_receipt(store: MutationStore, fence: OwnerFence) -> bool:
         row is None
         or not attempt.turn_settled
         or not attempt.backend_done
-        or attempt.process_dead
+        # Actual child death after the committed terminal receipt is an
+        # independent lifecycle fact; it does not erase the settled input.
         or row["terminal_digest"] is None
         or row["owner_lookup"] != attempt.owner_lookup
         or row["owner_thread"] != fence.owner_thread

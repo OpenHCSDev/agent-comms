@@ -243,6 +243,43 @@ def test_retained_turn_requires_exact_receipt_then_uses_same_keyed_gateway(
         case.close()
 
 
+def test_death_after_committed_retained_receipt_does_not_erase_settlement(
+    tmp_path: Path,
+) -> None:
+    case = _ready(tmp_path, direct=True, process_dead=False, retained=True)
+    try:
+        assert case.retained_identity is not None
+        settled = record_test_turn_settled(
+            case.store,
+            case.fence,
+            RetainedTurnReceipt(case.retained_identity, 1, "a" * 64),
+        ).value.fence
+        # The original owner is still live; only the already-settled Pi child
+        # dies. This is NOT a permit to resume that child or replay raw input.
+        dead = case.store.advance_attempt(
+            settled,
+            AttemptPhase.SETTLING,
+            expected_pointer_revision=1,
+            process_dead=True,
+        ).value.fence
+        attempt = case.store.snapshot("exec").attempt
+        assert attempt.turn_settled and attempt.process_dead
+        prepare_fenced_response(
+            case.store,
+            case.bus,
+            dead,
+            "Already settled before child death",
+            timestamp=123.5,
+        )
+        published = publish_fenced_response(case.store, case.bus, dead).value
+        assert published.execution.status is ExecutionStatus.COMPLETED
+        assert published.attempt.turn_settled and published.attempt.process_dead
+        assert case.comms.bus.latest_sequence() == case.origin_seq + 1
+        assert isinstance(resolve_existing_response(case.store, case.bus, dead), AlreadyApplied)
+    finally:
+        case.close()
+
+
 def test_out_of_order_retained_receipt_cannot_settle(tmp_path: Path) -> None:
     case = _ready(tmp_path, direct=True, process_dead=False, retained=True, finalize=False)
     try:
