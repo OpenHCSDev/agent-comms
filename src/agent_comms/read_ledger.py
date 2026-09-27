@@ -24,7 +24,6 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, slots=True)
 class ReadDocument:
     messages: dict[str, tuple[int, ...]] = field(default_factory=dict)
-    historical_messages: dict[str, tuple[int, ...]] = field(default_factory=dict)
     bus_identity: tuple[int, int] | None = None
     transcripts: dict[str, int] = field(default_factory=dict)
     migrated: bool = False
@@ -79,12 +78,19 @@ class ReadLedger(LockedStore[ReadDocument]):
         )
 
     def capture(
-        self, viewer: str, messages: Iterable[Message], snapshot: RegistrySnapshot, bus_path: Path
+        self,
+        viewer: str,
+        messages: Iterable[Message],
+        snapshot: RegistrySnapshot,
+        bus_path: Path,
+        *,
+        conversation_snapshot: RegistrySnapshot | None = None,
     ) -> DisplayBasis:
         viewer = snapshot.aliases.get(viewer, viewer)
         grouped: dict[Conversation, list[int]] = {}
         for message in messages:
-            grouped.setdefault(self.conversation(message, snapshot), []).append(message.seq)
+            conversation = self.conversation(message, conversation_snapshot or snapshot)
+            grouped.setdefault(conversation, []).append(message.seq)
         return DisplayBasis(
             viewer,
             snapshot.threads[viewer].created_at,
@@ -112,26 +118,6 @@ class ReadLedger(LockedStore[ReadDocument]):
                 replace(document, messages=messages, bus_identity=displayed.bus_identity)
                 if messages != document.messages or document.bus_identity != displayed.bus_identity
                 else document
-            )
-
-        self.update(advance)
-
-    def mark_historical(self, displayed) -> None:
-        key = json.dumps(
-            [
-                displayed.viewer,
-                displayed.viewer_created_at,
-                displayed.source.key,
-                displayed.source.bus_identity,
-            ]
-        )
-
-        def advance(document):
-            seen = tuple(
-                sorted(set(document.historical_messages.get(key, ())) | set(displayed.sequences))
-            )
-            return replace(
-                document, historical_messages={**document.historical_messages, key: seen}
             )
 
         self.update(advance)

@@ -20,7 +20,8 @@ or original-root mutation was performed. Parent owns installation/activation.
   policy. Its public original wire representation is unchanged; CLI display includes
   separate provenance. A message older than its source registry's latest declaration
   keeps an unknown incarnation rather than claiming that newer declaration authored it.
-- ReadLedger owns separate sparse historical paint evidence. Historical reads never
+- ReadLedger owns sparse historical paint evidence in each destination snapshot, using
+  its unchanged schema. No field is added to the live read document. Historical reads never
   advance live human reads or executor delivery. Existing S4 partial channel ACKs
   remain based only on painted live bodies. Toad uses source-bound keys for mounting,
   sorting, pruning and edge cursors, so overlapping sequences cannot suppress rows.
@@ -36,7 +37,8 @@ or original-root mutation was performed. Parent owns installation/activation.
 
 ## Validation
 
-See `core.txt`, `regression.txt`, `real-sources.json`, and the Toad PR evidence.
+Core/read/display selection: **71 passed**. Transcript/catalog regression selection:
+**102 passed**. See `core.txt`, `regression.txt`, `real-sources.json`, and the Toad PR evidence.
 
 The preserved-data check copies active presentation/bus metadata into a fixture under
 this worktree, then attaches `/home/ts/.agent-comms` and
@@ -47,8 +49,9 @@ exists but neither preserved bus has posts to that channel. All 93 recorded save
 session files across the two source registries opened through the existing transcript
 reader; this checks bounded saved tail parsing, not execution/resumption of each agent.
 
-NRA before scan: exact_compact_global, all 79 detectors analyzed, zero omitted,
-complete. Existing findings remain; no whole-package clean claim. These are authored
+NRA before and after scans: exact_compact_global, all 79 detectors analyzed, zero omitted,
+complete. The two reported findings are existing ThreadStatus dispatch and
+ViewPredicate/SavedView tiny-method duplication. Existing findings remain; no whole-package clean claim. These are authored
 feature extensions of existing owners, not a proved behavior-preserving codemod.
 
 ## Parent installation / migration procedure
@@ -86,8 +89,8 @@ feature extensions of existing owners, not a proved behavior-preserving codemod.
    transfer to a current owner. User-directed new execution is a separate explicit action.
 6. Roll back display attachment by restoring the manifest and catalog backups (or
    removing only files recorded absent). Restore previous runtime links if reverting
-   the UI. Keep `read_ledger.json`: historical receipts are separate and inert when a
-   source is detached. Once no UI holds the removed sources, delete only unreferenced
+   the UI. Keep the live `read_ledger.json` unchanged: historical receipts live in source
+   snapshots and are inert when a source is detached. Once no UI holds the removed sources, delete only unreferenced
    destination `history/source-*` directories to reclaim their disposable copies.
    Never remove original roots or original sessions. No live bus rollback is needed.
 

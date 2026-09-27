@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import Comms, HistoricalMessage, HistoryCursor, Thread
+from agent_comms.read_ledger import ReadLedger
 
 
 def setup(root, count=5):
@@ -90,11 +91,18 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
         "#team", before=HistoryCursor(source.key, 100), worktree=str(live.root), limit=3
     )
     live.mark_historical_view_read(page.historical_display.select([page.messages[1].seq]))
-    assert list(live.reads.read().historical_messages.values()) == [(page.messages[1].seq,)]
+    assert list(ReadLedger(Path(source.root) / ReadLedger.filename).read().messages.values()) == [
+        (page.messages[1].seq,)
+    ]
     assert not live.reads.seen_sequences(viewer.name, live.registry.snapshot())
     assert live.pending_count("bob", "#team") == 2
     with pytest.raises(ValueError):
-        live.mark_historical_view_read(replace(page.historical_display, viewer_created_at=-9.0))
+        live.mark_historical_view_read(
+            replace(
+                page.historical_display,
+                displayed=replace(page.historical_display.displayed, viewer_created_at=-9.0),
+            )
+        )
 
 
 def test_duplicate_and_newer_incarnations_sessions(tmp_path):

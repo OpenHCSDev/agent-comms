@@ -70,7 +70,7 @@ from .response_policy import ResponsePolicy
 if TYPE_CHECKING:
     from .coordination import PublicationIntent
     from .goal_history import GoalHistoryEntry
-    from .historical_views import HistoricalDisplay
+    from .historical_views import HistoricalDisplay, HistoryCursor, HistorySource
     from .owner_compaction_gate import OwnerCompactionAttestation
     from .private_registry_guard import PrivateRegistryGuard
 from .envelope_claim_transitions import (
@@ -1809,7 +1809,7 @@ class Message:
                 )
 
     @property
-    def view_cursor(self) -> int:
+    def view_cursor(self) -> int | HistoryCursor:
         return self.seq
 
     @property
@@ -2118,11 +2118,11 @@ class MessagePage:
     historical_display: HistoricalDisplay | None = None
 
     @property
-    def oldest_cursor(self):
+    def oldest_cursor(self) -> int | HistoryCursor | None:
         return self.messages[0].view_cursor if self.messages else None
 
     @property
-    def newest_cursor(self):
+    def newest_cursor(self) -> int | HistoryCursor | None:
         return self.messages[-1].view_cursor if self.messages else None
 
     def __post_init__(self) -> None:
@@ -3394,7 +3394,7 @@ class MessageBus:
     def history_manifest(self) -> Path:
         return self._path.with_name("history_sources.json")
 
-    def history_sources(self):
+    def history_sources(self) -> tuple[HistorySource, ...]:
         from .historical_views import HistorySource
 
         try:
@@ -3403,7 +3403,7 @@ class MessageBus:
             return ()
         return tuple(FieldCodec.decode(HistorySource, item) for item in raw)
 
-    def attach_history(self, source_root: Path):
+    def attach_history(self, source_root: Path) -> HistorySource:
         """Snapshot a preserved source, then publish it for ordinary display.
 
         Only destination files are written. No Comms constructor, source locks,
@@ -3513,10 +3513,13 @@ class MessageBus:
                 max_bytes=max_bytes,
             )
 
-            page = replace(page, messages=tuple(
-                HistoricalMessage.project(message, source, index, snapshot)
-                for message in page.messages
-            ))
+            page = replace(
+                page,
+                messages=tuple(
+                    HistoricalMessage.project(message, source, index, snapshot)
+                    for message in page.messages
+                ),
+            )
             if page.messages:
                 # Cross-source availability is resolved by the next bounded read;
                 # false-positive edges terminate on an empty page without replay.

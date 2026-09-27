@@ -13,6 +13,7 @@ from .declarations import (
     ThreadRegistry,
     file_revision,
 )
+from .read_basis import DisplayBasis
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,15 +121,16 @@ class HistoricalThread:
 
 @dataclass(frozen=True, slots=True)
 class HistoricalDisplay:
-    viewer: str
-    viewer_created_at: float
     source: HistorySource
-    sequences: tuple[int, ...]
+    displayed: DisplayBasis
+
+    @property
+    def viewer(self) -> str:
+        return self.displayed.viewer
+
+    @property
+    def viewer_created_at(self) -> float:
+        return self.displayed.viewer_created_at
 
     def select(self, sequences) -> HistoricalDisplay:
-        return HistoricalDisplay(
-            self.viewer,
-            self.viewer_created_at,
-            self.source,
-            tuple(n for n in self.sequences if n in sequences),
-        )
+        return HistoricalDisplay(self.source, self.displayed.select(sequences))

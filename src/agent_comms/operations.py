@@ -44,6 +44,7 @@ from .goal_waits import GoalInputReview, GoalWait, GoalWaits
 
 if TYPE_CHECKING:
     from .agent_events import GoalChanged
+    from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
     from .relationships import ThreadRelationships
 from .declarations import (
     PRIVATE_OWNER_RENAME_PENDING,
@@ -603,8 +604,8 @@ class Comms:
         a: str,
         b: str,
         *,
-        before: int | None = None,
-        after: int | None = None,
+        before: int | HistoryCursor | None = None,
+        after: int | HistoryCursor | None = None,
         limit: int = 100,
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
@@ -625,14 +626,14 @@ class Comms:
             max_bytes=max_bytes,
         )
 
-    def attach_history(self, source_root: Path):
+    def attach_history(self, source_root: Path) -> HistorySource:
         """Attach preserved history without admitting any historical execution."""
         source = self.bus.attach_history(Path(source_root))
         catalog = ChannelCatalog(Path(source.root) / "channels.json", source.registry())
         self.channel_catalog.restore_missing(catalog)
         return source
 
-    def historical_threads(self, name: str | None = None):
+    def historical_threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
         from .historical_views import HistoricalThread
 
         return tuple(
@@ -668,11 +669,16 @@ class Comms:
             display = None
             if worktree is not None:
                 viewer = self.user_identity(worktree)
+                source = history.messages[0].source
                 display = HistoricalDisplay(
-                    viewer.name,
-                    viewer.created_at,
-                    history.messages[0].source,
-                    tuple(m.seq for m in history.messages),
+                    source,
+                    self.reads.capture(
+                        viewer.name,
+                        history.messages,
+                        self.registry.snapshot(),
+                        Path(source.root) / "bus.jsonl",
+                        conversation_snapshot=source.registry().snapshot(),
+                    ),
                 )
             latest = live_page(limit=1)
             return replace(
@@ -689,8 +695,8 @@ class Comms:
         peer: str,
         *,
         worktree: str,
-        before=None,
-        after=None,
+        before: int | HistoryCursor | None = None,
+        after: int | HistoryCursor | None = None,
         limit: int = 100,
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
@@ -708,10 +714,12 @@ class Comms:
             }
 
         historical_only = peer not in self.registry and bool(self.historical_threads(peer))
+
         def live_page(**kwargs):
             if historical_only:
                 return MessagePage((), False, False)
             return self._live_dm_display_page(peer, worktree=worktree, **kwargs)
+
         return self._integrated_display_page(
             live_page,
             matches,
@@ -727,8 +735,8 @@ class Comms:
         target: str,
         *,
         worktree: str | None = None,
-        before=None,
-        after=None,
+        before: int | HistoryCursor | None = None,
+        after: int | HistoryCursor | None = None,
         limit: int = 100,
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
@@ -767,7 +775,7 @@ class Comms:
             max_bytes=max_bytes,
         )
 
-    def mark_historical_view_read(self, displayed) -> None:
+    def mark_historical_view_read(self, displayed: HistoricalDisplay) -> None:
         """Record only painted historical membership in the existing human ledger."""
         viewer = self.registry.require(displayed.viewer)
         if viewer.created_at != displayed.viewer_created_at or viewer.role.executable:
@@ -775,7 +783,13 @@ class Comms:
         if displayed.source not in self.bus.history_sources():
             raise ValueError("Historical source detached; refresh history")
         displayed.source.validate()
-        self.reads.mark_historical(displayed)
+        # The snapshot is a separate bus: reuse its existing ledger owner and
+        # schema. Live/older readers never encounter foreign sequence facts.
+        from .read_ledger import ReadLedger
+
+        ReadLedger(Path(displayed.source.root) / ReadLedger.filename).mark_displayed(
+            displayed.viewer, displayed.displayed
+        )
 
     def _live_dm_display_page(
         self,
@@ -882,8 +896,8 @@ class Comms:
         self,
         target: str,
         *,
-        before: int | None = None,
-        after: int | None = None,
+        before: int | HistoryCursor | None = None,
+        after: int | HistoryCursor | None = None,
         limit: int = 100,
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
@@ -1067,8 +1081,8 @@ class Comms:
     def full_history_page(
         self,
         *,
-        before: int | None = None,
-        after: int | None = None,
+        before: int | HistoryCursor | None = None,
+        after: int | HistoryCursor | None = None,
         limit: int = 100,
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
