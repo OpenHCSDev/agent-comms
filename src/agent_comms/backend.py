@@ -47,7 +47,9 @@ from uuid import uuid4
 from .diagnostics import FailureReason
 from .image_inputs import ImageInput
 from .native_pi import CAPABILITY as NATIVE_INPUT_CAPABILITY
+from .native_prompt_send import send_fenced_prompt
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
+from .selected_persistent_prompt import SelectedPersistentPrompt
 from .tool_results import ToolDiff
 
 
@@ -695,6 +697,7 @@ async def stream_agent_events(
     ) = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
     persistent_session: PersistentPiSession | None = None,
+    selected_prompt: SelectedPersistentPrompt | None = None,
     ui_request: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run the backend and yield events. Always ends with a ``done`` event.
@@ -741,6 +744,7 @@ async def stream_agent_events(
                         native_start=native_start,
                         interrupt_boundary=interrupt_boundary,
                         persistent_session=persistent_session,
+                        selected_prompt=selected_prompt,
                         ui_request=ui_request,
                         startup=startup,
                     )
@@ -794,6 +798,7 @@ async def _stream_agent_events(
     ) = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
     persistent_session: PersistentPiSession | None = None,
+    selected_prompt: SelectedPersistentPrompt | None = None,
     ui_request: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]] | None = None,
     startup: NativeStartupAdmission | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
@@ -813,7 +818,9 @@ async def _stream_agent_events(
         else "agent-comms-prompt"
     )
     preflight_id = f"agent-comms-preflight-{secrets.token_hex(16)}"
-    original_input_id = secrets.token_hex(16)
+    original_input_id = (
+        selected_prompt.input_id if selected_prompt is not None else secrets.token_hex(16)
+    )
     prompt_payload = b""
     if rpc_args is not None:
         argv = [agent_bin, *rpc_args]
@@ -863,8 +870,25 @@ async def _stream_agent_events(
             and not fork_session
             and persistent_session.reusable(launch_key, session_file)
         )
-        if not reused:
-            await persistent_session.close()
+    if selected_prompt is not None and (
+        not reused
+        or "--no-tools" in (rpc_args or ())
+        or send_boundary is not None
+        or not require_input_id
+        or steering_queue is not None
+        or images
+    ):
+        # No fallback launch, no change to the idle child, and no legacy
+        # buffered send/steering route for this reserved private input.
+        yield {
+            "type": "done",
+            "ok": False,
+            "text": "Selected persistent owner/profile unavailable; no prompt sent.",
+            "reason_code": "selected_persistent_owner_unavailable",
+        }
+        return
+    if persistent_session is not None and not reused:
+        await persistent_session.close()
     loop = asyncio.get_running_loop()
     if not reused and rpc_args is not None and require_input_id and startup is not None:
         await startup.acquire(finish_event)
@@ -1565,20 +1589,33 @@ async def _stream_agent_events(
             prompt_start_deadline = loop.time() + PROMPT_START_TIMEOUT_SECONDS
             assert proc.stdin is not None
             try:
-                boundary_context = (
-                    send_boundary(None, original_input_id, task)
-                    if send_boundary is not None
-                    else nullcontext(True)
-                )
-                with boundary_context as authorized:
-                    if authorized:
-                        prompt_dispatched = True
-                        proc.stdin.write(prompt_payload)
-                if not authorized:
-                    fail_reason = "Input authority changed before Pi prompt send."
-                    await _terminate_process(proc)
-                    break
-                await proc.stdin.drain()
+                if selected_prompt is not None:
+                    # Admission holds through every actual os.write, never an
+                    # asyncio StreamWriter buffer later flushed after revocation.
+                    # A failed/partial write leaves the caller's reserved input
+                    # UNKNOWN; this transport never retries it.
+                    prompt_dispatched = True
+                    await send_fenced_prompt(
+                        proc.stdin,
+                        prompt_payload,
+                        selected_prompt.send_boundary,
+                        timeout=prompt_start_deadline - loop.time(),
+                    )
+                else:
+                    boundary_context = (
+                        send_boundary(None, original_input_id, task)
+                        if send_boundary is not None
+                        else nullcontext(True)
+                    )
+                    with boundary_context as authorized:
+                        if authorized:
+                            prompt_dispatched = True
+                            proc.stdin.write(prompt_payload)
+                    if not authorized:
+                        fail_reason = "Input authority changed before Pi prompt send."
+                        await _terminate_process(proc)
+                        break
+                    await proc.stdin.drain()
             except (BrokenPipeError, ConnectionResetError):
                 fail_reason = "Pi RPC prompt could not be sent after capability preflight."
                 await _terminate_process(proc)
