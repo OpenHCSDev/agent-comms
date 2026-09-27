@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
+from .active_route import guard_legacy_root_write
 from .candidate_maintenance import schedule_private_candidate_after_commit
 from .channels import ChannelCatalog
 from .goal_history import GoalHistoryEntry
@@ -424,7 +425,7 @@ class Comms:
         releases: Sequence[str | Path] = (),
     ) -> Message:
         """Return one committed envelope, including optional guarded claims."""
-        with _store_lock(self._wire_lock_path):
+        with guard_legacy_root_write(self.root), _store_lock(self._wire_lock_path):
             if sender not in self.registry:
                 raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
             owner = self.registry.require(sender)
@@ -534,9 +535,10 @@ class Comms:
             return thread
 
     def send_user_message(self, target: str, body: str, *, worktree: str) -> Message:
-        user = self.user_identity(worktree)
-        with _store_lock(self._wire_lock_path):
-            return self.bus.publish(Message(user.name, target, body, MessageType.INFO))
+        with guard_legacy_root_write(self.root):
+            user = self.user_identity(worktree)
+            with _store_lock(self._wire_lock_path):
+                return self.bus.publish(Message(user.name, target, body, MessageType.INFO))
 
     def inbox(self, name: str, target: str | None = None) -> Sequence[Message]:
         """Undelivered messages for one thread, optionally scoped to a conversation."""
@@ -1459,7 +1461,7 @@ class Comms:
     ) -> Thread:
         for tag in add | remove:
             Tag(tag)
-        with _store_lock(self._wire_lock_path):
+        with guard_legacy_root_write(self.root), _store_lock(self._wire_lock_path):
             self._require_available_new_tags(add)
             thread = self.registry.require(name)
             previous_channels = self.channel_catalog.views()

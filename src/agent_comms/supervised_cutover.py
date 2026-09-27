@@ -443,6 +443,7 @@ def stage_private_participants(
     old_waits = GoalWaits(legacy.root / "goal_waits.json").snapshot()
     migrated_waits = []
     seen_goals: set[str] = set()
+    selected_owners = {participant.name: participant for participant in participants}
     for thread in participants:
         goal = thread.goal
         if goal is None or not goal.active:
@@ -459,6 +460,12 @@ def stage_private_participants(
             or not wait.targets
         ):
             raise RelationViolationError("Cutover active goal wait lost its owner binding")
+        if any(
+            target.name not in selected_owners
+            or selected_owners[target.name].created_at != target.created_at
+            for target in wait.targets
+        ):
+            raise RelationViolationError("Cutover goal wait requires every exact target staged")
         # New wire sequences start at one. Preserve the dependency wait, but
         # only a FRESH private-root reply may release it. A legacy child-turn
         # callback cannot certify new-root completion after migration.
@@ -485,6 +492,7 @@ def stage_private_participants(
             new_waits.record(wait)
         for thread in participants:
             private.registry.register(thread, ThreadStatus.STOPPED)
+    _require_unchanged_archive_source(legacy, archive)
     return root_id, tuple(witnesses[name] for name in selected)
 
 

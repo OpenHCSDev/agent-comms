@@ -23,7 +23,7 @@ from agent_comms import (
     worker,
 )
 from agent_comms.coordination_store import IdentityConflict, PublicationActivationBlocked
-from agent_comms.declarations import RelationViolationError, Thread
+from agent_comms.declarations import Message, MessageType, RelationViolationError, Thread
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, private_nk_launch
 from test_native_prompt_binding import _root
@@ -416,6 +416,8 @@ def test_activate_archive_stage_and_route_as_one_default_lock(tmp_path, monkeypa
         copied = threading.Event()
         release = threading.Event()
         shared_requested = threading.Event()
+        requests = 0
+        requests_lock = threading.Lock()
         original_archive = supervised_cutover.archive_stopped_root
         original_flock = active_route.fcntl.flock
 
@@ -426,15 +428,19 @@ def test_activate_archive_stage_and_route_as_one_default_lock(tmp_path, monkeypa
             return receipt
 
         def observed_flock(fd, operation):
+            nonlocal requests
             if operation == active_route.fcntl.LOCK_SH:
-                shared_requested.set()
+                with requests_lock:
+                    requests += 1
+                    if requests == 4:
+                        shared_requested.set()
             return original_flock(fd, operation)
 
         monkeypatch.setattr(supervised_cutover, "archive_stopped_root", pause_after_archive)
         monkeypatch.setattr(active_route.fcntl, "flock", observed_flock)
         monkeypatch.setattr(cli, "wire", lambda _root=None: legacy)
         monkeypatch.setattr(cli, "_emit", lambda _payload: None)
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        with ThreadPoolExecutor(max_workers=5) as executor:
             activating = executor.submit(
                 supervised_cutover.activate_stopped_legacy_route,
                 legacy, private, inventory, ["sender"],
@@ -445,11 +451,23 @@ def test_activate_archive_stage_and_route_as_one_default_lock(tmp_path, monkeypa
                 cli.main,
                 ["send", "--from", "observer", "--to", "receiver", "--body", "late"],
             )
+            direct = executor.submit(legacy.send, "observer", "receiver", "direct late")
+            raw = executor.submit(
+                legacy.bus.publish,
+                Message("observer", "receiver", "raw late", MessageType.INFO),
+            )
+            human = executor.submit(
+                legacy.send_user_message, "receiver", "human late", worktree=str(tmp_path)
+            )
             assert shared_requested.wait(timeout=5)
             assert not route_file.exists()
+            assert not any(task.done() for task in (sending, direct, raw, human))
             release.set()
             archive, route, selected = activating.result(timeout=5)
             assert sending.result(timeout=5) == 1
+            for task in (direct, raw, human):
+                with pytest.raises(ValueError, match="route changed before write"):
+                    task.result(timeout=5)
         assert active_route.read_active_route(route_file) == route
         assert selected == (witness,)
         assert archive.pending_messages == archive.unknown_inputs == 1
@@ -477,6 +495,25 @@ def test_invalid_active_route_fails_closed(tmp_path, monkeypatch, capsys):
         private_nk_entrypoint.private_nk_from_environment()
     assert cli.main(["threads"]) == 1
     assert "invalid JSON" in json.loads(capsys.readouterr().out)["error"]
+
+
+def test_route_publication_reports_unknown_after_link(tmp_path, monkeypatch):
+    root = tmp_path / "private"
+    root.mkdir(mode=0o700)
+    path = tmp_path / "route-state" / "active-route.json"
+    route = active_route.ActiveRoute(root, "a" * 32, tmp_path)
+    monkeypatch.setattr(cohort_foreground, "_preflight", lambda *_: None)
+    real_fsync = os.fsync
+
+    def fail_after_link(fd):
+        if path.exists() and Path(os.readlink(f"/proc/self/fd/{fd}")) == path.parent:
+            raise OSError(5, "injected route directory sync failure")
+        return real_fsync(fd)
+
+    monkeypatch.setattr(active_route.os, "fsync", fail_after_link)
+    with pytest.raises(active_route.RoutePublicationUnknownError, match="UNKNOWN after link"):
+        active_route.publish_active_route(route, path)
+    assert active_route.read_active_route(path) == route
 
 
 def test_active_route_refuses_symlink_and_concurrent_replacement(tmp_path, monkeypatch):

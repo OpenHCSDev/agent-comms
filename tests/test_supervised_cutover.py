@@ -112,6 +112,7 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
     saved.write_text('{"type":"session"}\n')
     saved.chmod(0o600)
     process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    receiver_process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
     try:
         legacy.register(
             Thread(
@@ -120,7 +121,8 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
                 goal=Goal("wait for receiver", "stage-goal"),
             )
         )
-        legacy.register(Thread("receiver", frozenset(), str(tmp_path), pid=0))
+        legacy.register(Thread("receiver", frozenset(), str(tmp_path), pid=receiver_process.pid,
+                               session_file=str(saved)))
         legacy.send("sender", "receiver", "old pending message")
         before_wait = legacy.registry.snapshot()
         GoalWaits(legacy.root / "goal_waits.json").record(
@@ -145,19 +147,35 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
             supervised_cutover._process_start_ticks(process.pid),
             saved, info.st_dev, info.st_ino, tmp_path, "pi", "",
         )
+        receiver = snapshot.threads["receiver"]
+        receiver_witness = OwnerWitness(
+            "receiver", receiver_process.pid, receiver.created_at,
+            snapshot.admission_generations["receiver"],
+            supervised_cutover._process_start_ticks(receiver_process.pid),
+            saved, info.st_dev, info.st_ino, tmp_path, "pi", "",
+        )
         inventory = LegacyInventory(
-            legacy.root, (witness,), (), (), (("receiver", 1),), 1
+            legacy.root, (witness, receiver_witness), (), (), (("receiver", 1),), 1
         )
         process.terminate()
         process.wait(timeout=5)
+        receiver_process.terminate()
+        receiver_process.wait(timeout=5)
         legacy.registry.unregister("sender")
+        legacy.registry.unregister("receiver")
         archive = archive_stopped_root(legacy, tmp_path / "archive" / "snapshot")
         private = Comms(tmp_path / "private")
+        incomplete = Comms(tmp_path / "incomplete-private")
+        with pytest.raises(RelationViolationError, match="every exact target staged"):
+            stage_private_participants(
+                legacy, incomplete, archive, inventory, ["sender"]
+            )
+        assert not (incomplete.root / "bus_meta.json").exists()
         root_id, selected = stage_private_participants(
-            legacy, private, archive, inventory, ["sender"]
+            legacy, private, archive, inventory, ["sender", "receiver"]
         )
         staged = private.registry.require("sender")
-        assert selected == (witness,)
+        assert selected == (witness, receiver_witness)
         assert staged.pid == 0 and staged.session_file == str(saved)
         assert staged.created_at == thread.created_at
         assert private.registry.status("sender") is ThreadStatus.STOPPED
@@ -168,22 +186,27 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
         assert not (private.root / "bus.jsonl").exists()
         assert archive.pending_messages == archive.unknown_inputs == 1
         private.registry.register(replace(staged, pid=os.getpid()), ThreadStatus.RUNNING)
-        private.register(Thread("receiver", frozenset(), str(tmp_path), pid=os.getpid()))
+        private.registry.register(
+            replace(private.registry.require("receiver"), pid=os.getpid()), ThreadStatus.RUNNING
+        )
         message = private.send_initial_cohort("sender", "receiver", "new private input")
         initial = private.bus.read_initial_cohort(root_id, message.seq)
         assert initial.audience.recipients[0].canonical_thread == "receiver"
         assert [item.body for item in legacy.inbox("receiver")] == ["old pending message"]
         with pytest.raises(RelationViolationError, match="fresh private root"):
-            stage_private_participants(legacy, private, archive, inventory, ["sender"])
+            stage_private_participants(legacy, private, archive, inventory, ["sender", "receiver"])
         another = Comms(tmp_path / "another-private")
         InputDispositions(legacy.root).record(
             "stage:late", seq=None, owner="sender", admission=1,
             target="sender", text="late old input",
         )
         with pytest.raises(RelationViolationError, match="changed after its cutover archive"):
-            stage_private_participants(legacy, another, archive, inventory, ["sender"])
+            stage_private_participants(legacy, another, archive, inventory, ["sender", "receiver"])
         assert not (another.root / "bus_meta.json").exists()
     finally:
         if process.poll() is None:
             process.kill()
             process.wait(timeout=5)
+        if receiver_process.poll() is None:
+            receiver_process.kill()
+            receiver_process.wait(timeout=5)

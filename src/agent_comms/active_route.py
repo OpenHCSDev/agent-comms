@@ -10,6 +10,7 @@ import fcntl
 import json
 import os
 import stat
+import threading
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
@@ -28,6 +29,24 @@ class ActiveRoute:
     root: Path
     wire_root_id: str
     native_package: Path
+
+
+class RoutePublicationUnknownError(RelationViolationError):
+    """The new route may be visible after a failed durability boundary."""
+
+
+_route_write_owner = threading.local()
+
+
+@contextmanager
+def guard_legacy_root_write(root: Path) -> Iterator[None]:
+    """Fence a cooperating write through the historical root after cutover."""
+    legacy = Path.home() / ".agent-comms"
+    if root.expanduser().resolve() == legacy.resolve():
+        with guard_default_route_write(legacy):
+            yield
+    else:
+        yield
 
 
 def active_route_path() -> Path:
@@ -108,9 +127,16 @@ def guard_default_route_write(expected_root: Path) -> Iterator[None]:
     """Keep a default-root write on its selected root through publication.
 
     Callers must enter this guard before the mutating operation, including any
-    thread dispatch. Explicit AGENT_COMMS_ROOT operations do not use it.
+    thread dispatch. A nested guard in the same thread shares the outer lock.
     """
     path = active_route_path()
+    held = getattr(_route_write_owner, "held", None)
+    identity = (str(path), str(expected_root.expanduser().resolve(strict=True)))
+    if held is not None:
+        if held != identity:
+            raise ValueError("nested default comms write changed its route")
+        yield
+        return
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     directory = os.open(
         path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
@@ -131,7 +157,11 @@ def guard_default_route_write(expected_root: Path) -> Iterator[None]:
         current_root = route.root if route is not None else Path.home() / ".agent-comms"
         if expected_root.expanduser().resolve(strict=True) != current_root.resolve(strict=True):
             raise ValueError("default comms route changed before write")
-        yield
+        _route_write_owner.held = identity
+        try:
+            yield
+        finally:
+            _route_write_owner.held = None
     finally:
         os.close(directory)
 
@@ -223,12 +253,17 @@ def _publish_active_route_locked(route: ActiveRoute, path: Path, directory: int)
             )
         except FileExistsError as error:
             raise ValueError("active comms route is already installed") from error
-        os.unlink(temporary, dir_fd=directory)
-        temporary = None
-        os.fsync(directory)
+        try:
+            os.unlink(temporary, dir_fd=directory)
+            temporary = None
+            os.fsync(directory)
+        except OSError as error:
+            raise RoutePublicationUnknownError(
+                "active comms route publication outcome UNKNOWN after link"
+            ) from error
     finally:
         if temporary is not None:
-            with suppress(FileNotFoundError):
+            with suppress(OSError):
                 os.unlink(temporary, dir_fd=directory)
 
 

@@ -3400,6 +3400,12 @@ class MessageBus:
 
     def publish(self, message: Message) -> Message:
         """Commit an ordinary row; refuse legacy appends after private cutover."""
+        from .active_route import guard_legacy_root_write
+
+        with guard_legacy_root_write(self._path.parent):
+            return self._publish_legacy(message)
+
+    def _publish_legacy(self, message: Message) -> Message:
         if message.claim_transition is not None:
             raise RelationViolationError("Claim envelopes require the gated private sender.")
         sender, target = self._validate_publish_request(message)
