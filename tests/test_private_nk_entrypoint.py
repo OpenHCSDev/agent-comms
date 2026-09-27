@@ -133,6 +133,30 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     assert private_nk_entrypoint.private_nk_from_environment() is None
 
 
+def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, monkeypatch):
+    root, root_id, _, _, _ = _root(tmp_path)
+    directory = tmp_path / "route-state"
+    directory.mkdir(mode=0o755)
+    route_file = directory / "active-route.json"
+    route = active_route.ActiveRoute(root, root_id, tmp_path)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    for name in ("AGENT_COMMS_ROOT", ROOT_ID_ENV, PACKAGE_ENV):
+        monkeypatch.delenv(name, raising=False)
+
+    assert active_route.read_active_route() is None
+    active_route.publish_active_route(route)
+    assert directory.stat().st_mode & 0o777 == 0o700
+    assert route_file.stat().st_mode & 0o777 == 0o600
+    assert active_route.read_active_route() == route
+    assert operations.wire().root == root
+    assert private_nk_entrypoint.private_nk_from_environment().validated_root == root
+    original = route_file.read_bytes()
+    with pytest.raises(ValueError, match="already installed"):
+        active_route.publish_active_route(route)
+    assert route_file.read_bytes() == original
+
+
 def test_invalid_active_route_fails_closed(tmp_path, monkeypatch, capsys):
     route_file = tmp_path / "active-route.json"
     route_file.write_text("{")

@@ -6,9 +6,12 @@ fails closed; it never sends a message to a guessed root.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import stat
+import uuid
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -93,3 +96,79 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
     if not Path(root).is_dir():
         raise ValueError("active comms route root is missing")
     return ActiveRoute(Path(root), root_id, Path(package))
+
+
+def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
+    """Atomically install the first private default after owner cutover.
+
+    Existing routes are never overwritten by a stale cutover. Readers see
+    either the historical absent route or one complete, fsynced private route.
+    """
+    from .cohort_foreground import _preflight
+
+    path = active_route_path() if path is None else path
+    if path.name != "active-route.json" or not path.is_absolute():
+        raise ValueError("active comms route requires its absolute route path")
+    if (
+        not route.root.is_absolute()
+        or not route.native_package.is_absolute()
+        or ".." in route.root.parts
+        or ".." in route.native_package.parts
+    ):
+        raise ValueError("active comms route requires absolute root and package identities")
+    _preflight(route.root, route.wire_root_id, route.native_package, True)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    directory = os.open(
+        path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+    )
+    temporary: str | None = None
+    try:
+        fcntl.flock(directory, fcntl.LOCK_EX)
+        info = os.fstat(directory)
+        parent = path.parent.lstat()
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != os.geteuid()
+            or parent.st_dev != info.st_dev
+            or parent.st_ino != info.st_ino
+        ):
+            raise ValueError("active comms route directory changed or is not owned")
+        os.fchmod(directory, 0o700)
+        if read_active_route(path) is not None:
+            raise ValueError("active comms route is already installed")
+        payload = (
+            json.dumps(
+                {
+                    "version": 1,
+                    "root": str(route.root),
+                    "wire_root_id": route.wire_root_id,
+                    "native_package": str(route.native_package),
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode()
+        temporary = f".active-route-{uuid.uuid4().hex}.tmp"
+        fd = os.open(
+            temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o600, dir_fd=directory,
+        )
+        try:
+            view = memoryview(payload)
+            while view:
+                view = view[os.write(fd, view):]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        _preflight(route.root, route.wire_root_id, route.native_package, True)
+        parent = path.parent.lstat()
+        if (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino):
+            raise ValueError("active comms route directory changed before publication")
+        os.replace(temporary, path.name, src_dir_fd=directory, dst_dir_fd=directory)
+        temporary = None
+        os.fsync(directory)
+    finally:
+        if temporary is not None:
+            with suppress(FileNotFoundError):
+                os.unlink(temporary, dir_fd=directory)
+        os.close(directory)
