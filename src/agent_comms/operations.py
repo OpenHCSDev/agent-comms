@@ -544,13 +544,12 @@ class Comms:
 
         # The PR116 legacy retirement fence precedes identity creation and
         # remains held through the actual bus publication on an old root.
-        with guard_legacy_root_write(self.root):
-            with _store_lock(self._wire_lock_path):
-                user = self._user_identity_under_wire_lock(worktree)
-                committed = self.bus.publish_ordinary(
-                    Message(user.name, target, body, MessageType.INFO),
-                    _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
-                )
+        with guard_legacy_root_write(self.root), _store_lock(self._wire_lock_path):
+            user = self._user_identity_under_wire_lock(worktree)
+            committed = self.bus.publish_ordinary(
+                Message(user.name, target, body, MessageType.INFO),
+                _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
+            )
         # Never turn a committed row into an apparent failed send because a
         # best-effort notification failed. No notification runs on UNKNOWN.
         try:
