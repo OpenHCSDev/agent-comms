@@ -7,6 +7,8 @@ import json
 import os
 import subprocess
 import sys
+import threading
+import time
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -21,6 +23,28 @@ from test_coordinated_runtime import _fake_model, _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
 tmp_path = private_root_fixture
+
+
+@pytest.mark.parametrize("grant", [False, True, 0])
+def test_raw_writer_denies_non_none_grant_before_any_byte(grant):
+    if not hasattr(os, "pipe2"):
+        pytest.skip("raw writer requires POSIX nonblocking pipe")
+    read_fd, write_fd = os.pipe2(os.O_NONBLOCK)
+
+    @contextmanager
+    def boundary():
+        yield grant
+
+    try:
+        with pytest.raises(native_prompt_send.PromptSendUnknown, match="denied"):
+            native_prompt_send._write_fenced(
+                write_fd, b"selected-prompt\n", boundary, threading.Event(), time.monotonic() + 1
+            )
+        with pytest.raises(BlockingIOError):
+            os.read(read_fd, 4096)
+    finally:
+        os.close(read_fd)
+        os.close(write_fd)
 
 
 @pytest.mark.parametrize(

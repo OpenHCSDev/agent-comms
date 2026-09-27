@@ -34,7 +34,12 @@ def _write_fenced(
     # the owner loop is synchronously waiting to stop this registry incarnation.
     written = 0
     try:
-        with boundary():
+        with boundary() as grant:
+            # Raw writer admission has no legacy Boolean-success convention.
+            # A False-yielding owner boundary is a denial, never a permission
+            # to write bytes merely because the context manager entered.
+            if grant is not None:
+                raise PromptSendUnknown("Native prompt boundary denied raw send; no retry")
             remaining = memoryview(payload)
             while remaining:
                 budget = deadline - time.monotonic()
