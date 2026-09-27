@@ -147,6 +147,34 @@ def test_invalid_active_route_fails_closed(tmp_path, monkeypatch, capsys):
     assert "invalid JSON" in json.loads(capsys.readouterr().out)["error"]
 
 
+def test_active_route_refuses_symlink_and_concurrent_replacement(tmp_path, monkeypatch):
+    directory = tmp_path / "private"
+    directory.mkdir(mode=0o700)
+    target = directory / "target.json"
+    target.write_text("{}")
+    target.chmod(0o600)
+    link = directory / "active-route.json"
+    link.symlink_to(target)
+    with pytest.raises(OSError):
+        active_route.read_active_route(link)
+    link.unlink()
+    link.write_text("{}")
+    link.chmod(0o600)
+    replacement = directory / "replacement.json"
+    replacement.write_text("{}")
+    replacement.chmod(0o600)
+    original_read = os.read
+
+    def replace_after_read(fd, count):
+        data = original_read(fd, count)
+        os.replace(replacement, link)
+        return data
+
+    monkeypatch.setattr(active_route.os, "read", replace_after_read)
+    with pytest.raises(ValueError, match="changed while reading"):
+        active_route.read_active_route(link)
+
+
 @pytest.mark.parametrize("entrypoint", ["acp", "worker"])
 async def test_private_relative_root_pinned_across_cwd_change_before_wire(
     tmp_path, monkeypatch, entrypoint

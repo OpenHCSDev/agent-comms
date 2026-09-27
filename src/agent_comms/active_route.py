@@ -34,6 +34,13 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
     except FileNotFoundError:
         return None
     try:
+        parent = path.parent.lstat()
+        if (
+            not stat.S_ISDIR(parent.st_mode)
+            or parent.st_uid != os.geteuid()
+            or stat.S_IMODE(parent.st_mode) != 0o700
+        ):
+            raise ValueError("active comms route directory must be owner-only")
         info = os.fstat(fd)
         if (
             not stat.S_ISREG(info.st_mode)
@@ -46,6 +53,17 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
         raw = os.read(fd, 4097)
     finally:
         os.close(fd)
+    try:
+        current = path.lstat()
+    except FileNotFoundError as error:
+        raise ValueError("active comms route changed while reading") from error
+    if (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns) != (
+        info.st_dev,
+        info.st_ino,
+        info.st_size,
+        info.st_mtime_ns,
+    ):
+        raise ValueError("active comms route changed while reading")
     try:
         value = json.loads(raw, object_pairs_hook=unique_wire_object)
     except (ValueError, UnicodeError) as error:
