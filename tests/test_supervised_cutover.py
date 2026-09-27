@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 from dataclasses import replace
@@ -12,6 +13,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import supervised_cutover
+from agent_comms.coordination_store import MutationStore
 from agent_comms.declarations import (
     Goal,
     GoalExecutionState,
@@ -44,6 +46,8 @@ def test_archive_refuses_live_owner_then_preserves_pending_and_unknown(tmp_path)
             "test:unknown", seq=None, owner="receiver", admission=1,
             target="receiver", text="uncertain input",
         )
+        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+            store.register_participant("old-owner", "Old Owner", "sender", committed=True)
         destination = tmp_path / "private-archive" / "snapshot"
         with pytest.raises(RelationViolationError, match="all old owners stopped"):
             archive_stopped_root(comms, destination)
@@ -62,6 +66,9 @@ def test_archive_refuses_live_owner_then_preserves_pending_and_unknown(tmp_path)
     manifest = json.loads((destination / ".archive-manifest").read_text())
     assert receipt.pending_messages == manifest["pending_messages"] == 1
     assert receipt.unknown_inputs == manifest["unknown_inputs"] == 1
+    with sqlite3.connect(destination / "coordination.sqlite3") as archived:
+        assert archived.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert archived.execute("SELECT count(*) FROM participants").fetchone()[0] == 1
     for name, evidence in manifest["files"].items():
         assert (destination / name).read_bytes() == (comms.root / name).read_bytes()
         assert hashlib.sha256((destination / name).read_bytes()).hexdigest() == evidence["sha256"]
