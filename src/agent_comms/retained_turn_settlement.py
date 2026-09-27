@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
-from .coordination import AttemptPhase, OwnerFence
+from .coordination import AttemptPhase, OwnerFence, WakeMode
 from .coordination_store import (
     AlreadyApplied,
     Applied,
@@ -21,6 +21,8 @@ from .coordination_store import (
     StaleRevision,
     StartResult,
 )
+from .declarations import MessageBus
+from .wake import WakeDecision
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,12 +91,28 @@ def _matches(row: sqlite3.Row, identity: RetainedTurnIdentity) -> bool:
 
 
 def admit_test_retained_turn(
-    store: MutationStore, fence: OwnerFence, identity: RetainedTurnIdentity
+    store: MutationStore,
+    bus: MessageBus,
+    wire_root_id: str,
+    fence: OwnerFence,
+    identity: RetainedTurnIdentity,
 ) -> Applied[StartResult]:
-    """Test-only: bind identity to a fresh prompt-starting FULL claim, once."""
+    """Test-only: bind a verified original FULL source and fresh claim once.
+
+    The committed bus row is immutable; this OFF-only read is NOT an atomic
+    source/registry/SQL grant for raw bytes or ACP admission.
+    """
     _enabled(store)
-    if type(identity) is not RetainedTurnIdentity:
-        raise TypeError("exact retained turn identity required")
+    if type(identity) is not RetainedTurnIdentity or type(bus) is not MessageBus:
+        raise TypeError("exact retained turn identity and bus required")
+    if type(wire_root_id) is not str or not wire_root_id:
+        raise ValueError("retained turn requires original wire root")
+    candidate = store.snapshot(fence.execution_id).claims
+    if len(candidate) != 1 or candidate[0].claim_id != identity.claim_id:
+        raise StaleFence("retained turn requires sole original execution claim")
+    # Read the committed original BEFORE the SQL lock; it is immutable. Recheck
+    # the FULL claim's exact sequence/ID/revision under the SQL transaction.
+    source = bus.read_initial_cohort(wire_root_id, candidate[0].wire_seq)
     with store._transaction() as db:
         snapshot, attempt = store._assert_fence(fence)
         if (
@@ -107,6 +125,26 @@ def admit_test_retained_turn(
         claim = snapshot.claims[0]
         if claim.revision != identity.claim_revision or claim.disposition.value != "engaged":
             raise StaleRevision("retained claim changed before admission")
+        if claim.wake_mode is not WakeMode.FULL:
+            raise StaleFence("retained turn requires original selected FULL claim")
+        matching = [
+            (recipient, decision)
+            for recipient, decision in zip(
+                source.audience.recipients, source.decisions, strict=True
+            )
+            if recipient.recipient_lookup == claim.recipient_lookup
+        ]
+        if (
+            len(matching) != 1
+            or source.message.message_id != claim.message_id
+            or source.message.seq != claim.wire_seq
+            or matching[0][0].canonical_thread != claim.recipient
+            or type(matching[0][1]) is not WakeDecision
+            or matching[0][1].wake_mode is not WakeMode.FULL
+            or matching[0][1].audience is not claim.audience
+            or matching[0][1].recipient != claim.recipient_lookup
+        ):
+            raise StaleFence("retained FULL claim does not match committed original bus row")
         if db.execute(
             "SELECT 1 FROM retained_turn_receipts WHERE input_id=? OR "
             "(session_id=? AND turn_id=? AND turn_generation=?)",

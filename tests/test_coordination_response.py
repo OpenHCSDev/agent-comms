@@ -20,6 +20,7 @@ from agent_comms.coordination import (
     ExecutionOrigin,
     ExecutionStatus,
     ObligationState,
+    WakeMode,
 )
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import (
@@ -138,7 +139,11 @@ def _ready(
             claim_id=claim.claim_id,
             claim_revision=store.snapshot("exec").claims[0].revision,
         )
-        first = admit_test_retained_turn(store, first, identity).value.fence
+        try:
+            first = admit_test_retained_turn(store, comms.bus, root_id, first, identity).value.fence
+        except BaseException:
+            store.close()
+            raise
     accepted_turn = store.advance_attempt(
         first, AttemptPhase.PROMPT_ACCEPTED, expected_pointer_revision=1
     ).value.fence
@@ -185,6 +190,21 @@ def test_retained_child_cannot_publish_under_one_shot_process_death_contract(
         assert case.store.snapshot("exec").obligation.state is ObligationState.PENDING
     finally:
         case.close()
+
+
+def test_bounded_triage_engaged_claim_is_not_selected_full_admission(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(StaleFence, match="original selected FULL"):
+        _ready(tmp_path, direct=False, process_dead=False, retained=True)
+    with MutationStore(str(tmp_path / "wire" / "coordination.sqlite3")) as store:
+        snapshot = store.snapshot("exec")
+        assert snapshot.claims[0].wake_mode is WakeMode.BOUNDED_TRIAGE
+        assert snapshot.attempt.completion_kind == "one_shot"
+        assert (
+            store._connection.execute("SELECT COUNT(*) FROM retained_turn_receipts").fetchone()[0]
+            == 0
+        )
 
 
 def test_retained_turn_requires_exact_receipt_then_uses_same_keyed_gateway(
@@ -386,11 +406,15 @@ def test_two_retained_turns_reuse_one_synthetic_child_identity(tmp_path: Path) -
             with pytest.raises(IdentityConflict, match="already belongs"):
                 admit_test_retained_turn(
                     second_connection,
+                    case.comms.bus,
+                    case.root_id,
                     fence,
                     replace(second_id, input_id=case.retained_identity.input_id),
                 )
         assert case.store.snapshot("exec2").attempt.completion_kind == "one_shot"
-        fence = admit_test_retained_turn(case.store, fence, second_id).value.fence
+        fence = admit_test_retained_turn(
+            case.store, case.comms.bus, case.root_id, fence, second_id
+        ).value.fence
         for phase in (
             AttemptPhase.PROMPT_ACCEPTED,
             AttemptPhase.MODEL_RUNNING,
