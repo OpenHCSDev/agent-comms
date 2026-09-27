@@ -28,7 +28,12 @@ from test_coordinated_runtime import _fake_model, _root
 
 @pytest.fixture
 def private_root():
-    if os.name != "posix" or Path("/var").is_symlink() or Path("/var/tmp").is_symlink():
+    if (
+        os.name != "posix"
+        or not Path("/var/tmp").is_dir()
+        or Path("/var").is_symlink()
+        or Path("/var/tmp").is_symlink()
+    ):
         pytest.skip("private selected runner needs a physical /var/tmp")
     with TemporaryDirectory(prefix="ac-tool-hook-", dir="/var/tmp") as dirname:
         yield Path(dirname)
