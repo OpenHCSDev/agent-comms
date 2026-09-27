@@ -40,7 +40,7 @@ const witness=manager.captureCompactionWitness(preparation.firstKeptEntryId);
 const model={provider:'fake',id:'fake',api:'openai-completions',contextWindow:10000,maxTokens:1000};
 let mode='success',release,callCount=0,blockHooks=false;
 const runner={hasHandlers:()=>blockHooks};
-const catalog=[model];
+const catalog=process.env.PR95_DECLINE_SUMMARY === '1' ? [] : [model];
 const session={sessionManager:manager,sessionFile:manager.getSessionFile(),sessionId:manager.getSessionId(),
   model,modelRuntime:{getAvailableSnapshot:()=>catalog},settingsManager:{getCompactionSettings:()=>settings},
   extensionRunner:runner,_extensionRunnerRef:{current:runner},messages:[],isIdle:true,isStreaming:false,

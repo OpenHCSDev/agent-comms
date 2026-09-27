@@ -172,8 +172,9 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
 
 @pytest.mark.parametrize("correction", [False, True])
 @pytest.mark.parametrize("real_host", [False, True])
+@pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
 async def test_acp_selected_summary_handoff_uses_final_prompt_once(
-    tmp_path, monkeypatch, correction, real_host
+    tmp_path, monkeypatch, correction, real_host, clean_decline
 ):
     from dataclasses import replace
 
@@ -184,6 +185,8 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
     from agent_comms.operations import wire
     from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
 
+    if clean_decline:
+        monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
     async with owner_fixture(tmp_path, monkeypatch, real_host=real_host) as (
         persistent,
         _registry,
@@ -268,7 +271,10 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
             # Exercise actual ACP admission/bind callbacks; no provider or
             # second native user turn is started by this synthetic receiver.
             assert task != "Continue" and task.endswith("Continue")
-            assert persistent.proc is None and persistent.reopen_required == file
+            if clean_decline:
+                assert persistent.proc is not None and persistent.reopen_required is None
+            else:
+                assert persistent.proc is None and persistent.reopen_required == file
             with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
                 assert allowed is True
                 dispatched.append(task)
@@ -322,11 +328,14 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 assert dispositions.status("acp:original") == "started"
             journal = CompactionJournal(root / "compaction-commits.sqlite3")
             attempt = journal.selected_summary(summary_ids[0])
-            assert attempt.status == ("reserved" if correction else "linked")
+            terminal_status = "declined-prestart" if clean_decline else "linked"
+            assert attempt.status == ("reserved" if correction else terminal_status)
             assert bool(journal.blocking_selected_summary(file)) is correction
             assert native_input_admitted(root, file) is not correction
             entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
-            assert sum(row["type"] == "compaction" for row in entries) == (0 if correction else 1)
+            assert sum(row["type"] == "compaction" for row in entries) == (
+                0 if correction or clean_decline else 1
+            )
             assert "proj" not in agent._selected_summary_admissions
             if real_host and not correction:
                 assert persistent.reopen_required is None
@@ -365,12 +374,16 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 )
                 assert dispositions.status("acp:next") == "started"
                 assert len(summary_ids) == 2
-                assert all(journal.selected_summary(key).status == "linked" for key in summary_ids)
+                assert all(
+                    journal.selected_summary(key).status == terminal_status for key in summary_ids
+                )
                 assert journal.blocking_selected_summary(file) == ()
                 assert native_input_admitted(root, file)
                 assert persistent.reopen_required is None and persistent.proc is not None
                 final_entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
-                assert sum(row["type"] == "compaction" for row in final_entries) == 2
+                assert sum(row["type"] == "compaction" for row in final_entries) == (
+                    0 if clean_decline else 2
+                )
                 original_ids = {
                     dispositions.get(key)["native_id"] for key in ("acp:original", "acp:next")
                 }

@@ -18,10 +18,11 @@ from .compaction_journal import CompactionJournalError
 from .declarations import AgentRuntimeInfo, RelationViolationError, ThreadRegistry
 from .native_session_reopen import package_for_launcher
 from .owner_compaction_commit import OwnerCompactionCommit
-from .owner_compaction_provider import NativeSummary
+from .owner_compaction_provider import OwnerSummaryOutcome
 from .owner_compaction_runtime import (
     PreparedOwnerSummary,
     SelectedNativeSummary,
+    SelectedSummaryDecline,
     compact_owner_once,
 )
 from .owner_compaction_settings import (
@@ -43,7 +44,7 @@ async def maybe_compact_owner_turn(
     persistent: PersistentPiSession,
     *,
     summary_strategy: (
-        Callable[[PreparedOwnerSummary], Awaitable[str | NativeSummary]] | None
+        Callable[[PreparedOwnerSummary], Awaitable[str | OwnerSummaryOutcome]] | None
     ) = None,
     input_text: str | None = None,
     on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
@@ -151,7 +152,7 @@ async def maybe_compact_owner_turn(
             session_revision=revision,
         )
 
-        async def selected_summary(prepared: PreparedOwnerSummary) -> NativeSummary:
+        async def selected_summary(prepared: PreparedOwnerSummary) -> OwnerSummaryOutcome:
             slot = SelectedSummarySlot(owner.name, prepared.session_id)
             result = await slot.run_selected_summary(
                 persistent,
@@ -173,6 +174,12 @@ async def maybe_compact_owner_turn(
                 tokens_before=prepared.tokens_before,
             )
             if result.summary is None:
+                if result.decline_reason in {"split_turn", "unsupported"}:
+                    return SelectedSummaryDecline(
+                        bridge.journal.selected_summary(result.operation_id),
+                        identity,
+                        result.decline_reason,
+                    )
                 raise PiSettingsEvidenceError(
                     f"Selected Pi declined summary ({result.decline_reason}); "
                     "original remains unbound"
@@ -187,7 +194,7 @@ async def maybe_compact_owner_turn(
 
         summary_strategy = selected_summary
 
-    async def summarize(prepared: PreparedOwnerSummary) -> str | NativeSummary:
+    async def summarize(prepared: PreparedOwnerSummary) -> str | OwnerSummaryOutcome:
         # Recheck immediately before paid provider work, then after it. The
         # owner source and ingress remain independently fenced by the bridge.
         current, current_epoch = registry.live_owner_with_epoch(thread_name)

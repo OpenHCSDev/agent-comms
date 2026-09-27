@@ -531,6 +531,38 @@ class OwnerCompactionCommit:
             )
             return self.journal.get(commit_id)
 
+    def admit_selected_decline(
+        self,
+        owner: Thread,
+        epoch: int,
+        attempt: SelectedSummaryAttempt,
+        source: CompactionSource,
+        identity: SelectedAdmissionIdentity,
+        reason: str,
+    ) -> SelectedSummaryAdmission:
+        """Continue one original after a correlated, unchanged prestart decline."""
+        witness = json.loads(source.native_json)
+        with self._boundary(owner, epoch, witness, pending_input_key=source.pending_input_key) as (
+            receipt,
+            _fd,
+            _retained,
+        ):
+            if source != self._source(
+                receipt, witness, source.pending_input_key, source.settings_paths
+            ):
+                raise RelationViolationError("Selected source changed before decline admission")
+            if (
+                self.journal.selected_summary(attempt.operation_id) != attempt
+                or attempt.session_file != witness["sessionFile"]
+                or _session_revision(witness["sessionFile"]) != identity.reserved_revision
+            ):
+                raise CompactionJournalError("Selected decline source changed")
+            admission = self.journal.decline_selected_summary_prestart(
+                attempt.operation_id, reason, admission=identity
+            )
+            assert admission is not None
+            return admission
+
     def admit_selected_original(
         self,
         owner: Thread,

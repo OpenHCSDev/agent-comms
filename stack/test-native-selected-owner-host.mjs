@@ -53,6 +53,7 @@ session.agent.streamFunction = () => {
   });
   return events;
 };
+if (process.env.PR95_DECLINE_SUMMARY === '1') runtime.getAvailableSnapshot = () => [];
 process.stderr.write(JSON.stringify({sessionFile: session.sessionFile, sessionId: session.sessionId,
   model: `${model.provider}/${model.id}`, contextWindow: model.contextWindow}) + '\n');
 await runRpcMode({session, setRebindSession() {}, async dispose() { session.dispose(); }});

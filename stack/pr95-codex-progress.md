@@ -77,9 +77,12 @@ original input and retains a settled reusable child.
 2. Continue ordinary private sessions safely: fresh-only enrollment and the raw
    UNKNOWN coverage floor still exclude continued `native-sessions` histories.
    Preserve unresolved inputs and existing journals; never delete rows to bypass.
-3. A selected clean prestart decline currently raises with the reservation
-   intact; wire its existing decline admission path after source revalidation.
-   Other errors and UNKNOWN remain blocked, with no automatic replay.
+3. DONE: clean prestart declines use the existing decline admission path after
+   revalidating owner, ingress and unchanged saved source. Summary and decline
+   are nominal OwnerSummaryOutcome cases; the decline performs no writer call
+   or manager retirement. Other errors and UNKNOWN remain blocked, without
+   replay. Four real/synthetic RPC decline/correction cases pass, including
+   repeated originals after unchanged-source declines.
 4. The active route still verifies the smaller native `_PATCHED_SHA` set, whose
    RPC/session-manager hashes predate this full compaction bundle. Reconcile that
    existing runtime verifier with the normal bundle before switching its route.
@@ -125,3 +128,16 @@ attempts, UNKNOWN and mismatched starts, second reservation/commit, historical
 retention and used-token refusal. Real offline SDK/RPC repeated-cycle test passes.
 This change is limited to compaction_journal.py, compaction_send_admission.py and
 focused tests, so S1's ACP/event migration is untouched.
+
+## Clean-decline completion
+
+`OwnerSummaryOutcome` is the public behavioral contract. NativeSummary owns the
+shared commit behavior inherited by SelectedNativeSummary; SelectedSummaryDecline
+preserves its source and obtains the existing one-use decline admission through
+the owner bridge. No fake summary, duplicate writer or retry path is introduced.
+
+Local verification after this change: 10 owner integration cases pass (4 decline,
+6 summary/correction cases); 14 adaptive/runtime cases pass, including cancellation
+joining the actual commit worker. Both native success and clean-decline cases
+exercise repeated originals on the actual offline prepared SDK/RPC host. No
+live provider/install/restart or ACP/S1 file edit.

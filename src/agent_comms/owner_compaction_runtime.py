@@ -15,7 +15,7 @@ from .compaction_journal import CompactionOperation, SelectedSummaryAttempt
 from .declarations import Thread
 from .owner_compaction_commit import CompactionSource, OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
-from .owner_compaction_provider import NativeSummary
+from .owner_compaction_provider import NativeSummary, OwnerSummaryOutcome
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 
 
@@ -34,10 +34,37 @@ class SelectedNativeSummary(NativeSummary):
         bridge: OwnerCompactionCommit,
         owner: Thread,
         epoch: int,
-        operation: CompactionOperation,
+        operation: CompactionOperation | None,
         source: CompactionSource,
     ) -> SelectedSummaryAdmission:
+        assert operation is not None
         return bridge.admit_selected_original(owner, epoch, operation, source, self.identity)
+
+
+@dataclass(frozen=True)
+class SelectedSummaryDecline(OwnerSummaryOutcome):
+    """A verified prestart decline preserves the native manager and source."""
+
+    attempt: SelectedSummaryAttempt
+    identity: SelectedAdmissionIdentity
+    reason: str
+
+    async def commit_with(
+        self, writer: Callable[[NativeSummary], Awaitable[CompactionOperation]]
+    ) -> None:
+        return None
+
+    def admit_original(
+        self,
+        bridge: OwnerCompactionCommit,
+        owner: Thread,
+        epoch: int,
+        operation: CompactionOperation | None,
+        source: CompactionSource,
+    ) -> SelectedSummaryAdmission:
+        return bridge.admit_selected_decline(
+            owner, epoch, self.attempt, source, self.identity, self.reason
+        )
 
 
 @dataclass(frozen=True)
@@ -55,7 +82,7 @@ async def compact_owner_once(
     owner: Thread,
     epoch: int,
     persistent: PersistentPiSession,
-    summarize: Callable[[PreparedOwnerSummary], Awaitable[str | NativeSummary]],
+    summarize: Callable[[PreparedOwnerSummary], Awaitable[str | OwnerSummaryOutcome]],
     *,
     keep_recent_tokens: int | None = None,
     pending_input_key: str | None = None,
@@ -91,10 +118,34 @@ async def compact_owner_once(
             prepared.tokens_before, prepared.is_split_turn, prepared.session_id, prepared
         )
     )
-    details = result.details if isinstance(result, NativeSummary) else None
-    usage = result.usage if isinstance(result, NativeSummary) else None
-    summary = result.text if isinstance(result, NativeSummary) else result
-    if type(summary) is not str or not summary:
+    if isinstance(result, str):
+        result = NativeSummary(result, None, None)
+
+    async def write(summary: NativeSummary) -> CompactionOperation:
+        return await _commit_native_summary(
+            bridge, owner, epoch, persistent, prepared, source, summary
+        )
+
+    operation = await result.commit_with(write)
+    admission = result.admit_original(bridge, owner, epoch, operation, source)
+    if admission is not None:
+        if on_admission is None:
+            admission.invalidate()
+            raise ValueError("Selected summary requires its original-input owner")
+        on_admission(admission)
+    return operation
+
+
+async def _commit_native_summary(
+    bridge: OwnerCompactionCommit,
+    owner: Thread,
+    epoch: int,
+    persistent: PersistentPiSession,
+    prepared: NativePreparation,
+    source: CompactionSource,
+    result: NativeSummary,
+) -> CompactionOperation:
+    if type(result.text) is not str or not result.text:
         raise ValueError("Bounded owner summary required")
     # No native write can begin until this returns; closing under the borrow
     # lock makes an old RPC manager unusable even if commit is later refused.
@@ -110,27 +161,19 @@ async def compact_owner_once(
             owner,
             epoch,
             prepared.witness,
-            summary,
+            result.text,
             prepared.tokens_before,
             source=source,
-            details=details,
-            usage=usage,
-            **(result.commit_options() if isinstance(result, NativeSummary) else {}),
+            details=result.details,
+            usage=result.usage,
+            **result.commit_options(),
         )
     finally:
         # No queued follow-up or replay. The submitted worker remains owned
         # by its Future; executor threads retire after this one operation.
         executor.shutdown(wait=False)
     try:
-        operation = await asyncio.shield(asyncio.wrap_future(committing))
-        if isinstance(result, NativeSummary):
-            admission = result.admit_original(bridge, owner, epoch, operation, source)
-            if admission is not None:
-                if on_admission is None:
-                    admission.invalidate()
-                    raise ValueError("Selected summary requires its original-input owner")
-                on_admission(admission)
-        return operation
+        return await asyncio.shield(asyncio.wrap_future(committing))
     except asyncio.CancelledError:
         # The wrapper may itself become cancelled during loop shutdown, but
         # the concurrent Future cannot report completion while its native
