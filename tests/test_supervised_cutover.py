@@ -76,15 +76,16 @@ def test_archive_refuses_rival_destination_after_staging(tmp_path, monkeypatch):
         comms.registry.unregister(name)
     destination = tmp_path / "private-archive" / "snapshot"
     original = supervised_cutover._publish_archive_noreplace
+    rival_inode: list[int] = []
 
     def rival_after_copy(stage, target):
         target.mkdir(mode=0o700)
-        (target / "rival").write_text("preserve rival")
+        rival_inode.append(target.stat().st_ino)
         return original(stage, target)
 
     monkeypatch.setattr(supervised_cutover, "_publish_archive_noreplace", rival_after_copy)
     with pytest.raises(ValueError, match="already exists"):
         archive_stopped_root(comms, destination)
-    assert (destination / "rival").read_text() == "preserve rival"
-    assert not (destination / ".archive-manifest").exists()
+    assert destination.is_dir() and destination.stat().st_ino == rival_inode[0]
+    assert list(destination.iterdir()) == []
     assert not list(destination.parent.glob(".cutover-archive-*"))
