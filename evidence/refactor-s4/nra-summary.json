@@ -52,5 +52,17 @@
     "WireExportLimitKind semantic descent boundary",
     "WireExportScopeKind semantic descent boundary"
   ],
-  "limits": "Complete package context, no native equivalence proof; authored behavior validated by tests. No findings in new S4 modules. Message importing.py Pi payload is a different domain; DisplayOrder stays separate typed thread/channel orders."
+  "limits": "Complete package context, no native equivalence proof; authored behavior validated by tests. No findings in new S4 modules. Message importing.py Pi payload is a different domain; DisplayOrder stays separate typed thread/channel orders.",
+  "merged": {
+    "commit": "f75dc81",
+    "main": "bf402f5",
+    "scan_status": {
+      "mode": "exact_compact_global",
+      "analyzed_detector_count": 79,
+      "omitted_detector_count": 0,
+      "complete": true,
+      "reason": "all_context_detectors_use_compact_global_projections"
+    },
+    "finding_count": 23
+  }
 }

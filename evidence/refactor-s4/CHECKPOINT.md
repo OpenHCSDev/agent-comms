@@ -16,3 +16,8 @@ subsequent baseline and final whole-package scans complete 79/79 detectors.
 Next: commit explicit S4 file list, normal-merge newest main, run bounded relevant
 integration checks, push own branch, create draft PR explicitly on
 OpenHCSDev/agent-comms, record exact remote SHA/URL. No CI wait or live deployment.
+
+Implementation committed as 4aa1371; normal newest-main merge f75dc81 (bf402f5).
+Merged checks: 115 passed. Fresh full package NRA complete, 79/79 detectors.
+Scope audit: five S8 declarations and 13 goal methods unchanged; protected parent
+files exactly match main. Publication in progress, no remaining source/test fix.

@@ -139,3 +139,16 @@ this favors correctness over a lossy watermark. A later compaction must retain
 holes, not replace sparse membership by a maximum. Renames may conservatively
 make earlier incarnation-keyed DM reads unread under the approved name/creation
 fallback; they cannot transfer read evidence to a rebound peer.
+
+## Publication checkpoint
+
+Implementation commit `4aa1371`. Normal newest-main merge `f75dc81` incorporates
+main `bf402f5` without conflicts. Merged-tree focused shard: **115 passed in
+42.42 seconds**, recorded in merged-tests.txt. A fresh merged package NRA scan
+is complete (79 detectors, none omitted); exact count in nra-summary.json.
+AST comparison against eca634a preserves all five named S8 goal/presentation
+declarations and all 13 Comms goal methods. Protected parent files match
+origin/main byte-for-byte in git diff. No additional parent-code edits.
+
+Publishing this implementation as a draft to OpenHCSDev/agent-comms. Final URL
+and verified remote SHA are recorded in the final checkpoint once created.
