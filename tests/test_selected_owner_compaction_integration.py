@@ -244,9 +244,11 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
             text="Continue",
         )
         selected_exchange = SelectedSummarySlot.run_selected_summary
+        summary_ids = []
 
         async def selected_with_correction(self, *args, **kwargs):
             result = await selected_exchange(self, *args, **kwargs)
+            summary_ids.append(result.operation_id)
             if correction:
                 dispositions.record(
                     "acp:correction",
@@ -319,9 +321,10 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 assert len(dispatched) == (0 if real_host else 1)
                 assert dispositions.status("acp:original") == "started"
             journal = CompactionJournal(root / "compaction-commits.sqlite3")
-            rows = journal.blocking_selected_summary(file)
-            assert len(rows) == 1
-            assert rows[0].status == ("reserved" if correction else "linked")
+            attempt = journal.selected_summary(summary_ids[0])
+            assert attempt.status == ("reserved" if correction else "linked")
+            assert bool(journal.blocking_selected_summary(file)) is correction
+            assert native_input_admitted(root, file) is not correction
             entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
             assert sum(row["type"] == "compaction" for row in entries) == (0 if correction else 1)
             assert "proj" not in agent._selected_summary_admissions
@@ -338,6 +341,47 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                     and row["message"].get("inputId") == native_id
                 ]
                 assert len(user_entries) == 1
+                # Repeat the complete selected path on the continued session.
+                # Historical linked rows must neither block new work nor permit
+                # replay of their originals after this owner's turn finished.
+                current = comms.registry.require("proj")
+                comms.registry.register(replace(current, goal=Goal("next task", "goal-next")))
+                store.create_goal("goal-next")
+                dispositions.record(
+                    "acp:next",
+                    seq=None,
+                    owner="proj",
+                    admission=comms.registry.snapshot().admission_generations["proj"],
+                    target="proj",
+                    text="Continue again",
+                )
+                await agent._run_agent_turn(
+                    "proj",
+                    "proj",
+                    "Continue again",
+                    original_keys=("acp:next",),
+                    original_owner_input=True,
+                    original_goal_id="goal-next",
+                )
+                assert dispositions.status("acp:next") == "started"
+                assert len(summary_ids) == 2
+                assert all(journal.selected_summary(key).status == "linked" for key in summary_ids)
+                assert journal.blocking_selected_summary(file) == ()
+                assert native_input_admitted(root, file)
+                assert persistent.reopen_required is None and persistent.proc is not None
+                final_entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
+                assert sum(row["type"] == "compaction" for row in final_entries) == 2
+                original_ids = {
+                    dispositions.get(key)["native_id"] for key in ("acp:original", "acp:next")
+                }
+                assert len(original_ids) == 2
+                assert (
+                    sum(
+                        row["type"] == "message" and row["message"].get("inputId") in original_ids
+                        for row in final_entries
+                    )
+                    == 2
+                )
         finally:
             await agent.shutdown()
 

@@ -17,7 +17,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 from weakref import WeakKeyDictionary
 
@@ -76,6 +76,36 @@ class SelectedSummaryAttempt:
     status: str
     commit_id: str | None
     decline_reason: str | None
+
+    def original_has_started(self, inputs: dict[str, dict[str, Any]]) -> bool:
+        """Completed input evidence retires this barrier, never recreates a send token.
+
+        The existing input ledger owns native-start proof. A linked/declined
+        summary alone, a bound UNKNOWN input, or an unrelated started input
+        cannot retire the reservation. Historical rows and IDs stay intact.
+        """
+        if self.status not in {"linked", "declined-prestart"}:
+            return False
+        try:
+            source = json.loads(self.source_json)["source"]
+            key = source["ingressKey"]
+            if not isinstance(key, str) or not key.startswith("acp:"):
+                return False
+            row = inputs.get(key)
+            return row is not None and (
+                row["status"] == "started"
+                and row["native_id"] is not None
+                and row["sequence"] is None
+                and row["owner"] == row["target"] == source["ownerName"]
+                and row["admission"] == source["admissionGeneration"]
+                and row["turn_id"] == source["turnId"]
+                and row["sent_text"] is not None
+                and hashlib.sha256(row["sent_text"].encode()).hexdigest() == source["inputSha256"]
+                and hashlib.sha256(row["source_text"].encode()).hexdigest()
+                == source["originalSha256"]
+            )
+        except (KeyError, TypeError, ValueError):
+            return False
 
 
 @dataclass(frozen=True)
@@ -175,7 +205,7 @@ class CompactionJournal:
             # 47c8's partial index permitted several historical terminal rows.
             # Preserve every row: a global UNIQUE migration would fail journal
             # open and block unrelated sessions. BEGIN IMMEDIATE + the SELECT
-            # before reserve below excludes any *new* attempt for that session.
+            # before reserve below excludes incomplete attempts for that session.
             db.execute("DROP INDEX IF EXISTS selected_summary_session")
             db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS unresolved_selected_summary_session
                 ON selected_summary_attempts(session_file)
@@ -257,16 +287,12 @@ class CompactionJournal:
             raise ValueError("Compaction intent exceeds bound")
         try:
             with self._transaction() as db:
-                selected = db.execute(
-                    "SELECT operation_id, status FROM selected_summary_attempts "
-                    "WHERE session_file = ?",
-                    (canonical,),
-                ).fetchall()
+                selected = self._blocking_selected_summary(db, canonical)
                 if selected and (
                     len(selected) != 1
-                    or selected[0][1] != "reserved"
+                    or selected[0].status != "reserved"
                     or type(intent) is not dict
-                    or intent.get("selectedSummaryOperationId") != selected[0][0]
+                    or intent.get("selectedSummaryOperationId") != selected[0].operation_id
                 ):
                     raise CompactionJournalError(
                         "Blocked selected summary; unrelated native commit forbidden"
@@ -499,10 +525,7 @@ class CompactionJournal:
                 ).fetchone():
                     raise CompactionJournalError("Unresolved native commit; no selected summary")
                 if (
-                    db.execute(
-                        "SELECT 1 FROM selected_summary_attempts WHERE session_file = ? LIMIT 1",
-                        (canonical,),
-                    ).fetchone()
+                    self._blocking_selected_summary(db, canonical)
                     or db.execute(
                         "SELECT 1 FROM private_raw_inputs WHERE session_file = ? LIMIT 1",
                         (canonical,),
@@ -541,20 +564,33 @@ class CompactionJournal:
             ).fetchall()
         return tuple(SelectedSummaryAttempt(*row) for row in rows)
 
-    def blocking_selected_summary(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:
-        """All attempts block automatic native input, including apparent terminals.
+    def _blocking_selected_summary(
+        self, db: sqlite3.Connection, canonical: str
+    ) -> tuple[SelectedSummaryAttempt, ...]:
+        from .input_disposition import InputDispositions
 
-        A post-COMMIT parent-fsync failure can leave linked or declined-prestart
-        visible even though its caller received UNKNOWN. Neither status is
-        automatic send authority, in this process or after a restart.
+        rows = db.execute(
+            "SELECT * FROM selected_summary_attempts WHERE session_file = ?", (canonical,)
+        ).fetchall()
+        if not rows:
+            return ()
+        inputs = InputDispositions(self.path.parent)._read()
+        return tuple(
+            attempt
+            for row in rows
+            if not (attempt := SelectedSummaryAttempt(*row)).original_has_started(inputs)
+        )
+
+    def blocking_selected_summary(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:
+        """Block until the exact original input has durable native-start evidence.
+
+        Terminal-looking summary rows never grant a send or mint a token. Once
+        the original has actually started, the existing disposition prevents
+        replay while ordinary new inputs and later compactions can proceed.
         """
         canonical = str(Path(session_file).resolve(strict=True))
         with self._transaction() as db:
-            rows = db.execute(
-                "SELECT * FROM selected_summary_attempts WHERE session_file = ?",
-                (canonical,),
-            ).fetchall()
-        return tuple(SelectedSummaryAttempt(*row) for row in rows)
+            return self._blocking_selected_summary(db, canonical)
 
     def reserve_private_raw_input(self, session_file: Path, input_id: str) -> None:
         """Durably mark exact private-session raw input UNKNOWN before any pipe write.
@@ -570,17 +606,11 @@ class CompactionJournal:
         canonical = str(session_file.resolve(strict=False))
         try:
             with self._transaction() as db:
-                if (
-                    db.execute(
-                        "SELECT 1 FROM operations WHERE session_file = ? "
-                        "AND status IN ('intent','unknown') LIMIT 1",
-                        (canonical,),
-                    ).fetchone()
-                    or db.execute(
-                        "SELECT 1 FROM selected_summary_attempts WHERE session_file = ? LIMIT 1",
-                        (canonical,),
-                    ).fetchone()
-                ):
+                if db.execute(
+                    "SELECT 1 FROM operations WHERE session_file = ? "
+                    "AND status IN ('intent','unknown') LIMIT 1",
+                    (canonical,),
+                ).fetchone() or self._blocking_selected_summary(db, canonical):
                     raise CompactionJournalError(
                         "Selected or unresolved journal blocks native input"
                     )
@@ -599,7 +629,7 @@ class CompactionJournal:
 
         The caller must already hold the authoritative shared wire lock. This
         journal BEGIN IMMEDIATE serializes even a concurrent direct reservation
-        that did not take the wire lock; a selected row from any status denies
+        that did not take the wire lock; an incomplete selected attempt denies
         before bytes can enter the native pipe. The exact saved file, not a
         recipient-wide prefix or a post-send cursor, is the exclusion key.
         """
@@ -611,17 +641,11 @@ class CompactionJournal:
         if Path(canonical).is_relative_to(private_sessions) and private_input_id is None:
             raise CompactionJournalError("Private raw send requires durable prewrite marker")
         with self._transaction() as db:
-            if (
-                db.execute(
-                    "SELECT 1 FROM operations WHERE session_file = ? "
-                    "AND status IN ('intent','unknown') LIMIT 1",
-                    (canonical,),
-                ).fetchone()
-                or db.execute(
-                    "SELECT 1 FROM selected_summary_attempts WHERE session_file = ? LIMIT 1",
-                    (canonical,),
-                ).fetchone()
-            ):
+            if db.execute(
+                "SELECT 1 FROM operations WHERE session_file = ? "
+                "AND status IN ('intent','unknown') LIMIT 1",
+                (canonical,),
+            ).fetchone() or self._blocking_selected_summary(db, canonical):
                 raise CompactionJournalError("Selected or unresolved journal blocks native input")
             if private_input_id is not None and db.execute(
                 "SELECT session_file,status FROM private_raw_inputs WHERE input_id = ?",
@@ -721,9 +745,9 @@ class CompactionJournal:
         """Settle only a reserved attempt after its exact native commit is durable.
 
         This is NOT a provider receipt validator or an input admission grant.
-        Even a linked row remains a durable blocker until an exact-ID recovery
-        path exists. A future caller must check the complete selected Pi result
-        and current owner/ingress source before the native CAS, and call this
+        A linked row remains a blocker until its exact original input has
+        native-start evidence. The owner checks the complete selected Pi result
+        and current owner/ingress source before the native CAS, and calls this
         only after the native journal committed.
         An UNKNOWN provider attempt cannot be automatically linked or retried.
         """

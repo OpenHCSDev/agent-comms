@@ -68,10 +68,12 @@ original input and retains a settled reusable child.
 
 ## Remaining requirements — PR95 is not complete or live
 
-1. Finish the selected-attempt lifecycle. A returned one-use token now permits
-   the original turn, but the historical linked row still blocks later ordinary
-   inputs and additional summaries. Bind retirement to the actual native input
-   outcome without recreating admission from terminal-looking SQLite rows.
+1. DONE: selected-attempt lifecycle. Barrier retirement derives from the existing
+   input ledger's exact native start (owner, turn, input, admission and prompt
+   hashes). Historical attempts stay intact and cannot replenish tokens. Bound
+   UNKNOWN and mismatched starts continue blocking. Actual offline Pi SDK/RPC
+   passes two complete compaction/commit/reopen/original/settlement cycles on the
+   same continued session; next reservation and new inputs remain usable.
 2. Continue ordinary private sessions safely: fresh-only enrollment and the raw
    UNKNOWN coverage floor still exclude continued `native-sessions` histories.
    Preserve unresolved inputs and existing journals; never delete rows to bypass.
@@ -109,3 +111,17 @@ new event classes. Backend changes since `b74774f` are absent.
 
 Source leases saved in the PR48 worktree remain untouched. No deployment or
 activation is implied by this checkpoint.
+
+## Subsequent lifecycle implementation
+
+`SelectedSummaryAttempt` owns the original-start predicate; every journal send,
+reserve and commit guard uses one shared projection. No new store, state enum,
+replay recovery or duplicate input authority. The input ledger is read once per
+projection rather than once per historical summary; sessions without summaries
+need no input-ledger scan.
+
+Validation: selected journal/admission tests cover completed linked/declined
+attempts, UNKNOWN and mismatched starts, second reservation/commit, historical
+retention and used-token refusal. Real offline SDK/RPC repeated-cycle test passes.
+This change is limited to compaction_journal.py, compaction_send_admission.py and
+focused tests, so S1's ACP/event migration is untouched.

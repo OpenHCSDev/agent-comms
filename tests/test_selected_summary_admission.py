@@ -9,6 +9,7 @@ import sqlite3
 import subprocess
 import sys
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -520,3 +521,81 @@ async def test_acp_final_boundary_consumes_exact_ack_at_native_id_bind(tmp_path,
         assert not native_input_admitted(comms.root, str(session))
     finally:
         await agent.shutdown()
+
+
+@pytest.mark.parametrize("terminal", ["linked", "declined-prestart"])
+def test_native_start_retires_barrier_without_erasing_history_or_replaying_original(case, terminal):
+    comms, session, journal, operation_id, dispositions, identity, text = case
+    if terminal == "linked":
+        source = journal.selected_summary(operation_id).source_json
+        commit_id = journal.begin(
+            session,
+            {
+                "selectedSummaryOperationId": operation_id,
+                "selectedSummarySourceDigest": hashlib.sha256(source.encode()).hexdigest(),
+            },
+        )
+        journal.resolve(commit_id, "committed", {"fixture": "committed"})
+        token = journal.link_selected_summary_commit(operation_id, commit_id, admission=identity)
+    else:
+        token = journal.decline_selected_summary_prestart(
+            operation_id, "unsupported", admission=identity
+        )
+    assert _claim(case, token)
+    assert not native_input_admitted(comms.root, session), "bound UNKNOWN is not native start"
+    assert dispositions.started(identity.ingress_key, turn_id="turn", native_id="b" * 32, text=text)
+    reopened = CompactionJournal(journal.path)
+    assert native_input_admitted(comms.root, session)
+    assert reopened.blocking_selected_summary(session) == ()
+    assert reopened.selected_summary(operation_id).status == terminal
+    assert not _claim(case, token), "native start cannot replenish a consumed token"
+    with reopened.ordinary_input_send_fence(Path(session)):
+        pass
+    with pytest.raises(ValueError, match="durable original input changed"):
+        reopened.reserve_selected_summary(session, _source(identity))
+    next_identity = _identity(session, text="Next original", key="acp:next", turn="next-turn")
+    assert dispositions.record(
+        next_identity.ingress_key,
+        seq=None,
+        owner=next_identity.owner_name,
+        admission=next_identity.admission_generation,
+        target=next_identity.owner_name,
+        text="Next original",
+    )
+    next_id = reopened.reserve_selected_summary(session, _source(next_identity))
+    assert [row.operation_id for row in reopened.blocking_selected_summary(session)] == [next_id]
+    # A subsequent writer can bind ONLY the new reservation, despite historical
+    # terminal rows remaining in the same table for audit and ID uniqueness.
+    reopened.begin(session, {"selectedSummaryOperationId": next_id})
+    assert not native_input_admitted(comms.root, session)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("turn_id", "other-turn"),
+        ("owner", "other-owner"),
+        ("target", "other-target"),
+        ("admission", 2),
+        ("sent_text", "other sent text"),
+        ("source_text", "other original"),
+        ("status", "unknown"),
+        ("native_id", None),
+    ],
+)
+def test_unrelated_or_uncertain_input_never_retires_selected_barrier(case, field, value):
+    comms, session, journal, operation_id, dispositions, identity, text = case
+    token = journal.decline_selected_summary_prestart(
+        operation_id, "unsupported", admission=identity
+    )
+    assert _claim(case, token)
+    assert dispositions.started(identity.ingress_key, turn_id="turn", native_id="b" * 32, text=text)
+    rows = dispositions._read()
+    rows[identity.ingress_key][field] = value
+    dispositions._write(rows)
+    assert not native_input_admitted(comms.root, session)
+    with (
+        pytest.raises(CompactionJournalError, match="blocks native input"),
+        journal.ordinary_input_send_fence(Path(session)),
+    ):
+        raise AssertionError("stale native-start identity admitted")
