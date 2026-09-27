@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -177,6 +179,44 @@ def test_publish_route_refuses_rival_installed_after_absent_check(tmp_path, monk
         active_route.publish_active_route(route, route_file)
     assert route_file.read_bytes() == rival
     assert not list(directory.glob(".active-route-*.tmp"))
+
+
+def test_default_write_guard_orders_old_root_write_before_route_publication(tmp_path, monkeypatch):
+    root, root_id, _, _, _ = _root(tmp_path)
+    legacy = tmp_path / ".agent-comms"
+    legacy.mkdir(mode=0o700)
+    route_file = tmp_path / "route-state" / "active-route.json"
+    route = active_route.ActiveRoute(root, root_id, tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    exclusive_requested = threading.Event()
+    original_flock = active_route.fcntl.flock
+
+    def observed_flock(fd, operation):
+        if operation == active_route.fcntl.LOCK_EX:
+            exclusive_requested.set()
+        return original_flock(fd, operation)
+
+    monkeypatch.setattr(active_route.fcntl, "flock", observed_flock)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with active_route.guard_default_route_write(legacy):
+            publishing = executor.submit(active_route.publish_active_route, route)
+            assert exclusive_requested.wait(timeout=5)
+            assert not route_file.exists()
+            (legacy / "read-marker").write_text("old write completed")
+        publishing.result(timeout=5)
+    assert route_file.exists()
+    assert (legacy / "read-marker").read_text() == "old write completed"
+    with (
+        pytest.raises(ValueError, match="route changed before write"),
+        active_route.guard_default_route_write(legacy),
+    ):
+        (legacy / "read-marker").write_text("late write")
+    assert (legacy / "read-marker").read_text() == "old write completed"
+    with active_route.guard_default_route_write(root):
+        (root / "read-marker").write_text("new write completed")
+    assert (root / "read-marker").read_text() == "new write completed"
 
 
 def test_invalid_active_route_fails_closed(tmp_path, monkeypatch, capsys):

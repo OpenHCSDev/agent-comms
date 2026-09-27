@@ -11,7 +11,8 @@ import json
 import os
 import stat
 import uuid
-from contextlib import suppress
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -96,6 +97,38 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
     if not Path(root).is_dir():
         raise ValueError("active comms route root is missing")
     return ActiveRoute(Path(root), root_id, Path(package))
+
+
+@contextmanager
+def guard_default_route_write(expected_root: Path) -> Iterator[None]:
+    """Keep a default-root write on its selected root through publication.
+
+    Callers must enter this guard before the mutating operation, including any
+    thread dispatch. Explicit AGENT_COMMS_ROOT operations do not use it.
+    """
+    path = active_route_path()
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    directory = os.open(
+        path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        fcntl.flock(directory, fcntl.LOCK_SH)
+        info = os.fstat(directory)
+        parent = path.parent.lstat()
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != os.geteuid()
+            or stat.S_IMODE(info.st_mode) != 0o700
+            or (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino)
+        ):
+            raise ValueError("active comms route directory changed or is not owner-only")
+        route = read_active_route(path)
+        current_root = route.root if route is not None else Path.home() / ".agent-comms"
+        if expected_root.expanduser().resolve(strict=True) != current_root.resolve(strict=True):
+            raise ValueError("default comms route changed before write")
+        yield
+    finally:
+        os.close(directory)
 
 
 def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
