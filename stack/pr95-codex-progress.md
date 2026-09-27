@@ -3,7 +3,7 @@
 Worktree: `/home/ts/wt/comms-pr95-finish-codex-20260927`.
 Branch: `codex/pr95-finish-20260927`.
 Original PR95 and saved PR48/Pi-owner worktrees are preserved. Main is normally
-merged through PR124; parent PR126 will be merged after publication.
+merged through PR126 (`e4cd10e`), preserving configured model/auth routing.
 
 ## Implemented
 
@@ -39,6 +39,10 @@ Native integration: **6 passed**; adaptive/runtime: **14 passed**; strict reopen
 **10 passed**. Total current selection: **119 passed, 1 skipped**. An initial
 combined run hit its 60-second deadline after 28 passing cases; the complete
 smaller runs above supersede that incomplete result.
+Main-merge checks: 139 passed and 10 optional tests skipped initially; one
+existing inode-replacement fixture failed because unlink immediately reused its
+inode. The fixture now renames its original before creating the replacement;
+all five affected cases pass. No runtime check was weakened.
 Ruff and diff whitespace pass. No live provider, install/restart, shared checkout
 edit, or UNKNOWN replay. CI was not awaited.
 
@@ -74,10 +78,13 @@ original input and retains a settled reusable child.
 3. A selected clean prestart decline currently raises with the reservation
    intact; wire its existing decline admission path after source revalidation.
    Other errors and UNKNOWN remain blocked, with no automatic replay.
-4. Effective project/custom-model configuration is still excluded by the adaptive
+4. The active route still verifies the smaller native `_PATCHED_SHA` set, whose
+   RPC/session-manager hashes predate this full compaction bundle. Reconcile that
+   existing runtime verifier with the normal bundle before switching its route.
+5. Effective project/custom-model configuration is still excluded by the adaptive
    owner admission; integrate the parent-owned runtime settings/model route.
    No active goal or no existing idle child is currently a trigger skip.
-5. Enable the completed route by default, verify repeated compaction/retention
+6. Enable the completed route by default, verify repeated compaction/retention
    and queued inputs, then parent performs merge, installation and live checks.
    Adaptive activation remains off until these substantive gaps are closed.
 
@@ -89,7 +96,7 @@ If integrating only the current slice, apply it after `b74774f` and main PR124.
 
 PR126 parent's patcher was copied unchanged into this branch. Preserve parent
 `native_pi.py`, `coordinated_runtime.py`, source configuration environment and
-additional channel tools/relevance changes. Merge main normally once PR126 lands.
+additional channel tools/relevance changes. PR126 is already normally merged.
 The normal combined bundle's `agent-session-services.js` hash is
 `4af410d793207f0269cf442a799b0f83933b69d728d166e49a3a6134ff7108a6`.
 Its RPC includes both selected-summary operations and native input proofs.
