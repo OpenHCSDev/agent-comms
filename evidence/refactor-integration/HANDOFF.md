@@ -24,11 +24,21 @@ Local combined-tree results so far:
 - Message/resource/envelope boundaries: 155 passed, 1 inapplicable skipped.
 - Mounted Toad PR77 against this combined core: partial-paint and DM-rebind
   pilots pass. These execute the real Textual widget paths.
-- Native compaction selection exceeded its 60-second outer bound without a
-  completed suite result. It is split into bounded selections; results pending.
+- Native compaction selection first exceeded its 60-second outer bound. Bounded
+  complete partitions then passed: 7 summary cases plus 2 inapplicable skipped;
+  10 decline/settings/no-goal cases plus 2 inapplicable skipped; 49 native owner,
+  admission and actual packaged-tool loader cases.
+- 16 inherited authority/parent-death tests pass on the combined shared/exclusive
+  lock implementation.
+- Installed core and Toad wheels in runtime-refactors-20260927 passed both
+  partial-paint and DM-rebind pilots with PYTHONPATH unset. Imports resolve to
+  site-packages. The installed native package preflight passed against the
+  current root; roster103 and bus17 remain present. Constructing the new Comms
+  reader creates S4 read_ledger.json through its normal one-time migration; old
+  read-marker files remain intact. No executable owner was restarted by this check.
 
 Logs including failures remain under .artifacts/integration. CI is deferred.
-This is integration validation, not yet installed/live acceptance. Toad PR77
+This includes isolated installed-wheel validation, not yet live owner activation. Toad PR77
 must ship with S4 core; coupled core/Toad pins and stack lock will be refreshed
 before activating the combined installed runtime. History migration, normal
 channel coding tools and real-provider compaction retention remain unfinished.
