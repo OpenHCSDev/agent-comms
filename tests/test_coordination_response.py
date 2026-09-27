@@ -34,6 +34,7 @@ from agent_comms.coordination_store import (
     MutationStore,
     PublicationActivationBlocked,
     PublicationUncertain,
+    RecoveryBlocked,
     StaleRevision,
     prepare_fence_token,
 )
@@ -62,7 +63,7 @@ class Fixture:
         self.store.close()
 
 
-def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
+def _ready(tmp_path: Path, *, direct: bool = False, process_dead: bool = True) -> Fixture:
     comms = Comms(tmp_path / "wire", private_initial_writes=True)
     for name in ("sender", "owner"):
         comms.register(Thread(name, frozenset({"team"}), worktree=str(tmp_path)))
@@ -118,7 +119,7 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
         AttemptPhase.SETTLING,
         expected_pointer_revision=1,
         backend_done=True,
-        process_dead=True,
+        process_dead=process_dead,
     ).value.fence
     return Fixture(
         comms,
@@ -131,6 +132,23 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
         claim.claim_id,
         final,
     )
+
+
+def test_retained_child_cannot_publish_under_one_shot_process_death_contract(
+    tmp_path: Path,
+) -> None:
+    """A live persistent child needs a new truthful turn-settled fact.
+
+    Never claim process death to make a one-shot response gate pass.
+    """
+    case = _ready(tmp_path, direct=True, process_dead=False)
+    try:
+        with pytest.raises(RecoveryBlocked, match="death evidence"):
+            prepare_fenced_response(case.store, case.bus, case.fence, "Not yet publishable")
+        assert case.comms.bus.latest_sequence() == case.origin_seq
+        assert case.store.snapshot("exec").obligation.state is ObligationState.PENDING
+    finally:
+        case.close()
 
 
 @pytest.mark.parametrize("direct", [False, True])
