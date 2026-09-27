@@ -2,6 +2,8 @@
 
 Branch: `codex/refactor-a8-locked-store-20260927`.
 Starting main: `e4cd10e` (PR126). Owner: this A8 implementation worker.
+Published draft: https://github.com/OpenHCSDev/agent-comms/pull/129.
+Implementation commit: `0b7f82e1e280896fd3387eefffdbec2d2641eed2`.
 Scope expanded by the dispatch README during this run to GoalPauses and
 GoalHistory where applicable. Parent/S1/PR95 files were not edited.
 
@@ -98,7 +100,10 @@ PYTHONPATH=src PYTHONDONTWRITEBYTECODE=1 TMPDIR=<owned-temp> timeout 60 python -
   Total final focused results: 156 passed. See the three result logs.
 - Ruff on all five implementation/test files passed. Black with py311 passed.
   Mypy with `--follow-imports=silent` passed on the four owned store modules.
-  `git diff --check` passed. No whole-repository typecheck or full-suite claim.
+  A8 `git diff --check` passed. The unchanged cherry-picked foundation test log
+  contains a pre-existing whitespace-only line; the main-to-branch whitespace
+  check reports that inherited evidence line. No whole-repository typecheck or
+  full-suite claim.
 
 The dedicated tests use spawned processes with bounded waits and cleanup to
 prove simultaneous readers, excluded writers, blocked snapshots, concurrent
