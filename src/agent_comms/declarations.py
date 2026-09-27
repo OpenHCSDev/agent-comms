@@ -70,6 +70,7 @@ from .response_policy import ResponsePolicy
 if TYPE_CHECKING:
     from .coordination import PublicationIntent
     from .goal_history import GoalHistoryEntry
+    from .historical_views import HistoricalDisplay, HistoryCursor, HistorySource
     from .owner_compaction_gate import OwnerCompactionAttestation
     from .private_registry_guard import PrivateRegistryGuard
 from .envelope_claim_transitions import (
@@ -1808,11 +1809,26 @@ class Message:
                 )
 
     @property
+    def view_cursor(self) -> int | HistoryCursor:
+        return self.seq
+
+    @property
+    def view_key(self) -> tuple[str, int]:
+        return "", self.seq
+
+    @property
+    def view_order(self) -> tuple[int, int, int]:
+        return 1, 0, self.seq
+
+    @property
     def message_id(self) -> str:
         digest = hashlib.sha256(
             f"{self.sender}:{self.target}:{self.timestamp}:{self.body}".encode()
         ).hexdigest()[:12]
         return digest
+
+    def to_display_wire(self) -> dict:
+        return self.to_wire()
 
     def to_wire(self) -> dict:
         result = MessageWireCodec.encode(self)
@@ -2099,6 +2115,16 @@ class MessagePage:
     has_newer: bool
     display_scope: ChannelDisplayScope | None = None
     display_basis: DMDisplayBasis | None = None
+    historical_display: HistoricalDisplay | None = None
+    history_revision: tuple[int, int, int, int] | None = None
+
+    @property
+    def oldest_cursor(self) -> int | HistoryCursor | None:
+        return self.messages[0].view_cursor if self.messages else None
+
+    @property
+    def newest_cursor(self) -> int | HistoryCursor | None:
+        return self.messages[-1].view_cursor if self.messages else None
 
     def __post_init__(self) -> None:
         sequences = [message.seq for message in self.messages]
@@ -3364,6 +3390,146 @@ class MessageBus:
         self._view_unread_cache: dict[str, ViewUnread] = {}
         self._channel_activity_revision: tuple | None = None
         self._channel_activity: dict[str, ChannelActivity] = {}
+
+    @property
+    def history_manifest(self) -> Path:
+        return self._path.with_name("history_sources.json")
+
+    def history_sources(self) -> tuple[HistorySource, ...]:
+        from .historical_views import HistorySource
+
+        try:
+            raw = json.loads(self.history_manifest.read_text())
+        except FileNotFoundError:
+            return ()
+        return tuple(FieldCodec.decode(HistorySource, item) for item in raw)
+
+    def attach_history(self, source_root: Path) -> HistorySource:
+        """Snapshot a preserved source, then publish it for ordinary display.
+
+        Only destination files are written. No Comms constructor, source locks,
+        inboxes, execution inputs, or source sequence allocator are touched.
+        A source is attached once. Its original bytes and identity survive.
+        """
+        import shutil
+        import tempfile
+
+        from .historical_views import HistorySource
+
+        source_root = source_root.resolve()
+        if source_root == self._path.parent.resolve():
+            raise ValueError("The live bus cannot be its own history source")
+        with _store_lock(self.history_manifest):
+            sources = self.history_sources()
+            existing = next((s for s in sources if s.original_root == str(source_root)), None)
+            if existing is not None:
+                return existing
+            parent = self._path.parent / "history"
+            parent.mkdir(mode=0o700, exist_ok=True)
+            stage = Path(tempfile.mkdtemp(prefix="source-", dir=parent))
+            try:
+                paths = [
+                    source_root / name
+                    for name in (
+                        "bus.jsonl",
+                        "registry.json",
+                        "channels.json",
+                        "channel_metadata.json",
+                        "transcript_routes.json",
+                        "bus_meta.json",
+                        "channel_pins.json",
+                        "saved_views.json",
+                    )
+                ]
+                revisions = tuple(file_revision(path) for path in paths)
+                for path in paths:
+                    if path.exists():
+                        shutil.copyfile(path, stage / path.name)
+                if revisions != tuple(file_revision(path) for path in paths):
+                    raise ValueError("Historical source changed during snapshot; retry")
+                bus_info = paths[0].stat() if paths[0].exists() else None
+                if bus_info is None:
+                    (stage / "bus.jsonl").touch()
+                # Source metadata is provenance only. Never turn the snapshot
+                # into an active private root or copy coordinator/native state.
+                meta = stage / "bus_meta.json"
+                marker = json.loads(meta.read_text()) if meta.exists() else {}
+                if meta.exists():
+                    meta.rename(stage / "source_bus_meta.json")
+                source = HistorySource(
+                    str(stage.resolve()),
+                    str(source_root),
+                    marker.get("wire_root_id", ""),
+                    (bus_info.st_dev, bus_info.st_ino) if bus_info else (0, 0),
+                    bus_info.st_size if bus_info else 0,
+                    file_revision(stage / "bus.jsonl"),
+                    file_revision(stage / "registry.json"),
+                )
+                registry = source.registry().snapshot()
+                previous = 0
+                for record, size in _iter_jsonl_records(stage / "bus.jsonl"):
+                    message, _ = self._public_page_record(record, size)
+                    if message.seq <= previous:
+                        raise ValueError("Historical source has nonascending sequences")
+                    previous = message.seq
+                if not registry.threads:
+                    raise ValueError("Historical source has no identity declarations")
+                _atomic_write_text(
+                    self.history_manifest,
+                    json.dumps([FieldCodec.encode(item) for item in (*sources, source)]),
+                )
+                return source
+            except BaseException:
+                shutil.rmtree(stage)
+                raise
+
+    def historical_page(self, matches, *, before=None, after=None, limit=100, max_bytes=256 * 1024):
+        """Page one original source at a time, with source-bound cursors.
+
+        The caller owns live pages. None means the oldest live boundary;
+        a historical cursor can travel in either direction across snapshots.
+        """
+        from .historical_views import HistoricalMessage
+
+        sources = self.history_sources()
+        cursor = before or after
+        if before is not None and after is not None:
+            raise ValueError("Choose one history paging direction")
+        start = next(
+            (i for i, source in enumerate(sources) if cursor and source.key == cursor.source),
+            len(sources) - 1 if cursor is None else -1,
+        )
+        if cursor is not None and start < 0:
+            raise ValueError("Historical source detached; reload history")
+        indexes = range(start, len(sources)) if after else range(start, -1, -1)
+        for index in indexes:
+            source = sources[index]
+            snapshot = source.registry().snapshot()
+            historical_bus = MessageBus(Path(source.root) / "bus.jsonl", source.registry())
+            page = historical_bus._history_page(
+                lambda message, snapshot=snapshot: matches(message, snapshot),
+                before=cursor.sequence if before and index == start else None,
+                after=cursor.sequence if after and index == start else (0 if after else None),
+                limit=limit,
+                max_bytes=max_bytes,
+            )
+
+            page = replace(
+                page,
+                messages=tuple(
+                    HistoricalMessage.project(message, source, index, snapshot)
+                    for message in page.messages
+                ),
+            )
+            if page.messages:
+                # Cross-source availability is resolved by the next bounded read;
+                # false-positive edges terminate on an empty page without replay.
+                return replace(
+                    page,
+                    has_older=page.has_older or index > 0,
+                    has_newer=page.has_newer or index < len(sources) - 1,
+                )
+        return MessagePage((), False, False)
 
     def view_unread_counts(
         self,

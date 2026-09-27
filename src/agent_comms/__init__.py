@@ -51,6 +51,13 @@ from .exporting import (
     WireExportScope,
     WireTranscriptExporter,
 )
+from .historical_views import (
+    HistoricalDisplay,
+    HistoricalMessage,
+    HistoricalThread,
+    HistoryCursor,
+    HistorySource,
+)
 from .importing import ImportFormat, ImportLimits, ImportReceipt, ImportSnapshot
 from .mentions import MentionCandidate, MentionQuery, ThreadMention
 from .operations import (
@@ -133,6 +140,11 @@ __all__ = [
     "ThreadRegistry",
     "MessageBus",
     "MessagePage",
+    "HistoryCursor",
+    "HistorySource",
+    "HistoricalMessage",
+    "HistoricalDisplay",
+    "HistoricalThread",
     "SharedLedger",
     "ThreadStatus",
     "MessageType",
