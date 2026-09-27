@@ -17,6 +17,7 @@ import pytest
 
 from agent_comms.native_pi import (
     CAPABILITY,
+    NativePiTerminalFailure,
     NativePiUnavailable,
     _read_native_context_evidence,
     _trusted_package,
@@ -920,8 +921,10 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             assert "agent_settled" in observed
         else:
             failure = "429 rate limit" if outcome == "429" else "did not finish successfully"
-            with pytest.raises(NativePiUnavailable, match=failure):
+            with pytest.raises(NativePiTerminalFailure, match=failure) as failed:
                 await run_native_pi_turn(package, **request)
+            assert failed.value.context.input_id == INPUT_ID
+            assert "agent_settled" in observed
         assert calls == ["/v1/chat/completions"]
         assert not (sessions / ".native-pi-agent" / "auth.json").exists()
         assert not (sessions / ".native-pi-agent" / "models.json").exists()
@@ -1005,3 +1008,20 @@ def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch):
     monkeypatch.setattr(private_nk_entrypoint, "private_nk_from_environment", lambda: None)
     with pytest.raises(NativePiUnavailable, match="configured private route"):
         native_pi.main()
+
+
+def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_path):
+    from agent_comms.native_pi import NativeContextProof
+
+    context = NativeContextProof(
+        INPUT_ID, "session", "entry", 1, DIGEST, tmp_path / "session.jsonl"
+    )
+    failed = NativePiTerminalFailure(
+        "SECRET provider response including prompt data", context, "provider", "model"
+    )
+    assert failed.public_message == "provider/model: provider request failed."
+    assert "SECRET" not in failed.public_message
+    usage = NativePiTerminalFailure(
+        "Codex error: The usage limit has been reached", context, "openai-codex", "gpt-6-sol"
+    )
+    assert "The usage limit has been reached" in usage.public_message
