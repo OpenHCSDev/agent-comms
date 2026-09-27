@@ -347,7 +347,11 @@ class RetiredChild:
 async def spawn_retired_child(
     launch: NativePiRpcLaunch, identity: RetirementIdentity, input_id: str, prompt: str
 ) -> RetiredChild:
-    """Explicit default-OFF launch; no fallback on unsupported containment."""
+    """Quarantined historical prototype; no child may launch from this path."""
+    # SCM_CREDENTIALS -> procfs -> pidfd_open does not pin PID 1 while its
+    # numeric host PID can be recycled. A failed launch could signal another
+    # process. Keep this independent guard even for direct callers.
+    raise RetirementUnavailable("native Pi namespace retirement is disabled before dispatch")
     if sys.platform != "linux":
         raise RetirementUnavailable("Linux PID namespace and pidfd are required")
     identity.check(input_id, prompt, launch.session_file)

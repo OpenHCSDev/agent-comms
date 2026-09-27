@@ -24,6 +24,11 @@ from agent_comms.native_pi_retirement import (
 )
 from agent_comms.native_prompt_binding import native_request_digest
 
+# The frozen fake positives below exercised a numeric host PID -> pidfd race.
+# Preserve them as historical fixtures only; no unsafe child may run until a
+# separately reviewed identity-safe launcher replaces that implementation.
+pytestmark = pytest.mark.skip(reason="unsafe namespace PID handoff quarantined")
+
 _INPUT = "a" * 32
 _PROMPT = "one exact private selected input"
 

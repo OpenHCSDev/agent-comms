@@ -524,6 +524,11 @@ async def run_native_pi_turn(
     The caller owns disposition/publication and must never infer either from an
     input ACK. No automatic replay, fallback, tool launch, or coordinator writes.
     """
+    # Independent exact-head review found a numeric PID -> pidfd reuse gap in
+    # the opt-in namespace supervisor. Refuse before package checks or spawn;
+    # no fake receipt from that implementation can authorize PR95 settlement.
+    if retirement_identity is not None:
+        raise NativePiUnavailable("Native Pi retirement prototype is disabled before dispatch")
     if type(input_id) is not str or _INPUT_ID.fullmatch(input_id) is None:
         raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
     if not prompt or not isinstance(prompt, str) or not 0 < timeout <= 300:
