@@ -6,7 +6,9 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const manifest = readFileSync(resolve(import.meta.dirname, 'pi-native.sha256'));
 const build = createHash('sha256').update(manifest).digest('hex').slice(0, 16);
-const path = resolve(import.meta.dirname, `.pi-native-${build}/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js`);
+const packageDir = process.env.PI_NATIVE_PACKAGE_DIR ?? resolve(import.meta.dirname,
+  `.pi-native-${build}/node_modules/@earendil-works/pi-coding-agent`);
+const path = resolve(packageDir, 'dist/core/compaction/compaction.js');
 const { generateSummaryWithUsage } = await import(pathToFileURL(path).href);
 const usage = { input: 3, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 5,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };

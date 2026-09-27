@@ -111,52 +111,20 @@ def parse_selected_request(raw: bytes, token: str) -> SelectedToolRequest:
     return SelectedToolRequest(call_id, resource, payload)
 
 
-def stage_selected_extension(directory: Path) -> Path:
-    """Pin and durably stage only the reviewed explicit tool extension.
+def selected_extension(package: Path) -> Path:
+    """Select the tool shipped inside the already verified native package.
 
-    Never load extension source directly from a project/worktree directory.
-    Existing staged bytes are verified, never overwritten after an uncertain
-    previous attempt. Source changes require a new reviewed hash.
+    The native deployment manifest admits this exact module. A private session
+    directory is state storage, not an extension installation root.
     """
-    source = Path(__file__).with_name("selected_claimed_write.mjs")
+    source = Path(package) / "dist/selected_claimed_write.mjs"
     info = source.lstat()
     if (
         not stat.S_ISREG(info.st_mode)
         or hashlib.sha256(source.read_bytes()).hexdigest() != _TOOL_SOURCE_SHA
     ):
         raise SelectedToolDenied("Selected native extension differs from reviewed source")
-    directory = Path(directory).absolute()
-    info = directory.lstat()
-    if (
-        not stat.S_ISDIR(info.st_mode)
-        or info.st_uid != os.geteuid()
-        or stat.S_IMODE(info.st_mode) != 0o700
-        or directory.resolve() != directory
-    ):
-        raise SelectedToolDenied("Selected tool staging directory is not private")
-    target = directory / "selected-claim-extension.mjs"
-    try:
-        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    except FileExistsError:
-        pass
-    else:
-        try:
-            with os.fdopen(fd, "wb") as output:
-                output.write(source.read_bytes())
-                output.flush()
-                os.fsync(output.fileno())
-            _sync_dir(directory)
-        except OSError as error:
-            raise SelectedToolDenied("Selected extension staging UNKNOWN") from error
-    info = target.lstat()
-    if (
-        not stat.S_ISREG(info.st_mode)
-        or info.st_uid != os.geteuid()
-        or stat.S_IMODE(info.st_mode) != 0o600
-        or hashlib.sha256(target.read_bytes()).hexdigest() != _TOOL_SOURCE_SHA
-    ):
-        raise SelectedToolDenied("Selected extension is not pinned and private")
-    return target
+    return source
 
 
 def _sync_dir(path: Path) -> None:

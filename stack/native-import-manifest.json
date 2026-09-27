@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "extensionEntries": [
+    "agent-comms-extensions/pi-mcp-client/index.mjs",
+    "dist/selected_claimed_write.mjs"
+  ],
+  "peerAliases": {
+    "@earendil-works/pi-coding-agent": "dist/index.js"
+  }
+}

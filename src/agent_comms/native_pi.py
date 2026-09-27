@@ -8,7 +8,6 @@ No coordinator state changes or production runtime hookup occur in this module.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import os
 import re
@@ -19,7 +18,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from .declarations import RelationViolationError, _store_lock
@@ -28,9 +27,12 @@ from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
 from .selected_tool_broker import (
     SelectedToolMode,
     SelectedToolSocket,
-    stage_selected_extension,
+    selected_extension,
     verify_selected_terminal,
 )
+
+if TYPE_CHECKING:
+    from .fresh_private_session import FreshPrivateSession
 
 CAPABILITY = "pi-native-input-v1-live-only"
 _INPUT_ID = re.compile(r"[0-9a-f]{32}\Z")
@@ -43,32 +45,6 @@ _NATIVE_SETTINGS = (
     b'{"retry":{"enabled":false,"maxRetries":0,"provider":{"maxRetries":0}},'
     b'"compaction":{"enabled":false}}\n'
 )
-# Pinned outputs of prepare-copied-pi.sh at stock Pi 0.85.1 with the
-# merged proof-journal headroom and canonical model-configuration fixes.
-_PATCHED_SHA = {
-    "dist/core/agent-session-services.js": (
-        "4af410d793207f0269cf442a799b0f83933b69d728d166e49a3a6134ff7108a6"
-    ),
-    "dist/cli.js": "8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d",
-    "dist/core/agent-session.js": (
-        "b8b3deeffad82771762808c435617d03f4701c3ac14a9620f5e313545a8d6875"
-    ),
-    "dist/core/session-manager.js": (
-        "dd75fef58eaa5458a91cff9fe1cf70556ebc720afd98720eae3dcb6572cb63ca"
-    ),
-    "dist/modes/rpc/rpc-mode.js": (
-        "bd6dfca7b14cad4023c5ab56a7fc91bef3db9670c96b6ad7625df16353b42e5a"
-    ),
-    "node_modules/@earendil-works/pi-agent-core/dist/agent.js": (
-        "93ed16306399765e79c11f78897f575252d7174b85b81a01cdebb2a479e0e57f"
-    ),
-    "node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js": (
-        "e6003ded7cd11fc8bfd01e4f48cd3d5a19338b64c2e1febe81d0659c31013c11"
-    ),
-    "node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js": (
-        "13d6fec97d08f4303714aca50f3113ba0263706e961fc220ccb1cc023c520e6b"
-    ),
-}
 
 
 class NativePiUnavailable(RuntimeError):  # noqa: N818 - nominal fail-closed outcome
@@ -83,7 +59,33 @@ def main() -> int:
     if launch is None:
         raise NativePiUnavailable("Native owner backend requires a configured private route")
     cli = _trusted_package(launch.native_package)
-    os.execvp("node", ["node", str(cli), *sys.argv[1:]])
+    environment = dict(os.environ)
+    environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
+        Path(
+            environment.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
+            or environment.get("PI_CODING_AGENT_DIR")
+            or "~/.pi/agent"
+        )
+        .expanduser()
+        .resolve()
+    )
+    for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
+        environment.pop(name, None)
+    environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
+    os.execvpe(
+        "node",
+        [
+            "node",
+            "--no-global-search-paths",
+            "--import",
+            str(cli.with_name("agent-comms-import-fence.mjs")),
+            "--import",
+            str(cli.with_name("agent-comms-project-bootstrap.mjs")),
+            str(cli),
+            *sys.argv[1:],
+        ],
+        environment,
+    )
     return 0
 
 
@@ -196,13 +198,12 @@ def _trusted_package(package: Path) -> Path:
     root = package.parents[2]
     if root.stat().st_uid != os.geteuid() or stat.S_IMODE(root.stat().st_mode) != 0o700:
         raise NativePiUnavailable("Disposable native Pi root must be owner-only")
-    for relative, digest in _PATCHED_SHA.items():
-        path = package / relative
-        info = path.lstat()
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid():
-            raise NativePiUnavailable("Pinned native Pi module is redirected")
-        if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
-            raise NativePiUnavailable("Pinned native Pi module differs from reviewed fork")
+    from .native_package import NativePackageError, verify_native_package
+
+    try:
+        verify_native_package(package)
+    except (OSError, NativePackageError) as error:
+        raise NativePiUnavailable("Pinned native Pi package differs from reviewed fork") from error
     return package / "dist/cli.js"
 
 
@@ -486,6 +487,24 @@ def _verify_context(
     return proof
 
 
+def _require_reviewed_selected_source_cli() -> None:
+    """Default OFF until copied CLI startup factories are independently fenced."""
+    raise NativePiUnavailable(
+        "Selected first-source CLI builtins are unreviewed; no Pi startup or raw prompt"
+    )
+
+
+def _fresh_selected_revision(
+    fresh: FreshPrivateSession, *, started: bool = False
+) -> tuple[int, int, int, int, int]:
+    """Exact saved inode+revision; not a provider or terminal receipt."""
+    if started:
+        return fresh.verify_selected_startup()
+    fresh.verify_prewrite()
+    info = fresh.path.lstat()
+    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
+
+
 def prepare_native_pi_rpc_launch(
     package: Path,
     *,
@@ -495,6 +514,7 @@ def prepare_native_pi_rpc_launch(
     provider: str = "openrouter",
     model: str = "z-ai/glm-5.3-flash",
     thinking_level: str | None = None,
+    selected_thinking_level: str | None = None,
     selected_tool_mode: SelectedToolMode | None = None,
 ) -> NativePiRpcLaunch:
     """Verify compiled Pi bytes and commit private no-retry policy before spawning.
@@ -512,8 +532,16 @@ def prepare_native_pi_rpc_launch(
         for value in (provider, model)
     ):
         raise NativePiUnavailable("Native Pi requires an explicit provider and model")
+    if selected_thinking_level is not None and (
+        type(selected_thinking_level) is not str
+        or selected_thinking_level not in {"low", "high"}
+        or session_file is None
+    ):
+        raise NativePiUnavailable("Selected launch requires a saved session and supported level")
     if selected_tool_mode is not None and type(selected_tool_mode) is not SelectedToolMode:
         raise NativePiUnavailable("Selected tool requires a trusted nominal mode")
+    if selected_thinking_level is not None and selected_tool_mode is not None:
+        raise NativePiUnavailable("Selected fresh source cannot launch a file tool")
     cli = _trusted_package(package)
     worktree = Path(worktree).absolute()
     session_dir = Path(session_dir).absolute()
@@ -522,9 +550,20 @@ def prepare_native_pi_rpc_launch(
         raise NativePiUnavailable("Native Pi worktree is unavailable")
     if session_file is not None:
         session_file = _session_location(session_dir, str(session_file))
-        _read_private_file(session_file)
+        entries = _read_private_file(session_file)
+        if not entries or entries[0].get("type") != "session":
+            raise NativePiUnavailable("Selected native source lacks a session header")
+        marker = entries[0].get("agentCommsSelectedFresh")
+        if (marker is not None or selected_thinking_level is not None) and (
+            type(marker) is not dict
+            or marker != {"schema": 1, "thinkingLevel": selected_thinking_level}
+            or selected_thinking_level not in {"low", "high"}
+        ):
+            raise NativePiUnavailable(
+                "Selected fresh source cannot reopen without exact first-start token"
+            )
     agent_dir = _private_agent_dir(session_dir)
-    extension = stage_selected_extension(session_dir) if selected_tool_mode is not None else None
+    extension = selected_extension(package) if selected_tool_mode is not None else None
     argv = [
         "node",
         str(cli),
@@ -546,30 +585,53 @@ def prepare_native_pi_rpc_launch(
         "--model",
         model,
     ]
+    if selected_thinking_level is not None:
+        argv.extend(("--thinking", selected_thinking_level, "--no-prompt-templates", "--no-themes"))
     if extension is not None:
         argv.extend(("-e", str(extension)))
     if session_file is not None:
         argv.extend(("--session", str(session_file)))
-    if thinking_level is not None:
+    if thinking_level is not None and selected_thinking_level is None:
         argv.extend(("--thinking", thinking_level))
-    env = os.environ.copy()
-    for name in (
-        "PI_AGENT_ID",
-        "PI_PARENT_ID",
-        "PI_AGENT_TAGS",
-        "AGENT_COMMS_THREAD",
-        "AGENT_COMMS_TAGS",
-        "AGENT_COMMS_SELECTED_TOOL_SOCKET",
-        "AGENT_COMMS_SELECTED_TOOL_TOKEN",
-    ):
-        env.pop(name, None)
-    env["PI_OFFLINE"] = "1"
-    # Keep one credential/model store and its existing refresh lock. Isolating
-    # retry settings must not copy credentials or replace the owner's catalog.
-    env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
-        Path(os.environ.get("PI_CODING_AGENT_DIR", "~/.pi/agent")).expanduser().resolve()
-    )
-    env["PI_CODING_AGENT_DIR"] = str(agent_dir)
+    if selected_thinking_level is not None:
+        # This selected-only candidate is still hard-denied before real spawn.
+        # Do not hand a credential, proxy, hooks, or ambient provider settings
+        # to even a future reviewed source CLI. The copied c1 gate needs its
+        # explicit marker; PR94 must separately review this exact env contract.
+        if os.name != "posix":
+            raise NativePiUnavailable("Selected source requires reviewed POSIX isolation")
+        import pwd
+
+        username = pwd.getpwuid(os.geteuid()).pw_name
+        env = {
+            "HOME": str(agent_dir),
+            "USER": username,
+            "LOGNAME": username,
+            "PATH": os.defpath,
+            "LANG": "C.UTF-8",
+            "TMPDIR": str(session_dir),
+            "PI_OFFLINE": "1",
+            "PI_CODING_AGENT_DIR": str(agent_dir),
+            "AGENT_COMMS_SELECTED_SOURCE_COPY": "1",
+        }
+    else:
+        env = os.environ.copy()
+        for name in (
+            "PI_AGENT_ID",
+            "PI_PARENT_ID",
+            "PI_AGENT_TAGS",
+            "AGENT_COMMS_THREAD",
+            "AGENT_COMMS_TAGS",
+            "AGENT_COMMS_SELECTED_TOOL_SOCKET",
+            "AGENT_COMMS_SELECTED_TOOL_TOKEN",
+        ):
+            env.pop(name, None)
+        env["PI_OFFLINE"] = "1"
+        # Canonical credentials/catalog remain separate from retry isolation.
+        env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
+            Path(os.environ.get("PI_CODING_AGENT_DIR", "~/.pi/agent")).expanduser().resolve()
+        )
+        env["PI_CODING_AGENT_DIR"] = str(agent_dir)
     return NativePiRpcLaunch(tuple(argv), worktree, env, session_dir, session_file)
 
 
@@ -585,8 +647,9 @@ async def run_native_pi_turn(
     model: str = "z-ai/glm-5.3-flash",
     thinking_level: str | None = None,
     timeout: float = 90.0,
-    prompt_send_boundary: Callable[[], AbstractContextManager[None]] | None = None,
+    prompt_send_boundary: Callable[..., AbstractContextManager[None]] | None = None,
     maintenance_root: Path | None = None,
+    fresh_selected: FreshPrivateSession | None = None,
     selected_tool_mode: SelectedToolMode | None = None,
 ) -> NativeTurnResult:
     """One tracked real Pi RPC prompt in an isolated, persisted session.
@@ -598,6 +661,20 @@ async def run_native_pi_turn(
         raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
     if not prompt or not isinstance(prompt, str) or not 0 < timeout <= 300:
         raise ValueError("A native turn requires bounded prompt and deadline")
+    selected_revision = None
+    if fresh_selected is not None:
+        from .fresh_private_session import FreshPrivateSession
+
+        if (
+            type(fresh_selected) is not FreshPrivateSession
+            or session_file != fresh_selected.path
+            or fresh_selected.selected_thinking_level not in {"low", "high"}
+            or prompt_send_boundary is None
+            or maintenance_root is None
+        ):
+            raise NativePiUnavailable("Selected first source requires enrolled locked prewrite")
+        selected_revision = _fresh_selected_revision(fresh_selected)
+        _require_reviewed_selected_source_cli()  # Must fail before real CLI spawn.
     launch = prepare_native_pi_rpc_launch(
         package,
         worktree=worktree,
@@ -606,6 +683,9 @@ async def run_native_pi_turn(
         provider=provider,
         model=model,
         thinking_level=thinking_level,
+        selected_thinking_level=(
+            fresh_selected.selected_thinking_level if fresh_selected is not None else None
+        ),
         selected_tool_mode=selected_tool_mode,
     )
     session_dir, session_file = launch.session_dir, launch.session_file
@@ -697,6 +777,26 @@ async def run_native_pi_turn(
             if session_file is not None and actual_file != session_file:
                 raise NativePiUnavailable("Native Pi rebound its session")
             session_id = data["sessionId"]
+            if fresh_selected is not None:
+                actual_model = data.get("model")
+                if (
+                    session_id != fresh_selected.session_id
+                    or type(actual_model) is not dict
+                    or actual_model.get("provider") != "openrouter"
+                    or actual_model.get("id") != "z-ai/glm-5.3-flash"
+                    or data.get("thinkingLevel") != fresh_selected.selected_thinking_level
+                    or type(data.get("messageCount")) is not int
+                    or data["messageCount"] != 0
+                    or type(data.get("pendingMessageCount")) is not int
+                    or data["pendingMessageCount"] != 0
+                    or data.get("isStreaming") is not False
+                    or data.get("isCompacting") is not False
+                ):
+                    raise NativePiUnavailable("Selected first source runtime or inode differs")
+                startup_revision = _fresh_selected_revision(fresh_selected, started=True)
+                if startup_revision[:2] != selected_revision[:2]:
+                    raise NativePiUnavailable("Selected startup changed enrolled inode")
+                selected_revision = startup_revision
             break
         command = {"type": "prompt", "id": "native-prompt", "inputId": input_id, "message": prompt}
         if prompt_send_boundary is None:
@@ -708,7 +808,11 @@ async def run_native_pi_turn(
             await send_fenced_prompt(
                 stdin,
                 (json.dumps(command, separators=(",", ":")) + "\n").encode(),
-                prompt_send_boundary,
+                (
+                    (lambda: prompt_send_boundary(actual_file, selected_revision))
+                    if fresh_selected is not None
+                    else (lambda: prompt_send_boundary(actual_file))
+                ),
                 timeout=deadline - asyncio.get_running_loop().time(),
             )
         accepted = False

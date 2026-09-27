@@ -28,7 +28,7 @@ import uuid
 from bisect import bisect_left
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import closing, contextmanager, nullcontext, suppress
+from contextlib import AbstractContextManager, closing, contextmanager, nullcontext, suppress
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from enum import Enum, StrEnum
@@ -273,8 +273,13 @@ def _verify_claim_bus_before_read_unlocked(bus_path: Path) -> None:
 @contextmanager
 def _store_lock(
     store_path: Path, *, blocking: bool = True, max_bus_bytes: int | None = None
-) -> Iterator[None]:
-    """Hold a canonical store lock; optionally cap bytes before its durability scan."""
+) -> Iterator[int]:
+    """Hold a canonical wire lock; yield its inheritable descriptor.
+
+    A bounded projection refuses over-budget bus bytes before its durability
+    scan. POSIX release is by last close, not LOCK_UN: an inherited descriptor
+    retains authority if its parent dies before native mutation finishes.
+    """
     if max_bus_bytes is not None and (type(max_bus_bytes) is not int or max_bus_bytes < 0):
         raise ValueError("bus read cap must be a nonnegative integer")
     store_path.parent.mkdir(parents=True, exist_ok=True)
@@ -309,15 +314,15 @@ def _store_lock(
                 if not stat.S_ISREG(bus_info.st_mode) or bus_info.st_size > max_bus_bytes:
                     raise RelationViolationError("Bus exceeds bounded read budget.")
             _verify_claim_bus_before_read_unlocked(store_path)
-            yield
+            yield lock_file.fileno()
         finally:
             if os.name == "nt":
                 lock_file.seek(0)
                 msvcrt.locking(  # type: ignore[attr-defined]
                     lock_file.fileno(), msvcrt.LK_UNLCK, 1  # type: ignore[attr-defined]
                 )
-            else:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            # POSIX flock releases on the last close of this open-file
+            # description (including inherited copies), at the outer `with`.
 
 
 def _replace_snapshot(source: Path, target: Path, *, windows: bool = os.name == "nt") -> None:
@@ -2531,29 +2536,45 @@ No bus, delivery cursor, pending input or coordinator row is copied.
                 if not math.isfinite(candidate):
                     raise RelationViolationError("Registry creation identities collide.")
                 thread = replace(thread, created_at=candidate)
-            history = None
-            intent = None
-            before_goal = previous.goal if previous is not None else None
-            if before_goal != thread.goal:
-                from .goal_history import GoalHistoryStore
-
-                history = GoalHistoryStore(self._path)
-                intent = history.begin(thread.created_at, before_goal, thread.goal)
-            self._threads[thread.name] = thread
-            self._statuses[thread.name] = status
-            self._last_seen[thread.name] = time.time()
-            if (
-                previous is None
-                or new_owner
+            identity_changed = previous is not None and (
+                previous.created_at != thread.created_at
                 or previous.pid != thread.pid
+                or previous.session_file != thread.session_file
+                or previous.worktree != thread.worktree
                 or previous.role != thread.role
                 or (previous_status is not None and previous_status.active != status.active)
-            ):
-                self._bump_admission_unlocked(thread.name)
-            self._bump_owner_epoch_unlocked(thread.name)
-            self._save_unlocked()
-            if history is not None and intent is not None:
-                history.commit(intent)
+            )
+            identity_scope: AbstractContextManager[None]
+            if identity_changed:
+                from .compaction_publication_lease import publication_identity_fence
+
+                identity_scope = publication_identity_fence(self._path.parent, nonblocking=True)
+            else:
+                identity_scope = nullcontext()
+            with identity_scope:
+                history = None
+                intent = None
+                before_goal = previous.goal if previous is not None else None
+                if before_goal != thread.goal:
+                    from .goal_history import GoalHistoryStore
+
+                    history = GoalHistoryStore(self._path)
+                    intent = history.begin(thread.created_at, before_goal, thread.goal)
+                self._threads[thread.name] = thread
+                self._statuses[thread.name] = status
+                self._last_seen[thread.name] = time.time()
+                if (
+                    previous is None
+                    or new_owner
+                    or previous.pid != thread.pid
+                    or previous.role != thread.role
+                    or (previous_status is not None and previous_status.active != status.active)
+                ):
+                    self._bump_admission_unlocked(thread.name)
+                self._bump_owner_epoch_unlocked(thread.name)
+                self._save_unlocked()
+                if history is not None and intent is not None:
+                    history.commit(intent)
 
     def live_owner_with_epoch(self, name: str) -> tuple[Thread, int]:
         """Capture an active owner and its persistent incarnation under one lock.
@@ -2694,14 +2715,48 @@ No bus, delivery cursor, pending input or coordinator row is copied.
         expected_epoch: int,
         turn_id: str,
         *,
-        expected_goal_id: str,
-        expected_goal_revision: int,
+        expected_goal_id: str | None,
+        expected_goal_revision: int | None,
         correction_revision: int,
         session_file: str,
         session_leaf: str,
         session_revision: str,
     ) -> OwnerCompactionAttestation:
-        """Recheck canonical owner authority for one compaction commit, atomically.
+        """Return an audit snapshot, NOT authority for a later native mutation."""
+        with self.guard_owner_compaction(
+            expected,
+            expected_epoch,
+            turn_id,
+            expected_goal_id=expected_goal_id,
+            expected_goal_revision=expected_goal_revision,
+            correction_revision=correction_revision,
+            session_file=session_file,
+            session_leaf=session_leaf,
+            session_revision=session_revision,
+        ) as (attestation, _):
+            return attestation
+
+    @contextmanager
+    def guard_owner_compaction(
+        self,
+        expected: Thread,
+        expected_epoch: int,
+        turn_id: str,
+        *,
+        expected_goal_id: str | None,
+        expected_goal_revision: int | None,
+        correction_revision: int,
+        session_file: str,
+        session_leaf: str,
+        session_revision: str,
+    ) -> Iterator[tuple[OwnerCompactionAttestation, int]]:
+        """Hold canonical authority through the caller's native mutation.
+
+        Lock order: registry, then native session writer. No registry method
+        may be called inside this scope (the lock is not reentrant). A native
+        child MUST inherit the yielded descriptor and keep it until exit;
+        the caller must bound, terminate and reap it before leaving normally.
+        This scope does not validate correction or native session evidence.
 
         This is NOT a bearer token: the same check must run again at commit
         time under this lock. Anything that moved since the caller captured
@@ -2716,10 +2771,16 @@ No bus, delivery cursor, pending input or coordinator row is copied.
             or expected_epoch < 1
             or type(turn_id) is not str
             or not 0 < len(turn_id) <= 128
-            or type(expected_goal_id) is not str
-            or not expected_goal_id
-            or type(expected_goal_revision) is not int
-            or expected_goal_revision < 0
+            or ((expected_goal_id is None) != (expected_goal_revision is None))
+            or (
+                expected_goal_id is not None
+                and (
+                    type(expected_goal_id) is not str
+                    or not expected_goal_id
+                    or type(expected_goal_revision) is not int
+                    or expected_goal_revision < 0
+                )
+            )
             or type(correction_revision) is not int
             or correction_revision < 0
             or type(session_file) is not str
@@ -2730,7 +2791,7 @@ No bus, delivery cursor, pending input or coordinator row is copied.
             or not session_revision
         ):
             raise ValueError("owner compaction attestation requires bounded exact expectations")
-        with _store_lock(self._path):
+        with _store_lock(self._path) as authority_fd:
             self._load_unlocked()
             canonical = self._aliases.get(expected.name, expected.name)
             owner = self._threads.get(canonical)
@@ -2749,28 +2810,26 @@ No bus, delivery cursor, pending input or coordinator row is copied.
                 or owner.active_turn is None
                 or owner.active_turn.id != turn_id
                 or self._turn_epochs.get(canonical) != epoch
-                or goal is None
-                or not goal.active
-                or goal.id != expected_goal_id
-                or goal.revision != expected_goal_revision
+                or (goal.id if goal is not None else None) != expected_goal_id
+                or (goal.revision if goal is not None else None) != expected_goal_revision
             ):
                 raise RelationViolationError(
                     "canonical owner attestation unavailable for compaction commit"
                 )
             from .owner_compaction_gate import OwnerCompactionAttestation
 
-            return OwnerCompactionAttestation(
+            yield OwnerCompactionAttestation(
                 thread=owner.name,
                 owner_epoch=epoch,
                 turn_id=turn_id,
-                goal_id=goal.id,
-                goal_revision=goal.revision,
+                goal_id=goal.id if goal is not None else None,
+                goal_revision=goal.revision if goal is not None else None,
                 correction_revision=correction_revision,
                 session_file=session_file,
                 session_leaf=session_leaf,
                 session_revision=session_revision,
                 registry_revision=file_revision(self._path),
-            )
+            ), authority_fd
 
     def _assert_maintenance_open_unlocked(self) -> None:
         from .maintenance_barrier import MaintenanceBarrier
@@ -2924,7 +2983,12 @@ No bus, delivery cursor, pending input or coordinator row is copied.
 
     def rename(self, name: str, new_name: str) -> tuple[str, str]:
         """Rename one running thread while retaining old names as aliases."""
-        with _store_lock(self._path):
+        from .compaction_publication_lease import publication_identity_fence
+
+        with (
+            publication_identity_fence(self._path.parent, nonblocking=True),
+            _store_lock(self._path),
+        ):
             self._load_unlocked()
             canonical = self._aliases.get(name, name)
             if canonical not in self._threads:
@@ -2991,7 +3055,12 @@ No bus, delivery cursor, pending input or coordinator row is copied.
             return self._admission_generations[expected.name]
 
     def unregister(self, name: str) -> None:
-        with _store_lock(self._path):
+        from .compaction_publication_lease import publication_identity_fence
+
+        with (
+            publication_identity_fence(self._path.parent, nonblocking=True),
+            _store_lock(self._path),
+        ):
             self._load_unlocked()
             name = self._aliases.get(name, name)
             if name not in self._threads:
@@ -3003,7 +3072,12 @@ No bus, delivery cursor, pending input or coordinator row is copied.
             self._save_unlocked()
 
     def archive(self, name: str) -> None:
-        with _store_lock(self._path):
+        from .compaction_publication_lease import publication_identity_fence
+
+        with (
+            publication_identity_fence(self._path.parent, nonblocking=True),
+            _store_lock(self._path),
+        ):
             self._load_unlocked()
             name = self._aliases.get(name, name)
             if name not in self._threads:
@@ -3014,7 +3088,12 @@ No bus, delivery cursor, pending input or coordinator row is copied.
             self._save_unlocked()
 
     def begin_delete(self, name: str) -> None:
-        with _store_lock(self._path):
+        from .compaction_publication_lease import publication_identity_fence
+
+        with (
+            publication_identity_fence(self._path.parent, nonblocking=True),
+            _store_lock(self._path),
+        ):
             self._load_unlocked()
             name = self._aliases.get(name, name)
             if name not in self._threads:
@@ -3031,7 +3110,12 @@ No bus, delivery cursor, pending input or coordinator row is copied.
 
     def remove(self, name: str) -> tuple[str, ...]:
         """Remove a declaration and atomically detach its surviving children."""
-        with _store_lock(self._path):
+        from .compaction_publication_lease import publication_identity_fence
+
+        with (
+            publication_identity_fence(self._path.parent, nonblocking=True),
+            _store_lock(self._path),
+        ):
             self._load_unlocked()
             name = self._aliases.get(name, name)
             if name not in self._threads:
@@ -3966,7 +4050,7 @@ class MessageBus:
         if certificate_enabled(self._path):
             private = row.get(PRIVATE_WIRE_FIELD)
             initial = (
-                validate_initial_record(row, metadata["wire_root_id"])
+                validate_initial_record(row, str(metadata["wire_root_id"]))
                 if isinstance(private, dict) and "initial" in private
                 else None
             )
