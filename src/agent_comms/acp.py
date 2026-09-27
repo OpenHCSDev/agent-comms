@@ -1362,7 +1362,9 @@ class CommsAgent:
             "ownerEpoch": epoch,
         }
 
-    def _private_cursor_metadata(self, thread_name: str, session_id: str) -> dict[str, Any]:
+    def _private_cursor_metadata(
+        self, thread_name: str, session_id: str, *, defer_busy: bool = False
+    ) -> dict[str, Any]:
         """Owner-scoped, ordered informational cursor for trusted ACP attach.
 
         Every status (including none/unavailable) advances the local projection
@@ -1394,6 +1396,17 @@ class CommsAgent:
                 cursor = read_current_native_cursor(
                     bus, store, wire_root_id=root_id, owner_name=thread_name
                 )
+        except BlockingIOError:
+            # A writer holding a nonblocking observation lock did not invalidate
+            # the last observation. On periodic refresh, try again next poll
+            # instead of making the UI alternate between proof and unavailable.
+            # A changed/unknown owner still invalidates immediately; a trusted
+            # load without an observation still reports unavailable.
+            current_scope = self._private_cursor_scope(thread_name, session_id)
+            if defer_busy and current_scope == scope:
+                raise
+            result["scope"] = current_scope
+            return result
         except (OSError, ValueError, sqlite3.Error, CoordinationError):
             cursor = None
             unavailable = True
@@ -1426,7 +1439,10 @@ class CommsAgent:
         must invalidate a previously displayed proof. This is only projection
         metadata: it never selects, sends, acknowledges, or retries an input.
         """
-        cursor = self._private_cursor_metadata(thread_name, session_id)
+        try:
+            cursor = self._private_cursor_metadata(thread_name, session_id, defer_busy=True)
+        except BlockingIOError:
+            return  # Read contention; the next poll refreshes this observation.
         signature = json.dumps(
             {key: value for key, value in cursor.items() if key != "revision"},
             sort_keys=True,
