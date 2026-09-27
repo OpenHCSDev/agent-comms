@@ -1174,3 +1174,32 @@ async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, mo
     assert os.geteuid() == os.stat(tmp_path).st_uid
     with pytest.raises(NativePiUnavailable, match="Pinned disposable"):
         _trusted_package(stock)
+
+
+def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp_path, monkeypatch):
+    from agent_comms import native_pi, private_nk_entrypoint
+
+    launch = private_nk_entrypoint.PrivateNkLaunch(tmp_path, "a" * 32, tmp_path / "pi", None)
+    monkeypatch.setattr(private_nk_entrypoint, "private_nk_from_environment", lambda: launch)
+    verified = []
+    cli = launch.native_package / "dist" / "cli.js"
+
+    def trusted(package):
+        verified.append(package)
+        return cli
+
+    monkeypatch.setattr(native_pi, "_trusted_package", trusted)
+    monkeypatch.setattr(sys, "argv", ["pi-comms-native", "--mode", "rpc", "--model", "owner/model"])
+    executed = []
+    monkeypatch.setattr(os, "execvp", lambda executable, argv: executed.append((executable, argv)))
+    assert native_pi.main() == 0
+    assert verified == [launch.native_package]
+    assert executed == [("node", ["node", str(cli), "--mode", "rpc", "--model", "owner/model"])]
+
+
+def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch):
+    from agent_comms import native_pi, private_nk_entrypoint
+
+    monkeypatch.setattr(private_nk_entrypoint, "private_nk_from_environment", lambda: None)
+    with pytest.raises(NativePiUnavailable, match="configured private route"):
+        native_pi.main()

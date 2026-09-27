@@ -14,6 +14,7 @@ import os
 import re
 import signal
 import stat
+import sys
 from collections.abc import Callable
 from contextlib import AbstractContextManager, suppress
 from dataclasses import dataclass
@@ -72,6 +73,18 @@ _PATCHED_SHA = {
 
 class NativePiUnavailable(RuntimeError):  # noqa: N818 - nominal fail-closed outcome
     """Tracked execution failed closed without committing a coordinator fact."""
+
+
+def main() -> int:
+    """Run the active route's pinned Pi for ordinary ACP owner sessions."""
+    from .private_nk_entrypoint import private_nk_from_environment
+
+    launch = private_nk_from_environment()
+    if launch is None:
+        raise NativePiUnavailable("Native owner backend requires a configured private route")
+    cli = _trusted_package(launch.native_package)
+    os.execvp("node", ["node", str(cli), *sys.argv[1:]])
+    return 0
 
 
 @dataclass(frozen=True, slots=True)
