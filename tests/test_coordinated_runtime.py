@@ -67,7 +67,14 @@ def tmp_path():
         yield Path(root)
 
 
-def _root(tmp_path: Path, *, direct: bool = False, mentioned: bool = False):
+def _root(
+    tmp_path: Path,
+    *,
+    direct: bool = False,
+    mentioned: bool = False,
+    claims: bool = False,
+    body: str | None = None,
+):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
@@ -87,8 +94,10 @@ def _root(tmp_path: Path, *, direct: bool = False, mentioned: bool = False):
     for person in people:
         comms.register(person)
     root_id = comms.initialize_private_initial_protocol()
+    if claims:
+        comms.initialize_private_claim_protocol()
     target = "beta" if direct else "#team"
-    body = "@beta Compute 17+25." if mentioned else "Compute 17+25."
+    body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
     message = comms.send_initial_cohort("sender", target, body)
     initial = comms.bus.read_initial_cohort(root_id, message.seq)
     with MutationStore(str(root / "coordination.sqlite3")) as store:

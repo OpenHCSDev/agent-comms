@@ -138,9 +138,7 @@ def guard_default_route_write(expected_root: Path) -> Iterator[None]:
         yield
         return
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    directory = os.open(
-        path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
-    )
+    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
     try:
         fcntl.flock(directory, fcntl.LOCK_SH)
         info = os.fstat(directory)
@@ -187,9 +185,7 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
         raise ValueError("active comms route requires absolute root and package identities")
     _preflight(route.root, route.wire_root_id, route.native_package, True)
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    directory = os.open(
-        path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
-    )
+    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
     try:
         fcntl.flock(directory, fcntl.LOCK_EX)
         _publish_active_route_locked(route, path, directory)
@@ -197,7 +193,13 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
         os.close(directory)
 
 
-def _publish_active_route_locked(route: ActiveRoute, path: Path, directory: int) -> None:
+def _publish_active_route_locked(
+    route: ActiveRoute,
+    path: Path,
+    directory: int,
+    *,
+    expected: ActiveRoute | None = None,
+) -> None:
     """Publish through a checked directory FD already held with route EX."""
     from .cohort_foreground import _preflight
 
@@ -213,8 +215,13 @@ def _publish_active_route_locked(route: ActiveRoute, path: Path, directory: int)
         ):
             raise ValueError("active comms route directory changed or is not owned")
         os.fchmod(directory, 0o700)
-        if read_active_route(path) is not None:
-            raise ValueError("active comms route is already installed")
+        current = read_active_route(path)
+        if current != expected:
+            raise ValueError(
+                "active comms route is already installed"
+                if expected is None
+                else "active comms route is not the expected private root"
+            )
         payload = (
             json.dumps(
                 {
@@ -229,13 +236,15 @@ def _publish_active_route_locked(route: ActiveRoute, path: Path, directory: int)
         ).encode()
         temporary = f".active-route-{uuid.uuid4().hex}.tmp"
         fd = os.open(
-            temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
-            0o600, dir_fd=directory,
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+            dir_fd=directory,
         )
         try:
             view = memoryview(payload)
             while view:
-                view = view[os.write(fd, view):]
+                view = view[os.write(fd, view) :]
             os.fsync(fd)
         finally:
             os.close(fd)
@@ -243,32 +252,101 @@ def _publish_active_route_locked(route: ActiveRoute, path: Path, directory: int)
         parent = path.parent.lstat()
         if (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino):
             raise ValueError("active comms route directory changed before publication")
-        try:
-            os.link(
-                temporary,
-                path.name,
-                src_dir_fd=directory,
-                dst_dir_fd=directory,
-                follow_symlinks=False,
-            )
-        except FileExistsError as error:
-            raise ValueError("active comms route is already installed") from error
-        try:
-            os.unlink(temporary, dir_fd=directory)
-            temporary = None
-            os.fsync(directory)
-        except OSError as error:
-            raise RoutePublicationUnknownError(
-                "active comms route publication outcome UNKNOWN after link"
-            ) from error
+        if expected is None:
+            try:
+                os.link(
+                    temporary,
+                    path.name,
+                    src_dir_fd=directory,
+                    dst_dir_fd=directory,
+                    follow_symlinks=False,
+                )
+            except FileExistsError as error:
+                raise ValueError("active comms route is already installed") from error
+            try:
+                os.unlink(temporary, dir_fd=directory)
+                temporary = None
+                os.fsync(directory)
+            except OSError as error:
+                raise RoutePublicationUnknownError(
+                    "active comms route publication outcome UNKNOWN after link"
+                ) from error
+        else:
+            if read_active_route(path) != expected:
+                raise ValueError("active comms route changed before replacement")
+            try:
+                os.replace(temporary, path.name, src_dir_fd=directory, dst_dir_fd=directory)
+                temporary = None
+                os.fsync(directory)
+            except OSError as error:
+                raise RoutePublicationUnknownError(
+                    "active comms route publication outcome UNKNOWN after replacement"
+                ) from error
     finally:
         if temporary is not None:
             with suppress(OSError):
                 os.unlink(temporary, dir_fd=directory)
 
 
+def rotate_active_route(
+    expected: ActiveRoute,
+    replacement: ActiveRoute,
+    archive: ArchiveReceipt,
+    path: Path | None = None,
+) -> None:
+    """Atomically replace a stopped private route after its immutable archive.
+
+    The caller fences explicit-root ingress and all owner processes, archives
+    the stopped source, and stages saved owners in an empty new private root.
+    Pending and UNKNOWN inputs stay in the archived source; none are replayed.
+    """
+    from .cohort_foreground import _preflight
+    from .operations import Comms
+    from .supervised_cutover import _require_unchanged_archive_source
+
+    path = active_route_path() if path is None else path
+    if path.name != "active-route.json" or not path.is_absolute():
+        raise ValueError("active comms route requires its absolute route path")
+    if expected.root == replacement.root or archive.path.is_relative_to(replacement.root):
+        raise ValueError("private route rotation requires distinct roots and archive")
+    _preflight(replacement.root, replacement.wire_root_id, replacement.native_package, True)
+    new = Comms(replacement.root)
+    with _store_lock(new.bus._path):
+        marker = new.bus._private_marker_unlocked()
+        if (
+            marker.get("claim_envelopes_version") != 1
+            or marker["last_seq"] != 0
+            or (new.bus._path.exists() and new.bus._path.stat().st_size != 0)
+        ):
+            raise RelationViolationError("replacement route requires an empty claim-ready bus")
+    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        fcntl.flock(directory, fcntl.LOCK_EX)
+        if read_active_route(path) != expected:
+            raise ValueError("active comms route is not the expected private root")
+        old = Comms(expected.root)
+        with _store_lock(old.bus._path):
+            marker = old.bus._private_marker_unlocked()
+            if marker["wire_root_id"] != expected.wire_root_id:
+                raise RelationViolationError("old private route identity changed")
+        _require_unchanged_archive_source(old, archive)
+        with _store_lock(new.bus._path):
+            marker = new.bus._private_marker_unlocked()
+            if (
+                marker.get("claim_envelopes_version") != 1
+                or marker["last_seq"] != 0
+                or (new.bus._path.exists() and new.bus._path.stat().st_size != 0)
+            ):
+                raise RelationViolationError("replacement route changed before publication")
+        _publish_active_route_locked(replacement, path, directory, expected=expected)
+    finally:
+        os.close(directory)
+
+
 def withdraw_active_route(
-    expected: ActiveRoute, archive_destination: Path, path: Path | None = None,
+    expected: ActiveRoute,
+    archive_destination: Path,
+    path: Path | None = None,
 ) -> ArchiveReceipt:
     """Archive a stopped private root, then withdraw its exact default route.
 
@@ -281,9 +359,7 @@ def withdraw_active_route(
     path = active_route_path() if path is None else path
     if path.name != "active-route.json" or not path.is_absolute():
         raise ValueError("active comms route requires its absolute route path")
-    directory = os.open(
-        path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
-    )
+    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
     try:
         fcntl.flock(directory, fcntl.LOCK_EX)
         info = os.fstat(directory)

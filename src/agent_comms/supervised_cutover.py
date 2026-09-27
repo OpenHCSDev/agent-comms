@@ -193,9 +193,32 @@ def inventory_legacy_root(comms: Comms) -> LegacyInventory:
 
 
 def _state_files(root: Path) -> tuple[Path, ...]:
-    """Capture top-level wire/state stores, including SQLite recovery sidecars."""
+    """Capture wire stores and private Pi journals, excluding transient sockets."""
     suffixes = (".json", ".jsonl", ".sqlite3", ".sqlite3-wal", ".sqlite3-shm", ".sqlite3-journal")
-    return tuple(sorted(path for path in root.iterdir() if path.name.endswith(suffixes)))
+    files = [path for path in root.iterdir() if path.name.endswith(suffixes)]
+    for name in ("native-sessions", "runtime"):
+        base = root / name
+        if not base.exists() and not base.is_symlink():
+            continue
+        for directory_name, directory_names, file_names in os.walk(base, followlinks=False):
+            directory = Path(directory_name)
+            info = directory.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid():
+                raise RelationViolationError("Cutover private state directory is redirected")
+            for child_name in directory_names:
+                child = directory / child_name
+                child_info = child.lstat()
+                if not stat.S_ISDIR(child_info.st_mode) or child_info.st_uid != os.geteuid():
+                    raise RelationViolationError("Cutover private state directory is redirected")
+            for child_name in file_names:
+                child = directory / child_name
+                child_info = child.lstat()
+                if stat.S_ISSOCK(child_info.st_mode):
+                    continue
+                if not stat.S_ISREG(child_info.st_mode) or child_info.st_uid != os.geteuid():
+                    raise RelationViolationError("Cutover private state file is redirected")
+                files.append(child)
+    return tuple(sorted(files))
 
 
 def _file_identity(info: os.stat_result) -> tuple[int, int, int, int, int]:
@@ -203,6 +226,7 @@ def _file_identity(info: os.stat_result) -> tuple[int, int, int, int, int]:
 
 
 def _copy_checked(source: Path, target: Path) -> dict[str, object]:
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     descriptor = os.open(source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     try:
         initial = os.fstat(descriptor)
@@ -251,13 +275,21 @@ def _publish_archive_noreplace(stage: Path, destination: Path) -> None:
         except AttributeError as error:
             raise ValueError("Cutover archive cannot guarantee no-replace publication") from error
         renameat2.argtypes = (
-            ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
         )
         renameat2.restype = ctypes.c_int
         # Linux RENAME_NOREPLACE=1. Both names are relative to the checked
         # owner-only parent fd, so no path-based replace can race this step.
-        if renameat2(directory, os.fsencode(stage.name), directory,
-                     os.fsencode(destination.name), 1) != 0:
+        if (
+            renameat2(
+                directory, os.fsencode(stage.name), directory, os.fsencode(destination.name), 1
+            )
+            != 0
+        ):
             code = ctypes.get_errno()
             if code in (errno.EEXIST, errno.ENOTEMPTY):
                 raise ValueError("Cutover archive destination already exists")
@@ -289,11 +321,12 @@ def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
     before = comms.registry.snapshot()
     if any(thread.active_turn is not None for thread in before.threads.values()):
         raise RelationViolationError("Cutover archive has an active owner turn")
-    if any(thread.pid > 0 and comms._process_alive(thread.pid)
-           for thread in before.threads.values()):
+    if any(
+        thread.pid > 0 and comms._process_alive(thread.pid) for thread in before.threads.values()
+    ):
         raise RelationViolationError("Cutover archive requires all old owners stopped")
     files = _state_files(comms.root)
-    required = {"bus.jsonl", "bus_meta.json", "registry.json", "input_dispositions.json"}
+    required = {"bus.jsonl", "bus_meta.json", "registry.json"}
     if not required.issubset({path.name for path in files}):
         raise RelationViolationError("Cutover archive is missing core wire or input state")
     identities = {path: _file_identity(path.lstat()) for path in files}
@@ -303,7 +336,12 @@ def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
     )
     stage = Path(tempfile.mkdtemp(prefix=".cutover-archive-", dir=destination.parent))
     try:
-        entries = {source.name: _copy_checked(source, stage / source.name) for source in files}
+        entries = {
+            source.relative_to(comms.root).as_posix(): _copy_checked(
+                source, stage / source.relative_to(comms.root)
+            )
+            for source in files
+        }
         after = comms.registry.snapshot()
         if (
             before.threads != after.threads
@@ -313,8 +351,10 @@ def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
             or any(
                 _file_identity(path.lstat()) != identity for path, identity in identities.items()
             )
-            or any(thread.pid > 0 and comms._process_alive(thread.pid)
-                   for thread in after.threads.values())
+            or any(
+                thread.pid > 0 and comms._process_alive(thread.pid)
+                for thread in after.threads.values()
+            )
         ):
             raise RelationViolationError("Cutover root changed during archive")
         manifest = {
@@ -334,11 +374,14 @@ def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
             os.fsync(fd)
         finally:
             os.close(fd)
-        directory = os.open(stage, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        directories = {stage}
+        directories.update((stage / source.relative_to(comms.root)).parent for source in files)
+        for staged_dir in sorted(directories, key=lambda item: len(item.parts), reverse=True):
+            directory = os.open(staged_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
         _publish_archive_noreplace(stage, destination)
         return ArchiveReceipt(destination, len(files), pending, unknown)
     except BaseException:
@@ -363,7 +406,7 @@ def _require_unchanged_archive_source(legacy: Comms, archive: ArchiveReceipt) ->
         manifest.get("version") != 1
         or manifest.get("source_root") != str(legacy.root.absolute())
         or not isinstance(files, dict)
-        or set(files) != {path.name for path in sources}
+        or set(files) != {path.relative_to(legacy.root).as_posix() for path in sources}
     ):
         raise RelationViolationError("Cutover archive differs from the stopped source")
     for source in sources:
@@ -375,10 +418,12 @@ def _require_unchanged_archive_source(legacy: Comms, archive: ArchiveReceipt) ->
             while chunk := stream.read(1024 * 1024):
                 digest.update(chunk)
         after = source.lstat()
-        if (
-            _file_identity(before) != _file_identity(after)
-            or files[source.name] != {"size": before.st_size, "sha256": digest.hexdigest()}
-        ):
+        if _file_identity(before) != _file_identity(after) or files[
+            source.relative_to(legacy.root).as_posix()
+        ] != {
+            "size": before.st_size,
+            "sha256": digest.hexdigest(),
+        }:
             raise RelationViolationError("Old root changed after its cutover archive")
 
 
@@ -410,8 +455,7 @@ def stage_private_participants(
     _require_unchanged_archive_source(legacy, archive)
     snapshot = legacy.registry.snapshot()
     if any(thread.active_turn is not None for thread in snapshot.threads.values()) or any(
-        thread.pid > 0 and legacy._process_alive(thread.pid)
-        for thread in snapshot.threads.values()
+        thread.pid > 0 and legacy._process_alive(thread.pid) for thread in snapshot.threads.values()
     ):
         raise RelationViolationError("Cutover participants require all old owners stopped")
     witnesses = {witness.name: witness for witness in inventory.live_owners}
@@ -426,7 +470,9 @@ def stage_private_participants(
             or snapshot.statuses[name] is not ThreadStatus.STOPPED
             or (thread.pid, thread.created_at, thread.session_file, thread.worktree)
             != (
-                witness.pid, witness.created_at, str(witness.session_file),
+                witness.pid,
+                witness.created_at,
+                str(witness.session_file),
                 str(witness.worktree),
             )
         ):
@@ -439,8 +485,7 @@ def stage_private_participants(
             or stat.S_IMODE(session.st_mode) != 0o600
             or session.st_nlink != 1
             or session.st_size == 0
-            or (session.st_dev, session.st_ino)
-            != (witness.session_device, witness.session_inode)
+            or (session.st_dev, session.st_ino) != (witness.session_device, witness.session_inode)
             or not stat.S_ISDIR(worktree.st_mode)
             or worktree.st_uid != os.geteuid()
         ):
@@ -492,6 +537,9 @@ def stage_private_participants(
     ):
         raise RelationViolationError("Cutover participants require a fresh private root")
     root_id = private.initialize_private_initial_protocol()
+    # A claim read barrier can only be installed while the private bus is
+    # empty. Selected owner writes on this route need it before any USER row.
+    private.initialize_private_claim_protocol()
     with _store_lock(private._wire_lock_path):
         new_waits = GoalWaits(private.root / "goal_waits.json")
         for wait in migrated_waits:
@@ -508,7 +556,9 @@ def stage_private_participants(
         install_prompt_binding_schema(store)
         for thread in participants:
             store.register_participant(
-                stable_thread_lookup(thread.created_at), thread.name, thread.name,
+                stable_thread_lookup(thread.created_at),
+                thread.name,
+                thread.name,
                 committed=True,
             )
     _require_unchanged_archive_source(legacy, archive)

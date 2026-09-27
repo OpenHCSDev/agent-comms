@@ -29,7 +29,7 @@ from agent_comms.coordination_store import (
     MutationStore,
     PublicationActivationBlocked,
 )
-from agent_comms.declarations import Message, MessageType, RelationViolationError, Thread
+from agent_comms.declarations import Message, MessageType, RelationViolationError, Thread, ThreadStatus
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, private_nk_launch
 from test_native_prompt_binding import _root
@@ -55,7 +55,22 @@ def test_explicit_owner_entrypoint_requires_exact_root_and_package(tmp_path, mon
     assert exact is not None
     assert exact.wire_root_id == root_id and exact.native_package == tmp_path
     assert exact.validated_root == root
+    assert exact.selected_tool_intent is None
     assert not (root / "native-sessions").exists()
+
+
+def test_fresh_private_claim_root_enables_owner_selected_tool(tmp_path, monkeypatch):
+    from agent_comms.selected_tool_broker import SelectedToolIntent
+
+    root = tmp_path / "claim-wire"
+    root.mkdir(mode=0o700)
+    comms = operations.Comms(root)
+    root_id = comms.initialize_private_initial_protocol()
+    comms.initialize_private_claim_protocol()
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    selected = private_nk_launch(root, {ROOT_ID_ENV: root_id, PACKAGE_ENV: str(tmp_path)})
+    assert selected is not None
+    assert type(selected.selected_tool_intent) is SelectedToolIntent
 
 
 async def test_worker_rejects_partial_private_configuration_before_wire(tmp_path, monkeypatch):
@@ -212,6 +227,47 @@ def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, mo
     with pytest.raises(ValueError, match="already installed"):
         active_route.publish_active_route(route)
     assert route_file.read_bytes() == original
+
+
+@pytest.mark.parametrize("late_old_message", [False, True])
+def test_rotate_stopped_private_route_without_replaying_old_inputs(
+    tmp_path, monkeypatch, late_old_message
+):
+    old_root = tmp_path / "old-private"
+    new_root = tmp_path / "new-private"
+    old_root.mkdir(mode=0o700)
+    new_root.mkdir(mode=0o700)
+    old = operations.Comms(old_root)
+    old.registry.register(
+        Thread("owner", frozenset(), str(tmp_path), pid=0),
+        ThreadStatus.STOPPED,
+    )
+    old_id = old.initialize_private_initial_protocol()
+    old.send_user_message("owner", "pending old message", worktree=str(tmp_path))
+    InputDispositions(old_root).record(
+        "old:unknown", seq=None, owner="owner", admission=1,
+        target="owner", text="uncertain old input",
+    )
+    new = operations.Comms(new_root)
+    new_id = new.initialize_private_initial_protocol()
+    new.initialize_private_claim_protocol()
+    route_file = tmp_path / "route-state" / "active-route.json"
+    old_route = active_route.ActiveRoute(old_root, old_id, tmp_path)
+    new_route = active_route.ActiveRoute(new_root, new_id, tmp_path)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    active_route.publish_active_route(old_route, route_file)
+    archive = supervised_cutover.archive_stopped_root(old, tmp_path / "archive" / "old")
+    if late_old_message:
+        old.send_user_message("owner", "late old message", worktree=str(tmp_path))
+        with pytest.raises(RelationViolationError, match="changed after its cutover archive"):
+            active_route.rotate_active_route(old_route, new_route, archive, route_file)
+        assert active_route.read_active_route(route_file) == old_route
+    else:
+        active_route.rotate_active_route(old_route, new_route, archive, route_file)
+        assert active_route.read_active_route(route_file) == new_route
+        assert new.message_high_water() == 0
+        assert archive.pending_messages == archive.unknown_inputs == 1
+        assert (archive.path / "bus.jsonl").read_bytes() == (old_root / "bus.jsonl").read_bytes()
 
 
 def test_publish_route_refuses_rival_installed_after_absent_check(tmp_path, monkeypatch):

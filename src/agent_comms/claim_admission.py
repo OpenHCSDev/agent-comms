@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import os
 import stat
+from collections.abc import Callable, Iterator
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
@@ -225,6 +227,69 @@ def publish_selected_resource_claim(
             )
 
 
+@contextmanager
+def _opened_selected_file(
+    worktree: Path, normalized: str
+) -> Iterator[tuple[int, Callable[[], None]]]:
+    """Anchor every parent component to physical worktree directory FDs.
+
+    Path normalization alone is not enough: a parent can be replaced by a
+    symlink before a final-component O_NOFOLLOW open. Preflight stability is
+    required before truncation; post-fsync drift is UNKNOWN, not success.
+    This does not promise hostile same-UID rename exclusion during a write.
+    """
+    relative = Path(normalized).relative_to(worktree)
+    if not relative.parts or not hasattr(os, "O_DIRECTORY"):
+        raise IdentityConflict("Selected write needs a physical directory chain")
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    with ExitStack() as opened:
+        try:
+            root_fd = os.open(worktree, directory_flags)
+            opened.callback(os.close, root_fd)
+            chain: list[tuple[int | None, str | Path, int]] = [(None, worktree, root_fd)]
+            parent_fd = root_fd
+            for part in relative.parts[:-1]:
+                next_fd = os.open(part, directory_flags, dir_fd=parent_fd)
+                opened.callback(os.close, next_fd)
+                chain.append((parent_fd, part, next_fd))
+                parent_fd = next_fd
+            leaf = relative.parts[-1]
+            before = os.stat(leaf, dir_fd=parent_fd, follow_symlinks=False)
+            fd = os.open(leaf, os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent_fd)
+            opened.callback(os.close, fd)
+            actual = os.fstat(fd)
+            if (
+                not stat.S_ISREG(actual.st_mode)
+                or actual.st_nlink != 1
+                or (actual.st_dev, actual.st_ino) != (before.st_dev, before.st_ino)
+            ):
+                raise IdentityConflict("Selected write file changed before opening")
+
+            def stable() -> None:
+                for parent, name, directory_fd in chain:
+                    visible = os.stat(name, dir_fd=parent, follow_symlinks=False)
+                    held = os.fstat(directory_fd)
+                    if not stat.S_ISDIR(visible.st_mode) or (visible.st_dev, visible.st_ino) != (
+                        held.st_dev,
+                        held.st_ino,
+                    ):
+                        raise IdentityConflict("Selected write parent directory changed")
+                visible_file = os.stat(leaf, dir_fd=parent_fd, follow_symlinks=False)
+                held_file = os.fstat(fd)
+                if (
+                    not stat.S_ISREG(visible_file.st_mode)
+                    or held_file.st_nlink != 1
+                    or (visible_file.st_dev, visible_file.st_ino)
+                    != (held_file.st_dev, held_file.st_ino)
+                ):
+                    raise IdentityConflict("Selected write opened file changed")
+
+            stable()
+        except OSError as error:
+            raise IdentityConflict("Selected write directory or file changed") from error
+        yield fd, stable
+
+
 def write_selected_claimed_file(
     comms: Comms,
     store: MutationStore,
@@ -297,16 +362,7 @@ def write_selected_claimed_file(
             projection, _ = bus._claim_projection_unlocked(marker)
             if claimed.admission != admission or projection.get(normalized) != claimed:
                 raise IdentityConflict("Selected write has no current exact resource claim")
-            before = os.stat(normalized, follow_symlinks=False)
-            fd = os.open(normalized, os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
-            try:
-                opened = os.fstat(fd)
-                if (
-                    not stat.S_ISREG(opened.st_mode)
-                    or opened.st_nlink != 1
-                    or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
-                ):
-                    raise IdentityConflict("Selected write file changed before opening")
+            with _opened_selected_file(Path(owner.worktree), normalized) as (fd, stable):
                 os.ftruncate(fd, 0)
                 view = memoryview(contents)
                 while view:
@@ -315,5 +371,9 @@ def write_selected_claimed_file(
                         raise OSError("Selected write made no progress; file outcome UNKNOWN")
                     view = view[written:]
                 os.fsync(fd)
-            finally:
-                os.close(fd)
+                try:
+                    stable()
+                except (IdentityConflict, OSError) as error:
+                    raise OSError(
+                        "Selected write parent/file drift after fsync; outcome UNKNOWN"
+                    ) from error

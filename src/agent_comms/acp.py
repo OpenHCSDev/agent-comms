@@ -30,7 +30,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from acp import RequestError, run_agent
@@ -65,7 +65,7 @@ from . import backend
 from .bus_publication import stable_thread_lookup, unique_wire_object
 from .cohort_foreground import _accept_visible_initials, _preflight
 from .coordinated_runtime import run_one_sealed_claim
-from .coordination import CoordinationError
+from .coordination import CoordinationError, WakeClaim
 from .coordination_store import (
     IdentityConflict,
     MutationStore,
@@ -110,8 +110,12 @@ from .runtime import (
     socket_path,
 )
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
+from .selected_write_plan import PlannedWrite, SelectedWritePlans
 from .tool_results import tool_result_content
 from .wire_watch import open_wire_watcher
+
+if TYPE_CHECKING:
+    from .selected_tool_broker import SelectedToolIntent  # type: ignore[import-not-found]
 
 GLOBAL_TARGET = "#all"
 AGENT_PREFIX = "!agent "
@@ -175,9 +179,18 @@ class CommsAgent:
         adaptive_summary_strategy: Any = None,
         private_nk_native_package: Path | None = None,
         private_nk_wire_root_id: str | None = None,
+        private_selected_tool_intent: SelectedToolIntent | None = None,
     ):
         if (private_nk_native_package is None) != (private_nk_wire_root_id is None):
             raise ValueError("private N/K ACP requires both reviewed Pi package and exact root")
+        if private_selected_tool_intent is not None:
+            from .selected_tool_broker import SelectedToolIntent
+
+            if type(private_selected_tool_intent) is not SelectedToolIntent:
+                raise TypeError("private selected tool needs a nominal owner intent")
+            if private_nk_wire_root_id is None or private_nk_native_package is None:
+                raise ValueError("private selected tool requires exact N/K root and native package")
+        self._private_selected_tool_intent = private_selected_tool_intent
         self._private_nk_native_package = private_nk_native_package
         self._private_nk_wire_root_id = private_nk_wire_root_id
         self._private_cursor_announced: dict[str, str] = {}
@@ -229,6 +242,9 @@ class CommsAgent:
         self._runtime_enabled = runtime_enabled
         self._runtime = RuntimeServer(self)
         self._proxies: dict[str, RuntimeProxy] = {}
+        # A preplanned write is valid only while its original ACP controller
+        # remains attached. Never restore this binding after a process crash.
+        self._selected_write_controllers: dict[tuple[str, int], tuple[str, object]] = {}
         self._proxy_image_support: dict[str, bool] = {}
         self._auto_wake = auto_wake
         self._pending_turns: dict[str, list[ScheduledTurn]] = {}
@@ -606,6 +622,51 @@ class CommsAgent:
             raise RequestError.invalid_params({"reason": "userText must be a string"})
         display_text = options.get("userText") or self._prompt_text(prompt)
         defer_display = options.get("deferDisplay") is True
+        if "selectedExistingFileWrite" in options:
+            request = options["selectedExistingFileWrite"]
+            if (
+                type(request) is not dict
+                or set(request) != {"sourceSeq", "sourceMessageId", "resource", "contents"}
+                or type(request["sourceSeq"]) is not int
+                or any(
+                    type(request[key]) is not str
+                    for key in ("sourceMessageId", "resource", "contents")
+                )
+                or prompt
+                or set(options) != {"selectedExistingFileWrite"}
+            ):
+                raise RequestError.invalid_params(
+                    {"reason": "Selected write requires exact metadata and no prompt"}
+                )
+            if session_id in self._proxies:
+                result = await self._proxies[session_id].request("prompt", meta=meta, prompt=[])
+                return PromptResponse.model_validate(result)
+            owner = self._require_session(session_id)
+            root_id = self._private_nk_marker()
+            if root_id is None or self._private_nk_native_package is None:
+                raise RequestError.invalid_params(
+                    {"reason": "Selected write requires private N/K owner"}
+                )
+            controller = self._runtime.controller.get()
+            if controller is None or (controller is UNBOUND_CONTROLLER and self._client is None):
+                raise RequestError.invalid_params(
+                    {"reason": "Selected write requires attached ACP controller"}
+                )
+            receipt = SelectedWritePlans(self._comms, root_id).submit(
+                owner_name=owner,
+                source_seq=request["sourceSeq"],
+                source_message_id=request["sourceMessageId"],
+                resource=request["resource"],
+                contents=request["contents"],
+            )
+            attached = self._client if controller is UNBOUND_CONTROLLER else controller
+            self._selected_write_controllers[(owner, request["sourceSeq"])] = (
+                str(receipt["operationId"]),
+                attached,
+            )
+            return PromptResponse(
+                stop_reason="end_turn", field_meta={"agentComms": {"selectedWrite": receipt}}
+            )
         if options.get("clearQueue") is True:
             # Attachment-only clients clear the owner's queue through the
             # existing prompt channel; no turn is launched.
@@ -1749,11 +1810,42 @@ class CommsAgent:
                 0,
                 owner_name=owner.name,
             )
+        plans = SelectedWritePlans(self._comms, wire_root_id)
+
+        def check_plan_controller(claim: WakeClaim, owner: Thread, operation_id: str) -> None:
+            bound = self._selected_write_controllers.get((owner.name, claim.wire_seq))
+            if bound is None or bound[0] != operation_id:
+                raise IdentityConflict("Selected write original controller is no longer bound")
+            controller = bound[1]
+            if isinstance(controller, SocketClient):
+                if not self._runtime.is_controller(session_id, controller):
+                    raise IdentityConflict("Selected write controller disconnected")
+            elif controller is not self._client or controller is None:
+                raise IdentityConflict("Selected write ACP controller changed")
+
+        def load_plan(claim: WakeClaim, owner: Thread, epoch: int) -> PlannedWrite | None:
+            plan = plans.load(claim, owner, epoch)
+            if plan is not None:
+                check_plan_controller(claim, owner, plan.operation_id)
+            return plan
+
+        def applied_plan(claim: WakeClaim, owner: Thread, operation_id: str) -> None:
+            plans.applied(claim, owner, operation_id)
+            self._selected_write_controllers.pop((owner.name, claim.wire_seq), None)
+
         result = await run_one_sealed_claim(
             self._comms.root,
             wire_root_id=wire_root_id,
             owner_name=thread_name,
             native_package=package,
+            selected_write_plan_loader=load_plan,
+            selected_write_plan_check=check_plan_controller,
+            selected_write_plan_applied=applied_plan,
+            **(
+                {"selected_tool_intent": self._private_selected_tool_intent}
+                if self._private_selected_tool_intent is not None
+                else {}
+            ),
         )
         if result is None:
             # N (or absent-audience) rows prove coverage, not an injected
