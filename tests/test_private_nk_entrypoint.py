@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 
 import pytest
 
-from agent_comms import acp, cohort_foreground, operations, private_nk_entrypoint, worker
+from agent_comms import (
+    acp,
+    active_route,
+    cohort_foreground,
+    operations,
+    private_nk_entrypoint,
+    worker,
+)
 from agent_comms.coordination_store import IdentityConflict, PublicationActivationBlocked
 from agent_comms.declarations import Thread
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, private_nk_launch
@@ -90,6 +98,50 @@ def test_environment_launch_uses_selected_root_not_cwd(tmp_path, monkeypatch):
     assert selected.native_package == tmp_path and seen == [tmp_path]
     assert selected.validated_root == root
     assert os.environ["AGENT_COMMS_ROOT"] == str(root)
+
+
+def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_path, monkeypatch):
+    root, root_id, _, _, _ = _root(tmp_path)
+    route_file = tmp_path / "active-route.json"
+    route_file.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "root": str(root),
+                "wire_root_id": root_id,
+                "native_package": str(tmp_path),
+            }
+        )
+    )
+    route_file.chmod(0o600)
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    for name in ("AGENT_COMMS_ROOT", ROOT_ID_ENV, PACKAGE_ENV):
+        monkeypatch.delenv(name, raising=False)
+    assert operations.wire().root == root
+    selected = private_nk_entrypoint.private_nk_from_environment()
+    assert selected is not None
+    assert (selected.validated_root, selected.wire_root_id, selected.native_package) == (
+        root,
+        root_id,
+        tmp_path,
+    )
+    legacy = tmp_path / "explicit-legacy"
+    monkeypatch.setenv("AGENT_COMMS_ROOT", str(legacy))
+    assert operations.wire().root == legacy
+    assert private_nk_entrypoint.private_nk_from_environment() is None
+
+
+def test_invalid_active_route_fails_closed(tmp_path, monkeypatch):
+    route_file = tmp_path / "active-route.json"
+    route_file.write_text("{")
+    route_file.chmod(0o600)
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
+    with pytest.raises(ValueError, match="invalid JSON"):
+        operations.wire()
+    with pytest.raises(ValueError, match="invalid JSON"):
+        private_nk_entrypoint.private_nk_from_environment()
 
 
 @pytest.mark.parametrize("entrypoint", ["acp", "worker"])

@@ -4164,7 +4164,20 @@ class Comms:
 
 
 def wire(root: Path | str | None = None) -> Comms:
-    """Build a Comms wire. Defaults to ~/.agent-comms or $AGENT_COMMS_ROOT."""
+    """Build a Comms wire from an explicit root or the active default route."""
+    active_route = None
     if root is None:
-        root = os.environ.get("AGENT_COMMS_ROOT", "~/.agent-comms")
-    return Comms(Path(root).expanduser())
+        if "AGENT_COMMS_ROOT" in os.environ:
+            root = os.environ["AGENT_COMMS_ROOT"]
+        else:
+            from .active_route import read_active_route
+
+            active_route = read_active_route()
+            root = active_route.root if active_route is not None else "~/.agent-comms"
+    comms = Comms(Path(root).expanduser())
+    if active_route is not None:
+        with _store_lock(comms.bus._path):
+            marker = comms.bus._private_marker_unlocked()
+        if marker["wire_root_id"] != active_route.wire_root_id:
+            raise RelationViolationError("active comms route root ID changed")
+    return comms
