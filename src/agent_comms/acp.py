@@ -18,6 +18,7 @@ The explicit ``!agent`` prefix remains accepted for compatibility.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -109,6 +110,7 @@ from .runtime import (
     SocketClient,
     socket_path,
 )
+from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 from .selected_write_plan import PlannedWrite, SelectedWritePlans
 from .wire_watch import open_wire_watcher
 
@@ -173,6 +175,8 @@ class CommsAgent:
         reply_quiet: float | None = None,
         runtime_enabled: bool = False,
         auto_wake: bool = True,
+        adaptive_compaction_enabled: bool = False,
+        adaptive_summary_strategy: Any = None,
         private_nk_native_package: Path | None = None,
         private_nk_wire_root_id: str | None = None,
         private_selected_tool_intent: SelectedToolIntent | None = None,
@@ -194,6 +198,10 @@ class CommsAgent:
         # This is informational UI ordering, never a native input disposition.
         self._private_cursor_revisions: dict[str, int] = {}
         self._comms = comms
+        # Explicit construction-only opt-in; no inherited environment or
+        # model/tool content may enable paid compaction on a running owner.
+        self._adaptive_compaction_enabled = adaptive_compaction_enabled
+        self._adaptive_summary_strategy = adaptive_summary_strategy
         self._sessions: dict[str, str] = {}
         self._client: Any = None
         self._agent_bin = agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", DEFAULT_AGENT_BIN)
@@ -218,6 +226,9 @@ class CommsAgent:
         self._steering_goal_ids: dict[str, dict[str, str | None]] = {}
         self._turn_input_keys: dict[str, set[str]] = {}
         self._turn_original_input_keys: dict[str, tuple[str, ...]] = {}
+        # Adaptive selected summaries hand off their returned owner admission here.
+        # A terminal journal row can never recreate an admission after restart.
+        self._selected_summary_admissions: dict[str, SelectedSummaryAdmission] = {}
         self._turn_input_text: dict[str, str] = {}
         self._dispositions = InputDispositions(comms.root)
         self._goal_store: GoalAttemptStore | None = None
@@ -2831,6 +2842,17 @@ class CommsAgent:
                         )
                     )
                 )
+                selected_admission = (
+                    self._selected_summary_admissions.get(session_id) if public_id is None else None
+                )
+                if allowed and selected_admission is None:
+                    from .compaction_send_admission import native_input_admitted
+
+                    # Under the same wire lock as the owner commit. A selected
+                    # row blocks this ordinary path regardless of its status.
+                    allowed = current is not None and native_input_admitted(
+                        self._comms.root, current.session_file
+                    )
                 if allowed and input_permit is not None:
                     attempt = input_permit.reservation
                     assert self._goal_store is not None
@@ -2844,7 +2866,55 @@ class CommsAgent:
                             attempt.attempt_id,
                         ),
                     )
-                if allowed:
+                if not allowed and selected_admission is not None:
+                    selected_admission.invalidate()  # No later owner/turn ABA can revive it.
+                if allowed and selected_admission is not None:
+                    # The only selected bypass is a post-fsync-ACK ephemeral
+                    # one-shot, consumed at this same durable native-ID bind
+                    # point under the wire lock, before any stdin.write. No
+                    # admission is reconstructed from SQLite.
+                    if (
+                        current is None
+                        or current.session_file is None
+                        or len(keys) != 1
+                        or already_bound
+                    ) or (revision := backend._session_revision(current.session_file)) is None:
+                        selected_admission.invalidate()
+                        allowed = False
+                    else:
+                        original = self._dispositions.get(keys[0])
+                        if original is None or type(original["source_text"]) is not str:
+                            selected_admission.invalidate()
+                            allowed = False
+                        else:
+                            digest = hashlib.sha256(sent_text.encode()).hexdigest()
+                            original_digest = hashlib.sha256(
+                                original["source_text"].encode()
+                            ).hexdigest()
+                            identity = SelectedAdmissionIdentity(
+                                owner_name=canonical,
+                                owner_pid=current.pid,
+                                owner_created_at=float(current.created_at).hex(),
+                                turn_id=turn_id,
+                                ingress_key=keys[0],
+                                admission_generation=snapshot.admission_generations[canonical],
+                                correction_witness=(
+                                    f"{snapshot.admission_generations[canonical]}:{digest}"
+                                ),
+                                input_sha256=digest,
+                                original_sha256=original_digest,
+                                reserved_revision=selected_admission._identity.reserved_revision,
+                                session_revision=revision,
+                            )
+                            allowed = selected_admission.consume_bound_original(
+                                wire_root=self._comms.root,
+                                session_file=current.session_file,
+                                identity=identity,
+                                native_id=native_id,
+                                sent_text=sent_text,
+                                dispositions=self._dispositions,
+                            )
+                elif allowed:
                     for key in keys:
                         row = self._dispositions.get(key)
                         if (
@@ -3021,6 +3091,11 @@ class CommsAgent:
             await self._emit_event(session_id, self._started_event(thread_name, turn_id))
             await self.emit_input_delivery_changed(session_id)
             await self._drain_inbox(session_id)
+            from .compaction_publication import publish_pending_local
+
+            # Existing local ACP owner session only. If delivery is uncertain,
+            # the keyed metadata remains pending; never invent a bus recipient.
+            await publish_pending_local(self, session_id, thread_name)
             # ACP delivery/ACK/UI updates above are not model context. This
             # bounded projection is prepared ONLY inside an already authorized
             # natural turn, from a separate owner-bound source cursor. It never
@@ -3053,6 +3128,51 @@ class CommsAgent:
                             # the already-authorized owner task remains intact.
                             passive_frame = ""
                             passive_sources = ()
+            if (
+                self._adaptive_compaction_enabled
+                and original_owner_input
+                and len(original_keys) == 1
+                and thread.session_file is not None
+                and backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
+            ):
+                from .owner_compaction_adaptive import maybe_compact_owner_turn
+
+                def admit_original(admission: SelectedSummaryAdmission) -> None:
+                    self._selected_summary_admissions[session_id] = admission
+
+                try:
+                    committed = await maybe_compact_owner_turn(
+                        self._comms.registry,
+                        self._agent_bin,
+                        thread_name,
+                        turn_id,
+                        self._comms.agent_info_of(thread_name),
+                        original_keys[0],
+                        self._persistent_backends.setdefault(
+                            session_id, backend.PersistentPiSession()
+                        ),
+                        summary_strategy=self._adaptive_summary_strategy,
+                        input_text=task,
+                        on_admission=admit_original,
+                    )
+                except Exception:
+                    # A selected adaptive operation may already have paid or
+                    # written. Do not turn a fault into ordinary input fallback.
+                    if goal is not None and goal.active:
+                        self._comms.block_goal_after_failed_turn(
+                            thread_name,
+                            started_goal=goal,
+                            expected_worktree=thread.worktree,
+                            diagnostic=(
+                                "Adaptive native compaction did not establish a "
+                                "safe outcome; inspect the exact commit journal."
+                            ),
+                        )
+                    raise
+                if committed:
+                    # Local metadata-only outbox; uncertain subscriber delivery
+                    # leaves its exact row pending, never broadcasts a summary.
+                    await publish_pending_local(self, session_id, thread_name)
             session_file = thread.session_file
             fork_session = False
             if not session_file and thread.parent:
@@ -3612,6 +3732,7 @@ class CommsAgent:
             self._steering_origins.pop(session_id, None)
             self._steering_goal_ids.pop(session_id, None)
             self._turn_input_keys.pop(session_id, None)
+            self._selected_summary_admissions.pop(session_id, None)
             await self.emit_input_delivery_changed(session_id)
             remaining = self._queued_inputs.pop(session_id, {})
             if remaining:
