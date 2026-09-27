@@ -42,7 +42,9 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
     root = tmp_path / "wire"
     comms = Comms(root)
     comms.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
-    alpha = Thread("alpha", frozenset({"team"}), str(tmp_path), pid=os.getpid())
+    alpha = Thread(
+        "alpha", frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="openai-codex/gpt-6-sol"
+    )
     comms.register(alpha)
     root_id = comms.initialize_private_initial_protocol()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -59,6 +61,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
 
     def ready(beta):
         recipient.append(beta)
+        comms.set_thread_model(beta.name, "openai-codex/gpt-6-sol")
         # The ordinary public API, not send_initial_cohort or a candidate bridge.
         receipt = invoke_tool(comms, "comms_send", {"from": "sender", "to": target, "body": body})
         original.append(comms.bus.message_by_id(receipt["id"]))
