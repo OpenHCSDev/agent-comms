@@ -638,7 +638,8 @@ class CommsAgent:
             )
             attached = self._client if controller is UNBOUND_CONTROLLER else controller
             self._selected_write_controllers[(owner, request["sourceSeq"])] = (
-                str(receipt["operationId"]), attached
+                str(receipt["operationId"]),
+                attached,
             )
             return PromptResponse(
                 stop_reason="end_turn", field_meta={"agentComms": {"selectedWrite": receipt}}
