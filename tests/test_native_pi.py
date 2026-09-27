@@ -601,21 +601,21 @@ def test_seven_compiled_pins_include_bedrock_and_reject_its_drift(monkeypatch) -
     expected = {
         "dist/cli.js": "8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d",
         "dist/core/agent-session.js": (
-            "424066056076cbe2861c12277cb745428b13bf3308a8b9873d3064b62dc740d7"
+            "b8b3deeffad82771762808c435617d03f4701c3ac14a9620f5e313545a8d6875"
         ),
         "dist/core/session-manager.js": (
             "dd75fef58eaa5458a91cff9fe1cf70556ebc720afd98720eae3dcb6572cb63ca"
         ),
         "dist/modes/rpc/rpc-mode.js": (
-            "6f5438c028032f3bc212b6270a1acf9d3e5d22ce5837b85ff5a6fea6c240c76a"
+            "bd6dfca7b14cad4023c5ab56a7fc91bef3db9670c96b6ad7625df16353b42e5a"
         ),
         "node_modules/@earendil-works/pi-agent-core/dist/agent.js": (
             "93ed16306399765e79c11f78897f575252d7174b85b81a01cdebb2a479e0e57f"
         ),
         "node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js": (
-            "7469aebae3badc125087c55843130fe44c2ea3b68ea1b757c884469dd355d5f4"
+            "e6003ded7cd11fc8bfd01e4f48cd3d5a19338b64c2e1febe81d0659c31013c11"
         ),
-        bedrock: "33c0509b2c64a458079f3a94d6467bd47600acbf28b9b495294053c2b928fb94",
+        bedrock: "13d6fec97d08f4303714aca50f3113ba0263706e961fc220ccb1cc023c520e6b",
     }
     assert expected == native._PATCHED_SHA
     with TemporaryDirectory(prefix="agent-comms-pi-native-", dir="/var/tmp") as raw:
