@@ -37,7 +37,9 @@ def _session(tmp_path, *, package=True):
     root = tmp_path / "wire"
     comms = Comms(root)
     comms.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
-    owner = Thread("beta", frozenset({"team"}), str(tmp_path), pid=os.getpid())
+    owner = Thread(
+        "beta", frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="openai-codex/gpt-6-sol"
+    )
     comms.register(owner)
     root_id = comms.initialize_private_initial_protocol()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
