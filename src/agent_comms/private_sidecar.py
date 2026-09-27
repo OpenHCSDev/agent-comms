@@ -340,7 +340,7 @@ def encode_request(text: str) -> str:
             "images": None,
             "streamingBehavior": None,
             "expandPromptTemplates": True,
-            "source": "interactive",
+            "source": "rpc",
         },
         separators=(",", ":"),
         ensure_ascii=False,
