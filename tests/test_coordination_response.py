@@ -281,6 +281,13 @@ def test_retained_crash_cancel_and_late_receipt_do_not_publish(tmp_path: Path) -
                 RetainedTurnReceipt(case.retained_identity, 1, "a" * 64),
             )
         assert case.comms.bus.latest_sequence() == case.origin_seq
+        with pytest.raises(RecoveryBlocked, match="one-shot final"):
+            case.store.settle_nonpublication(
+                dead,
+                expected_pointer_revision=1,
+                success=False,
+                reason_code="child_lost",
+            )
         # Reopening SQL does not manufacture a missing terminal receipt.
         with MutationStore(str(case.comms.root / "coordination.sqlite3")) as reopened:
             with pytest.raises(RecoveryBlocked, match="settlement is OFF"):

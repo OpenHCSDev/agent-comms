@@ -1266,11 +1266,12 @@ class MutationStore(CoordinationStore):
         if (
             attempt is None
             or not snapshot.is_current
+            or attempt.completion_kind != "one_shot"
             or not (attempt.backend_done and attempt.process_dead)
         ):
             # Nonpublication is deliberately still one-shot only: a retained
             # UNKNOWN cannot be silently marked successful or retryable.
-            raise RecoveryBlocked("settlement requires exact final done/death evidence")
+            raise RecoveryBlocked("settlement requires one-shot final done/death evidence")
         if success:
             if attempt.phase is not AttemptPhase.SETTLING:
                 raise IdentityConflict("silent completion requires settling phase")
@@ -1382,6 +1383,10 @@ class RecoveryMonitorCapability:
                 or attempt.owner_generation != owner_generation
             ):
                 raise StaleFence("monitor must name the exact old active attempt")
+            if attempt.completion_kind == "retained_turn":
+                raise RecoveryBlocked(
+                    "retained child loss is UNKNOWN without exact settled-turn recovery"
+                )
             if (attempt.revision, snapshot.execution.revision, snapshot.pointer_revision) != (
                 expected_attempt_revision,
                 expected_execution_revision,
