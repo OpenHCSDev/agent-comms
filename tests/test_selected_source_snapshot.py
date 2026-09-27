@@ -492,6 +492,39 @@ def test_file_ops_and_footer_must_match_one_prepared_source(
     with pytest.raises(SelectedSourceSnapshotError, match="file operations or footer differs"):
         parse()
 
+    def set_file_ops(raw: bytes, formatted: bytes) -> None:
+        payload["fileOpsBase64"] = base64.b64encode(raw).decode()
+        payload["fileOpsByteLength"] = len(raw)
+        payload["fileOpsDigest"] = hashlib.sha256(raw).hexdigest()
+        payload["footerBase64"] = base64.b64encode(formatted).decode()
+        payload["footerByteLength"] = len(formatted)
+        payload["footerDigest"] = hashlib.sha256(formatted).hexdigest()
+
+    # JS sorts UTF-16 code units: supplementary U+10000 precedes BMP U+E000.
+    # Python scalar-order sort would falsely decline this exact valid Pi order.
+    paths = ["\U00010000", "\ue000"]
+    sorted_ops = json.dumps(
+        {"readFiles": paths, "modifiedFiles": []}, ensure_ascii=False, separators=(",", ":")
+    ).encode()
+    sorted_footer = ("\n\n<read-files>\n" + "\n".join(paths) + "\n</read-files>").encode()
+    set_file_ops(sorted_ops, sorted_footer)
+    assert parse()["fileOpsBytes"] == sorted_ops
+    reversed_ops = json.dumps(
+        {"readFiles": paths[::-1], "modifiedFiles": []},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode()
+    set_file_ops(reversed_ops, sorted_footer)
+    with pytest.raises(SelectedSourceSnapshotError, match="file operations or footer differs"):
+        parse()
+
+    # JS can stringify a lone surrogate as an escape; Python must return the
+    # nominal typed decline, not leak UnicodeEncodeError from canonical JSON.
+    surrogate_ops = b'{"readFiles":["\\ud800"],"modifiedFiles":[]}'
+    set_file_ops(surrogate_ops, b"\n\n<read-files>\n\\ud800\n</read-files>")
+    with pytest.raises(SelectedSourceSnapshotError, match="file operations or footer differs"):
+        parse()
+
 
 def test_missing_or_changed_sidecar_rejected_before_any_pi_source_process(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

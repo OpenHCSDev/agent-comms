@@ -189,6 +189,16 @@ def _verify_bound_fd(path: Path, fd: int, revision: _FileRevision, digest: str) 
         raise SelectedSourceSnapshotError("Selected source FD/path/sidecar changed")
 
 
+def _valid_sorted_file_paths(paths: object) -> bool:
+    """Match JS UTF-16 .sort(), declining surrogate paths before UTF-8 encoding."""
+    if type(paths) is not list or any(type(path) is not str or not path for path in paths):
+        return False
+    try:
+        return paths == sorted(set(paths), key=lambda path: path.encode("utf-16-be"))
+    except UnicodeError:
+        return False
+
+
 def _expected_file_ops_footer(read_files: list[str], modified_files: list[str]) -> str:
     """Reproduce pinned Pi's formatted footer, not a caller-supplied digest."""
     sections = []
@@ -301,10 +311,7 @@ def _read_snapshot_result(raw: bytes, fresh: FreshPrivateSession, revision: str)
         or type(file_ops) is not dict
         or list(file_ops) != ["readFiles", "modifiedFiles"]
         or any(
-            type(file_ops[key]) is not list
-            or any(type(path) is not str or not path for path in file_ops[key])
-            or file_ops[key] != sorted(set(file_ops[key]))
-            for key in ("readFiles", "modifiedFiles")
+            not _valid_sorted_file_paths(file_ops[key]) for key in ("readFiles", "modifiedFiles")
         )
         or set(file_ops["readFiles"]) & set(file_ops["modifiedFiles"])
         or json.dumps(file_ops, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
