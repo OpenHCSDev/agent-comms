@@ -160,9 +160,19 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
     directory = os.open(
         path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
     )
-    temporary: str | None = None
     try:
         fcntl.flock(directory, fcntl.LOCK_EX)
+        _publish_active_route_locked(route, path, directory)
+    finally:
+        os.close(directory)
+
+
+def _publish_active_route_locked(route: ActiveRoute, path: Path, directory: int) -> None:
+    """Publish through a checked directory FD already held with route EX."""
+    from .cohort_foreground import _preflight
+
+    temporary: str | None = None
+    try:
         info = os.fstat(directory)
         parent = path.parent.lstat()
         if (
@@ -220,7 +230,6 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
         if temporary is not None:
             with suppress(FileNotFoundError):
                 os.unlink(temporary, dir_fd=directory)
-        os.close(directory)
 
 
 def withdraw_active_route(

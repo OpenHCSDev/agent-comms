@@ -19,6 +19,7 @@ from agent_comms import (
     cohort_foreground,
     operations,
     private_nk_entrypoint,
+    supervised_cutover,
     worker,
 )
 from agent_comms.coordination_store import IdentityConflict, PublicationActivationBlocked
@@ -367,6 +368,97 @@ def test_withdraw_route_archives_stopped_private_root(tmp_path, monkeypatch):
         assert manifest["pending_messages"] == 1
         assert manifest["unknown_inputs"] == 1
         assert (archive / "bus.jsonl").read_bytes() == (root / "bus.jsonl").read_bytes()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+
+
+def test_activate_archive_stage_and_route_as_one_default_lock(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
+    route_file = tmp_path / "route-state" / "active-route.json"
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    legacy = operations.Comms(tmp_path / ".agent-comms")
+    saved = tmp_path / "saved-session.jsonl"
+    saved.write_text('{"type":"session"}\n')
+    saved.chmod(0o600)
+    process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        legacy.register(
+            Thread("sender", frozenset({"team"}), str(tmp_path), pid=process.pid,
+                   session_file=str(saved))
+        )
+        legacy.register(Thread("receiver", frozenset(), str(tmp_path), pid=0))
+        legacy.register(Thread("observer", frozenset(), str(tmp_path), pid=0))
+        legacy.send("sender", "receiver", "old pending")
+        InputDispositions(legacy.root).record(
+            "cutover:unknown", seq=None, owner="sender", admission=1,
+            target="sender", text="uncertain old input",
+        )
+        snapshot = legacy.registry.snapshot()
+        sender = snapshot.threads["sender"]
+        saved_info = saved.stat()
+        witness = supervised_cutover.OwnerWitness(
+            "sender", process.pid, sender.created_at,
+            snapshot.admission_generations["sender"],
+            supervised_cutover._process_start_ticks(process.pid),
+            saved, saved_info.st_dev, saved_info.st_ino, tmp_path, "pi", "",
+        )
+        inventory = supervised_cutover.LegacyInventory(
+            legacy.root, (witness,), (), (), (("receiver", 1),), 1
+        )
+        process.terminate()
+        process.wait(timeout=5)
+        legacy.registry.unregister("sender")
+        private = operations.Comms(tmp_path / "fresh-private")
+        copied = threading.Event()
+        release = threading.Event()
+        shared_requested = threading.Event()
+        original_archive = supervised_cutover.archive_stopped_root
+        original_flock = active_route.fcntl.flock
+
+        def pause_after_archive(*args, **kwargs):
+            receipt = original_archive(*args, **kwargs)
+            copied.set()
+            assert release.wait(timeout=5)
+            return receipt
+
+        def observed_flock(fd, operation):
+            if operation == active_route.fcntl.LOCK_SH:
+                shared_requested.set()
+            return original_flock(fd, operation)
+
+        monkeypatch.setattr(supervised_cutover, "archive_stopped_root", pause_after_archive)
+        monkeypatch.setattr(active_route.fcntl, "flock", observed_flock)
+        monkeypatch.setattr(cli, "wire", lambda _root=None: legacy)
+        monkeypatch.setattr(cli, "_emit", lambda _payload: None)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            activating = executor.submit(
+                supervised_cutover.activate_stopped_legacy_route,
+                legacy, private, inventory, ["sender"],
+                tmp_path / "archive" / "snapshot", tmp_path, route_file,
+            )
+            assert copied.wait(timeout=5)
+            sending = executor.submit(
+                cli.main,
+                ["send", "--from", "observer", "--to", "receiver", "--body", "late"],
+            )
+            assert shared_requested.wait(timeout=5)
+            assert not route_file.exists()
+            release.set()
+            archive, route, selected = activating.result(timeout=5)
+            assert sending.result(timeout=5) == 1
+        assert active_route.read_active_route(route_file) == route
+        assert selected == (witness,)
+        assert archive.pending_messages == archive.unknown_inputs == 1
+        assert private.registry.require("sender").pid == 0
+        assert not (private.root / "bus.jsonl").exists()
+        assert [item.body for item in legacy.inbox("receiver")] == ["old pending"]
+        assert operations.wire()._private_nk_launch == (
+            private.root, route.wire_root_id, tmp_path,
+        )
     finally:
         if process.poll() is None:
             process.kill()

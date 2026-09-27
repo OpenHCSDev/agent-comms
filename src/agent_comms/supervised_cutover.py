@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ctypes
 import errno
+import fcntl
 import hashlib
 import json
 import os
@@ -19,10 +20,14 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .declarations import RelationViolationError, Thread, ThreadStatus, _store_lock
 from .input_disposition import InputDispositions
 from .operations import Comms
+
+if TYPE_CHECKING:
+    from .active_route import ActiveRoute
 
 
 @dataclass(frozen=True, slots=True)
@@ -392,6 +397,7 @@ def stage_private_participants(
         or private.root.resolve() == legacy.root.resolve()
         or private.root.resolve().is_relative_to(legacy.root.resolve())
         or private.root.resolve().is_relative_to(archive.path.resolve())
+        or archive.path.resolve().is_relative_to(private.root.resolve())
     ):
         raise ValueError("Cutover source, archive, and private root must be distinct")
     _require_unchanged_archive_source(legacy, archive)
@@ -444,3 +450,73 @@ def stage_private_participants(
         for thread in participants:
             private.registry.register(thread, ThreadStatus.STOPPED)
     return root_id, tuple(witnesses[name] for name in selected)
+
+
+def activate_stopped_legacy_route(
+    legacy: Comms,
+    private: Comms,
+    inventory: LegacyInventory,
+    selected_names: Sequence[str],
+    archive_destination: Path,
+    native_package: Path,
+    route_path: Path | None = None,
+) -> tuple[ArchiveReceipt, ActiveRoute, tuple[OwnerWitness, ...]]:
+    """Archive, stage, and publish under one default-route exclusive lock.
+
+    The operator must already have fenced explicit-root ingress and Toad child
+    process groups. This function never stops, starts, prompts, or replays an
+    owner. On a failure it leaves the archive/root for inspection and does not
+    retry publication.
+    """
+    from .active_route import (
+        ActiveRoute,
+        _publish_active_route_locked,
+        active_route_path,
+        read_active_route,
+    )
+    from .cohort_foreground import _preflight, _trusted_package
+
+    route_path = active_route_path() if route_path is None else route_path
+    if route_path.name != "active-route.json" or not route_path.is_absolute():
+        raise ValueError("Cutover requires the absolute default route path")
+    if legacy.root.resolve() != (Path.home() / ".agent-comms").resolve():
+        raise ValueError("Cutover requires the local legacy default root")
+    if (
+        not private.root.is_absolute()
+        or private.root == Path("/var/tmp")
+        or not private.root.is_relative_to("/var/tmp")
+        or ".." in private.root.parts
+        or private.root.resolve() != private.root
+        or not native_package.is_absolute()
+        or ".." in native_package.parts
+        or archive_destination.resolve().is_relative_to(private.root.resolve())
+    ):
+        raise ValueError("Cutover requires an absolute private root and Pi package")
+    _trusted_package(native_package)
+    route_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    directory = os.open(
+        route_path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        fcntl.flock(directory, fcntl.LOCK_EX)
+        info = os.fstat(directory)
+        parent = route_path.parent.lstat()
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != os.geteuid()
+            or (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino)
+        ):
+            raise ValueError("Cutover route directory changed or is not owned")
+        os.fchmod(directory, 0o700)
+        if read_active_route(route_path) is not None:
+            raise ValueError("Cutover route is already installed")
+        archive = archive_stopped_root(legacy, archive_destination)
+        root_id, witnesses = stage_private_participants(
+            legacy, private, archive, inventory, selected_names
+        )
+        route = ActiveRoute(private.root, root_id, native_package)
+        _preflight(route.root, route.wire_root_id, route.native_package, True)
+        _publish_active_route_locked(route, route_path, directory)
+        return archive, route, witnesses
+    finally:
+        os.close(directory)
