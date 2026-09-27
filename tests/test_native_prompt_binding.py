@@ -57,7 +57,14 @@ def _root(tmp_path: Path):
     comms = Comms(root, private_initial_writes=True)
     people = [
         Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()),
-        Thread("alpha", frozenset({"team"}), str(tmp_path), pid=os.getpid(), task="math answers"),
+        Thread(
+            "alpha",
+            frozenset({"team"}),
+            str(tmp_path),
+            pid=os.getpid(),
+            task="math answers",
+            model="openai-codex/gpt-6-sol",
+        ),
     ]
     for person in people:
         comms.register(person)
@@ -902,7 +909,7 @@ def test_native_request_digest_matches_real_pinned_module():
 import('{module}').then(m => {{
   const fn = m.AgentSession.prototype._claimNativeInput;
   const ctx = {{_nativeProofPath() {{}}, _nativeInputClaims: new Map()}};
-  fn.call(ctx, '{'a' * 32}', {{
+  fn.call(ctx, '{"a" * 32}', {{
     kind: 'prompt',
     text: {json.dumps("bound prompt reply exactly")},
     images: null,

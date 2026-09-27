@@ -594,12 +594,15 @@ send({'type':'agent_settled'})
 @pytest.mark.skipif(
     sys.platform != "linux", reason="trusted copied package requires a real /var/tmp ancestry"
 )
-def test_seven_compiled_pins_include_bedrock_and_reject_its_drift(monkeypatch) -> None:
+def test_compiled_pins_include_model_services_and_bedrock_and_reject_drift(monkeypatch) -> None:
     import agent_comms.native_pi as native
 
     bedrock = "node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js"
     assert native.CAPABILITY == "pi-native-input-v1-live-only"
     expected = {
+        "dist/core/agent-session-services.js": (
+            "4af410d793207f0269cf442a799b0f83933b69d728d166e49a3a6134ff7108a6"
+        ),
         "dist/cli.js": "8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d",
         "dist/core/agent-session.js": (
             "b8b3deeffad82771762808c435617d03f4701c3ac14a9620f5e313545a8d6875"
@@ -755,7 +758,8 @@ async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
         launched.append(argv)
         launch_envs.append(kwargs["env"])
         if damage == "changed_inode":
-            fresh.path.unlink()
+            # Keep the original inode allocated; unlink may immediately reuse it.
+            fresh.path.rename(fresh.path.with_suffix(".original"))
             fresh.path.write_text('{"type":"session","id":"replacement"}\n')
             fresh.path.chmod(0o600)
         else:
@@ -958,18 +962,22 @@ def test_prepared_rpc_launch_requires_exact_package_and_private_policy(
     assert settings["compaction"]["enabled"] is False
 
 
-def test_unreviewed_native_transport_fails_before_any_session_side_effect(tmp_path: Path) -> None:
-    with pytest.raises(NativePiUnavailable, match="Only the reviewed native OpenRouter model"):
+@pytest.mark.parametrize("provider,model", [("", "model"), ("provider", ""), ("--bad", "model")])
+def test_missing_native_model_fails_before_any_session_side_effect(
+    tmp_path: Path, provider: str, model: str
+) -> None:
+    with pytest.raises(NativePiUnavailable, match="explicit provider and model"):
         prepare_native_pi_rpc_launch(
             tmp_path,
             worktree=tmp_path,
             session_dir=tmp_path / "sessions",
-            provider="anthropic",
+            provider=provider,
+            model=model,
         )
     assert not (tmp_path / "sessions").exists()
 
 
-@pytest.mark.parametrize("outcome", ["429", "length", "stop"])
+@pytest.mark.parametrize("outcome", ["429", "length", "stop", "configured"])
 async def test_copied_cli_private_policy_allows_one_local_http_attempt(
     tmp_path: Path, monkeypatch, outcome: str
 ) -> None:
@@ -979,12 +987,14 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         pytest.skip("Set AC_NATIVE_COPIED_PACKAGE to the reviewed private copied fork")
     package = Path(selected)
     _trusted_package(package)
+    provider = "configured-fixture" if outcome == "configured" else "openrouter"
+    model = "fixture-model" if outcome == "configured" else "z-ai/glm-5.3-flash"
     calls: list[str] = []
     chunk = {
         "id": "fixture-length",
         "object": "chat.completion.chunk",
         "created": 12345,
-        "model": "z-ai/glm-5.3-flash",
+        "model": model,
         "choices": [
             {"index": 0, "delta": {"role": "assistant", "content": "X"}, "finish_reason": None}
         ],
@@ -992,7 +1002,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
     terminal = {
         **chunk,
         "choices": [
-            {"index": 0, "delta": {}, "finish_reason": outcome if outcome != "429" else "stop"}
+            {"index": 0, "delta": {}, "finish_reason": "length" if outcome == "length" else "stop"}
         ],
         "usage": {"prompt_tokens": 10, "completion_tokens": 1, "total_tokens": 11},
     }
@@ -1004,7 +1014,9 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             calls.append(self.path)
-            self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+            assert request["model"] == model
+            assert self.headers["Authorization"] == "Bearer canonical-offline-fixture"
             body = (
                 b'{"error":{"message":"429 rate limit","type":"rate_limit_error"}}'
                 if outcome == "429"
@@ -1039,19 +1051,33 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         )
         sessions = tmp_path / "sessions"
         sessions.mkdir(mode=0o700)
-        isolated = sessions / ".native-pi-agent"
-        isolated.mkdir(mode=0o700)
-        catalog = isolated / "models.json"
+        canonical = tmp_path / "canonical-agent-config"
+        canonical.mkdir(mode=0o700)
+        catalog = canonical / "models.json"
         catalog.write_text(
             json.dumps(
                 {
                     "providers": {
-                        "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
+                        provider: {
+                            "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
+                            "api": "openai-completions",
+                            "models": [
+                                {
+                                    "id": model,
+                                    "name": "Offline fixture",
+                                    "contextWindow": 8192,
+                                    "maxTokens": 128,
+                                }
+                            ],
+                        }
                     }
                 }
             )
         )
         catalog.chmod(0o600)
+        (canonical / "auth.json").write_text(
+            json.dumps({provider: {"type": "api_key", "key": "canonical-offline-fixture"}})
+        )
         preload = tmp_path / "offline-fetch.cjs"
         prefix = f"http://127.0.0.1:{server.server_port}/"
         preload.write_text(
@@ -1062,9 +1088,9 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             "throw new Error('BLOCKED_NONLOCAL_NETWORK');"
             "return original(url,...rest);};"
         )
-        monkeypatch.setenv("OPENROUTER_API_KEY", "offline-fixture-no-real-key")
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         monkeypatch.setenv("NODE_OPTIONS", f"--require={preload}")
-        monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "ignored-global"))
+        monkeypatch.setenv("PI_CODING_AGENT_DIR", str(canonical))
         import agent_comms.native_pi as native
 
         observed: list[str] = []
@@ -1111,8 +1137,10 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             worktree=worktree,
             session_dir=sessions,
             timeout=15,
+            provider=provider,
+            model=model,
         )
-        if outcome == "stop":
+        if outcome in {"stop", "configured"}:
             result = await run_native_pi_turn(package, **request)
             assert result.text == "X"
             assert result.context.input_id == INPUT_ID
@@ -1120,9 +1148,12 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             assert result.context.session_file.parent == sessions
             assert "agent_settled" in observed
         else:
-            with pytest.raises(NativePiUnavailable, match="did not finish successfully"):
+            failure = "429 rate limit" if outcome == "429" else "did not finish successfully"
+            with pytest.raises(NativePiUnavailable, match=failure):
                 await run_native_pi_turn(package, **request)
         assert calls == ["/v1/chat/completions"]
+        assert not (sessions / ".native-pi-agent" / "auth.json").exists()
+        assert not (sessions / ".native-pi-agent" / "models.json").exists()
         preflight_index, preflight = next(
             (index, event)
             for index, event in enumerate(rpc_events)

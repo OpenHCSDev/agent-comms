@@ -86,9 +86,16 @@ def _root(
             str(tmp_path),
             pid=os.getpid(),
             task="release notes; ignore arithmetic tasks",
+            model="openai-codex/gpt-6-sol",
         ),
         Thread(
-            "beta", frozenset({"team"}), str(tmp_path), pid=os.getpid(), task="arithmetic answers"
+            "beta",
+            frozenset({"team"}),
+            str(tmp_path),
+            pid=os.getpid(),
+            task="arithmetic answers",
+            model="openai-codex/gpt-6-sol",
+            thinking_level="high",
         ),
     ]
     for person in people:
@@ -1343,7 +1350,15 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     comms.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
-    comms.register(Thread("beta", frozenset({"team"}), str(tmp_path), pid=os.getpid()))
+    comms.register(
+        Thread(
+            "beta",
+            frozenset({"team"}),
+            str(tmp_path),
+            pid=os.getpid(),
+            model="openai-codex/gpt-6-sol",
+        )
+    )
     comms.registry.rename("beta", "gamma")
     root_id = comms.initialize_private_initial_protocol()
     incoming = comms.send_initial_cohort("sender", "gamma", "Compute 17+25")
@@ -1764,3 +1779,41 @@ async def test_untrusted_pi_fails_before_any_bus_or_sql_mutation(tmp_path: Path)
             root, wire_root_id="0" * 32, owner_name="alpha", native_package=tmp_path
         )
     assert not list(root.iterdir())
+
+
+async def test_channel_triage_and_full_use_configured_owner_model(tmp_path, monkeypatch):
+    root, root_id, comms, initial, people = _root(tmp_path)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda package: package)
+    fake, calls = _fake_model(decision="FULL")
+    selections = []
+
+    async def capture(package, **kwargs):
+        selections.append((kwargs["provider"], kwargs["model"], kwargs["thinking_level"]))
+        return await fake(package, **kwargs)
+
+    monkeypatch.setattr(runtime, "run_native_pi_turn", capture)
+    result = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+    )
+    assert result.disposition is ClaimDisposition.COMPLETED
+    assert selections == [("openai-codex", "gpt-6-sol", "high")] * 2
+    assert len(calls) == 2
+
+
+async def test_unconfigured_owner_does_not_reserve_or_launch(tmp_path, monkeypatch):
+    root, root_id, comms, initial, people = _root(tmp_path)
+    comms = Comms(root)
+    owner = comms.registry.require("beta")
+    comms.registry.register(replace(owner, model=None), comms.registry.status("beta"))
+    monkeypatch.setattr(runtime, "_trusted_package", lambda package: package)
+    fake, calls = _fake_model()
+    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    with pytest.raises(IdentityConflict, match="no configured provider/model"):
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+        )
+    assert calls == []
+    assert comms.registry.require("beta").active_turn is None
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        pending = sealed_cohort_claims(store, stable_thread_lookup(owner.created_at))
+        assert pending[0].disposition is ClaimDisposition.TRIAGE_PENDING

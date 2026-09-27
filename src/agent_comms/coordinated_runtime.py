@@ -1067,6 +1067,12 @@ async def run_one_sealed_claim(
             raise IdentityConflict(
                 f"sealed claim scan exhausted; retry explicitly with after_seq={cursor}"
             )
+        model_selection = comms.resolve_thread_model(owner.name)
+        if not model_selection or "/" not in model_selection:
+            raise IdentityConflict("Selected owner has no configured provider/model")
+        provider, model = model_selection.split("/", 1)
+        if not provider or not model:
+            raise IdentityConflict("Selected owner's configured provider/model is incomplete")
         # A PID and RUNNING bit can survive stop -> heartbeat in the same
         # process. Bind publication to this immutable turn; unregister and
         # finish_turn both clear it. CAS also compares the persistent per-owner
@@ -1176,6 +1182,9 @@ async def run_one_sealed_claim(
                 worktree=worktree,
                 session_dir=session_dir,
                 session_file=triage_session,
+                provider=provider,
+                model=model,
+                thinking_level=owner.thinking_level,
                 maintenance_root=root,
                 fresh_selected=first_selected,
                 prompt_send_boundary=_native_send_boundary(
@@ -1373,6 +1382,9 @@ async def run_one_sealed_claim(
             worktree=worktree,
             session_dir=session_dir,
             session_file=triage_session,
+            provider=provider,
+            model=model,
+            thinking_level=owner.thinking_level,
             maintenance_root=root,
             fresh_selected=first_selected,
             **({"selected_tool_mode": bound_tool_mode} if bound_tool_mode is not None else {}),

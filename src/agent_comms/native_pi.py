@@ -47,8 +47,11 @@ _NATIVE_SETTINGS = (
     b'"compaction":{"enabled":false}}\n'
 )
 # Pinned outputs of prepare-copied-pi.sh at stock Pi 0.85.1 with the
-# merged 128 MiB proof-journal headroom fix.
+# merged proof-journal headroom and canonical model-configuration fixes.
 _PATCHED_SHA = {
+    "dist/core/agent-session-services.js": (
+        "4af410d793207f0269cf442a799b0f83933b69d728d166e49a3a6134ff7108a6"
+    ),
     "dist/cli.js": "8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d",
     "dist/core/agent-session.js": (
         "b8b3deeffad82771762808c435617d03f4701c3ac14a9620f5e313545a8d6875"
@@ -489,6 +492,7 @@ def prepare_native_pi_rpc_launch(
     session_file: Path | None = None,
     provider: str = "openrouter",
     model: str = "z-ai/glm-5.3-flash",
+    thinking_level: str | None = None,
     selected_thinking_level: str | None = None,
     selected_tool_mode: SelectedToolMode | None = None,
 ) -> NativePiRpcLaunch:
@@ -499,8 +503,14 @@ def prepare_native_pi_rpc_launch(
     only establishes the executable and its settings; native input, context,
     and model-delivery proofs remain separate per-attempt observations.
     """
-    if provider != "openrouter" or model != "z-ai/glm-5.3-flash":
-        raise NativePiUnavailable("Only the reviewed native OpenRouter model may be launched")
+    if any(
+        not isinstance(value, str)
+        or not value.strip()
+        or value.startswith("-")
+        or any(character.isspace() for character in value)
+        for value in (provider, model)
+    ):
+        raise NativePiUnavailable("Native Pi requires an explicit provider and model")
     if selected_thinking_level is not None and (
         type(selected_thinking_level) is not str
         or selected_thinking_level not in {"low", "high"}
@@ -560,6 +570,8 @@ def prepare_native_pi_rpc_launch(
         argv.extend(("-e", str(extension)))
     if session_file is not None:
         argv.extend(("--session", str(session_file)))
+    if thinking_level is not None and selected_thinking_level is None:
+        argv.extend(("--thinking", thinking_level))
     if selected_thinking_level is not None:
         # This selected-only candidate is still hard-denied before real spawn.
         # Do not hand a credential, proxy, hooks, or ambient provider settings
@@ -594,6 +606,10 @@ def prepare_native_pi_rpc_launch(
         ):
             env.pop(name, None)
         env["PI_OFFLINE"] = "1"
+        # Canonical credentials/catalog remain separate from retry isolation.
+        env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
+            Path(os.environ.get("PI_CODING_AGENT_DIR", "~/.pi/agent")).expanduser().resolve()
+        )
         env["PI_CODING_AGENT_DIR"] = str(agent_dir)
     return NativePiRpcLaunch(tuple(argv), worktree, env, session_dir, session_file)
 
@@ -608,6 +624,7 @@ async def run_native_pi_turn(
     session_file: Path | None = None,
     provider: str = "openrouter",
     model: str = "z-ai/glm-5.3-flash",
+    thinking_level: str | None = None,
     timeout: float = 90.0,
     prompt_send_boundary: Callable[..., AbstractContextManager[None]] | None = None,
     maintenance_root: Path | None = None,
@@ -644,6 +661,7 @@ async def run_native_pi_turn(
         session_file=session_file,
         provider=provider,
         model=model,
+        thinking_level=thinking_level,
         selected_thinking_level=(
             fresh_selected.selected_thinking_level if fresh_selected is not None else None
         ),
@@ -809,10 +827,12 @@ async def run_native_pi_turn(
                 message = event.get("message")
                 if isinstance(message, dict) and message.get("role") == "assistant":
                     content = message.get("content")
-                    if (
-                        not isinstance(content, list)
-                        or any(not isinstance(item, dict) for item in content)
-                        or message.get("errorMessage")
+                    if message.get("errorMessage"):
+                        raise NativePiUnavailable(
+                            f"Native Pi model error: {message['errorMessage']}"
+                        )
+                    if not isinstance(content, list) or any(
+                        not isinstance(item, dict) for item in content
                     ):
                         raise NativePiUnavailable("Native Pi assistant content is malformed")
                     if message.get("stopReason") == "toolUse" and tool_socket is not None:
