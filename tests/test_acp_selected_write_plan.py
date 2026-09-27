@@ -33,7 +33,16 @@ from test_coordinated_runtime import _fake_model
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "scenario", ["success", "reconnect", "lost_process_state", "commit_unknown", "native_failure"]
+    "scenario",
+    [
+        "success",
+        "reconnect",
+        "lost_process_state",
+        "commit_unknown",
+        "native_failure",
+        "older_claims",
+        "parent_retry",
+    ],
 )
 async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
     monkeypatch, scenario
@@ -88,11 +97,20 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
                 return None
 
         agent._client = AttachedClient()  # explicit attached direct ACP test controller
-        message = comms.send_message("sender", "#team", "@beta inspect module.py")
+        prior_seq = 0
+        if scenario == "older_claims":
+            for index in range(100):
+                prior_seq = comms.send_message("sender", "#team", f"@beta earlier {index}").seq
         bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
+        if prior_seq:
+            with MutationStore(str(root / "coordination.sqlite3")) as store:
+                _accept_visible_initials(
+                    bus, root_id, store, stable_thread_lookup(51003.0), 0, owner_name="beta"
+                )
+        message = comms.send_message("sender", "#team", "@beta inspect module.py")
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             _accept_visible_initials(
-                bus, root_id, store, stable_thread_lookup(51003.0), 0, owner_name="beta"
+                bus, root_id, store, stable_thread_lookup(51003.0), prior_seq, owner_name="beta"
             )
         options = {
             "selectedExistingFileWrite": {
@@ -127,6 +145,20 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
                 resource=str(resource),
                 contents="not written",
             )
+        if scenario == "parent_retry":
+            original_sync = SelectedWritePlans._fsync_dir
+
+            def fail_parent(path):
+                if path == root:
+                    raise OSError("ambiguous parent fsync")
+                return original_sync(path)
+
+            with monkeypatch.context() as fault:
+                fault.setattr(SelectedWritePlans, "_fsync_dir", staticmethod(fail_parent))
+                with pytest.raises(OSError, match="ambiguous parent fsync"):
+                    await agent.prompt("beta", [], field_meta={"agentComms": options})
+            assert (root / "selected-write-plans").is_dir()
+            assert not list((root / "selected-write-plans").glob("*.json"))
         if scenario == "commit_unknown":
             original_sync = SelectedWritePlans._fsync_dir
 
@@ -149,6 +181,10 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         receipt = response.field_meta["agentComms"]["selectedWrite"]
         assert receipt["status"] == "accepted_not_applied"
         assert resource.read_bytes() == b"before\n"
+        if scenario == "older_claims":
+            assert message.seq > 100
+            await agent.shutdown()
+            return
         with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
             await agent.prompt("beta", [], field_meta={"agentComms": options})
         monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)

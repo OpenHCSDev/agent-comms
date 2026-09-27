@@ -60,6 +60,9 @@ filesystem isolation. A test fixture deliberately holds dispatch to admit a
 predispatch plan deterministically; a busy owner can reject the request.
 Observer, wrong source/root, duplicate/ambiguous fsync, native failure,
 controller reconnect, and lost owner-process binding cases refuse mutation.
+A dirfd-relative no-follow parent walk rejects detectable parent-symlink swaps
+before write and post-fsync drift is UNKNOWN; this is still a cooperative
+filesystem model, not hostile same-UID rename containment.
 None of this authorizes production cutover, privileged host activation,
 old-client exclusion, UNKNOWN replay, or a public Pi tool. See
 `scoped_mediated_file_write.md` for the underlying narrow explicit write API.

@@ -14,6 +14,7 @@ import json
 import os
 import secrets
 import stat
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -55,12 +56,13 @@ class SelectedWritePlans:
             os.close(fd)
 
     def _prepare_dir(self) -> None:
-        try:
+        with suppress(FileExistsError):
             self.directory.mkdir(mode=0o700)
-            self._fsync_dir(self.comms.root)
-        except FileExistsError:
-            pass
         self._validate_dir()
+        # Also on an existing directory: a previous mkdir may have survived
+        # while its parent fsync failed. Do not acknowledge a later intent
+        # until the directory entry itself is known durable.
+        self._fsync_dir(self.comms.root)
 
     def _validate_dir(self) -> bool:
         try:
@@ -133,7 +135,7 @@ class SelectedWritePlans:
                 raise IdentityConflict("Selected write source identity changed")
             lookup = stable_thread_lookup(owner.created_at)
             with MutationStore(str(self.comms.root / "coordination.sqlite3")) as store:
-                claims = sealed_cohort_claims(store, lookup)
+                claims = sealed_cohort_claims(store, lookup, after_seq=source_seq - 1)
                 selected = [
                     claim
                     for claim in claims

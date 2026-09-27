@@ -19,10 +19,13 @@ owner-rename intent refusal, and current resource claim under wire → bus →
 registry → SQLite exclusions. A fail-fast
 SQLite write transaction remains held through open, truncate, bounded write,
 and `fsync`. A stopped/re-admitted owner, settled attempt, different resource
-claim or symlink/hardlink alias fails closed before mutation. `O_NOFOLLOW` and
-file inode/link checks prevent an already-changed path from passing admission;
-malicious filesystem replacement *during* mutation is outside this cooperative
-filesystem model.
+claim or symlink/hardlink alias fails closed before mutation. A directory-FD-relative `O_DIRECTORY | O_NOFOLLOW` walk from the physical
+worktree, plus exact parent/file inode checks before truncation and after fsync,
+rejects detectable parent symlink swaps and opened-object drift. Post-write
+drift is UNKNOWN, never automatic retry. Hostile same-UID rename *during* the
+write cannot be wholly excluded by cooperative filesystem checks alone;
+production hostile-FS containment needs a separate OS permission/mount
+boundary.
 
 The payload is exact `bytes`, at most 1 MiB. A successful call means only the
 opened file descriptor's bytes were fsynced, not model acceptance or goal
