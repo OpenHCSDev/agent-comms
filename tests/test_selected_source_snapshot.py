@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -77,12 +78,47 @@ def _populated_source(tmp_path: Path, *, thinking_level: str | None = "high"):
     return fresh, proof
 
 
+def _require_old_reviewed_pin(package: str) -> None:
+    from agent_comms.native_pi import NativePiUnavailable, _trusted_package
+    from agent_comms.selected_source_snapshot import _COMPACTION_SHA256
+
+    compaction = Path(package) / "dist/core/compaction/compaction.js"
+    if hashlib.sha256(compaction.read_bytes()).hexdigest() != _COMPACTION_SHA256:
+        pytest.skip("Live copied preparation differs; it must remain denied before Node")
+    try:
+        _trusted_package(Path(package))
+    except NativePiUnavailable:
+        pytest.skip("Old compaction pin alone does not establish trusted package closure")
+
+
+def test_live_copied_source_mismatch_denies_before_node(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = os.environ.get("AGENT_COMMS_TEST_COPIED_PIN")
+    if package is None:
+        pytest.skip("Explicit copied pinned Pi package required; no download/provider")
+    from agent_comms import selected_source_snapshot as module
+
+    compaction = Path(package) / "dist/core/compaction/compaction.js"
+    if hashlib.sha256(compaction.read_bytes()).hexdigest() == module._COMPACTION_SHA256:
+        pytest.skip("This copied source is already the old reviewed pin")
+    fresh, _proof = _populated_source(tmp_path)
+
+    def forbidden_node(*_args, **_kwargs):
+        raise AssertionError("Live copied source launched Node despite pin mismatch")
+
+    monkeypatch.setattr(module.subprocess, "run", forbidden_node)
+    with pytest.raises(SelectedSourceSnapshotError, match="preparation module differs"):
+        capture_selected_source_snapshot(Path(package), fresh, keep_recent_tokens=20)
+
+
 def test_optional_pinned_source_snapshot_binds_two_inodes_and_exact_context(
     tmp_path: Path,
 ) -> None:
     package = os.environ.get("AGENT_COMMS_TEST_COPIED_PIN")
     if package is None:
         pytest.skip("Explicit copied pinned Pi package required; no download/provider")
+    _require_old_reviewed_pin(package)
     fresh, proof = _populated_source(tmp_path)
     outcome = capture_selected_source_snapshot(Path(package), fresh, keep_recent_tokens=20)
     assert outcome is not None
@@ -91,6 +127,13 @@ def test_optional_pinned_source_snapshot_binds_two_inodes_and_exact_context(
     assert outcome.source["firstKeptEntryId"]
     assert outcome.source["revision"].split(":")[:2] == [str(fresh.device), str(fresh.inode)]
     assert outcome.source["contextDigest"] == hashlib.sha256(outcome.context_bytes).hexdigest()
+    assert (
+        outcome.source["preparedHistoryDigest"]
+        == hashlib.sha256(outcome.prepared_history_bytes).hexdigest()
+    )
+    assert outcome.source["sourceDigest"] == hashlib.sha256(fresh.path.read_bytes()).hexdigest()
+    assert outcome.source["sidecarDigest"] == hashlib.sha256(proof.read_bytes()).hexdigest()
+    assert json.loads(outcome.prepared_history_bytes)["messagesToSummarize"]
     assert outcome.source["selectedProvider"] == "openrouter"
     assert outcome.source["selectedModelId"] == "z-ai/glm-5.3-flash"
     assert outcome.source["selectedThinkingLevel"] == "high"
@@ -110,6 +153,7 @@ def test_optional_pinned_off_source_is_not_silently_clamped(
     package = os.environ.get("AGENT_COMMS_TEST_COPIED_PIN")
     if package is None:
         pytest.skip("Explicit copied pinned Pi package required; no download/provider")
+    _require_old_reviewed_pin(package)
     fresh, _proof = _populated_source(tmp_path, thinking_level=None)
     with pytest.raises(SelectedSourceSnapshotError, match="not explicitly supported"):
         capture_selected_source_snapshot(Path(package), fresh, keep_recent_tokens=20)
@@ -138,6 +182,161 @@ def test_sidecar_change_during_provider_free_capture_refuses_result(
 
     monkeypatch.setattr(module.subprocess, "run", changed_proof)
     with pytest.raises(SelectedSourceSnapshotError, match="changed during native snapshot"):
+        capture_selected_source_snapshot(package, fresh, keep_recent_tokens=20)
+
+
+def test_fake_split_cut_declines_without_any_prepared_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent_comms import selected_source_snapshot as module
+
+    fresh, _proof = _populated_source(tmp_path)
+    package = tmp_path / "fixture-package"
+    compaction = package / "dist/core/compaction/compaction.js"
+    compaction.parent.mkdir(parents=True)
+    compaction.write_bytes(b"fixture only; never executed")
+    monkeypatch.setattr(module, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(
+        module, "_COMPACTION_SHA256", hashlib.sha256(compaction.read_bytes()).hexdigest()
+    )
+
+    def split(*_args, **kwargs):
+        assert kwargs["input"] == fresh.path.read_bytes()
+        return subprocess.CompletedProcess([], 0, b'{"status":"skip","reason":"split_turn"}\n', b"")
+
+    monkeypatch.setattr(module.subprocess, "run", split)
+    assert capture_selected_source_snapshot(package, fresh, keep_recent_tokens=20) is None
+
+
+def test_same_length_sidecar_overwrite_refuses_fake_node_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent_comms import selected_source_snapshot as module
+
+    fresh, proof = _populated_source(tmp_path)
+    package = tmp_path / "fixture-package"
+    compaction = package / "dist/core/compaction/compaction.js"
+    compaction.parent.mkdir(parents=True)
+    compaction.write_bytes(b"fixture only; never executed")
+    monkeypatch.setattr(module, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(
+        module, "_COMPACTION_SHA256", hashlib.sha256(compaction.read_bytes()).hexdigest()
+    )
+
+    def changed_proof(*_args, **kwargs):
+        assert kwargs["input"] == fresh.path.read_bytes()
+        before = proof.read_bytes()
+        proof.write_bytes(before[:-2] + b"Z\n")
+        assert len(proof.read_bytes()) == len(before)
+        return subprocess.CompletedProcess([], 0, b'{"status":"skip","reason":"no_cut"}\n', b"")
+
+    monkeypatch.setattr(module.subprocess, "run", changed_proof)
+    with pytest.raises(SelectedSourceSnapshotError, match="changed during native snapshot"):
+        capture_selected_source_snapshot(package, fresh, keep_recent_tokens=20)
+
+
+def test_same_length_source_overwrite_rejected_even_if_revision_clock_collides(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent_comms import selected_source_snapshot as module
+
+    fresh, _proof = _populated_source(tmp_path)
+    package = tmp_path / "fixture-package"
+    compaction = package / "dist/core/compaction/compaction.js"
+    compaction.parent.mkdir(parents=True)
+    compaction.write_bytes(b"fixture only; never executed")
+    monkeypatch.setattr(module, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(
+        module, "_COMPACTION_SHA256", hashlib.sha256(compaction.read_bytes()).hexdigest()
+    )
+    real_revision = module._revision
+    monkeypatch.setattr(module, "_revision", lambda st: (*real_revision(st)[:3], 0, 0))
+
+    def changed_source(*_args, **kwargs):
+        data = kwargs["input"]
+        fresh.path.write_bytes(data[:-2] + b"Z\n")
+        assert len(fresh.path.read_bytes()) == len(data)
+        return subprocess.CompletedProcess([], 0, b'{"status":"skip","reason":"no_cut"}\n', b"")
+
+    monkeypatch.setattr(module.subprocess, "run", changed_source)
+    with pytest.raises(SelectedSourceSnapshotError, match="changed during native snapshot"):
+        capture_selected_source_snapshot(package, fresh, keep_recent_tokens=20)
+
+
+def test_replaced_source_path_refuses_fake_node_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent_comms import selected_source_snapshot as module
+
+    fresh, _proof = _populated_source(tmp_path)
+    package = tmp_path / "fixture-package"
+    compaction = package / "dist/core/compaction/compaction.js"
+    compaction.parent.mkdir(parents=True)
+    compaction.write_bytes(b"fixture only; never executed")
+    monkeypatch.setattr(module, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(
+        module, "_COMPACTION_SHA256", hashlib.sha256(compaction.read_bytes()).hexdigest()
+    )
+
+    def replaced(*_args, **kwargs):
+        captured = kwargs["input"]
+        assert captured == fresh.path.read_bytes()
+        fresh.path.rename(fresh.path.with_suffix(".old"))
+        fresh.path.write_bytes(captured)
+        fresh.path.chmod(0o600)
+        return subprocess.CompletedProcess([], 0, b'{"status":"skip","reason":"no_cut"}\n', b"")
+
+    monkeypatch.setattr(module.subprocess, "run", replaced)
+    with pytest.raises(SelectedSourceSnapshotError, match="changed during native snapshot"):
+        capture_selected_source_snapshot(package, fresh, keep_recent_tokens=20)
+
+
+def test_tampered_prepared_history_digest_refuses_fake_node_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent_comms import selected_source_snapshot as module
+
+    fresh, _proof = _populated_source(tmp_path)
+    package = tmp_path / "fixture-package"
+    compaction = package / "dist/core/compaction/compaction.js"
+    compaction.parent.mkdir(parents=True)
+    compaction.write_bytes(b"fixture only; never executed")
+    monkeypatch.setattr(module, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(
+        module, "_COMPACTION_SHA256", hashlib.sha256(compaction.read_bytes()).hexdigest()
+    )
+    context = json.dumps(
+        {
+            "messages": [{"role": "user", "content": "fixture"}],
+            "model": {"provider": "openrouter", "modelId": "z-ai/glm-5.3-flash"},
+            "thinkingLevel": "high",
+        }
+    ).encode()
+    history = json.dumps(
+        {
+            "messagesToSummarize": [{"role": "user", "content": "fixture"}],
+            "previousSummary": None,
+            "turnPrefixMessages": [],
+            "firstKeptEntryId": "kept",
+        }
+    ).encode()
+
+    def tampered(*_args, **kwargs):
+        assert kwargs["input"] == fresh.path.read_bytes()
+        payload = {
+            "status": "ready",
+            "sessionId": fresh.session_id,
+            "leafId": "leaf",
+            "firstKeptEntryId": "kept",
+            "contextDigest": hashlib.sha256(context).hexdigest(),
+            "contextBase64": base64.b64encode(context).decode(),
+            "preparedHistoryDigest": "a" * 64,
+            "preparedHistoryBase64": base64.b64encode(history).decode(),
+        }
+        return subprocess.CompletedProcess([], 0, (json.dumps(payload) + "\n").encode(), b"")
+
+    monkeypatch.setattr(module.subprocess, "run", tampered)
+    with pytest.raises(SelectedSourceSnapshotError, match="prepared history differs"):
         capture_selected_source_snapshot(package, fresh, keep_recent_tokens=20)
 
 

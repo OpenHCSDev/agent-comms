@@ -14,32 +14,46 @@ import os
 import shutil
 import stat
 import subprocess
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from .fresh_private_session import FreshPrivateSession
-from .native_pi import NativePiUnavailable, _private_session_dir, _trusted_package
+from .native_pi import NativePiUnavailable, _private_session_dir, _trusted_package, _unique
 
 _MAX_SOURCE_FILE = 16 * 1024 * 1024
 _MAX_CONTEXT = 1024 * 1024
+_MAX_HISTORY = 256 * 1024
 _MAX_STDOUT = 2 * 1024 * 1024
 # Exact reviewed copied 0.85.1 preparation logic used for the cut point.
 _COMPACTION_SHA256 = "3d5f1f2a3e801c965214717b6abad1839239b4a030517bffdf0c8eff25df5c2a"
 
-# This source runs only in the explicitly verified disposable copied Pi package.
-# It is deliberately read-only: inMemory avoids SessionManager.open's writer,
-# and no model, extension, settings or auth accessor is called.
+# This source runs only after the existing SHA3d compaction pin has passed.
+# It is deliberately read-only: inMemory avoids SessionManager.open's writer.
+# The parent supplies bytes from its checked FD, never a path for Pi to reopen.
+# No model, extension, settings or auth accessor is called.
 _SNAPSHOT_JS = r"""
 import {createHash} from 'node:crypto';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
-const [root, file, recent] = process.argv.slice(1);
-const {loadEntriesFromFile, SessionManager} = await import(
+const [root, recent] = process.argv.slice(1);
+const {SessionManager} = await import(
   pathToFileURL(join(root, 'dist/core/session-manager.js')));
 const {prepareCompaction, DEFAULT_COMPACTION_SETTINGS} = await import(
   pathToFileURL(join(root, 'dist/core/compaction/compaction.js')));
-const rows = loadEntriesFromFile(file);
+const raw = await (async () => {
+  const {readFileSync} = await import('node:fs');
+  return readFileSync(0);
+})();
+if (!raw.length || raw.length > 16*1024*1024 || raw.at(-1) !== 10)
+  throw Error('Selected source FD bytes are incomplete or oversized');
+const lines = raw.toString('utf8').split('\n');
+lines.pop();
+const rows = lines.map(line => {
+  if (!line) throw Error('Selected source has an empty entry');
+  return JSON.parse(line);
+});
 if (!rows.length || rows[0].type !== 'session' || rows[0].version !== 3 ||
     typeof rows[0].id !== 'string' || !rows[0].id)
   throw Error('Selected source is not strict v3');
@@ -54,13 +68,26 @@ if (!preparation || preparation.isSplitTurn) {
 } else {
   if (!branch.some(entry => entry.id === preparation.firstKeptEntryId))
     throw Error('Selected source kept entry changed');
+  // This hashes Pi's exact prepared history objects, including prior summary,
+  // not an independently attested prompt, stream attempt or source parity.
+  const history = Buffer.from(JSON.stringify({
+    messagesToSummarize:preparation.messagesToSummarize,
+    previousSummary:preparation.previousSummary ?? null,
+    turnPrefixMessages:preparation.turnPrefixMessages,
+    firstKeptEntryId:preparation.firstKeptEntryId,
+  }), 'utf8');
+  if (!preparation.messagesToSummarize.length ||
+      !history.length || history.length > 256*1024)
+    throw Error('Selected prepared history is empty or oversized');
   const content = Buffer.from(JSON.stringify(manager.buildSessionContext()), 'utf8');
   if (!content.length || content.length > 1024*1024)
     throw Error('Selected source context is outside one MiB bound');
   console.log(JSON.stringify({status:'ready',sessionId:manager.getSessionId(),
     leafId:manager.getLeafId(),firstKeptEntryId:preparation.firstKeptEntryId,
     contextDigest:createHash('sha256').update(content).digest('hex'),
-    contextBase64:content.toString('base64')}));
+    contextBase64:content.toString('base64'),
+    preparedHistoryDigest:createHash('sha256').update(history).digest('hex'),
+    preparedHistoryBase64:history.toString('base64')}));
 }
 """
 
@@ -78,13 +105,10 @@ class SelectedSourceSnapshot:
     source: dict[str, str]
     sidecar_revision: _FileRevision
     context_bytes: bytes
+    prepared_history_bytes: bytes
 
 
-def _private_revision(path: Path) -> _FileRevision:
-    try:
-        info = path.lstat()
-    except OSError as error:
-        raise SelectedSourceSnapshotError("Selected source file is unavailable") from error
+def _revision(info: os.stat_result) -> _FileRevision:
     if (
         not stat.S_ISREG(info.st_mode)
         or info.st_uid != os.geteuid()
@@ -96,11 +120,60 @@ def _private_revision(path: Path) -> _FileRevision:
     return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
 
 
+def _private_revision(path: Path) -> _FileRevision:
+    try:
+        return _revision(path.lstat())
+    except OSError as error:
+        raise SelectedSourceSnapshotError("Selected source file is unavailable") from error
+
+
+def _read_bound_fd(fd: int, revision: _FileRevision) -> bytes:
+    """Reread the *same* enrolled inode, detecting truncation and growth."""
+    if _revision(os.fstat(fd)) != revision:
+        raise SelectedSourceSnapshotError("Selected source FD revision changed")
+    data = bytearray()
+    while len(data) < revision[2]:
+        chunk = os.pread(fd, min(65536, revision[2] - len(data)), len(data))
+        if not chunk:
+            raise SelectedSourceSnapshotError("Selected source FD became incomplete")
+        data.extend(chunk)
+    if os.pread(fd, 1, revision[2]) or _revision(os.fstat(fd)) != revision:
+        raise SelectedSourceSnapshotError("Selected source FD changed during read")
+    return bytes(data)
+
+
+def _open_bound_fd(path: Path, stack: ExitStack) -> tuple[int, _FileRevision, bytes]:
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if not nofollow:
+        raise SelectedSourceSnapshotError("Selected source cannot deny redirected opens")
+    before = _private_revision(path)
+    fd = os.open(
+        path,
+        os.O_RDONLY | nofollow | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0),
+    )
+    stack.callback(os.close, fd)
+    if _revision(os.fstat(fd)) != before or _private_revision(path) != before:
+        raise SelectedSourceSnapshotError("Selected source path rebounded while opening")
+    data = _read_bound_fd(fd, before)
+    if _private_revision(path) != before:
+        raise SelectedSourceSnapshotError("Selected source path changed during FD read")
+    return fd, before, data
+
+
+def _verify_bound_fd(path: Path, fd: int, revision: _FileRevision, digest: str) -> None:
+    if (
+        _private_revision(path) != revision
+        or hashlib.sha256(_read_bound_fd(fd, revision)).hexdigest() != digest
+        or _private_revision(path) != revision
+    ):
+        raise SelectedSourceSnapshotError("Selected source FD/path/sidecar changed")
+
+
 def _read_snapshot_result(raw: bytes, fresh: FreshPrivateSession, revision: str) -> dict[str, Any]:
     if not raw or len(raw) > _MAX_STDOUT or not raw.endswith(b"\n"):
         raise SelectedSourceSnapshotError("Selected source result is incomplete or oversized")
     try:
-        result = json.loads(raw)
+        result = json.loads(raw, object_pairs_hook=_unique)
     except (UnicodeError, ValueError) as error:
         raise SelectedSourceSnapshotError("Selected source result is not JSON") from error
     if type(result) is not dict:
@@ -113,20 +186,40 @@ def _read_snapshot_result(raw: bytes, fresh: FreshPrivateSession, revision: str)
         return result
     if (
         set(result)
-        != {"status", "sessionId", "leafId", "firstKeptEntryId", "contextDigest", "contextBase64"}
+        != {
+            "status",
+            "sessionId",
+            "leafId",
+            "firstKeptEntryId",
+            "contextDigest",
+            "contextBase64",
+            "preparedHistoryDigest",
+            "preparedHistoryBase64",
+        }
         or result["status"] != "ready"
         or result["sessionId"] != fresh.session_id
         or any(
             type(result[key]) is not str or not result[key]
-            for key in ("leafId", "firstKeptEntryId", "contextDigest", "contextBase64")
+            for key in (
+                "leafId",
+                "firstKeptEntryId",
+                "contextDigest",
+                "contextBase64",
+                "preparedHistoryDigest",
+                "preparedHistoryBase64",
+            )
         )
-        or len(result["contextDigest"]) != 64
-        or any(c not in "0123456789abcdef" for c in result["contextDigest"])
+        or any(
+            len(result[key]) != 64 or any(c not in "0123456789abcdef" for c in result[key])
+            for key in ("contextDigest", "preparedHistoryDigest")
+        )
     ):
         raise SelectedSourceSnapshotError("Selected source returned mismatched identity")
     try:
         content = base64.b64decode(result["contextBase64"], validate=True)
-        context = json.loads(content)
+        context = json.loads(content, object_pairs_hook=_unique)
+        history = base64.b64decode(result["preparedHistoryBase64"], validate=True)
+        prepared = json.loads(history, object_pairs_hook=_unique)
     except (ValueError, UnicodeError) as error:
         raise SelectedSourceSnapshotError("Selected source context bytes are invalid") from error
     if (
@@ -137,6 +230,22 @@ def _read_snapshot_result(raw: bytes, fresh: FreshPrivateSession, revision: str)
         or not context["messages"]
     ):
         raise SelectedSourceSnapshotError("Selected source context digest or content differs")
+    if (
+        not 0 < len(history) <= _MAX_HISTORY
+        or hashlib.sha256(history).hexdigest() != result["preparedHistoryDigest"]
+        or type(prepared) is not dict
+        or set(prepared)
+        != {"messagesToSummarize", "previousSummary", "turnPrefixMessages", "firstKeptEntryId"}
+        or type(prepared["messagesToSummarize"]) is not list
+        or not prepared["messagesToSummarize"]
+        or any(type(message) is not dict for message in prepared["messagesToSummarize"])
+        or prepared["turnPrefixMessages"] != []
+        or prepared["firstKeptEntryId"] != result["firstKeptEntryId"]
+        or (
+            prepared["previousSummary"] is not None and type(prepared["previousSummary"]) is not str
+        )
+    ):
+        raise SelectedSourceSnapshotError("Selected prepared history differs")
     model = context.get("model")
     level = context.get("thinkingLevel")
     # These fields are projected by the verified Pi SessionManager from the
@@ -158,11 +267,13 @@ def _read_snapshot_result(raw: bytes, fresh: FreshPrivateSession, revision: str)
         "leafId": result["leafId"],
         "firstKeptEntryId": result["firstKeptEntryId"],
         "contextDigest": result["contextDigest"],
+        "preparedHistoryDigest": result["preparedHistoryDigest"],
         "selectedProvider": model["provider"],
         "selectedModelId": model["modelId"],
         "selectedThinkingLevel": level,
     }
     result["contextBytes"] = content
+    result["preparedHistoryBytes"] = history
     return result
 
 
@@ -176,7 +287,8 @@ def capture_selected_source_snapshot(
 
     The caller must hold its authoritative owner/wire/native-writer exclusion
     throughout this read and separately require every prior raw-input returned
-    retirement receipt. This method is never a recovery/terminal receipt.
+    retirement receipt. A change after attempt reservation remains UNKNOWN;
+    this snapshot cannot clear or retry it. This is never a terminal receipt.
     """
     if type(fresh) is not FreshPrivateSession:
         raise SelectedSourceSnapshotError("Returned fresh-session identity required")
@@ -197,46 +309,86 @@ def capture_selected_source_snapshot(
         if file != file.resolve(strict=True):
             raise SelectedSourceSnapshotError("Selected source has redirected path")
         fresh.verify_saved_identity()
-        before = _private_revision(file)
         proof_path = Path(str(file) + ".input-proof")
-        proof_before = _private_revision(proof_path)
-        if (before[0], before[1]) != (fresh.device, fresh.inode):
-            raise SelectedSourceSnapshotError("Selected saved file lost its enrolled inode")
-        revision = ":".join(map(str, before))
-        node = shutil.which("node")
-        if node is None:
-            raise SelectedSourceSnapshotError("Verified selected source loader unavailable")
-        result = subprocess.run(
-            [
-                node,
-                "--no-global-search-paths",
-                "--input-type=module",
-                "--eval",
-                _SNAPSHOT_JS,
-                str(Path(package).absolute()),
-                str(file),
-                str(keep_recent_tokens),
-            ],
-            cwd=file.parent,
-            env={
-                "HOME": str(file.parent),
-                "PATH": os.environ.get("PATH", os.defpath),
-                "PI_OFFLINE": "1",
-                "NODE_DISABLE_COMPILE_CACHE": "1",
-            },
-            capture_output=True,
-            timeout=10,
-        )
-        if (
-            result.returncode
-            or _private_revision(file) != before
-            or _private_revision(proof_path) != proof_before
-        ):
-            raise SelectedSourceSnapshotError("Selected source changed during native snapshot")
-        fresh.verify_saved_identity()
-        parsed = _read_snapshot_result(result.stdout, fresh, revision)
-        if parsed["status"] == "skip":
-            return None
-        return SelectedSourceSnapshot(file, parsed["source"], proof_before, parsed["contextBytes"])
+        with ExitStack() as stack:
+            source_fd, before, source_data = _open_bound_fd(file, stack)
+            proof_fd, proof_before, proof_data = _open_bound_fd(proof_path, stack)
+            if (before[0], before[1]) != (fresh.device, fresh.inode):
+                raise SelectedSourceSnapshotError("Selected saved file lost its enrolled inode")
+            if not source_data.endswith(b"\n") or not proof_data.endswith(b"\n"):
+                raise SelectedSourceSnapshotError("Selected source or sidecar is incomplete")
+            # Reject malformed input before any Node import. These are exact
+            # enrolled FD bytes, not a second read of a mutable pathname.
+            try:
+                rows = [
+                    json.loads(line, object_pairs_hook=_unique)
+                    for line in source_data[:-1].decode("utf-8").split("\n")
+                ]
+            except (UnicodeError, ValueError, TypeError) as error:
+                raise SelectedSourceSnapshotError(
+                    "Selected source FD entries are invalid"
+                ) from error
+            if not rows or any(type(row) is not dict for row in rows):
+                raise SelectedSourceSnapshotError("Selected source FD entries are invalid")
+            source_digest = hashlib.sha256(source_data).hexdigest()
+            proof_digest = hashlib.sha256(proof_data).hexdigest()
+            revision = ":".join(map(str, before))
+            node = shutil.which("node")
+            if node is None:
+                raise SelectedSourceSnapshotError("Verified selected source loader unavailable")
+            result = subprocess.run(
+                [
+                    node,
+                    "--no-global-search-paths",
+                    "--input-type=module",
+                    "--eval",
+                    _SNAPSHOT_JS,
+                    str(Path(package).absolute()),
+                    str(keep_recent_tokens),
+                ],
+                input=source_data,
+                cwd=file.parent,
+                env={
+                    "HOME": str(file.parent),
+                    "PATH": os.environ.get("PATH", os.defpath),
+                    "PI_OFFLINE": "1",
+                    "NODE_DISABLE_COMPILE_CACHE": "1",
+                },
+                capture_output=True,
+                timeout=10,
+            )
+            # Even skip/failure must not launder a changed source into a retry.
+            try:
+                _verify_bound_fd(file, source_fd, before, source_digest)
+                _verify_bound_fd(proof_path, proof_fd, proof_before, proof_digest)
+            except SelectedSourceSnapshotError as error:
+                raise SelectedSourceSnapshotError(
+                    "Selected source changed during native snapshot"
+                ) from error
+            if result.returncode:
+                raise SelectedSourceSnapshotError("Selected source changed during native snapshot")
+            fresh.verify_saved_identity()
+            parsed = _read_snapshot_result(result.stdout, fresh, revision)
+            if parsed["status"] == "skip":
+                _verify_bound_fd(file, source_fd, before, source_digest)
+                _verify_bound_fd(proof_path, proof_fd, proof_before, proof_digest)
+                return None
+            parsed["source"].update(
+                {
+                    "sourceDigest": source_digest,
+                    "sidecarRevision": ":".join(map(str, proof_before)),
+                    "sidecarDigest": proof_digest,
+                }
+            )
+            _verify_bound_fd(file, source_fd, before, source_digest)
+            _verify_bound_fd(proof_path, proof_fd, proof_before, proof_digest)
+            fresh.verify_saved_identity()
+            return SelectedSourceSnapshot(
+                file,
+                parsed["source"],
+                proof_before,
+                parsed["contextBytes"],
+                parsed["preparedHistoryBytes"],
+            )
     except (OSError, subprocess.TimeoutExpired, NativePiUnavailable) as error:
         raise SelectedSourceSnapshotError("Selected source cannot be safely captured") from error
