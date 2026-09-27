@@ -998,6 +998,10 @@ async def run_one_sealed_claim(
             raise IdentityConflict(
                 f"sealed claim scan exhausted; retry explicitly with after_seq={cursor}"
             )
+        if person.pointer.execution_id is not None:
+            raise StaleFence(
+                "selected owner has an unresolved execution; new claims remain pending"
+            )
         model_selection = comms.resolve_thread_model(owner.name)
         if not model_selection or "/" not in model_selection:
             raise IdentityConflict("Selected owner has no configured provider/model")

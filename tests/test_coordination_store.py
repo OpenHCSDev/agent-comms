@@ -150,8 +150,8 @@ def monitor_evidence(
 
 @pytest.fixture
 def test_only_trusted_owner_loss(monkeypatch: pytest.MonkeyPatch) -> VerifiedOwnerLoss:
-    # This is an isolated test simulation of a FUTURE verifier, NOT a production
-    # issuer.  Production _owner_loss_verified always fails closed in Slice 2.
+    # Isolated store transition fixture; native release observations have
+    # separate process-backed integration tests.
     proof = object.__new__(VerifiedOwnerLoss)
     object.__setattr__(proof, "execution_id", "exec")
     object.__setattr__(proof, "owner_lookup", "owner")
@@ -160,7 +160,7 @@ def test_only_trusted_owner_loss(monkeypatch: pytest.MonkeyPatch) -> VerifiedOwn
     monkeypatch.setattr(
         store_module,
         "_owner_loss_verified",
-        lambda supplied, execution_id, lookup, generation, ordinal: (
+        lambda supplied, execution_id, lookup, generation, ordinal, store: (
             supplied is proof
             and (execution_id, lookup, generation, ordinal)
             == (

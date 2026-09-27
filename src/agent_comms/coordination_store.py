@@ -7,12 +7,15 @@ particular a frozen PUBLISHING intent cannot be resolved by this store.
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import secrets
 import sqlite3
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Generic, TypeVar
 
 from .coordination import (
@@ -113,23 +116,104 @@ class StartResult:
     fence: OwnerFence
 
 
+_OWNER_LOSS_ISSUER = object()
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class VerifiedOwnerLoss:
-    """Future verifier-minted, identity-bound registry-owner loss attestation.
-
-    There is NO authenticated Registry/PID verifier within Slice 2.  Normal
-    construction and production verification remain disabled until separately
-    authorized runtime integration.  A caller's boolean or forged instance is
-    not evidence of old registry-owner loss.
-    """
+    """A native owner's attested release, valid only inside its registry lock."""
 
     execution_id: str
     owner_lookup: str
     owner_generation: int
     attempt_ordinal: int
+    _issuer: object = field(repr=False)
+    _active: bool = field(repr=False)
+    _store: MutationStore = field(repr=False)
 
     def __init__(self, **_unsupported: object) -> None:
-        raise RecoveryBlocked("owner-loss verifier is not activated")
+        raise RecoveryBlocked("owner-loss proof requires an observed native owner release")
+
+    @classmethod
+    @contextmanager
+    def observe_native_release(
+        cls, store: MutationStore, execution_id: str
+    ) -> Iterator[VerifiedOwnerLoss]:
+        """Join the existing native admission, release receipt and live registry.
+
+        Keep canonical wire/bus/registry exclusion through monitor settlement.
+        A later attested release also fences earlier admission epochs of the same
+        incarnation. Lease expiry or a replaced PID alone is insufficient.
+        """
+        from .bus_publication import stable_thread_lookup
+        from .coordinated_runtime_schema import assert_native_runtime_schema
+        from .coordination_response import _response_boundary
+        from .operations import Comms
+
+        if store.path.name != "coordination.sqlite3":
+            raise RecoveryBlocked("native recovery requires the canonical coordination store")
+        comms = Comms(store.path.parent)
+        with _response_boundary(comms.bus) as registry:
+            assert_native_runtime_schema(store._connection)
+            snapshot = store.snapshot(execution_id)
+            attempt = snapshot.attempt
+            if attempt is None or not snapshot.is_current:
+                raise RecoveryBlocked("native recovery requires the current attempted execution")
+            source = store._connection.execute(
+                "SELECT owner_lookup,owner_thread,owner_generation,sent_owner_admission_epoch "
+                "FROM native_runtime_inputs WHERE execution_id=? AND attempt_ordinal=?",
+                (execution_id, attempt.attempt_ordinal),
+            ).fetchone()
+            if source is None or tuple(source[:3]) != (
+                attempt.owner_lookup,
+                attempt.owner_thread,
+                attempt.owner_generation,
+            ):
+                raise RecoveryBlocked("native attempt has no matching dispatched owner")
+            epoch = source["sent_owner_admission_epoch"]
+            release = comms._read_owner_release_receipts().get(attempt.owner_thread)
+            current = registry.threads.get(attempt.owner_thread)
+            if release is None or current is None:
+                raise RecoveryBlocked("native owner release receipt is missing")
+            try:
+                released = json.loads(release["thread"])
+                pid, before, after = release["pid"], release["before"], release["after"]
+                valid = (
+                    type(pid) is int
+                    and pid > 0
+                    and type(before) is int
+                    and type(epoch) is int
+                    and before >= epoch
+                    and type(after) is int
+                    and after > before
+                    and released["name"] == attempt.owner_thread
+                    and released["pid"] == pid
+                    and released["created_at"] == current.created_at
+                    and released["active_turn"] is None
+                    and stable_thread_lookup(current.created_at) == attempt.owner_lookup
+                    and registry.admission_generations[current.name] >= after
+                    and current.active_turn is None
+                    and not comms._process_alive(pid)
+                )
+            except (KeyError, TypeError, ValueError):
+                valid = False
+            if not valid:
+                raise RecoveryBlocked("native owner release does not prove loss of this admission")
+            proof = object.__new__(cls)
+            for name, value in (
+                ("execution_id", execution_id),
+                ("owner_lookup", attempt.owner_lookup),
+                ("owner_generation", attempt.owner_generation),
+                ("attempt_ordinal", attempt.attempt_ordinal),
+                ("_issuer", _OWNER_LOSS_ISSUER),
+                ("_active", True),
+                ("_store", store),
+            ):
+                object.__setattr__(proof, name, value)
+            try:
+                yield proof
+            finally:
+                object.__setattr__(proof, "_active", False)
 
 
 def _owner_loss_verified(
@@ -138,9 +222,25 @@ def _owner_loss_verified(
     _owner_lookup: str,
     _owner_generation: int,
     _attempt_ordinal: int,
+    _store: MutationStore,
 ) -> bool:
-    """Activation-blocked issuer check; a future trusted verifier must own issuance."""
-    return False
+    """Only the scoped observer can attest this store's exact lost owner."""
+    try:
+        return (
+            type(_proof) is VerifiedOwnerLoss
+            and _proof._issuer is _OWNER_LOSS_ISSUER
+            and _proof._active
+            and _proof._store is _store
+            and (
+                _proof.execution_id,
+                _proof.owner_lookup,
+                _proof.owner_generation,
+                _proof.attempt_ordinal,
+            )
+            == (_execution_id, _owner_lookup, _owner_generation, _attempt_ordinal)
+        )
+    except AttributeError:
+        return False  # An uninitialized/forged object has no issuer or scope.
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -1339,15 +1439,132 @@ class RecoveryMonitorCapability:
     """Separate attested dead-attempt authority; never a live owner fence.
 
     Construction is deliberately unavailable from MutationStore's public API.
-    A future trusted runtime must explicitly bind this private grant to an
-    independently authenticated monitor; ordinary callers cannot obtain it via
-    registration, a token, or a recovered snapshot.
+    The native failure entry point observes owner release and a failed backend
+    terminal itself. Registration, tokens and snapshots cannot mint that grant.
     """
 
     def __init__(self, store: MutationStore, *, _grant: object) -> None:
         if _grant is not _MONITOR_GRANT:
             raise PermissionError("recovery monitor requires trusted construction")
         self._store = store
+
+    @classmethod
+    def recover_native_failure(
+        cls, store: MutationStore, execution_id: str, session_file: Path
+    ) -> Applied[RecoverySnapshot]:
+        """Retire a released owner's failed native input without recovering acceptance.
+
+        A saved error is evidence of failure only: no live context receipt is
+        reconstructed, no cursor advances, and UNKNOWN effects remain unsafe
+        to replay. An unfinished journal or unresolved publication is refused.
+        """
+        from .native_pi import _read_native_context_evidence, _read_private_file
+        from .native_prompt_binding import (
+            expected_prompt_matches_journal,
+            read_expected_prompt_binding,
+        )
+
+        with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:
+            snapshot = store.snapshot(execution_id)
+            attempt = snapshot.attempt
+            assert attempt is not None  # The release observer requires an attempt.
+            if snapshot.publication_intent is not None:
+                raise PublicationUncertain("native failure cannot resolve frozen publication")
+            reserved = store._connection.execute(
+                "SELECT * FROM native_runtime_inputs WHERE execution_id=? AND attempt_ordinal=?",
+                (execution_id, attempt.attempt_ordinal),
+            ).fetchone()
+            assert reserved is not None  # Already joined by the release observer.
+            session_dir = store.path.parent / "native-sessions" / loss.owner_lookup
+            session_file = Path(session_file).absolute()
+            if session_file.parent != session_dir:
+                raise RecoveryBlocked("native failure session belongs to another owner")
+            binding = read_expected_prompt_binding(store, reserved["input_id"])
+            if (
+                binding is None
+                or (
+                    binding.execution_id,
+                    binding.attempt_ordinal,
+                    binding.owner_lookup,
+                    binding.owner_thread,
+                    binding.owner_generation,
+                    binding.claim_id,
+                    binding.stage,
+                )
+                != (
+                    execution_id,
+                    attempt.attempt_ordinal,
+                    loss.owner_lookup,
+                    attempt.owner_thread,
+                    attempt.owner_generation,
+                    reserved["claim_id"],
+                    "full",
+                )
+                or not expected_prompt_matches_journal(session_file, binding)
+            ):
+                raise RecoveryBlocked("native failure lacks its bound original input")
+            proof = _read_native_context_evidence(session_file, reserved["input_id"])
+            entries = _read_private_file(session_file)
+            user_index = next(
+                index
+                for index, entry in enumerate(entries)
+                if entry.get("id") == proof.session_entry_id
+            )
+            following = entries[user_index + 1 :]
+            if len(following) != 1:
+                raise RecoveryBlocked("native failure has unfinished or additional session work")
+            terminal = following[0]
+            message = terminal.get("message")
+            if (
+                terminal.get("type") != "message"
+                or terminal.get("parentId") != proof.session_entry_id
+                or not isinstance(message, dict)
+                or message.get("role") != "assistant"
+                or message.get("stopReason") != "error"
+                or not isinstance(message.get("errorMessage"), str)
+                or not message["errorMessage"]
+                or message.get("content") != []
+            ):
+                raise RecoveryBlocked("native recovery requires an unambiguous failed terminal")
+            cls._require_native_session_exited(session_dir)
+            monitor = cls(store, _grant=_MONITOR_GRANT)
+            return monitor.terminalize_dead_attempt(
+                execution_id,
+                attempt.attempt_ordinal,
+                attempt.owner_generation,
+                expected_attempt_revision=attempt.revision,
+                expected_execution_revision=snapshot.execution.revision,
+                expected_pointer_revision=snapshot.pointer_revision,
+                owner_loss=loss,
+                evidence=MonitorEvidence(
+                    subprocess_dead=True,
+                    backend_done=True,
+                    unknown_effects=True,
+                    reason_code="released_native_failure",
+                    observed_at_ms=int(time.time() * 1000),
+                ),
+            )
+
+    @staticmethod
+    def _require_native_session_exited(session_dir: Path) -> None:
+        """Observe the pinned RPC session's processes under owner exclusion."""
+        proc = Path("/proc")
+        if not proc.is_dir():
+            raise RecoveryBlocked("native recovery requires Linux process observation")
+        for entry in proc.iterdir():
+            if not entry.name.isdecimal():
+                continue
+            try:
+                if entry.stat().st_uid != os.getuid():
+                    continue
+                args = (entry / "cmdline").read_bytes().split(b"\0")
+            except (FileNotFoundError, ProcessLookupError):
+                continue  # This process exited during observation.
+            except PermissionError as error:
+                raise RecoveryBlocked("native process observation was denied") from error
+            for index, argument in enumerate(args[:-1]):
+                if argument == b"--session-dir" and args[index + 1] == os.fsencode(session_dir):
+                    raise RecoveryBlocked("native session subprocess is still running")
 
     def terminalize_dead_attempt(
         self,
@@ -1383,9 +1600,9 @@ class RecoveryMonitorCapability:
             ):
                 raise StaleRevision("monitor CAS is stale")
             if not isinstance(owner_loss, VerifiedOwnerLoss) or not _owner_loss_verified(
-                owner_loss, execution_id, attempt.owner_lookup, owner_generation, ordinal
+                owner_loss, execution_id, attempt.owner_lookup, owner_generation, ordinal, store
             ):
-                raise RecoveryBlocked("authenticated old-owner-loss verifier is not activated")
+                raise RecoveryBlocked("monitor requires an observed release of this exact owner")
             now = store._now(max(attempt.updated_at_ms, evidence.observed_at_ms))
             # Preserve previously known safety only when trusted evidence says
             # effects were observed rather than guessed unknown.  Never assert
