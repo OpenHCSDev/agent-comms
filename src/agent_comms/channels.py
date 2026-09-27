@@ -23,6 +23,61 @@ from .declarations import (
 
 
 class ChannelCatalog:
+
+    def restore_missing(self, source: "ChannelCatalog") -> tuple[str, ...]:
+        """Restore catalog metadata while preserving target preferences.
+
+This copies declarations and presentation only. It never republishes a
+message, starts a recipient, or changes a thread's subscriptions.
+"""
+        if source.path.resolve() == self.path.resolve():
+            raise ValueError("Catalog restoration requires distinct stores")
+        source_tags, source_named = source.read()
+        source_views = source.views()
+        source_saved = source.saved_views()
+        source_pins = source.pinned_threads_snapshot()
+        source_order = source.list_order
+        with _store_lock(self.path.with_name("wire")):
+            had_catalog = self.path.exists()
+            tags, named = self.read()
+            missing = {
+                name: channel
+                for name, channel in source_views.items()
+                if name not in self._created_at
+                and (channel.builtin is None or not had_catalog)
+            }
+            parents = dict(self._parents)
+            parents.update(
+                (name, channel.parent)
+                for name, channel in missing.items()
+                if channel.parent is not None
+            )
+            for name in parents:
+                visited: set[str] = set()
+                parent = name
+                while parent in parents:
+                    if parent in visited:
+                        raise ValueError("Restored channel parents form a cycle")
+                    visited.add(parent)
+                    parent = parents[parent]
+            for name, channel in missing.items():
+                self._created_at[name] = channel.created_at
+                self._orders[name] = channel.order
+                if channel.archived:
+                    self._archived_channels |= {name}
+                if channel.any_mode:
+                    self._any_modes |= {name}
+                if channel.pinned:
+                    self._pinned_channels |= {name}
+                if name in source_pins:
+                    self._pinned_threads[name] = source_pins[name]
+            self._parents = parents
+            self._saved_views = source_saved | self._saved_views
+            if not had_catalog:
+                self._list_order = source_order
+            self.write(source_tags | tags, source_named | named)
+            return tuple(missing)
+
     def __init__(self, path: Path, registry: ThreadRegistry):
         self.path = path
         # Long-lived executors may still write the older catalog schema during
