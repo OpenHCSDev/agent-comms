@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import Thread, wire
+from agent_comms import agent_events as ae
 from agent_comms import passive_channel_awareness as passive_store
 from agent_comms.acp import CommsAgent
 from agent_comms.bus_page_index import BusPageIndex
@@ -42,9 +43,9 @@ def _fake_events(captured, *, ok=True, abort=False):
         captured.append(task)
         if abort:
             raise RuntimeError("provider never gave a terminal result")
-        yield {"type": "input_started", "id": None}
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": ok, "text": ""}
+        yield ae.InputStarted(id=None)
+        yield ae.StreamSettled()
+        yield ae.Done(ok=ok, text="")
 
     return events
 
@@ -191,9 +192,9 @@ async def test_native_input_start_and_nominal_terminal_are_not_context_receipts(
             with kwargs["send_boundary"](None, native_id, task) as admitted:
                 assert admitted is True
             assert kwargs["native_start"](None, native_id, task) is True
-            yield {"type": "input_started", "id": None}
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": True, "text": ""}
+            yield ae.InputStarted(id=None)
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent._run_agent_turn(owner, owner, "First owner task")
@@ -396,8 +397,8 @@ async def test_send_boundary_rejects_stale_passive_frame_before_native_start(
                 comms.update_tags(owner, remove=frozenset({"comms"}))
             with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
                 permitted.append(allowed)
-            yield {"type": "settled"}
-            yield {"type": "done", "ok": False, "text": ""}
+            yield ae.StreamSettled()
+            yield ae.Done(ok=False, text="")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         await agent._run_agent_turn(owner, owner, "Independently authorized task")

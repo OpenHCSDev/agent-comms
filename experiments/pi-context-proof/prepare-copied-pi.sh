@@ -23,7 +23,7 @@ e968e5be01dc7ad9615f938ae867ef136fa495f13dcf169942e9f781a299d9eb  dist/modes/rpc
 13d6fec97d08f4303714aca50f3113ba0263706e961fc220ccb1cc023c520e6b  node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
 SHAS
 ) || { echo 'Stock Pi bytes changed; refusing patch' >&2; exit 1; }
-ROOT=$(mktemp -d /var/tmp/agent-comms-pi-native-XXXXXXXX)
+ROOT=$(mktemp -d "${TMPDIR:-/var/tmp}/agent-comms-pi-native-XXXXXXXX")
 chmod 0700 "$ROOT"
 mkdir -p "$ROOT/node_modules/@earendil-works"
 TARGET="$ROOT/node_modules/@earendil-works/pi-coding-agent"

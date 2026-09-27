@@ -9,6 +9,7 @@ from dataclasses import replace
 import pytest
 from acp.schema import TextContentBlock
 
+from agent_comms import agent_events as ae
 from test_goal_direct_interrupt import _owner
 
 
@@ -54,7 +55,7 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
         with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
             assert allowed is True
         assert kwargs["native_start"](None, native_id, args[2])
-        yield {"type": "input_started", "id": None}
+        yield ae.InputStarted(id=None)
         # Both the public goal and original native input remain live; this is
         # not a terminal/cleared-turn race or a stale optional awareness frame.
         assert comms.registry.require(session).active_turn is not None
@@ -102,16 +103,16 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
             assert allowed is (change is None), gate_facts
         if change is None:
             assert kwargs["native_start"](public_id, "b" * 32, command["message"])
-            yield {"type": "input_started", "id": public_id}
+            yield ae.InputStarted(id=public_id)
             # STARTED is not a reusable send right, even with unchanged owner.
             before_duplicate = agent._dispositions.path.read_bytes()
             with kwargs["send_boundary"](public_id, "c" * 32, command["message"]) as allowed:
                 assert allowed is False
             assert agent._dispositions.path.read_bytes() == before_duplicate
         else:
-            yield {"type": "input_refused", "id": public_id}
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": change is None, "text": "No goal authority was used"}
+            yield ae.InputRefused(id=public_id)
+        yield ae.StreamSettled()
+        yield ae.Done(ok=change is None, text="No goal authority was used")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
@@ -187,9 +188,9 @@ for line in sys.stdin:
     started = asyncio.Event()
     emit = agent._emit_event
 
-    async def capture_started(session_id, event):
-        await emit(session_id, event)
-        if event.get("type") == "input_started" and event.get("id") is None:
+    async def capture_started(session_id, event, **kwargs):
+        await emit(session_id, event, **kwargs)
+        if isinstance(event, ae.InputStarted) and event.id is None:
             started.set()
 
     monkeypatch.setattr(agent, "_emit_event", capture_started)

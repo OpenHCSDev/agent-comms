@@ -1,0 +1,18 @@
+{
+  "_JsonLineReader": {
+    "matches_published_PR95": true,
+    "sha256": "0c425e1b2f7ca260ef233d709249e774bae5b422e7aa41c2aa00cc9eac210fc9"
+  },
+  "_private_cursor_metadata": {
+    "matches_published_PR95": true,
+    "sha256": "af657850e06032d7fc9aacc635c07e23a48ac09503db1a93a9c21b40d002e95f"
+  },
+  "_publish_private_cursor": {
+    "matches_published_PR95": true,
+    "sha256": "37e2d82fb32e2e1e3bf5d55c946b5820e3637212d04fd581545474c635b34dcd"
+  },
+  "_replay_transcript": {
+    "matches_published_PR95": true,
+    "sha256": "3d98371ca479892fe59ce7d9b907e9b1bbdb2ce045b5165cfb5b07903effc830"
+  }
+}

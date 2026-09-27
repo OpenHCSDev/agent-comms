@@ -11,6 +11,7 @@ import pytest
 from acp import RequestError
 
 from agent_comms import Thread, wire
+from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.tools import invoke_tool
 
@@ -100,12 +101,12 @@ async def test_owner_automatically_continues_same_session_in_new_project(tmp_pat
 
     async def events(*args, **kwargs):
         calls.append((args[3], kwargs.get("session_file"), args[2]))
-        yield {"type": "agent_info", "session_file": session_file}
+        yield ae.AgentInfo(session_file=session_file)
         if len(calls) == 1:
             comms.set_project(session, str(new))
-            yield {"type": "tool_end", "id": "project", "name": "comms_set_project", "ok": True}
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True}
+            yield ae.ToolEnd(id="project", name="comms_set_project", ok=True)
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
@@ -135,7 +136,7 @@ async def test_cancel_during_project_change_does_not_restart_work(tmp_path, monk
         comms.set_project(session, str(new))
         changed.set()
         await asyncio.sleep(60)
-        yield {"type": "done", "ok": True}
+        yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     prompt = asyncio.create_task(agent.prompt(session, [{"type": "text", "text": "switch"}]))

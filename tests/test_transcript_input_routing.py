@@ -5,6 +5,7 @@ import json
 import pytest
 
 from agent_comms import Thread, TurnRouting, wire
+from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.declarations import ScheduledTurn
 
@@ -58,7 +59,7 @@ async def test_original_and_busy_input_keep_distinct_routes(
             assert allowed
             append_input(session, "a" * 32, args[2])
         assert kwargs["native_start"](None, "a" * 32, args[2])
-        yield {"type": "input_started", "id": None}
+        yield ae.InputStarted(id=None)
         incoming = comms.send_message("peer", target, "@worker Follow-up request")
         received.append(incoming)
         assert await agent._drain_inbox("worker") == 1
@@ -69,9 +70,9 @@ async def test_original_and_busy_input_keep_distinct_routes(
             assert allowed
             append_input(session, "b" * 32, text)
         assert kwargs["native_start"](public_id, "b" * 32, text)
-        yield {"type": "input_started", "id": public_id}
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": terminal_ok, "text": "done"}
+        yield ae.InputStarted(id=public_id)
+        yield ae.StreamSettled()
+        yield ae.Done(ok=terminal_ok, text="done")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:

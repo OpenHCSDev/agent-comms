@@ -10,6 +10,7 @@ import pytest
 from acp import RequestError
 from acp.schema import ImageContentBlock
 
+from agent_comms import agent_events as ae
 from agent_comms import backend, wire
 from agent_comms.acp import CommsAgent
 from agent_comms.image_inputs import MAX_IMAGE_BYTES, ImageInput, prompt_images
@@ -73,7 +74,7 @@ async def test_initial_and_image_only_prompts_reach_backend(tmp_path, monkeypatc
 
     async def stream(*args, **kwargs):
         received.extend(kwargs["images"])
-        yield {"type": "done", "ok": True, "text": "Image seen"}
+        yield ae.Done(ok=True, text="Image seen")
 
     monkeypatch.setattr(backend, "stream_agent_events", stream)
     try:
@@ -103,7 +104,7 @@ async def test_image_steering_and_queue_restoration_keep_attachment_reference(
         commands.append(await kwargs["steering_queue"].get())
         received.set()
         await asyncio.Event().wait()
-        yield {"type": "done", "ok": True}
+        yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr(backend, "stream_agent_events", stream)
     turn = asyncio.create_task(agent.prompt("project", [{"type": "text", "text": "original"}]))
@@ -145,7 +146,7 @@ async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path,
     async def stream(*args, **kwargs):
         started.set()
         await asyncio.Event().wait()
-        yield {"type": "done", "ok": True}
+        yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr(backend, "stream_agent_events", stream)
     proxy = RuntimeProxy(client, "project", socket_path(comms.root, os.getpid()))
@@ -214,8 +215,8 @@ for line in sys.stdin:
             images=(ImageInput(PNG, "image/png"),),
         )
     ]
-    assert events[-1]["ok"] is False
-    assert PNG not in json.dumps(events)
+    assert events[-1].ok is False
+    assert PNG not in repr(events)
 
     agent = await make_agent(tmp_path / "acp", monkeypatch)
     agent._agent_bin = str(stub)
@@ -269,8 +270,8 @@ for line in sys.stdin:
             steering_queue=queue,
         )
     ]
-    assert events[-1]["ok"] is False
-    assert PNG not in json.dumps(events)
+    assert events[-1].ok is False
+    assert PNG not in repr(events)
 
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     agent = CommsAgent(
@@ -344,7 +345,7 @@ print(json.dumps({{'type': 'response', 'command': 'get_session_stats',
             str(stub), [], "inspect", str(tmp_path), images=(ImageInput(PNG, "image/png"),)
         )
     ]
-    assert events[-1]["ok"] is True
+    assert events[-1].ok is True
     request = json.loads(captured.read_text())
     assert {key: request[key] for key in ("type", "message", "images")} == {
         "type": "prompt",

@@ -119,7 +119,7 @@ async def test_backend_writer_waits_while_session_is_fenced(tmp_path):
         fcntl.flock(held.fileno(), fcntl.LOCK_UN)
     events = await asyncio.wait_for(task, 2)
     assert marker.exists()
-    assert events[-1]["ok"] is True
+    assert events[-1].ok is True
 
 
 async def _collect_backend(module, child: str, cwd: str, session: str):

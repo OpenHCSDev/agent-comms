@@ -7,6 +7,7 @@ import os
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
@@ -57,7 +58,7 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
     async def events(*args, **kwargs):
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
             observed.append(allowed)
-        yield {"type": "done", "ok": False, "text": "No provider send"}
+        yield ae.Done(ok=False, text="No provider send")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:

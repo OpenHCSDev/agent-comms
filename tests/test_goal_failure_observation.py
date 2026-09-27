@@ -8,6 +8,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms.declarations import Goal, GoalPauseSource, Thread, ThreadStatus, TurnClaimFence
 from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_attempts import (
@@ -320,15 +321,14 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
         if owner_pauses:
             wired.update_goal("project", "paused", goal_id=goal.id, owner_action=True)
             pause_bytes = (wired.root / "goal_pause_events.json").read_bytes()
-        yield {"type": "settled"}
+        yield ae.StreamSettled()
         if outcome != "eof":
-            yield {
-                "type": "done",
-                "ok": False,
-                "text": "private provider text",
-                "reason_code": "assistant_final_stop_missing",
-                "diagnostic": {"exit_code": 0},
-            }
+            yield ae.Done(
+                ok=False,
+                text="private provider text",
+                reason_code="assistant_final_stop_missing",
+                diagnostic={"exit_code": 0},
+            )
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", failed_events)
     try:
