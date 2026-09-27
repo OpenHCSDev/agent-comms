@@ -22,7 +22,13 @@ from agent_comms import (
     supervised_cutover,
     worker,
 )
-from agent_comms.coordination_store import IdentityConflict, PublicationActivationBlocked
+from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_store import (
+    IdentityConflict,
+    MutationStore,
+    PublicationActivationBlocked,
+)
 from agent_comms.declarations import Message, MessageType, RelationViolationError, Thread
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, private_nk_launch
@@ -638,3 +644,31 @@ def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path
         comms._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi")
     assert seen == [(str(root), root_id, str(tmp_path))]
     assert not (other / "registry.json").exists()
+
+
+def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_path, monkeypatch):
+    root, root_id, comms, _, _ = _root(tmp_path)
+    comms.pin_private_nk_launch(root, root_id, tmp_path)
+    comms.register(Thread("late-owner", frozenset(), str(tmp_path)))
+    late = comms.registry.require("late-owner")
+    lookup = stable_thread_lookup(late.created_at)
+    message = comms.send_initial_cohort("sender", "late-owner", "fresh private task")
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        with pytest.raises(IdentityConflict, match="not registered"):
+            store.participant(lookup)
+
+    class StopBeforeSpawn(Exception):
+        pass
+
+    def intercept(_argv, *, env, **_kwargs):
+        assert env["AGENT_COMMS_ROOT"] == str(root)
+        with MutationStore(str(root / "coordination.sqlite3")) as store:
+            participant = store.participant(lookup)
+            assert participant.committed and participant.owner_thread == "late-owner"
+        raise StopBeforeSpawn
+
+    monkeypatch.setattr(operations.subprocess, "Popen", intercept)
+    with pytest.raises(StopBeforeSpawn):
+        comms.start("late-owner", agent_bin="pi")
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        assert accept_initial_cohort(comms.bus, root_id, message.seq, store).value.member_count == 1
