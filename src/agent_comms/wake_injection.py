@@ -109,11 +109,36 @@ def render_selected_wake_frame(
         ensure_ascii=True,
         separators=(",", ":"),
     )
+    work_context = json.dumps(
+        {
+            "name": owner.name,
+            "title": owner.title,
+            "tags": sorted(owner.tags),
+            "original_assignment": owner.task,
+            "current_goal": (
+                None
+                if owner.goal is None
+                else {
+                    "text": owner.goal.text,
+                    "status": owner.goal.status,
+                    "progress": owner.goal.progress,
+                }
+            ),
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
     return (
         "── comms: 1 selected ──\n"
         f"selected: {selected_line}\n"
         f"expected: {expectation}\n"
         "── your state ──\n"
         f"{obligation_line}\n"
+        f"work_context: {work_context}\n"
+        "Judge relevance using your current goal, thread role/title, channel tags and the "
+        "new request. The original assignment records how the thread started; an old "
+        "bootstrap instruction to wait for a task does not exclude a new relevant request. "
+        "A current goal takes precedence over that original assignment. Preserve explicit "
+        "goal pauses; answering a coordination question need not resume paused work.\n"
         "This frame is a read-only projection, not file-write permission.\n"
     )

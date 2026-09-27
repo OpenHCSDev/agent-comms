@@ -1460,3 +1460,42 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     )
     assert result.disposition is ClaimDisposition.COMPLETED
     assert len(calls) == before + 1
+
+
+async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monkeypatch):
+    from agent_comms.declarations import Goal
+
+    root, root_id, comms, _initial, _people = _root(tmp_path)
+    owner = comms.registry.require("beta")
+    comms.registry.register(
+        replace(
+            owner,
+            task="Bootstrap: wait for a concrete task; do not modify files yet.",
+            title="Channel delivery implementation",
+            goal=Goal(
+                text="Restore channel subscribers", id="current-goal", progress="Routing fixed"
+            ),
+        )
+    )
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model(decision="FULL")
+    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    result = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+    )
+    assert result.disposition is ClaimDisposition.COMPLETED
+    assert len(calls) == 2
+    for _input_id, prompt in calls:
+        context = json.loads(
+            next(
+                line.removeprefix("work_context: ")
+                for line in prompt.splitlines()
+                if line.startswith("work_context: ")
+            )
+        )
+        assert context["title"] == "Channel delivery implementation"
+        assert context["tags"] == ["team"]
+        assert context["current_goal"]["text"] == "Restore channel subscribers"
+        assert context["current_goal"]["progress"] == "Routing fixed"
+        assert context["original_assignment"].startswith("Bootstrap:")
+        assert "an old bootstrap instruction to wait for a task does not exclude" in prompt
