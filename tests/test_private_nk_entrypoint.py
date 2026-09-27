@@ -123,7 +123,9 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     for name in ("AGENT_COMMS_ROOT", ROOT_ID_ENV, PACKAGE_ENV):
         monkeypatch.delenv(name, raising=False)
-    assert operations.wire().root == root
+    routed = operations.wire()
+    assert routed.root == root
+    assert routed._private_nk_launch == (root, root_id, tmp_path)
     selected = private_nk_entrypoint.private_nk_from_environment()
     assert selected is not None
     assert (selected.validated_root, selected.wire_root_id, selected.native_package) == (
@@ -135,6 +137,50 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(legacy))
     assert operations.wire().root == legacy
     assert private_nk_entrypoint.private_nk_from_environment() is None
+
+
+def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, monkeypatch):
+    root, root_id, _, _, _ = _root(tmp_path)
+    route_file = tmp_path / "route-state" / "active-route.json"
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
+    active_route.publish_active_route(active_route.ActiveRoute(root, root_id, tmp_path))
+    comms = operations.wire()
+    saved = tmp_path / "saved-session.jsonl"
+    saved.write_text('{"type":"session"}\n')
+    saved.chmod(0o600)
+    comms.register(
+        Thread("resumable", frozenset(), str(tmp_path), pid=0, session_file=str(saved))
+    )
+    launched: list[subprocess.Popen] = []
+    captured: list[dict[str, str]] = []
+    original_popen = subprocess.Popen
+
+    def provider_free_child(_argv, **kwargs):
+        captured.append(kwargs["env"])
+        process = original_popen(
+            [
+                sys.executable, "-c",
+                "import os,time; os.read(int(os.environ['AGENT_COMMS_RESERVATION_FD']),32); "
+                "time.sleep(10)",
+            ],
+            **kwargs,
+        )
+        launched.append(process)
+        return process
+
+    monkeypatch.setattr(operations.subprocess, "Popen", provider_free_child)
+    try:
+        result = comms.start("resumable")
+        assert result.pid == launched[0].pid
+        assert captured[0]["AGENT_COMMS_ROOT"] == str(root)
+        assert captured[0][ROOT_ID_ENV] == root_id
+        assert captured[0][PACKAGE_ENV] == str(tmp_path)
+    finally:
+        for process in launched:
+            process.terminate()
+            process.wait(timeout=5)
 
 
 def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, monkeypatch):

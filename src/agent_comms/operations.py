@@ -4176,8 +4176,7 @@ def wire(root: Path | str | None = None) -> Comms:
             root = active_route.root if active_route is not None else "~/.agent-comms"
     comms = Comms(Path(root).expanduser())
     if active_route is not None:
-        with _store_lock(comms.bus._path):
-            marker = comms.bus._private_marker_unlocked()
-        if marker["wire_root_id"] != active_route.wire_root_id:
-            raise RelationViolationError("active comms route root ID changed")
+        comms.pin_private_nk_launch(
+            active_route.root, active_route.wire_root_id, active_route.native_package
+        )
     return comms
