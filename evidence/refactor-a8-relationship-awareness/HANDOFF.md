@@ -1,6 +1,6 @@
 # A8 relationship and passive-awareness adoption
 
-Owner: Codex session `01a0e4f3-fd49-7381-8e9f-86627340b30c`, resumed in independent service PID 1910618. Worktree `/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927`; branch `codex/refactor-a8-relationship-awareness-20260927`. Implementation and validation complete; publication receipt follows in `publication.json`. Parent owns integration/deployment. No blocker remains in this assigned surface.
+Owner: Codex session `01a0e4f3-fd49-7381-8e9f-86627340b30c`, resumed in independent service PID 1910618. Worktree `/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927`; branch `codex/refactor-a8-relationship-awareness-20260927`. Completed and published as draft [PR138](https://github.com/OpenHCSDev/agent-comms/pull/138). Tested implementation SHA `214b0d98af4d0fdc3ffdc97ef6bb7b9914eb9169`; `publication.json` records that verified publication. The following commit adds receipts only; `final-publication.json` retains the exact final remote head locally without recursive self-hashing. Parent owns integration/deployment. No blocker remains in this assigned surface.
 
 Started from completed S8 `a6f9e5414e092b64dd6082946a485c4fc1dc806b` / draft PR134. Draft base is `codex/refactor-s8-goals-20260927`. PR134 already includes A8/PR129, A1/A2 foundation/PR125, S1/PR127 and its main merges. Keep those dependencies once; this change is not an independent replacement for them. No edits to S4's field_codec/channels/read/routing, parent registry restoration/runtime/native/coordination, PR95, ACP, Toad, or the live root. No owner restart, uncertain input replay, model override, paid provider, extra worker, deployment, merge or CI wait.
 
@@ -54,3 +54,5 @@ src/agent_comms/locked_store.py --context-root src/agent_comms --json --json-pay
 `process-evidence.json` records actual resumed session/process state. `cleanup.json` records removal of only this worker's disposable artifacts after test/audit processes exited. Original worktrees, commits and durable recipes/evidence are preserved.
 
 Evidence text logs have trailing whitespace normalized; JSON patch retains exact diff bytes.
+
+Publication detail: the first draft creation failed because PR134's head ref existed only in `trissim/agent-comms`. Read-only REST/ref checks verified that state. The unchanged published S8 SHA `a6f9e5414e092b64dd6082946a485c4fc1dc806b` was pushed as `codex/refactor-s8-goals-20260927` in OpenHCSDev/agent-comms, then PR138 was created against that exact dependency. No S8 code or existing ref was changed, and no PR was opened against upstream.

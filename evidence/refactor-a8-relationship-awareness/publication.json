@@ -1,0 +1,13 @@
+{
+  "baseRefName": "codex/refactor-s8-goals-20260927",
+  "baseRefOid": "a6f9e5414e092b64dd6082946a485c4fc1dc806b",
+  "headRefName": "codex/refactor-a8-relationship-awareness-20260927",
+  "headRefOid": "214b0d98af4d0fdc3ffdc97ef6bb7b9914eb9169",
+  "isDraft": true,
+  "number": 138,
+  "state": "OPEN",
+  "url": "https://github.com/OpenHCSDev/agent-comms/pull/138",
+  "tested_source_sha": "214b0d98af4d0fdc3ffdc97ef6bb7b9914eb9169",
+  "prior_create_failure": "Missing target base branch; verified PR134 head lived in trissim/agent-comms.",
+  "resolution": "Published unchanged PR134 head as base ref in OpenHCSDev/agent-comms; draft then created successfully."
+}
