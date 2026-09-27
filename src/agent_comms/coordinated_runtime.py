@@ -75,6 +75,7 @@ from .native_source_cursor import advance_current_native_cursor
 from .operations import Comms
 from .optional_awareness_projection import OptionalAwarenessProjection
 from .private_sidecar import SidecarCommitUnknown, native_request_digest
+from .selected_write_plan import PlannedWrite
 from .wake import WakeDecision, derive_exact_reply_target
 from .wake_candidate_index import WakeCandidateIndex
 from .wake_injection import render_selected_wake_frame
@@ -905,6 +906,11 @@ async def run_one_sealed_claim(
     after_seq: int = 0,
     session_file: Path | None = None,
     selected_existing_file_write: SelectedExistingFileWrite | None = None,
+    selected_write_plan_loader: (
+        Callable[[WakeClaim, Thread, int], PlannedWrite | None] | None
+    ) = None,
+    selected_write_plan_check: Callable[[WakeClaim, Thread, str], None] | None = None,
+    selected_write_plan_applied: Callable[[WakeClaim, Thread, str], None] | None = None,
     optional_awareness_builder: (
         Callable[[CommittedInitial, WakeClaim, Thread], OptionalAwarenessSupplement] | None
     ) = None,
@@ -1118,6 +1124,20 @@ async def run_one_sealed_claim(
         ]
         if len(selected_claims) != 1:
             raise IdentityConflict("full wake lost its selected claim")
+        selected_operation_id: str | None = None
+        if selected_write_plan_loader is not None:
+            planned = selected_write_plan_loader(pending, owner, owner_epoch)
+            if planned is not None:
+                if (
+                    selected_existing_file_write is not None
+                    or selected_write_plan_applied is None
+                    or selected_write_plan_check is None
+                ):
+                    raise IdentityConflict("Selected write has conflicting or incomplete authority")
+                selected_existing_file_write = SelectedExistingFileWrite(
+                    planned.resource, planned.contents
+                )
+                selected_operation_id = planned.operation_id
         frame = render_selected_wake_frame(
             initial,
             selected_claims[0],
@@ -1210,6 +1230,9 @@ async def run_one_sealed_claim(
         if not result.text:
             raise IdentityConflict("successful model produced no publishable response")
         if selected_existing_file_write is not None:
+            if selected_operation_id is not None:
+                assert selected_write_plan_check is not None
+                selected_write_plan_check(pending, owner, selected_operation_id)
             # This is an explicitly requested foreground action, not a model
             # instruction. Both the claim append and actual mutation recheck
             # current owner/attempt/resource authority under canonical locks.
@@ -1224,7 +1247,7 @@ async def run_one_sealed_claim(
                 wake_revision=selected_claims[0].revision,
                 recipient_lookup=lookup,
                 execution_id=execution_id,
-                operation_id=secrets.token_hex(16),
+                operation_id=selected_operation_id or secrets.token_hex(16),
                 owner_admission_generation=owner_epoch,
                 turn_id=turn.id,
                 participant_generation=person.generation,
@@ -1236,6 +1259,9 @@ async def run_one_sealed_claim(
             write_selected_claimed_file(
                 comms, store, admission, owner.name, claimed, selected_existing_file_write.contents
             )
+            if selected_operation_id is not None:
+                assert selected_write_plan_applied is not None
+                selected_write_plan_applied(pending, owner, selected_operation_id)
         _record_full(store, pending, owner, person.generation, fence, input_id, result)
         pointer_revision = started.snapshot.pointer_revision
         for phase in (AttemptPhase.PROMPT_ACCEPTED, AttemptPhase.MODEL_RUNNING):
