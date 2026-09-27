@@ -49,6 +49,7 @@ from .diagnostics import FailureReason
 from .image_inputs import ImageInput
 from .maintenance_barrier import MaintenanceBarrier
 from .native_pi import CAPABILITY as NATIVE_INPUT_CAPABILITY
+from .native_pi import NativeContextProof, NativePiUnavailable, _verify_context
 from .native_prompt_send import send_fenced_prompt
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .selected_persistent_prompt import SelectedPersistentPrompt
@@ -1191,6 +1192,8 @@ async def _stream_agent_events(
     capability_failed = False
     prompt_start_deadline: float | None = None
     initial_input_started = False
+    selected_input_event: dict[str, Any] | None = None
+    selected_context_proof: NativeContextProof | None = None
     live_status_seen = False
     stats_requested = False
     stats_state_id = f"agent-comms-stats-state-{secrets.token_hex(16)}"
@@ -1869,6 +1872,43 @@ async def _stream_agent_events(
                 yield turn_state("failed", "prompt_rejected", 0, event_phase="shutdown")
                 yield {"type": "error", "text": error_message}
                 break
+        elif selected_prompt is not None and kind == "input_committed":
+            if (
+                selected_input_event is not None
+                or payload.get("inputId") != original_input_id
+                or payload.get("sessionId") != initial_session_id
+            ):
+                input_uncertain = True
+                fail_reason = "Selected Pi input commitment changed; no replay."
+                await abort_stalled_rpc()
+                break
+            selected_input_event = payload
+        elif selected_prompt is not None and kind == "context_committed":
+            if (
+                selected_input_event is None
+                or selected_context_proof is not None
+                or payload.get("inputId") != original_input_id
+                or payload.get("sessionId") != initial_session_id
+                or type(initial_session_file) is not str
+            ):
+                input_uncertain = True
+                fail_reason = "Selected Pi context commitment is uncertain; no replay."
+                await abort_stalled_rpc()
+                break
+            try:
+                selected_context_proof = _verify_context(
+                    Path(initial_session_file),
+                    original_input_id,
+                    initial_session_id,
+                    selected_input_event,
+                    payload,
+                )
+            except (NativePiUnavailable, OSError, ValueError):
+                input_uncertain = True
+                fail_reason = "Selected Pi live context disagrees with private journal; no replay."
+                await abort_stalled_rpc()
+                break
+            yield {"type": "selected_context_proof", "proof": selected_context_proof}
         elif kind == "auto_retry_start":
             final_assistant_stop = False
             prompt_accepted = True
@@ -2161,6 +2201,11 @@ async def _stream_agent_events(
             elif delta_type in {"toolcall_start", "toolcall_delta", "toolcall_end"}:
                 output_started = True
         elif kind == "tool_execution_start":
+            if selected_prompt is not None and selected_context_proof is None:
+                input_uncertain = True
+                fail_reason = "Selected tool started before exact Pi context proof; no replay."
+                await abort_stalled_rpc()
+                break
             name = payload.get("toolName") or "tool"
             args = payload.get("args") or {}
             tool_id = payload.get("toolCallId") or name
@@ -2346,6 +2391,9 @@ async def _stream_agent_events(
         and initial_session_file == active_session_file
         and revision is not None
     )
+    if selected_prompt is not None and selected_context_proof is None:
+        retained = False
+        fail_reason = fail_reason or "Selected input lacks live private context proof; no replay."
     if retained:
         assert persistent_session is not None
         persistent_session.proc = proc

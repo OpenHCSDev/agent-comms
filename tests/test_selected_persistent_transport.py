@@ -18,7 +18,8 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="raw Pi pipe is POSIX
 
 def _fake_pi(root: Path) -> str:
     session = root / "session.jsonl"
-    session.write_text("session\n")
+    session.write_text('{"type":"session","id":"fixed-session"}\n')
+    session.chmod(0o600)
     pid_log = root / "pid-log"
     prompt_log = root / "prompt-log"
     source = root / "pi-stub"
@@ -26,6 +27,7 @@ def _fake_pi(root: Path) -> str:
         f"#!{sys.executable}\n"
         + """
 import json, os, sys
+from agent_comms.private_sidecar import native_request_digest
 emit = lambda row: print(json.dumps(row), flush=True)
 with open(@@LOG@@, 'a') as log: log.write(str(os.getpid()) + '\\n')
 for line in sys.stdin:
@@ -40,11 +42,35 @@ for line in sys.stdin:
         emit({{'type':'response','command':kind,'id':command['id'],'success':True}})
         emit({{'type':'message_start','message':{{'role':'user',
               'content':command['message'],'inputId':command['inputId']}}}})
-        if command['message'] == 'selected safe tool':
-            emit({{'type':'tool_execution_start','toolCallId':'call-1',
+        if command['message'] == 'selected missing proof tool':
+            emit({{'type':'tool_execution_start','toolCallId':'early',
                   'toolName':'read','args':{{'path':'safe.txt'}}}})
-            emit({{'type':'tool_execution_end','toolCallId':'call-1',
-                  'toolName':'read','result':{{'content':[{{'type':'text','text':'safe'}}]}}}})
+        if command['message'] in ('selected safe tool', 'selected forged proof'):
+            entry = 'entry-1'
+            with open(@@SESSION@@, 'a') as log:
+                log.write(json.dumps({{'type':'message','id':entry,'message':{{'role':'user',
+                    'inputId':command['inputId'],
+                    'inputDigest':native_request_digest(command['message'])}}}}) + '\\n')
+                log.flush(); os.fsync(log.fileno())
+            journal = @@PROOF@@
+            with open(journal, 'a') as log:
+                os.chmod(journal, 0o600)
+                log.write(json.dumps({{'schema':1,'type':'context_committed',
+                    'sessionId':'fixed-session','inputId':command['inputId'],
+                    'sessionEntryId':entry,'requestGeneration':1,
+                    'llmContextDigest':'f'*64}}) + '\\n')
+                log.flush(); os.fsync(log.fileno())
+            emit({{'type':'input_committed','sessionId':'fixed-session',
+                  'inputId':command['inputId'],'sessionEntryId':entry}})
+            emit({{'type':'context_committed','sessionId':'fixed-session',
+                  'inputId':command['inputId'],'sessionEntryId':entry,
+                  'requestGeneration':1,'llmContextDigest':
+                    ('e' if command['message'] == 'selected forged proof' else 'f')*64}})
+            if command['message'] == 'selected safe tool':
+                emit({{'type':'tool_execution_start','toolCallId':'call-1',
+                      'toolName':'read','args':{{'path':'safe.txt'}}}})
+                emit({{'type':'tool_execution_end','toolCallId':'call-1',
+                      'toolName':'read','result':{{'content':[{{'type':'text','text':'safe'}}]}}}})
         emit({{'type':'message_update','assistantMessageEvent':
               {{'type':'text_delta','delta':'ok'}}}})
         emit({{'type':'message_end','message':{{'role':'assistant','stopReason':'stop'}}}})
@@ -56,6 +82,7 @@ for line in sys.stdin:
         .replace("}}", "}")
         .replace("@@LOG@@", repr(str(pid_log)))
         .replace("@@PROMPTS@@", repr(str(prompt_log)))
+        .replace("@@PROOF@@", repr(str(session) + ".input-proof"))
         .replace("@@SESSION@@", repr(str(session)))
     )
     source.chmod(0o755)
@@ -114,6 +141,12 @@ async def test_selected_exact_input_uses_same_live_child_and_one_raw_writer(tmp_
             SelectedPersistentPrompt(input_id, boundary),
         )
         assert selected[-1]["ok"] is True
+        assert any(
+            event.get("type") == "selected_context_proof"
+            and event["proof"].input_id == input_id
+            and event["proof"].session_id == "fixed-session"
+            for event in selected
+        )
         assert any(
             event.get("type") == "tool_start" and event["name"] == "read" for event in selected
         )
@@ -235,6 +268,42 @@ async def test_selected_refuses_stale_session_or_profile_without_replacement(tmp
         assert persistent.proc is child and child.returncode is None
         assert len((tmp_path / "prompt-log").read_text().splitlines()) == 1
         assert (tmp_path / "pid-log").read_text().splitlines() == [str(child.pid)]
+    finally:
+        await persistent.close_idle()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    ["selected missing proof", "selected missing proof tool", "selected forged proof"],
+)
+async def test_selected_missing_or_forged_live_context_never_retains_child(tmp_path, message):
+    stub = _fake_pi(tmp_path)
+    persistent = backend.PersistentPiSession()
+
+    @contextmanager
+    def boundary():
+        yield
+
+    boundary._maintenance_wire_locked = True
+    try:
+        baseline = await _run(stub, tmp_path, persistent, "ordinary")
+        assert baseline[-1]["ok"] is True
+        child = persistent.proc
+        assert child is not None
+        selected = await _run(
+            stub,
+            tmp_path,
+            persistent,
+            message,
+            SelectedPersistentPrompt("9" * 32, boundary),
+        )
+        assert selected[-1]["ok"] is False
+        assert persistent.proc is None
+        assert child.returncode is not None
+        assert not any(event["type"] == "selected_context_proof" for event in selected)
+        assert not any(event["type"] == "tool_start" for event in selected)
+        assert len((tmp_path / "pid-log").read_text().splitlines()) == 1
     finally:
         await persistent.close_idle()
 
