@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import json
-from dataclasses import asdict, dataclass
-from pathlib import Path
+from dataclasses import dataclass
 
-from .declarations import Goal, GoalPauseSource, _atomic_write_text, _store_lock
+from .declarations import Goal, GoalPauseSource
+from .locked_store import LockedStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,15 +32,16 @@ class GoalPauseEvent:
 
 
 @dataclass(frozen=True, slots=True)
-class GoalPauseEvents:
-    path: Path
+class GoalPauseEvents(LockedStore[dict[str, GoalPauseEvent]]):
+    @property
+    def record_type(self) -> type[dict[str, GoalPauseEvent]]:
+        return dict[str, GoalPauseEvent]
+
+    def empty(self) -> dict[str, GoalPauseEvent]:
+        return {}
 
     def snapshot(self) -> dict[str, GoalPauseEvent]:
-        try:
-            rows = json.loads(self.path.read_text())
-        except FileNotFoundError:
-            return {}
-        return {key: GoalPauseEvent(**row) for key, row in rows.items()}
+        return self.read()
 
     @staticmethod
     def for_goal(goal: Goal | None, events: dict[str, GoalPauseEvent]) -> GoalPauseEvent | None:
@@ -50,11 +50,4 @@ class GoalPauseEvents:
         return events.get(f"{goal.id}:{goal.revision}")
 
     def record(self, event: GoalPauseEvent) -> None:
-        with _store_lock(self.path):
-            events = self.snapshot()
-            events[event.key] = event
-            _atomic_write_text(
-                self.path,
-                json.dumps({key: asdict(value) for key, value in events.items()}),
-                fsync_parent=True,
-            )
+        self.update(lambda events: {**events, event.key: event})

@@ -272,10 +272,15 @@ def _verify_claim_bus_before_read_unlocked(bus_path: Path) -> None:
 
 @contextmanager
 def _store_lock(
-    store_path: Path, *, blocking: bool = True, max_bus_bytes: int | None = None
+    store_path: Path,
+    *,
+    blocking: bool = True,
+    max_bus_bytes: int | None = None,
+    shared: bool = False,
 ) -> Iterator[int]:
-    """Hold a canonical wire lock; yield its inheritable descriptor.
+    """Hold a canonical store lock; yield its inheritable descriptor.
 
+    Shared document readers can coexist; updates retain exclusive ownership.
     A bounded projection refuses over-budget bus bytes before its durability
     scan. POSIX release is by last close, not LOCK_UN: an inherited descriptor
     retains authority if its parent dies before native mutation finishes.
@@ -293,9 +298,8 @@ def _store_lock(
             lock_file.seek(0)
             while True:
                 try:
-                    msvcrt.locking(  # type: ignore[attr-defined]
-                        lock_file.fileno(), msvcrt.LK_NBLCK, 1  # type: ignore[attr-defined]
-                    )
+                    mode = msvcrt.LK_NBRLCK if shared else msvcrt.LK_NBLCK
+                    msvcrt.locking(lock_file.fileno(), mode, 1)  # type: ignore[attr-defined]
                     break
                 except OSError as error:
                     if not blocking or error.errno not in {errno.EACCES, errno.EDEADLK}:
@@ -304,7 +308,8 @@ def _store_lock(
         else:
             import fcntl
 
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+            mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
+            fcntl.flock(lock_file.fileno(), mode | (0 if blocking else fcntl.LOCK_NB))
         try:
             # The shared claim bus durability guard may parse the entire log.
             # A bounded projection must refuse over-budget bytes *before* that

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, replace
-from pathlib import Path
+from dataclasses import dataclass, fields, replace
+from typing import Any
 
 from .declarations import (
     Goal,
@@ -14,9 +13,8 @@ from .declarations import (
     GoalWaitTarget,
     Message,
     RegistrySnapshot,
-    _atomic_write_text,
-    _store_lock,
 )
+from .locked_store import LockedStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,51 +88,46 @@ class GoalInputReview:
 
 
 @dataclass(frozen=True, slots=True)
-class GoalWaits:
-    path: Path
+class GoalWaits(LockedStore[dict[str, GoalWait]]):
+    @property
+    def record_type(self) -> type[dict[str, GoalWait]]:
+        return dict[str, GoalWait]
 
-    def snapshot(self) -> dict[str, GoalWait]:
-        try:
-            data = json.loads(self.path.read_text())
-        except FileNotFoundError:
-            return {}
-        return {
-            key: GoalWait(
-                goal_id=row["goal_id"],
-                wait_id=row["wait_id"],
-                revision=row["revision"],
-                after_seq=row["after_seq"],
-                targets=tuple(GoalWaitTarget(**target) for target in row["targets"]),
-                owner_created_at=row.get("owner_created_at"),
-                target_turn_generations=tuple(row.get("target_turn_generations", ())),
-                report_turn_id=row.get("report_turn_id"),
-                report_turn_generation=row.get("report_turn_generation"),
-            )
-            for key, row in data.items()
-        }
+    def empty(self) -> dict[str, GoalWait]:
+        return {}
 
-    def _write(self, rows: dict[str, GoalWait]) -> None:
-        _atomic_write_text(
-            self.path,
-            json.dumps({key: asdict(row) for key, row in rows.items()}),
-            fsync_parent=True,
+    def _decode(self, data: Any) -> dict[str, GoalWait]:
+        # The legacy reader ignored extra wait-row keys (but not extra target
+        # keys). Derive that projection from the record, then use the shared
+        # codec for every field, nested target, tuple and default.
+        names = {field.name for field in fields(GoalWait)}
+        # slots=True replaces the class on Python 3.11; use its final identity.
+        return super(GoalWaits, self)._decode(  # noqa: UP008
+            {
+                key: {name: value for name, value in row.items() if name in names}
+                for key, row in data.items()
+            }
         )
 
+    def snapshot(self) -> dict[str, GoalWait]:
+        return self.read()
+
     def record(self, wait: GoalWait) -> None:
-        with _store_lock(self.path):
-            rows = self.snapshot()
-            rows[wait.goal_id] = wait
-            self._write(rows)
+        self.update(lambda rows: {**rows, wait.goal_id: wait})
 
     def clear(self, goal_id: str, *, wait_id: str | None = None) -> bool:
-        with _store_lock(self.path):
-            rows = self.snapshot()
+        removed = False
+
+        def change(rows: dict[str, GoalWait]) -> dict[str, GoalWait]:
+            nonlocal removed
             current = rows.get(goal_id)
             if current is None or (wait_id is not None and current.wait_id != wait_id):
-                return False
-            del rows[goal_id]
-            self._write(rows)
-            return True
+                return rows
+            removed = True
+            return {key: row for key, row in rows.items() if key != goal_id}
+
+        self.update(change)
+        return removed
 
     @staticmethod
     def for_goal(goal: Goal | None, rows: dict[str, GoalWait]) -> GoalWait | None:
