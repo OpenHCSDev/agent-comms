@@ -1,0 +1,54 @@
+F....................................................................... [ 87%]
+..........                                                               [100%]
+=================================== FAILURES ===================================
+__________________ test_golden_relationship_document_and_noop __________________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.artifacts/adopters/test_golden_relationship_docum0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f0381634c10>
+
+    def test_golden_relationship_document_and_noop(tmp_path, monkeypatch):
+        comms = setup_wire(tmp_path)
+        service = comms.relationships
+        assert service.store.read() == {"version": 1, "collaborations": [], "orders": []}
+        assert not service.path.exists()
+        monkeypatch.setattr("agent_comms.relationships.time.time", lambda: 123.0)
+        first, peer = comms.registry.require("owner"), comms.registry.require("peer")
+        service.edit("owner", "add", "peer", "Review")
+        service.set_order("owner", "children", ThreadSort.CREATED)
+        expected = {
+            "version": 1,
+            "collaborations": [
+                {
+                    "owner": "owner",
+                    "peer": "peer",
+                    "owner_created": first.created_at,
+                    "peer_created": peer.created_at,
+                    "note": "Review",
+                    "created_at": 123.0,
+                    "updated_at": 123.0,
+                }
+            ],
+            "orders": [
+                {
+                    "owner": "owner",
+                    "owner_created": first.created_at,
+                    "group": "children",
+                    "order": "created",
+                }
+            ],
+        }
+>       assert service.path.read_text() == json.dumps(expected, indent=2) + "\n"
+E       assert '{\n  "versio...  }\n  ]\n}\n' == '{\n  "versio...  }\n  ]\n}\n'
+E
+E         Skipping 391 identical leading characters in diff, use -v to show
+E         - : "created"
+E         + : "created_at"
+E         ?           +++
+E               }
+E             ]
+E           }
+
+tests/test_relationship_awareness_store.py:80: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_relationship_awareness_store.py::test_golden_relationship_document_and_noop
+1 failed, 81 passed in 8.13s

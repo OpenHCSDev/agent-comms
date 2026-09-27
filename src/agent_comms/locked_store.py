@@ -7,10 +7,11 @@ import os
 import stat
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import Any, ClassVar, Generic, TypeVar
 
 from .declarations import _replace_snapshot, _store_lock
 from .field_codec import FieldCodec
@@ -30,6 +31,9 @@ class LockedStore(ABC, Generic[T]):
     """
 
     path: Path
+    json_indent: ClassVar[int | None] = None
+    json_sort_keys: ClassVar[bool] = False
+    json_suffix: ClassVar[str] = ""
 
     @property
     @abstractmethod
@@ -43,24 +47,43 @@ class LockedStore(ABC, Generic[T]):
     def _read_unlocked(self) -> T:
         try:
             text = self.path.read_text(encoding="utf-8")
+            return self._decode(json.loads(text))
         except FileNotFoundError:
             return self.empty()
-        return self._decode(json.loads(text))
+        except (OSError, ValueError, TypeError) as error:
+            return self._unreadable(error)
+
+    def _unreadable(self, error: Exception) -> T:
+        """Strict by default; optional owners may declare a fail-closed value."""
+        raise error
 
     def _decode(self, data: Any) -> T:
         """Decode at the boundary; owners may normalize legacy document shapes."""
         return FieldCodec.decode(self.record_type, data)
 
-    def read(self) -> T:
+    @contextmanager
+    def reading(self) -> Iterator[T]:
+        """Keep a shared lock through a dependent projection or source check."""
         with _store_lock(self.path, shared=True):
-            return self._read_unlocked()
+            yield self._read_unlocked()
+
+    def read(self) -> T:
+        with self.reading() as value:
+            return value
 
     def update(self, change: Callable[[T], T]) -> T:
         with _store_lock(self.path):
             original = self._read_unlocked()
             changed = change(original)
             if changed is not original:
-                self._write_unlocked(json.dumps(FieldCodec.encode(changed)))
+                self._write_unlocked(
+                    json.dumps(
+                        FieldCodec.encode(changed),
+                        indent=self.json_indent,
+                        sort_keys=self.json_sort_keys,
+                    )
+                    + self.json_suffix
+                )
             return changed
 
     def _write_unlocked(self, text: str) -> None:
