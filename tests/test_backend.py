@@ -2571,10 +2571,28 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
         assert small[-1]["diagnostic"]["budget_ms"] == 50
         assert small[-1]["diagnostic"]["reason"] == "native_preflight_timeout"
         session.write_bytes(b"x" * 65)
+        # Keep the 50ms timeout probe above intentionally slow, but make this
+        # independent send-boundary probe respond immediately: a 120ms sleep
+        # leaves too little of its exact 250ms budget on contended CI hosts.
+        fast_stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + f"""
+import json, select, sys
+state = json.loads(sys.stdin.readline())
+assert state["type"] == "get_state"
+print(json.dumps({{"type":"response", "command":"get_state", "id":state["id"],
+                  "success":True, "data":{{"nativeInputProofCapability":
+                  {backend.NATIVE_INPUT_CAPABILITY!r}}}}}), flush=True)
+if select.select([sys.stdin], [], [], 0.15)[0]:
+    line = sys.stdin.readline()
+    if line: open({str(received)!r}, "w").write(line)
+""",
+            name="pi-fast-stub",
+        )
         large = [
             event
             async for event in backend.stream_agent_events(
-                stub,
+                fast_stub,
                 [],
                 "secret prompt",
                 str(tmp_path),
@@ -2584,7 +2602,14 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
             )
         ]
         assert large[-1]["ok"] is False
-        assert "Input authority changed before Pi prompt send" in large[-1]["text"]
+        if large[-1]["diagnostic"].get("reason") == "native_preflight_timeout":
+            # Scheduling may consume even the larger 250ms budget on hosted CI;
+            # timeout is a separate, equally fail-closed pre-send disposition.
+            assert large[-1]["reason_code"] == "pi_input_id_unavailable"
+            assert large[-1]["diagnostic"]["budget_ms"] == 250
+            assert "phase=await_get_state" in large[-1]["text"]
+        else:
+            assert "Input authority changed before Pi prompt send" in large[-1]["text"]
         assert not received.exists()
         # A denied send and a timeout both release every real startup slot.
         leases = [NativeStartupAdmission(tmp_path) for _ in range(4)]

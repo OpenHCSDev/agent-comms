@@ -30,7 +30,11 @@ def _wire(base: Path) -> tuple[Comms, str]:
 def test_ordinary_private_send_deferred_index_catches_up_without_wake_authority(
     monkeypatch,
 ) -> None:
-    with TemporaryDirectory(prefix="ac-candidate-scheduled-", dir="/var/tmp") as dirname:
+    # macOS exposes /var as a symlink to /private/var. The private bus must
+    # receive a lexical, nonredirectable path rather than that alias.
+    with TemporaryDirectory(
+        prefix="ac-candidate-scheduled-", dir=Path("/var/tmp").resolve(strict=True)
+    ) as dirname:
         comms, root_id = _wire(Path(dirname))
         monkeypatch.setattr(
             "agent_comms.operations.schedule_private_candidate_after_commit",
@@ -62,7 +66,9 @@ def test_ordinary_private_send_deferred_index_catches_up_without_wake_authority(
 def test_notification_runs_after_wire_and_bus_locks_and_failure_cannot_fail_send(
     monkeypatch,
 ) -> None:
-    with TemporaryDirectory(prefix="ac-candidate-postcommit-", dir="/var/tmp") as dirname:
+    with TemporaryDirectory(
+        prefix="ac-candidate-postcommit-", dir=Path("/var/tmp").resolve(strict=True)
+    ) as dirname:
         comms, _root_id = _wire(Path(dirname))
         witnessed: list[bool] = []
 
