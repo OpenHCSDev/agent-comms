@@ -718,6 +718,9 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
 
     def intercept(_argv, *, env, **_kwargs):
         assert env["AGENT_COMMS_ROOT"] == str(root)
+        assert env["AGENT_COMMS_AGENT_BIN"] == str(
+            Path(sys.executable).with_name("pi-comms-native")
+        )
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             participant = store.participant(lookup)
             assert participant.committed and participant.owner_thread == "late-owner"
