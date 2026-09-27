@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 import re
-from abc import ABC
-from typing import ClassVar, Self
+from abc import ABC, ABCMeta
+from typing import Any, ClassVar, Self, cast
 
-from metaclass_registry import AutoRegisterMeta, RegistryConfig
+from metaclass_registry import AutoRegisterMeta, RegistryConfig  # type: ignore[import-untyped]
 
 
-class _FamilyMeta(AutoRegisterMeta):
-    def __new__(mcs, name, bases, namespace, *, affix=None, declared_name=None):
+class _FamilyMeta(AutoRegisterMeta, ABCMeta):
+    def __new__(
+        mcs,
+        name: str,
+        bases: tuple[type, ...],
+        namespace: dict[str, Any],
+        *,
+        affix: str | None = None,
+        declared_name: str | None = None,
+    ) -> _FamilyMeta:
         roots = {
             base._family_root
             for base in bases
@@ -39,19 +47,23 @@ class _FamilyMeta(AutoRegisterMeta):
                 raise TypeError("A family member must have a nonempty name.")
         config = (
             RegistryConfig(
-                registry_dict=namespace["__registry__"] if is_root else root.__registry__,
+                registry_dict=(
+                    namespace["__registry__"]
+                    if is_root
+                    else cast(type[DeclaredFamily], root).__registry__
+                ),
                 key_attribute="declared_name",
                 skip_if_no_key=True,
             )
             if is_root or root is not None
             else None
         )
-        cls = super().__new__(mcs, name, bases, namespace, registry_config=config)
+        cls: Any = super().__new__(mcs, name, bases, namespace, registry_config=config)
         cls._family_root = cls if is_root else root
-        return cls
+        return cast(_FamilyMeta, cls)
 
     @staticmethod
-    def _register_class(cls, key, config):
+    def _register_class(cls: Any, key: str, config: RegistryConfig) -> None:
         previous = config.registry_dict.get(key)
         if previous is not None:
             # dataclass(slots=True) creates a replacement class, not a new member.
@@ -84,6 +96,15 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     _family_affix: ClassVar[str]
     __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
 
+    def __init_subclass__(
+        cls,
+        *,
+        affix: str | None = None,
+        declared_name: str | None = None,
+    ) -> None:
+        # The metaclass consumes these declaration options before ABC creation.
+        super().__init_subclass__()
+
     @classmethod
     def decode(cls, name: str) -> type[Self]:
         try:
@@ -92,7 +113,7 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
             raise ValueError(f"Unknown {cls.__name__} name: {name!r}") from None
         if not issubclass(member, cls):
             raise ValueError(f"{name!r} is not a member of {cls.__name__}")
-        return member
+        return cast(type[Self], member)
 
     @classmethod
     def names(cls) -> tuple[str, ...]:
@@ -101,7 +122,7 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     @classmethod
     def members_with(cls, capability: type) -> tuple[type[Self], ...]:
         return tuple(
-            member
+            cast(type[Self], member)
             for member in cls.__registry__.values()
             if issubclass(member, cls) and issubclass(member, capability)
         )
