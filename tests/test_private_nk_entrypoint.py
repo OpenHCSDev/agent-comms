@@ -223,6 +223,54 @@ def test_default_write_guard_orders_old_root_write_before_route_publication(tmp_
     assert (root / "read-marker").read_text() == "new write completed"
 
 
+def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypatch):
+    root, root_id, _, _, _ = _root(tmp_path)
+    legacy = operations.Comms(tmp_path / ".agent-comms")
+    for name in ("sender", "receiver"):
+        legacy.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+    route_file = tmp_path / "route-state" / "active-route.json"
+    route = active_route.ActiveRoute(root, root_id, tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(cli, "wire", lambda _root=None: legacy)
+    monkeypatch.setattr(cli, "_emit", lambda _payload: None)
+    entered_send = threading.Event()
+    release_send = threading.Event()
+    exclusive_requested = threading.Event()
+    original_send = legacy.send
+    original_flock = active_route.fcntl.flock
+
+    def delayed_send(*args):
+        entered_send.set()
+        assert release_send.wait(timeout=5)
+        return original_send(*args)
+
+    def observed_flock(fd, operation):
+        if operation == active_route.fcntl.LOCK_EX:
+            exclusive_requested.set()
+        return original_flock(fd, operation)
+
+    monkeypatch.setattr(legacy, "send", delayed_send)
+    monkeypatch.setattr(active_route.fcntl, "flock", observed_flock)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        sending = executor.submit(
+            cli.main, ["send", "--from", "sender", "--to", "receiver", "--body", "old"]
+        )
+        assert entered_send.wait(timeout=5)
+        publishing = executor.submit(active_route.publish_active_route, route)
+        assert exclusive_requested.wait(timeout=5)
+        assert not route_file.exists()
+        release_send.set()
+        assert sending.result(timeout=5) == 0
+        publishing.result(timeout=5)
+    assert route_file.exists()
+    assert [message.body for message in legacy.inbox("receiver")] == ["old"]
+    assert cli.main(["send", "--from", "sender", "--to", "receiver", "--body", "late"]) == 1
+    assert [message.body for message in legacy.inbox("receiver")] == ["old"]
+
+
 def test_withdraw_route_archives_stopped_private_root(tmp_path, monkeypatch):
     root = tmp_path / "private-wire"
     comms = operations.Comms(root)
