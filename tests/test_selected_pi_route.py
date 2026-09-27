@@ -37,7 +37,7 @@ class FakeReader:
         self.response = response
         self.calls = 0
 
-    async def readline(self):
+    async def readline(self, *, max_bytes=None):
         self.calls += 1
         if self.response is None:
             await asyncio.Future()
@@ -201,3 +201,82 @@ async def test_stale_child_refuses_before_rpc(tmp_path):
         await probe(case)
     assert case[1].stdin.request is None
     assert case[2].calls == 0
+
+
+def selected_settings(request):
+    return {
+        "id": request["id"],
+        "type": "response",
+        "command": request["type"],
+        "success": True,
+        "data": {
+            "version": 1,
+            **{
+                key: request[key]
+                for key in ("sessionId", "sessionFile", "selected", "contextTokens")
+            },
+            "decision": {
+                "enabled": True,
+                "reserveTokens": 100,
+                "keepRecentTokens": 20,
+                "trigger": True,
+            },
+        },
+    }
+
+
+async def settings_probe(case):
+    from agent_comms.selected_pi_route import read_selected_compaction_decision
+
+    persistent, _, _, witness, selected, _, _ = case
+    return await read_selected_compaction_decision(
+        persistent,
+        session_file=witness["sessionFile"],
+        expected_launcher="pi-native",
+        provider=selected["provider"],
+        model_id=selected["modelId"],
+        context_tokens=950,
+        context_window=selected["contextWindow"],
+    )
+
+
+async def test_selected_settings_reads_once_without_starting_or_writing(tmp_path):
+    case = request_case(tmp_path, selected_settings)
+    result = await settings_probe(case)
+    assert result.enabled and result.trigger and result.keep_recent_tokens == 20
+    assert case[2].calls == 1
+    assert case[0].reopen_required is None
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda data: data.update(sessionId="other"),
+        lambda data: data.update(contextTokens=True),
+        lambda data: data["selected"].update(contextWindow=True),
+        lambda data: data["selected"].update(provider="other"),
+        lambda data: data["decision"].update(reserveTokens=True),
+        lambda data: data["decision"].update(trigger="yes"),
+        lambda data: data["decision"].update(keepRecentTokens=0),
+    ],
+)
+async def test_selected_settings_uncertain_response_retires_child(tmp_path, mutation):
+    def response(request):
+        reply = selected_settings(request)
+        mutation(reply["data"])
+        return reply
+
+    case = request_case(tmp_path, response)
+    closed = []
+
+    async def close():
+        closed.append(True)
+        case[0].proc = None
+
+    case[0].close = close
+    with pytest.raises(SelectedPiProbeUnknownError):
+        await settings_probe(case)
+    assert closed == [True]
+    assert case[2].calls == 1
+    assert case[0].reopen_required == str(case[-1])
+    assert case[0].proc is None

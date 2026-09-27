@@ -72,6 +72,16 @@ python3 "$stack_root/patch-native-writer-failure-state.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
 python3 "$stack_root/patch-native-compaction-metadata.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
+services=dist/core/agent-session-services.js
+python3 "$stack_root/patch-native-model-config.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent/$services"
+python3 "$stack_root/patch-native-adaptive-settings.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent"
+rpc=dist/modes/rpc/rpc-mode.js
+python3 "$stack_root/patch-native-compaction-readiness.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
+python3 "$stack_root/patch-native-selected-compaction-summary.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
 cp -- "$repo_root/src/agent_comms/pi_project_bootstrap.mjs" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-project-bootstrap.mjs"
 python3 "$stack_root/prepare-native-import-boundary.py" \
@@ -81,5 +91,7 @@ node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$compaction"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$services"
 mv -- "$stage" "$target"
 printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"

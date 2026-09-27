@@ -1,4 +1,4 @@
-"""Opt-in ACP owner-turn admission for Pi-native adaptive compaction.
+"""ACP owner-turn admission for Pi-native adaptive compaction.
 
 The existing native hard-context backstop remains independent of this trigger.
 No input is sent by this module; a committed result resumes via the ordinary
@@ -8,22 +8,32 @@ single-send backend path and its strict saved-session reopen.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
+import shutil
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from .backend import PersistentPiSession
+from .backend import PersistentPiSession, _session_revision
 from .compaction_journal import CompactionJournalError
 from .declarations import AgentRuntimeInfo, RelationViolationError, ThreadRegistry
 from .native_session_reopen import package_for_launcher
 from .owner_compaction_commit import OwnerCompactionCommit
-from .owner_compaction_provider import NativeSummary
-from .owner_compaction_runtime import PreparedOwnerSummary, compact_owner_once
+from .owner_compaction_provider import OwnerSummaryOutcome
+from .owner_compaction_runtime import (
+    PreparedOwnerSummary,
+    SelectedNativeSummary,
+    SelectedSummaryDecline,
+    compact_owner_once,
+)
 from .owner_compaction_settings import (
     PiCompactionDecision,
     PiSettingsEvidenceError,
     read_compaction_decision,
 )
+from .selected_pi_route import read_selected_compaction_decision
+from .selected_pi_summary_rpc import SelectedSummarySlot
+from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 
 
 async def maybe_compact_owner_turn(
@@ -36,8 +46,10 @@ async def maybe_compact_owner_turn(
     persistent: PersistentPiSession,
     *,
     summary_strategy: (
-        Callable[[PreparedOwnerSummary], Awaitable[str | NativeSummary]] | None
+        Callable[[PreparedOwnerSummary], Awaitable[str | OwnerSummaryOutcome]] | None
     ) = None,
+    input_text: str | None = None,
+    on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
 ) -> bool:
     """Return False only for a clean trigger skip; errors never dispatch input.
 
@@ -46,11 +58,8 @@ async def maybe_compact_owner_turn(
     that one row and rechecks every ingress revision at native commit.
     """
     owner, epoch = registry.live_owner_with_epoch(thread_name)
-    goal = owner.goal
     if (
-        goal is None
-        or not goal.active
-        or owner.active_turn is None
+        owner.active_turn is None
         or owner.active_turn.id != turn_id
         or owner.session_file is None
         or not owner.model
@@ -71,18 +80,31 @@ async def maybe_compact_owner_turn(
     provider, model_id = owner.model.split("/", 1)
     if not provider or not model_id:
         return False
+    if summary_strategy is None:
+        executable = Path(shutil.which(launcher) or launcher).resolve()
+        if executable.name not in {"pi-native", "pi-comms-native"}:
+            return False
     package = package_for_launcher(launcher)
-    # The reader can merge project settings with projectTrusted:true, but the
-    # ACP owner has no durable proof of Pi's live project trust decision.
-    # Until that decision is bound, NEVER pay when a project settings file
-    # exists. Absence itself is captured and rechecked at native commit.
+    # A selected child owns effective settings including project trust and model
+    # overrides. Detached injected strategies still need conservative file proof.
     project_settings = Path(owner.worktree) / ".pi" / "settings.json"
     global_dir = Path(
         os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi" / "agent"
     ).expanduser()
     if not global_dir.is_absolute():
         raise PiSettingsEvidenceError("Canonical global settings directory required")
-    model_files = (global_dir / "models.json", project_settings.with_name("models.json"))
+    native_config = Path(os.environ.get("AGENT_COMMS_NATIVE_CONFIG_DIR") or global_dir).expanduser()
+    if not native_config.is_absolute():
+        raise PiSettingsEvidenceError("Canonical native model configuration directory required")
+    model_files = tuple(
+        dict.fromkeys(
+            (
+                global_dir / "models.json",
+                native_config / "models.json",
+                project_settings.with_name("models.json"),
+            )
+        )
+    )
     settings_paths = (
         str(global_dir / "settings.json"),
         str(project_settings),
@@ -98,10 +120,26 @@ async def maybe_compact_owner_turn(
             return True
         return False
 
-    if configuration_unbound():
+    selected_native = summary_strategy is None
+    if selected_native:
+        if input_text is None or on_admission is None:
+            raise PiSettingsEvidenceError("Selected live Pi summary needs its original-input owner")
+        if persistent.proc is None:
+            return False
+    elif configuration_unbound():
         return False
 
     async def decision() -> PiCompactionDecision:
+        if selected_native:
+            return await read_selected_compaction_decision(
+                persistent,
+                session_file=owner.session_file,
+                expected_launcher=launcher,
+                provider=provider,
+                model_id=model_id,
+                context_tokens=context_used,
+                context_window=context_window,
+            )
         if configuration_unbound():
             raise PiSettingsEvidenceError("Adaptive project trust or custom model is not bound")
         return await asyncio.to_thread(
@@ -115,15 +153,71 @@ async def maybe_compact_owner_turn(
     settings = await decision()
     if not settings.enabled or not settings.trigger:
         return False
-    # A second Node process cannot attest the idle selected Pi child's
-    # credential/baseURL, extension/CLI or project-trust route. Do not pay for
-    # a detached summary or dispatch the original input after selection until
-    # an in-process read-only seam is independently reviewed and bound.
-    if summary_strategy is None:
-        raise PiSettingsEvidenceError("Selected live Pi summarization route is unbound")
     bridge = await asyncio.to_thread(OwnerCompactionCommit, registry._path, package)
+    if summary_strategy is None:
+        assert input_text is not None and on_admission is not None
+        revision = _session_revision(owner.session_file)
+        original = bridge.inputs.get(original_input_key)
+        if revision is None or original is None or type(original["source_text"]) is not str:
+            raise PiSettingsEvidenceError("Selected original input or saved session is unavailable")
+        digest = hashlib.sha256(input_text.encode()).hexdigest()
+        identity = SelectedAdmissionIdentity(
+            owner_name=owner.name,
+            owner_pid=owner.pid,
+            owner_created_at=float(owner.created_at).hex(),
+            turn_id=turn_id,
+            ingress_key=original_input_key,
+            admission_generation=owner.active_turn.admission_generation,
+            correction_witness=f"{owner.active_turn.admission_generation}:{digest}",
+            input_sha256=digest,
+            original_sha256=hashlib.sha256(original["source_text"].encode()).hexdigest(),
+            reserved_revision=revision,
+            session_revision=revision,
+        )
 
-    async def summarize(prepared: PreparedOwnerSummary) -> str | NativeSummary:
+        async def selected_summary(prepared: PreparedOwnerSummary) -> OwnerSummaryOutcome:
+            slot = SelectedSummarySlot(owner.name, prepared.session_id)
+            result = await slot.run_selected_summary(
+                persistent,
+                bridge.journal,
+                prepared.preparation.witness,
+                {
+                    "source": identity.source_fields(),
+                    "selected": {
+                        "provider": provider,
+                        "modelId": model_id,
+                        "contextWindow": context_window,
+                    },
+                    "settings": {
+                        "reserveTokens": settings.reserve_tokens,
+                        "keepRecentTokens": settings.keep_recent_tokens,
+                    },
+                },
+                expected_launcher=launcher,
+                tokens_before=prepared.tokens_before,
+            )
+            if result.summary is None:
+                if result.decline_reason in {"split_turn", "unsupported"}:
+                    return SelectedSummaryDecline(
+                        bridge.journal.selected_summary(result.operation_id),
+                        identity,
+                        result.decline_reason,
+                    )
+                raise PiSettingsEvidenceError(
+                    f"Selected Pi declined summary ({result.decline_reason}); "
+                    "original remains unbound"
+                )
+            return SelectedNativeSummary(
+                result.summary.text,
+                result.summary.details,
+                result.summary.usage,
+                bridge.journal.selected_summary(result.operation_id),
+                identity,
+            )
+
+        summary_strategy = selected_summary
+
+    async def summarize(prepared: PreparedOwnerSummary) -> str | OwnerSummaryOutcome:
         # Recheck immediately before paid provider work, then after it. The
         # owner source and ingress remain independently fenced by the bridge.
         current, current_epoch = registry.live_owner_with_epoch(thread_name)
@@ -145,6 +239,7 @@ async def maybe_compact_owner_turn(
         pending_input_key=original_input_key,
         settings_paths=settings_paths,
         allow_split_turn=False,
+        on_admission=on_admission,
     )
     if operation is None:
         # Pi found no safe cut point. Do not disable the ordinary hard-context

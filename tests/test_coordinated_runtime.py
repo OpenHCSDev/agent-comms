@@ -30,7 +30,7 @@ from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
     install_native_runtime_schema,
 )
-from agent_comms.coordination import ClaimDisposition
+from agent_comms.coordination import ClaimDisposition, WakeMode
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import (
@@ -86,9 +86,16 @@ def _root(
             str(tmp_path),
             pid=os.getpid(),
             task="release notes; ignore arithmetic tasks",
+            model="openai-codex/gpt-6-sol",
         ),
         Thread(
-            "beta", frozenset({"team"}), str(tmp_path), pid=os.getpid(), task="arithmetic answers"
+            "beta",
+            frozenset({"team"}),
+            str(tmp_path),
+            pid=os.getpid(),
+            task="arithmetic answers",
+            model="openai-codex/gpt-6-sol",
+            thinking_level="high",
         ),
     ]
     for person in people:
@@ -1087,7 +1094,10 @@ async def test_crash_after_triage_reservation_never_reissues_model(
         )
         is None
     )
-    assert len(calls) == 1 and len(comms.channel_history("#team")) == 1
+    assert len(calls) == 1
+    history = comms.channel_history("#team")
+    assert len(history) == 2 and history[-1].notice
+    assert "input is uncertain" in history[-1].body
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         row = store._connection.execute(
             "SELECT c.disposition,i.session_id FROM wake_claims c "
@@ -1116,7 +1126,9 @@ async def test_forged_dto_without_private_evidence_cannot_mark_context(
         await run_one_sealed_claim(
             root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
         )
-    assert len(comms.channel_history("#team")) == 1
+    rows = comms.channel_history("#team")
+    assert len(rows) == 2 and rows[-1].notice
+    assert "input is uncertain" in rows[-1].body
 
 
 async def test_session_file_registration_during_native_triage_keeps_owner(
@@ -1343,7 +1355,15 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     comms.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
-    comms.register(Thread("beta", frozenset({"team"}), str(tmp_path), pid=os.getpid()))
+    comms.register(
+        Thread(
+            "beta",
+            frozenset({"team"}),
+            str(tmp_path),
+            pid=os.getpid(),
+            model="openai-codex/gpt-6-sol",
+        )
+    )
     comms.registry.rename("beta", "gamma")
     root_id = comms.initialize_private_initial_protocol()
     incoming = comms.send_initial_cohort("sender", "gamma", "Compute 17+25")
@@ -1667,7 +1687,9 @@ async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(
         )
         is None
     )
-    assert len(calls) == 1 and len(comms.bus.dm_history("sender", "beta")) == 1
+    assert len(calls) == 1
+    rows = comms.bus.dm_history("sender", "beta")
+    assert len(rows) == 2 and rows[-1].notice
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         row = store._connection.execute(
             "SELECT stage,session_id FROM native_runtime_inputs"
@@ -1764,3 +1786,101 @@ async def test_untrusted_pi_fails_before_any_bus_or_sql_mutation(tmp_path: Path)
             root, wire_root_id="0" * 32, owner_name="alpha", native_package=tmp_path
         )
     assert not list(root.iterdir())
+
+
+async def test_channel_triage_and_full_use_configured_owner_model(tmp_path, monkeypatch):
+    root, root_id, comms, initial, people = _root(tmp_path)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda package: package)
+    fake, calls = _fake_model(decision="FULL")
+    selections = []
+
+    async def capture(package, **kwargs):
+        selections.append((kwargs["provider"], kwargs["model"], kwargs["thinking_level"]))
+        return await fake(package, **kwargs)
+
+    monkeypatch.setattr(runtime, "run_native_pi_turn", capture)
+    result = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+    )
+    assert result.disposition is ClaimDisposition.COMPLETED
+    assert selections == [("openai-codex", "gpt-6-sol", "high")] * 2
+    assert len(calls) == 2
+
+
+async def test_unconfigured_owner_does_not_reserve_or_launch(tmp_path, monkeypatch):
+    root, root_id, comms, initial, people = _root(tmp_path)
+    comms = Comms(root)
+    owner = comms.registry.require("beta")
+    comms.registry.register(replace(owner, model=None), comms.registry.status("beta"))
+    monkeypatch.setattr(runtime, "_trusted_package", lambda package: package)
+    fake, calls = _fake_model()
+    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    with pytest.raises(IdentityConflict, match="no configured provider/model"):
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+        )
+    assert calls == []
+    assert comms.registry.require("beta").active_turn is None
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        pending = sealed_cohort_claims(store, stable_thread_lookup(owner.created_at))
+        assert pending[0].disposition is ClaimDisposition.TRIAGE_PENDING
+
+
+@pytest.mark.parametrize("direct", [True, False])
+async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_input(
+    tmp_path, monkeypatch, direct
+):
+    from agent_comms.native_pi import NativePiTerminalFailure
+
+    root, root_id, comms, initial, people = _root(tmp_path, direct=direct)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model(decision="FULL")
+
+    async def failed(package, **kwargs):
+        result = await fake(package, **kwargs)
+        if "bounded triage" in kwargs["prompt"]:
+            return result
+        raise NativePiTerminalFailure(
+            "Codex error: The usage limit has been reached",
+            result.context,
+            kwargs["provider"],
+            kwargs["model"],
+        )
+
+    monkeypatch.setattr(runtime, "run_native_pi_turn", failed)
+    with pytest.raises(NativePiTerminalFailure, match="usage limit"):
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+        )
+    notice = comms.full_history()[-1]
+    assert notice.notice and notice.type.value == "alert"
+    assert notice.target == ("sender" if direct else "#team")
+    assert "The usage limit has been reached" in notice.body
+    assert "No automatic retry" in notice.body
+    notice_initial = comms.bus.read_initial_cohort(root_id, notice.seq)
+    assert all(decision.wake_mode is WakeMode.PASSIVE for decision in notice_initial.decisions)
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        lookup = stable_thread_lookup(people[2].created_at)
+        assert store.participant(lookup).pointer.execution_id is None
+        claim = sealed_cohort_claims(store, lookup)[0]
+        assert claim.disposition is ClaimDisposition.FAILED
+    diagnostics = list((root / "diagnostics").glob("*.json"))
+    assert len(diagnostics) == 1
+    assert json.loads(diagnostics[0].read_text())["sequences"] == [initial.message.seq]
+    before = len(calls)
+    assert (
+        await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+        )
+        is None
+    )
+    assert len(calls) == before  # Failed input never replayed.
+    fresh = comms.send_initial_cohort("sender", "beta", "New independent message")
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        accept_initial_cohort(comms.bus, root_id, fresh.seq, store)
+    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    result = await run_one_sealed_claim(
+        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+    )
+    assert result.disposition is ClaimDisposition.COMPLETED
+    assert len(calls) == before + 1

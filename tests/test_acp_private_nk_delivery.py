@@ -21,7 +21,7 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import MutationStore, PublicationActivationBlocked, StaleFence
-from agent_comms.declarations import MessageBus, RelationViolationError, Thread
+from agent_comms.declarations import MessageBus, RelationViolationError, Thread, _store_lock
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.operations import Comms
@@ -37,7 +37,9 @@ def _session(tmp_path, *, package=True):
     root = tmp_path / "wire"
     comms = Comms(root)
     comms.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
-    owner = Thread("beta", frozenset({"team"}), str(tmp_path), pid=os.getpid())
+    owner = Thread(
+        "beta", frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="openai-codex/gpt-6-sol"
+    )
     comms.register(owner)
     root_id = comms.initialize_private_initial_protocol()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -698,6 +700,63 @@ async def test_unavailable_cursor_metadata_retains_owner_scope(tmp_path):
     assert unavailable["scope"] == before["scope"]
     assert unavailable["revision"] > before["revision"]
     assert "input_id" not in unavailable
+
+
+async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
+    tmp_path, monkeypatch
+):
+    comms, agent, _ = _session(tmp_path)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model()
+    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+    updates = []
+
+    async def record_update(*, session_id, update):
+        updates.append(update.field_meta["agentComms"]["privateNativeCursor"])
+
+    monkeypatch.setattr(agent._runtime, "session_update", record_update)
+    comms.send_message("sender", "beta", "first")
+    assert await agent._drain_inbox("beta") == 1
+    assert updates[-1]["status"] == "proven"
+    before = len(updates)
+    with _store_lock(comms.root / "wire"):
+        # This is an actual contended flock in the canonical read path, not a
+        # mocked error. A new attachment cannot claim an unread observation.
+        loaded = agent._private_cursor_metadata("beta", "beta")
+        assert loaded["status"] == "unavailable"
+        await agent._publish_private_cursor("beta", "beta")
+    assert len(updates) == before
+    await agent._publish_private_cursor("beta", "beta")
+    assert len(updates) == before  # Same proof; no spurious transition on unlock.
+    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+        store._connection.execute("DROP TABLE native_runtime_schema_meta")
+    await agent._publish_private_cursor("beta", "beta")
+    assert updates[-1]["status"] == "unavailable"
+    assert updates[-1]["scope"] == loaded["scope"]
+    assert len(calls) == 1  # Observation never initiates or replays an input.
+
+
+async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_path, monkeypatch):
+    comms, agent, _ = _session(tmp_path)
+    updates = []
+
+    async def record_update(*, session_id, update):
+        updates.append(update.field_meta["agentComms"]["privateNativeCursor"])
+
+    monkeypatch.setattr(agent._runtime, "session_update", record_update)
+    await agent._publish_private_cursor("beta", "beta")
+    scope = updates[-1]["scope"]
+
+    def replacement_during_read(*args, **kwargs):
+        comms.registry.unregister("beta")
+        comms.registry.heartbeat("beta")
+        raise BlockingIOError("writer holds the observation lock")
+
+    monkeypatch.setattr("agent_comms.acp.read_current_native_cursor", replacement_during_read)
+    await agent._publish_private_cursor("beta", "beta")
+    assert updates[-1]["status"] == "unavailable"
+    assert updates[-1]["scope"]["ownerEpoch"] > scope["ownerEpoch"]
 
 
 async def test_acp_private_does_not_overlap_owner_turn(tmp_path, monkeypatch):

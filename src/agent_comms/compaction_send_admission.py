@@ -1,8 +1,8 @@
 """Exact-session compaction barrier before ANY ACP provider input send.
 
-Unresolved native commits or ANY selected-summary attempt refuse input. A
-terminal-looking selected row is not durable caller acknowledgment: its last
-post-COMMIT fsync may have failed. Neither correction nor restart grants replay.
+Unresolved native commits or incomplete selected-summary attempts refuse input. A
+terminal-looking selected row alone is not admission. Completion is derived
+from the original input ledger's native-start evidence; it never permits replay.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from .compaction_journal import CompactionJournal, CompactionJournalError
 
 
 def native_input_admitted(wire_root: Path, session_file: str | None) -> bool:
-    """Fail closed on an unresolved native commit or any selected attempt.
+    """Fail closed on an unresolved commit or an incomplete selected attempt.
 
     No journal is normal before the owner has ever prepared a native commit.
     Call under the wire lock immediately before the backend's stdin write; the

@@ -2665,8 +2665,8 @@ class ThreadRegistry:
         expected_epoch: int,
         turn_id: str,
         *,
-        expected_goal_id: str,
-        expected_goal_revision: int,
+        expected_goal_id: str | None,
+        expected_goal_revision: int | None,
         correction_revision: int,
         session_file: str,
         session_leaf: str,
@@ -2693,8 +2693,8 @@ class ThreadRegistry:
         expected_epoch: int,
         turn_id: str,
         *,
-        expected_goal_id: str,
-        expected_goal_revision: int,
+        expected_goal_id: str | None,
+        expected_goal_revision: int | None,
         correction_revision: int,
         session_file: str,
         session_leaf: str,
@@ -2721,10 +2721,16 @@ class ThreadRegistry:
             or expected_epoch < 1
             or type(turn_id) is not str
             or not 0 < len(turn_id) <= 128
-            or type(expected_goal_id) is not str
-            or not expected_goal_id
-            or type(expected_goal_revision) is not int
-            or expected_goal_revision < 0
+            or ((expected_goal_id is None) != (expected_goal_revision is None))
+            or (
+                expected_goal_id is not None
+                and (
+                    type(expected_goal_id) is not str
+                    or not expected_goal_id
+                    or type(expected_goal_revision) is not int
+                    or expected_goal_revision < 0
+                )
+            )
             or type(correction_revision) is not int
             or correction_revision < 0
             or type(session_file) is not str
@@ -2754,10 +2760,8 @@ class ThreadRegistry:
                 or owner.active_turn is None
                 or owner.active_turn.id != turn_id
                 or self._turn_epochs.get(canonical) != epoch
-                or goal is None
-                or not goal.active
-                or goal.id != expected_goal_id
-                or goal.revision != expected_goal_revision
+                or (goal.id if goal is not None else None) != expected_goal_id
+                or (goal.revision if goal is not None else None) != expected_goal_revision
             ):
                 raise RelationViolationError(
                     "canonical owner attestation unavailable for compaction commit"
@@ -2768,8 +2772,8 @@ class ThreadRegistry:
                 thread=owner.name,
                 owner_epoch=epoch,
                 turn_id=turn_id,
-                goal_id=goal.id,
-                goal_revision=goal.revision,
+                goal_id=goal.id if goal is not None else None,
+                goal_revision=goal.revision if goal is not None else None,
                 correction_revision=correction_revision,
                 session_file=session_file,
                 session_leaf=session_leaf,

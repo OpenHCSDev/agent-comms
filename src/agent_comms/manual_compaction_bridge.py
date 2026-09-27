@@ -66,7 +66,7 @@ async def compact_context(
         # Canonical pi-native may be invoked through a renamed symlink. Match
         # the resolved executable just as saved-session reopen does; spelling
         # alone cannot authorize the older unjournaled direct writer.
-        if Path(launcher).resolve().name == "pi-native":
+        if Path(launcher).resolve().name in {"pi-native", "pi-comms-native"}:
             return {
                 "ok": False,
                 "error": "Canonical native compaction requires the owner journal bridge.",

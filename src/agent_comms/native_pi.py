@@ -8,12 +8,12 @@ No coordinator state changes or production runtime hookup occur in this module.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import os
 import re
 import signal
 import stat
+import sys
 from collections.abc import Callable
 from contextlib import AbstractContextManager, suppress
 from dataclasses import dataclass
@@ -45,33 +45,48 @@ _NATIVE_SETTINGS = (
     b'{"retry":{"enabled":false,"maxRetries":0,"provider":{"maxRetries":0}},'
     b'"compaction":{"enabled":false}}\n'
 )
-# Pinned outputs of prepare-copied-pi.sh at stock Pi 0.85.1 with the
-# merged 128 MiB proof-journal headroom fix.
-_PATCHED_SHA = {
-    "dist/cli.js": "8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d",
-    "dist/core/agent-session.js": (
-        "b8b3deeffad82771762808c435617d03f4701c3ac14a9620f5e313545a8d6875"
-    ),
-    "dist/core/session-manager.js": (
-        "dd75fef58eaa5458a91cff9fe1cf70556ebc720afd98720eae3dcb6572cb63ca"
-    ),
-    "dist/modes/rpc/rpc-mode.js": (
-        "bd6dfca7b14cad4023c5ab56a7fc91bef3db9670c96b6ad7625df16353b42e5a"
-    ),
-    "node_modules/@earendil-works/pi-agent-core/dist/agent.js": (
-        "93ed16306399765e79c11f78897f575252d7174b85b81a01cdebb2a479e0e57f"
-    ),
-    "node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js": (
-        "e6003ded7cd11fc8bfd01e4f48cd3d5a19338b64c2e1febe81d0659c31013c11"
-    ),
-    "node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js": (
-        "13d6fec97d08f4303714aca50f3113ba0263706e961fc220ccb1cc023c520e6b"
-    ),
-}
 
 
 class NativePiUnavailable(RuntimeError):  # noqa: N818 - nominal fail-closed outcome
     """Tracked execution failed closed without committing a coordinator fact."""
+
+
+def main() -> int:
+    """Run the active route's pinned Pi for ordinary ACP owner sessions."""
+    from .private_nk_entrypoint import private_nk_from_environment
+
+    launch = private_nk_from_environment()
+    if launch is None:
+        raise NativePiUnavailable("Native owner backend requires a configured private route")
+    cli = _trusted_package(launch.native_package)
+    environment = dict(os.environ)
+    environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
+        Path(
+            environment.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
+            or environment.get("PI_CODING_AGENT_DIR")
+            or "~/.pi/agent"
+        )
+        .expanduser()
+        .resolve()
+    )
+    for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
+        environment.pop(name, None)
+    environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
+    os.execvpe(
+        "node",
+        [
+            "node",
+            "--no-global-search-paths",
+            "--import",
+            str(cli.with_name("agent-comms-import-fence.mjs")),
+            "--import",
+            str(cli.with_name("agent-comms-project-bootstrap.mjs")),
+            str(cli),
+            *sys.argv[1:],
+        ],
+        environment,
+    )
+    return 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +97,29 @@ class NativeContextProof:
     request_generation: int
     llm_context_digest: str
     session_file: Path
+
+
+class NativePiTerminalFailure(NativePiUnavailable):
+    """A proved input ended in a failed terminal and its owned process was reaped."""
+
+    def __init__(self, detail: str, context: NativeContextProof, provider: str, model: str):
+        super().__init__(f"Native Pi assistant did not finish successfully: {detail}")
+        self.context = context
+        self.provider = provider
+        self.model = model
+        # Provider text may contain arbitrary response bodies. Only complete
+        # known short errors may be broadcast into a shared channel.
+        match = re.fullmatch(
+            r"(?:(?:Codex|OpenAI|Anthropic) error: )?"
+            r"(The usage limit has been reached|Insufficient credits|"
+            r"(?:401|402|403|429)(?::\s*|\s+)(?:insufficient credits|rate limit|unauthorized)|"
+            r"Model output limit reached)\.?",
+            detail,
+            flags=re.IGNORECASE,
+        )
+        self.public_message = (
+            f"{provider}/{model}: {match.group(1) if match else 'provider request failed'}."
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,13 +198,12 @@ def _trusted_package(package: Path) -> Path:
     root = package.parents[2]
     if root.stat().st_uid != os.geteuid() or stat.S_IMODE(root.stat().st_mode) != 0o700:
         raise NativePiUnavailable("Disposable native Pi root must be owner-only")
-    for relative, digest in _PATCHED_SHA.items():
-        path = package / relative
-        info = path.lstat()
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid():
-            raise NativePiUnavailable("Pinned native Pi module is redirected")
-        if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
-            raise NativePiUnavailable("Pinned native Pi module differs from reviewed fork")
+    from .native_package import NativePackageError, verify_native_package
+
+    try:
+        verify_native_package(package)
+    except (OSError, NativePackageError) as error:
+        raise NativePiUnavailable("Pinned native Pi package differs from reviewed fork") from error
     return package / "dist/cli.js"
 
 
@@ -476,6 +513,7 @@ def prepare_native_pi_rpc_launch(
     session_file: Path | None = None,
     provider: str = "openrouter",
     model: str = "z-ai/glm-5.3-flash",
+    thinking_level: str | None = None,
     selected_thinking_level: str | None = None,
     selected_tool_mode: SelectedToolMode | None = None,
 ) -> NativePiRpcLaunch:
@@ -486,8 +524,14 @@ def prepare_native_pi_rpc_launch(
     only establishes the executable and its settings; native input, context,
     and model-delivery proofs remain separate per-attempt observations.
     """
-    if provider != "openrouter" or model != "z-ai/glm-5.3-flash":
-        raise NativePiUnavailable("Only the reviewed native OpenRouter model may be launched")
+    if any(
+        not isinstance(value, str)
+        or not value.strip()
+        or value.startswith("-")
+        or any(character.isspace() for character in value)
+        for value in (provider, model)
+    ):
+        raise NativePiUnavailable("Native Pi requires an explicit provider and model")
     if selected_thinking_level is not None and (
         type(selected_thinking_level) is not str
         or selected_thinking_level not in {"low", "high"}
@@ -547,6 +591,8 @@ def prepare_native_pi_rpc_launch(
         argv.extend(("-e", str(extension)))
     if session_file is not None:
         argv.extend(("--session", str(session_file)))
+    if thinking_level is not None and selected_thinking_level is None:
+        argv.extend(("--thinking", thinking_level))
     if selected_thinking_level is not None:
         # This selected-only candidate is still hard-denied before real spawn.
         # Do not hand a credential, proxy, hooks, or ambient provider settings
@@ -581,6 +627,10 @@ def prepare_native_pi_rpc_launch(
         ):
             env.pop(name, None)
         env["PI_OFFLINE"] = "1"
+        # Canonical credentials/catalog remain separate from retry isolation.
+        env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
+            Path(os.environ.get("PI_CODING_AGENT_DIR", "~/.pi/agent")).expanduser().resolve()
+        )
         env["PI_CODING_AGENT_DIR"] = str(agent_dir)
     return NativePiRpcLaunch(tuple(argv), worktree, env, session_dir, session_file)
 
@@ -595,6 +645,7 @@ async def run_native_pi_turn(
     session_file: Path | None = None,
     provider: str = "openrouter",
     model: str = "z-ai/glm-5.3-flash",
+    thinking_level: str | None = None,
     timeout: float = 90.0,
     prompt_send_boundary: Callable[..., AbstractContextManager[None]] | None = None,
     maintenance_root: Path | None = None,
@@ -631,6 +682,7 @@ async def run_native_pi_turn(
         session_file=session_file,
         provider=provider,
         model=model,
+        thinking_level=thinking_level,
         selected_thinking_level=(
             fresh_selected.selected_thinking_level if fresh_selected is not None else None
         ),
@@ -768,6 +820,7 @@ async def run_native_pi_turn(
         contexts: list[dict[str, Any]] = []
         chunks: list[str] = []
         final_messages: list[str] = []
+        terminal_error: str | None = None
         selected_call_id: str | None = None
         selected_args: object = None
         selected_started = False
@@ -796,10 +849,11 @@ async def run_native_pi_turn(
                 message = event.get("message")
                 if isinstance(message, dict) and message.get("role") == "assistant":
                     content = message.get("content")
-                    if (
-                        not isinstance(content, list)
-                        or any(not isinstance(item, dict) for item in content)
-                        or message.get("errorMessage")
+                    if message.get("errorMessage"):
+                        terminal_error = str(message["errorMessage"])
+                        continue
+                    if not isinstance(content, list) or any(
+                        not isinstance(item, dict) for item in content
                     ):
                         raise NativePiUnavailable("Native Pi assistant content is malformed")
                     if message.get("stopReason") == "toolUse" and tool_socket is not None:
@@ -833,7 +887,11 @@ async def run_native_pi_turn(
                                 )
                         final_messages.append("".join(parts))
                     else:
-                        raise NativePiUnavailable("Native Pi assistant did not finish successfully")
+                        terminal_error = (
+                            "Model output limit reached"
+                            if message.get("stopReason") == "length"
+                            else "Provider returned an unsuccessful terminal"
+                        )
             elif kind == "tool_execution_start":
                 if (
                     tool_socket is None
@@ -883,6 +941,9 @@ async def run_native_pi_turn(
                 raise NativePiUnavailable("Native Pi session identity changed during a turn")
         if not accepted or input_event is None or not contexts:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
+        if terminal_error is not None:
+            proof = _verify_context(actual_file, input_id, session_id, input_event, contexts[-1])
+            raise NativePiTerminalFailure(terminal_error, proof, provider, model)
         if selected_call_id is not None and not selected_finished:
             raise NativePiUnavailable("Native Pi selected tool has no terminal result")
         if (

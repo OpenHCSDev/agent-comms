@@ -11,13 +11,21 @@ import asyncio
 import json
 import os
 import shutil
+from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from math import isfinite
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .native_package import verify_native_package
 from .owner_compaction_prepare import NativePreparation
+
+if TYPE_CHECKING:
+    from .compaction_journal import CompactionOperation
+    from .declarations import Thread
+    from .owner_compaction_commit import CompactionSource, OwnerCompactionCommit
+    from .selected_summary_admission import SelectedSummaryAdmission
 
 _SUMMARIZE = r"""
 import {lstatSync, realpathSync} from 'node:fs';
@@ -146,11 +154,40 @@ def valid_native_usage(value: Any) -> bool:
     )
 
 
+class OwnerSummaryOutcome(ABC):
+    """The selected outcome owns whether a native write is needed."""
+
+    @abstractmethod
+    async def commit_with(
+        self, writer: Callable[[NativeSummary], Awaitable[CompactionOperation]]
+    ) -> CompactionOperation | None:
+        """Write a summary or preserve the unchanged source on a clean decline."""
+
+    def admit_original(
+        self,
+        bridge: OwnerCompactionCommit,
+        owner: Thread,
+        epoch: int,
+        operation: CompactionOperation | None,
+        source: CompactionSource,
+    ) -> SelectedSummaryAdmission | None:
+        return None
+
+
 @dataclass(frozen=True)
-class NativeSummary:
+class NativeSummary(OwnerSummaryOutcome):
     text: str
-    details: dict[str, list[str]]
-    usage: dict[str, Any]
+    details: dict[str, list[str]] | None
+    usage: dict[str, Any] | None
+
+    async def commit_with(
+        self, writer: Callable[[NativeSummary], Awaitable[CompactionOperation]]
+    ) -> CompactionOperation:
+        return await writer(self)
+
+    def commit_options(self) -> dict[str, Any]:
+        """Additional owner-commit binding supplied by a selected summary."""
+        return {}
 
 
 async def summarize_native(

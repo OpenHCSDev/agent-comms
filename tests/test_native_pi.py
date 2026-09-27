@@ -18,6 +18,7 @@ import pytest
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_pi import (
     CAPABILITY,
+    NativePiTerminalFailure,
     NativePiUnavailable,
     _read_native_context_evidence,
     _trusted_package,
@@ -594,42 +595,24 @@ send({'type':'agent_settled'})
 @pytest.mark.skipif(
     sys.platform != "linux", reason="trusted copied package requires a real /var/tmp ancestry"
 )
-def test_seven_compiled_pins_include_bedrock_and_reject_its_drift(monkeypatch) -> None:
+def test_compiled_pins_include_model_services_and_bedrock_and_reject_drift(monkeypatch) -> None:
     import agent_comms.native_pi as native
 
-    bedrock = "node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js"
     assert native.CAPABILITY == "pi-native-input-v1-live-only"
-    expected = {
-        "dist/cli.js": "8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d",
-        "dist/core/agent-session.js": (
-            "b8b3deeffad82771762808c435617d03f4701c3ac14a9620f5e313545a8d6875"
-        ),
-        "dist/core/session-manager.js": (
-            "dd75fef58eaa5458a91cff9fe1cf70556ebc720afd98720eae3dcb6572cb63ca"
-        ),
-        "dist/modes/rpc/rpc-mode.js": (
-            "bd6dfca7b14cad4023c5ab56a7fc91bef3db9670c96b6ad7625df16353b42e5a"
-        ),
-        "node_modules/@earendil-works/pi-agent-core/dist/agent.js": (
-            "93ed16306399765e79c11f78897f575252d7174b85b81a01cdebb2a479e0e57f"
-        ),
-        "node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js": (
-            "e6003ded7cd11fc8bfd01e4f48cd3d5a19338b64c2e1febe81d0659c31013c11"
-        ),
-        bedrock: "13d6fec97d08f4303714aca50f3113ba0263706e961fc220ccb1cc023c520e6b",
-    }
-    assert expected == native._PATCHED_SHA
+    from agent_comms import native_package
+
     with TemporaryDirectory(prefix="agent-comms-pi-native-", dir="/var/tmp") as raw:
         package = Path(raw) / "node_modules" / "@earendil-works" / "pi-coding-agent"
-        synthetic = {}
-        for index, relative in enumerate(native._PATCHED_SHA):
-            path = package / relative
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(f"synthetic module {index}".encode())
-            synthetic[relative] = native.hashlib.sha256(path.read_bytes()).hexdigest()
-        monkeypatch.setattr(native, "_PATCHED_SHA", synthetic)
+        package.mkdir(parents=True)
+        module = package / "unlisted-dependency.js"
+        module.write_bytes(b"reviewed dependency")
+        manifest = Path(raw) / "manifest"
+        manifest.write_text(
+            native_package.TREE_PREFIX + native_package.package_tree_digest(package) + "\n"
+        )
+        monkeypatch.setattr(native_package, "MANIFEST", manifest)
         assert native._trusted_package(package) == package / "dist/cli.js"
-        (package / bedrock).write_bytes(b"altered Bedrock compiled module")
+        module.write_bytes(b"altered dependency outside former short hash list")
         with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
             native._trusted_package(package)
 
@@ -755,7 +738,8 @@ async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
         launched.append(argv)
         launch_envs.append(kwargs["env"])
         if damage == "changed_inode":
-            fresh.path.unlink()
+            # Keep the original inode allocated; unlink may immediately reuse it.
+            fresh.path.rename(fresh.path.with_suffix(".original"))
             fresh.path.write_text('{"type":"session","id":"replacement"}\n')
             fresh.path.chmod(0o600)
         else:
@@ -958,18 +942,22 @@ def test_prepared_rpc_launch_requires_exact_package_and_private_policy(
     assert settings["compaction"]["enabled"] is False
 
 
-def test_unreviewed_native_transport_fails_before_any_session_side_effect(tmp_path: Path) -> None:
-    with pytest.raises(NativePiUnavailable, match="Only the reviewed native OpenRouter model"):
+@pytest.mark.parametrize("provider,model", [("", "model"), ("provider", ""), ("--bad", "model")])
+def test_missing_native_model_fails_before_any_session_side_effect(
+    tmp_path: Path, provider: str, model: str
+) -> None:
+    with pytest.raises(NativePiUnavailable, match="explicit provider and model"):
         prepare_native_pi_rpc_launch(
             tmp_path,
             worktree=tmp_path,
             session_dir=tmp_path / "sessions",
-            provider="anthropic",
+            provider=provider,
+            model=model,
         )
     assert not (tmp_path / "sessions").exists()
 
 
-@pytest.mark.parametrize("outcome", ["429", "length", "stop"])
+@pytest.mark.parametrize("outcome", ["429", "length", "stop", "configured"])
 async def test_copied_cli_private_policy_allows_one_local_http_attempt(
     tmp_path: Path, monkeypatch, outcome: str
 ) -> None:
@@ -979,12 +967,14 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         pytest.skip("Set AC_NATIVE_COPIED_PACKAGE to the reviewed private copied fork")
     package = Path(selected)
     _trusted_package(package)
+    provider = "configured-fixture" if outcome == "configured" else "openrouter"
+    model = "fixture-model" if outcome == "configured" else "z-ai/glm-5.3-flash"
     calls: list[str] = []
     chunk = {
         "id": "fixture-length",
         "object": "chat.completion.chunk",
         "created": 12345,
-        "model": "z-ai/glm-5.3-flash",
+        "model": model,
         "choices": [
             {"index": 0, "delta": {"role": "assistant", "content": "X"}, "finish_reason": None}
         ],
@@ -992,7 +982,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
     terminal = {
         **chunk,
         "choices": [
-            {"index": 0, "delta": {}, "finish_reason": outcome if outcome != "429" else "stop"}
+            {"index": 0, "delta": {}, "finish_reason": "length" if outcome == "length" else "stop"}
         ],
         "usage": {"prompt_tokens": 10, "completion_tokens": 1, "total_tokens": 11},
     }
@@ -1004,7 +994,9 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             calls.append(self.path)
-            self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+            assert request["model"] == model
+            assert self.headers["Authorization"] == "Bearer canonical-offline-fixture"
             body = (
                 b'{"error":{"message":"429 rate limit","type":"rate_limit_error"}}'
                 if outcome == "429"
@@ -1039,19 +1031,33 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         )
         sessions = tmp_path / "sessions"
         sessions.mkdir(mode=0o700)
-        isolated = sessions / ".native-pi-agent"
-        isolated.mkdir(mode=0o700)
-        catalog = isolated / "models.json"
+        canonical = tmp_path / "canonical-agent-config"
+        canonical.mkdir(mode=0o700)
+        catalog = canonical / "models.json"
         catalog.write_text(
             json.dumps(
                 {
                     "providers": {
-                        "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
+                        provider: {
+                            "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
+                            "api": "openai-completions",
+                            "models": [
+                                {
+                                    "id": model,
+                                    "name": "Offline fixture",
+                                    "contextWindow": 8192,
+                                    "maxTokens": 128,
+                                }
+                            ],
+                        }
                     }
                 }
             )
         )
         catalog.chmod(0o600)
+        (canonical / "auth.json").write_text(
+            json.dumps({provider: {"type": "api_key", "key": "canonical-offline-fixture"}})
+        )
         preload = tmp_path / "offline-fetch.cjs"
         prefix = f"http://127.0.0.1:{server.server_port}/"
         preload.write_text(
@@ -1062,9 +1068,9 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             "throw new Error('BLOCKED_NONLOCAL_NETWORK');"
             "return original(url,...rest);};"
         )
-        monkeypatch.setenv("OPENROUTER_API_KEY", "offline-fixture-no-real-key")
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         monkeypatch.setenv("NODE_OPTIONS", f"--require={preload}")
-        monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "ignored-global"))
+        monkeypatch.setenv("PI_CODING_AGENT_DIR", str(canonical))
         import agent_comms.native_pi as native
 
         observed: list[str] = []
@@ -1111,8 +1117,10 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             worktree=worktree,
             session_dir=sessions,
             timeout=15,
+            provider=provider,
+            model=model,
         )
-        if outcome == "stop":
+        if outcome in {"stop", "configured"}:
             result = await run_native_pi_turn(package, **request)
             assert result.text == "X"
             assert result.context.input_id == INPUT_ID
@@ -1120,9 +1128,14 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             assert result.context.session_file.parent == sessions
             assert "agent_settled" in observed
         else:
-            with pytest.raises(NativePiUnavailable, match="did not finish successfully"):
+            failure = "429 rate limit" if outcome == "429" else "did not finish successfully"
+            with pytest.raises(NativePiTerminalFailure, match=failure) as failed:
                 await run_native_pi_turn(package, **request)
+            assert failed.value.context.input_id == INPUT_ID
+            assert "agent_settled" in observed
         assert calls == ["/v1/chat/completions"]
+        assert not (sessions / ".native-pi-agent" / "auth.json").exists()
+        assert not (sessions / ".native-pi-agent" / "models.json").exists()
         preflight_index, preflight = next(
             (index, event)
             for index, event in enumerate(rpc_events)
@@ -1174,3 +1187,70 @@ async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, mo
     assert os.geteuid() == os.stat(tmp_path).st_uid
     with pytest.raises(NativePiUnavailable, match="Pinned disposable"):
         _trusted_package(stock)
+
+
+def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp_path, monkeypatch):
+    from agent_comms import native_pi, private_nk_entrypoint
+
+    launch = private_nk_entrypoint.PrivateNkLaunch(tmp_path, "a" * 32, tmp_path / "pi", None)
+    monkeypatch.setattr(private_nk_entrypoint, "private_nk_from_environment", lambda: launch)
+    verified = []
+    cli = launch.native_package / "dist" / "cli.js"
+
+    def trusted(package):
+        verified.append(package)
+        return cli
+
+    monkeypatch.setattr(native_pi, "_trusted_package", trusted)
+    monkeypatch.setattr(sys, "argv", ["pi-comms-native", "--mode", "rpc", "--model", "owner/model"])
+    executed = []
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "canonical"))
+    monkeypatch.delenv("AGENT_COMMS_NATIVE_CONFIG_DIR", raising=False)
+    monkeypatch.setenv("NODE_OPTIONS", "--import=/unreviewed.js")
+    monkeypatch.setattr(
+        os, "execvpe", lambda executable, argv, env: executed.append((executable, argv, env))
+    )
+    assert native_pi.main() == 0
+    assert verified == [launch.native_package]
+    executable, argv, environment = executed[0]
+    assert executable == "node"
+    assert argv == [
+        "node",
+        "--no-global-search-paths",
+        "--import",
+        str(cli.with_name("agent-comms-import-fence.mjs")),
+        "--import",
+        str(cli.with_name("agent-comms-project-bootstrap.mjs")),
+        str(cli),
+        "--mode",
+        "rpc",
+        "--model",
+        "owner/model",
+    ]
+    assert environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] == str(tmp_path / "canonical")
+    assert "NODE_OPTIONS" not in environment
+
+
+def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch):
+    from agent_comms import native_pi, private_nk_entrypoint
+
+    monkeypatch.setattr(private_nk_entrypoint, "private_nk_from_environment", lambda: None)
+    with pytest.raises(NativePiUnavailable, match="configured private route"):
+        native_pi.main()
+
+
+def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_path):
+    from agent_comms.native_pi import NativeContextProof
+
+    context = NativeContextProof(
+        INPUT_ID, "session", "entry", 1, DIGEST, tmp_path / "session.jsonl"
+    )
+    failed = NativePiTerminalFailure(
+        "SECRET provider response including prompt data", context, "provider", "model"
+    )
+    assert failed.public_message == "provider/model: provider request failed."
+    assert "SECRET" not in failed.public_message
+    usage = NativePiTerminalFailure(
+        "Codex error: The usage limit has been reached", context, "openai-codex", "gpt-6-sol"
+    )
+    assert "The usage limit has been reached" in usage.public_message

@@ -3639,6 +3639,10 @@ class Comms:
             env.pop(key, None)
         private_launch = self._private_nk_launch
         if private_launch is not None:
+            if agent_bin == "pi":
+                # The default stock binary cannot attest native input IDs.
+                # Keep the owner on this installation's pinned Pi entrypoint.
+                agent_bin = str(Path(sys.executable).with_name("pi-comms-native"))
             # Cutover stages its owners up front, but a later owner can be
             # registered on the active route. The cohort reader needs this
             # same immutable creation identity before the worker can wake.

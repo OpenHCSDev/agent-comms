@@ -63,19 +63,7 @@ class SelectedAdmissionIdentity:
         return (
             type(witness) is dict
             and set(witness) == _SOURCE_FIELDS
-            and witness
-            == {
-                "ownerName": self.owner_name,
-                "ownerPid": self.owner_pid,
-                "ownerCreatedAt": self.owner_created_at,
-                "turnId": self.turn_id,
-                "ingressKey": self.ingress_key,
-                "admissionGeneration": self.admission_generation,
-                "correctionWitness": self.correction_witness,
-                "inputSha256": self.input_sha256,
-                "originalSha256": self.original_sha256,
-                "reservedRevision": json.loads(json.dumps(self.reserved_revision)),
-            }
+            and witness == self.source_fields()
             and type(self.owner_name) is str
             and bool(self.owner_name)
             and type(self.owner_pid) is int
@@ -96,6 +84,21 @@ class SelectedAdmissionIdentity:
             and _HEX.fullmatch(self.original_sha256) is not None
             and self.reserved_revision is not None
         )
+
+    def source_fields(self) -> dict:
+        """The admission identity owns its existing persisted wire format."""
+        return {
+            "ownerName": self.owner_name,
+            "ownerPid": self.owner_pid,
+            "ownerCreatedAt": self.owner_created_at,
+            "turnId": self.turn_id,
+            "ingressKey": self.ingress_key,
+            "admissionGeneration": self.admission_generation,
+            "correctionWitness": self.correction_witness,
+            "inputSha256": self.input_sha256,
+            "originalSha256": self.original_sha256,
+            "reservedRevision": json.loads(json.dumps(self.reserved_revision)),
+        }
 
 
 class SelectedSummaryAdmission:
