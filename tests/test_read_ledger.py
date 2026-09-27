@@ -131,12 +131,15 @@ def test_shown_only_property_across_pages_modes_and_reopen(tmp_path, seed):
         )
         if page.messages:
             through = rng.choice(page.messages).seq
-            shown.update(message.seq for message in page.messages if message.seq <= through)
+            painted = {message.seq for message in page.messages if rng.choice([True, False])}
+            shown.update(sequence for sequence in painted if sequence <= through)
+            scope = page.display_scope
+            scope = replace(scope, displayed=scope.displayed.select(painted))
             comms.mark_channel_view_read(
-                page.display_scope.channel,
+                scope.channel,
                 worktree=str(tmp_path),
                 through=through,
-                expected_scope=page.display_scope,
+                expected_scope=scope,
             )
         comms = wire(tmp_path)
         seen = comms.reads.seen_sequences(viewer, comms.registry.snapshot())
@@ -177,3 +180,28 @@ def test_replaced_bus_cannot_inherit_sequence_read_facts(tmp_path):
     replacement.replace(comms.bus._path)
     assert comms.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
     assert not comms.reads.seen_sequences(viewer, comms.registry.snapshot())
+
+
+def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
+    comms = prepared(tmp_path)
+    messages = [comms.send_message("alice", "#team", f"row {i}") for i in range(5)]
+    page = comms.channel_display_page("#team", worktree=str(tmp_path), limit=3)
+    scope = page.display_scope
+    assert scope is not None and scope.displayed is not None
+    # Requested sequences outside the original page cannot become read facts.
+    first = scope.displayed.select({messages[0].seq, messages[2].seq, 999999})
+    assert [n for item in first.conversations for n in item.sequences] == [messages[2].seq]
+    for selected in (first, scope.displayed.select({messages[4].seq})):
+        comms.mark_channel_view_read(
+            "#team", worktree=str(tmp_path), through=page.newest_seq,
+            expected_scope=replace(scope, displayed=selected),
+        )
+        # Unrelated registry changes and previous ACKs do not invalidate the
+        # remaining captured proof; participant identity still does.
+        comms.registry.register(Thread("unrelated", frozenset(), str(tmp_path)))
+    reopened = wire(tmp_path)
+    viewer = reopened.user_identity(str(tmp_path)).name
+    assert reopened.reads.seen_sequences(viewer, reopened.registry.snapshot()) == {
+        messages[2].seq, messages[4].seq,
+    }
+    assert reopened.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3

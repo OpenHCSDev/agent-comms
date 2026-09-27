@@ -26,8 +26,8 @@ under LockedStore. No parallel A7 or recovery fence was introduced.
 Toad integration: existing channel_display_page -> display_scope ->
 mark_channel_view_read(expected_scope=..., through=...) and dm_display_page ->
 display_basis -> mark_dm_view_read(expected_display_basis=..., through=...)
-call signatures are preserved. ChannelDisplayScope carries .displayed; pass the
-returned object unchanged after paint. Do not reconstruct scopes from channel
+call signatures are preserved. ChannelDisplayScope carries .displayed; retain the
+returned evidence after paint (or select its painted subset via DisplayBasis.select). Do not reconstruct scopes from channel
 names/watermarks or invent markers. Legacy after/expanded_after fields remain
 zero-valued compatibility data, never read authority. DM viewer_epoch/peer_epoch
 observer attributes remain available as derived creation-time aliases (floats),
@@ -35,9 +35,15 @@ not ownership/turn counters; new code should use viewer_created_at,
 peer_created_at and displayed. Full registry or marker revisions are not identity
 proofs. Server validates DM incarnations, aliases, root and bus before marking.
 
-Toad source/runtime was not inspected, modified, installed or executed. Parent
-must run mounted paint/rebind acceptance against the integrated UI before live
-activation; this worker claims core API/local behavior, not live paint proof.
+Mounted Toad validation is now complete in the own persistent tree
+/home/ts/wt/toad-s4-read-routing-20260927, branch
+codex/s4-mounted-read-basis-20260927. The focused integration removes obsolete
+watermark/all-page gates and keeps captured per-page evidence for painted subsets.
+DisplayBasis.select(sequences) retains only original proof members. Channel
+projection matching ignores read progress; identity validation remains required.
+Toad derives DM/cache identity from creation time and bus inode, never owner epochs.
+The parent owns pin refresh and deployment; see HANDOFF.md and CHECKPOINT.md for
+passing mounted cases, exact revisions and PR links.
 The current conservative DM contiguous-tail/older_unread check remains compatible.
 Explicit Mark Read retains its user-command meaning: it selects the current
 whole inbox/view without asserting that a UI painted it. Automatic painted-page

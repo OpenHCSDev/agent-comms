@@ -1271,7 +1271,10 @@ class Comms:
             else:
                 if expected_scope is None or expected_scope.displayed is None:
                     raise ValueError("Channel display scope missing; refresh the displayed page.")
-                if current != expected_scope or self._display_basis_revision() != revision:
+                if (
+                    not current.same_projection(expected_scope)
+                    or self._display_basis_revision() != revision
+                ):
                     raise ValueError("Channel display changed; refresh the displayed page.")
                 displayed = expected_scope.displayed
                 displayed.validate(viewer, basis[0], self.reads.bus_identity(self.bus._path))

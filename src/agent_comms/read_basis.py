@@ -7,6 +7,7 @@ uses (name, created_at), not ownership or turn counters; S5 owns richer identity
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -42,6 +43,21 @@ class DisplayBasis:
     viewer_created_at: float
     conversations: tuple[DisplayedConversation, ...]
     bus_identity: tuple[int, int] | None
+
+    def select(self, sequences: Collection[int]) -> DisplayBasis:
+        """Retain painted members of this proof; never introduce new sequences."""
+        selected = frozenset(sequences)
+        return DisplayBasis(
+            self.viewer,
+            self.viewer_created_at,
+            tuple(
+                DisplayedConversation(
+                    item.conversation, tuple(n for n in item.sequences if n in selected)
+                )
+                for item in self.conversations
+            ),
+            self.bus_identity,
+        )
 
     def through(self, sequence: int) -> DisplayBasis:
         if sequence < 0:

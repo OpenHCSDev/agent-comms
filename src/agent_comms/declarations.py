@@ -2095,6 +2095,15 @@ class ChannelDisplayScope:
     seen_sequences: frozenset[int] = frozenset()
     displayed: DisplayBasis | None = field(default=None, compare=False)
 
+    def same_projection(self, other: ChannelDisplayScope) -> bool:
+        """Read progress and unrelated store revisions do not change inclusion."""
+        return (
+            self.channel == other.channel
+            and self.targets == other.targets
+            and self.any_mode == other.any_mode
+            and self.participant_names == other.participant_names
+        )
+
     def includes(self, message: Message) -> bool:
         if self.targets is None or message.target in self.targets:
             return True

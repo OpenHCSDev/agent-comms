@@ -1,0 +1,14 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.11, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-refactor-s4-read-routing-20260927
+configfile: pyproject.toml
+plugins: anyio-4.15.1, asyncio-1.4.0, xdist-3.8.0, cov-7.1.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 40 items
+
+tests/test_read_ledger.py ...........                                    [ 27%]
+tests/test_channel_display.py ................                           [ 67%]
+tests/test_dm_scoped_ack.py .......                                      [ 85%]
+tests/test_dm_scoped_ack_successor.py ......                             [100%]
+
+============================== 40 passed in 5.58s ==============================

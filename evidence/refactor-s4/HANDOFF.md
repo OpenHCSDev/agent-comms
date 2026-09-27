@@ -121,16 +121,17 @@ Other remaining reports concern unassigned recovery/goal/export boundaries.
 This is authored semantic implementation, not a claimed native equivalence proof
 or automatic NRA codemod application. The read behavior intentionally changes;
 NRA is coverage/ownership evidence, and the local tests establish the stated
-behavior boundaries. No full suite, installed wheel, live UI, CI, deployment or
-end-to-end Toad paint validation is claimed. Owner requested bounded local shards
+behavior boundaries. No full suite, installed wheel, live owner UI, CI or deployment is claimed.
+Mounted Toad test-app paint/rebind validation is recorded below. Owner requested bounded local shards
 and no CI wait. Artifacts are preserved per crash-recovery instruction.
 
 ## Integration and remaining work
 
 See DISPATCH.md for A9/Toad API details and three narrow, value-preserving ACP/
-parent alias/role consumer follow-ups. Toad code/runtime and S8 goals were not
-modified. Parent must merge foundation/A8 once, merge S4 and S8 normally, run
-mounted Toad paint/rebind validation, then decide activation. No current live
+parent alias/role consumer follow-ups. S8 goals were not modified. The latest owner directive assigned mounted
+Toad validation and its focused fix to S4 in a separate persistent worktree.
+Parent must merge foundation/A8 once, merge S4/S8 and the Toad integration
+normally, refresh pins and decide activation. No current live
 read files were touched. S5 can later replace participant tuples with its shared
 identity declaration; do not add a second incarnation or owner-epoch counter.
 
@@ -152,3 +153,48 @@ origin/main byte-for-byte in git diff. No additional parent-code edits.
 
 Publishing this implementation as a draft to OpenHCSDev/agent-comms. Final URL
 and verified remote SHA are recorded in the final checkpoint once created.
+
+## Mounted integration closure (2026-09-27)
+
+Core draft https://github.com/OpenHCSDev/agent-comms/pull/137 was published at
+b3acdf2, after the interruption was resolved by inspecting both Git and remote.
+The previous push of 40c5599 had succeeded; no PR had been created. Normal merge
+b3acdf2 incorporated main b0d4900/PR136, preserving restore_stopped/restore_missing.
+The focused restoration/read/policy check passed 25 cases.
+
+Mounted Toad at published main 0894005 in a new owned persistent clone revealed
+that its old after/expanded_after gate prevented any bounded tail acknowledgment.
+A two-row painted-tail pilot failed against the archived original source and
+passes with the integration. The follow/refocus pilot additionally exposed the
+all-fetched-rows-visible gate. Toad now retains bounded pending page proofs,
+acknowledges their painted subsets, and keeps other rows pending for scrolling.
+Core DisplayBasis.select intersects with captured membership; it cannot add a
+sequence from outside the page. ChannelDisplayScope.same_projection compares
+inclusion semantics, not read progress or unrelated store writes. DM retains its
+conservative inbound/older-unread gate and also subsets its proof to painted rows.
+
+The core's randomized shown-only test now varies painted subsets as well as page,
+mode, prefix bound and reopen. A captured page can acknowledge later subsets
+across prior acknowledgments and unrelated registry updates; changed participant,
+viewer or bus identities still invalidate it. Final focused core shard: 54 passed
+in 4.33s. Complete package NRA remains 79/79, 0 omitted, 23 findings. Logs and
+summaries retained here; raw scan/test artifacts remain in .artifacts/s4.
+
+Toad source/worktree: /home/ts/wt/toad-s4-read-routing-20260927,
+branch codex/s4-mounted-read-basis-20260927. Eight mounted pilots pass: DM rebind,
+bounded displayed-only page, partial viewport plus scroll, any-mode scope
+expansion, any-mode menu, follow/refocus, migration notice and divider-only
+visibility. Four history-reader cases pass (including channel and DM bus inode
+replacement, turn-claim identity stability and background admission). The cache
+identity now includes bus/viewer creation identity and has no epoch comparisons.
+Full exact source and dependency recipe is in that tree's evidence/s4/HANDOFF.md.
+
+Tests used pre-existing Python 3.14 UI dependencies and Textual 4fa6a9c with core
+and Toad source mounted through PYTHONPATH. No installs, live provider calls,
+owner restarts, deployment, shared-root edits, native runtime or recovery edits.
+The migration fixture now creates a pre-ledger root before reopening; writing a
+legacy marker after migration is intentionally not a second migration. The
+viewport fixture gates initial automatic ACK while arranging divider-only
+geometry, since the initial body paint is now legitimately acknowledged. The
+follow pilot waits for committed layout after async participant hydration.
+Final publication revisions and the Toad PR are recorded in CHECKPOINT.md.
