@@ -321,11 +321,17 @@ def _require_final_owner(
     if (
         execution.status is not ExecutionStatus.ACTIVE
         or attempt.phase is not AttemptPhase.SETTLING
-        or not (attempt.backend_done and attempt.process_dead)
+        or not attempt.backend_done
         or snapshot.obligation is None
         or snapshot.obligation.exact_target != execution.exact_target
         or execution.exact_target is None
     ):
+        raise RecoveryBlocked("response requires final model/death evidence and exact wire route")
+    if attempt.completion_kind == "retained_turn":
+        from .retained_turn_settlement import require_retained_receipt
+
+        require_retained_receipt(store, fence)
+    elif not attempt.process_dead:
         raise RecoveryBlocked("response requires final model/death evidence and exact wire route")
     _require_cohort_claims(store, bus, snapshot, wire_root_id)
     return snapshot
@@ -493,6 +499,27 @@ def _terminal_replay(
         or snapshot.publication_receipt is None
     ):
         raise StaleFence("finished response is not this owner's original attempt")
+    if attempt.completion_kind == "retained_turn":
+        if not store._test_retained_turns:
+            raise RecoveryBlocked("retained response replay is OFF")
+        row = store._connection.execute(
+            "SELECT * FROM retained_turn_receipts WHERE execution_id=? AND attempt_ordinal=?",
+            (fence.execution_id, fence.attempt_ordinal),
+        ).fetchone()
+        if (
+            row is None
+            or not attempt.turn_settled
+            or not attempt.backend_done
+            or row["terminal_digest"] is None
+            or row["owner_lookup"] != attempt.owner_lookup
+            or row["owner_thread"] != fence.owner_thread
+            or row["owner_generation"] != fence.owner_generation
+            or len(snapshot.claims) != 1
+            or row["claim_id"] != snapshot.claims[0].claim_id
+        ):
+            raise RecoveryBlocked("retained terminal receipt is absent in replay")
+    elif not attempt.process_dead:
+        raise RecoveryBlocked("one-shot replay requires actual child death")
     _require_cohort_claims(store, bus, snapshot, wire_root_id, terminal=True)
     matched, _, _ = bus._keyed_receipt_unlocked(snapshot.publication_intent)
     if matched is None or (

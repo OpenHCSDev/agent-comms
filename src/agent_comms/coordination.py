@@ -23,8 +23,9 @@ from typing import Final, Self
 
 from .declarations import Message, MessageType
 
-COORDINATION_SCHEMA_VERSION: Final = 2
-COORDINATION_SNAPSHOT_VERSION: Final = 2
+# Isolated PR94 prototype schema; existing v2 roots fail closed. PR116 owns migration.
+COORDINATION_SCHEMA_VERSION: Final = 3
+COORDINATION_SNAPSHOT_VERSION: Final = 3
 RESOLVER_VERSION: Final = "resolver-v1"
 POLICY_VERSION: Final = "policy-v1"
 MAX_PUBLICATION_PAYLOAD_BYTES: Final = 120_000
@@ -578,6 +579,16 @@ def attempt_phase_transition_allowed(before: AttemptRecord, after: AttemptRecord
         and after.updated_at_ms >= before.updated_at_ms
         and (not before.backend_done or after.backend_done)
         and (not before.process_dead or after.process_dead)
+        and (not before.turn_settled or after.turn_settled)
+        and (
+            before.completion_kind == after.completion_kind
+            or (
+                before.completion_kind == "one_shot"
+                and before.phase is AttemptPhase.PROMPT_STARTING
+                and not before.backend_done
+                and not before.process_dead
+            )
+        )
         and (
             before.last_progress_at_ms is None
             or (
@@ -592,7 +603,13 @@ def attempt_phase_transition_allowed(before: AttemptRecord, after: AttemptRecord
         )
         and (
             after.phase not in TERMINAL_ATTEMPT_PHASES
-            or (after.backend_done and after.process_dead)
+            or (
+                after.backend_done
+                and (
+                    (after.completion_kind == "one_shot" and after.process_dead)
+                    or (after.completion_kind == "retained_turn" and after.turn_settled)
+                )
+            )
         )
     )
 
@@ -759,10 +776,19 @@ class AttemptRecord:
     reason_code: str | None
     created_at_ms: int
     updated_at_ms: int
+    completion_kind: str = "one_shot"
+    turn_settled: bool = False
 
     def __post_init__(self) -> None:
         _validate_execution_id(self.execution_id)
         object.__setattr__(self, "phase", AttemptPhase(self.phase))
+        if (
+            self.completion_kind not in {"one_shot", "retained_turn"}
+            or type(self.turn_settled) is not bool
+        ):
+            raise IntegrityViolationError("invalid completion kind or retained terminal fact")
+        if self.completion_kind == "one_shot" and self.turn_settled:
+            raise IntegrityViolationError("one-shot attempt cannot have a retained receipt")
         for field, value in (
             ("owner_lookup", self.owner_lookup),
             ("owner_thread", self.owner_thread),
@@ -777,8 +803,14 @@ class AttemptRecord:
                 raise IntegrityViolationError("active attempt requires a lease")
         elif self.lease_expires_at_ms is not None:
             raise IntegrityViolationError("terminal attempt must release lease")
-        if self.phase in TERMINAL_ATTEMPT_PHASES and not (self.backend_done and self.process_dead):
-            raise IntegrityViolationError("terminal attempt requires final completion/death")
+        if self.phase in TERMINAL_ATTEMPT_PHASES and not (
+            self.backend_done
+            and (
+                (self.completion_kind == "one_shot" and self.process_dead)
+                or (self.completion_kind == "retained_turn" and self.turn_settled)
+            )
+        ):
+            raise IntegrityViolationError("terminal attempt requires typed final evidence")
         _optional_nonempty(self.reason_code, "reason_code", MAX_REASON_CODE_CHARS)
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:
             raise ValueError("attempt timestamps are inconsistent")
@@ -1299,6 +1331,8 @@ class RecoverySnapshot:
                     "last_progress_at_ms": attempt.last_progress_at_ms,
                     "backend_done": attempt.backend_done,
                     "process_dead": attempt.process_dead,
+                    "completion_kind": attempt.completion_kind,
+                    "turn_settled": attempt.turn_settled,
                     "reason_code": attempt.reason_code,
                     "created_at_ms": attempt.created_at_ms,
                     "updated_at_ms": attempt.updated_at_ms,
@@ -1574,6 +1608,9 @@ CREATE TABLE attempts (
     last_progress_at_ms INTEGER,
     backend_done INTEGER NOT NULL CHECK (backend_done IN (0,1)),
     process_dead INTEGER NOT NULL CHECK (process_dead IN (0,1)),
+    completion_kind TEXT NOT NULL DEFAULT 'one_shot'
+      CHECK (completion_kind IN ('one_shot','retained_turn')),
+    turn_settled INTEGER NOT NULL DEFAULT 0 CHECK (turn_settled IN (0,1)),
     reason_code TEXT CHECK (reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64),
     created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
     updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms >= created_at_ms),
@@ -1581,11 +1618,14 @@ CREATE TABLE attempts (
        WHEN phase IN ('succeeded','attempt_failed') THEN phase ELSE 'active' END) STORED,
     active_required_status TEXT GENERATED ALWAYS AS
        (CASE WHEN phase_kind = 'active' THEN 'active' END) STORED,
+    CHECK (completion_kind != 'one_shot' OR turn_settled = 0),
     CHECK (last_progress_at_ms IS NULL OR
            last_progress_at_ms BETWEEN created_at_ms AND updated_at_ms),
     CHECK ((phase_kind = 'active' AND lease_expires_at_ms IS NOT NULL)
        OR (phase_kind != 'active' AND lease_expires_at_ms IS NULL
-           AND backend_done = 1 AND process_dead = 1)),
+           AND backend_done = 1 AND
+           ((completion_kind = 'one_shot' AND process_dead = 1) OR
+            (completion_kind = 'retained_turn' AND turn_settled = 1)))),
     PRIMARY KEY(execution_id,attempt_ordinal),
     UNIQUE(execution_id,attempt_ordinal,owner_lookup,phase_kind),
     FOREIGN KEY(execution_id,attempt_ordinal,owner_lookup,active_required_status)
@@ -1660,6 +1700,10 @@ WHEN NEW.execution_id IS NOT OLD.execution_id
  OR NEW.updated_at_ms < OLD.updated_at_ms
  OR (OLD.backend_done = 1 AND NEW.backend_done = 0)
  OR (OLD.process_dead = 1 AND NEW.process_dead = 0)
+ OR (OLD.turn_settled = 1 AND NEW.turn_settled = 0)
+ OR (OLD.completion_kind != NEW.completion_kind AND
+     (OLD.completion_kind != 'one_shot' OR OLD.phase != 'prompt_starting'
+       OR OLD.backend_done != 0 OR OLD.process_dead != 0))
  OR (OLD.last_progress_at_ms IS NOT NULL AND
       (NEW.last_progress_at_ms IS NULL OR NEW.last_progress_at_ms < OLD.last_progress_at_ms))
  OR (OLD.lease_expires_at_ms IS NOT NULL AND NEW.lease_expires_at_ms IS NOT NULL
@@ -1669,6 +1713,58 @@ BEGIN SELECT RAISE(ABORT, 'attempt transition rewrites frozen facts'); END;
 CREATE TRIGGER attempt_delete_frozen BEFORE DELETE ON attempts BEGIN
     SELECT RAISE(ABORT, 'attempt cannot be deleted');
 END;
+-- Test-gated retained-child receipt in the SAME owner SQL authority. This
+-- fresh-root prototype is not a PR116 migration or a production Pi witness.
+CREATE TABLE retained_turn_receipts (
+    execution_id TEXT NOT NULL,
+    attempt_ordinal INTEGER NOT NULL,
+    owner_lookup TEXT NOT NULL,
+    owner_thread TEXT NOT NULL,
+    owner_generation INTEGER NOT NULL,
+    input_id TEXT NOT NULL UNIQUE,
+    session_id TEXT NOT NULL,
+    session_file TEXT NOT NULL,
+    child_pid INTEGER NOT NULL CHECK (child_pid > 0),
+    child_nonce TEXT NOT NULL,
+    turn_id TEXT NOT NULL,
+    turn_generation INTEGER NOT NULL CHECK (turn_generation > 0),
+    claim_id TEXT NOT NULL,
+    claim_revision INTEGER NOT NULL CHECK (claim_revision > 0),
+    terminal_sequence INTEGER CHECK (terminal_sequence > 0),
+    terminal_digest TEXT CHECK (terminal_digest IS NULL OR length(terminal_digest) = 64),
+    CHECK ((terminal_sequence IS NULL) = (terminal_digest IS NULL)),
+    PRIMARY KEY(execution_id,attempt_ordinal),
+    UNIQUE(session_id,turn_id,turn_generation),
+    FOREIGN KEY(execution_id,attempt_ordinal) REFERENCES attempts(execution_id,attempt_ordinal),
+    FOREIGN KEY(execution_id,claim_id) REFERENCES execution_claims(execution_id,claim_id)
+) STRICT;
+CREATE TRIGGER retained_receipt_frozen BEFORE UPDATE ON retained_turn_receipts
+WHEN NEW.execution_id IS NOT OLD.execution_id
+ OR NEW.attempt_ordinal != OLD.attempt_ordinal
+ OR NEW.owner_lookup IS NOT OLD.owner_lookup
+ OR NEW.owner_thread IS NOT OLD.owner_thread
+ OR NEW.owner_generation != OLD.owner_generation
+ OR NEW.input_id IS NOT OLD.input_id
+ OR NEW.session_id IS NOT OLD.session_id
+ OR NEW.session_file IS NOT OLD.session_file
+ OR NEW.child_pid != OLD.child_pid
+ OR NEW.child_nonce IS NOT OLD.child_nonce
+ OR NEW.turn_id IS NOT OLD.turn_id
+ OR NEW.turn_generation != OLD.turn_generation
+ OR NEW.claim_id IS NOT OLD.claim_id
+ OR NEW.claim_revision != OLD.claim_revision
+ OR OLD.terminal_digest IS NOT NULL
+ OR NEW.terminal_digest IS NULL
+BEGIN SELECT RAISE(ABORT, 'retained receipt is immutable after settlement'); END;
+CREATE TRIGGER retained_receipt_no_delete BEFORE DELETE ON retained_turn_receipts
+BEGIN SELECT RAISE(ABORT, 'retained receipt cannot be deleted'); END;
+CREATE TRIGGER retained_terminal_requires_receipt BEFORE UPDATE ON attempts
+WHEN NEW.turn_settled = 1 AND OLD.turn_settled = 0 AND NOT EXISTS (
+  SELECT 1 FROM retained_turn_receipts r WHERE r.execution_id=NEW.execution_id
+    AND r.attempt_ordinal=NEW.attempt_ordinal
+    AND r.owner_lookup=NEW.owner_lookup AND r.owner_thread=NEW.owner_thread
+    AND r.owner_generation=NEW.owner_generation AND r.terminal_digest IS NOT NULL)
+BEGIN SELECT RAISE(ABORT, 'retained terminal requires exact immutable receipt'); END;
 CREATE TABLE current_executions (
     owner_lookup TEXT PRIMARY KEY REFERENCES participants(participant_lookup),
     execution_id TEXT,

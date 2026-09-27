@@ -236,6 +236,8 @@ def _attempt(row: sqlite3.Row) -> AttemptRecord:
         reason_code=row["reason_code"],
         created_at_ms=row["created_at_ms"],
         updated_at_ms=row["updated_at_ms"],
+        completion_kind=row["completion_kind"],
+        turn_settled=bool(row["turn_settled"]),
     )
 
 
@@ -247,6 +249,8 @@ class MutationStore(CoordinationStore):
     ) -> None:
         super().__init__(path, lock_timeout=lock_timeout)
         self._clock_ms = clock_ms or (lambda: time.time_ns() // 1_000_000)
+        # No production in-child witness exists. Explicit offline test protocol only.
+        self._test_retained_turns = False
 
     def _now(self, floor: int = 0) -> int:
         now = self._clock_ms()
@@ -1068,7 +1072,7 @@ class MutationStore(CoordinationStore):
                 raise StaleRevision("pointer revision changed")
             if phase != attempt.phase and phase not in ATTEMPT_PHASE_TRANSITIONS[attempt.phase]:
                 raise IdentityConflict("attempt phase edge is not declared")
-            if attempt.process_dead or attempt.backend_done:
+            if attempt.process_dead or attempt.backend_done or attempt.turn_settled:
                 # Once either finality fact is recorded, the backend cannot
                 # emit another phase or progress observation.  The other fact
                 # may arrive later on the SAME phase before atomic settlement.
@@ -1264,6 +1268,8 @@ class MutationStore(CoordinationStore):
             or not snapshot.is_current
             or not (attempt.backend_done and attempt.process_dead)
         ):
+            # Nonpublication is deliberately still one-shot only: a retained
+            # UNKNOWN cannot be silently marked successful or retryable.
             raise RecoveryBlocked("settlement requires exact final done/death evidence")
         if success:
             if attempt.phase is not AttemptPhase.SETTLING:

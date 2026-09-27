@@ -35,11 +35,18 @@ from agent_comms.coordination_store import (
     PublicationActivationBlocked,
     PublicationUncertain,
     RecoveryBlocked,
+    StaleFence,
     StaleRevision,
     prepare_fence_token,
 )
 from agent_comms.declarations import MessageBus, Thread, ThreadRegistry, _store_lock
 from agent_comms.operations import Comms
+from agent_comms.retained_turn_settlement import (
+    RetainedTurnIdentity,
+    RetainedTurnReceipt,
+    admit_test_retained_turn,
+    record_test_turn_settled,
+)
 from agent_comms.wake import derive_exact_reply_target
 
 # Private bus publication requires POSIX owner/mode ancestry; Windows stat
@@ -58,12 +65,20 @@ class Fixture:
     owner_lookup: str
     claim_id: str
     fence: object
+    retained_identity: RetainedTurnIdentity | None = None
 
     def close(self) -> None:
         self.store.close()
 
 
-def _ready(tmp_path: Path, *, direct: bool = False, process_dead: bool = True) -> Fixture:
+def _ready(
+    tmp_path: Path,
+    *,
+    direct: bool = False,
+    process_dead: bool = True,
+    retained: bool = False,
+    finalize: bool = True,
+) -> Fixture:
     comms = Comms(tmp_path / "wire", private_initial_writes=True)
     for name in ("sender", "owner"):
         comms.register(Thread(name, frozenset({"team"}), worktree=str(tmp_path)))
@@ -108,19 +123,39 @@ def _ready(tmp_path: Path, *, direct: bool = False, process_dead: bool = True) -
         expected_execution_revision=2,
         expected_pointer_revision=0,
     ).value.fence
+    identity = None
+    if retained:
+        assert not process_dead
+        store._test_retained_turns = True  # Explicit offline fixture; never ACP.
+        identity = RetainedTurnIdentity(
+            input_id="input-1",
+            session_id="persistent-child-session",
+            session_file=str(tmp_path / "saved-session.jsonl"),
+            child_pid=12345,
+            child_nonce="child-1",
+            turn_id="turn-1",
+            turn_generation=1,
+            claim_id=claim.claim_id,
+            claim_revision=store.snapshot("exec").claims[0].revision,
+        )
+        first = admit_test_retained_turn(store, first, identity).value.fence
     accepted_turn = store.advance_attempt(
         first, AttemptPhase.PROMPT_ACCEPTED, expected_pointer_revision=1
     ).value.fence
     model = store.advance_attempt(
         accepted_turn, AttemptPhase.MODEL_RUNNING, expected_pointer_revision=1
     ).value.fence
-    final = store.advance_attempt(
-        model,
-        AttemptPhase.SETTLING,
-        expected_pointer_revision=1,
-        backend_done=True,
-        process_dead=process_dead,
-    ).value.fence
+    final = (
+        store.advance_attempt(
+            model,
+            AttemptPhase.SETTLING,
+            expected_pointer_revision=1,
+            backend_done=True,
+            process_dead=process_dead,
+        ).value.fence
+        if finalize
+        else model
+    )
     return Fixture(
         comms,
         bus,
@@ -131,6 +166,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, process_dead: bool = True) -
         recipient.recipient_lookup,
         claim.claim_id,
         final,
+        identity,
     )
 
 
@@ -147,6 +183,196 @@ def test_retained_child_cannot_publish_under_one_shot_process_death_contract(
             prepare_fenced_response(case.store, case.bus, case.fence, "Not yet publishable")
         assert case.comms.bus.latest_sequence() == case.origin_seq
         assert case.store.snapshot("exec").obligation.state is ObligationState.PENDING
+    finally:
+        case.close()
+
+
+def test_retained_turn_requires_exact_receipt_then_uses_same_keyed_gateway(
+    tmp_path: Path,
+) -> None:
+    case = _ready(tmp_path, direct=True, process_dead=False, retained=True)
+    try:
+        assert case.retained_identity is not None
+        with pytest.raises(RecoveryBlocked, match="retained terminal receipt"):
+            prepare_fenced_response(case.store, case.bus, case.fence, "Not settled")
+        wrong = replace(case.retained_identity, input_id="different-input")
+        with pytest.raises(StaleFence, match="retained terminal identity"):
+            record_test_turn_settled(
+                case.store, case.fence, RetainedTurnReceipt(wrong, 1, "a" * 64)
+            )
+        assert case.store.snapshot("exec").attempt.process_dead is False
+        assert case.comms.bus.latest_sequence() == case.origin_seq
+        settled = record_test_turn_settled(
+            case.store,
+            case.fence,
+            RetainedTurnReceipt(case.retained_identity, 1, "a" * 64),
+        ).value.fence
+        assert case.store.snapshot("exec").attempt.process_dead is False
+        with MutationStore(str(case.comms.root / "coordination.sqlite3")) as duplicate_connection:
+            duplicate_connection._test_retained_turns = True
+            duplicate = record_test_turn_settled(
+                duplicate_connection,
+                settled,
+                RetainedTurnReceipt(case.retained_identity, 1, "a" * 64),
+            )
+            assert isinstance(duplicate, AlreadyApplied)
+        with pytest.raises(RecoveryBlocked, match="conflicting retained receipt"):
+            record_test_turn_settled(
+                case.store,
+                settled,
+                RetainedTurnReceipt(case.retained_identity, 2, "b" * 64),
+            )
+        intent = prepare_fenced_response(
+            case.store, case.bus, settled, "Exact retained response", timestamp=123.5
+        ).value
+        assert intent.exact_target == case.reply_target
+        published = publish_fenced_response(case.store, case.bus, settled).value
+        assert published.execution.status is ExecutionStatus.COMPLETED
+        assert published.attempt.process_dead is False
+        assert published.attempt.turn_settled is True
+        assert case.comms.bus.latest_sequence() == case.origin_seq + 1
+        assert isinstance(resolve_existing_response(case.store, case.bus, settled), AlreadyApplied)
+        with MutationStore(str(case.comms.root / "coordination.sqlite3")) as reopened:
+            with pytest.raises(RecoveryBlocked, match="replay is OFF"):
+                resolve_existing_response(reopened, case.bus, settled)
+            reopened._test_retained_turns = True
+            assert isinstance(
+                resolve_existing_response(reopened, case.bus, settled), AlreadyApplied
+            )
+    finally:
+        case.close()
+
+
+def test_out_of_order_retained_receipt_cannot_settle(tmp_path: Path) -> None:
+    case = _ready(tmp_path, direct=True, process_dead=False, retained=True, finalize=False)
+    try:
+        assert case.retained_identity is not None
+        with pytest.raises(RecoveryBlocked, match="truthful final backend"):
+            record_test_turn_settled(
+                case.store,
+                case.fence,
+                RetainedTurnReceipt(case.retained_identity, 1, "a" * 64),
+            )
+        with pytest.raises(RecoveryBlocked, match="final model/death evidence"):
+            prepare_fenced_response(case.store, case.bus, case.fence, "too early")
+        assert case.store.snapshot("exec").attempt.turn_settled is False
+        assert case.comms.bus.latest_sequence() == case.origin_seq
+    finally:
+        case.close()
+
+
+def test_retained_crash_cancel_and_late_receipt_do_not_publish(tmp_path: Path) -> None:
+    case = _ready(tmp_path, direct=True, process_dead=False, retained=True)
+    try:
+        assert case.retained_identity is not None
+        with pytest.raises(RecoveryBlocked, match="retained terminal receipt"):
+            prepare_fenced_response(case.store, case.bus, case.fence, "crashed before receipt")
+        # A child that actually died is not a retained successful turn.
+        dead = case.store.advance_attempt(
+            case.fence,
+            AttemptPhase.SETTLING,
+            expected_pointer_revision=1,
+            process_dead=True,
+        ).value.fence
+        with pytest.raises(RecoveryBlocked, match="truthful final backend"):
+            record_test_turn_settled(
+                case.store,
+                dead,
+                RetainedTurnReceipt(case.retained_identity, 1, "a" * 64),
+            )
+        assert case.comms.bus.latest_sequence() == case.origin_seq
+        # Reopening SQL does not manufacture a missing terminal receipt.
+        with MutationStore(str(case.comms.root / "coordination.sqlite3")) as reopened:
+            with pytest.raises(RecoveryBlocked, match="settlement is OFF"):
+                prepare_fenced_response(reopened, case.bus, dead, "default off")
+            reopened._test_retained_turns = True
+            with pytest.raises(RecoveryBlocked, match="retained terminal receipt"):
+                prepare_fenced_response(reopened, case.bus, dead, "still unknown")
+            assert reopened.snapshot("exec").attempt.turn_settled is False
+    finally:
+        case.close()
+
+
+def test_two_retained_turns_reuse_one_synthetic_child_identity(tmp_path: Path) -> None:
+    case = _ready(tmp_path, direct=True, process_dead=False, retained=True)
+    try:
+        assert case.retained_identity is not None
+        first = record_test_turn_settled(
+            case.store,
+            case.fence,
+            RetainedTurnReceipt(case.retained_identity, 1, "a" * 64),
+        ).value.fence
+        prepare_fenced_response(case.store, case.bus, first, "first", timestamp=123.5)
+        publish_fenced_response(case.store, case.bus, first)
+        source = case.comms.send_initial_cohort("sender", "owner", "Second exact input")
+        accepted = accept_initial_cohort(case.comms.bus, case.root_id, source.seq, case.store)
+        claim = accepted.value.claims[0]
+        target = derive_exact_reply_target(source)
+        assert target is not None
+        case.store.create_execution(
+            "exec2",
+            ExecutionOrigin.WIRE,
+            case.owner_lookup,
+            "owner",
+            1,
+            claim_ids=(claim.claim_id,),
+            exact_target=target,
+        )
+        case.store.mark_pending("exec2", expected_revision=1)
+        token = prepare_fence_token()
+        fence = case.store.start_attempt(
+            "exec2",
+            1,
+            "owner",
+            1,
+            token,
+            expected_execution_revision=2,
+            expected_pointer_revision=2,
+        ).value.fence
+        second_id = replace(
+            case.retained_identity,
+            input_id="input-2",
+            turn_id="turn-2",
+            turn_generation=2,
+            claim_id=claim.claim_id,
+            claim_revision=case.store.snapshot("exec2").claims[0].revision,
+        )
+        with MutationStore(str(case.comms.root / "coordination.sqlite3")) as second_connection:
+            second_connection._test_retained_turns = True
+            with pytest.raises(IdentityConflict, match="already belongs"):
+                admit_test_retained_turn(
+                    second_connection,
+                    fence,
+                    replace(second_id, input_id=case.retained_identity.input_id),
+                )
+        assert case.store.snapshot("exec2").attempt.completion_kind == "one_shot"
+        fence = admit_test_retained_turn(case.store, fence, second_id).value.fence
+        for phase in (
+            AttemptPhase.PROMPT_ACCEPTED,
+            AttemptPhase.MODEL_RUNNING,
+            AttemptPhase.SETTLING,
+        ):
+            fence = case.store.advance_attempt(
+                fence,
+                phase,
+                expected_pointer_revision=3,
+                backend_done=(phase is AttemptPhase.SETTLING),
+            ).value.fence
+        fence = record_test_turn_settled(
+            case.store, fence, RetainedTurnReceipt(second_id, 2, "b" * 64)
+        ).value.fence
+        prepare_fenced_response(case.store, case.bus, fence, "second", timestamp=124.5)
+        result = publish_fenced_response(case.store, case.bus, fence).value
+        assert result.execution.status is ExecutionStatus.COMPLETED
+        assert result.attempt.process_dead is False
+        receipts = list(
+            case.store._connection.execute(
+                "SELECT input_id,session_id,child_nonce FROM retained_turn_receipts "
+                "ORDER BY input_id"
+            )
+        )
+        assert [r["input_id"] for r in receipts] == ["input-1", "input-2"]
+        assert len({(r["session_id"], r["child_nonce"]) for r in receipts}) == 1
     finally:
         case.close()
 

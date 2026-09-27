@@ -495,7 +495,7 @@ def test_database_version_privacy_and_reopen(db):
     connection, path = db
     assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert connection.execute("PRAGMA user_version").fetchone()[0] == COORDINATION_SCHEMA_VERSION
-    assert COORDINATION_SNAPSHOT_VERSION == 2
+    assert COORDINATION_SNAPSHOT_VERSION == 3
     if os.name != "nt":  # NTFS access is governed by ACLs, not POSIX mode bits.
         assert os.stat(path).st_mode & 0o777 == 0o600
     with CoordinationStore(path) as reopened:
@@ -509,12 +509,22 @@ def test_database_version_privacy_and_reopen(db):
         )
 
 
+def test_retained_prototype_refuses_existing_v2_without_pr116_migration(tmp_path):
+    path = tmp_path / "old-coordination.sqlite3"
+    with sqlite3.connect(path) as db:
+        db.execute("PRAGMA user_version=2")
+    with pytest.raises(SchemaVersionError, match="unsupported"):
+        CoordinationStore(path)
+    with sqlite3.connect(path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+
+
 def test_concurrent_fresh_initializers_serialize_and_reopen(tmp_path):
     script = """import sys
-from agent_comms.coordination import CoordinationStore
+from agent_comms.coordination import CoordinationStore, COORDINATION_SCHEMA_VERSION
 sys.stdin.buffer.read(1)
 with CoordinationStore(sys.argv[1]) as store:
-    assert store.schema_version == 2
+    assert store.schema_version == COORDINATION_SCHEMA_VERSION
     assert store._connection.execute("SELECT count(*) FROM schema_meta").fetchone()[0] == 1
 print("ready")
 """
