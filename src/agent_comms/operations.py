@@ -3638,6 +3638,20 @@ class Comms:
         for key in ("PI_PROMPT", "PI_PARENT_ID", "PI_TASK", "AGENT_COMMS_RESERVATION_FD"):
             env.pop(key, None)
         private_launch = self._private_nk_launch
+        if private_launch is not None:
+            # Cutover stages its owners up front, but a later owner can be
+            # registered on the active route. The cohort reader needs this
+            # same immutable creation identity before the worker can wake.
+            from .bus_publication import stable_thread_lookup
+            from .coordination_store import MutationStore
+
+            with MutationStore(str(self.root / "coordination.sqlite3")) as store:
+                store.register_participant(
+                    stable_thread_lookup(thread.created_at),
+                    thread.name,
+                    thread.name,
+                    committed=True,
+                )
         env.update(
             {
                 "PI_AGENT_ID": thread.name,
