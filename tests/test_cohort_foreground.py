@@ -50,16 +50,20 @@ def _fake_pi(calls: list[str]):
     async def run(
         package, *, input_id, prompt, worktree, session_dir, session_file=None, **_kwargs
     ):
+        assert session_file is None
+        session_file = session_dir / "one.jsonl"
+        # The real get_state provides an actual saved file before prompt send.
+        session_file.write_text(json.dumps({"type": "session", "id": "foreground"}) + "\n")
+        session_file.chmod(0o600)
+
         def admitted():
             # The fake Pi must cross the same irreversible send-admission
             # boundary before claiming a native context. Do not synthesize a
             # receipt from a reservation that was never sent.
-            with _kwargs["prompt_send_boundary"]():
+            with _kwargs["prompt_send_boundary"](session_file):
                 calls.append(input_id)
 
         await asyncio.to_thread(admitted)
-        assert session_file is None
-        session_file = session_dir / "one.jsonl"
         entry_id = hashlib.sha256(input_id.encode()).hexdigest()[:16]
         session_file.write_text(
             json.dumps({"type": "session", "id": "foreground"})

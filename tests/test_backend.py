@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.image_inputs import ImageInput
 
@@ -38,7 +39,7 @@ emit({{"type": "message_start", "message": {{"role": "user",
 
 async def _rpc_events(
     tmp_path: Path, records: list[dict], *, current_input: bool = True
-) -> list[dict]:
+) -> list[ae.AgentEvent]:
     if current_input:
         # Most parser fixtures model an ordinary accepted prompt. They need a
         # matching user start, not a fabricated assistant final. Tests of the
@@ -135,9 +136,9 @@ class TestRpcParsing:
                 },
             ],
         )
-        assert events[-1]["ok"] is successful
+        assert events[-1].ok is successful
         if not successful and assistant_stops[-1:] not in (["error"], ["aborted"]):
-            assert events[-1]["reason_code"] == "assistant_final_stop_missing"
+            assert events[-1].reason_code == "assistant_final_stop_missing"
 
     @pytest.mark.parametrize(
         "subsequent_event",
@@ -166,13 +167,13 @@ class TestRpcParsing:
                 },
             ],
         )
-        assert events[-1]["ok"] is False
+        assert events[-1].ok is False
         expected = (
             "unrecognized_followup_input"
             if subsequent_event.get("message", {}).get("role") == "user"
             else "assistant_final_stop_missing"
         )
-        assert events[-1]["reason_code"] == expected
+        assert events[-1].reason_code == expected
 
     @pytest.mark.parametrize(
         ("user_start", "expected_reason"),
@@ -198,8 +199,8 @@ class TestRpcParsing:
             ]
         )
         events = await _rpc_events(tmp_path, records, current_input=False)
-        assert events[-1]["ok"] is False
-        assert events[-1]["reason_code"] == (expected_reason or "assistant_final_stop_missing")
+        assert events[-1].ok is False
+        assert events[-1].reason_code == (expected_reason or "assistant_final_stop_missing")
 
     @pytest.mark.parametrize(
         ("input_events", "reason_code"),
@@ -256,9 +257,9 @@ class TestRpcParsing:
             ],
             current_input=False,
         )
-        assert events[-1]["ok"] is (reason_code is None)
+        assert events[-1].ok is (reason_code is None)
         if reason_code is not None:
-            assert events[-1]["reason_code"] == reason_code
+            assert events[-1].reason_code == reason_code
 
     @pytest.mark.parametrize("managed_finish", [False, True])
     async def test_large_end_of_turn_record_does_not_fail_completed_reply(
@@ -293,18 +294,15 @@ for line in sys.stdin:
             stub, [], "task", str(tmp_path), finish_event=finish
         ):
             events.append(event)
-            if event["type"] == "settled" and finish is not None:
+            if isinstance(event, ae.StreamSettled) and finish is not None:
                 finish.set()
-        assert [event["text"] for event in events if event["type"] == "chunk"] == [
+        assert [event.text for event in events if isinstance(event, ae.Chunk)] == [
             "completed reply"
         ]
-        assert any(event.get("context_used") == 64330 for event in events)
-        assert events[-1] == {
-            "type": "done",
-            "ok": True,
-            "text": "completed reply",
-            "diagnostic": {"exit_code": 0},
-        }
+        assert any(
+            event.context_used == 64330 for event in events if isinstance(event, ae.AgentInfo)
+        )
+        assert events[-1] == ae.Done(ok=True, text="completed reply", diagnostic={"exit_code": 0})
 
     async def test_partial_large_record_survives_cancelled_read(self):
         stream = asyncio.StreamReader(limit=8)
@@ -337,8 +335,8 @@ for line in sys.stdin:
                 stub, [], "task", str(tmp_path), steering_queue=asyncio.Queue()
             )
         ]
-        assert events[-1]["ok"] is False
-        assert events[-1]["reason_code"] == "pi_invalid_rpc_event"
+        assert events[-1].ok is False
+        assert events[-1].reason_code == "pi_invalid_rpc_event"
         assert pid_file.exists()
         with pytest.raises(ProcessLookupError):
             os.kill(int(pid_file.read_text()), 0)
@@ -406,26 +404,26 @@ for line in sys.stdin:
         stub = _stub(tmp_path, f"#!/bin/sh\ntrue\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
         events = [e async for e in backend.stream_agent_events(stub, [], "task", str(tmp_path))]
         # pi-named stub triggers rpc mode; prompt goes to stdin.
-        types = [e["type"] for e in events]
+        types = [type(e) for e in events]
         assert types == [
-            "chunk",
-            "chunk",
-            "thinking",
-            "tool_start",
-            "tool_progress",
-            "tool_end",
-            "chunk",
-            "settled",
-            "done",
+            ae.Chunk,
+            ae.Chunk,
+            ae.Thinking,
+            ae.ToolStart,
+            ae.ToolProgress,
+            ae.ToolEnd,
+            ae.Chunk,
+            ae.StreamSettled,
+            ae.Done,
         ]
-        assert events[2]["text"] == "Checking the workspace"
+        assert events[2].text == "Checking the workspace"
         tool_start = events[3]
-        assert tool_start["name"] == "bash" and tool_start["id"] == "t1"
-        assert "echo hi" in tool_start["title"]
-        assert events[4]["output"] == "running"
+        assert tool_start.name == "bash" and tool_start.id == "t1"
+        assert "echo hi" in tool_start.title
+        assert events[4].output == "running"
         tool_end = events[5]
-        assert tool_end["ok"] is True and "hi" in tool_end["output"]
-        assert events[-1]["text"] == "hello done" and events[-1]["ok"] is True
+        assert tool_end.ok is True and "hi" in tool_end.output
+        assert events[-1].text == "hello done" and events[-1].ok is True
 
     async def test_tool_use_progress_requires_committed_assistant_text(self, tmp_path):
         records = [
@@ -477,10 +475,10 @@ for line in sys.stdin:
         events = [
             event async for event in backend.stream_agent_events(stub, [], "task", str(tmp_path))
         ]
-        assert [event["text"] for event in events if event["type"] == "committed_progress"] == [
+        assert [event.text for event in events if isinstance(event, ae.CommittedProgress)] == [
             "Working"
         ]
-        assert events[-1]["ok"] is True
+        assert events[-1].ok is True
 
     async def test_foreign_tool_use_before_exact_input_start_is_not_progress(self, tmp_path):
         # A typed prompt ACK is not a current-turn start. A previous Pi
@@ -510,8 +508,8 @@ for line in sys.stdin:
                 stub, [], "current prompt", str(tmp_path)
             )
         ]
-        assert not [event for event in events if event["type"] == "committed_progress"]
-        assert any(event["type"] == "done" and event["ok"] is False for event in events)
+        assert not [event for event in events if isinstance(event, ae.CommittedProgress)]
+        assert any(isinstance(event, ae.Done) and event.ok is False for event in events)
 
     async def test_rpc_model_and_context_metadata(self, tmp_path):
         rpc_lines = "\n".join(
@@ -529,11 +527,11 @@ for line in sys.stdin:
         )
         stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
         events = [e async for e in backend.stream_agent_events(stub, [], "t", str(tmp_path))]
-        info = [event for event in events if event["type"] == "agent_info"]
-        assert info[0]["model"] == "openrouter/z-ai/glm"
-        assert info[0]["session_file"] == "/tmp/pi-session.jsonl"
-        assert info[-1]["context_used"] == 200
-        assert info[-1]["context_size"] == 1000
+        info = [event for event in events if isinstance(event, ae.AgentInfo)]
+        assert info[0].model == "openrouter/z-ai/glm"
+        assert info[0].session_file == "/tmp/pi-session.jsonl"
+        assert info[-1].context_used == 200
+        assert info[-1].context_size == 1000
 
     @pytest.mark.parametrize("stats", [0, None, 60, 260, "invalid", True, "missing"])
     async def test_final_assistant_usage_survives_unavailable_stats(self, tmp_path, stats):
@@ -562,9 +560,9 @@ for line in sys.stdin:
             },
         ]
         events = await _rpc_events(tmp_path, records)
-        used = [e["context_used"] for e in events if e["type"] == "agent_info"]
+        used = [e.context_used for e in events if isinstance(e, ae.AgentInfo)]
         assert used == [None, 150, stats if type(stats) is int and stats > 0 else 150]
-        assert events[-1]["type"] == "done" and events[-1]["ok"] is True
+        assert isinstance(events[-1], ae.Done) and events[-1].ok is True
 
     async def test_positive_final_usage_survives_empty_stats_and_final_stop_gate(self, tmp_path):
         events = await _rpc_events(
@@ -593,18 +591,13 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e["context_used"] for e in events if e["type"] == "agent_info"] == [
+        assert [e.context_used for e in events if isinstance(e, ae.AgentInfo)] == [
             None,
             78330,
             78330,
         ]
-        assert all(e["context_size"] == 272000 for e in events if e["type"] == "agent_info")
-        assert events[-1] == {
-            "type": "done",
-            "ok": True,
-            "text": "",
-            "diagnostic": {"exit_code": 0},
-        }
+        assert all(e.context_size == 272000 for e in events if isinstance(e, ae.AgentInfo))
+        assert events[-1] == ae.Done(ok=True, text="", diagnostic={"exit_code": 0})
 
     @pytest.mark.parametrize("nested", [False, True])
     async def test_final_usage_replaces_provisional_even_if_lower(self, tmp_path, nested):
@@ -638,7 +631,7 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e["context_used"] for e in events if e["type"] == "agent_info"] == [210, 150, 150]
+        assert [e.context_used for e in events if isinstance(e, ae.AgentInfo)] == [210, 150, 150]
 
     @pytest.mark.parametrize("prior", [None, 150])
     @pytest.mark.parametrize("invalid", ["missing", 0, -1, True, "200", None, 12.5])
@@ -680,11 +673,11 @@ for line in sys.stdin:
             ]
         )
         events = await _rpc_events(tmp_path, records)
-        used = [e["context_used"] for e in events if e["type"] == "agent_info"]
+        used = [e.context_used for e in events if isinstance(e, ae.AgentInfo)]
         assert used == (
             ([prior] if prior is not None else []) + [300, prior, 55 if stats == 55 else prior]
         )
-        assert events[-1]["ok"] is True
+        assert events[-1].ok is True
 
     @pytest.mark.parametrize("failure", ["error", "aborted"])
     async def test_failed_assistant_cannot_promote_its_provisional_usage(self, tmp_path, failure):
@@ -722,17 +715,17 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e["context_used"] for e in events if e["type"] == "agent_info"] == [
+        assert [e.context_used for e in events if isinstance(e, ae.AgentInfo)] == [
             150,
             310,
             150,
             150,
         ]
-        assert [e["usage"]["totalTokens"] for e in events if e["type"] == "provider_usage"] == [
+        assert [e.usage["totalTokens"] for e in events if isinstance(e, ae.ProviderUsage)] == [
             150,
             500,
         ]
-        assert events[-1]["ok"] is False
+        assert events[-1].ok is False
 
     @pytest.mark.parametrize("tokens", [0, -1, 12.5, True, "120", None])
     async def test_invalid_usage_and_non_assistant_messages_are_not_context(self, tmp_path, tokens):
@@ -777,7 +770,7 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e["context_used"] for e in events if e["type"] == "agent_info"] == [None, None]
+        assert [e.context_used for e in events if isinstance(e, ae.AgentInfo)] == [None, None]
 
     @pytest.mark.parametrize(
         "compaction",
@@ -811,7 +804,7 @@ for line in sys.stdin:
         )
         # An aborted or malformed compaction does not prove the old meter is
         # still current; typed usage stays unknown until fresh stats.
-        assert [e["context_used"] for e in events if e["type"] == "agent_info"] == [
+        assert [e.context_used for e in events if isinstance(e, ae.AgentInfo)] == [
             250,
             None,
             None,
@@ -867,7 +860,7 @@ for line in sys.stdin:
             },
         ]
         events = await _rpc_events(tmp_path, records)
-        assert [e["context_used"] for e in events if e["type"] == "agent_info"] == (
+        assert [e.context_used for e in events if isinstance(e, ae.AgentInfo)] == (
             [None, 250, None, None, 40, 30] if post_compaction else [None, 250, None, None, None]
         )
 
@@ -893,7 +886,7 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e["context_used"] for e in events if e["type"] == "agent_info"] == [250, None, 35]
+        assert [e.context_used for e in events if isinstance(e, ae.AgentInfo)] == [250, None, 35]
 
     @pytest.mark.parametrize("changed_field", ["sessionId", "sessionFile"])
     @pytest.mark.parametrize("final_state_observed", [False, True])
@@ -937,13 +930,13 @@ for line in sys.stdin:
         )
         owner = asyncio.current_task()
         events = await _rpc_events(tmp_path, records)
-        info = [e for e in events if e["type"] == "agent_info"]
-        assert [e["context_used"] for e in info] == [None, 250, None, None]
-        assert all(e["session_file"] == "/tmp/first.jsonl" for e in info)
-        assert all(e["context_size"] == 1000 for e in info)
-        assert all(e["model"] == "test/A" for e in info)
-        assert events[-1]["reason_code"] == "session_identity_uncertain"
-        assert events[-1]["ok"] is False
+        info = [e for e in events if isinstance(e, ae.AgentInfo)]
+        assert [e.context_used for e in info] == [None, 250, None, None]
+        assert all(e.session_file == "/tmp/first.jsonl" for e in info)
+        assert all(e.context_size == 1000 for e in info)
+        assert all(e.model == "test/A" for e in info)
+        assert events[-1].reason_code == "session_identity_uncertain"
+        assert events[-1].ok is False
         assert owner not in backend._ACTIVE_PROCESSES
 
     async def test_in_flight_branch_mutation_evidence_invalidates_usage(self, tmp_path):
@@ -975,14 +968,14 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e["context_used"] for e in events if e["type"] == "agent_info"] == [
+        assert [e.context_used for e in events if isinstance(e, ae.AgentInfo)] == [
             None,
             250,
             None,
         ]
-        assert events[-1]["reason_code"] == "session_identity_uncertain"
-        assert events[-1]["ok"] is False
-        assert not any(e["type"] == "settled" for e in events)
+        assert events[-1].reason_code == "session_identity_uncertain"
+        assert events[-1].ok is False
+        assert not any(isinstance(e, ae.StreamSettled) for e in events)
 
     @pytest.mark.parametrize(
         "mutation",
@@ -1017,10 +1010,10 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e["context_used"] for e in events if e["type"] == "agent_info"] == [None, 250, None]
-        assert events[-1]["reason_code"] == "session_identity_uncertain"
-        assert events[-1]["ok"] is False
-        assert not any(e["type"] == "settled" for e in events)
+        assert [e.context_used for e in events if isinstance(e, ae.AgentInfo)] == [None, 250, None]
+        assert events[-1].reason_code == "session_identity_uncertain"
+        assert events[-1].ok is False
+        assert not any(isinstance(e, ae.StreamSettled) for e in events)
 
     @pytest.mark.parametrize("mutation_type", ["new_session", "switch_session", "fork", "clone"])
     async def test_outbound_session_mutation_rejected_before_write_but_a_continues(
@@ -1074,31 +1067,23 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
                 stub, [], "task", str(tmp_path), steering_queue=queue, model_wait_timeout=None
             ):
                 events.append(event)
-                if event["type"] == "chunk" and event["text"] == "A-before ":
+                if isinstance(event, ae.Chunk) and event.text == "A-before ":
                     process = backend._ACTIVE_PROCESSES[owner]
                     queue.put_nowait({"type": mutation_type, "id": "rejected-1"})
-                if (
-                    event["type"] == "error"
-                    and event.get("reason_code") == "steering_command_rejected"
-                ):
+                if isinstance(event, ae.Error) and event.reason_code == "steering_command_rejected":
                     release.touch()
 
         async with asyncio.timeout(8):
             await consume()
-        assert [e["text"] for e in events if e["type"] == "chunk"] == ["A-before ", "A-after"]
-        assert [e["type"] for e in events].count("tool_end") == 1
+        assert [e.text for e in events if isinstance(e, ae.Chunk)] == ["A-before ", "A-after"]
+        assert [type(e) for e in events].count(ae.ToolEnd) == 1
         assert [
-            (e["command"], e["id"])
+            (e.command, e.id)
             for e in events
-            if e.get("reason_code") == "steering_command_rejected"
+            if isinstance(e, ae.Error) and e.reason_code == "steering_command_rejected"
         ] == [(mutation_type, "rejected-1")]
-        assert [e["type"] for e in events].count("done") == 1
-        assert events[-1] == {
-            "type": "done",
-            "ok": True,
-            "text": "A-before A-after",
-            "diagnostic": {"exit_code": 0},
-        }
+        assert [type(e) for e in events].count(ae.Done) == 1
+        assert events[-1] == ae.Done(ok=True, text="A-before A-after", diagnostic={"exit_code": 0})
         assert process is not None and process.returncode == 0
         assert owner not in backend._ACTIVE_PROCESSES
         assert owner not in backend._ACTIVE_STEERING
@@ -1178,29 +1163,37 @@ for line in sys.stdin:
             stub, [], "task", str(tmp_path), steering_queue=queue, rpc_abort_grace=0.3
         ):
             events.append(event)
-            if event["type"] == "chunk":
+            if isinstance(event, ae.Chunk):
                 process = backend._ACTIVE_PROCESSES[owner]
                 queue.put_nowait(pending)
-        assert [e["text"] for e in events if e["type"] == "chunk"] == ["A-before"]
-        assert [e["context_used"] for e in events if e["type"] == "agent_info"] == [None, 250, None]
-        assert all(e.get("session_file") != "/tmp/second.jsonl" for e in events)
+        assert [e.text for e in events if isinstance(e, ae.Chunk)] == ["A-before"]
+        assert [e.context_used for e in events if isinstance(e, ae.AgentInfo)] == [None, 250, None]
+        assert all(
+            e.session_file != "/tmp/second.jsonl" for e in events if isinstance(e, ae.AgentInfo)
+        )
         assert not any(
-            e["type"]
-            in {"thinking", "tool_start", "tool_progress", "tool_end", "settled", "recovered"}
+            type(e)
+            in {
+                ae.Thinking,
+                ae.ToolStart,
+                ae.ToolProgress,
+                ae.ToolEnd,
+                ae.StreamSettled,
+                "recovered",
+            }
             for e in events
         )
-        assert "B-secret" not in json.dumps(events)
-        assert [e["type"] for e in events].count("done") == 1
+        assert "B-secret" not in repr(events)
+        assert [type(e) for e in events].count(ae.Done) == 1
         assert process is not None and process.returncode is not None
-        assert events[-1] == {
-            "type": "done",
-            "ok": False,
-            "text": "Pi session identity changed during this turn.",
-            "reason_code": "session_identity_uncertain",
-            "diagnostic": {"exit_code": process.returncode},
-        }
+        assert events[-1] == ae.Done(
+            ok=False,
+            text="Pi session identity changed during this turn.",
+            reason_code="session_identity_uncertain",
+            diagnostic={"exit_code": process.returncode},
+        )
         assert owner not in backend._ACTIVE_PROCESSES
-        assert [e["type"] for e in events].count("input_started") == 0
+        assert [type(e) for e in events].count(ae.InputStarted) == 0
         if abort_pipe_closed:
             assert abort_write_failed
         # A sent input on the old owner cannot be replayed after rebind.
@@ -1241,14 +1234,14 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e["context_used"] for e in events if e["type"] == "agent_info"] == [
+        assert [e.context_used for e in events if isinstance(e, ae.AgentInfo)] == [
             250,
             None,
             70,
             None,
             None,
         ]
-        assert events[-1]["ok"] is False
+        assert events[-1].ok is False
 
     async def test_rpc_resumes_session_and_forwards_live_prompts(self, tmp_path):
         args_path = tmp_path / "args"
@@ -1288,9 +1281,9 @@ EOF
         assert "[peer] ping" in steering_path.read_text()
         assert '"streamingBehavior": "steer"' in steering_path.read_text()
         assert any(
-            event.get("session_file") == str(session_path)
+            event.session_file == str(session_path)
             for event in events
-            if event["type"] == "agent_info"
+            if isinstance(event, ae.AgentInfo)
         )
 
     async def test_manual_compaction_returns_native_summary(self, tmp_path):
@@ -1356,13 +1349,13 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
             finish_event=finish,
         ):
             events.append(event)
-            if event["type"] == "settled":
-                if not any(item["type"] == "chunk" for item in events):
+            if isinstance(event, ae.StreamSettled):
+                if not any(isinstance(item, ae.Chunk) for item in events):
                     queue.put_nowait("[child] ping")
                 else:
                     finish.set()
 
-        assert [event["text"] for event in events if event["type"] == "chunk"] == ["pong"]
+        assert [event.text for event in events if isinstance(event, ae.Chunk)] == ["pong"]
 
     async def test_accepted_prompt_stall_is_aborted_without_backend_replay(self, tmp_path):
         abort_log = tmp_path / "abort"
@@ -1397,22 +1390,26 @@ time.sleep(60)
             )
         ]
 
-        states = [event["state"] for event in events if event["type"] == "turn_state"]
+        states = [event.state for event in events if isinstance(event, ae.TurnState)]
         assert states == ["model_stalled", "aborting", "failed"]
-        stalled = next(event for event in events if event.get("state") == "model_stalled")
-        assert stalled["type"] == "turn_state"
-        assert stalled["phase"] == "model_wait"
-        assert stalled["reason_code"] == "model_no_progress"
-        assert stalled["elapsed_ms"] >= 20
+        stalled = next(
+            event
+            for event in events
+            if isinstance(event, ae.TurnState) and event.state == "model_stalled"
+        )
+        assert isinstance(stalled, ae.TurnState)
+        assert stalled.phase == "model_wait"
+        assert stalled.reason_code == "model_no_progress"
+        assert stalled.elapsed_ms >= 20
         # The prompt crossed an uncertain provider boundary. A watchdog may
         # abort and report diagnostics, never grant automatic replay authority.
-        assert stalled["retryable"] is False and stalled["replay_safe"] is False
-        assert stalled["side_effects_possible"] is True
+        assert stalled.retryable is False and stalled.replay_safe is False
+        assert stalled.side_effects_possible is True
         assert abort_log.read_text() == "abort"
         assert launch_log.read_text() == "x"  # Backend never owns prompt/session replay.
-        assert [event["type"] for event in events].count("done") == 1
-        assert events[-1]["type"] == "done" and events[-1]["ok"] is False
-        assert "no RPC progress" in events[-1]["text"]
+        assert [type(event) for event in events].count(ae.Done) == 1
+        assert isinstance(events[-1], ae.Done) and events[-1].ok is False
+        assert "no RPC progress" in events[-1].text
 
     async def test_watchdog_force_kills_backend_that_ignores_abort_and_term(self, tmp_path):
         stub = _stub(
@@ -1445,10 +1442,10 @@ time.sleep(60)
         ]
 
         elapsed = asyncio.get_running_loop().time() - started
-        states = [event["state"] for event in events if event["type"] == "turn_state"]
+        states = [event.state for event in events if isinstance(event, ae.TurnState)]
         assert states == ["model_stalled", "aborting", "failed"]
         assert elapsed < 1.5
-        assert events[-1]["type"] == "done" and events[-1]["ok"] is False
+        assert isinstance(events[-1], ae.Done) and events[-1].ok is False
 
     async def test_irrelevant_rpc_traffic_does_not_renew_model_lease(self, tmp_path):
         stub = _stub(
@@ -1484,7 +1481,7 @@ time.sleep(60)
         ]
 
         elapsed = asyncio.get_running_loop().time() - started
-        states = [event["state"] for event in events if event["type"] == "turn_state"]
+        states = [event.state for event in events if isinstance(event, ae.TurnState)]
         assert states == ["model_stalled", "aborting", "failed"]
         assert elapsed < 0.8
 
@@ -1520,10 +1517,10 @@ time.sleep(60)
             )
         ]
 
-        states = [event["state"] for event in events if event["type"] == "turn_state"]
+        states = [event.state for event in events if isinstance(event, ae.TurnState)]
         assert states == ["retrying", "model_stalled", "aborting", "failed"]
         assert "recovered" not in states
-        assert events[-1]["type"] == "done" and events[-1]["ok"] is False
+        assert isinstance(events[-1], ae.Done) and events[-1].ok is False
 
     async def test_retry_recovery_requires_substantive_model_progress(self, tmp_path):
         rpc_lines = "\n".join(
@@ -1544,16 +1541,11 @@ time.sleep(60)
 
         events = [e async for e in backend.stream_agent_events(stub, [], "task", str(tmp_path))]
 
-        states = [event for event in events if event["type"] == "turn_state"]
-        assert [event["state"] for event in states] == ["retrying", "recovered"]
-        assert states[-1]["replay_safe"] is False
-        assert states[-1]["side_effects_possible"] is True
-        assert events[-1] == {
-            "type": "done",
-            "ok": True,
-            "text": "recovered reply",
-            "diagnostic": {"exit_code": 0},
-        }
+        states = [event for event in events if isinstance(event, ae.TurnState)]
+        assert [event.state for event in states] == ["retrying", "recovered"]
+        assert states[-1].replay_safe is False
+        assert states[-1].side_effects_possible is True
+        assert events[-1] == ae.Done(ok=True, text="recovered reply", diagnostic={"exit_code": 0})
 
     async def test_routine_compaction_emits_no_false_recovery_states(self, tmp_path):
         rpc_lines = "\n".join(
@@ -1575,13 +1567,8 @@ time.sleep(60)
 
         events = [e async for e in backend.stream_agent_events(stub, [], "task", str(tmp_path))]
 
-        assert not [event for event in events if event["type"] == "turn_state"]
-        assert events[-1] == {
-            "type": "done",
-            "ok": True,
-            "text": "after compaction",
-            "diagnostic": {"exit_code": 0},
-        }
+        assert not [event for event in events if isinstance(event, ae.TurnState)]
+        assert events[-1] == ae.Done(ok=True, text="after compaction", diagnostic={"exit_code": 0})
 
     async def test_overflow_compaction_retry_recovers_only_after_model_progress(self, tmp_path):
         rpc_lines = "\n".join(
@@ -1601,12 +1588,12 @@ time.sleep(60)
 
         events = [e async for e in backend.stream_agent_events(stub, [], "task", str(tmp_path))]
 
-        states = [event for event in events if event["type"] == "turn_state"]
-        assert [event["state"] for event in states] == ["retrying", "recovered"]
-        assert states[0]["reason_code"] == "overflow_compaction_retry"
-        assert states[1]["reason_code"] == "overflow_retry_progress"
-        assert all(event["replay_safe"] is False for event in states)
-        assert all(event["side_effects_possible"] is True for event in states)
+        states = [event for event in events if isinstance(event, ae.TurnState)]
+        assert [event.state for event in states] == ["retrying", "recovered"]
+        assert states[0].reason_code == "overflow_compaction_retry"
+        assert states[1].reason_code == "overflow_retry_progress"
+        assert all(event.replay_safe is False for event in states)
+        assert all(event.side_effects_possible is True for event in states)
 
     async def test_compaction_stall_is_non_replayable(self, tmp_path):
         stub = _stub(
@@ -1639,18 +1626,22 @@ time.sleep(60)
             )
         ]
 
-        states = [event for event in events if event["type"] == "turn_state"]
-        assert [event["state"] for event in states] == [
+        states = [event for event in events if isinstance(event, ae.TurnState)]
+        assert [event.state for event in states] == [
             "model_stalled",
             "aborting",
             "failed",
         ]
-        stalled = next(event for event in states if event["state"] == "model_stalled")
-        assert stalled["phase"] == "compaction"
-        assert stalled["reason_code"] == "compaction_no_progress"
-        assert all(event["replay_safe"] is False for event in states)
-        assert all(event["retryable"] is False for event in states)
-        assert all(event["side_effects_possible"] is True for event in states)
+        stalled = next(
+            event
+            for event in states
+            if isinstance(event, ae.TurnState) and event.state == "model_stalled"
+        )
+        assert stalled.phase == "compaction"
+        assert stalled.reason_code == "compaction_no_progress"
+        assert all(event.replay_safe is False for event in states)
+        assert all(event.retryable is False for event in states)
+        assert all(event.side_effects_possible is True for event in states)
 
     async def test_prestart_compaction_outlives_prompt_start_wait(self, tmp_path, monkeypatch):
         monkeypatch.setattr(backend, "PROMPT_START_TIMEOUT_SECONDS", 0.1)
@@ -1697,33 +1688,26 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
                 require_input_id=True,
             )
         ]
-        assert [e["type"] for e in events if e["type"].startswith("compaction_")] == [
-            "compaction_start",
-            "compaction_progress",
-            "compaction_progress",
-            "compaction_progress",
-            "compaction_end",
+        assert [
+            type(e) for e in events if isinstance(e, (ae.CompactionEvent, ae.CompactionProgress))
+        ] == [
+            ae.CompactionStart,
+            ae.CompactionProgress,
+            ae.CompactionProgress,
+            ae.CompactionProgress,
+            ae.CompactionEnd,
         ]
-        progress = [e for e in events if e["type"] == "compaction_progress"]
-        assert progress[0] == {
-            "type": "compaction_progress",
-            "chunk_index": 0,
-            "source_bytes_done": 0,
-            "source_bytes_total": 1000,
-            "summary_phase": "history",
-        }
-        assert progress[1]["source_bytes_done"] == 500
-        assert progress[2]["summary_phase"] == "synthesis"
-        assert [e["usage"]["totalTokens"] for e in events if e["type"] == "provider_usage"] == [
+        progress = [e for e in events if isinstance(e, ae.CompactionProgress)]
+        assert progress[0] == ae.CompactionProgress(
+            chunk_index=0, source_bytes_done=0, source_bytes_total=1000, summary_phase="history"
+        )
+        assert progress[1].source_bytes_done == 500
+        assert progress[2].summary_phase == "synthesis"
+        assert [e.usage["totalTokens"] for e in events if isinstance(e, ae.ProviderUsage)] == [
             10,
             11,
         ]
-        assert events[-1] == {
-            "type": "done",
-            "ok": True,
-            "text": "ok",
-            "diagnostic": {"exit_code": 0},
-        }
+        assert events[-1] == ae.Done(ok=True, text="ok", diagnostic={"exit_code": 0})
 
     async def test_prestart_compaction_failure_refuses_prompt(self, tmp_path):
         stub = _stub(
@@ -1757,9 +1741,9 @@ emit({"type": "agent_settled"})
                 require_input_id=True,
             )
         ]
-        assert not [event for event in events if event["type"] == "input_started"]
-        assert events[-1]["ok"] is False
-        assert events[-1]["reason_code"] == "prestart_compaction_failed"
+        assert not [event for event in events if isinstance(event, ae.InputStarted)]
+        assert events[-1].ok is False
+        assert events[-1].reason_code == "prestart_compaction_failed"
 
     async def test_summarization_retry_stall_is_bounded_and_non_replayable(self, tmp_path):
         stub = _stub(
@@ -1792,18 +1776,22 @@ time.sleep(60)
             )
         ]
 
-        states = [event for event in events if event["type"] == "turn_state"]
-        assert [event["state"] for event in states] == [
+        states = [event for event in events if isinstance(event, ae.TurnState)]
+        assert [event.state for event in states] == [
             "retrying",
             "model_stalled",
             "aborting",
             "failed",
         ]
-        stalled = next(event for event in states if event["state"] == "model_stalled")
-        assert stalled["phase"] == "summarization_retry"
-        assert stalled["reason_code"] == "summarization_retry_no_progress"
-        assert all(event["replay_safe"] is False for event in states)
-        assert all(event["side_effects_possible"] is True for event in states)
+        stalled = next(
+            event
+            for event in states
+            if isinstance(event, ae.TurnState) and event.state == "model_stalled"
+        )
+        assert stalled.phase == "summarization_retry"
+        assert stalled.reason_code == "summarization_retry_no_progress"
+        assert all(event.replay_safe is False for event in states)
+        assert all(event.side_effects_possible is True for event in states)
 
     async def test_provider_retry_failure_is_distinct_from_model_silence(self, tmp_path):
         rpc_lines = "\n".join(
@@ -1848,14 +1836,14 @@ time.sleep(60)
 
         assert len(starts) == 1 and starts[0][0] is None and starts[0][2] == "task", events
         assert len(starts[0][1]) == 32
-        recovery = [event for event in events if event["type"] == "turn_state"]
-        assert [event["state"] for event in recovery] == ["retrying", "failed"], events
-        assert recovery[0]["attempt"] == {"current": 1, "max": 3}
-        assert recovery[-1]["reason_code"] == "provider_retry_exhausted"
+        recovery = [event for event in events if isinstance(event, ae.TurnState)]
+        assert [event.state for event in recovery] == ["retrying", "failed"], events
+        assert recovery[0].attempt == {"current": 1, "max": 3}
+        assert recovery[-1].reason_code == "provider_retry_exhausted"
         assert all("secret" not in str(event) for event in recovery)
-        assert not any(event.get("state") == "model_stalled" for event in recovery)
-        assert events[-1]["ok"] is False
-        assert events[-1]["text"] == "provider unavailable"
+        assert not any(event.state == "model_stalled" for event in recovery)
+        assert events[-1].ok is False
+        assert events[-1].text == "provider unavailable"
 
     @pytest.mark.parametrize("started", [False, True])
     async def test_watchdog_never_requeues_forwarded_input_after_uncertainty(
@@ -1916,9 +1904,9 @@ time.sleep(60)
 
         sent = steering_log.read_text()
         assert '"_input_id"' not in sent and '"images"' in sent
-        started_events = [event for event in events if event["type"] == "input_started"]
-        assert started_events == ([{"type": "input_started", "id": "queued-1"}] if started else [])
-        assert events[-1]["ok"] is False
+        started_events = [event for event in events if isinstance(event, ae.InputStarted)]
+        assert started_events == ([ae.InputStarted(id="queued-1")] if started else [])
+        assert events[-1].ok is False
         # Start evidence informs disposition, but neither case authorizes an
         # automatic replay of the forwarded provider opportunity.
         assert queue.empty()
@@ -1963,13 +1951,8 @@ for line in sys.stdin:
             )
         ]
 
-        assert not [event for event in events if event["type"] == "turn_state"]
-        assert events[-1] == {
-            "type": "done",
-            "ok": True,
-            "text": "done after tool",
-            "diagnostic": {"exit_code": 0},
-        }
+        assert not [event for event in events if isinstance(event, ae.TurnState)]
+        assert events[-1] == ae.Done(ok=True, text="done after tool", diagnostic={"exit_code": 0})
 
     async def test_stall_after_tool_is_failed_without_retry(self, tmp_path):
         launches = tmp_path / "launches"
@@ -2005,16 +1988,18 @@ for line in sys.stdin:
             )
         ]
 
-        states = [event["state"] for event in events if event["type"] == "turn_state"]
+        states = [event.state for event in events if isinstance(event, ae.TurnState)]
         assert states == ["model_stalled", "aborting", "failed"]
-        failed = next(event for event in events if event.get("state") == "failed")
-        assert failed["phase"] == "shutdown"
-        assert failed["reason_code"] == "model_no_progress"
-        assert failed["retryable"] is False and failed["replay_safe"] is False
-        assert failed["side_effects_possible"] is True
+        failed = next(
+            event for event in events if isinstance(event, ae.TurnState) and event.state == "failed"
+        )
+        assert failed.phase == "shutdown"
+        assert failed.reason_code == "model_no_progress"
+        assert failed.retryable is False and failed.replay_safe is False
+        assert failed.side_effects_possible is True
         assert launches.read_text() == "x"
-        assert events[-1]["type"] == "done" and events[-1]["ok"] is False
-        assert "no RPC progress" in events[-1]["text"]
+        assert isinstance(events[-1], ae.Done) and events[-1].ok is False
+        assert "no RPC progress" in events[-1].text
 
     async def test_failed_tool_does_not_fail_recovered_turn(self, tmp_path):
         rpc_lines = "\n".join(
@@ -2029,18 +2014,18 @@ for line in sys.stdin:
         )
         stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
         events = [e async for e in backend.stream_agent_events(stub, [], "t", str(tmp_path))]
-        assert events[-1]["ok"] is True
+        assert events[-1].ok is True
         tool_end = events[1]
-        assert tool_end["ok"] is False
+        assert tool_end.ok is False
 
 
 class TestTextFallback:
     async def test_non_pi_backend_streams_raw_output(self, tmp_path):
         stub = _stub(tmp_path, "#!/bin/sh\necho plain reply\n", name="echo-stub")
         events = [e async for e in backend.stream_agent_events(stub, [], "task", str(tmp_path))]
-        assert events[-1]["type"] == "done"
-        assert "plain reply" in events[-1]["text"]
-        assert any(e["type"] == "chunk" for e in events)
+        assert isinstance(events[-1], ae.Done)
+        assert "plain reply" in events[-1].text
+        assert any(isinstance(e, ae.Chunk) for e in events)
 
     async def test_missing_backend_yields_done_not_ok(self, tmp_path):
         events = [
@@ -2050,13 +2035,13 @@ class TestTextFallback:
             )
         ]
         assert len(events) == 1
-        assert events[0]["type"] == "done" and events[0]["ok"] is False
-        assert "not found" in events[0]["text"]
+        assert isinstance(events[0], ae.Done) and events[0].ok is False
+        assert "not found" in events[0].text
 
     async def test_nonzero_exit_marks_not_ok(self, tmp_path):
         stub = _stub(tmp_path, "#!/bin/sh\necho partial\nexit 3\n", name="echo-stub")
         events = [e async for e in backend.stream_agent_events(stub, [], "t", str(tmp_path))]
-        assert events[-1]["ok"] is False
+        assert events[-1].ok is False
 
 
 class TestRpcArgs:
@@ -2137,7 +2122,7 @@ if select.select([sys.stdin], [], [], 0.3)[0]:
         assert len(checks) == 1 and checks[0][0] is None
         assert len(checks[0][1]) == 32 and checks[0][2] == "work"
         assert not received.exists()
-        assert events[-1]["ok"] is False
+        assert events[-1].ok is False
 
     async def test_malformed_native_user_content_fails_typed_and_reaps_live_child(self, tmp_path):
         pid_file = tmp_path / "pi.pid"
@@ -2163,10 +2148,10 @@ while True: time.sleep(0.1)
         events = [
             event async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path))
         ]
-        assert [event for event in events if event["type"] == "done"] == [events[-1]]
-        assert events[-1]["ok"] is False
-        assert events[-1]["reason_code"] == "pi_invalid_rpc_event"
-        assert "NoneType" not in events[-1]["text"]
+        assert [event for event in events if isinstance(event, ae.Done)] == [events[-1]]
+        assert events[-1].ok is False
+        assert events[-1].reason_code == "pi_invalid_rpc_event"
+        assert "NoneType" not in events[-1].text
         assert pid_file.exists()
         with pytest.raises(ProcessLookupError):
             os.kill(int(pid_file.read_text()), 0)
@@ -2209,10 +2194,10 @@ while True: time.sleep(0.1)
             if exit_mode == "malformed":
                 async with asyncio.timeout(4):
                     events = [event async for event in stream]
-                assert events[-1]["reason_code"] == "pi_invalid_rpc_event"
+                assert events[-1].reason_code == "pi_invalid_rpc_event"
             else:
                 async with asyncio.timeout(4):
-                    while (await stream.__anext__())["type"] != "chunk":
+                    while not isinstance(await stream.__anext__(), ae.Chunk):
                         pass
                     await stream.aclose()
             assert pid_file.exists()
@@ -2256,10 +2241,10 @@ if case != "eof":
         events = [
             event async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path))
         ]
-        assert [event for event in events if event["type"] == "done"] == [events[-1]]
-        assert events[-1]["ok"] is False
-        assert events[-1]["reason_code"] == "pi_input_id_unavailable"
-        assert "preflight" in events[-1]["text"]
+        assert [event for event in events if isinstance(event, ae.Done)] == [events[-1]]
+        assert events[-1].ok is False
+        assert events[-1].reason_code == "pi_input_id_unavailable"
+        assert "preflight" in events[-1].text
 
     @pytest.mark.skipif(os.name != "posix", reason="POSIX process-group signal")
     async def test_preflight_refusal_survives_process_group_signal_error(
@@ -2294,7 +2279,7 @@ while True: time.sleep(0.1)
             event async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path))
         ]
         assert injected and pid_file.exists()
-        assert events[-1]["reason_code"] == "pi_input_id_unavailable"
+        assert events[-1].reason_code == "pi_input_id_unavailable"
         with pytest.raises(ProcessLookupError):
             os.kill(int(pid_file.read_text()), 0)
         assert not backend._ACTIVE_PROCESSES and not backend._ACTIVE_STDERR_TASKS
@@ -2349,8 +2334,8 @@ while True: time.sleep(0.1)
                 event
                 async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path))
             ]
-        assert events[-1]["type"] == "done" and events[-1]["ok"] is False
-        assert events[-1]["reason_code"] == (
+        assert isinstance(events[-1], ae.Done) and events[-1].ok is False
+        assert events[-1].reason_code == (
             "pi_input_id_unavailable" if phase == "preflight" else "current_prompt_input_missing"
         )
         assert pid_file.exists() and close_calls
@@ -2417,13 +2402,13 @@ send({{"type":"response", "command":"get_session_stats", "success":True,
                     stub, [], "initial turn", str(tmp_path), steering_queue=queue
                 )
             ]
-        assert [event for event in events if event["type"] == "done"] == [events[-1]]
-        assert events[-1]["ok"] is (expected_reason is None)
+        assert [event for event in events if isinstance(event, ae.Done)] == [events[-1]]
+        assert events[-1].ok is (expected_reason is None)
         if expected_reason is None:
-            assert events[-1]["text"] == "original only"
+            assert events[-1].text == "original only"
         else:
-            assert events[-1]["reason_code"] == expected_reason
-            assert "original only" not in events[-1]["text"]
+            assert events[-1].reason_code == expected_reason
+            assert "original only" not in events[-1].text
         assert not backend._ACTIVE_PROCESSES
         assert not backend._ACTIVE_STEERING_TASKS
 
@@ -2457,12 +2442,12 @@ for line in sys.stdin:
                 stub, [], "initial turn", str(tmp_path), steering_queue=queue, finish_event=finish
             ):
                 events.append(event)
-                if event["type"] == "settled":
+                if isinstance(event, ae.StreamSettled):
                     queue.put_nowait("late inbox update")
                     finish.set()
-        assert events[-1]["ok"] is False
-        assert events[-1]["reason_code"] == "queued_input_start_missing"
-        assert [event for event in events if event["type"] == "done"] == [events[-1]]
+        assert events[-1].ok is False
+        assert events[-1].reason_code == "queued_input_start_missing"
+        assert [event for event in events if isinstance(event, ae.Done)] == [events[-1]]
 
     async def test_stock_pi_capability_preflight_sends_no_prompt(self, tmp_path):
         received = tmp_path / "received-prompt"
@@ -2482,9 +2467,9 @@ if select.select([sys.stdin], [], [], 0.2)[0]:
         events = [
             event async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path))
         ]
-        assert events[-1]["ok"] is False
-        assert "native input-ID capability" in events[-1]["text"]
-        assert events[-1]["reason_code"] == "pi_input_id_unavailable"
+        assert events[-1].ok is False
+        assert "native input-ID capability" in events[-1].text
+        assert events[-1].reason_code == "pi_input_id_unavailable"
         assert not received.exists()
 
     async def test_preflight_timeout_reports_phase_duration_and_session_size(
@@ -2513,17 +2498,17 @@ if select.select([sys.stdin], [], [], 0)[0]:
             )
         ]
         done = events[-1]
-        assert done["ok"] is False
-        assert done["reason_code"] == "pi_input_id_unavailable"
-        assert "phase=await_get_state" in done["text"]
-        assert "session_bytes=123" in done["text"]
-        assert done["diagnostic"]["reason"] == "native_preflight_timeout"
-        assert done["diagnostic"]["session_bytes"] == 123
-        assert done["diagnostic"]["wait_ms"] >= 0
-        assert "elapsed_ms=" in done["text"]
-        assert "wait_ms=" in done["text"]
-        assert "spawn_ms=" in done["text"]
-        assert "secret prompt" not in done["text"]
+        assert done.ok is False
+        assert done.reason_code == "pi_input_id_unavailable"
+        assert "phase=await_get_state" in done.text
+        assert "session_bytes=123" in done.text
+        assert done.diagnostic["reason"] == "native_preflight_timeout"
+        assert done.diagnostic["session_bytes"] == 123
+        assert done.diagnostic["wait_ms"] >= 0
+        assert "elapsed_ms=" in done.text
+        assert "wait_ms=" in done.text
+        assert "spawn_ms=" in done.text
+        assert "secret prompt" not in done.text
         assert not received.exists()
 
     async def test_large_saved_session_gets_only_bounded_preflight_budget(
@@ -2568,8 +2553,8 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
                 env_extra={"AGENT_COMMS_ROOT": str(tmp_path)},
             )
         ]
-        assert small[-1]["diagnostic"]["budget_ms"] == 50
-        assert small[-1]["diagnostic"]["reason"] == "native_preflight_timeout"
+        assert small[-1].diagnostic["budget_ms"] == 50
+        assert small[-1].diagnostic["reason"] == "native_preflight_timeout"
         session.write_bytes(b"x" * 65)
         large = [
             event
@@ -2583,8 +2568,8 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
                 send_boundary=lambda *_: nullcontext(False),
             )
         ]
-        assert large[-1]["ok"] is False
-        assert "Input authority changed before Pi prompt send" in large[-1]["text"]
+        assert large[-1].ok is False
+        assert "Input authority changed before Pi prompt send" in large[-1].text
         assert not received.exists()
         # A denied send and a timeout both release every real startup slot.
         leases = [NativeStartupAdmission(tmp_path) for _ in range(4)]
@@ -2595,7 +2580,9 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
             for lease in leases:
                 lease.release()
 
-    async def test_persistent_pi_reuses_one_child_with_fresh_prompt_receipts(self, tmp_path):
+    async def test_persistent_pi_reuses_one_child_with_fresh_prompt_receipts(
+        self, tmp_path, monkeypatch
+    ):
         session_file = tmp_path / "session.jsonl"
         session_file.write_text("session\n")
         proof_file = tmp_path / "session.jsonl.input-proof"
@@ -2671,7 +2658,7 @@ for line in sys.stdin:
                     persistent_session=persistent,
                 )
             ]
-            assert first[-1]["ok"] is True and second[-1]["ok"] is True
+            assert first[-1].ok is True and second[-1].ok is True
             assert persistent.proc is first_proc and first_proc is not None
             assert first_proc.returncode is None
             ids = [line.split() for line in ids_file.read_text().splitlines()]
@@ -2689,7 +2676,7 @@ for line in sys.stdin:
                     persistent_session=persistent,
                 )
             ]
-            assert third[-1]["ok"] is True
+            assert third[-1].ok is True
             assert persistent.proc is not first_proc
             assert first_proc.returncode is not None
             third_proc = persistent.proc
@@ -2705,7 +2692,7 @@ for line in sys.stdin:
                     persistent_session=persistent,
                 )
             ]
-            assert proof_changed[-1]["ok"] is True
+            assert proof_changed[-1].ok is True
             assert persistent.proc is not third_proc
             assert third_proc is not None and third_proc.returncode is not None
             fourth_proc = persistent.proc
@@ -2742,7 +2729,7 @@ for line in sys.stdin:
                     persistent_session=persistent,
                 )
             ]
-            assert after[-1]["ok"] is True
+            assert after[-1].ok is True
             assert len(ids_file.read_text().splitlines()) == 6
 
             @contextmanager
@@ -2762,7 +2749,7 @@ for line in sys.stdin:
                     send_boundary=revoked_goal,
                 )
             ]
-            assert denied[-1]["ok"] is False
+            assert denied[-1].ok is False
             assert len(ids_file.read_text().splitlines()) == 6
             revived = [
                 event
@@ -2775,7 +2762,7 @@ for line in sys.stdin:
                     persistent_session=persistent,
                 )
             ]
-            assert revived[-1]["ok"] is True
+            assert revived[-1].ok is True
             before_image_proc = persistent.proc
             image = ImageInput("U0VDUkVUX0lNQUdFX0JZVEVT", "image/png")
             image_turn = [
@@ -2790,7 +2777,7 @@ for line in sys.stdin:
                     images=(image,),
                 )
             ]
-            assert image_turn[-1]["ok"] is True
+            assert image_turn[-1].ok is True
             assert persistent.proc is before_image_proc and before_image_proc is not None
             failed = [
                 event
@@ -2803,9 +2790,9 @@ for line in sys.stdin:
                     persistent_session=persistent,
                 )
             ]
-            assert failed[-1]["ok"] is False
-            assert "diagnostics withheld" in failed[-1]["text"]
-            assert image.data not in failed[-1]["text"]
+            assert failed[-1].ok is False
+            assert "diagnostics withheld" in failed[-1].text
+            assert image.data not in failed[-1].text
             revived = [
                 event
                 async for event in backend.stream_agent_events(
@@ -2817,7 +2804,39 @@ for line in sys.stdin:
                     persistent_session=persistent,
                 )
             ]
-            assert revived[-1]["ok"] is True
+            assert revived[-1].ok is True
+            # The real pinned strict validator is exercised separately against
+            # a valid native JSONL. This stub tests the transport lifecycle:
+            # discard injected manager; a different process and matching
+            # get_state identity precede a distinct new input's provider work.
+            from agent_comms import native_session_reopen
+
+            calls = []
+
+            def validated(_launcher, file, *, expected_session_id):
+                calls.append((file, expected_session_id))
+                return "fixed-session"
+
+            monkeypatch.setattr(native_session_reopen, "validate_native_reopen", validated)
+            retired = persistent.proc
+            await persistent.discard_for_external_write(str(session_file))
+            assert retired is not None and retired.returncode is not None
+            assert persistent.proc is None and persistent.reopen_session_id == "fixed-session"
+            reopened = [
+                event
+                async for event in backend.stream_agent_events(
+                    stub,
+                    [],
+                    "fresh after discarded manager",
+                    str(tmp_path),
+                    session_file=str(session_file),
+                    persistent_session=persistent,
+                )
+            ]
+            assert reopened[-1].ok is True
+            assert calls == [(str(session_file), "fixed-session")]
+            assert persistent.proc is not None and persistent.proc is not retired
+            assert persistent.reopen_required is None
             borrowed_proc = persistent.proc
 
             async def delayed_turn():
@@ -2842,7 +2861,7 @@ for line in sys.stdin:
             assert not closing.done() and borrowed_proc is not None
             assert borrowed_proc.returncode is None
             delayed = await active
-            assert delayed[-1]["ok"] is True
+            assert delayed[-1].ok is True
             await closing
             assert borrowed_proc.returncode is not None
         finally:
@@ -2895,9 +2914,9 @@ send({{"type":"agent_settled"}})
                 stub, [], "same text", str(tmp_path), steering_queue=queue
             )
         ]
-        assert events[-1]["ok"] is expected_ok
+        assert events[-1].ok is expected_ok
         if not expected_ok:
-            assert events[-1]["reason_code"] == (
+            assert events[-1].reason_code == (
                 "unrecognized_followup_input"
                 if case == "wrong_steer_id"
                 else "current_prompt_input_missing"
@@ -2948,9 +2967,9 @@ for line in sys.stdin:
                 native_start=native_start,
             )
         ]
-        assert events[-1]["ok"] is True, events
+        assert events[-1].ok is True, events
         assert [text for _, _, text in starts] == ["goal request", "channel mention"]
-        assert len([e for e in events if e["type"] == "input_started"]) == 2
+        assert len([e for e in events if isinstance(e, ae.InputStarted)]) == 2
 
     @pytest.mark.parametrize(("decision", "expected_ok"), [(None, True), (False, False)])
     async def test_unsent_followup_goal_defer_or_owner_stop(self, tmp_path, decision, expected_ok):
@@ -3004,11 +3023,11 @@ for line in sys.stdin:
                 send_boundary=send_boundary,
             )
         ]
-        assert events[-1]["ok"] is expected_ok, events
+        assert events[-1].ok is expected_ok, events
         if expected_ok:
-            assert {"type": "input_refused", "id": "bus-42"} in events
+            assert ae.InputRefused(id="bus-42") in events
         else:
-            assert events[-1]["reason_code"] == "input_authority_changed"
+            assert events[-1].reason_code == "input_authority_changed"
         assert queue.empty()
 
 
@@ -3051,26 +3070,26 @@ class TestPrRpcParsing:
         stub = _stub(tmp_path, f"#!/bin/sh\ntrue\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
         events = [e async for e in backend.stream_agent_events(stub, [], "task", str(tmp_path))]
         # pi-named stub triggers rpc mode; prompt goes to stdin.
-        types = [e["type"] for e in events]
+        types = [type(e) for e in events]
         assert types == [
-            "chunk",
-            "chunk",
-            "thinking",
-            "tool_start",
-            "tool_progress",
-            "tool_end",
-            "chunk",
-            "settled",
-            "done",
+            ae.Chunk,
+            ae.Chunk,
+            ae.Thinking,
+            ae.ToolStart,
+            ae.ToolProgress,
+            ae.ToolEnd,
+            ae.Chunk,
+            ae.StreamSettled,
+            ae.Done,
         ]
-        assert events[2]["text"] == "Checking the workspace"
+        assert events[2].text == "Checking the workspace"
         tool_start = events[3]
-        assert tool_start["name"] == "bash" and tool_start["id"] == "t1"
-        assert "echo hi" in tool_start["title"]
-        assert events[4]["output"] == "running"
+        assert tool_start.name == "bash" and tool_start.id == "t1"
+        assert "echo hi" in tool_start.title
+        assert events[4].output == "running"
         tool_end = events[5]
-        assert tool_end["ok"] is True and "hi" in tool_end["output"]
-        assert events[-1]["text"] == "hello done" and events[-1]["ok"] is True
+        assert tool_end.ok is True and "hi" in tool_end.output
+        assert events[-1].text == "hello done" and events[-1].ok is True
 
     async def test_rpc_model_and_context_metadata(self, tmp_path):
         rpc_lines = "\n".join(
@@ -3090,11 +3109,11 @@ class TestPrRpcParsing:
         )
         stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
         events = [e async for e in backend.stream_agent_events(stub, [], "t", str(tmp_path))]
-        info = [event for event in events if event["type"] == "agent_info"]
-        assert info[0]["model"] == "openrouter/z-ai/glm"
-        assert info[0]["session_file"] == "/tmp/pi-session.jsonl"
-        assert info[-1]["context_used"] == 200
-        assert info[-1]["context_size"] == 1000
+        info = [event for event in events if isinstance(event, ae.AgentInfo)]
+        assert info[0].model == "openrouter/z-ai/glm"
+        assert info[0].session_file == "/tmp/pi-session.jsonl"
+        assert info[-1].context_used == 200
+        assert info[-1].context_size == 1000
 
     async def test_rpc_resumes_session_and_forwards_live_prompts(self, tmp_path):
         args_path = tmp_path / "args"
@@ -3137,9 +3156,9 @@ EOF
         assert ']\\n[peer] ping"' in steering_path.read_text()
         assert '"streamingBehavior": "steer"' in steering_path.read_text()
         assert any(
-            event.get("session_file") == str(session_path)
+            event.session_file == str(session_path)
             for event in events
-            if event["type"] == "agent_info"
+            if isinstance(event, ae.AgentInfo)
         )
 
     async def test_rpc_stays_open_for_steered_child_reply(self, tmp_path):
@@ -3172,13 +3191,13 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
             finish_event=finish,
         ):
             events.append(event)
-            if event["type"] == "settled":
-                if not any(item["type"] == "chunk" for item in events):
+            if isinstance(event, ae.StreamSettled):
+                if not any(isinstance(item, ae.Chunk) for item in events):
                     queue.put_nowait("[child] ping")
                 else:
                     finish.set()
 
-        assert [event["text"] for event in events if event["type"] == "chunk"] == ["pong"]
+        assert [event.text for event in events if isinstance(event, ae.Chunk)] == ["pong"]
 
     @pytest.mark.parametrize("aborted", [False, True])
     async def test_midturn_compaction_forwards_lifecycle_and_clears_stale_usage(
@@ -3218,17 +3237,17 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
         assert next(
             event
             for event in events
-            if event["type"] == "agent_info" and event["context_used"] == 83
+            if isinstance(event, ae.AgentInfo) and event.context_used == 83
         )
-        start = next(event for event in events if event["type"] == "compaction_start")
-        end = next(event for event in events if event["type"] == "compaction_end")
-        assert start["reason"] == "threshold"
-        assert end["reason"] == "threshold"
-        assert end["aborted"] is aborted
-        assert end["context_used"] is None
-        assert end["summary"] == (None if aborted else summary)
-        assert events[-2]["type"] == "agent_info" and events[-2]["context_used"] is None
-        assert events[-1]["ok"] is True
+        start = next(event for event in events if isinstance(event, ae.CompactionStart))
+        end = next(event for event in events if isinstance(event, ae.CompactionEnd))
+        assert start.reason == "threshold"
+        assert end.reason == "threshold"
+        assert end.aborted is aborted
+        assert end.context_used is None
+        assert end.summary == (None if aborted else summary)
+        assert isinstance(events[-2], ae.AgentInfo) and events[-2].context_used is None
+        assert events[-1].ok is True
 
     async def test_failed_tool_does_not_fail_recovered_turn(self, tmp_path):
         rpc_lines = "\n".join(
@@ -3243,9 +3262,9 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
         )
         stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
         events = [e async for e in backend.stream_agent_events(stub, [], "t", str(tmp_path))]
-        assert events[-1]["ok"] is True
+        assert events[-1].ok is True
         tool_end = events[1]
-        assert tool_end["ok"] is False
+        assert tool_end.ok is False
 
     @pytest.mark.parametrize(
         ("starts", "stops", "expected_reason"),
@@ -3282,10 +3301,10 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
         events = [
             event async for event in backend.stream_agent_events(stub, [], "t", str(tmp_path))
         ]
-        assert events[-1]["ok"] is (expected_reason is None)
+        assert events[-1].ok is (expected_reason is None)
         if expected_reason is not None:
-            assert events[-1]["reason_code"] == expected_reason
-            assert events[-1]["text"]
+            assert events[-1].reason_code == expected_reason
+            assert events[-1].text
 
     @pytest.mark.parametrize(
         "records",
@@ -3324,8 +3343,8 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
         events = [
             event async for event in backend.stream_agent_events(stub, [], "t", str(tmp_path))
         ]
-        assert events[-1]["ok"] is False
-        assert events[-1]["reason_code"] == "current_prompt_input_missing"
+        assert events[-1].ok is False
+        assert events[-1].reason_code == "current_prompt_input_missing"
 
     @pytest.mark.parametrize(
         ("steer_accepted", "foreign_first", "expected_ok"),
@@ -3366,9 +3385,9 @@ send({{"type": "agent_settled"}})
                 stub, [], "t", str(tmp_path), steering_queue=queue
             )
         ]
-        assert events[-1]["ok"] is expected_ok
+        assert events[-1].ok is expected_ok
         if not expected_ok:
-            assert events[-1]["reason_code"] == (
+            assert events[-1].reason_code == (
                 "current_prompt_input_missing" if foreign_first else "unrecognized_followup_input"
             )
 
@@ -3401,8 +3420,8 @@ send({"type": "agent_settled"})
                 stub, [], "t", str(tmp_path), steering_queue=queue
             )
         ]
-        assert events[-1]["ok"] is False
-        assert events[-1]["reason_code"] == "unrecognized_followup_input"
+        assert events[-1].ok is False
+        assert events[-1].reason_code == "unrecognized_followup_input"
 
     @pytest.mark.parametrize("managed_finish", [False, True])
     async def test_handled_ack_without_user_start_times_out_without_replay(
@@ -3436,9 +3455,9 @@ time.sleep(30)
 
         events = await asyncio.wait_for(collect(), timeout=3)
         assert calls.read_text().splitlines() == ["one"]
-        assert [event for event in events if event["type"] == "done"] == [events[-1]]
-        assert events[-1]["ok"] is False
-        assert events[-1]["reason_code"] == "current_prompt_input_missing"
+        assert [event for event in events if isinstance(event, ae.Done)] == [events[-1]]
+        assert events[-1].ok is False
+        assert events[-1].reason_code == "current_prompt_input_missing"
 
     @pytest.mark.parametrize(
         "later_event",
@@ -3463,5 +3482,5 @@ time.sleep(30)
         events = [
             event async for event in backend.stream_agent_events(stub, [], "t", str(tmp_path))
         ]
-        assert events[-1]["ok"] is False
-        assert events[-1]["reason_code"] == "assistant_final_stop_missing"
+        assert events[-1].ok is False
+        assert events[-1].reason_code == "assistant_final_stop_missing"

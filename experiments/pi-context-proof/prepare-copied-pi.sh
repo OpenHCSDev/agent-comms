@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Reproducible, opt-in Pi 0.85.1 native-input fork. NEVER patches the installed Pi.
 set -euo pipefail
+unset NODE_OPTIONS NODE_PATH
 STOCK=${PI_STOCK_DIR:-/home/ts/.local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent}
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 VERSION=$(node -e 'console.log(require(process.argv[1]).version)' "$STOCK/package.json")
@@ -22,11 +23,25 @@ e968e5be01dc7ad9615f938ae867ef136fa495f13dcf169942e9f781a299d9eb  dist/modes/rpc
 13d6fec97d08f4303714aca50f3113ba0263706e961fc220ccb1cc023c520e6b  node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
 SHAS
 ) || { echo 'Stock Pi bytes changed; refusing patch' >&2; exit 1; }
-ROOT=$(mktemp -d /var/tmp/agent-comms-pi-native-XXXXXXXX)
+ROOT=$(mktemp -d "${TMPDIR:-/var/tmp}/agent-comms-pi-native-XXXXXXXX")
 chmod 0700 "$ROOT"
 mkdir -p "$ROOT/node_modules/@earendil-works"
 TARGET="$ROOT/node_modules/@earendil-works/pi-coding-agent"
-cp -a --reflink=auto "$STOCK" "$TARGET"
+# Materialize only internal regular-file aliases (npm's .bin launchers). Never
+# leave a copied symlink capable of redirecting a later patch into stock files.
+python3 - "$STOCK" <<'PY'
+import sys
+from pathlib import Path
+root = Path(sys.argv[1]).resolve(strict=True)
+for index, path in enumerate(root.rglob("*")):
+    if index >= 30000:
+        raise SystemExit("Stock package inventory limit exceeded")
+    if path.is_symlink():
+        target = path.resolve(strict=True)
+        if not target.is_relative_to(root) or not target.is_file():
+            raise SystemExit("Stock package contains an external or directory alias")
+PY
+cp -aL --no-preserve=links --reflink=auto "$STOCK" "$TARGET"
 [[ $(realpath "$TARGET/dist/core/agent-session.js") == "$TARGET/dist/core/agent-session.js" ]] || {
   echo 'Patch target is not an independent copy' >&2; exit 1;
 }

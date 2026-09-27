@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import Message, MessageType, Thread
+from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.declarations import ScheduledTurn
 from agent_comms.goal_attempts import GoalAttemptStore
@@ -41,12 +42,11 @@ async def test_preflight_failure_keeps_its_reason_visible(tmp_path, monkeypatch)
             updates.append(update)
 
     async def events(*args, **kwargs):
-        yield {
-            "type": "done",
-            "ok": False,
-            "text": "Pi native input-ID capability preflight failed.",
-            "reason_code": "pi_input_id_unavailable",
-        }
+        yield ae.Done(
+            ok=False,
+            text="Pi native input-ID capability preflight failed.",
+            reason_code="pi_input_id_unavailable",
+        )
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     agent.on_connect(Client())
@@ -81,13 +81,13 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
     comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
 
     async def events(*args, **kwargs):
-        yield {"type": "input_started", "id": None}
+        yield ae.InputStarted(id=None)
         comms.send("peer", "project", "late direct")
         assert await agent._drain_inbox("project") == 1
         assert agent._forwarded_inputs["project"] == {"bus-1"}
         goal = comms.update_goal("project", "set", text="Long-term architecture work")
         assert goal is not None
-        yield {"type": "tool_end", "id": "set-goal", "name": "comms_set_goal", "ok": True}
+        yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
         command = kwargs["steering_queue"].get_nowait()
         with kwargs["send_boundary"](command["_input_id"], "a" * 32, command["message"]) as allowed:
             assert allowed is None
@@ -96,7 +96,7 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
             pending = await proxy.request("input_dispositions")
             assert [row["inputId"] for row in pending["inputs"]] == ["bus:1"]
             updates.clear()
-            yield {"type": "input_refused", "id": "bus-1"}
+            yield ae.InputRefused(id="bus-1")
             # Inspect before the turn finishes: refusal removes this input from
             # awaiting authority, even though the steering lookup remains.
             assert "project" in agent._active_turns
@@ -117,8 +117,8 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
             assert agent._dispositions.get("bus:1") == {**before, "notice_dismissed": True}
         finally:
             await proxy.close()
-        yield {"type": "settled"}
-        yield {"type": "done", "ok": True, "text": "Goal set"}
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="Goal set")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
@@ -181,8 +181,8 @@ async def test_two_queued_directs_need_two_distinct_native_starts(tmp_path, monk
             assert allowed
         assert kwargs["native_start"](None, native_id, args[2])
         receipts.append(native_id)
-        yield {"type": "input_started", "id": None}
-        yield {"type": "done", "ok": True, "text": "done"}
+        yield ae.InputStarted(id=None)
+        yield ae.Done(ok=True, text="done")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
@@ -222,7 +222,7 @@ async def test_ui_ack_does_not_hide_unknown_or_authorize_goal_superseded_direct(
 
         async def events(*args, **kwargs):
             backend_calls.append(args)
-            yield {"type": "done", "ok": False, "text": "not sent"}
+            yield ae.Done(ok=False, text="not sent")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
         pending = agent._pending_turns.pop("project")
@@ -257,7 +257,7 @@ async def test_project_change_after_queue_denies_stale_project_send(tmp_path, mo
         comms.set_project("project", str(other_project))
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
             authorized.append(allowed)
-        yield {"type": "done", "ok": False, "text": "not sent"}
+        yield ae.Done(ok=False, text="not sent")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:

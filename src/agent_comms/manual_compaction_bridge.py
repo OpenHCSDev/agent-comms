@@ -3,45 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 from contextlib import suppress
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from acp.schema import AgentMessageChunk, TextContentBlock
 
+from . import agent_events as events
 from . import backend, manual_compaction
 from .declarations import ActivityState
-
-
-async def _emit_compaction(agent: Any, session_id: str, phase: str, summary: str = "") -> None:
-    """Emit ACP metadata directly; published acp.py has no compaction event branch."""
-    detail: dict[str, Any] = {
-        "phase": phase,
-        "status": {"start": "running", "end": "completed", "abort": "aborted"}[phase],
-        "reason": "manual",
-        "contextUsed": None,
-        "contextState": "unknown",
-        "willRetry": False,
-    }
-    if phase in {"end", "abort"} and summary:
-        detail["summary"] = summary
-    text = {
-        "start": "",
-        "end": "Context compacted; usage is recalculating.",
-        "abort": "Context compaction aborted; usage is unknown.",
-    }[phase]
-    if phase == "end" and summary:
-        text += f" Summary: {summary}"
-    elif phase == "abort" and summary:
-        text += f" {summary}"
-    await agent._runtime.session_update(
-        session_id=session_id,
-        update=AgentMessageChunk(
-            session_update="agent_message_chunk",
-            content=TextContentBlock(type="text", text=text),
-            field_meta={"agentComms": {"compaction": detail}},
-        ),
-    )
 
 
 async def compact_context(
@@ -57,6 +29,18 @@ async def compact_context(
     async with lock:
         if session_id in agent._active_turns:
             return {"ok": False, "error": "Wait for the current response before compacting."}
+        # The legacy /compact helper hashes the separately installed Pi and
+        # makes Pi commit its own summary. It cannot be an alternate writer of
+        # the canonical PR95 root or bypass the owner journal/outbox.
+        launcher = shutil.which(agent._agent_bin) or agent._agent_bin
+        # Canonical pi-native may be invoked through a renamed symlink. Match
+        # the resolved executable just as saved-session reopen does; spelling
+        # alone cannot authorize the older unjournaled direct writer.
+        if Path(launcher).resolve().name in {"pi-native", "pi-comms-native"}:
+            return {
+                "ok": False,
+                "error": "Canonical native compaction requires the owner journal bridge.",
+            }
         thread = agent._comms.registry.require(thread_name)
         if not thread.session_file:
             return {"ok": False, "error": "This thread has no saved session to compact."}
@@ -98,7 +82,7 @@ async def compact_context(
                 context_size=info.context_size if info else None,
             )
             started = True
-            await _emit_compaction(agent, session_id, "start")
+            await agent._emit_event(session_id, events.CompactionStart(reason="manual"))
             result = await manual_compaction.compact_session(
                 agent._agent_bin,
                 backend.args_for_thinking_level(
@@ -113,11 +97,12 @@ async def compact_context(
             # A client may receive this terminal event then raise. Do not send
             # a contradictory abort after an uncertain delivery.
             terminal_attempted = True
-            await _emit_compaction(
-                agent,
+            await agent._emit_event(
                 session_id,
-                "end" if success else "abort",
-                result.get("summary", "") if success else result.get("error", ""),
+                events.ManualCompactionEnd(
+                    aborted=not success,
+                    summary=result.get("summary", "") if success else result.get("error", ""),
+                ),
             )
             if success:
                 await agent._runtime.session_update(
@@ -132,10 +117,5 @@ async def compact_context(
         finally:
             if started and not terminal_attempted:
                 with suppress(Exception, asyncio.CancelledError):
-                    await _emit_compaction(agent, session_id, "abort")
-            if agent._active_turns.get(session_id) == turn_id:
-                agent._active_turns.pop(session_id, None)
-            if agent._turn_tasks.get(session_id) is task:
-                agent._turn_tasks.pop(session_id, None)
-            agent._comms.finish_turn(thread_name, turn_id, expected=turn_claim)
-            await agent._emit_event(session_id, {"type": "settled", "turn_id": turn_id})
+                    await agent._emit_event(session_id, events.ManualCompactionEnd(aborted=True))
+            await agent.settle_turn(session_id, thread_name, turn_id, turn_claim, task=task)

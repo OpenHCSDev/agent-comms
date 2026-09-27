@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
 from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
+from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination import (
     AttemptPhase,
@@ -61,11 +62,13 @@ from .declarations import (
 )
 from .diagnostics import record_terminal_failure
 from .envelope_claim_transitions import WakeAdmission
+from .fresh_private_session import FreshPrivateSession, create_fresh_private_session
 from .native_pi import (
     NativeContextProof,
     NativePiTerminalFailure,
     NativePiUnavailable,
     NativeTurnResult,
+    _fresh_selected_revision,
     _private_session_dir,
     _read_native_context_evidence,
     _trusted_package,
@@ -105,6 +108,7 @@ class CoordinatedTurn:
     response_message_id: str | None
     exact_target: str | None
     cursor_status: str = "unavailable"  # never an ACK, work-skip or provider permit
+    fresh_session: FreshPrivateSession | None = None  # creation coverage, never terminal receipt
 
 
 @dataclass(frozen=True, slots=True)
@@ -312,7 +316,9 @@ def _native_send_boundary(
     wire_root_id: str,
     token: str,
     fence: OwnerFence | None = None,
-) -> Callable[[], AbstractContextManager[None]]:
+    expected_session_file: Path | None = None,
+    fresh_selected: FreshPrivateSession | None = None,
+) -> Callable[..., AbstractContextManager[None]]:
     """One-use final-send admission, with wire→bus→registry→SQL lock order.
 
     Entered only by the native adapter's isolated raw-pipe writer (never an
@@ -321,9 +327,15 @@ def _native_send_boundary(
     """
     once = threading.Lock()
     store_path = store.path
+    # Prepare durable journal schema before the deadline-constrained raw
+    # writer. A missing selected row must not mean a missing admission fence.
+    journal = CompactionJournal(bus._path.parent / "compaction-commits.sqlite3")
 
     @contextmanager
-    def boundary() -> Iterator[None]:
+    def boundary(
+        actual_session_file: Path,
+        selected_runtime_revision: tuple[int, int, int, int, int] | None = None,
+    ) -> Iterator[None]:
         try:
             asyncio.get_running_loop()
         except RuntimeError:
@@ -451,19 +463,70 @@ def _native_send_boundary(
                 ordinal,
             ):
                 raise IdentityConflict("native send differs from its durable prompt binding")
-            # Bind the exact input ID to the owner admission in which Pi is
-            # actually sent the prompt, not to a later caller-provided epoch.
-            # The same transaction holds all exclusions through os.write;
-            # failure rolls back this proof and leaves the attempt uncertain.
-            updated = db.execute(
-                "UPDATE native_runtime_inputs SET sent_owner_admission_epoch=? "
-                "WHERE input_id=? AND sent_owner_admission_epoch IS NULL",
-                (epoch, input_id),
-            )
-            if updated.rowcount != 1:
-                raise StaleFence("native input admission was already bound")
-            # No event-loop transport buffer may own any of these prompt bytes.
-            yield
+            # The real RPC get_state resolved this exact saved session file
+            # before creating a raw writer. Do not substitute a recipient-wide
+            # scan or post-send cursor: both admit a same-session selected row.
+            if (
+                not isinstance(actual_session_file, Path)
+                or actual_session_file.is_symlink()
+                or (
+                    expected_session_file is not None
+                    and (
+                        actual_session_file != expected_session_file
+                        or not actual_session_file.is_file()
+                    )
+                )
+            ):
+                raise IdentityConflict("native send requires an exact saved session file")
+            try:
+                # Pi may report a fresh path before writing its session header.
+                # This lexical canonical path still equals any later durable
+                # reservation; the journal lock below covers file creation.
+                saved = actual_session_file.resolve(strict=False)
+                expected_dir = (
+                    bus._path.parent / "native-sessions" / claim.recipient_lookup
+                ).resolve(strict=True)
+            except OSError as error:
+                raise IdentityConflict("native saved session unavailable before send") from error
+            if (
+                saved.parent != expected_dir
+                or saved.suffix != ".jsonl"
+                or (actual_session_file.exists() and not actual_session_file.is_file())
+            ):
+                raise IdentityConflict("native saved session changed before send")
+
+            # The actual source's native get_state was checked before this
+            # isolated writer acquired owner/wire/registry/SQL locks. Check the
+            # SAME enrolled inode, bootstrap prefix and exact post-startup
+            # revision again while holding locks and before any raw pipe byte.
+            if fresh_selected is not None and (
+                selected_runtime_revision is None
+                or saved != fresh_selected.path
+                or _fresh_selected_revision(fresh_selected, started=True)
+                != selected_runtime_revision
+            ):
+                raise IdentityConflict("selected fresh source changed before native send")
+            # Persist UNKNOWN in the selected journal *before* the first raw
+            # byte. A crash, lost parent-fsync ACK, or provider uncertainty can
+            # never turn a previous raw send into a later selected reservation.
+            # This marker is never cleared by a raw pipe ACK or fake result.
+            journal.reserve_private_raw_input(saved, input_id)
+            # Reacquire the SAME journal's exclusion after the durable marker;
+            # a concurrent selected reserve sees it and must refuse. Hold the
+            # journal lock through every raw os.write under PR94's canonical
+            # wire→bus→registry→store lock order.
+            with journal.ordinary_input_send_fence(saved, private_input_id=input_id):
+                # Bind the input ID to the owner admission in which Pi is sent
+                # the prompt, never a later caller-provided epoch.
+                updated = db.execute(
+                    "UPDATE native_runtime_inputs SET sent_owner_admission_epoch=? "
+                    "WHERE input_id=? AND sent_owner_admission_epoch IS NULL",
+                    (epoch, input_id),
+                )
+                if updated.rowcount != 1:
+                    raise StaleFence("native input admission was already bound")
+                # No event-loop transport buffer may own prompt bytes here.
+                yield
 
     return boundary
 
@@ -913,6 +976,8 @@ async def run_one_sealed_claim(
     opt_in: bool = True,
     after_seq: int = 0,
     session_file: Path | None = None,
+    fresh_private_enrollment: bool = False,
+    selected_thinking_level: str | None = None,
     selected_existing_file_write: SelectedExistingFileWrite | None = None,
     selected_tool_intent: SelectedToolIntent | None = None,
     selected_write_plan_loader: (
@@ -933,6 +998,16 @@ async def run_one_sealed_claim(
     if not opt_in or root == Path("/var/tmp") or not root.is_relative_to("/var/tmp"):
         raise PublicationActivationBlocked("coordinated runtime requires a private /var/tmp root")
     _private_session_dir(root)
+    if type(fresh_private_enrollment) is not bool or (
+        fresh_private_enrollment and session_file is not None
+    ):
+        raise IdentityConflict("Fresh private enrollment requires a new, explicit session")
+    if selected_thinking_level is not None and (
+        not fresh_private_enrollment
+        or type(selected_thinking_level) is not str
+        or selected_thinking_level not in {"low", "high"}
+    ):
+        raise IdentityConflict("Selected level requires explicitly supported fresh enrollment")
     _trusted_package(native_package)  # fail BEFORE any claim is reserved
     if (
         selected_existing_file_write is not None
@@ -1041,7 +1116,8 @@ async def run_one_sealed_claim(
             owner_epoch,
         )
         session_dir = root / "native-sessions" / lookup
-        session_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
+        if not fresh_private_enrollment:
+            session_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
         if session_file is not None:
             session_file = Path(session_file).absolute()
             if session_file.parent != session_dir:
@@ -1049,7 +1125,47 @@ async def run_one_sealed_claim(
         worktree = Path(owner.worktree).absolute()
         if not worktree.is_dir():
             raise IdentityConflict("registered participant worktree is unavailable")
+        fresh_session: FreshPrivateSession | None = None
+        if fresh_private_enrollment:
+            # Explicit new-session coverage is created after the exact owner
+            # turn is claimed and before either preflight or raw prompt. No
+            # path-only or historical-session backfill is allowed. The wire
+            # lock remains held across O_EXCL, file+parent fsync and journal
+            # COMMIT+parent fsync, in wire→bus→registry→store→journal order.
+            with _response_boundary(bus) as registry, store._read_transaction():
+                actual = registry.threads.get(owner.name)
+                status = registry.statuses.get(owner.name)
+                if (
+                    actual != owner
+                    or status is None
+                    or not status.active
+                    or registry.admission_generations.get(owner.name) != owner_epoch
+                ):
+                    raise StaleFence("fresh-session owner changed before enrollment")
+                _require_owner(store, lookup, owner, person.generation)
+                from .maintenance_barrier import MaintenanceBarrier
+
+                MaintenanceBarrier(bus._registry._path).assert_open_unlocked()
+                fresh_session = create_fresh_private_session(
+                    session_dir,
+                    worktree=worktree,
+                    selected_thinking_level=selected_thinking_level,
+                )
+                CompactionJournal(root / "compaction-commits.sqlite3").enroll_fresh_private_session(
+                    fresh_session,
+                    owner_name=owner.name,
+                    owner_created_at=float(owner.created_at).hex(),
+                    owner_lookup=lookup,
+                    owner_generation=person.generation,
+                    admission_epoch=owner_epoch,
+                )
+            session_file = fresh_session.path
         triage_session = session_file
+        first_selected = (
+            fresh_session
+            if fresh_session is not None and selected_thinking_level is not None
+            else None
+        )
         if pending.disposition is ClaimDisposition.TRIAGE_PENDING:
             triage_prompt = _triage_prompt(initial, pending, owner)
             if len(triage_prompt.encode("utf-8")) > _MAX_PROMPT_BYTES:
@@ -1076,6 +1192,7 @@ async def run_one_sealed_claim(
                 model=model,
                 thinking_level=owner.thinking_level,
                 maintenance_root=root,
+                fresh_selected=first_selected,
                 prompt_send_boundary=_native_send_boundary(
                     store,
                     bus,
@@ -1087,6 +1204,8 @@ async def run_one_sealed_claim(
                     claim=pending,
                     wire_root_id=wire_root_id,
                     token=token,
+                    expected_session_file=triage_session,
+                    fresh_selected=first_selected,
                 ),
             )
             _verify_live_turn(
@@ -1124,8 +1243,10 @@ async def run_one_sealed_claim(
                     None,
                     None,
                     cursor_status,
+                    fresh_session,
                 )
             triage_session = result.context.session_file
+            first_selected = None  # Pi has already appended this raw input.
         else:
             if pending.wake_mode is not WakeMode.FULL:
                 raise IdentityConflict("pending claim wake decision is not executable")
@@ -1271,6 +1392,7 @@ async def run_one_sealed_claim(
             model=model,
             thinking_level=owner.thinking_level,
             maintenance_root=root,
+            fresh_selected=first_selected,
             **({"selected_tool_mode": bound_tool_mode} if bound_tool_mode is not None else {}),
             prompt_send_boundary=_native_send_boundary(
                 store,
@@ -1284,6 +1406,8 @@ async def run_one_sealed_claim(
                 wire_root_id=wire_root_id,
                 token=token,
                 fence=fence,
+                expected_session_file=triage_session,
+                fresh_selected=first_selected,
             ),
         )
         _verify_live_turn(
@@ -1373,6 +1497,7 @@ async def run_one_sealed_claim(
             published.publication_receipt.message_id,
             published.execution.exact_target,
             cursor_status,
+            fresh_session,
         )
     except NativePiTerminalFailure as error:
         # The native adapter observed agent_settled, verified its input proof,

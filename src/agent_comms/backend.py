@@ -8,16 +8,7 @@ modes:
   opencode-style feedback (thinking spinners, tool-call cards).
 - **text** (fallback): any other backend; output arrives as raw chunks.
 
-Events (dicts):
-    {"type": "chunk",      "text": str}
-    {"type": "committed_progress", "text": str}  # completed Pi tool-use message
-    {"type": "tool_start", "id": str, "name": str, "title": str}
-    {"type": "tool_end",   "id": str, "name": str, "ok": bool, "output": str}
-    {"type": "agent_info", "model": str | None, "context_used": int | None,
-                            "context_size": int | None, "session_name": str | None}
-    {"type": "turn_state", "state": "model_stalled" | "aborting" |
-                                     "retrying" | "recovered" | "failed", ...}
-    {"type": "done",       "text": str, "ok": bool}
+Events are frozen nominal values declared in :mod:`agent_events`.
 
 The runner never raises on backend failure; it yields ``done`` with
 ``ok=False`` and the error as text. Callers own presentation. Provider
@@ -44,6 +35,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from . import agent_events as events
 from .declarations import _store_lock
 from .diagnostics import FailureReason
 from .image_inputs import ImageInput
@@ -195,15 +187,23 @@ class _JsonLineReader:
         self.reader = reader
         self.chunks: list[bytes] = []
 
-    async def readline(self) -> bytes:
+    async def readline(self, *, max_bytes: int | None = None) -> bytes:
+        size = sum(map(len, self.chunks))
         while True:
             try:
                 line = await self.reader.readuntil(b"\n")
             except asyncio.LimitOverrunError as error:
+                if max_bytes is not None and size + error.consumed > max_bytes:
+                    self.chunks.clear()
+                    raise ValueError("Native RPC record exceeds transport limit") from error
                 self.chunks.append(await self.reader.readexactly(error.consumed))
+                size += error.consumed
                 continue
             except asyncio.IncompleteReadError as error:
                 line = error.partial
+            if max_bytes is not None and size + len(line) > max_bytes:
+                self.chunks.clear()
+                raise ValueError("Native RPC record exceeds transport limit")
             self.chunks.append(line)
             record = b"".join(self.chunks)
             self.chunks.clear()
@@ -250,10 +250,17 @@ class PersistentPiSession:
         self.session_id: str | None = None
         self.revision: tuple[_FileRevision, _FileRevision | None] | None = None
         self.sensitive_diagnostics = False
+        self.reopen_required: str | None = None
+        self.reopen_session_id: str | None = None
+        # A cancellation cannot lose the sole handle to a child still being
+        # reaped. Every later borrower waits for this task before launching.
+        self._close_task: asyncio.Task[None] | None = None
 
     def reusable(self, launch_key: tuple[Any, ...], session_file: str | None) -> bool:
         return (
-            self.proc is not None
+            self.reopen_required is None
+            and self._close_task is None
+            and self.proc is not None
             and self.proc.returncode is None
             and self.reader is not None
             and self.stderr_task is not None
@@ -264,24 +271,54 @@ class PersistentPiSession:
         )
 
     async def close(self) -> None:
-        """Close while the caller owns ``lock`` or has stopped all turns."""
-        proc, stderr_task = self.proc, self.stderr_task
-        self.proc = None
-        self.reader = None
-        self.stderr_task = None
-        self.launch_key = None
-        self.session_file = None
-        self.session_id = None
-        self.revision = None
-        self.sensitive_diagnostics = False
-        if proc is not None:
-            await _terminate_process(proc)
-        if stderr_task is not None:
-            await asyncio.gather(stderr_task, return_exceptions=True)
+        """Reap the exact child even if a caller is cancelled mid-retirement.
+
+        The lock serializes normal borrowers. A cancelled borrower releases it,
+        but the retained cleanup task owns the old process and the next borrow
+        must await that same task before opening another Pi child.
+        """
+        if self._close_task is None:
+            proc, stderr_task = self.proc, self.stderr_task
+
+            async def finish() -> None:
+                if proc is not None:
+                    await _terminate_process(proc)
+                if stderr_task is not None:
+                    await asyncio.gather(stderr_task, return_exceptions=True)
+
+            # Create the independent cleanup BEFORE forgetting the process.
+            self._close_task = asyncio.create_task(finish())
+            self.proc = None
+            self.reader = None
+            self.stderr_task = None
+            self.launch_key = None
+            self.session_file = None
+            self.session_id = None
+            self.revision = None
+            self.sensitive_diagnostics = False
+        await asyncio.shield(self._close_task)
+        self._close_task = None
 
     async def close_idle(self) -> None:
         """Wait for a borrowed turn's stats/cleanup before closing its child."""
         async with self.lock:
+            await self.close()
+
+    async def discard_for_external_write(self, session_file: str) -> None:
+        """Retire the injected in-memory manager; require strict disk validation.
+
+        The old child must die BEFORE another process can rewrite its session.
+        A public field assignment or fresh attempt cannot revive that child.
+        """
+        async with self.lock:
+            if self.session_file is not None and self.session_file != session_file:
+                raise ValueError("Idle manager belongs to a different saved session")
+            expected = self.session_id if self.session_file == session_file else None
+            # Poison before the first cancellable await. An interrupted retire
+            # cannot make old in-memory history reusable or waive validation.
+            self.reopen_required = session_file
+            if expected is not None:
+                self.reopen_session_id = expected
             await self.close()
 
 
@@ -721,7 +758,7 @@ async def stream_agent_events(
     native_start: Callable[[str | None, str, str], bool] | None = None,
     persistent_session: PersistentPiSession | None = None,
     ui_request: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]] | None = None,
-) -> AsyncIterator[dict[str, Any]]:
+) -> AsyncIterator[events.AgentEvent]:
     """Run the backend and yield events. Always ends with a ``done`` event.
 
     The no-progress watchdog applies only while waiting for the model. A running
@@ -769,9 +806,9 @@ async def stream_agent_events(
                         ui_request=ui_request,
                         startup=startup,
                     )
-                ) as events:
-                    async for event in events:
-                        if event.get("type") == "done":
+                ) as stream:
+                    async for event in stream:
+                        if isinstance(event, events.Done):
                             terminal_seen = True
                         yield event
             finally:
@@ -789,12 +826,11 @@ async def stream_agent_events(
         if owner is not None:
             await terminate_task_process(owner)
         if not terminal_seen:
-            yield {
-                "type": "done",
-                "ok": False,
-                "reason_code": "pi_invalid_rpc_event",
-                "text": "Pi RPC returned an invalid event; this turn was not completed.",
-            }
+            yield events.Done(
+                ok=False,
+                reason_code="pi_invalid_rpc_event",
+                text="Pi RPC returned an invalid event; this turn was not completed.",
+            )
 
 
 async def _stream_agent_events(
@@ -821,14 +857,14 @@ async def _stream_agent_events(
     persistent_session: PersistentPiSession | None = None,
     ui_request: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]] | None = None,
     startup: NativeStartupAdmission | None = None,
-) -> AsyncGenerator[dict[str, Any], None]:
+) -> AsyncGenerator[events.AgentEvent, None]:
     if shutil.which(agent_bin) is None and not Path(agent_bin).is_file():
-        yield {"type": "done", "text": f"agent backend {agent_bin!r} not found", "ok": False}
+        yield events.Done(text=f"agent backend {agent_bin!r} not found", ok=False)
         return
 
     rpc_args = rpc_args_for(agent_bin, agent_args)
     if images and rpc_args is None:
-        yield {"type": "done", "text": "This backend does not support image prompts.", "ok": False}
+        yield events.Done(text="This backend does not support image prompts.", ok=False)
         return
     stdin_payload: bytes | None = None
     argv: list[str]
@@ -891,6 +927,31 @@ async def _stream_agent_events(
         if not reused:
             await persistent_session.close()
     loop = asyncio.get_running_loop()
+    validated_session_id: str | None = None
+    if persistent_session is not None and persistent_session.reopen_required is not None:
+        if session_file != persistent_session.reopen_required or not require_input_id:
+            yield events.Done(
+                text="Saved native session requires explicit validated reopen.",
+                ok=False,
+                reason_code="compaction_reopen_invalid",
+            )
+            return
+        try:
+            from .native_session_reopen import validate_native_reopen
+
+            validated_session_id = await asyncio.to_thread(
+                validate_native_reopen,
+                agent_bin,
+                session_file,
+                expected_session_id=persistent_session.reopen_session_id,
+            )
+        except ValueError:
+            yield events.Done(
+                text="Saved native session failed strict reopen validation.",
+                ok=False,
+                reason_code="compaction_reopen_invalid",
+            )
+            return
     if not reused and rpc_args is not None and require_input_id and startup is not None:
         await startup.acquire(finish_event)
     launch_started_at = loop.time()
@@ -921,7 +982,7 @@ async def _stream_agent_events(
                 start_new_session=os.name == "posix",
             )
         except OSError as exc:
-            yield {"type": "done", "text": f"agent launch failed: {exc}", "ok": False}
+            yield events.Done(text=f"agent launch failed: {exc}", ok=False)
             return
         spawn_ms = round((loop.time() - launch_started_at) * 1000)
 
@@ -978,14 +1039,13 @@ async def _stream_agent_events(
                 break
             piece = chunk.decode(errors="replace")
             text_parts.append(piece)
-            yield {"type": "chunk", "text": piece}
+            yield events.Chunk(text=piece)
         code = await proc.wait()
         if owner is not None:
             _ACTIVE_PROCESSES.pop(owner, None)
         error_text = await stderr_task
-        yield {
-            "type": "done",
-            "text": (
+        yield events.Done(
+            text=(
                 "".join(text_parts).strip()
                 if code == 0
                 else (
@@ -994,8 +1054,8 @@ async def _stream_agent_events(
                     else error_text or f"Backend exited with code {code}"
                 )
             ),
-            "ok": code == 0,
-        }
+            ok=code == 0,
+        )
         return
 
     steering_task: asyncio.Task[None] | None = None
@@ -1003,7 +1063,7 @@ async def _stream_agent_events(
     accepted_forwarded: set[str] = set()
     input_state_changed = asyncio.Event()
     explicit_interrupt = False
-    rejected_commands: list[dict[str, Any]] = []
+    rejected_commands: list[events.AgentEvent] = []
     rejected_signal = asyncio.Event()
     session_identity_uncertain = False
     input_uncertain = False
@@ -1087,13 +1147,12 @@ async def _stream_agent_events(
                     # Reject before writing: Pi may tear down A and bind B even
                     # before its RPC response. Rejection is not a failed A turn.
                     rejected_commands.append(
-                        {
-                            "type": "error",
-                            "reason_code": "steering_command_rejected",
-                            "command": command["type"],
-                            "id": command.get("id"),
-                            "text": f"Mid-turn {command['type']} is not supported.",
-                        }
+                        events.Error(
+                            reason_code="steering_command_rejected",
+                            command=command["type"],
+                            id=command.get("id"),
+                            text=f"Mid-turn {command['type']} is not supported.",
+                        )
                     )
                     rejected_signal.set()
                     continue
@@ -1134,7 +1193,7 @@ async def _stream_agent_events(
                         pending_inputs[:] = [
                             item for item in pending_inputs if item[3] != native_input_id
                         ]
-                        rejected_commands.append({"type": "input_refused", "id": public_input_id})
+                        rejected_commands.append(events.InputRefused(id=public_input_id))
                         rejected_signal.set()
                         continue
                 else:
@@ -1376,7 +1435,7 @@ async def _stream_agent_events(
         *,
         event_phase: str | None = None,
         attempt: tuple[int | None, int | None] | None = None,
-    ) -> dict[str, Any]:
+    ) -> events.TurnState:
         replay_safe = not (
             prompt_dispatched
             or tool_ever_started
@@ -1384,24 +1443,19 @@ async def _stream_agent_events(
             or forwarded_input_started
             or compaction_started
         )
-        event: dict[str, Any] = {
-            "type": "turn_state",
-            "state": state,
-            "reason_code": reason_code,
-            "elapsed_ms": max(0, elapsed_ms),
-            "phase": event_phase or phase,
-            "retryable": replay_safe,
-            "replay_safe": replay_safe,
-            "side_effects_possible": (
-                prompt_dispatched
-                or tool_ever_started
-                or forwarded_input_started
-                or compaction_started
-            ),
-        }
-        if attempt is not None:
-            event["attempt"] = {"current": attempt[0], "max": attempt[1]}
-        return event
+        return events.TurnState(
+            state=state,
+            reason_code=reason_code,
+            elapsed_ms=max(0, elapsed_ms),
+            phase=event_phase or phase,
+            retryable=replay_safe,
+            replay_safe=replay_safe,
+            side_effects_possible=prompt_dispatched
+            or tool_ever_started
+            or forwarded_input_started
+            or compaction_started,
+            attempt={"current": attempt[0], "max": attempt[1]} if attempt is not None else None,
+        )
 
     def positive_tokens(usage: Any) -> int | None:
         if not isinstance(usage, dict):
@@ -1409,15 +1463,14 @@ async def _stream_agent_events(
         tokens = usage.get("totalTokens")
         return tokens if type(tokens) is int and tokens > 0 else None
 
-    def context_info() -> dict[str, Any]:
-        return {
-            "type": "agent_info",
-            "model": model_name,
-            "session_name": session_name,
-            "session_file": active_session_file,
-            "context_used": context_used,
-            "context_size": context_size,
-        }
+    def context_info() -> events.AgentInfo:
+        return events.AgentInfo(
+            model=model_name,
+            session_name=session_name,
+            session_file=active_session_file,
+            context_used=context_used,
+            context_size=context_size,
+        )
 
     def retry_made_progress(payload: dict[str, Any]) -> bool:
         kind = payload.get("type")
@@ -1519,7 +1572,7 @@ async def _stream_agent_events(
             yield turn_state("aborting", reason_code, elapsed_ms, event_phase="shutdown")
             await abort_stalled_rpc()
             for input_id in started_during_abort:
-                yield {"type": "input_started", "id": input_id}
+                yield events.InputStarted(id=input_id)
             failed_elapsed_ms = round((loop.time() - last_model_progress) * 1000)
             yield turn_state("failed", reason_code, failed_elapsed_ms, event_phase="shutdown")
             fail_reason = (
@@ -1575,6 +1628,12 @@ async def _stream_agent_events(
                     state.get("sessionId") != persistent_session.session_id
                     or state.get("sessionFile") != persistent_session.session_file
                 )
+            ) or (
+                validated_session_id is not None
+                and (
+                    state.get("sessionId") != validated_session_id
+                    or state.get("sessionFile") != session_file
+                )
             ):
                 session_identity_uncertain = True
                 fail_reason = _IDENTITY_FAILURE_TEXT
@@ -1587,15 +1646,12 @@ async def _stream_agent_events(
                 proof_journal_bytes is not None
                 and proof_journal_bytes >= _NATIVE_PROOF_JOURNAL_WARN_BYTES
             ):
-                yield {
-                    "type": "notice",
-                    "text": (
-                        "[agent-comms warning] Pi native input proof journal measures at least "
-                        "96 MiB. Pi checks decoded content against a 128 MiB startup limit; "
-                        "byte size is only an advisory. Preserve the session and journal; "
-                        "arrange a reviewed checkpoint or upgrade before further growth."
-                    ),
-                }
+                yield events.Notice(
+                    text="[agent-comms warning] Pi native input proof journal measures at least "
+                    "96 MiB. Pi checks decoded content against a 128 MiB startup limit; "
+                    "byte size is only an advisory. Preserve the session and journal; "
+                    "arrange a reviewed checkpoint or upgrade before further growth."
+                )
             prompt_start_deadline = loop.time() + PROMPT_START_TIMEOUT_SECONDS
             assert proc.stdin is not None
             try:
@@ -1657,16 +1713,15 @@ async def _stream_agent_events(
             provisional_usage = False
             text_parts.clear()
             yield context_info()  # Only A's previously observed metadata.
-            yield {
-                "type": "turn_state",
-                "state": "failed",
-                "reason_code": "session_identity_uncertain",
-                "elapsed_ms": 0,
-                "phase": "shutdown",
-                "retryable": False,
-                "replay_safe": False,
-                "side_effects_possible": True,
-            }
+            yield events.TurnState(
+                state="failed",
+                reason_code="session_identity_uncertain",
+                elapsed_ms=0,
+                phase="shutdown",
+                retryable=False,
+                replay_safe=False,
+                side_effects_possible=True,
+            )
             fail_reason = _IDENTITY_FAILURE_TEXT
             await abort_stalled_rpc()
             break
@@ -1689,7 +1744,7 @@ async def _stream_agent_events(
                     receipt = _pi_mcp_live_receipt(payload, original_input_id)
                     if receipt is not None:
                         live_status_seen = True
-                        yield {"type": "mcp_live_status", "receipt": receipt}
+                        yield events.McpLiveStatus(receipt=receipt)
                 continue
             # The only return path for Pi dialogs is this exact child stdin.
             # Never relay a request across a new child/session or infer a human
@@ -1782,13 +1837,13 @@ async def _stream_agent_events(
             text_parts.clear()
             error_message = None
             final_assistant_stop = False
-            yield {"type": "steering_interrupted"}
+            yield events.SteeringInterrupted()
         elif (
             kind == "response"
             and command == "interrupt_steering"
             and payload.get("success") is False
         ):
-            yield {"type": "error", "text": str(payload.get("error") or "Send now was refused")}
+            yield events.Error(text=str(payload.get("error") or "Send now was refused"))
         if retry_recovery_pending and retry_made_progress(payload):
             if kind in {"message_start", "message_end", "message_update"}:
                 output_started = True
@@ -1829,7 +1884,7 @@ async def _stream_agent_events(
                     else str(payload.get("error") or "Prompt was rejected")
                 )
                 yield turn_state("failed", "prompt_rejected", 0, event_phase="shutdown")
-                yield {"type": "error", "text": error_message}
+                yield events.Error(text=error_message)
                 break
         elif kind == "auto_retry_start":
             final_assistant_stop = False
@@ -1898,10 +1953,9 @@ async def _stream_agent_events(
             provisional_usage = False
             yield context_info()
             reason = payload.get("reason")
-            yield {
-                "type": "compaction_start",
-                "reason": reason if reason in {"manual", "threshold", "overflow"} else "unknown",
-            }
+            yield events.CompactionStart(
+                reason=reason if reason in {"manual", "threshold", "overflow"} else "unknown"
+            )
         elif kind == "compaction_progress":
             # Each chunk finished a separate provider response. Keep the
             # no-progress watchdog bounded to the current response, not the
@@ -1913,21 +1967,21 @@ async def _stream_agent_events(
             if isinstance(usage, dict):
                 provider_response_index += 1
                 compaction_usage_recorded = True
-                yield {
-                    "type": "provider_usage",
-                    "response_id": str(provider_response_index),
-                    "usage": usage,
-                }
+                yield events.ProviderUsage(response_id=str(provider_response_index), usage=usage)
             done = payload.get("sourceBytesDone")
             total = payload.get("sourceBytesTotal")
             measured = type(done) is int and type(total) is int and 0 <= done <= total and total > 0
             if type(chunk_index) is int and (chunk_index > 0 or chunk_index == 0 and measured):
-                progress = {"type": "compaction_progress", "chunk_index": chunk_index}
-                if measured:
-                    progress.update(source_bytes_done=done, source_bytes_total=total)
-                if isinstance(payload.get("summaryPhase"), str) and payload["summaryPhase"]:
-                    progress["summary_phase"] = payload["summaryPhase"]
-                yield progress
+                yield events.CompactionProgress(
+                    chunk_index=chunk_index,
+                    source_bytes_done=done if measured else None,
+                    source_bytes_total=total if measured else None,
+                    summary_phase=(
+                        payload["summaryPhase"]
+                        if isinstance(payload.get("summaryPhase"), str) and payload["summaryPhase"]
+                        else None
+                    ),
+                )
         elif kind == "compaction_end":
             last_model_progress = now
             phase = "model_wait"
@@ -1939,11 +1993,9 @@ async def _stream_agent_events(
                 and isinstance(result.get("usage"), dict)
             ):
                 provider_response_index += 1
-                yield {
-                    "type": "provider_usage",
-                    "response_id": str(provider_response_index),
-                    "usage": result["usage"],
-                }
+                yield events.ProviderUsage(
+                    response_id=str(provider_response_index), usage=result["usage"]
+                )
             if completed and not initial_input_started and prompt_start_deadline is not None:
                 prompt_start_deadline = now + PROMPT_START_TIMEOUT_SECONDS
             # A committed compaction starts a new context epoch. Aborted or
@@ -1954,14 +2006,13 @@ async def _stream_agent_events(
             yield context_info()
             reason = payload.get("reason")
             summary = result.get("summary") if completed else None
-            yield {
-                "type": "compaction_end",
-                "reason": reason if reason in {"manual", "threshold", "overflow"} else "unknown",
-                "aborted": not completed,
-                "summary": compaction_summary(summary) if isinstance(summary, str) else None,
-                "context_used": None,
-                "will_retry": payload.get("willRetry") is True,
-            }
+            yield events.CompactionEnd(
+                reason=reason if reason in {"manual", "threshold", "overflow"} else "unknown",
+                aborted=not completed,
+                summary=compaction_summary(summary) if isinstance(summary, str) else None,
+                context_used=None,
+                will_retry=payload.get("willRetry") is True,
+            )
             if not completed and not initial_input_started:
                 # Pi otherwise continues with the uncompressed history and
                 # can send the same oversized context to the model. An
@@ -2014,7 +2065,7 @@ async def _stream_agent_events(
                     break
                 initial_input_started = True
                 if native_start is not None:
-                    yield {"type": "input_started", "id": None}
+                    yield events.InputStarted(id=None)
                 if steering_queue is not None and proc.stdin is not None and steering_task is None:
                     steering_task = asyncio.create_task(forward_steering())
                     if owner is not None:
@@ -2022,7 +2073,7 @@ async def _stream_agent_events(
             elif initial_input_started and not input_uncertain:
                 matched, input_id = mark_pending_input_started(payload)
                 if matched:
-                    yield {"type": "input_started", "id": input_id}
+                    yield events.InputStarted(id=input_id)
                 else:
                     # A second original, foreign, or unstarted queued input
                     # cannot make the assistant's final stop authoritative.
@@ -2039,19 +2090,17 @@ async def _stream_agent_events(
                 await abort_stalled_rpc()
                 break
         elif kind == "response" and payload.get("command") == "set_model":
-            yield {
-                "type": "model_changed",
-                "id": payload.get("id"),
-                "ok": bool(payload.get("success")),
-                "error": payload.get("error", "Model change failed"),
-            }
+            yield events.ModelChanged(
+                id=payload.get("id"),
+                ok=bool(payload.get("success")),
+                error=payload.get("error", "Model change failed"),
+            )
         elif kind == "response" and payload.get("command") == "set_thinking_level":
-            yield {
-                "type": "thinking_changed",
-                "id": payload.get("id"),
-                "ok": bool(payload.get("success")),
-                "error": payload.get("error", "Thinking level change failed"),
-            }
+            yield events.ThinkingChanged(
+                id=payload.get("id"),
+                ok=bool(payload.get("success")),
+                error=payload.get("error", "Thinking level change failed"),
+            )
         elif kind == "response" and payload.get("success"):
             command = payload.get("command")
             data = payload.get("data") or {}
@@ -2071,15 +2120,14 @@ async def _stream_agent_events(
                 session_name = data.get("sessionName")
                 active_session_file = state_file or active_session_file
                 context_size = model.get("contextWindow")
-                yield {
-                    "type": "agent_info",
-                    "model": model_name,
-                    "thinking_level": data.get("thinkingLevel"),
-                    "session_name": session_name,
-                    "session_file": active_session_file,
-                    "context_used": context_used,
-                    "context_size": context_size,
-                }
+                yield events.AgentInfo(
+                    model=model_name,
+                    thinking_level=data.get("thinkingLevel"),
+                    session_name=session_name,
+                    session_file=active_session_file,
+                    context_used=context_used,
+                    context_size=context_size,
+                )
             elif command == "get_session_stats":
                 context = data.get("contextUsage") or {}
                 tokens = context.get("tokens") if isinstance(context, dict) else None
@@ -2114,12 +2162,12 @@ async def _stream_agent_events(
                     output_started = True
                 text_parts.append(piece)
                 assistant_message_parts.append(piece)
-                yield {"type": "chunk", "text": piece}
+                yield events.Chunk(text=piece)
             elif delta_type == "thinking_delta":
                 piece = delta_event.get("delta") or ""
                 if piece:
                     output_started = True
-                    yield {"type": "thinking", "text": piece}
+                    yield events.Thinking(text=piece)
             elif delta_type in {"toolcall_start", "toolcall_delta", "toolcall_end"}:
                 output_started = True
         elif kind == "tool_execution_start":
@@ -2130,20 +2178,13 @@ async def _stream_agent_events(
             tool_ever_started = True
             active_tools.add(tool_id)
             phase = "tool_running"
-            yield {
-                "type": "tool_start",
-                "id": tool_id,
-                "name": name,
-                "title": _tool_title(name, args),
-                "args": args,
-            }
+            yield events.ToolStart(id=tool_id, name=name, title=_tool_title(name, args), args=args)
         elif kind == "tool_execution_update":
-            yield {
-                "type": "tool_progress",
-                "id": payload.get("toolCallId") or payload.get("toolName") or "tool",
-                "name": payload.get("toolName") or "tool",
-                "output": _result_text(payload.get("partialResult")),
-            }
+            yield events.ToolProgress(
+                id=payload.get("toolCallId") or payload.get("toolName") or "tool",
+                name=payload.get("toolName") or "tool",
+                output=_result_text(payload.get("partialResult")),
+            )
         elif kind == "tool_execution_end":
             name = payload.get("toolName") or "tool"
             result = payload.get("result") or {}
@@ -2154,14 +2195,13 @@ async def _stream_agent_events(
             last_model_progress = loop.time()
             if not active_tools:
                 phase = "model_wait"
-            yield {
-                "type": "tool_end",
-                "id": tool_id,
-                "name": name,
-                "ok": is_ok,
-                "output": output,
-                "diff": ToolDiff.from_result(name, result, is_ok),
-            }
+            yield events.ToolEnd(
+                id=tool_id,
+                name=name,
+                ok=is_ok,
+                output=output,
+                diff=ToolDiff.from_result(name, result, is_ok),
+            )
         elif kind == "message_end":
             # Pi reports provider failures (usage limits, transport errors) as a
             # completed assistant message with stopReason "error"/"aborted".
@@ -2194,16 +2234,14 @@ async def _stream_agent_events(
                     # user input has started (including its native ID when
                     # require_input_id is set). This remains progress, not a
                     # receipt or terminal response.
-                    yield {"type": "committed_progress", "text": committed_text}
+                    yield events.CommittedProgress(text=committed_text)
                 assistant_message_parts.clear()
                 usage = message.get("usage")
                 if isinstance(usage, dict) and not session_identity_uncertain:
                     provider_response_index += 1
-                    yield {
-                        "type": "provider_usage",
-                        "response_id": str(provider_response_index),
-                        "usage": usage,
-                    }
+                    yield events.ProviderUsage(
+                        response_id=str(provider_response_index), usage=usage
+                    )
                 stop_reason = message.get("stopReason")
                 final_assistant_stop = (
                     stop_reason == "stop" and initial_input_started and not input_uncertain
@@ -2220,7 +2258,7 @@ async def _stream_agent_events(
                         or f"Model request {stop_reason}"
                     )
                     if not (explicit_interrupt and stop_reason == "aborted"):
-                        yield {"type": "error", "text": error_message}
+                        yield events.Error(text=error_message)
                 else:
                     error_message = None
                     tokens = positive_tokens(message.get("usage"))
@@ -2247,7 +2285,7 @@ async def _stream_agent_events(
                 if persistent_session is not None:
                     await request_stats()
                 else:
-                    yield {"type": "settled"}
+                    yield events.StreamSettled()
                 if persistent_session is None and finish_event is None:
                     await request_stats()
 
@@ -2273,7 +2311,7 @@ async def _stream_agent_events(
                 ) and not pending_inputs:
                     await request_stats()
                 continue
-            yield {"type": "settled"}
+            yield events.StreamSettled()
             break
 
     if steering_task is not None:
@@ -2318,6 +2356,9 @@ async def _stream_agent_events(
         persistent_session.session_id = initial_session_id
         persistent_session.revision = revision
         persistent_session.sensitive_diagnostics = image_input_sent or inherited_image_sensitive
+        if validated_session_id is not None:
+            persistent_session.reopen_required = None
+            persistent_session.reopen_session_id = None
     else:
         _close_child_stdin(proc)
         try:
@@ -2386,9 +2427,8 @@ async def _stream_agent_events(
         terminal_reason_code = FailureReason.FINAL_STOP_MISSING
     elif otherwise_successful and unresolved_inputs:
         terminal_reason_code = FailureReason.QUEUED_INPUT_MISSING
-    yield {
-        "type": "done",
-        "text": (
+    yield events.Done(
+        text=(
             _IDENTITY_FAILURE_TEXT
             if session_identity_uncertain
             else (
@@ -2404,11 +2444,11 @@ async def _stream_agent_events(
                 or f"Backend exited with code {proc.returncode}"
             )
         ),
-        "ok": success and not session_identity_uncertain,
-        **({"reason_code": terminal_reason_code} if terminal_reason_code else {}),
-        "diagnostic": {
+        ok=success and not session_identity_uncertain,
+        reason_code=terminal_reason_code,
+        diagnostic={
             **diagnostic,
             **({"reason": preflight_failure} if preflight_failure else {}),
             **({"exit_code": proc.returncode} if proc.returncode is not None else {}),
         },
-    }
+    )
