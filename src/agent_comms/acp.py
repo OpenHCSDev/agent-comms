@@ -29,7 +29,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from acp import RequestError, run_agent
@@ -112,6 +112,9 @@ from .selected_write_plan import PlannedWrite, SelectedWritePlans
 from .tool_results import tool_result_content
 from .wire_watch import open_wire_watcher
 
+if TYPE_CHECKING:
+    from .selected_tool_broker import SelectedToolIntent  # type: ignore[import-not-found]
+
 GLOBAL_TARGET = "#all"
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
@@ -172,9 +175,18 @@ class CommsAgent:
         auto_wake: bool = True,
         private_nk_native_package: Path | None = None,
         private_nk_wire_root_id: str | None = None,
+        private_selected_tool_intent: SelectedToolIntent | None = None,
     ):
         if (private_nk_native_package is None) != (private_nk_wire_root_id is None):
             raise ValueError("private N/K ACP requires both reviewed Pi package and exact root")
+        if private_selected_tool_intent is not None:
+            from .selected_tool_broker import SelectedToolIntent
+
+            if type(private_selected_tool_intent) is not SelectedToolIntent:
+                raise TypeError("private selected tool needs a nominal owner intent")
+            if private_nk_wire_root_id is None or private_nk_native_package is None:
+                raise ValueError("private selected tool requires exact N/K root and native package")
+        self._private_selected_tool_intent = private_selected_tool_intent
         self._private_nk_native_package = private_nk_native_package
         self._private_nk_wire_root_id = private_nk_wire_root_id
         self._private_cursor_announced: dict[str, str] = {}
@@ -600,6 +612,10 @@ class CommsAgent:
         display_text = options.get("userText") or self._prompt_text(prompt)
         defer_display = options.get("deferDisplay") is True
         if "selectedExistingFileWrite" in options:
+            if self._private_selected_tool_intent is not None:
+                raise RequestError.invalid_params(
+                    {"reason": "operator preplan and selected tool are separate activation modes"}
+                )
             request = options["selectedExistingFileWrite"]
             if (
                 type(request) is not dict
@@ -1818,6 +1834,11 @@ class CommsAgent:
             selected_write_plan_loader=load_plan,
             selected_write_plan_check=check_plan_controller,
             selected_write_plan_applied=applied_plan,
+            **(
+                {"selected_tool_intent": self._private_selected_tool_intent}
+                if self._private_selected_tool_intent is not None
+                else {}
+            ),
         )
         if result is None:
             # N (or absent-audience) rows prove coverage, not an injected
