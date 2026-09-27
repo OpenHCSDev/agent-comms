@@ -272,7 +272,11 @@ def _verify_claim_bus_before_read_unlocked(bus_path: Path) -> None:
 
 @contextmanager
 def _store_lock(
-    store_path: Path, *, blocking: bool = True, max_bus_bytes: int | None = None
+    store_path: Path,
+    *,
+    blocking: bool = True,
+    max_bus_bytes: int | None = None,
+    shared: bool = False,
 ) -> Iterator[None]:
     """Hold a canonical store lock; optionally cap bytes before its durability scan."""
     if max_bus_bytes is not None and (type(max_bus_bytes) is not int or max_bus_bytes < 0):
@@ -288,9 +292,8 @@ def _store_lock(
             lock_file.seek(0)
             while True:
                 try:
-                    msvcrt.locking(  # type: ignore[attr-defined]
-                        lock_file.fileno(), msvcrt.LK_NBLCK, 1  # type: ignore[attr-defined]
-                    )
+                    mode = msvcrt.LK_NBRLCK if shared else msvcrt.LK_NBLCK
+                    msvcrt.locking(lock_file.fileno(), mode, 1)  # type: ignore[attr-defined]
                     break
                 except OSError as error:
                     if not blocking or error.errno not in {errno.EACCES, errno.EDEADLK}:
@@ -299,7 +302,8 @@ def _store_lock(
         else:
             import fcntl
 
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+            mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
+            fcntl.flock(lock_file.fileno(), mode | (0 if blocking else fcntl.LOCK_NB))
         try:
             # The shared claim bus durability guard may parse the entire log.
             # A bounded projection must refuse over-budget bytes *before* that

@@ -1,0 +1,47 @@
+...............................F......................                   [100%]
+=================================== FAILURES ===================================
+_________ test_production_only_import_cannot_reach_disposable_control __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-a8-locked-store-20260927/.artifacts/pytest-integration/test_production_only_import_ca0')
+
+    def test_production_only_import_cannot_reach_disposable_control(tmp_path: Path) -> None:
+        src = Path(__file__).resolve().parents[1] / "src"
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import importlib.util\n"
+                "from agent_comms.maintenance_barrier import MaintenanceBarrier\n"
+                "assert not hasattr(MaintenanceBarrier, 'begin'); "
+                "assert not hasattr(MaintenanceBarrier, 'advance'); "
+                "assert importlib.util.find_spec('agent_comms.maintenance_control_fixture') is None",
+            ],
+            cwd=tmp_path,
+            env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(src)},
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 2, in <module>
+E           File "/home/ts/wt/comms-refactor-a8-locked-store-20260927/src/agent_comms/__init__.py", line 56, in <module>
+E             from .operations import (
+E           File "/home/ts/wt/comms-refactor-a8-locked-store-20260927/src/agent_comms/operations.py", line 38, in <module>
+E             from .goal_history import GoalHistoryEntry
+E           File "/home/ts/wt/comms-refactor-a8-locked-store-20260927/src/agent_comms/goal_history.py", line 23, in <module>
+E             from .field_codec import FieldCodec
+E           File "/home/ts/wt/comms-refactor-a8-locked-store-20260927/src/agent_comms/field_codec.py", line 11, in <module>
+E             from .declared_family import DeclaredFamily
+E           File "/home/ts/wt/comms-refactor-a8-locked-store-20260927/src/agent_comms/declared_family.py", line 9, in <module>
+E             from metaclass_registry import AutoRegisterMeta, RegistryConfig  # type: ignore[import-untyped]
+E             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E         ModuleNotFoundError: No module named 'metaclass_registry'
+E
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/ts/.agent-comms/.venv/bin/python', '-c', "import importlib.util\nfrom agent_comms.mainte...^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nModuleNotFoundError: No module named \'metaclass_registry\'\n').returncode
+
+tests/test_maintenance_barrier.py:55: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_maintenance_barrier.py::test_production_only_import_cannot_reach_disposable_control
+1 failed, 53 passed in 29.88s
