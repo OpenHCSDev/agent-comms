@@ -208,6 +208,9 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
             _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
     assert second.bus.full_history() == []
+    with pytest.raises(RelationViolationError, match="reservation has UNKNOWN"):
+        second.send_user_message("alice", "different new human input", worktree=str(tmp_path))
+    assert second.bus.full_history() == []
     later_agent = second.send_initial_cohort("alice", "bob", "unrelated agent input")
     assert later_agent.seq == 2
     with pytest.raises(RelationViolationError, match="sequence gap has UNKNOWN"):
