@@ -13,6 +13,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import supervised_cutover
+from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordination_store import MutationStore
 from agent_comms.declarations import (
     Goal,
@@ -186,6 +187,16 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
         assert staged.pid == 0 and staged.session_file == str(saved)
         assert staged.created_at == thread.created_at
         assert private.registry.status("sender") is ThreadStatus.STOPPED
+        with MutationStore(str(private.root / "coordination.sqlite3")) as store:
+            sender = store.participant(stable_thread_lookup(staged.created_at))
+            assert sender.display_name == "sender"
+            assert store.participant(
+                stable_thread_lookup(private.registry.require("receiver").created_at)
+            ).display_name == "receiver"
+        with sqlite3.connect(private.root / "coordination.sqlite3") as db:
+            assert db.execute("SELECT count(*) FROM cohort_schema_meta").fetchone()[0] == 1
+            assert db.execute("SELECT count(*) FROM response_schema_meta").fetchone()[0] == 1
+            assert db.execute("SELECT count(*) FROM native_runtime_schema_meta").fetchone()[0] == 1
         assert private.goal_execution("sender").state is GoalExecutionState.STANDBY
         migrated_wait = GoalWaits(private.root / "goal_waits.json").snapshot()["stage-goal"]
         assert migrated_wait.after_seq == 0
