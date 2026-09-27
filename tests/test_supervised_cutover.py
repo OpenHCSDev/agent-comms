@@ -12,7 +12,15 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import supervised_cutover
-from agent_comms.declarations import RelationViolationError, Thread, ThreadStatus
+from agent_comms.declarations import (
+    Goal,
+    GoalExecutionState,
+    GoalWaitTarget,
+    RelationViolationError,
+    Thread,
+    ThreadStatus,
+)
+from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import Comms
 from agent_comms.supervised_cutover import (
@@ -109,10 +117,21 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
             Thread(
                 "sender", frozenset({"team"}), str(tmp_path), pid=process.pid,
                 session_file=str(saved), model="openai-codex/gpt-6-sol",
+                goal=Goal("wait for receiver", "stage-goal"),
             )
         )
         legacy.register(Thread("receiver", frozenset(), str(tmp_path), pid=0))
         legacy.send("sender", "receiver", "old pending message")
+        before_wait = legacy.registry.snapshot()
+        GoalWaits(legacy.root / "goal_waits.json").record(
+            GoalWait(
+                "stage-goal", "old-wait", 0, legacy.message_high_water(),
+                (GoalWaitTarget("receiver", before_wait.threads["receiver"].created_at),),
+                owner_created_at=before_wait.threads["sender"].created_at,
+                target_turn_generations=(None,),
+            )
+        )
+        assert legacy.goal_execution("sender").state is GoalExecutionState.STANDBY
         InputDispositions(legacy.root).record(
             "stage:unknown", seq=None, owner="sender", admission=1,
             target="sender", text="uncertain old input",
@@ -142,6 +161,10 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
         assert staged.pid == 0 and staged.session_file == str(saved)
         assert staged.created_at == thread.created_at
         assert private.registry.status("sender") is ThreadStatus.STOPPED
+        assert private.goal_execution("sender").state is GoalExecutionState.STANDBY
+        migrated_wait = GoalWaits(private.root / "goal_waits.json").snapshot()["stage-goal"]
+        assert migrated_wait.after_seq == 0
+        assert migrated_wait.target_turn_generations == (None,)
         assert not (private.root / "bus.jsonl").exists()
         assert archive.pending_messages == archive.unknown_inputs == 1
         private.registry.register(replace(staged, pid=os.getpid()), ThreadStatus.RUNNING)

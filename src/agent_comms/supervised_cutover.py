@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .declarations import RelationViolationError, Thread, ThreadStatus, _store_lock
+from .goal_waits import GoalWaits
 from .input_disposition import InputDispositions
 from .operations import Comms
 
@@ -439,6 +440,38 @@ def stage_private_participants(
         ):
             raise RelationViolationError(f"Cutover owner {name!r} lost its saved session")
         participants.append(replace(thread, pid=0, active_turn=None))
+    old_waits = GoalWaits(legacy.root / "goal_waits.json").snapshot()
+    migrated_waits = []
+    seen_goals: set[str] = set()
+    for thread in participants:
+        goal = thread.goal
+        if goal is None or not goal.active:
+            continue
+        if goal.id in seen_goals:
+            raise RelationViolationError("Cutover active goal identities collide")
+        seen_goals.add(goal.id)
+        wait = old_waits.get(goal.id)
+        if wait is None:
+            continue
+        if (
+            wait.owner_created_at not in (None, thread.created_at)
+            or wait.revision > goal.revision
+            or not wait.targets
+        ):
+            raise RelationViolationError("Cutover active goal wait lost its owner binding")
+        # New wire sequences start at one. Preserve the dependency wait, but
+        # only a FRESH private-root reply may release it. A legacy child-turn
+        # callback cannot certify new-root completion after migration.
+        migrated_waits.append(
+            replace(
+                wait,
+                after_seq=0,
+                owner_created_at=thread.created_at,
+                target_turn_generations=tuple(None for _ in wait.targets),
+                report_turn_id=None,
+                report_turn_generation=None,
+            )
+        )
     if (
         (private.root / "bus_meta.json").exists()
         or (private.root / "bus.jsonl").exists()
@@ -447,6 +480,9 @@ def stage_private_participants(
         raise RelationViolationError("Cutover participants require a fresh private root")
     root_id = private.initialize_private_initial_protocol()
     with _store_lock(private._wire_lock_path):
+        new_waits = GoalWaits(private.root / "goal_waits.json")
+        for wait in migrated_waits:
+            new_waits.record(wait)
         for thread in participants:
             private.registry.register(thread, ThreadStatus.STOPPED)
     return root_id, tuple(witnesses[name] for name in selected)
