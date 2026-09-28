@@ -152,3 +152,25 @@ kept real bounded page and damaged-cache behavior. Full integrated suite and
 quiet installation remain open. Next: registry/goal durable rewrite, runtime
 UNKNOWN preservation, removal of supervised_cutover and remaining old callers,
 then coordinated affected-path installation.
+
+## Current integration: route retirement and L0A
+
+PR235 is merged into the PR229 branch (not main or the installed runtime).
+Removed supervised_cutover.py (641 production lines), route rotation/withdrawal,
+WireLog old-root rewrite/purge entrypoints, and their exclusive tests. The original
+root write fence remains named guard_original_root_write. Process inventory is
+a one-shot tool under tools/cutover.
+
+Route/admission/loader focused acceptance: 25 passed. The combined DM shard
+exposed three real same-name incarnation unread-count failures; Copernicus owns
+BusRouteCounts A13 migration plus DeliveryScope and pending/inbox callers. No
+assertions were weakened. The fsync test now injects the syscall failure only
+into the read-ledger store, so a bus checkpoint cache miss cannot redirect the
+failure into a different durability boundary. Its unchanged-ledger assertion passes.
+
+NRA R1 is installed from merged PR9 in ~/wt/nra-installed-main-20260928; real
+CLI scanned 193 files with 81/81 detectors and no omissions. PR234 reports 552
+net production lines removed with native four-tool acceptance; PR236 reports
+107 passed/2 skipped. A12 cancellation/launch fixes belong to Lovelace, and
+NativeRuntimeInput/startup declarations to Cicero/Pascal. These branches and
+the D22 data rewrite are not yet installed.

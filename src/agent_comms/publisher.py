@@ -151,11 +151,11 @@ class Publisher:
         unmarked data requires the explicit archival cutover; a send never
         rewrites history or falls back to an uncoordinated append.
         """
-        from .active_route import guard_legacy_root_write
+        from .active_route import guard_original_root_write
 
         if _human_origin is not None and type(_human_origin) is not HumanOrigin:
             raise RelationViolationError("Human origin must be a typed local USER identity.")
-        with guard_legacy_root_write(self.log.path.parent), self.log.locked():
+        with guard_original_root_write(self.log.path.parent), self.log.locked():
             self._validate_publish_request(message)
             if not self.log.read_metadata_unlocked().private:
                 self._initialize_private_protocol_unlocked()
@@ -168,8 +168,8 @@ class Publisher:
     def initialize_private_protocol(self) -> str:
         """Marker issuer for a NEW, isolated bus root only.
 
-        Operational old-writer quiescence remains required for any future live
-        cutover; this issuer refuses a legacy log rather than guessing it.
+        Existing unmarked logs require an explicit offline rewrite. This issuer
+        creates a protocol marker only for an empty root.
         """
         if self._private_initial_writes is not True:
             raise RelationViolationError("Private initial publication is disabled.")

@@ -363,7 +363,7 @@ class InputDrain(FutureInputQueue):
             return pushed
         raise PublicationActivationBlocked(
             "This bus has no canonical protocol marker. Archive and migrate "
-            "existing data with supervised_cutover before starting delivery."
+            "existing history into the current source format before starting delivery."
         )
 
     def schedule_wake(self, session_id: str) -> None:

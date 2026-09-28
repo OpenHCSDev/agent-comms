@@ -523,45 +523,8 @@ class WireLog:
         except (ValueError, UnicodeError) as error:
             raise RelationViolationError("Malformed last bus row blocks publication.") from error
 
-    def assert_legacy_rewrite_allowed(self) -> None:
-        """Reject a deletion before registry state changes if private proof may exist."""
-        with _store_lock(self.path):
-            self._assert_no_private_authority_unlocked()
 
-    def _assert_no_private_authority_unlocked(self) -> None:
-        if self.read_metadata_unlocked().private:
-            raise RelationViolationError("Private bus protocol blocks legacy deletion.")
-        if not self.path.exists():
-            return
-        with self.path.open("rb") as records:
-            if records.seek(0, os.SEEK_END):
-                records.seek(-1, os.SEEK_END)
-                if records.read(1) != b"\n":
-                    raise RelationViolationError("Incomplete bus row blocks legacy deletion.")
-        for record, _ in _iter_jsonl_records(self.path):
-            if has_private_wire_fields(record):
-                raise RelationViolationError("Private bus authority blocks legacy deletion.")
 
-    def remove_legacy_threads(self, names: frozenset[str]) -> int:
-        with _store_lock(self.path):
-            self._assert_no_private_authority_unlocked()
-            messages = list(self._iter_log_unlocked())
-            retained = [
-                message
-                for message in messages
-                if message.sender not in names and message.target not in names
-            ]
-            high_water = max(
-                self.read_metadata_unlocked().last_seq,
-                max((message.seq for message in messages), default=0),
-            )
-            self.write_metadata_unlocked(WireMetadata(last_seq=high_water))
-            _atomic_write_text(
-                self.path,
-                "".join(f"{json.dumps(message.to_wire())}\n" for message in retained),
-            )
-
-        return len(messages) - len(retained)
 
     def claim_gate_enabled(self) -> bool:
         # _store_lock is also used for registry, channels, and marker files.
@@ -690,7 +653,6 @@ class WireLog:
             raise RelationViolationError(f"Bus protocol marker is invalid: {error}") from error
 
     def write_metadata_unlocked(self, metadata: WireMetadata) -> None:
-        from .store_files import _atomic_write_text
 
         _atomic_write_text(
             self.metadata_path, json.dumps(FieldCodec.encode(metadata), indent=2), fsync_parent=True

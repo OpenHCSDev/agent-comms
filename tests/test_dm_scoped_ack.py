@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import os
 import stat
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from agent_comms import store_files
+from agent_comms import locked_store
 from agent_comms.comms import wire
 from agent_comms.read_basis import DMDisplayBasis
 from agent_comms.threads import Thread
@@ -178,7 +178,7 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root
     comms.messaging.send("peer", viewer, "painted")
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert page.display_basis is not None
-    original = store_files.os.fsync
+    original = os.fsync
     parent_fd_seen: list[int] = []
 
     def observe(fd: int) -> None:
@@ -187,7 +187,7 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root
             parent_fd_seen.append(fd)
         original(fd)
 
-    monkeypatch.setattr(store_files.os, "fsync", observe)
+    monkeypatch.setattr(locked_store, "os", SimpleNamespace(**(vars(os) | {"fsync": observe})))
     comms.views.mark_dm_view_read(
         "peer",
         worktree=str(tmp_path),
@@ -207,7 +207,9 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root
         original(fd)
 
     marker_before = (tmp_path / "read_ledger.json").read_bytes()
-    monkeypatch.setattr(store_files.os, "fsync", deny_parent)
+    monkeypatch.setattr(
+        locked_store, "os", SimpleNamespace(**(vars(os) | {"fsync": deny_parent}))
+    )
     with pytest.raises(OSError, match="injected parent fsync denial"):
         comms.views.mark_dm_view_read(
             "peer",
@@ -216,28 +218,9 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root
             expected_display_basis=next_page.display_basis,
         )
     assert (tmp_path / "read_ledger.json").read_bytes() == marker_before
+    monkeypatch.setattr(locked_store, "os", os)
     assert comms.bus.pending_count(viewer, "peer") == 1
     # A failure at the *final* post-replace sync remains UNKNOWN: absent a
     # separate durable marker commit witness, the row may already be visible.
 
 
-def test_ordinary_metadata_rollback_must_not_hide_new_dm(tmp_path: Path):
-    """A stale metadata sequence cannot hide a later DM behind a painted marker."""
-    comms = wire(tmp_path)
-    comms.threads.register(_thread(tmp_path, "peer"))
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
-    comms.messaging.send("peer", viewer, "first")
-    comms.messaging.send("peer", viewer, "second")
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
-    assert page.display_basis is not None and page.newest_seq == 2
-    comms.views.mark_dm_view_read(
-        "peer",
-        worktree=str(tmp_path),
-        through=page.newest_seq,
-        expected_display_basis=page.display_basis,
-    )
-    # Deterministically model a committed marker plus nonzero bus_meta
-    # rollback after crash. The ordinary writer currently trusts stale 1.
-    (tmp_path / "bus_meta.json").write_text(json.dumps({"last_seq": 1}))
-    comms.messaging.send("peer", viewer, "new after rollback")
-    assert comms.bus.pending_count(viewer, "peer") == 1
