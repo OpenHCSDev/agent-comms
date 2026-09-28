@@ -249,7 +249,7 @@ class HistoryViews:
         incoming = catalog.read()
         source_threads = source.registry().all_threads()
         with _store_lock(self._wire_lock_path):
-            existing = any(path.exists() for path in self.channels.catalog.source_paths())
+            existing = self.channels.catalog.path.exists()
             with self.channels.catalog.editing() as document:
                 document.restore_missing(incoming, source_threads, existing=existing)
         return source
@@ -523,7 +523,7 @@ class HistoryViews:
             file_revision(path)
             for path in (
                 self.registry.store.path,
-                *self.channels.catalog.source_paths(),
+                self.channels.catalog.path,
                 self.bus.reads.path,
             )
         )
@@ -758,11 +758,7 @@ class HistoryViews:
                 )
             )
             if display_activity is None:
-                targets = (
-                    channel.builtin.history_targets
-                    if channel.builtin is not None
-                    else frozenset({channel.name})
-                )
+                targets = channel.history_targets
                 history = (
                     tuple(messages.values())
                     if targets is None
@@ -977,7 +973,7 @@ class HistoryViews:
                 file_revision(path)
                 for path in (
                     self.registry.store.path,
-                    *self.channels.catalog.source_paths(),
+                    self.channels.catalog.path,
                     self.bus.log.path,
                     self.bus.history_manifest,
                     self.agents.activity._path,

@@ -1,0 +1,27 @@
+{
+  "sources_unchanged": true,
+  "roots": [
+    {
+      "source": "/home/ts/.agent-comms",
+      "metadata_files": 4,
+      "preferences": 16,
+      "saved_views": 0,
+      "lossless_projection_and_reopen": true
+    },
+    {
+      "source": "/var/tmp/agent-comms-live-20260927-6_d_vdul",
+      "metadata_files": 4,
+      "preferences": 6,
+      "saved_views": 0,
+      "lossless_projection_and_reopen": true
+    },
+    {
+      "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "metadata_files": 5,
+      "preferences": 28,
+      "saved_views": 0,
+      "lossless_projection_and_reopen": true
+    }
+  ],
+  "synthetic_union_preferences_original_target_and_wire_preserved": true
+}
