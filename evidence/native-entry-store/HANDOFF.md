@@ -1,16 +1,13 @@
-# Final matched candidate — 2026-09-28
+# PR243: combined native history storage handoff
 
-Canonical package: `/home/ts/wt/comms-native-session-entry-store-20260928/stack/.pi-native-0d7ebb4f4b5aa1ec/node_modules/@earendil-works/pi-coding-agent`
-Launcher: `/home/ts/wt/comms-native-session-entry-store-20260928/stack/bin/pi-native`
-Python source: this branch `src`, combined installed225 + PR242 + PR244.
+Source checkpoint: `2755c2319cfecb7671412d9e9adcdd5504ae526e`, branch `refactor/native-session-entry-store-20260928`. Combines parent PR242 and Pascal PR244 on the requested installed225 base. This handoff replaces earlier checkpoint pending lists; earlier failed receipts are retained honestly.
 
-Production preparation and whole-package verification pass (`canonical-build-acceptance.log`). The earlier8eb7 package is superseded by this final candidate. Final source restores synthesis progress events, refuses pre-cancelled work before any provider invocation, and places previous summaries before new source during ordered map/reduce. Canonical parallel fixture passes cancellation, chronological multi-level synthesis, three successive summaries, split-turn retention and per-request reserve sizing (`parallel-canonical.log`). These are controlled local model responses, not semantic LLM-retention evidence.
+## Matching candidate
 
-All three remaining previously failed real-host ACP variants now pass (`selected-owner-remaining.log`,32.15s); with `selected-owner-corrected.log` this closes all four coroutine-related failures. Parent retains actual installed/provider acceptance. Final canonical CLI compact/reopen receipt is running; independent >256MiB full-chain acceptance belongs to Lovelace and remains pending.
-
-# Combined implementation checkpoint — 2026-09-28
-
-PR243 now combines Pascal PR244 proof startup and parent PR242 compaction fixes. This source checkpoint supersedes the historical pending implementation lists below. No live installation or paid provider calls.
+- Native package: `/home/ts/wt/comms-native-session-entry-store-20260928/stack/.pi-native-0d7ebb4f4b5aa1ec/node_modules/@earendil-works/pi-coding-agent`
+- Launcher: `/home/ts/wt/comms-native-session-entry-store-20260928/stack/bin/pi-native`
+- Python: `/home/ts/wt/comms-native-session-entry-store-20260928/src`
+- `canonical-build-acceptance.log`: production preparation, exact patch guards and whole-package verification pass. Earlier candidate packages are superseded. The final package is retained for parent/Lovelace; no live installation, restarts or paid calls performed.
 
 ## Implemented and deleted
 
@@ -19,59 +16,43 @@ PR243 now combines Pascal PR244 proof startup and parent PR242 compaction fixes.
 - Corrected actual empty-file initialization race, source/destination fork locks, failed-store invalidation/resource cleanup, and cleared branch labels. Store availability owns failure state; no replacement flag on SessionManager.
 - Combined proof integration removed attest_input's only yield. Migrated its actual caller to await the coroutine; original input now starts after selected summary/commit instead of becoming UNKNOWN through a Python protocol mismatch.
 
-## Current evidence
+- Compaction keeps previous summaries before newer source, preserves ordered results despite out-of-order map completion, uses native policy sizing and disk intermediate reduction. Pre-cancelled work invokes no provider; synthesis callbacks use existing progress ownership. No history-sized source/parts/results arrays.
+- Proof startup uses indexed tracked-input metadata without historical body decodes. Python `attest_input` is one awaited coroutine, with no compatibility generator/notice restored.
 
-- writer-coverage-first.log: 18 actual native writer/lock/CAS cases pass.
-- writer-failure-final.log: 13 failure scenarios and 442 continuation controls pass.
-- history-consumers-final.log: 3 branch/export/cache tests pass, including label clearing.
-- combined-cas-first.log: 9 pass; two obsolete fixture calls failed. metadata-cas-current.log: both repaired cases pass.
-- combined-cli-compaction.log: actual combined CLI compacts, commits and reopens; 20 loopback requests, original bytes retained, all original messages readable.
-- combined-proof.log: old compacted/sibling tracked input is verified with zero historical body decodes and zero startup proof emissions.
-- selected-summary-current.log: actual compiled selected native path passes, including 345 model-sized source requests, cancellation and UNKNOWN cases.
-- selected-owner-corrected.log: actual ACP selected summary → journal commit → strict reopen → original input passes (14.75s). Remaining previously failed variants are pending final focused rerun.
-- canonical-build.log: prior combined package built and verified through the production preparation script. Final pin includes subsequent small ownership/label/resource-cleanup corrections; final production rebuild is pending at this checkpoint.
+## Caller/deletion map
 
-## Remaining acceptance and boundaries
+| Owner | Current consumers | Replaced mechanism deleted |
+|---|---|---|
+| EntryStore / DiskEntryStore / MemoryEntryStore | SessionManager, proof startup, prepare/reopen helpers | eager fileEntries/byId/labels maps, loaders/index rebuild, preloaded constructor |
+| SessionManager writer + store observation/availability | append, reconcile, branch/fork, native commit | five sequential writer patch implementations, `_rewriteFile`, duplicate unusable flag |
+| SessionContext | SDK initialization, AgentSession restore/input, RPC count/read | eager initial history restore, old buildSessionContext/settings scans |
+| EntryMessageRange / SummarySource | prepare, native chunker, reduction and repeated split-turn compaction | full branch/source/chunk/result arrays |
+| EntryBranchRange / persisted entry IDs | branch summaries, interactive cache notices | branch path arrays and message object identity matching |
+| Existing output record queue / HTML exporter | normal RPC get_entries/get_messages, HTML/custom tools | eager transport history array and full embedded export serialization |
 
-Final matched canonical package build, remaining affected ACP variants, parallel chunk chronology/prefix fixture, and Lovelace's independent >256MiB full CLI/prepare/commit/reopen acceptance remain pending. Her earlier manager-only large-history memory proof is not full-chain proof. Parent owns integrated installation.
+Compiled current-consumer scan found no calls to removed SessionManager APIs. RPC client's `getEntries` remains the actual external get_entries protocol consumer. Two upstream footer comments mention the removed API; they are documentation, not executable adapters.
 
-Native history scanning and chunk sources avoid eager history-body arrays. RPC clients still buffer a requested complete record; explicit tree/render projections may allocate their requested result. No general bounded-memory claim is made for those paths or arbitrarily large single records. Python historical NativeEntry collections and the noncanonical stock manual helper are separate existing boundaries, not claimed replaced here.
+## Acceptance
 
-Toad T1 settings is queued after PR243 combined completion; no Toad edits started.
+| Receipt | Result and actual boundary |
+|---|---|
+| canonical-build-acceptance.log | Production native package preparation/verification passes |
+| cli-canonical-final.log | Actual canonical CLI compact → writer → fresh CLI reopen passes; 20 loopback requests, original318931 bytes preserved, all60 original messages accessible, one compaction, no provider call on reopen |
+| parallel-canonical.log | Actual compiled algorithm: four concurrent maps, ordered multi-level synthesis, cancellation/join, three successive summaries, saved split-turn prior-summary/custom-instruction preservation, configured output reserve |
+| selected-owner-corrected.log + selected-owner-remaining.log | All4 previously failing actual ACP real-host ordinary/private summary/decline cases pass after coroutine consumer repair; 1pass14.75s +3pass32.15s |
+| writer-coverage-first.log | 18 actual native malformed/race/lock/CAS cases pass, including empty-file initializer and fork source locks |
+| writer-failure-final.log | 13 failure scenarios,442 continuation controls pass; failed stores cannot resume writing/reading |
+| history-consumers-final.log | 3 branch/export/cache cases pass including cleared label preservation |
+| combined-cas-first.log + metadata-cas-current.log | 9pass initially;2 obsolete embedded fixture calls failed, then both repaired cases pass |
+| combined-proof.log | Indexed historical/sibling input proof with zero body reads and zero startup emissions |
+| selected-summary-current.log | Actual compiled selected summary, including345 model-sized source calls and UNKNOWN/cancel behavior |
 
----
+All provider responses in these tests are existing local fixtures. They establish protocol/storage/chunk plumbing, not semantic performance of a paid model. Initial failed assembly/fixture/cancellation logs are retained and are not counted as passes. Source chronology and pre-cancel regressions found during the final parallel test were fixed before final package publication.
 
-# Native SessionManager entry-store implementation
+## Remaining acceptance and limits
 
-Branch refactor/native-session-entry-store-20260928 from installed225/combined242/d04105d, persistent ~/wt/comms-native-session-entry-store-20260928. Work in progress; no live changes or provider calls.
+Lovelace owns independent **>256MiB full CLI → prepare → journal/inherited-authority commit → strict reopen** acceptance. Exact source/package/launcher were sent on PR243 and PR232. Her earlier302/604MB manager-only memory proofs are not full-chain proof. Parent owns combined source integration, installed/provider acceptance and activation. Latest round2 test receivers must be migrated to the actual matching source contract; no old internal API should be restored.
 
-## Ownership
+Native history scanning and chunk sources avoid eager history-body arrays. RPC clients still buffer a requested complete record; explicit tree/custom-render projections allocate requested results. No general bounded-memory claim is made for these paths or arbitrarily large single records. Python historical NativeEntry collections and the noncanonical stock manual helper are separate existing boundaries, not claimed replaced here. Canonical selected compaction retains its existing split-turn admission policy; ordinary native compact supports the tested split-turn history path.
 
-Darwin: EntryStore public nominal base, DiskEntryStore (SQLite-derived offsets/selectors, lazy JSONL payloads) and MemoryEntryStore; shared traversal/integrity; SessionManager load/append/CAS/fork/reconcile; prepare/reopen/compaction streaming and all direct consumers. Pascal: AgentSession native proof startup, consuming manager.entryStore.entries()/trackedInputs(). Direct contract posted PR234. Lovelace: >256MiB memory-envelope acceptance. Parent:242 native framing/activation.
-
-## Implemented checkpoint
-
-- Store scans strict UTF8/current-v3 header/ID ancestry/newline incrementally; holds offsets/selectors in disk SQLite, no historical message bodies or whole-file Map. On-demand reads verify descriptor and path revision. Index storage is derived, under persistent owned cache; close/process exit removes it.
-- Nominal subclasses share traversal, retained-compaction context, inherited settings, full-history tracked-input/commit search. All history remains in original JSONL; no original data mutation during reads.
-- SessionManager replacement patch deletes eager fileEntries/byId and loader/index mechanisms, moves append/fork/reconcile to store consumers. Current patch is still under caller integration; NOT ready for install.
-- Store tests2pass include both storage declarations/branches/retained settings/old input+commit lookup/append stale read and strict malformed history. Initial failed log retained: anonymous unlink of live SQLite file refused IO; fixed by actual store-owned index lifecycle. No claim of full memory acceptance yet.
-
-## Required remaining completion (same PR)
-
-Migrate native SDK/AgentSession/RPC/export/interactive direct consumers; complete streamed initial-uncompacted prepare→existing CompactionPolicy chunker (no eager messages/source arrays); prepare/reopen/commit helper current imports and lifetime guards; compiled/package integration; real local native and >256MiB/memory-envelope acceptance. No Proxy, array compatibility facade, new input allocator or replay.
-
-## Continued implementation checkpoint
-
-- PR243 now owns current native SDK/AgentSession/RPC direct consumers; Pascal's proof startup remains separate. Indexed trackedMetadata()/trackedInputMetadata(inputId) returns id/inputId/inputDigest without message body reads and validates observation revision; direct contract sent PR244.
-- Initial SDK restore no longer eagerly allocates every historical message. SessionContext Ready/Compaction subclasses own model-policy admission and native input gate; deferred history remains available for get_state count/get_messages/get_entries and owner-selected compaction. Existing CompactionPolicy supplies bytes sizing; no new resource catalog. Protocol history arrays now stream through existing output-guard record queue (no interleaved JSON).
-- Existing compact() exercised24 local native stream fixture calls with model-sized inputs, initial-uncompacted lazy message ranges and on-disk intermediate reduction. Source generations reach actual chunker; no fake prepared-input bypass.
-- Actual candidate CLI startup/get_state now succeeds on an uncompacted source too large for its model-policy admission; correct messageCount60, no provider call, no source-body preload. First source receipt incorrectly reported0 (caught/fixed by routing count through the context owner); both logs retained.
-- Native prepare/reopen/commit validators now consume DiskEntryStore; no separate eager strict parser, no lifetime256MiB file guard there. Commit/reconcile reuses the index observed by its own freshly-opened SessionManager and validates revision while holding original writer lock.
-- Remaining: full helper/manual saved-prefix streaming, HTML and branch-summary iterator consumers, final patch/package assembly against Pascal's current startup source, old/current contract fixtures and Lovelace's larger-than256MiB memory/initial compaction acceptance. This is not a finished deployable candidate yet.
-
-## Normal native CLI and remaining-consumer checkpoint
-
-- `cli-compaction-first.log`: normal native CLI RPC compact → native writer → fresh process reopen passes, 20 existing loopback-provider requests, exactly one compaction, original318936 bytes unchanged, all60 original messages still accessible through get_entries, retained context2 messages. Reopen/read-only RPC issued no provider call. Script committed with guarded main. This uses the owned staged package, not yet the final import-fenced deployment.
-- `history-consumers-first.log`:3pass branch summary range/budget, actual HTML full-history/base64/multibyte/custom-tool rendering and source preservation, cache notices keyed by persisted IDs across distinct disk message objects. Full HTML entries serialize incrementally; optional custom rendered-tool output remains an explicit export projection.
-- Deleted unused SessionManager rewrite, old array compaction/settings selectors and preloaded entries constructor path, plus obsolete public type/export declarations. Public storage and lazy range declarations now accompany their native SDK contracts. Intermediate chunk summaries use unlinked persistent files, cleaned by close/process exit.
-- Next: combine Pascal244 proof startup, assemble/reseal the complete candidate and run affected native source/CAS/normal CLI paths. Parent retains live activation. ToadT1 is queued after243 combined native completion, not started.
+Final package and committed receipts/scripts retained. Owned disposable fixture directories cleaned; no original/live roots modified. Toad T1 settings remains queued after PR243 combined completion, then T3 after T2; no premature Toad implementation.
