@@ -1,9 +1,26 @@
 """Canonical ACP owners sharing the production bus, SQL stores and owner socket."""
 
+import json
 from contextlib import asynccontextmanager
 
 from agent_comms.acp import CommsAgent
-from test_coordinated_runtime import _root
+from test_coordinated_runtime import _fake_model, _root
+
+
+def native_model(*, decision="FULL", fail_on=None):
+    """Give each fresh simulated session its own durable evidence file."""
+    model, calls = _fake_model(decision=decision, fail_on=fail_on)
+
+    async def run(*args, session_file=None, **kwargs):
+        if session_file is None:
+            input_id = kwargs["input_id"]
+            session_file = kwargs["session_dir"] / f"{input_id}.jsonl"
+            with session_file.open("x") as stream:
+                stream.write(json.dumps({"type": "session", "id": input_id}) + "\n")
+            session_file.chmod(0o600)
+        return await model(*args, session_file=session_file, **kwargs)
+
+    return run, calls
 
 
 @asynccontextmanager

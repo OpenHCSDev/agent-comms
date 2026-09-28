@@ -5,6 +5,7 @@ identity, SQLite, native journals and notification projection are not mocked.
 """
 
 import asyncio
+from dataclasses import replace
 
 import pytest
 
@@ -15,8 +16,7 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from delivery_owner_fixture import canonical_delivery_owner
-from test_coordinated_runtime import _fake_model
+from delivery_owner_fixture import canonical_delivery_owner, native_model
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
 tmp_path = private_root_fixture
@@ -26,10 +26,10 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
     async with canonical_delivery_owner(tmp_path) as (comms, owner, first, root_id):
-        alpha, alpha_calls = _fake_model(decision="IGNORE")
+        alpha, alpha_calls = native_model(decision="IGNORE")
         monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", alpha)
         assert await owner.inputs.drain_inbox("alpha") == 1
-        beta, beta_calls = _fake_model(decision="FULL")
+        beta, beta_calls = native_model(decision="FULL")
         monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", beta)
         assert await owner.inputs.drain_inbox("beta") == 1
         assert len(alpha_calls) == 1 and len(beta_calls) == 2
@@ -74,7 +74,7 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
 async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_path, monkeypatch):
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
-    model, calls = _fake_model(fail_on=1)
+    model, calls = native_model(fail_on=1)
     monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", model)
     async with canonical_delivery_owner(tmp_path) as (comms, owner, message, root_id):
         with pytest.raises(NativePiUnavailable, match="died"):
@@ -111,7 +111,7 @@ async def test_selected_owner_revocation_before_send_never_creates_receipt(
 ):
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
-    model, calls = _fake_model()
+    model, calls = native_model()
     entered, release = asyncio.Event(), asyncio.Event()
 
     async def suspended(*args, **kwargs):
@@ -147,5 +147,51 @@ async def test_selected_owner_revocation_before_send_never_creates_receipt(
             assert not owner.inputs.pending_turns
         finally:
             release.set()
+            turn.cancel()
+            await asyncio.gather(turn, return_exceptions=True)
+
+
+async def test_notification_busy_requires_matching_live_process_identity(tmp_path, monkeypatch):
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    model, calls = native_model()
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def suspended(*args, **kwargs):
+        entered.set()
+        await release.wait()
+        return await model(*args, **kwargs)
+
+    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", suspended)
+    async with canonical_delivery_owner(tmp_path, direct=True) as (comms, owner, message, _root):
+        turn = asyncio.create_task(owner.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            key = message.seq, message.message_id
+            notices = comms.views.message_notifications([message])[key]
+            assert len(notices) == 1
+            assert notices[0].state == "Responding…" and notices[0].busy
+            assert comms.views.recent_notifications("beta") == (
+                replace(notices[0], message=message),
+            )
+            assert calls == []  # Projection never launches or resends an input.
+
+            # Same PID, different process incarnation: even a retained active turn
+            # cannot supply liveness. Persist through the real typed registry.
+            with comms.registry.store.editing() as edit:
+                current = edit.document.threads["beta"]
+                identity = current.process_identity
+                assert identity is not None and current.active_turn is not None
+                edit.document.threads["beta"] = replace(
+                    current, process_identity=replace(identity, start_time=identity.start_time + 1)
+                )
+                edit.commit()
+            paused = comms.views.message_notifications([message])[key]
+            assert paused[0].state == "Paused" and not paused[0].busy
+            assert comms.views.recent_notifications("beta") == (
+                replace(paused[0], message=message),
+            )
+            assert calls == []
+        finally:
             turn.cancel()
             await asyncio.gather(turn, return_exceptions=True)
