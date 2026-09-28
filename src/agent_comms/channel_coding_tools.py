@@ -45,40 +45,40 @@ class CodingTool(DeclaredFamily, affix="Tool"):
     """Pi owns argument schemas; this family owns only cooperative claim behavior."""
 
     arguments: dict[str, Any]
+    claim: FileClaimPath | None = field(init=False, compare=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "claim", self._parse_resource())
 
     @abstractmethod
-    def resource_claim(self) -> FileClaimPath | None: ...
+    def _parse_resource(self) -> FileClaimPath | None: ...
 
     @classmethod
     def from_call(cls, name: str, arguments: dict[str, Any]) -> CodingTool:
         # The native tool validates its full schema. Preserve it exactly for
         # event/socket correlation, without maintaining a second Pi schema.
         FieldCodec.encode(arguments)
-        tool = cls.decode(name)(arguments)
-        resource = tool.resource_claim()
-        if resource is not None and (type(resource.resource) is not str or not resource.resource):
-            raise SelectedToolDenied("Coding mutation requires a file path")
-        return tool
+        return cls.decode(name)(arguments)
 
 
 class ReadTool(CodingTool):
-    def resource_claim(self) -> None:
+    def _parse_resource(self) -> None:
         return None
 
 
 class BashTool(CodingTool):
-    def resource_claim(self) -> None:
+    def _parse_resource(self) -> None:
         return None
 
 
 class EditTool(CodingTool):
-    def resource_claim(self) -> FileClaimPath:
-        return ExistingFileClaim(self.arguments["path"])
+    def _parse_resource(self) -> FileClaimPath:
+        return ExistingFileClaim(Path(self.arguments["path"]))
 
 
 class WriteTool(CodingTool):
-    def resource_claim(self) -> FileClaimPath:
-        return WritableFileClaim(self.arguments["path"])
+    def _parse_resource(self) -> FileClaimPath:
+        return WritableFileClaim(Path(self.arguments["path"]))
 
 
 @dataclass
@@ -130,7 +130,7 @@ class CodingToolOwner:
         verify_sent_full_input(self.store, self.admission, self.owner_name, self.input_id)
         verify_selected_wake(self.comms, self.store, self.admission, self.owner_name)
         consume_selected_slot(self.session_dir, call.slot(self.input_id), call.slot(self.input_id))
-        resource = call.tool.resource_claim()
+        resource = call.tool.claim
         if resource is not None:
             owner = self.comms.registry.require(self.owner_name)
             canonical = resource.normalized(Path(owner.worktree))

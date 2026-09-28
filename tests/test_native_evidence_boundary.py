@@ -7,8 +7,18 @@ import pytest
 
 from agent_comms.fresh_private_session import FreshPrivateSession, create_fresh_private_session
 from agent_comms.native_entries import NativeEntry
-from agent_comms.native_pi import NativePiUnavailable, prepare_native_pi_rpc_launch
+from agent_comms.native_pi import (
+    NativeContextProof,
+    NativePiUnavailable,
+    prepare_native_pi_rpc_launch,
+)
 from agent_comms.pi_payloads import TextContent, UnknownContent
+
+
+@pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+    with pytest.raises(ValueError, match="128-bit input ID"):
+        NativeContextProof.read_evidence(tmp_path / "absent.jsonl", input_id)
 
 
 @pytest.mark.parametrize(

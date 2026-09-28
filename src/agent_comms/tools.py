@@ -486,16 +486,6 @@ def _channels(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     }
 
 
-def _set_channel(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    channel = comms.channels.set_channel(str(arguments["name"]), _tag_set(arguments["tags"]))
-    return channel.to_wire()
-
-
-def _delete_channel(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    comms.channels.delete_channel(str(arguments["name"]))
-    return _channels(comms, {})
-
-
 def _set_channel_metadata(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     parent = str(arguments["parent"]).strip() or None
     return comms.channels.set_channel_metadata(
@@ -678,17 +668,6 @@ TOOLS = (
         _channels,
     ),
     ToolDeclaration(
-        "comms_set_channel",
-        "Configure legacy channel audience",
-        "Create/update a compatibility routable OR-union of tags. Exact one-tag channels "
-        "remain independently visible and retain target-owned history.",
-        (
-            ToolParameter("name", "string", "Channel name, e.g. #engineering"),
-            ToolParameter("tags", "string", "One or more comma-separated tags"),
-        ),
-        _set_channel,
-    ),
-    ToolDeclaration(
         "comms_set_channel_metadata",
         "Set channel presentation",
         "Set presentation-only parent and archive state. These fields never alter routing, "
@@ -729,13 +708,6 @@ TOOLS = (
         "Delete a saved projection without changing tags, channels, messages, or threads.",
         (ToolParameter("name", "string", "Saved view name"),),
         _delete_view,
-    ),
-    ToolDeclaration(
-        "comms_delete_channel",
-        "Delete channel view",
-        "Remove a named view, preserving tags and threads. Uncovered tags regain automatic views.",
-        (ToolParameter("name", "string", "Named channel to remove"),),
-        _delete_channel,
     ),
     ToolDeclaration(
         "comms_sort_channel",
