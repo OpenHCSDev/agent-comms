@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import stat
 import sys
 from collections.abc import Awaitable, Callable
@@ -227,6 +228,115 @@ class NativePiRpcLaunch:
     env: dict[str, str]
     session_dir: Path
     session_file: Path | None
+    package: Path
+
+    @classmethod
+    def package_for_command(cls, command: str) -> Path:
+        """Resolve an explicitly supported launcher to the reviewed package.
+
+        Executable names never establish capability. Configured commands must
+        name this installation's entrypoint, its pinned CLI, or the source stack
+        launcher; execution always uses the verified native package.
+        """
+        import hashlib
+
+        from .native_package import MANIFEST
+        from .private_nk_entrypoint import private_nk_from_environment
+
+        stack_launcher = MANIFEST.parent / "bin" / "pi-native"
+        executable = (
+            Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
+        )
+        route = private_nk_from_environment()
+        if route is not None:
+            package = route.native_package
+        elif executable is not None and executable == stack_launcher.resolve():
+            build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
+            package = (
+                MANIFEST.parent
+                / f".pi-native-{build}"
+                / "node_modules/@earendil-works/pi-coding-agent"
+            )
+        else:
+            raise NativePiUnavailable("Native owner requires a configured pinned package")
+        allowed = (
+            Path(sys.executable).with_name("pi-comms-native").resolve(),
+            stack_launcher.resolve(),
+            (package / "dist" / "cli.js").resolve(),
+        )
+        if executable is not None and executable not in allowed:
+            raise NativePiUnavailable("Configured command is not a validated native Pi launcher")
+        _trusted_package(package)
+        return package
+
+    @staticmethod
+    def rpc_arguments(arguments: tuple[str, ...]) -> tuple[str, ...]:
+        """Validate the external CLI mode once, without executable inference."""
+        result = []
+        iterator = iter(arguments)
+        for argument in iterator:
+            if argument == "--mode":
+                if next(iterator, None) != "rpc":
+                    raise NativePiUnavailable("Managed Pi requires RPC mode")
+            elif argument.startswith("--mode="):
+                if argument != "--mode=rpc":
+                    raise NativePiUnavailable("Managed Pi requires RPC mode")
+            elif argument in {"--print", "-p", "--help", "-h", "--version", "-v"}:
+                raise NativePiUnavailable("Managed Pi cannot run a one-shot CLI command")
+            else:
+                result.append(argument)
+        return (*result, "--mode", "rpc")
+
+    @classmethod
+    def managed(
+        cls,
+        command: str,
+        arguments: tuple[str, ...],
+        *,
+        worktree: Path,
+        environment: dict[str, str] | None = None,
+        session_file: str | None = None,
+        fork_session: bool = False,
+    ) -> NativePiRpcLaunch:
+        """Prepare managed ACP/headless execution; native receipts remain separate."""
+        arguments = cls.rpc_arguments(arguments)
+        package = cls.package_for_command(command)
+        cli = package / "dist" / "cli.js"
+        cwd = worktree.resolve(strict=True)
+        if not cwd.is_dir():
+            raise NativePiUnavailable("Native Pi worktree is unavailable")
+        env = dict(os.environ)
+        env.update(environment or {})
+        for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
+            env.pop(name, None)
+        env["NODE_DISABLE_COMPILE_CACHE"] = "1"
+        env["PI_WORKTREE"] = str(cwd)
+        env["PATH"] = os.pathsep.join(
+            (str(Path(sys.executable).parent), env.get("PATH", os.defpath))
+        )
+        env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
+            Path(
+                env.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
+                or env.get("PI_CODING_AGENT_DIR")
+                or "~/.pi/agent"
+            )
+            .expanduser()
+            .resolve()
+        )
+        saved = Path(session_file).absolute() if session_file else None
+        if saved is not None:
+            arguments += ("--fork" if fork_session else "--session", str(saved))
+        argv = (
+            "node",
+            "--no-global-search-paths",
+            "--import",
+            str(cli.with_name("agent-comms-import-fence.mjs")),
+            "--import",
+            str(cli.with_name("agent-comms-project-bootstrap.mjs")),
+            str(cli),
+            *arguments,
+        )
+        return cls(argv, cwd, env, saved.parent if saved else cwd, saved, package)
 
 
 def _unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -574,7 +684,7 @@ def prepare_native_pi_rpc_launch(
             Path(os.environ.get("PI_CODING_AGENT_DIR", "~/.pi/agent")).expanduser().resolve()
         )
         env["PI_CODING_AGENT_DIR"] = str(agent_dir)
-    return NativePiRpcLaunch(tuple(argv), worktree, env, session_dir, session_file)
+    return NativePiRpcLaunch(tuple(argv), worktree, env, session_dir, session_file, package)
 
 
 async def run_native_pi_turn(

@@ -41,7 +41,7 @@ from acp.schema import (
 )
 
 from . import agent_events as events
-from . import backend, manual_compaction_bridge
+from . import manual_compaction_bridge
 from .agent_event_updates import AcpEventConsumer
 from .bus_publication import stable_thread_lookup
 from .cohort_foreground import _accept_visible_initials
@@ -286,7 +286,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             supported = (
                 self.sessions.proxy_image_support.get(session_id, False)
                 if session_id in self.sessions.proxies
-                else backend.rpc_args_for(self.turns.agent_bin, self.turns.agent_args) is not None
+                else True
             )
             if not supported:
                 raise RequestError.invalid_params(
@@ -316,7 +316,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         text = self._prompt_text(prompt)
         if (
             session_id in self.turns.active_turns
-            and backend.rpc_args_for(self.turns.agent_bin, self.turns.agent_args) is not None
             and self.inputs.backend_inboxes.get(session_id) is not None
             and not text.lstrip().startswith(("@", "#", RELAY_PREFIX))
         ):
