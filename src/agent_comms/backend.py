@@ -311,6 +311,11 @@ async def terminate_task_process(task: asyncio.Task[Any]) -> None:
     proc = _ACTIVE_PROCESSES.pop(task, None)
     if proc is not None:
         await proc.stop()
+    stderr_task = _ACTIVE_STDERR_TASKS.pop(task, None)
+    if stderr_task is not None:
+        if not stderr_task.done():
+            stderr_task.cancel()
+        await asyncio.gather(stderr_task, return_exceptions=True)
 
 
 def configured_model(args: Sequence[str]) -> str | None:
@@ -624,11 +629,6 @@ async def stream_agent_events(
                 startup.release()
                 if owner is not None:
                     await terminate_task_process(owner)
-                    stderr_task = _ACTIVE_STDERR_TASKS.pop(owner, None)
-                    if stderr_task is not None:
-                        if not stderr_task.done():
-                            stderr_task.cancel()
-                        await asyncio.gather(stderr_task, return_exceptions=True)
     except Exception:
         # A malformed RPC row cannot certify a completed turn. Preserve no
         # raw payload/stderr in the wire response and always reap the child.

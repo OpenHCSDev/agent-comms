@@ -17,6 +17,7 @@ from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_session_reopen import validate_native_reopen
 from agent_comms.owner_compaction_prepare import prepare_native_source
+from agent_comms.selected_pi_route import read_selected_compaction_decision
 from agent_comms.threads import Thread
 from compaction_loopback import LoopbackProvider
 
@@ -144,6 +145,9 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
             },
             False,
         )
+        (tmp_path / "updates.json").write_text(
+            json.dumps([item["update"].model_dump(mode="json") for item in updates], indent=2)
+        )
         journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
         (attempt,) = journal.selected_summaries(str(session))
         if mode == "manual":
@@ -153,8 +157,20 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
         persistent = agent.turns.persistent_backends["retained"]
         if mode == "manual":
             assert persistent.proc is None and persistent.reopen_required == str(session)
+            await agent.turns.prepare_selected_session(
+                "retained", comms.registry.require("retained")
+            )
         else:
             assert persistent.proc is not None and persistent.proc.returncode is None
+        decision = await read_selected_compaction_decision(
+            persistent,
+            session_file=str(session),
+            expected_package=package,
+            provider="retained-local",
+            model_id="fixture",
+            context_window=272000,
+        )
+        assert not decision.trigger, "Committed context must be usable on a fresh native reopen"
         identity = await asyncio.to_thread(
             validate_native_reopen,
             package,
