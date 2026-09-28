@@ -38,7 +38,7 @@ class Comms:
         self.channels = ChannelManagement(self.root, self.registry, self.bus)
         self.messaging = Messaging(self.root, self.registry, self.bus)
         self.agents = AgentActivity(self.root, self.registry)
-        self.ledger = CollaborationLedger(self.root, self.registry)
+        self.ledger = CollaborationLedger(self.root / CollaborationLedger.filename, self.registry)
         self.owners = OwnerLifecycle(self.root, self.registry, self.bus)
         self.goals = Goals(self.root, self.registry, self.bus)
         self.transcripts = Transcripts(self.root, self.registry, self.bus, self.messaging)
