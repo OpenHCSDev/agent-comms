@@ -28,6 +28,7 @@ from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.store_files import _store_lock
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from test_coordinated_runtime import _fake_model
@@ -40,9 +41,20 @@ tmp_path = private_root_fixture
 def _session(tmp_path, *, package=True):
     root = tmp_path / "wire"
     comms = Comms(root)
-    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     owner = Thread(
-        "beta", frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="openai-codex/gpt-6-sol"
+        "beta",
+        frozenset({"team"}),
+        str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+        model="openai-codex/gpt-6-sol",
     )
     comms.threads.register(owner)
     root_id = comms.messaging.initialize_private_initial_protocol()
@@ -317,7 +329,14 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     project = tmp_path / "proj"
     project.mkdir()
     comms = Comms(root)
-    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     root_id = comms.messaging.initialize_private_initial_protocol()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
@@ -380,20 +399,11 @@ async def test_private_owner_rename_migrates_generation_before_canonical_selecte
     assert comms.registry.require("beta").name == "gamma"
     assert not (comms.root / ".private-owner-rename.pending").exists()
 
-    # The old direct alias remains unsupported; it must fail before any
-    # durable initial rather than become a second unstable recipient identity.
-    before_seq = comms.bus.log.latest_sequence()
-    with pytest.raises(
-        RelationViolationError, match="Initial direct aliases need a stable send binding"
-    ):
-        invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "old alias"})
-    assert comms.bus.log.latest_sequence() == before_seq
-
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
-    invoke_tool(comms, "comms_send", {"from": "sender", "to": "gamma", "body": "new owner"})
+    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "new owner"})
     assert await agent.inputs.drain_inbox("beta") == 1
     assert len(calls) == 1
     assert agent.sessions.bindings["beta"] == "gamma"
@@ -796,7 +806,12 @@ async def test_acp_private_without_explicit_package_refuses_legacy_delivery(tmp_
 
 async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, monkeypatch):
     comms, agent, root_id = _session(tmp_path)
-    alpha = Thread("alpha", frozenset({"team"}), str(tmp_path), pid=os.getpid())
+    alpha = Thread(
+        "alpha",
+        frozenset({"team"}),
+        str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    )
     comms.threads.register(alpha)
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         store.register_participant(
