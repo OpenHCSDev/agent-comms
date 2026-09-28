@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import ctypes
+import io
 import json
 import math
 import os
@@ -800,8 +801,13 @@ class ChildProcess(ABC):
                 stage = done.value
                 break
             await asyncio.sleep(delay)
+        self._release_retired_io()
         async with asyncio.timeout(STOP_GRACE_SECONDS):
             return stage(await self.wait())
+
+    def _release_retired_io(self) -> None:
+        """Release owned IO after the identity-bound process group has retired."""
+        return None
 
     async def stop(self) -> ChildOutcome:
         if self._stop_task is None:
@@ -858,6 +864,23 @@ class AttachedChild(ChildProcess):
 
     async def wait(self) -> ChildOutcome:
         return ChildOutcome.from_returncode(await self.process.wait())
+
+    def _release_retired_io(self) -> None:
+        # asyncio's wait also waits for pipe disconnects. A cancelled reader
+        # can leave a full pipe paused forever, even after process exit. Close
+        # the owned subprocess transport only after the group has retired;
+        # don't decode, accumulate, or replay abandoned output to unblock wait.
+        self.process._transport.close()
+
+    async def discard_stderr(self) -> None:
+        """Drain unwanted output through EOF without retaining the child's output.
+
+        Chunk size controls read allocation only, never total accepted output.
+        The caller owns cancellation together with the child session lifetime.
+        """
+        if self.stderr is not None:
+            while await self.stderr.read(io.DEFAULT_BUFFER_SIZE):
+                pass
 
     def close_input(self) -> None:
         if self.stdin is not None:

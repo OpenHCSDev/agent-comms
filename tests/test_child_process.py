@@ -418,3 +418,24 @@ BoundedRun.run_inherited(command,deadline=time.monotonic()+4,pass_fds=(fd,))
             await launcher.stop()
         if child is not None and child.alive():
             await DetachedProcess.attach(child).stop()
+
+
+@pytest.mark.asyncio
+async def test_discard_stderr_drains_past_transport_capacity_to_real_eof():
+    command = (
+        sys.executable,
+        "-c",
+        "import os; payload=b'x'*65536; "
+        "[os.write(2,payload) for _ in range(128)]; print('drained',flush=True)",
+    )
+    async with BoundedRun.session(command, timeout=10) as child:
+        drain = asyncio.create_task(child.discard_stderr())
+        try:
+            assert await child.stdout.readline() == b"drained\n"
+            outcome = await child.wait()
+            await drain
+            assert outcome.successful
+        finally:
+            drain.cancel()
+            await asyncio.gather(drain, return_exceptions=True)
+    assert not child.alive()

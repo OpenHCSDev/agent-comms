@@ -15,7 +15,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms.child_process import AttachedChild
+from agent_comms.child_process import AttachedChild, Platform
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_pi import (
     CAPABILITY,
@@ -955,7 +955,18 @@ def durable_attempt(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "outcome", ["429", "length", "stop", "configured", "restarted", "rejected"]
+    "outcome",
+    [
+        "429",
+        "length",
+        "stop",
+        "configured",
+        "restarted",
+        "rejected",
+        "large",
+        "cancel-large",
+        "eof-large",
+    ],
 )
 async def test_copied_cli_private_policy_allows_one_local_http_attempt(
     tmp_path: Path, monkeypatch, outcome: str, durable_attempt
@@ -969,13 +980,14 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
     provider = "configured-fixture" if outcome in {"configured", "restarted"} else "openrouter"
     model = "fixture-model" if outcome in {"configured", "restarted"} else "z-ai/glm-5.3-flash"
     calls: list[str] = []
+    answer = "X" * ((2 << 20) + 257) if outcome.endswith("large") else "X"
     chunk = {
         "id": "fixture-length",
         "object": "chat.completion.chunk",
         "created": 12345,
         "model": model,
         "choices": [
-            {"index": 0, "delta": {"role": "assistant", "content": "X"}, "finish_reason": None}
+            {"index": 0, "delta": {"role": "assistant", "content": answer}, "finish_reason": None}
         ],
     }
     terminal = {
@@ -1044,8 +1056,10 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
                                 {
                                     "id": model,
                                     "name": "Offline fixture",
-                                    "contextWindow": 272000,
-                                    "maxTokens": 128,
+                                    "contextWindow": (
+                                        4000000 if outcome.endswith("large") else 272000
+                                    ),
+                                    "maxTokens": 600000 if outcome.endswith("large") else 128,
                                 }
                             ],
                         }
@@ -1079,16 +1093,38 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
 
         observed: list[str] = []
         rpc_events: list[dict] = []
+        record_sizes: list[int] = []
+        oversized = asyncio.Event()
+        children = []
         real_launch = AttachedChild.start
 
         class Reader:
             def __init__(self, stream):
                 self.stream = stream
+                self.fragments = []
+                self.size = 0
+
+            async def readexactly(self, count):
+                raw = await self.stream.readexactly(count)
+                self.fragments.append(raw)
+                self.size += len(raw)
+                if self.size > 1 << 20 and not oversized.is_set():
+                    oversized.set()
+                    if outcome == "cancel-large":
+                        # Caller cancels during this actual native frame.
+                        await asyncio.Event().wait()
+                    elif outcome == "eof-large":
+                        Platform.current().force_group(children[0].identity)
+                return raw
 
             async def readuntil(self, separator):
                 raw = await self.stream.readuntil(separator)
                 if raw:
-                    event = json.loads(raw)
+                    record = b"".join((*self.fragments, raw))
+                    self.fragments.clear()
+                    self.size = 0
+                    record_sizes.append(len(record))
+                    event = json.loads(record)
                     rpc_events.append(event)
                     observed.append(event["type"])
                 return raw
@@ -1105,6 +1141,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
 
         async def launch(argv, **kwargs):
             child = await real_launch(argv, **kwargs)
+            children.append(child)
             child.stdout = Reader(child.stdout)
             child.stderr = StderrReader(child.stderr)
             return child
@@ -1128,6 +1165,27 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             provider=provider,
             model=model,
         )
+        if outcome in {"cancel-large", "eof-large"}:
+            task = asyncio.create_task(run_native_pi_turn(package, **request))
+            if outcome == "cancel-large":
+                try:
+                    await asyncio.wait_for(oversized.wait(), 10)
+                finally:
+                    task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+            else:
+                with pytest.raises(NativePiUnavailable, match="incomplete"):
+                    await task
+                assert oversized.is_set()
+            assert len(children) == 1 and children[0].returncode is not None
+            assert calls == ["/v1/chat/completions"]
+            assert observed.count("input_committed") == 1
+            assert observed.count("context_committed") == 1
+            assert "agent_settled" not in observed
+            settled = durable_attempt.fail_unknown()
+            assert not settled.is_current and not settled.can_retry
+            return
         if outcome == "rejected":
             from agent_comms.diagnostics import record_terminal_failure
 
@@ -1153,17 +1211,23 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             assert "fixture only" not in diagnostic.read_text()
             assert diagnostic.stat().st_mode & 0o777 == 0o600
             return
-        if outcome in {"stop", "configured", "restarted"}:
+        if outcome in {"stop", "configured", "restarted", "large"}:
             result = await run_native_pi_turn(package, **request)
             assert "prompt_accepted" in durable_phases
             assert "model_running" in durable_phases
             durable_attempt.finish()
             assert durable_attempt.store.snapshot("e").attempt.lifecycle.backend_done
-            assert result.text == "X"
+            assert result.text == answer
             assert result.context.input_id == INPUT_ID
             assert result.context.request_generation == 1
             assert result.context.session_file.parent == sessions
             assert "agent_settled" in observed
+            if outcome == "large":
+                assert max(record_sizes) > 1 << 20
+                print(
+                    f"actual_native_max_record_bytes={max(record_sizes)} "
+                    f"response_bytes={len(result.text)}"
+                )
         else:
             failure = "429 rate limit" if outcome == "429" else "did not finish successfully"
             with pytest.raises(NativePiTerminalFailure, match=failure) as failed:
