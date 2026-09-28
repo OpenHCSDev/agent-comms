@@ -72,6 +72,7 @@ async def compact_context(
             await runner.effects._emit_event(session_id, events.CompactionStart(reason="manual"))
             from .owner_compaction_manual import compact_manual_owner
 
+            info = await runner.prepare_selected_session(session_id, thread)
             result = await compact_manual_owner(runner, session_id, thread_name, info, instructions)
             success = result.get("ok") is True
             # A client may receive this terminal event then raise. Do not send

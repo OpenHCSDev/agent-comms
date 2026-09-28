@@ -311,6 +311,11 @@ async def terminate_task_process(task: asyncio.Task[Any]) -> None:
     proc = _ACTIVE_PROCESSES.pop(task, None)
     if proc is not None:
         await proc.stop()
+    stderr_task = _ACTIVE_STDERR_TASKS.pop(task, None)
+    if stderr_task is not None:
+        if not stderr_task.done():
+            stderr_task.cancel()
+        await asyncio.gather(stderr_task, return_exceptions=True)
 
 
 def configured_model(args: Sequence[str]) -> str | None:
@@ -624,11 +629,6 @@ async def stream_agent_events(
                 startup.release()
                 if owner is not None:
                     await terminate_task_process(owner)
-                    stderr_task = _ACTIVE_STDERR_TASKS.pop(owner, None)
-                    if stderr_task is not None:
-                        if not stderr_task.done():
-                            stderr_task.cancel()
-                        await asyncio.gather(stderr_task, return_exceptions=True)
     except Exception:
         # A malformed RPC row cannot certify a completed turn. Preserve no
         # raw payload/stderr in the wire response and always reap the child.
@@ -665,8 +665,9 @@ class TurnSession:
         ) = None,
         native_start: Callable[[str | None, str, str], bool] | None = None,
         persistent_session: PersistentPiSession | None = None,
-        ui_request: Callable[[pi.ExtensionUiRequest], Awaitable[pi.ExtensionUiChoice]]
-        | None = None,
+        ui_request: (
+            Callable[[pi.ExtensionUiRequest], Awaitable[pi.ExtensionUiChoice]] | None
+        ) = None,
         startup: NativeStartupAdmission | None = None,
     ):
         self.launch = launch
@@ -997,43 +998,44 @@ class TurnSession:
             self.native_capability_confirmed = True
             if self.startup is not None:
                 self.startup.release()
-            self.prompt_start_deadline = self.loop.time() + PROMPT_START_TIMEOUT_SECONDS
-            assert self.proc.stdin is not None
-            try:
-                self.boundary_context = _maintenance_send_boundary(
-                    Path(
-                        self.launch.env.get("AGENT_COMMS_ROOT")
-                        or os.environ.get("AGENT_COMMS_ROOT")
-                        or str(
-                            Path(tempfile.gettempdir()) / f"agent-comms-startup-{getpass.getuser()}"
-                        )
-                    ),
-                    self.send_boundary,
-                    None,
-                    self.original_input_id,
-                    self.task,
-                )
-                with self.boundary_context as self.authorized:
-                    if self.authorized:
-                        self.prompt_dispatched = True
-                        self.proc.stdin.write(self.prompt_payload)
-                if not self.authorized:
-                    self.record_failure(
-                        failures.InputMissing("Input authority changed before Pi prompt send.")
-                    )
-                    await self.proc.stop()
-                    self.finished = True
-                    return
-                await self.proc.stdin.drain()
-            except (BrokenPipeError, ConnectionResetError):
+            await self.input_ready()
+
+    async def input_ready(self) -> None:
+        self.prompt_start_deadline = self.loop.time() + PROMPT_START_TIMEOUT_SECONDS
+        assert self.proc.stdin is not None
+        try:
+            self.boundary_context = _maintenance_send_boundary(
+                Path(
+                    self.launch.env.get("AGENT_COMMS_ROOT")
+                    or os.environ.get("AGENT_COMMS_ROOT")
+                    or str(Path(tempfile.gettempdir()) / f"agent-comms-startup-{getpass.getuser()}")
+                ),
+                self.send_boundary,
+                None,
+                self.original_input_id,
+                self.task,
+            )
+            with self.boundary_context as self.authorized:
+                if self.authorized:
+                    self.prompt_dispatched = True
+                    self.proc.stdin.write(self.prompt_payload)
+            if not self.authorized:
                 self.record_failure(
-                    failures.InputIdUnavailable(
-                        "Pi RPC prompt could not be sent after capability preflight."
-                    )
+                    failures.InputMissing("Input authority changed before Pi prompt send.")
                 )
                 await self.proc.stop()
                 self.finished = True
                 return
+            await self.proc.stdin.drain()
+        except (BrokenPipeError, ConnectionResetError):
+            self.record_failure(
+                failures.InputIdUnavailable(
+                    "Pi RPC prompt could not be sent after capability preflight."
+                )
+            )
+            await self.proc.stop()
+            self.finished = True
+            return
 
     async def guard_identity(self) -> AsyncIterator[events.AgentEvent]:
         self.data = self.payload.data if isinstance(self.payload, pi.Response) else None
@@ -1374,27 +1376,7 @@ class TurnSession:
         if self.owner is not None:
             _ACTIVE_INPUT_RESTORERS.pop(self.owner, None)
         self.revision = _session_revision(self.active_session_file)
-        self.retained = bool(
-            self.persistent_session is not None
-            and self.require_input_id
-            and (self.proc.returncode is None)
-            and self.ok
-            and (not self.fail_reason)
-            and (self.error_message is None)
-            and (not self.session_identity_uncertain)
-            and (not isinstance(self.failure, failures.InputIdUnavailable))
-            and (not self.inputs.uncertain)
-            and (not self.unresolved_inputs)
-            and self.initial_input_started
-            and self.initial_prompt_acknowledged
-            and self.final_assistant_stop
-            and self.agent_settled_seen
-            and self.stats.complete
-            and isinstance(self.initial_session_id, str)
-            and isinstance(self.initial_session_file, str)
-            and (self.initial_session_file == self.active_session_file)
-            and (self.revision is not None)
-        )
+        self.retained = self.can_retain()
         if self.retained:
             assert self.persistent_session is not None
             self.persistent_session.proc = self.proc
@@ -1417,6 +1399,29 @@ class TurnSession:
                 self.record_failure(failures.BackendDidNotExit("agent backend did not exit"))
         if False:
             yield
+
+    def can_retain(self) -> bool:
+        return bool(
+            self.persistent_session is not None
+            and self.require_input_id
+            and (self.proc.returncode is None)
+            and self.ok
+            and (not self.fail_reason)
+            and (self.error_message is None)
+            and (not self.session_identity_uncertain)
+            and (not isinstance(self.failure, failures.InputIdUnavailable))
+            and (not self.inputs.uncertain)
+            and (not self.unresolved_inputs)
+            and self.initial_input_started
+            and self.initial_prompt_acknowledged
+            and self.final_assistant_stop
+            and self.agent_settled_seen
+            and self.stats.complete
+            and isinstance(self.initial_session_id, str)
+            and isinstance(self.initial_session_file, str)
+            and (self.initial_session_file == self.active_session_file)
+            and (self.revision is not None)
+        )
 
     async def finish_diagnostics(self) -> AsyncIterator[events.AgentEvent]:
         if self.owner is not None:

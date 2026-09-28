@@ -26,9 +26,9 @@ for(let i=0;i<5;i++) {
  manager.appendMessage({role:'assistant',content:[{type:'text',text:'Answer '+i}],provider:'fake',model:'fake',api:'fake',stopReason:'stop',timestamp:2*i+1});
 }
 const settings={enabled:process.env.PR95_EFFECTIVE_DISABLED !== '1',reserveTokens:1000,keepRecentTokens:10};
-const preparation=prepareCompaction(manager.entryStore,settings);
-const witness=manager.captureCompactionWitness(preparation.firstKeptEntryId);
 const model={provider:'fake',id:'fake',api:'openai-completions',contextWindow:10000,maxTokens:1000};
+const preparation=prepareCompaction(manager.entryStore,settings,model);
+const witness=manager.captureCompactionWitness(preparation.firstKeptEntryId);
 let mode='success',release,callCount=0,blockHooks=false;
 if(process.env.PR95_PROVIDER_ERROR === '1') mode='error-stop';
 const runner={hasHandlers:()=>blockHooks};

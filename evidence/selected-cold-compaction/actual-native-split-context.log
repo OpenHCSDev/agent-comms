@@ -1,0 +1,23 @@
+{
+  "paidRequests": 0,
+  "cases": [
+    {
+      "split": false,
+      "providerRequests": 1,
+      "generatedBytes": 15259,
+      "annotationBytes": 50418,
+      "committedBytes": 66320,
+      "inputBytes": 191712,
+      "readyAfterReopen": true
+    },
+    {
+      "split": true,
+      "providerRequests": 2,
+      "generatedBytes": 15259,
+      "annotationBytes": 50418,
+      "committedBytes": 104876,
+      "inputBytes": 191712,
+      "readyAfterReopen": true
+    }
+  ]
+}
