@@ -1310,7 +1310,18 @@ async def run_one_sealed_claim(
             obligation=started.snapshot.obligation,
         )
         selected_instruction = (
-            "Answer the original committed message directly and concisely, using no tools. "
+            (
+                "Answer the committed request and do the requested work using the normal "
+                "read, bash, edit and write tools. "
+                "Edit/write claims are checked by the owner before execution. "
+                "Bash is cooperative: "
+                "respect other agents' claims, stay in your worktree, and do not bypass "
+                "a denied edit through shell. "
+                "Never retry a tool or input with UNKNOWN outcome; report the concrete failure. "
+                "Finish with the actual result and tests, not a promise of later work. "
+                if selected_existing_file_write is None and first_selected is None
+                else "Answer the original message directly and concisely, using no tools. "
+            )
             if selected_tool_intent is None
             else (
                 "Answer the original committed message directly and concisely. "
@@ -1368,8 +1379,11 @@ async def run_one_sealed_claim(
             attempt_ordinal=fence.attempt_ordinal,
         )
         bound_tool_mode = None
-        if selected_tool_intent is not None:
-            from .selected_tool_broker import SelectedToolMode, selected_tool_mode_for_owner
+        if selected_tool_intent is not None or (
+            selected_existing_file_write is None and first_selected is None
+        ):
+            from .channel_coding_tools import CodingToolMode, CodingToolOwner
+            from .selected_tool_broker import NativeToolMode, selected_tool_mode_for_owner
 
             turn = owner.active_turn
             if turn is None:
@@ -1388,10 +1402,16 @@ async def run_one_sealed_claim(
                 participant_generation=person.generation,
                 attempt_ordinal=fence.attempt_ordinal,
             )
-            bound_tool_mode = selected_tool_mode_for_owner(
-                comms, store, tool_admission, owner.name, session_dir, input_id
+            bound_tool_mode = (
+                selected_tool_mode_for_owner(
+                    comms, store, tool_admission, owner.name, session_dir, input_id
+                )
+                if selected_tool_intent is not None
+                else CodingToolMode(
+                    CodingToolOwner(comms, store, tool_admission, owner.name, session_dir, input_id)
+                )
             )
-            if type(bound_tool_mode) is not SelectedToolMode:
+            if not isinstance(bound_tool_mode, NativeToolMode):
                 raise IdentityConflict("selected tool mode did not bind to the owner")
         result = await run_native_pi_turn(
             native_package,

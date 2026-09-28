@@ -78,12 +78,19 @@ class ReadLedger(LockedStore[ReadDocument]):
         )
 
     def capture(
-        self, viewer: str, messages: Iterable[Message], snapshot: RegistrySnapshot, bus_path: Path
+        self,
+        viewer: str,
+        messages: Iterable[Message],
+        snapshot: RegistrySnapshot,
+        bus_path: Path,
+        *,
+        conversation_snapshot: RegistrySnapshot | None = None,
     ) -> DisplayBasis:
         viewer = snapshot.aliases.get(viewer, viewer)
         grouped: dict[Conversation, list[int]] = {}
         for message in messages:
-            grouped.setdefault(self.conversation(message, snapshot), []).append(message.seq)
+            conversation = self.conversation(message, conversation_snapshot or snapshot)
+            grouped.setdefault(conversation, []).append(message.seq)
         return DisplayBasis(
             viewer,
             snapshot.threads[viewer].created_at,
