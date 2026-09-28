@@ -9,6 +9,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     BlockedGoalAction,
     CompletedGoalAction,
@@ -18,6 +19,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import CompletedGeneration, ReadyGeneration
+from agent_comms.goals import Goal
 from agent_comms.runtime import RuntimeProxy, socket_path
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
@@ -125,7 +127,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
         rejected = [result for result in results if isinstance(result, RuntimeError)]
         assert len(accepted) == len(rejected) == 1
         assert "changed" in str(rejected[0])
-        assert accepted[0]["goal"]["status"] == "active"
+        assert FieldCodec.decode(Goal, accepted[0]["goal"]).state.declared_name == "active"
         assert accepted[0]["goal"]["revision"] == blocked.revision + 1
         generation = GoalAttemptStore(store.root).snapshot(goal.id)
         assert (generation.number, generation.lifecycle, generation.attempt_id) == (
@@ -137,11 +139,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
         owner.turns.schedule_goal(session)
         assert len(calls) == 1 and not owner.inputs.pending_turns.get(session)
         assert any(
-            (getattr(update, "field_meta", None) or {})
-            .get("agentComms", {})
-            .get("goal", {})
-            .get("status")
-            == "active"
+            FieldCodec.decode(Goal, update.field_meta["agentComms"]["goal"]).state.active
             for update in updates
             if (getattr(update, "field_meta", None) or {}).get("agentComms", {}).get("goal")
         )

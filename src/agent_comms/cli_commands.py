@@ -541,22 +541,6 @@ class ArchiveCliCommand(CliCommand):
         return {"archived": self.name}
 
 
-@dataclass(frozen=True, kw_only=True)
-class DeleteCliCommand(CliCommand):
-    help = "Permanently delete a stopped thread"
-    name: str = option("--name")
-
-    def apply(self, ctx: Comms) -> Any:
-        delete_result = ctx.threads.delete(self.name)
-        return {
-            "deleted": delete_result.name,
-            "messages_removed": delete_result.messages_removed,
-            "markers_removed": delete_result.markers_removed,
-            "activity_events_removed": delete_result.activity_events_removed,
-            "runtime_removed": delete_result.runtime_removed,
-            "ledger_references_removed": delete_result.ledger_references_removed,
-            "detached_children": list(delete_result.detached_children),
-        }
 
 
 @dataclass(frozen=True, kw_only=True)
