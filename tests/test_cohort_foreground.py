@@ -28,6 +28,7 @@ from agent_comms.coordination_store import (
     MutationStore,
     PublicationActivationBlocked,
 )
+from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.native_pi import NativeContextProof, NativeTurnResult
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
@@ -211,7 +212,7 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
             wait_seconds=0,
             ready=ready,
             selected_existing_file_write=runtime.SelectedExistingFileWrite(
-                resource, b"after selected claim\n"
+                ExistingFileClaim(Path(resource)), b"after selected claim\n"
             ),
         )
         assert result is not None and result.response_message_id
@@ -234,7 +235,7 @@ async def test_foreground_selected_write_preflight_refuses_uninitialized_or_exte
         resource.write_bytes(b"before\n")
         root, root_id, comms = _wire(base)
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
-        plan = runtime.SelectedExistingFileWrite(resource, b"forbidden\n")
+        plan = runtime.SelectedExistingFileWrite(ExistingFileClaim(Path(resource)), b"forbidden\n")
         with pytest.raises(PublicationActivationBlocked, match="private claim protocol"):
             await foreground.run_foreground_once(
                 root,
@@ -258,7 +259,7 @@ async def test_foreground_selected_write_preflight_refuses_uninitialized_or_exte
                 tags=frozenset(),
                 native_package=tmp_path,
                 selected_existing_file_write=runtime.SelectedExistingFileWrite(
-                    external, b"forbidden\n"
+                    ExistingFileClaim(Path(external)), b"forbidden\n"
                 ),
             )
         assert "alpha" not in comms.registry and external.read_bytes() == b"external\n"
@@ -300,7 +301,11 @@ def test_foreground_cli_passes_bounded_source_to_explicit_selected_write_entry(
             str(source),
         ]
         assert foreground.main(argv) == 0
-        assert observed == [runtime.SelectedExistingFileWrite(resource, b"operator bytes\n")]
+        assert observed == [
+            runtime.SelectedExistingFileWrite(
+                ExistingFileClaim(Path(resource)), b"operator bytes\n"
+            )
+        ]
         assert resource.read_bytes() == b"before\n"  # Parser alone never writes.
         assert "NO_SELECTED_CLAIM" in capsys.readouterr().out
         observed.clear()
@@ -368,7 +373,7 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
             wait_seconds=0,
             ready=ready,
             selected_existing_file_write=runtime.SelectedExistingFileWrite(
-                resource, b"forbidden\n"
+                ExistingFileClaim(Path(resource)), b"forbidden\n"
             ),
         )
         assert isinstance(result, foreground.NoWakeReceipt)
@@ -713,7 +718,9 @@ async def test_failed_model_reservation_is_not_polled_or_replayed(
                 native_package=tmp_path,
                 opt_in=True,
                 wait_seconds=2,
-                ready=lambda _: comms.messaging.send_initial_cohort("sender", "beta", "one message"),
+                ready=lambda _: comms.messaging.send_initial_cohort(
+                    "sender", "beta", "one message"
+                ),
             )
         assert len(calls) == 1
         with MutationStore(str(root / "coordination.sqlite3")) as store:

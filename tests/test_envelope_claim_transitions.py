@@ -3,6 +3,7 @@
 import json
 import os
 from dataclasses import asdict, replace
+from pathlib import Path
 
 import pytest
 
@@ -13,9 +14,9 @@ from agent_comms.envelope_claim_transitions import (
     ClaimRelease,
     ClaimTransition,
     ClaimTransitionError,
+    ExistingFileClaim,
     WakeAdmission,
     apply_transition,
-    normalize_existing_file,
     parse_complete_transition_line,
     project_verified_transitions,
 )
@@ -86,34 +87,34 @@ def resources(tmp_path):
     (worktree / "b.py").write_text("b")
     return (
         worktree,
-        normalize_existing_file(worktree, "a.py"),
-        normalize_existing_file(worktree, "b.py"),
+        ExistingFileClaim(Path("a.py")).normalized(worktree),
+        ExistingFileClaim(Path("b.py")).normalized(worktree),
     )
 
 
 def test_existing_physical_worktree_files_and_aliases(tmp_path):
     worktree, a, _ = resources(tmp_path)
-    assert a == normalize_existing_file(worktree, worktree / "a.py")
-    assert a == normalize_existing_file(worktree, "./a.py")
+    assert a == ExistingFileClaim(Path(worktree / "a.py")).normalized(worktree)
+    assert a == ExistingFileClaim(Path("./a.py")).normalized(worktree)
     other = tmp_path / "other"
     other.mkdir()
     (other / "a.py").write_text("a")
-    assert a != normalize_existing_file(other, "a.py")
+    assert a != ExistingFileClaim(Path("a.py")).normalized(other)
     for path in ("missing.py", "../outside.py", ".", other / "a.py"):
         with pytest.raises(ClaimTransitionError):
-            normalize_existing_file(worktree, path)
+            ExistingFileClaim(Path(path)).normalized(worktree)
     (worktree / "link.py").symlink_to(worktree / "a.py")
     (worktree / "dir").mkdir()
     (worktree / "dir" / "sub.py").symlink_to(worktree / "a.py")
     for path in ("link.py", "dir/sub.py"):
         with pytest.raises(ClaimTransitionError, match="Symlink"):
-            normalize_existing_file(worktree, path)
+            ExistingFileClaim(Path(path)).normalized(worktree)
     (worktree / "hard.py").hardlink_to(worktree / "b.py")
     with pytest.raises(ClaimTransitionError, match="singly-linked"):
-        normalize_existing_file(worktree, "b.py")
+        ExistingFileClaim(Path("b.py")).normalized(worktree)
     (tmp_path / "root-link").symlink_to(worktree, target_is_directory=True)
     with pytest.raises(ClaimTransitionError, match="physical"):
-        normalize_existing_file(tmp_path / "root-link", "a.py")
+        ExistingFileClaim(Path("a.py")).normalized(tmp_path / "root-link")
 
 
 def test_two_serialized_conflicting_entrants_have_one_winner_and_one_synchronous_loser(tmp_path):
@@ -282,8 +283,8 @@ def test_parser_rejects_partial_duplicate_and_malformed_unverified_lines(tmp_pat
 def test_path_aliases_are_rejected_as_duplicate_normalized_resources(tmp_path):
     worktree, a, _ = resources(tmp_path)
     duplicate = (
-        normalize_existing_file(worktree, "a.py"),
-        normalize_existing_file(worktree, worktree / "a.py"),
+        ExistingFileClaim(Path("a.py")).normalized(worktree),
+        ExistingFileClaim(Path(worktree / "a.py")).normalized(worktree),
     )
     assert duplicate == (a, a)
     with pytest.raises(ClaimTransitionError, match="Duplicate"):
@@ -314,7 +315,7 @@ def test_raw_path_aliases_cannot_acquire_or_release_same_file(tmp_path):
     with pytest.raises(ClaimConflict) as loser:
         apply_transition(held, transition(2, owner="competitor", claims=(a,), generation=G2))
     assert loser.value.existing.resource == a
-    assert normalize_existing_file(worktree, aliases[0]) == a
+    assert ExistingFileClaim(Path(aliases[0])).normalized(worktree) == a
 
 
 def test_no_claim_state_or_sidecar_is_written_by_pure_projection(tmp_path):
