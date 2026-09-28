@@ -11,8 +11,13 @@ import pytest
 from agent_comms import Comms, Thread, ThreadSort, locked_store
 from agent_comms.declarations import _store_lock
 from agent_comms.locked_store import LockedStore
-from agent_comms.passive_channel_awareness import PassiveAwarenessStore, PassiveChannelAwareness
-from agent_comms.relationships import RelationshipStore
+from agent_comms.passive_channel_awareness import (
+    PassiveAwarenessDocument,
+    PassiveAwarenessRecord,
+    PassiveAwarenessStore,
+    PassiveChannelAwareness,
+)
+from agent_comms.relationships import RelationshipDocument, RelationshipStore
 from test_locked_store import _hold_lock, event, process
 from test_relationships import setup_wire
 
@@ -49,14 +54,13 @@ def _initialize_owner(root, number, start):
 def test_golden_relationship_document_and_noop(tmp_path, monkeypatch):
     comms = setup_wire(tmp_path)
     service = comms.relationships
-    assert service.store.read() == {"version": 1, "collaborations": [], "orders": []}
-    assert not service.path.exists()
+    assert service.store.read() == RelationshipDocument()
+    assert not service.store.path.exists()
     monkeypatch.setattr("agent_comms.relationships.time.time", lambda: 123.0)
     first, peer = comms.registry.require("owner"), comms.registry.require("peer")
     service.edit("owner", "add", "peer", "Review")
     service.set_order("owner", "children", ThreadSort.CREATED)
     expected = {
-        "version": 1,
         "collaborations": [
             {
                 "owner": "owner",
@@ -66,6 +70,7 @@ def test_golden_relationship_document_and_noop(tmp_path, monkeypatch):
                 "note": "Review",
                 "created_at": 123.0,
                 "updated_at": 123.0,
+                "history": [],
             }
         ],
         "orders": [
@@ -77,21 +82,22 @@ def test_golden_relationship_document_and_noop(tmp_path, monkeypatch):
             }
         ],
     }
-    assert service.path.read_text() == json.dumps(expected, indent=2) + "\n"
-    before = service.path.stat()
+    expected["version"] = 2
+    assert service.store.path.read_text() == json.dumps(expected, indent=2) + "\n"
+    before = service.store.path.stat()
     service.edit("owner", "add", "peer", "ignored")
     service.edit("owner", "remove", "absent")
-    assert service.path.stat() == before
+    assert service.store.path.stat() == before
     assert RelationshipStore.read is LockedStore.read
     assert RelationshipStore.update is LockedStore.update
 
 
-def test_golden_passive_scope_and_unknown_fields(tmp_path):
+def test_golden_passive_scope_and_typed_records(tmp_path):
     awareness = PassiveChannelAwareness(tmp_path)
     assert awareness.sources(owner()) == ()
-    assert not awareness.path.exists()
+    assert not awareness.store.path.exists()
     initialize(awareness)
-    key = awareness._key(owner())
+    key = PassiveAwarenessRecord.key(owner().created_at)
     row = {
         "name": "owner",
         "created_at": 12.0,
@@ -103,17 +109,16 @@ def test_golden_passive_scope_and_unknown_fields(tmp_path):
         "known": [],
     }
     expected = {"version": 1, "rows": {key: row}}
-    assert awareness.path.read_text() == json.dumps(expected, sort_keys=True)
-    before = awareness.path.stat()
+    assert awareness.store.path.read_text() == json.dumps(expected, sort_keys=True)
+    before = awareness.store.path.stat()
     initialize(awareness)
-    assert awareness.path.stat() == before
-    row["extension"] = {"keep": [1, 2]}
+    assert awareness.store.path.stat() == before
     row["known"] = [[8, "#team", "a" * 64]]
-    awareness.path.write_text(json.dumps(expected))
+    awareness.store.path.write_text(json.dumps(expected))
     assert awareness.sources(owner()) == ((8, "#team", "a" * 64),)
     changed = replace(owner(), channel_scope_generation=2)
     awareness.scope_changed(changed, admission=1, high_water=9, channels=frozenset({"#next"}))
-    stored = json.loads(awareness.path.read_text())["rows"][key]
+    stored = json.loads(awareness.store.path.read_text())["rows"][key]
     assert stored == {
         **row,
         "scope_after": 9,
@@ -131,11 +136,11 @@ def test_golden_passive_scope_and_unknown_fields(tmp_path):
 def test_corrupt_passive_file_is_never_replaced(tmp_path, text):
     awareness = PassiveChannelAwareness(tmp_path)
     before = text.encode("utf-8", errors="surrogateescape")
-    awareness.path.write_bytes(before)
+    awareness.store.path.write_bytes(before)
     assert awareness.sources(owner()) == ()
     initialize(awareness)
     awareness.scope_changed(owner(), admission=1, high_water=10, channels=frozenset())
-    assert awareness.path.read_bytes() == before
+    assert awareness.store.path.read_bytes() == before
 
 
 @pytest.mark.parametrize(
@@ -143,6 +148,7 @@ def test_corrupt_passive_file_is_never_replaced(tmp_path, text):
     [
         ("created_at", 12),
         ("admission", True),
+        ("unrecognized_data", "not erased"),
         ("cursor", -1),
         ("scope_after", 6),
         ("scope_generation", -1),
@@ -156,24 +162,24 @@ def test_corrupt_passive_file_is_never_replaced(tmp_path, text):
 def test_corrupt_passive_rows_fail_closed(tmp_path, field, value):
     awareness = PassiveChannelAwareness(tmp_path)
     initialize(awareness)
-    data = json.loads(awareness.path.read_text())
-    data["rows"][awareness._key(owner())][field] = value
+    data = json.loads(awareness.store.path.read_text())
+    data["rows"][PassiveAwarenessRecord.key(owner().created_at)][field] = value
     before = json.dumps(data)
-    awareness.path.write_text(before)
+    awareness.store.path.write_text(before)
     initialize(awareness)
     assert awareness.sources(owner()) == ()
-    assert awareness.path.read_text() == before
+    assert awareness.store.path.read_text() == before
 
 
 @pytest.mark.parametrize("text", ["{", "[]", '{"version": 2}'])
 def test_relationship_corruption_stays_strict(tmp_path, text):
     comms = setup_wire(tmp_path)
-    comms.relationships.path.write_text(text)
+    comms.relationships.store.path.write_text(text)
     with pytest.raises(ValueError):
         comms.relationships.collaborations("owner")
     with pytest.raises(ValueError):
         comms.relationships.edit("owner", "add", "peer")
-    assert comms.relationships.path.read_text() == text
+    assert comms.relationships.store.path.read_text() == text
 
 
 def test_unreadable_policy_does_not_hide_callback_errors(tmp_path, monkeypatch):
@@ -200,9 +206,9 @@ def test_unreadable_policy_does_not_hide_callback_errors(tmp_path, monkeypatch):
 def test_actual_adopter_reads_share_document_lock(tmp_path, kind):
     comms = setup_wire(tmp_path)
     path = (
-        comms.relationships.path
+        comms.relationships.store.path
         if kind == "relationships"
-        else PassiveChannelAwareness(comms.root).path
+        else PassiveChannelAwareness(comms.root).store.path
     )
     ready, release, done = event(), event(), event()
     with process(_hold_lock, path, True, ready, release):
@@ -219,7 +225,7 @@ def test_actual_adopter_reads_share_document_lock(tmp_path, kind):
 def test_shared_read_scope_holds_lock_until_exit(tmp_path):
     store = PassiveAwarenessStore(tmp_path / "p")
     with store.reading() as document:
-        assert document == {"version": 1, "rows": {}}
+        assert document == PassiveAwarenessDocument()
         # Separate process descriptors would see the same conflict; this separate
         # descriptor also proves reading() has not already released its lock.
         with pytest.raises(BlockingIOError), _store_lock(store.path, blocking=False):
@@ -236,7 +242,7 @@ def test_concurrent_passive_initializations_preserve_every_owner(tmp_path):
     ):
         start.set()
     data = PassiveAwarenessStore(tmp_path / PassiveAwarenessStore.filename).read()
-    assert {row["name"] for row in data["rows"].values()} == {"11", "22"}
+    assert {row.name for row in data.rows.values()} == {"11", "22"}
 
 
 @pytest.mark.parametrize("kind", ["relationships", "passive"])
@@ -246,14 +252,14 @@ def test_adopter_failure_restores_old_bytes_and_mode(tmp_path, monkeypatch, kind
     awareness = PassiveChannelAwareness(comms.root)
     if kind == "relationships":
         comms.relationships.edit("owner", "add", "peer", "old")
-        path = comms.relationships.path
+        path = comms.relationships.store.path
 
         def mutate():
             comms.relationships.edit("owner", "update", "peer", "new")
 
     else:
         initialize(awareness)
-        path = awareness.path
+        path = awareness.store.path
 
         def mutate():
             awareness.scope_changed(owner(), admission=1, high_water=99, channels=frozenset())
@@ -286,31 +292,3 @@ def test_adopter_failure_restores_old_bytes_and_mode(tmp_path, monkeypatch, kind
     assert stat.S_IMODE(path.stat().st_mode) == 0o640
     assert not list(path.parent.glob(".*.tmp"))
     assert not list(path.parent.glob(".*.previous"))
-
-
-def test_relationship_extension_keys_survive_mutations(tmp_path):
-    comms = setup_wire(tmp_path)
-    store = comms.relationships
-    store.path.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "collaborations": [],
-                "orders": [
-                    {
-                        "owner": "absent",
-                        "owner_created": 1.0,
-                        "group": "children",
-                        "order": "created_at",
-                        "extra": 2,
-                    }
-                ],
-                "extension": {"keep": True},
-            }
-        )
-    )
-    store.edit("owner", "add", "peer")
-    store.set_order("owner", "children", ThreadSort.CREATED)
-    data = json.loads(store.path.read_text())
-    assert data["extension"] == {"keep": True}
-    assert data["orders"][0]["extra"] == 2

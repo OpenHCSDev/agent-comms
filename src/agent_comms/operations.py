@@ -1532,7 +1532,7 @@ class Comms:
         # Even checking for an optional ledger can fail after the membership
         # commit. A failed probe skips the advisory; owner reads stay strict.
         try:
-            if not awareness.path.exists():
+            if not awareness.store.path.exists():
                 return
         except (OSError, TypeError, ValueError):
             return
