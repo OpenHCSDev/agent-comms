@@ -25,6 +25,7 @@ from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.compaction_states import CommittedOperation, DeclinedPrestartSummary, LinkedSummary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.reservation_rules import ReservationViolationError
 from agent_comms.selected_summary_admission import (
     SelectedSummaryAdmission,
 )
@@ -237,7 +238,8 @@ def test_changed_durable_original_after_reservation_refuses_burn(case):
     saved = json.loads(dispositions.path.read_text())
     saved["rows"][identity.source.ingress_key]["source_text"] = "different original"
     dispositions.path.write_text(json.dumps(saved))
-    assert not _assignment(case, token)
+    with pytest.raises(ReservationViolationError, match="content_changed"):
+        _assignment(case, token)
     assert not _assignment(case, token)
     assert dispositions.read().rows.get(identity.source.ingress_key).accepts_reservation
     assert not native_input_admitted(comms.root, session)
@@ -384,12 +386,12 @@ from pathlib import Path
 from agent_comms import backend
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.store_files import _store_lock
+from agent_comms.reservation_rules import ReservationViolationError
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.field_codec import FieldCodec
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.thread_identity import ThreadIncarnation, TurnId
 from agent_comms.text_digest import TextDigest
-from selected_summary_cases import admission_identity
 from agent_comms.selected_summary_admission import SelectedAdmissionIdentity
 root=Path(sys.argv[1]); session=sys.argv[2]; op=sys.argv[3]; key=sys.argv[4]; text=sys.argv[5]
 from agent_comms.child_process import ProcessIdentity
@@ -442,11 +444,12 @@ os._exit(17)
     assert journal.selected_summary(operation_id).state.declared_name == "declined-prestart"
     assert not native_input_admitted(comms.root, str(session))
     row = InputDispositions(comms.root / InputDispositions.filename).read().rows.get(key)
-    assert row is not None and row.declared_name == "unknown"
-    assert (row.native_id == "b" * 32) == send
+    assert row is not None and row.unresolved
+    assert row.has_native_binding == send
+    if send:
+        assert row.native_id == "b" * 32
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("terminal", ["linked", "declined-prestart"])
 def test_native_start_retires_barrier_without_erasing_history_or_replaying_original(case, terminal):
     comms, session, journal, operation_id, dispositions, identity, text = case
@@ -478,7 +481,7 @@ def test_native_start_retires_barrier_without_erasing_history_or_replaying_origi
     assert not _assignment(case, token), "native start cannot replenish a consumed token"
     with reopened.ordinary_input_send_fence(Path(session)):
         pass
-    with pytest.raises(ValueError, match="durable original input changed"):
+    with pytest.raises(ValueError, match="already_sent"):
         reopened.reserve_selected_summary(session, _source(identity))
     next_identity = admission_identity(
         session, text="Next original", key="acp:next", turn="next-turn"

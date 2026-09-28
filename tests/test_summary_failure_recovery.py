@@ -40,7 +40,7 @@ def test_finished_unbound_input_remains_visible_but_cannot_rebind(tmp_path):
         "acp:uncertain", admission=1, turn_id="earlier", native_id="b" * 32, text="bound"
     )
     assert not inputs.finish_unbound("acp:uncertain")
-    assert inputs.read().rows["acp:uncertain"].declared_name == "unknown"
+    assert inputs.read().rows["acp:uncertain"].declared_name == "bound_unknown"
 
 
 @pytest.mark.skipif(
@@ -101,10 +101,12 @@ async def test_interrupted_summary_recovery_requires_unsent_original_and_unchang
                 native_id="a" * 32,
                 text=text,
             )
+        else:
+            assert inputs.finish_unbound("acp:original")
         original = Path(session).read_bytes()
         dispositions = inputs.path.read_bytes()
         if bound:
-            with pytest.raises(ReservationViolationError, match="already_sent"):
+            with pytest.raises(ReservationViolationError, match="native_binding_exists"):
                 await asyncio.to_thread(
                     bridge.reconcile_interrupted_summaries, owner, generation, prepared.witness
                 )

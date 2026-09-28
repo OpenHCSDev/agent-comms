@@ -268,7 +268,7 @@ async def test_actual_native_provider_failure_attests_source_and_reopens(tmp_pat
                 journal,
                 preparation.witness,
                 dict(
-                    source=dict(ownerName="owner"),
+                    source=manual_source(session),
                     selected=selected.to_wire(),
                     settings=dict(reserveTokens=2048, keepRecentTokens=1024),
                 ),

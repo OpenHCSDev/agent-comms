@@ -8,10 +8,11 @@ import pytest
 from agent_comms.backend import _session_revision
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
-from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.reservation_rules import (
     CommitReservationCheck,
-    InterruptedReservationCheck,
+    InputReservationCheck,
+    InterruptedInputCheck,
     ReservationCheck,
     ReservationRule,
     ReservationViolationError,
@@ -36,7 +37,7 @@ def test_rule_family_names_actual_refusals_and_discovers_new_policy(tmp_path, mo
         text="original",
     )
     row = inputs.read().lookup(source.ingress_key)
-    check = InterruptedReservationCheck(
+    check = InterruptedInputCheck(
         source=source,
         revision=source.reserved_revision,
         row=row,
@@ -66,7 +67,12 @@ def test_rule_family_names_actual_refusals_and_discovers_new_policy(tmp_path, mo
         "session_changed": replace(check, revision=None),
         "ingress_changed": replace(commit, pending_input_key="acp:another"),
         "missing_input": replace(check, row=inputs.read().lookup("acp:missing")),
-        "already_sent": replace(check, row=inputs.read().lookup(source.ingress_key)),
+        "already_sent": InputReservationCheck(
+            source=source,
+            revision=source.reserved_revision,
+            row=inputs.read().lookup(source.ingress_key),
+        ),
+        "native_binding_exists": replace(check, row=inputs.read().lookup(source.ingress_key)),
         "input_owner_changed": replace(check, row=replace(row, owner="another")),
         "admission_changed": replace(check, row=replace(row, admission=2)),
         "content_changed": replace(check, row=replace(row, source_text="changed")),
@@ -105,6 +111,9 @@ def test_source_family_roundtrips_nested_values_and_requires_declared_kind(tmp_p
         reserved_revision=_session_revision(str(session)),
     )
     assert not hasattr(manual, "ingress_key")
+    manual.interrupted_check(
+        manual.reserved_revision, InputDocument(), manual.incarnation, TurnId("later")
+    ).require_valid()
     values = {value.declared_name: value for value in (manual, admission)}
     for name in SelectedSource.names():
         encoded = FieldCodec.encode(values[name])

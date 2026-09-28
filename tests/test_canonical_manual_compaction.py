@@ -110,7 +110,7 @@ async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
         assert result["ok"] is True
         assert journal.selected_summary(operation).state.declared_name == "retired_refusal"
         assert inputs.path.read_bytes() == before_inputs
-        assert inputs.read().rows["acp:original"].unattempted
+        assert inputs.read().rows["acp:original"].accepts_reservation
         assert native_input_admitted(tmp_path, file)
         rows = [json.loads(line) for line in Path(file).read_text().splitlines()]
         assert sum(row["type"] == "compaction" for row in rows) == 1

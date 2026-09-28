@@ -39,9 +39,9 @@ from .owner_compaction_prepare import NativePreparation, NativeWitness, prepare_
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_summary_payloads import SummaryFiles, SummaryUsage
 from .registration import Registration
-from .reservation_rules import CommitReservationCheck, InterruptedReservationCheck
+from .reservation_rules import CommitReservationCheck
 from .routing import DeliveryScope
-from .selected_source import SelectedAdmissionSource, SelectedSource
+from .selected_source import SelectedSource
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 from .session_fence import idle_session_writer_fence
 from .store_files import _store_lock
@@ -302,14 +302,13 @@ class OwnerCompactionCommit:
                 if not attempt.state.reconcile_unchanged_source:
                     continue
                 source = FieldCodec.decode(
-                    SelectedAdmissionSource, json.loads(attempt.source_json)["source"]
+                    SelectedSource, json.loads(attempt.source_json)["source"]
                 )
-                InterruptedReservationCheck(
-                    source=source,
-                    revision=_session_revision(witness.session_file),
-                    row=self.inputs._read_unlocked().lookup(source.ingress_key),
-                    incarnation=owner.incarnation,
-                    turn=TurnId(owner.active_turn.id),
+                source.interrupted_check(
+                    _session_revision(witness.session_file),
+                    self.inputs._read_unlocked(),
+                    owner.incarnation,
+                    TurnId(owner.active_turn.id),
                 ).require_valid()
                 self.journal.retire_unchanged_summary(attempt)
 

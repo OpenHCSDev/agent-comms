@@ -20,8 +20,8 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.pi_rpc import PiRpcChannel
-from selected_summary_cases import manual_source
 from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown, SelectedSummarySlot
+from selected_summary_cases import manual_source
 
 CHILD = r"""
 import json,sys,sqlite3,time

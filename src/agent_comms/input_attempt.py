@@ -30,6 +30,7 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     exists: ClassVar[bool] = False
     accepts_reservation: ClassVar[bool] = False
     has_started: ClassVar[bool] = False
+    has_native_binding: ClassVar[bool] = False
     unresolved: ClassVar[bool] = False
 
     @property
@@ -211,6 +212,7 @@ class ReservedInput(StoredInput):
 
 @dataclass(frozen=True)
 class SentInput(StoredInput):
+    has_native_binding = True
     turn_id: str = field(metadata={"public_exclude": True, "wire_required": True})
     native_id: str = field(metadata={"public_exclude": True, "wire_required": True})
     sent_text: str = field(metadata={"public_exclude": True, "wire_required": True})

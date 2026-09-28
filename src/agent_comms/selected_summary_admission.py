@@ -27,6 +27,7 @@ from .compaction_journal import (
 )
 from .compaction_states import SummaryState
 from .field_codec import FieldCodec
+from .reservation_rules import ReservationViolationError
 from .selected_source import SelectedAdmissionSource, SessionRevision
 
 if TYPE_CHECKING:
@@ -177,5 +178,7 @@ class SelectedSummaryAdmission:
                 native_id=native_id,
                 text=sent_text,
             )
+        except ReservationViolationError:
+            raise
         except (OSError, ValueError, TypeError, KeyError, sqlite3.Error, CompactionJournalError):
             return False

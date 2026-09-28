@@ -72,8 +72,8 @@ async def compact_manual_owner(
             raise CompactionJournalError("Refused selected source belongs to another owner")
         key = prior.pending_input_key
         if key is not None:
-            row = bridge.inputs.read().rows.get(key)
-            if row is None or not row.unattempted:
+            row = bridge.inputs.read().lookup(key)
+            if not row.accepts_reservation:
                 raise CompactionJournalError("Refused original input is no longer unbound")
             if pending_input_key is not None and pending_input_key != key:
                 raise CompactionJournalError(

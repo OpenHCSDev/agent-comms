@@ -23,6 +23,13 @@ class SelectedSource(DeclaredFamily, affix="Source"):
     turn: TurnId
     reserved_revision: SessionRevision
 
+    def interrupted_check(self, revision, inputs, incarnation, turn):
+        from .reservation_rules import InterruptedReservationCheck
+
+        return InterruptedReservationCheck(
+            source=self, revision=revision, incarnation=incarnation, turn=turn
+        )
+
     def matches_pending_input(self, key: str | None) -> bool:
         return True
 
@@ -72,6 +79,17 @@ class SelectedAdmissionSource(SelectedSource):
 
         return InputReservationCheck(
             source=self, revision=revision, row=inputs.lookup(self.ingress_key)
+        )
+
+    def interrupted_check(self, revision, inputs, incarnation, turn):
+        from .reservation_rules import InterruptedInputCheck
+
+        return InterruptedInputCheck(
+            source=self,
+            revision=revision,
+            row=inputs.lookup(self.ingress_key),
+            incarnation=incarnation,
+            turn=turn,
         )
 
     def matches_pending_input(self, key: str | None) -> bool:

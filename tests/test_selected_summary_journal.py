@@ -119,7 +119,7 @@ def test_raw_send_fence_serializes_concurrent_direct_reservation(reserved):
         pass
 
 
-def test_legacy_private_session_without_marker_fails_closed_at_selected_reserve(reserved):
+def test_unproven_private_session_cannot_reserve_selected_summary(reserved):
     journal, session, source = reserved
     private_dir = journal.path.parent / "native-sessions" / ("f" * 32)
     private_dir.mkdir(parents=True)
@@ -129,8 +129,9 @@ def test_legacy_private_session_without_marker_fails_closed_at_selected_reserve(
     # proves it has no old PR94 raw or UNKNOWN input on the same session.
     with sqlite3.connect(journal.path) as db:
         assert db.execute("SELECT count(*) FROM private_raw_inputs").fetchone()[0] == 0
+    private_source = dict(source, source=manual_source(saved))
     with pytest.raises(CompactionJournalError, match="coverage floor"):
-        journal.reserve_selected_summary(str(saved), source)
+        journal.reserve_selected_summary(str(saved), private_source)
     with (
         pytest.raises(CompactionJournalError, match="prewrite marker"),
         journal.ordinary_input_send_fence(saved),
@@ -140,7 +141,7 @@ def test_legacy_private_session_without_marker_fails_closed_at_selected_reserve(
     with journal.ordinary_input_send_fence(saved, private_input_id="a" * 32):
         pass  # Existing ordinary private N/K raw dispatch stays available.
     with pytest.raises(CompactionJournalError, match="coverage floor"):
-        journal.reserve_selected_summary(str(saved), source)
+        journal.reserve_selected_summary(str(saved), private_source)
     assert journal.reserve_selected_summary(session, source)
 
 
@@ -162,7 +163,7 @@ def test_private_raw_prewrite_marker_blocks_only_its_saved_session(reserved):
         reopened.ordinary_input_send_fence(Path(session), private_input_id="c" * 32),
     ):
         pass
-    assert reopened.reserve_selected_summary(str(other), source)
+    assert reopened.reserve_selected_summary(str(other), dict(source, source=manual_source(other)))
 
 
 def test_private_raw_marker_and_selected_reservation_share_symlink_alias_identity(reserved):
@@ -174,7 +175,7 @@ def test_private_raw_marker_and_selected_reservation_share_symlink_alias_identit
         journal.reserve_selected_summary(session, source)
     other = Path(session).with_name("other.jsonl")
     other.write_text("{}\n")
-    journal.reserve_selected_summary(str(other), source)
+    journal.reserve_selected_summary(str(other), dict(source, source=manual_source(other)))
     with (
         pytest.raises(CompactionJournalError, match="blocks native input"),
         journal.ordinary_input_send_fence(other),
@@ -185,7 +186,9 @@ def test_private_raw_marker_and_selected_reservation_share_symlink_alias_identit
     fresh.write_text("{}\n")
     fresh_alias = Path(session).with_name("fresh-alias.jsonl")
     fresh_alias.symlink_to(fresh)
-    journal.reserve_selected_summary(str(fresh_alias), source)
+    journal.reserve_selected_summary(
+        str(fresh_alias), dict(source, source=manual_source(fresh_alias))
+    )
     with (
         pytest.raises(CompactionJournalError, match="blocks native input"),
         journal.ordinary_input_send_fence(fresh),
@@ -477,7 +480,7 @@ def test_reservation_survives_crash_and_never_repeats_id(tmp_path):
     session = tmp_path / "session.jsonl"
     session.write_text("{}\n")
     source = {
-        "source": {"witnessRevision": "r"},
+        "source": manual_source(session),
         "selected": {"provider": "fixture", "modelId": "fixture", "contextWindow": 1000},
         "settings": {"reserveTokens": 100, "keepRecentTokens": 100},
     }
