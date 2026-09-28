@@ -1,6 +1,6 @@
 # PR138 relationship/passive-awareness complete data-boundary closure
 
-Owner: Pascal. Persistent tree `/home/ts/wt/comms-refactor-relationships-boundary-20260928`, branch `codex/refactor-relationships-boundary-20260928`, rebased on main `3889a22` (PR166), including installed S3/PR165. Parent owns serial deployment/migration. No live writes, provider calls, helpers or model changes. Implementation complete; no known code blocker.
+Owner: Pascal. Persistent tree `/home/ts/wt/comms-refactor-relationships-boundary-20260928`, branch `codex/refactor-relationships-boundary-20260928`, rebased on main `61fa722` (PR168), including installed S3/PR165 and goals/PR166. Parent owns serial deployment/migration. No live writes, provider calls, helpers or model changes. Implementation complete; no known code blocker.
 
 ## Ownership and deleted mechanisms
 
@@ -50,3 +50,5 @@ Current Toad `WireRelationshipSource` uses revision/snapshot/set_order and needs
 Before/final scans completed79detectors,0omissions,0reported findings in the selected files with complete package context. The final scan preceded only the PR166 rebase and preserving the existing unregistered-peer exception; current seam tests cover those changes. This is architecture coverage, not native codemod equivalence. Ownership changes/scripts were authored directly; failed and successful evidence is retained.
 
 Exact changed paths: `changed-files.txt`. All owned test/audit processes exited before cleanup. Copied private source documents, test roots, compiled bytecode and retired generated artifacts were removed; original data and all persistent worktrees remain intact.
+
+Current-main verification: PR168 adds only integration evidence/pins; `git diff 3889a22..61fa722 -- src tests` is empty. Rebase clean, source/tests identical to the passing166seam plus the checked unregistered-peer fix. No repeated suite needed. Next assigned surface is ThreadStatus lifecycle consumer closure in a new tree, outside Darwin history/index ownership.
