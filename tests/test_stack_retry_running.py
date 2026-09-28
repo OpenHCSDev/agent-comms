@@ -166,7 +166,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
             target=session,
             text="UNCERTAIN_OLD_INPUT_MUST_NOT_REPLAY",
         )
-        unknown_before = owner.inputs.dispositions.get("acp:old-unknown")
+        unknown_before = owner.inputs.dispositions.read().rows.get("acp:old-unknown")
         proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
         turn = asyncio.create_task(
             proxy.request(
@@ -211,7 +211,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
             final = GoalAttemptStore(store.root).snapshot(goal.id)
             assert (final.number, final.lifecycle, final.attempt_id) == (3, ReadyGeneration(), None)
             assert len(requests) == 2, "One ordinary request and one authorized goal continuation"
-            assert owner.inputs.dispositions.get("acp:old-unknown") == unknown_before
+            assert owner.inputs.dispositions.read().rows.get("acp:old-unknown") == unknown_before
             assert "UNCERTAIN_OLD_INPUT_MUST_NOT_REPLAY" not in json.dumps(requests)
             assert "CURRENT_USER_REQUEST" in json.dumps(requests[0])
             assert "Finish the blocked objective" in json.dumps(requests[1])

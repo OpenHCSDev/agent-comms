@@ -1,0 +1,351 @@
+FF...............F.....FF...........ssssssssssssssssssssssssssssssssssss [ 77%]
+s.FF
+=================================== FAILURES ===================================
+_ test_returned_ack_only_one_bound_original_and_no_status_bypass[declined-prestart] _
+
+case = (<agent_comms.comms.Comms object at 0x7ff25ab81400>, '/home/ts/wt/.r3doc/compaction/test_returned_ack_only_one_bou0/se...90571370472676861), None), session_revision=((2084, 9203805, 3, 1790571370472676861, 1790571370472676861), None)), ...)
+terminal = 'declined-prestart'
+
+    @pytest.mark.parametrize("terminal", ["declined-prestart", "linked"])
+    def test_returned_ack_only_one_bound_original_and_no_status_bypass(case, terminal):
+        comms, session, journal, operation_id, dispositions, identity, text = case
+        if terminal == "linked":
+            source = journal.selected_summary(operation_id).source_json
+            commit_id = journal.begin(
+                session,
+                {
+                    "selectedSummaryOperationId": operation_id,
+                    "selectedSummarySourceDigest": hashlib.sha256(source.encode()).hexdigest(),
+                },
+            )
+            journal.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
+            token = journal.link_selected_summary_commit(operation_id, commit_id, admission=identity)
+        else:
+            token = journal.decline_selected_summary_prestart(
+                operation_id, "split_turn", admission=identity
+            )
+        assert token is not None
+        with pytest.raises(TypeError, match="cannot cross"):
+            pickle.dumps(token)
+        assert not native_input_admitted(comms.root, session)
+        assert _claim(case, token)
+        row = dispositions.read().rows.get(identity.ingress_key)
+>       assert row is not None and row["native_id"] == "b" * 32 and row["status"] == "unknown"
+                                   ^^^^^^^^^^^^^^^^
+E       TypeError: 'UnknownInput' object is not subscriptable
+
+tests/test_selected_summary_admission.py:144: TypeError
+____ test_returned_ack_only_one_bound_original_and_no_status_bypass[linked] ____
+
+case = (<agent_comms.comms.Comms object at 0x7ff25abd5d10>, '/home/ts/wt/.r3doc/compaction/test_returned_ack_only_one_bou1/se...90571370541276713), None), session_revision=((2084, 9203815, 3, 1790571370541276713, 1790571370541276713), None)), ...)
+terminal = 'linked'
+
+    @pytest.mark.parametrize("terminal", ["declined-prestart", "linked"])
+    def test_returned_ack_only_one_bound_original_and_no_status_bypass(case, terminal):
+        comms, session, journal, operation_id, dispositions, identity, text = case
+        if terminal == "linked":
+            source = journal.selected_summary(operation_id).source_json
+            commit_id = journal.begin(
+                session,
+                {
+                    "selectedSummaryOperationId": operation_id,
+                    "selectedSummarySourceDigest": hashlib.sha256(source.encode()).hexdigest(),
+                },
+            )
+            journal.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
+            token = journal.link_selected_summary_commit(operation_id, commit_id, admission=identity)
+        else:
+            token = journal.decline_selected_summary_prestart(
+                operation_id, "split_turn", admission=identity
+            )
+        assert token is not None
+        with pytest.raises(TypeError, match="cannot cross"):
+            pickle.dumps(token)
+        assert not native_input_admitted(comms.root, session)
+        assert _claim(case, token)
+        row = dispositions.read().rows.get(identity.ingress_key)
+>       assert row is not None and row["native_id"] == "b" * 32 and row["status"] == "unknown"
+                                   ^^^^^^^^^^^^^^^^
+E       TypeError: 'UnknownInput' object is not subscriptable
+
+tests/test_selected_summary_admission.py:144: TypeError
+_____________ test_bind_fault_after_durable_unknown_never_replays ______________
+
+case = (<agent_comms.comms.Comms object at 0x7ff25acfb410>, '/home/ts/wt/.r3doc/compaction/test_bind_fault_after_durable_0/se...90571371347631073), None), session_revision=((2084, 9205564, 3, 1790571371347631073, 1790571371347631073), None)), ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff25a71bed0>
+
+    def test_bind_fault_after_durable_unknown_never_replays(case, monkeypatch):
+        comms, session, journal, operation_id, dispositions, identity, text = case
+        token = journal.decline_selected_summary_prestart(
+            operation_id, "split_turn", admission=identity
+        )
+        assert token is not None
+        bind = dispositions.bind
+    
+        def bind_then_fail(*args, **kwargs):
+            assert bind(*args, **kwargs)
+            raise OSError("post-bind fault")
+    
+>       monkeypatch.setattr(dispositions, "bind", bind_then_fail)
+
+tests/test_selected_summary_admission.py:307: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = InputDispositions(path=PosixPath('/home/ts/wt/.r3doc/compaction/test_bind_fault_after_durable_0/wire/input_dispositions.json'))
+name = 'bind'
+value = <function test_bind_fault_after_durable_unknown_never_replays.<locals>.bind_then_fail at 0x7ff25a62dbc0>
+
+>   ???
+E   TypeError: super(type, obj): obj (instance of InputDispositions) is not an instance or subtype of type (InputDispositions).
+
+<string>:16: TypeError
+___ test_process_death_before_or_after_fake_send_cannot_recreate_ack[False] ____
+
+tmp_path = PosixPath('/home/ts/wt/.r3doc/compaction/test_process_death_before_or_a0')
+send = False
+
+    @pytest.mark.parametrize("send", [False, True])
+    def test_process_death_before_or_after_fake_send_cannot_recreate_ack(tmp_path, send):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        operation_id, key, text = "a" * 32, "acp:" + "a" * 32, "fake original"
+        marker = tmp_path / "fake-stdin"
+        # The child reserves, durably declines and mints its own ACK. In the
+        # send case it binds its exact input ID and writes to a LOCAL marker only.
+        script = """
+    import hashlib,json,os,sys
+    from pathlib import Path
+    from agent_comms import backend
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.store_files import _store_lock
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.selected_summary_admission import SelectedAdmissionIdentity
+    root=Path(sys.argv[1]); session=sys.argv[2]; op=sys.argv[3]; key=sys.argv[4]; text=sys.argv[5]
+    digest=hashlib.sha256(text.encode()).hexdigest()
+    identity=SelectedAdmissionIdentity('project',os.getpid(),1.0.hex(),'turn',key,1,
+        f'1:{digest}',digest,digest,backend._session_revision(session),backend._session_revision(session))
+    source={'source':{'ownerName':identity.owner_name,'ownerPid':identity.owner_pid,
+        'ownerCreatedAt':identity.owner_created_at,'turnId':identity.turn_id,
+        'ingressKey':identity.ingress_key,'admissionGeneration':1,
+        'correctionWitness':identity.correction_witness,'inputSha256':digest,
+        'originalSha256':digest,'reservedRevision':json.loads(json.dumps(identity.reserved_revision))},
+        'selected':{'provider':'fake'},'settings':{'reserveTokens':100}}
+    j=CompactionJournal(root/'compaction-commits.sqlite3')
+    d=InputDispositions(root)
+    assert d.record(key,seq=None,owner='project',admission=1,target='project',text=text)
+    assert j.reserve_selected_summary(session,source,operation_id=op)==op
+    token=j.decline_selected_summary_prestart(op,'split_turn',admission=identity)
+    assert token is not None
+    if sys.argv[6]=='1':
+        with _store_lock(root/'wire'):
+            assert token.consume_bound_original(wire_root=root,session_file=session,identity=identity,
+                native_id='b'*32,sent_text=text,dispositions=d)
+            Path(sys.argv[7]).write_text('fake local stdin write')
+    os._exit(17)
+    """
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                script,
+                str(comms.root),
+                str(session),
+                operation_id,
+                key,
+                text,
+                "1" if send else "0",
+                str(marker),
+            ],
+            check=False,
+            timeout=10,
+        )
+>       assert result.returncode == 17
+E       assert 1 == 17
+E        +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-c', "\nimport hashlib,js...aaaa', 'fake original', '0', '/home/ts/wt/.r3doc/compaction/test_process_death_before_or_a0/fake-stdin'], returncode=1).returncode
+
+tests/test_selected_summary_admission.py:458: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "<string>", line 21, in <module>
+    assert d.record(key,seq=None,owner='project',admission=1,target='project',text=text)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/input_disposition.py", line 131, in record
+    self.update(change)
+    ~~~~~~~~~~~^^^^^^^^
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/locked_store.py", line 86, in update
+    original = self._read_unlocked()
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/locked_store.py", line 54, in _read_unlocked
+    return self._unreadable(error)
+           ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/locked_store.py", line 58, in _unreadable
+    raise error
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/locked_store.py", line 49, in _read_unlocked
+    text = self.path.read_text(encoding="utf-8")
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py", line 787, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py", line 771, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+IsADirectoryError: [Errno 21] Is a directory: '/home/ts/wt/.r3doc/compaction/test_process_death_before_or_a0/wire'
+____ test_process_death_before_or_after_fake_send_cannot_recreate_ack[True] ____
+
+tmp_path = PosixPath('/home/ts/wt/.r3doc/compaction/test_process_death_before_or_a1')
+send = True
+
+    @pytest.mark.parametrize("send", [False, True])
+    def test_process_death_before_or_after_fake_send_cannot_recreate_ack(tmp_path, send):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        operation_id, key, text = "a" * 32, "acp:" + "a" * 32, "fake original"
+        marker = tmp_path / "fake-stdin"
+        # The child reserves, durably declines and mints its own ACK. In the
+        # send case it binds its exact input ID and writes to a LOCAL marker only.
+        script = """
+    import hashlib,json,os,sys
+    from pathlib import Path
+    from agent_comms import backend
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.store_files import _store_lock
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.selected_summary_admission import SelectedAdmissionIdentity
+    root=Path(sys.argv[1]); session=sys.argv[2]; op=sys.argv[3]; key=sys.argv[4]; text=sys.argv[5]
+    digest=hashlib.sha256(text.encode()).hexdigest()
+    identity=SelectedAdmissionIdentity('project',os.getpid(),1.0.hex(),'turn',key,1,
+        f'1:{digest}',digest,digest,backend._session_revision(session),backend._session_revision(session))
+    source={'source':{'ownerName':identity.owner_name,'ownerPid':identity.owner_pid,
+        'ownerCreatedAt':identity.owner_created_at,'turnId':identity.turn_id,
+        'ingressKey':identity.ingress_key,'admissionGeneration':1,
+        'correctionWitness':identity.correction_witness,'inputSha256':digest,
+        'originalSha256':digest,'reservedRevision':json.loads(json.dumps(identity.reserved_revision))},
+        'selected':{'provider':'fake'},'settings':{'reserveTokens':100}}
+    j=CompactionJournal(root/'compaction-commits.sqlite3')
+    d=InputDispositions(root)
+    assert d.record(key,seq=None,owner='project',admission=1,target='project',text=text)
+    assert j.reserve_selected_summary(session,source,operation_id=op)==op
+    token=j.decline_selected_summary_prestart(op,'split_turn',admission=identity)
+    assert token is not None
+    if sys.argv[6]=='1':
+        with _store_lock(root/'wire'):
+            assert token.consume_bound_original(wire_root=root,session_file=session,identity=identity,
+                native_id='b'*32,sent_text=text,dispositions=d)
+            Path(sys.argv[7]).write_text('fake local stdin write')
+    os._exit(17)
+    """
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                script,
+                str(comms.root),
+                str(session),
+                operation_id,
+                key,
+                text,
+                "1" if send else "0",
+                str(marker),
+            ],
+            check=False,
+            timeout=10,
+        )
+>       assert result.returncode == 17
+E       assert 1 == 17
+E        +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-c', "\nimport hashlib,js...aaaa', 'fake original', '1', '/home/ts/wt/.r3doc/compaction/test_process_death_before_or_a1/fake-stdin'], returncode=1).returncode
+
+tests/test_selected_summary_admission.py:458: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "<string>", line 21, in <module>
+    assert d.record(key,seq=None,owner='project',admission=1,target='project',text=text)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/input_disposition.py", line 131, in record
+    self.update(change)
+    ~~~~~~~~~~~^^^^^^^^
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/locked_store.py", line 86, in update
+    original = self._read_unlocked()
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/locked_store.py", line 54, in _read_unlocked
+    return self._unreadable(error)
+           ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/locked_store.py", line 58, in _unreadable
+    raise error
+  File "/home/ts/wt/comms-input-disposition-documents-20260928/src/agent_comms/locked_store.py", line 49, in _read_unlocked
+    text = self.path.read_text(encoding="utf-8")
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py", line 787, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py", line 771, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+IsADirectoryError: [Errno 21] Is a directory: '/home/ts/wt/.r3doc/compaction/test_process_death_before_or_a1/wire'
+_ test_continued_private_uncertain_or_mismatched_history_never_reserves[unknown] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7ff25c1852c0>, PosixPath('/home/ts/wt/.r3doc/compaction...: 'fixture', 'modelId': 'fixture', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 10}})
+damage = 'unknown'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        rows = inputs.read().rows
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+>           rows["acp:old"]["status"] = "unknown"
+            ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           TypeError: 'StartedInput' object does not support item assignment
+
+tests/test_continued_private_session.py:84: TypeError
+_ test_continued_private_uncertain_or_mismatched_history_never_reserves[unbound] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7ff25c1868f0>, PosixPath('/home/ts/wt/.r3doc/compaction...: 'fixture', 'modelId': 'fixture', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 10}})
+damage = 'unbound'
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            "unknown",
+            "unbound",
+            "untracked",
+            "text",
+            "digest",
+            "revision",
+            "raw",
+            "duplicate",
+            "foreign",
+        ],
+    )
+    def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
+        journal, session, inputs, source = continued
+        rows = inputs.read().rows
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        if damage == "unknown":
+            rows["acp:old"]["status"] = "unknown"
+        if damage == "unbound":
+>           rows["acp:old"]["native_id"] = None
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           TypeError: 'StartedInput' object does not support item assignment
+
+tests/test_continued_private_session.py:86: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_selected_summary_admission.py::test_returned_ack_only_one_bound_original_and_no_status_bypass[declined-prestart]
+FAILED tests/test_selected_summary_admission.py::test_returned_ack_only_one_bound_original_and_no_status_bypass[linked]
+FAILED tests/test_selected_summary_admission.py::test_bind_fault_after_durable_unknown_never_replays
+FAILED tests/test_selected_summary_admission.py::test_process_death_before_or_after_fake_send_cannot_recreate_ack[False]
+FAILED tests/test_selected_summary_admission.py::test_process_death_before_or_after_fake_send_cannot_recreate_ack[True]
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[unknown]
+FAILED tests/test_continued_private_session.py::test_continued_private_uncertain_or_mismatched_history_never_reserves[unbound]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 7 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+7 failed, 32 passed, 37 skipped in 4.13s

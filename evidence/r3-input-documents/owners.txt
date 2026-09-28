@@ -1,0 +1,26 @@
+...............F..............                                           [100%]
+=================================== FAILURES ===================================
+_______ test_owner_queue_projection_clear_preserves_pending_and_unknown ________
+
+tmp_path = PosixPath('/home/ts/wt/.r3doc/owners/test_owner_queue_projection_cl0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f78531fd450>
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
+    async def test_owner_queue_projection_clear_preserves_pending_and_unknown(tmp_path, monkeypatch):
+        monkeypatch.delenv("PI_AGENT_ID", raising=False)
+        monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        async with queued_delivery_owner(tmp_path) as (owner, proxy, session, incoming):
+            ledger = owner.inputs.dispositions
+            before = ledger.read().rows
+            cursor_before = owner.inputs.delivery_cursors.path.read_bytes()
+            snapshot = await proxy.request("input_dispositions")
+            assert snapshot["currentScope"] == "owner_queue"
+>           assert [row.inputId for row in snapshot["inputs"]] == [f"bus:{incoming.seq}"]
+                    ^^^^^^^^^^^
+E           AttributeError: 'dict' object has no attribute 'inputId'
+
+tests/test_input_delivery_current.py:22: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_input_delivery_current.py::test_owner_queue_projection_clear_preserves_pending_and_unknown
+1 failed, 29 passed in 1.88s

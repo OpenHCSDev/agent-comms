@@ -135,7 +135,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 comms.registry.rename("worker", "renamed-worker")
             await agent.inputs.drain_inbox("worker")
             key = agent.inputs.dispositions.bus_key(message, comms.registry.require("worker"))
-            assert agent.inputs.dispositions.status(key) == "unknown"
+            assert agent.inputs.dispositions.read().rows[key].declared_name == "unknown"
             if case == "goal":
                 comms.goals.update_goal("worker", SetGoalAction(text="Changed goal"))
             elif case == "stop":
@@ -161,7 +161,9 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             if case == "deliver":
                 assert warmup_proc is not None and warmup_proc.returncode is None
                 assert agent.turns.persistent_backends["worker"].proc is warmup_proc
-            assert agent.inputs.dispositions.status(key) == ("started" if success else "unknown")
+            assert agent.inputs.dispositions.read().rows[key].declared_name == (
+                "started" if success else "unknown"
+            )
             assert not agent.inputs.pending_turns.get("worker")
             rows = [
                 json.loads(line)
@@ -180,13 +182,15 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                     in json.dumps(matched[0])
                 )
             if success:
-                assert matched[0]["inputId"] == agent.inputs.dispositions.get(key)["native_id"]
+                assert (
+                    matched[0]["inputId"] == agent.inputs.dispositions.read().rows.get(key).native_id
+                )
                 for origin in messages:
-                    row = agent.inputs.dispositions.get(
+                    row = agent.inputs.dispositions.read().rows.get(
                         agent.inputs.dispositions.bus_key(origin, comms.registry.require("worker"))
                     )
-                    assert row["status"] == "started"
-                    assert row["native_id"] == matched[0]["inputId"]
+                    assert row.declared_name == "started"
+                    assert row.native_id == matched[0]["inputId"]
                     assert origin.body in json.dumps(matched[0])
                 replayed = wire(comms.root).transcripts.thread_transcript_page("worker").events
                 incoming = [

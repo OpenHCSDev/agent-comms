@@ -1,6 +1,7 @@
 """Delivery notices reflect durable migration boundaries, never invented receipts."""
 
 import os
+from dataclasses import replace
 
 import pytest
 
@@ -13,9 +14,9 @@ from agent_comms.threads import Thread
 
 def seed(comms, name):
     owners = frozenset({name})
-    cursors = AcpDeliveryCursors(comms.root)
+    cursors = AcpDeliveryCursors(comms.root / AcpDeliveryCursors.filename)
     cursors.initialize(owners, name, high_water=7, fresh=False)
-    ledger = InputDispositions(comms.root)
+    ledger = InputDispositions(comms.root / InputDispositions.filename)
     for key, seq in [("bus:1", 1), ("bus:2", 2), ("bus:7", 7), ("bus:8", 8), ("acp:ui", None)]:
         ledger.record(key, seq=seq, owner=name, admission=1, target=name, text=f"Text {key}")
     ledger.bind("bus:2", admission=1, turn_id="t", native_id="a" * 32, text="Text bus:2")
@@ -29,7 +30,7 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     comms.threads.register(Thread("peer", frozenset(), str(tmp_path)))
     ledger, cursors = seed(comms, "owner")
     ledger.record("bus:3", seq=3, owner="peer", admission=1, target="peer", text="Peer")
-    before = ledger.unknown(frozenset({"owner"}))
+    before = ledger.read().unknown(frozenset({"owner"}))
     files = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
     overview = comms.goals.input_delivery("owner")
     assert [row["inputId"] for row in overview["inputs"]] == ["bus:2", "bus:8", "ui"]
@@ -45,15 +46,18 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     result = comms.goals.dismiss_historical_inputs("renamed")
     assert result["historicalCount"] == 0 and result["dismissedHistoricalCount"] == 2
     assert result["inputs"] == overview["inputs"]
-    assert ledger.get("bus:3").get("notice_dismissed") is None
-    assert [
-        {k: v for k, v in row.items() if k != "notice_dismissed"}
-        for row in ledger.unknown(frozenset({"owner"}))
-    ] == before
-    assert cursors.cursor(frozenset({"owner"})) == 0
+    assert not ledger.read().rows["bus:3"].notice_dismissed
+    assert (
+        tuple(
+            replace(row, notice_dismissed=False)
+            for row in ledger.read().unknown(frozenset({"owner"}))
+        )
+        == before
+    )
+    assert cursors.read().boundary(frozenset({"owner"})).cursor == 0
     reopened = wire(tmp_path)
     assert reopened.goals.input_delivery("renamed") == result
-    assert reopened.goals.unresolved_inputs("renamed") == [ledger.public(r) for r in before]
+    assert reopened.goals.unresolved_inputs("renamed") == [r.public() for r in before]
     assert all(
         r["noticeDismissed"]
         for r in reopened.goals.input_delivery("renamed", include_history=True)["historicalInputs"]
@@ -66,13 +70,13 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
 def test_no_migration_boundary_never_dismisses_inputs(tmp_path):
     comms = wire(tmp_path)
     comms.threads.register(Thread("owner", frozenset(), str(tmp_path)))
-    ledger = InputDispositions(tmp_path)
+    ledger = InputDispositions(tmp_path / InputDispositions.filename)
     ledger.record("bus:1", seq=1, owner="owner", admission=1, target="owner", text="Hello")
     before = ledger.path.read_bytes()
     assert comms.goals.dismiss_historical_inputs("owner")["historicalCount"] == 0
     assert len(comms.goals.input_delivery("owner")["inputs"]) == 1
     assert ledger.path.read_bytes() == before
-    assert not AcpDeliveryCursors(tmp_path).path.exists()
+    assert not AcpDeliveryCursors(tmp_path / AcpDeliveryCursors.filename).path.exists()
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
@@ -83,7 +87,7 @@ async def test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation(tmp_p
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     # New sessions have no migration boundary. Replace the fixture cursor before seeding.
-    AcpDeliveryCursors(comms.root).path.unlink()
+    AcpDeliveryCursors(comms.root / AcpDeliveryCursors.filename).path.unlink()
     ledger, _ = seed(comms, session)
     updates = []
 

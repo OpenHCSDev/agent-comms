@@ -227,16 +227,14 @@ class SelectedSummaryAdmission:
                 journal, self._session, self._operation_id, self._source_json
             ):
                 return False
-            row = dispositions.get(identity.ingress_key)
+            row = dispositions.read().rows.get(identity.ingress_key)
             if (
                 row is None
-                or row["status"] != "unknown"
-                or row["owner"] != identity.owner_name
-                or row["admission"] != identity.admission_generation
-                or row["native_id"] is not None
-                or type(row["source_text"]) is not str
-                or hashlib.sha256(row["source_text"].encode()).hexdigest()
-                != identity.original_sha256
+                or not row.unresolved
+                or row.owner != identity.owner_name
+                or row.admission != identity.admission_generation
+                or row.native_id is not None
+                or hashlib.sha256(row.source_text.encode()).hexdigest() != identity.original_sha256
             ):
                 return False
             return dispositions.bind(

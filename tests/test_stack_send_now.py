@@ -407,7 +407,8 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 await asyncio.wait_for(task, 10)
                 assert len(requests) == 1 and not started.is_set()
                 assert any(
-                    row["status"] == "unknown" for row in owner.inputs.dispositions._read().values()
+                    row.declared_name == "unknown"
+                    for row in owner.inputs.dispositions.read().rows.values()
                 )
                 return
             if surface in {"revoked", "oversized"}:
@@ -478,11 +479,11 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             else:
                 assert not owner.inputs.queued_inputs.get("project")
                 assert all(
-                    row["status"] == "started" for row in owner.inputs.dispositions._read().values()
+                    row.declared_name == "started"
+                    for row in owner.inputs.dispositions.read().rows.values()
                 )
                 assert not any(
-                    isinstance(row.get("content"), dict)
-                    and "[agent error]" in row["content"].get("text", "")
+                    isinstance(row.get("content"), dict) and "[agent error]" in row["content"].get("text", "")
                     for row in events
                 )
         finally:

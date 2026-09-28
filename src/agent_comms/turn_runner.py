@@ -465,10 +465,14 @@ class TurnRunner:
                 and (
                     turn.direct_interrupt_goal_id is None
                     or (
-                        (row := self.inputs.dispositions.get(turn.direct_interrupt_input_key or ""))
+                        (
+                            row := self.inputs.dispositions.read().rows.get(
+                                turn.direct_interrupt_input_key or ""
+                            )
+                        )
                         is not None
-                        and row["status"] == "unknown"
-                        and row["native_id"] is None
+                        and row.unresolved
+                        and row.native_id is None
                     )
                 )
             ]

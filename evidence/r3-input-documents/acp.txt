@@ -1,0 +1,519 @@
+..F......FFFFF.FF
+=================================== FAILURES ===================================
+_____________ test_goal_origin_survives_direct_refused_before_send _____________
+
+tmp_path = PosixPath('/home/ts/wt/.r3doc/acp/test_goal_origin_survives_dire0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fcc32d9a470>
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
+    @pytest.mark.asyncio
+    async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeypatch):
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        updates = []
+    
+        class Client:
+            async def session_update(self, session_id, update):
+                updates.append(update)
+    
+        agent.on_connect(Client())
+        await agent.new_session(str(tmp_path / "project"))
+        comms.threads.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
+    
+        async def events(*args, **kwargs):
+            yield ae.InputStarted(id=None)
+            comms.messaging.send("peer", "project", "late direct")
+            assert await agent.inputs.drain_inbox("project") == 1
+            assert agent.inputs.forwarded_inputs["project"] == {"bus-1"}
+            goal = comms.goals.update_goal("project", SetGoalAction(text="Long-term architecture work"))
+            assert goal is not None
+            yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
+            command = kwargs["steering_queue"].get_nowait()
+            with kwargs["send_boundary"](command["_input_id"], "a" * 32, command["message"]) as allowed:
+                assert allowed is None
+            proxy = RuntimeProxy(agent, "project", socket_path(comms.root, os.getpid()))
+            try:
+                pending = await proxy.request("input_dispositions")
+                assert [row["inputId"] for row in pending["inputs"]] == ["bus:1"]
+                updates.clear()
+                yield ae.InputRefused(id="bus-1")
+                # Inspect before the turn finishes: refusal removes this input from
+                # awaiting authority, even though the steering lookup remains.
+                assert "project" in agent.turns.active_turns
+                assert agent.inputs.steering_input_keys["project"] == {"bus-1": "bus:1"}
+                refused = await proxy.request("input_dispositions")
+                assert refused["inputs"] == []
+                assert refused["historicalCount"] == 1
+                assert any(
+                    update.model_dump(by_alias=True)
+                    .get("_meta", {})
+                    .get("agentComms", {})
+                    .get("inputDeliveryChanged")
+                    for update in updates
+                )
+                before = agent.inputs.dispositions.read().rows.get("bus:1")
+                cleared = await proxy.request("dismiss_historical_inputs")
+                assert cleared["dismissedHistoricalCount"] == 1
+                assert agent.inputs.dispositions.read().rows.get("bus:1") == {**before, "notice_dismissed": True}
+            finally:
+                await proxy.close()
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="Goal set")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+>           await agent.turns.run_agent_turn("project", "project", "Set a goal")
+
+tests/test_acp_input_disposition.py:129: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/turn_runner.py:699: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:836: in run
+    await self.stream()
+src/agent_comms/owned_turn.py:758: in stream
+    async for event in backend.stream_agent_events(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = ('pi', ['--print', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', ...], 'Give this new thr...'project', 'AGENT_COMMS_ROOT': '/home/ts/wt/.r3doc/acp/test_goal_origin_survives_dire0/wire', 'PI_PARENT_ID': '', ...})
+kwargs = {'session_file': None, 'fork_session': False, 'steering_queue': <Queue at 0x7fcc32c72350 maxsize=0 tasks=1>, 'finish_event': <asyncio.locks.Event object at 0x7fcc32c57a80 [unset]>, ...}
+
+    async def events(*args, **kwargs):
+        yield ae.InputStarted(id=None)
+        comms.messaging.send("peer", "project", "late direct")
+        assert await agent.inputs.drain_inbox("project") == 1
+        assert agent.inputs.forwarded_inputs["project"] == {"bus-1"}
+        goal = comms.goals.update_goal("project", SetGoalAction(text="Long-term architecture work"))
+        assert goal is not None
+        yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
+        command = kwargs["steering_queue"].get_nowait()
+        with kwargs["send_boundary"](command["_input_id"], "a" * 32, command["message"]) as allowed:
+            assert allowed is None
+        proxy = RuntimeProxy(agent, "project", socket_path(comms.root, os.getpid()))
+        try:
+            pending = await proxy.request("input_dispositions")
+            assert [row["inputId"] for row in pending["inputs"]] == ["bus:1"]
+            updates.clear()
+            yield ae.InputRefused(id="bus-1")
+            # Inspect before the turn finishes: refusal removes this input from
+            # awaiting authority, even though the steering lookup remains.
+            assert "project" in agent.turns.active_turns
+            assert agent.inputs.steering_input_keys["project"] == {"bus-1": "bus:1"}
+            refused = await proxy.request("input_dispositions")
+            assert refused["inputs"] == []
+            assert refused["historicalCount"] == 1
+            assert any(
+                update.model_dump(by_alias=True)
+                .get("_meta", {})
+                .get("agentComms", {})
+                .get("inputDeliveryChanged")
+                for update in updates
+            )
+            before = agent.inputs.dispositions.read().rows.get("bus:1")
+            cleared = await proxy.request("dismiss_historical_inputs")
+            assert cleared["dismissedHistoricalCount"] == 1
+>           assert agent.inputs.dispositions.read().rows.get("bus:1") == {**before, "notice_dismissed": True}
+                                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           TypeError: 'UnknownInput' object is not a mapping
+
+tests/test_acp_input_disposition.py:121: TypeError
+_______ test_started_then_ack_only_direct_survives_reopen_without_replay _______
+
+tmp_path = PosixPath('/home/ts/wt/.r3doc/acp/test_started_then_ack_only_dir0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fcc32a46170>
+
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX fake Pi executable")
+    async def test_started_then_ack_only_direct_survives_reopen_without_replay(tmp_path, monkeypatch):
+        stub = tmp_path / "pi-direct-stub"
+        session_file = tmp_path / "pi-session.jsonl"
+        session_file.touch()
+        stub.write_text(f"#!{sys.executable}\n" + f"session_file = {str(session_file)!r}\n" + """
+    import json, sys
+    from pathlib import Path
+    launches = Path(session_file + '.launches')
+    launches.write_text(launches.read_text() + 'x' if launches.exists() else 'x')
+    send = lambda event: print(json.dumps(event), flush=True)
+    state = json.loads(sys.stdin.readline())
+    send({"type":"response", "command":"get_state", "id":state["id"],
+          "success":True, "data":{"nativeInputProofCapability":"pi-native-input-v1-live-only",
+          "sessionFile":session_file}})
+    prompt = json.loads(sys.stdin.readline())
+    send({"type":"response", "command":"prompt", "id":prompt["id"], "success":True})
+    send({"type":"message_start", "message":{"role":"user", "content":prompt["message"],
+          "inputId":prompt["inputId"]}})
+    steer = json.loads(sys.stdin.readline())
+    assert steer["type"] == "prompt" and steer["streamingBehavior"] == "steer"
+    send({"type":"response", "command":"prompt", "id":steer["id"], "success":True})
+    send({"type":"message_end", "message":{"role":"assistant", "stopReason":"stop"}})
+    send({"type":"agent_settled"})
+    # Exit after ACK-only steering: there is deliberately no second input start.
+    # A persistent owner correctly refuses to settle this pending input and does
+    # not request final stats. Waiting for those requests deadlocks the fixture.
+    """)
+        stub.chmod(0o755)
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as wire_dir:
+            comms = wire(Path(wire_dir))
+            agent = CommsAgent(comms, agent_bin=str(stub), agent_args=[], runtime_enabled=True)
+            await agent.new_session(str(tmp_path / "project"))
+            agent.inputs.drain_tasks["project"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
+            monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+            comms.threads.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
+            comms.messaging.send("peer", "project", "first direct")
+            await agent.inputs.drain_inbox("project")
+            first = agent.inputs.pending_turns.pop("project")[0]
+    
+            async def wait_for_inbox():
+                async with asyncio.timeout(3):
+                    while "project" not in agent.inputs.backend_inboxes:
+                        await asyncio.sleep(0.01)
+    
+            try:
+                turn = asyncio.create_task(
+                    agent.turns.run_agent_turn(
+                        "project", "project", first.prompt, origins=(first.origin,)
+                    )
+                )
+                await wait_for_inbox()
+                comms.messaging.send("peer", "project", "second direct")
+                await agent.inputs.drain_inbox("project")
+                await asyncio.wait_for(turn, timeout=5)
+    
+                reopened = InputDispositions(comms.root / InputDispositions.filename)
+                assert reopened.read().rows["bus:1"].declared_name == "started"
+                assert reopened.read().rows["bus:2"].declared_name == "unknown"
+                assert comms.registry.require("project").session_file == str(session_file)
+                second_agent = CommsAgent(wire(comms.root), agent_bin="/bin/echo")
+                second_agent.sessions.bindings["project"] = "project"
+>               (
+                    second_agent.inputs.inbox_cursors["project"],
+                    second_agent.inputs.legacy_through["project"],
+                ) = second_agent.inputs.delivery_cursors.initialize(
+                    frozenset({"project"}),
+                    "project",
+                    high_water=second_agent._comms.bus.log.latest_sequence(),
+                    fresh=False,
+                )
+E               TypeError: cannot unpack non-iterable DeliveryCursor object
+
+tests/test_acp_input_disposition.py:426: TypeError
+__________ test_hard_exit_after_direct_record_never_replays_on_reopen __________
+
+    @pytest.mark.skipif(os.name == "nt", reason="real crash test needs /var/tmp and POSIX sockets")
+    def test_hard_exit_after_direct_record_never_replays_on_reopen():
+        child_code = """
+    import asyncio, os, sys
+    from pathlib import Path
+    from agent_comms.threads import Thread
+    from agent_comms.input_drain import InputDrain
+    from agent_comms.acp import CommsAgent
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.comms import wire
+    
+    async def run():
+        comms = wire(Path(sys.argv[1]))
+        agent = CommsAgent(comms, agent_bin='/bin/echo', runtime_enabled=True)
+        await agent.new_session(sys.argv[2])
+        agent.inputs.drain_tasks['project'].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks['project'], return_exceptions=True)
+        agent.inputs.schedule_wake = lambda _session: None
+        comms.threads.register(Thread(name='peer', tags=frozenset(), worktree=sys.argv[2]))
+        comms.messaging.send('peer', 'project', 'survive hard exit')
+        await agent.inputs.drain_inbox('project')
+        assert InputDispositions(comms.root).status('bus:1') == 'unknown'
+        os._exit(0)
+    asyncio.run(run())
+    """
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as wire_dir:
+            project = str(Path(wire_dir) / "project")
+            environment = os.environ.copy()
+            for name in (
+                "PI_AGENT_ID",
+                "PI_PARENT_ID",
+                "PI_TASK",
+                "PI_WORKTREE",
+                "AGENT_COMMS_THREAD",
+                "AGENT_COMMS_MANAGED",
+                "AGENT_COMMS_ROOT",
+            ):
+                environment.pop(name, None)
+            environment["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
+            child = subprocess.run(
+                [sys.executable, "-c", child_code, wire_dir, project],
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+>           assert child.returncode == 0, child.stderr
+E           AssertionError: Traceback (most recent call last):
+E               File "<string>", line 22, in <module>
+E                 asyncio.run(run())
+E                 ~~~~~~~~~~~^^^^^^^
+E               File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+E                 return runner.run(main)
+E                        ~~~~~~~~~~^^^^^^
+E               File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+E                 return self._loop.run_until_complete(task)
+E                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E               File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+E                 return future.result()
+E                        ~~~~~~~~~~~~~^^
+E               File "<string>", line 20, in run
+E                 assert InputDispositions(comms.root).status('bus:1') == 'unknown'
+E                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E             AttributeError: 'InputDispositions' object has no attribute 'status'
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-c', "\nimport asyncio, o...     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: \'InputDispositions\' object has no attribute \'status\'\n').returncode
+
+tests/test_acp_input_disposition.py:497: AssertionError
+_____ test_channel_queued_before_revocation_remains_visible_unknown[goal] ______
+
+tmp_path = PosixPath('/home/ts/wt/.r3doc/acp/test_channel_queued_before_rev0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fcc32b8fcd0>
+revocation = 'goal'
+
+    @pytest.mark.parametrize("revocation", ["goal", "stop", "reopen"])
+    async def test_channel_queued_before_revocation_remains_visible_unknown(
+        tmp_path, monkeypatch, revocation
+    ):
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+        await agent.new_session(str(tmp_path / "worker"))
+        comms.channels.update_tags("worker", add=frozenset({"team"}))
+        message = comms.messaging.send_user_message("#team", "Durable request", worktree=str(tmp_path))
+        observed = []
+        advance = agent.inputs.delivery_cursors.advance
+    
+        def durable_before_cursor(aliases, through):
+            if through >= message.seq:
+                rows = InputDispositions(comms.root / InputDispositions.filename).read().unknown(frozenset({"worker"}))
+                assert [row.sequence for row in rows] == [message.seq]
+                observed.append(through)
+            advance(aliases, through)
+    
+>       monkeypatch.setattr(agent.inputs.delivery_cursors, "advance", durable_before_cursor)
+
+tests/test_acp_channel_disposition.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = AcpDeliveryCursors(path=PosixPath('/home/ts/wt/.r3doc/acp/test_channel_queued_before_rev0/wire/acp_delivery_cursors.json'))
+name = 'advance'
+value = <function test_channel_queued_before_revocation_remains_visible_unknown.<locals>.durable_before_cursor at 0x7fcc32871dd0>
+
+>   ???
+E   TypeError: super(type, obj): obj (instance of AcpDeliveryCursors) is not an instance or subtype of type (AcpDeliveryCursors).
+
+<string>:16: TypeError
+_____ test_channel_queued_before_revocation_remains_visible_unknown[stop] ______
+
+tmp_path = PosixPath('/home/ts/wt/.r3doc/acp/test_channel_queued_before_rev1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fcc32876c10>
+revocation = 'stop'
+
+    @pytest.mark.parametrize("revocation", ["goal", "stop", "reopen"])
+    async def test_channel_queued_before_revocation_remains_visible_unknown(
+        tmp_path, monkeypatch, revocation
+    ):
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+        await agent.new_session(str(tmp_path / "worker"))
+        comms.channels.update_tags("worker", add=frozenset({"team"}))
+        message = comms.messaging.send_user_message("#team", "Durable request", worktree=str(tmp_path))
+        observed = []
+        advance = agent.inputs.delivery_cursors.advance
+    
+        def durable_before_cursor(aliases, through):
+            if through >= message.seq:
+                rows = InputDispositions(comms.root / InputDispositions.filename).read().unknown(frozenset({"worker"}))
+                assert [row.sequence for row in rows] == [message.seq]
+                observed.append(through)
+            advance(aliases, through)
+    
+>       monkeypatch.setattr(agent.inputs.delivery_cursors, "advance", durable_before_cursor)
+
+tests/test_acp_channel_disposition.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = AcpDeliveryCursors(path=PosixPath('/home/ts/wt/.r3doc/acp/test_channel_queued_before_rev1/wire/acp_delivery_cursors.json'))
+name = 'advance'
+value = <function test_channel_queued_before_revocation_remains_visible_unknown.<locals>.durable_before_cursor at 0x7fcc32872f00>
+
+>   ???
+E   TypeError: super(type, obj): obj (instance of AcpDeliveryCursors) is not an instance or subtype of type (AcpDeliveryCursors).
+
+<string>:16: TypeError
+____ test_channel_queued_before_revocation_remains_visible_unknown[reopen] _____
+
+tmp_path = PosixPath('/home/ts/wt/.r3doc/acp/test_channel_queued_before_rev2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fcc3285ab30>
+revocation = 'reopen'
+
+    @pytest.mark.parametrize("revocation", ["goal", "stop", "reopen"])
+    async def test_channel_queued_before_revocation_remains_visible_unknown(
+        tmp_path, monkeypatch, revocation
+    ):
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+        await agent.new_session(str(tmp_path / "worker"))
+        comms.channels.update_tags("worker", add=frozenset({"team"}))
+        message = comms.messaging.send_user_message("#team", "Durable request", worktree=str(tmp_path))
+        observed = []
+        advance = agent.inputs.delivery_cursors.advance
+    
+        def durable_before_cursor(aliases, through):
+            if through >= message.seq:
+                rows = InputDispositions(comms.root / InputDispositions.filename).read().unknown(frozenset({"worker"}))
+                assert [row.sequence for row in rows] == [message.seq]
+                observed.append(through)
+            advance(aliases, through)
+    
+>       monkeypatch.setattr(agent.inputs.delivery_cursors, "advance", durable_before_cursor)
+
+tests/test_acp_channel_disposition.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = AcpDeliveryCursors(path=PosixPath('/home/ts/wt/.r3doc/acp/test_channel_queued_before_rev2/wire/acp_delivery_cursors.json'))
+name = 'advance'
+value = <function test_channel_queued_before_revocation_remains_visible_unknown.<locals>.durable_before_cursor at 0x7fcc328e41a0>
+
+>   ???
+E   TypeError: super(type, obj): obj (instance of AcpDeliveryCursors) is not an instance or subtype of type (AcpDeliveryCursors).
+
+<string>:16: TypeError
+_________ test_channel_hard_exit_never_replays_unknown[before_cursor] __________
+
+crash_at = 'before_cursor'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fcc328b5e80>
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX crash durability uses /var/tmp")
+    @pytest.mark.parametrize("crash_at", ["before_cursor", "after_queue"])
+    async def test_channel_hard_exit_never_replays_unknown(crash_at, monkeypatch):
+        import subprocess
+        import sys
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+    
+        code = "\nimport asyncio, os, sys\nfrom pathlib import Path\nfrom agent_comms.comms import wire\nfrom agent_comms.input_drain import InputDrain\nfrom agent_comms.acp import CommsAgent\n\nasync def run():\n    comms = wire(Path(sys.argv[1]))\n    agent = CommsAgent(comms, agent_bin='pi', runtime_enabled=True)\n    agent.inputs.ensure_live_drain = lambda session: None\n    agent.inputs.schedule_wake = lambda session: None\n    await agent.new_session(sys.argv[2])\n    comms.channels.channels.update_tags('worker', add=frozenset({'team'}))\n    message = comms.messaging.send_user_message('#team', 'CRASH_REQUEST', worktree=sys.argv[2])\n    advance = agent.inputs.delivery_cursors.advance\n\n    def before_cursor(aliases, through):\n        if through == message.seq and sys.argv[3] == 'before_cursor':\n            pending = agent.inputs.dispositions.unknown(frozenset({'worker'}))[0]\n            assert pending['sequence'] == message.seq\n            os._exit(0)\n        advance(aliases, through)\n    agent.inputs.delivery_cursors.advance = before_cursor\n    await agent.inputs.drain_inbox('worker')\n    assert agent.inputs.pending_turns['worker']\n    assert agent.inputs.dispositions.unknown(frozenset({'worker'}))[0]['sequence'] == message.seq\n    os._exit(0)\nasyncio.run(run())\n"
+        with TemporaryDirectory(prefix="ac-channel-crash-", dir="/var/tmp") as raw:
+            root = Path(raw)
+            environment = os.environ.copy()
+            for name in (
+                "PI_AGENT_ID",
+                "PI_PARENT_ID",
+                "PI_TASK",
+                "PI_WORKTREE",
+                "AGENT_COMMS_THREAD",
+                "AGENT_COMMS_MANAGED",
+                "AGENT_COMMS_ROOT",
+            ):
+                environment.pop(name, None)
+            environment["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
+            result = subprocess.run(
+                [sys.executable, "-c", code, str(root / "wire"), str(root / "worker"), crash_at],
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+>           assert result.returncode == 0, result.stderr
+E           AssertionError: Traceback (most recent call last):
+E               File "<string>", line 29, in <module>
+E                 asyncio.run(run())
+E                 ~~~~~~~~~~~^^^^^^^
+E               File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+E                 return runner.run(main)
+E                        ~~~~~~~~~~^^^^^^
+E               File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+E                 return self._loop.run_until_complete(task)
+E                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E               File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+E                 return future.result()
+E                        ~~~~~~~~~~~~~^^
+E               File "<string>", line 14, in run
+E                 comms.channels.channels.update_tags('worker', add=frozenset({'team'}))
+E                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E             AttributeError: 'function' object has no attribute 'update_tags'
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-c', "\nimport asyncio, o...'}))\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: \'function\' object has no attribute \'update_tags\'\n').returncode
+
+tests/test_acp_channel_disposition.py:174: AssertionError
+__________ test_channel_hard_exit_never_replays_unknown[after_queue] ___________
+
+crash_at = 'after_queue'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fcc328b66d0>
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX crash durability uses /var/tmp")
+    @pytest.mark.parametrize("crash_at", ["before_cursor", "after_queue"])
+    async def test_channel_hard_exit_never_replays_unknown(crash_at, monkeypatch):
+        import subprocess
+        import sys
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+    
+        code = "\nimport asyncio, os, sys\nfrom pathlib import Path\nfrom agent_comms.comms import wire\nfrom agent_comms.input_drain import InputDrain\nfrom agent_comms.acp import CommsAgent\n\nasync def run():\n    comms = wire(Path(sys.argv[1]))\n    agent = CommsAgent(comms, agent_bin='pi', runtime_enabled=True)\n    agent.inputs.ensure_live_drain = lambda session: None\n    agent.inputs.schedule_wake = lambda session: None\n    await agent.new_session(sys.argv[2])\n    comms.channels.channels.update_tags('worker', add=frozenset({'team'}))\n    message = comms.messaging.send_user_message('#team', 'CRASH_REQUEST', worktree=sys.argv[2])\n    advance = agent.inputs.delivery_cursors.advance\n\n    def before_cursor(aliases, through):\n        if through == message.seq and sys.argv[3] == 'before_cursor':\n            pending = agent.inputs.dispositions.unknown(frozenset({'worker'}))[0]\n            assert pending['sequence'] == message.seq\n            os._exit(0)\n        advance(aliases, through)\n    agent.inputs.delivery_cursors.advance = before_cursor\n    await agent.inputs.drain_inbox('worker')\n    assert agent.inputs.pending_turns['worker']\n    assert agent.inputs.dispositions.unknown(frozenset({'worker'}))[0]['sequence'] == message.seq\n    os._exit(0)\nasyncio.run(run())\n"
+        with TemporaryDirectory(prefix="ac-channel-crash-", dir="/var/tmp") as raw:
+            root = Path(raw)
+            environment = os.environ.copy()
+            for name in (
+                "PI_AGENT_ID",
+                "PI_PARENT_ID",
+                "PI_TASK",
+                "PI_WORKTREE",
+                "AGENT_COMMS_THREAD",
+                "AGENT_COMMS_MANAGED",
+                "AGENT_COMMS_ROOT",
+            ):
+                environment.pop(name, None)
+            environment["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
+            result = subprocess.run(
+                [sys.executable, "-c", code, str(root / "wire"), str(root / "worker"), crash_at],
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+>           assert result.returncode == 0, result.stderr
+E           AssertionError: Traceback (most recent call last):
+E               File "<string>", line 29, in <module>
+E                 asyncio.run(run())
+E                 ~~~~~~~~~~~^^^^^^^
+E               File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+E                 return runner.run(main)
+E                        ~~~~~~~~~~^^^^^^
+E               File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+E                 return self._loop.run_until_complete(task)
+E                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E               File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+E                 return future.result()
+E                        ~~~~~~~~~~~~~^^
+E               File "<string>", line 14, in run
+E                 comms.channels.channels.update_tags('worker', add=frozenset({'team'}))
+E                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E             AttributeError: 'function' object has no attribute 'update_tags'
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-c', "\nimport asyncio, o...'}))\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: \'function\' object has no attribute \'update_tags\'\n').returncode
+
+tests/test_acp_channel_disposition.py:174: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_acp_input_disposition.py::test_goal_origin_survives_direct_refused_before_send
+FAILED tests/test_acp_input_disposition.py::test_started_then_ack_only_direct_survives_reopen_without_replay
+FAILED tests/test_acp_input_disposition.py::test_hard_exit_after_direct_record_never_replays_on_reopen
+FAILED tests/test_acp_channel_disposition.py::test_channel_queued_before_revocation_remains_visible_unknown[goal]
+FAILED tests/test_acp_channel_disposition.py::test_channel_queued_before_revocation_remains_visible_unknown[stop]
+FAILED tests/test_acp_channel_disposition.py::test_channel_queued_before_revocation_remains_visible_unknown[reopen]
+FAILED tests/test_acp_channel_disposition.py::test_channel_hard_exit_never_replays_unknown[before_cursor]
+FAILED tests/test_acp_channel_disposition.py::test_channel_hard_exit_never_replays_unknown[after_queue]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 8 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+8 failed, 9 passed in 14.93s

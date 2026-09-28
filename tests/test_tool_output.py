@@ -17,24 +17,23 @@ from agent_comms.tools import invoke_tool
 
 
 def seed_unknown(comms, count, text):
-    dispositions = InputDispositions(comms.root)
-    dispositions._write(
-        {
-            f"bus:{index}": {
-                "key": f"bus:{index}",
-                "sequence": index,
-                "owner": "b",
-                "admission": index,
-                "target": "b",
-                "source_text": f"{index}: {text}",
-                "turn_id": "private-turn",
-                "native_id": "f" * 32,
-                "sent_text": "private-native-prompt",
-                "status": "unknown",
-            }
-            for index in range(1, count + 1)
+    dispositions = InputDispositions(comms.root / InputDispositions.filename)
+    rows = {
+        f"bus:{index}": {
+            "key": f"bus:{index}",
+            "sequence": index,
+            "owner": "b",
+            "admission": index,
+            "target": "b",
+            "source_text": f"{index}: {text}",
+            "turn_id": "private-turn",
+            "native_id": "f" * 32,
+            "sent_text": "private-native-prompt",
+            "status": "unknown",
         }
-    )
+        for index in range(1, count + 1)
+    }
+    dispositions.path.write_text(json.dumps({"version": 1, "rows": rows}))
     return dispositions
 
 
@@ -127,7 +126,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
     messages = [
         comms.messaging.send_message("a", "b", body) for body in (large_body, "Previously reviewed reply")
     ]
-    dispositions = InputDispositions(comms.root)
+    dispositions = InputDispositions(comms.root / InputDispositions.filename)
     for message in messages:
         dispositions.record(
             f"bus:{message.seq}",
@@ -181,9 +180,12 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
     comms.agents.begin_turn("a", "next-a-result-in-flight")
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": full_review["reviewed_inputs"]})
     assert comms.goals.goal_wait("b") is not None
-    assert all(dispositions.status(f"bus:{message.seq}") == "unknown" for message in messages)
-    assert dispositions.status("acp:owner-input") == "unknown"
-    assert not dispositions.get("acp:owner-input").get("goal_reviews")
+    assert all(
+        dispositions.read().rows[f"bus:{message.seq}"].declared_name == "unknown"
+        for message in messages
+    )
+    assert dispositions.read().rows["acp:owner-input"].declared_name == "unknown"
+    assert not dispositions.read().rows.get("acp:owner-input").goal_reviews
 
 
 def test_materialization_measures_escaped_transport_bytes(tmp_path):
@@ -219,7 +221,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     comms.threads.register(replace(comms.registry.require("a"), pid=os.getpid()))
     comms.agents.begin_turn("a", "a-review-in-flight")
     goal = comms.goals.update_goal("b", SetGoalAction(text="Review a and wait for its next reply"))
-    dispositions = InputDispositions(comms.root)
+    dispositions = InputDispositions(comms.root / InputDispositions.filename)
     for index in range(930):
         dispositions.record(
             f"acp:owner-{index}",
@@ -296,8 +298,8 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     assert fresh["reviewed_inputs"] == [f"bus:{messages[1].seq}", f"bus:{late.seq}"]
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": fresh["reviewed_inputs"]})
     assert comms.goals.goal_wait("b") is not None
-    assert dispositions.status(f"bus:{messages[1].seq}") == "unknown"
-    assert not dispositions.get("acp:owner-0").get("goal_reviews")
+    assert dispositions.read().rows[f"bus:{messages[1].seq}"].declared_name == "unknown"
+    assert not dispositions.read().rows.get("acp:owner-0").goal_reviews
 
 
 async def test_pending_dependency_becomes_reviewable_after_owner_admission(tmp_path, monkeypatch):
@@ -335,7 +337,9 @@ async def test_pending_dependency_becomes_reviewable_after_owner_admission(tmp_p
             {**report, "reviewed_inputs": after["standby_review"]["reviewed_inputs"]},
         )
         assert comms.goals.goal_wait("b") is not None
-        assert owner.inputs.dispositions.status(f"bus:{message.seq}") == "unknown"
+        assert (
+            owner.inputs.dispositions.read().rows[f"bus:{message.seq}"].declared_name == "unknown"
+        )
         # The pre-standby drain legitimately queued one ordinary direct-DM
         # interrupt (no goal permit, wait/witness captured then). It must be
         # stale after the standby transition and never replay the input.
