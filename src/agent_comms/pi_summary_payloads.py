@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from typing import Literal
 
-from .field_codec import FieldCodec
 from .owner_compaction_prepare import NativeWitness
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_payloads import PiCost, PiPayload, PiResponseData, PiUsage
@@ -32,17 +30,8 @@ class SummaryFiles(PiPayload):
 
     def __post_init__(self):
         for paths in (self.read_files, self.modified_files):
-            if len(paths) > 256 or any(not p or "\0" in p or len(p.encode()) > 4096 for p in paths):
+            if any(not p or "\0" in p or len(p.encode()) > 4096 for p in paths):
                 raise ValueError("Invalid selected native file operations")
-        if (
-            len(
-                json.dumps(
-                    FieldCodec.encode(self), ensure_ascii=False, separators=(",", ":")
-                ).encode()
-            )
-            > 65536
-        ):
-            raise ValueError("Bounded native file operations required")
 
 
 @dataclass(frozen=True)
@@ -93,8 +82,9 @@ class SummaryResult(PiPayload):
     usage: SummaryUsage
 
     def __post_init__(self):
-        if not self.summary.strip() or len(self.summary.encode()) > 262144:
+        if not self.summary.strip():
             raise ValueError("Invalid selected native summary")
+        self.summary.encode("utf-8")  # Validate text, without a second output-size policy.
 
 
 @dataclass(frozen=True, kw_only=True)

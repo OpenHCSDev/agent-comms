@@ -1139,8 +1139,11 @@ async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, mo
         raise AssertionError("Stock Pi must not be started as a tracked backend")
 
     monkeypatch.setattr("agent_comms.child_process.AttachedChild.start", forbidden)
-    stock = Path("/home/ts/.local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent")
-    with pytest.raises(NativePiUnavailable, match="Pinned disposable"):
+    stock = tmp_path / "stock/node_modules/@earendil-works/pi-coding-agent"
+    stock.mkdir(parents=True)
+    stock.parents[2].chmod(0o700)
+    (stock / "unreviewed.js").write_text("not the pinned package")
+    with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
         await run_native_pi_turn(
             stock,
             input_id=INPUT_ID,
@@ -1149,7 +1152,7 @@ async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, mo
             session_dir=tmp_path / "sessions",
         )
     assert os.geteuid() == os.stat(tmp_path).st_uid
-    with pytest.raises(NativePiUnavailable, match="Pinned disposable"):
+    with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
         _trusted_package(stock)
 
 

@@ -24,15 +24,23 @@ from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown, SelectedSu
 
 CHILD = r"""
 import json,sys,sqlite3,time
+from agent_comms.compaction_journal import SelectedSummaryAttempt
+from agent_comms.compaction_states import ReservedSummary
 from pathlib import Path
 mode,journal,received=sys.argv[1:]
+print('ready',file=sys.stderr,flush=True)
 r=json.loads(sys.stdin.readline())
 # Check the actual persisted reservation before producing any result.
 db=sqlite3.connect(journal)
-row=db.execute('SELECT status FROM selected_summary_attempts WHERE operation_id=?',
-               (r['operationId'],)).fetchone()
-assert row==('reserved',),row
+row=SelectedSummaryAttempt.one(db,operation_id=r['operationId'])
+assert row is not None and isinstance(row.state,ReservedSummary),row
 Path(received).write_text(json.dumps(r))
+if mode in ('progress','duplicate-progress','foreign-progress'):
+    for sequence in range(1, 6):
+        print(json.dumps(dict(type='agent_comms_compaction_progress',id=r['id'],
+              operationId='foreign' if mode=='foreign-progress' else r['operationId'],
+              sequence=sequence if mode=='progress' else 1)),flush=True)
+        time.sleep(.035)
 if mode=='hang':
     time.sleep(30)
 if mode=='source':
@@ -47,14 +55,17 @@ usage=dict.fromkeys(['input','output','cacheRead','cacheWrite','totalTokens'],0)
 usage['cost']=cost
 result=dict(summary='native summary',firstKeptEntryId=r['witness']['firstKeptEntryId'],
             tokensBefore=1200,details=dict(readFiles=['foo.py'],modifiedFiles=[]),usage=usage)
+if mode=='many-files':
+    result['details']['readFiles']=[f'{n}/'+'x'*3990 for n in range(3800)]
 if mode=='tokens': result['tokensBefore']=True
 if mode=='file': result['details']['readFiles']=['bad\0path']
 if mode=='surrogate': result['summary']='\ud800'
 d=dict(version=1,status='summarized',operationId=r['operationId'],
        witness=r['witness'],selected=r['selected'],settings=r['settings'],result=result)
 if mode=='wrong': d['operationId']='f'*32
-if mode=='decline':
-    d=dict(version=1,status='declined',operationId=r['operationId'],reason='split_turn')
+if mode in ('decline','limit'):
+    d=dict(version=1,status='declined',operationId=r['operationId'],
+           reason='limit_exceeded' if mode=='limit' else 'split_turn')
 if mode=='unknown': d=dict(version=1,status='unknown',operationId=r['operationId'])
 if mode in ('provider-error', 'invalid-error', 'oversize-error'):
     d=dict(version=1,status='unknown',operationId=r['operationId'],
@@ -87,6 +98,8 @@ async def selected(tmp_path, mode="success"):
             str(received),
         )
     )
+    async with asyncio.timeout(5):
+        assert await child.stderr.readline() == b"ready\n"
     persistent = PersistentPiSession()
     persistent.proc = child
     persistent.reader = PiRpcChannel(child.stdout)
@@ -133,8 +146,8 @@ async def test_existing_child_summary_preserves_native_metadata_and_blocks_repla
         before = file.read_bytes()
         result = await run()
         assert result.summary.text == "native summary"
-        assert result.summary.details == dict(readFiles=["foo.py"], modifiedFiles=[])
-        assert result.summary.usage["cost"]["total"] == 0
+        assert result.summary.details.read_files == ("foo.py",)
+        assert result.summary.usage.cost.total == 0
         assert result.decline_reason is None
         assert json.loads(received.read_text())["operationId"] == result.operation_id
         assert journal.selected_summary(result.operation_id).state.declared_name == "reserved"
@@ -169,8 +182,8 @@ async def test_uncertain_result_retires_child_and_retains_unknown(tmp_path, mode
 
 async def test_timeout_does_not_retry_summary(tmp_path):
     async with selected(tmp_path, "hang") as (run, persistent, journal, file, received):
-        with pytest.raises(SelectedChildUnknown, match="timed out after 0.15 seconds"):
-            await run(timeout_seconds=0.15)
+        with pytest.raises(SelectedChildUnknown, match="made no progress for 0.15 seconds"):
+            await run(idle_timeout_seconds=0.15)
         assert persistent.proc is None and received.exists()
         assert len(journal.unresolved_selected_summary(str(file))) == 1
 
@@ -293,7 +306,7 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
                 source,
                 tokens_before=fixture["tokensBefore"],
                 expected_package=tmp_path,
-                timeout_seconds=5,
+                idle_timeout_seconds=5,
             )
             if provider_error:
                 with pytest.raises(
@@ -320,3 +333,70 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
             assert await child.wait() == 0
     finally:
         await persistent.close_idle()
+
+
+async def test_limit_decline_is_durable_and_never_admits_original(tmp_path):
+    from agent_comms.cli import main
+    from agent_comms.comms import wire
+    from agent_comms.threads import Thread
+
+    async with selected(tmp_path, "limit") as (run, persistent, journal, file, received):
+        result = await run()
+        assert result.summary is None and result.decline_reason == "limit_exceeded"
+        attempt = CompactionJournal(journal.path).selected_summary(result.operation_id)
+        assert attempt.state.declared_name == "refused"
+        assert attempt.state.decline_reason == "limit_exceeded"
+        assert not attempt.state.original_eligible
+        assert persistent.proc.returncode is None
+        assert not native_input_admitted(tmp_path, str(file))
+        comms = wire(tmp_path)
+        comms.registry.register(Thread("owner", frozenset(), str(tmp_path), session_file=str(file)))
+        assert main(["--root", str(tmp_path), "compaction-status", "--thread", "owner"]) == 0
+        before = received.read_bytes()
+        with pytest.raises(CompactionJournalError, match="never replay"):
+            await run()
+        assert received.read_bytes() == before
+
+
+async def test_observable_progress_extends_idle_deadline_without_total_limit(tmp_path):
+    async with selected(tmp_path, "progress") as (run, persistent, journal, file, _):
+        result = await run(idle_timeout_seconds=0.08)
+        assert result.summary.text == "native summary"
+        assert persistent.proc.returncode is None
+
+
+async def test_repeated_progress_does_not_hide_stalled_provider(tmp_path):
+    async with selected(tmp_path, "duplicate-progress") as (run, persistent, journal, file, _):
+        with pytest.raises(SelectedChildUnknown, match="made no progress"):
+            await run(idle_timeout_seconds=0.06)
+        assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
+        assert persistent.proc is None
+
+
+async def test_manual_instructions_share_selected_rpc_and_adaptive_omits_field(tmp_path):
+    async with selected(tmp_path, "decline") as (run, _, journal, file, received):
+        await run(custom_instructions="Preserve the owner decisions")
+        assert (
+            json.loads(received.read_text())["customInstructions"] == "Preserve the owner decisions"
+        )
+    other = tmp_path / "adaptive"
+    other.mkdir()
+    async with selected(other, "decline") as (run, _, journal, file, received):
+        await run()
+        assert "customInstructions" not in json.loads(received.read_text())
+
+
+async def test_foreign_progress_cannot_extend_selected_attempt(tmp_path):
+    async with selected(tmp_path, "foreign-progress") as (run, persistent, journal, file, _):
+        with pytest.raises(SelectedChildUnknown, match="Foreign selected compaction progress"):
+            await run(idle_timeout_seconds=.06)
+        assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
+        assert persistent.proc is None
+
+
+async def test_selected_frame_uses_transport_without_retired_file_count_budget(tmp_path):
+    async with selected(tmp_path, "many-files") as (run, persistent, journal, file, _):
+        result = await run()
+        assert len(result.summary.details.read_files) == 3800
+        assert persistent.proc.returncode is None
+        assert journal.blocking_selected_summary(str(file))

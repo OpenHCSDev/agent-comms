@@ -81,10 +81,23 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
     terminal: ClassVar[bool] = False
     original_eligible: ClassVar[bool] = False
     reservable_commit: ClassVar[bool] = False
+    settled_without_original: ClassVar[bool] = False
 
     @classmethod
     @abstractmethod
     def successors(cls) -> tuple[type[SummaryState], ...]: ...
+
+    def manual_recovery(self) -> SummaryState:
+        from .compaction_journal import CompactionJournalError
+
+        raise CompactionJournalError(
+            "Prior selected compaction is uncertain; inspect compaction-status, never replay"
+        )
+
+    def refuse(self, reason: str) -> SummaryState:
+        from .compaction_journal import CompactionJournalError
+
+        raise CompactionJournalError("Selected summary refusal transition forbidden")
 
     def verifies_original(
         self, journal: CompactionJournal, session: str, operation_id: str, source_json: str
@@ -95,9 +108,18 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
 class ReservedSummary(SummaryState):
     reservable_commit = True
 
+    def refuse(self, reason: str) -> SummaryState:
+        return RefusedSummary(reason)
+
     @classmethod
     def successors(cls):
-        return (UnknownSummary, LinkedSummary, DeclinedPrestartSummary)
+        return (
+            UnknownSummary,
+            LinkedSummary,
+            ManualCommittedSummary,
+            DeclinedPrestartSummary,
+            RefusedSummary,
+        )
 
 
 class UnknownSummary(SummaryState):
@@ -133,6 +155,13 @@ class LinkedSummary(SummaryState):
         )
 
 
+class ManualCommittedSummary(LinkedSummary):
+    """Explicit compaction has no original prompt to admit or replay."""
+
+    original_eligible = False
+    settled_without_original = True
+
+
 @dataclass(frozen=True)
 class DeclinedPrestartSummary(SummaryState, declared_name="declined-prestart"):
     decline_reason: str = field()
@@ -149,6 +178,48 @@ class DeclinedPrestartSummary(SummaryState, declared_name="declined-prestart"):
 
     def verifies_original(self, journal, session, operation_id, source_json):
         return True
+
+
+@dataclass(frozen=True)
+class RefusedSummary(SummaryState):
+    """Correlated native prestart refusal, never an original-input admission."""
+
+    decline_reason: str = field()
+    terminal = True
+
+    def __post_init__(self):
+        if not self.decline_reason or len(self.decline_reason) > 256:
+            raise ValueError("Bounded native refusal reason required")
+
+    def manual_recovery(self) -> SummaryState:
+        return RetiredRefusalSummary(self.decline_reason)
+
+    def refuse(self, reason: str) -> SummaryState:
+        if reason != self.decline_reason:
+            return super().refuse(reason)
+        return self
+
+    @classmethod
+    def successors(cls):
+        return (RetiredRefusalSummary,)
+
+
+
+@dataclass(frozen=True)
+class RetiredRefusalSummary(SummaryState):
+    """An explicit manual command acknowledged a known no-provider refusal."""
+
+    decline_reason: str = field()
+    terminal = True
+    settled_without_original = True
+
+    @classmethod
+    def successors(cls):
+        return ()
+
+    def __post_init__(self):
+        if not self.decline_reason or len(self.decline_reason) > 256:
+            raise ValueError("Retired refusal requires its bounded native reason")
 
 
 @dataclass(frozen=True)
