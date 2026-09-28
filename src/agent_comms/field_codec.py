@@ -137,6 +137,56 @@ class FieldCodec:
         return cast(T, cls._decode(target, data))
 
     @classmethod
+    def record_schema(cls, target: type) -> dict[str, Any]:
+        """JSON Schema for named external request fields; family selection is separate."""
+        properties = {}
+        required = []
+        hints = cls._types(target)
+        for declared, key in cls._fields(target):
+            schema = cls.value_schema(hints[declared.name])
+            metadata = declared.metadata
+            if "description" in metadata:
+                schema["description"] = metadata["description"]
+            if "wire_choices" in metadata:
+                schema["enum"] = list(metadata["wire_choices"]())
+            if declared.default is MISSING and declared.default_factory is MISSING:
+                required.append(key)
+            elif declared.default is not MISSING and declared.default is not None:
+                schema["default"] = cls.encode(declared.default)
+            properties[key] = schema
+        return {
+            "type": "object",
+            "properties": properties,
+            "required": required,
+            "additionalProperties": False,
+        }
+
+    @classmethod
+    def value_schema(cls, annotation: object) -> dict[str, Any]:
+        """Derive external scalar/array choices from the same decode declarations."""
+        origin, args = get_origin(annotation), get_args(annotation)
+        if origin in (Union, types.UnionType):
+            members = [item for item in args if item is not type(None)]
+            if len(members) == 1:
+                return cls.value_schema(members[0])
+            return {"anyOf": [cls.value_schema(item) for item in members]}
+        if origin is Literal:
+            return {**cls.value_schema(type(args[0])), "enum": list(args)}
+        if origin in (list, tuple, frozenset):
+            return {"type": "array", "items": cls.value_schema(args[0])}
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            return {"type": "string", "enum": list(args[0].names())}
+        if isinstance(annotation, type) and issubclass(annotation, Enum):
+            values = [item.value for item in annotation]
+            return {**cls.value_schema(type(values[0])), "enum": values}
+        primitive = {str: "string", bool: "boolean", int: "integer", float: "number"}
+        if annotation in primitive:
+            return {"type": primitive[annotation]}
+        if isinstance(annotation, type) and is_dataclass(annotation):
+            return cls.record_schema(annotation)
+        raise TypeError(f"No declared JSON schema for {annotation}")
+
+    @classmethod
     def project(cls, value: object, view: str) -> Any:
         """Encode a redacted view using field exclusions and owned properties.
 
@@ -238,6 +288,10 @@ class FieldCodec:
                 for field, key in declared
             ):
                 raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
             hints = cls._types(target)
             return target(
                 **{

@@ -44,9 +44,9 @@ class TestToolCatalog:
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
         with pytest.raises(ValueError, match="identity"):
             invoke_tool(comms, "comms_collaborations", {})
-        with pytest.raises(ValueError, match="must be one of"):
+        with pytest.raises(ValueError, match="Value does not match"):
             invoke_tool(comms, "comms_collaboration", {"action": "start", "peer": "b"})
-        with pytest.raises(ValueError, match="Unknown arguments"):
+        with pytest.raises(ValueError, match="Unknown fields"):
             invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b", "owner": "c"})
         assert not (comms.root / "relationships.json").exists()
 
@@ -87,11 +87,11 @@ class TestToolCatalog:
         assert comms.bus.pending_count("b") == 0
 
     def test_arguments_are_validated_before_dispatch(self, comms):
-        with pytest.raises(ValueError, match="Missing required argument"):
+        with pytest.raises(ValueError, match="missing.*name"):
             invoke_tool(comms, "comms_stop", {})
-        with pytest.raises(ValueError, match="Unknown arguments"):
+        with pytest.raises(ValueError, match="Unknown fields"):
             invoke_tool(comms, "comms_stop", {"name": "a", "force": True})
-        with pytest.raises(ValueError, match="must be boolean"):
+        with pytest.raises(ValueError, match="Expected.*bool"):
             invoke_tool(comms, "comms_threads", {"active_only": "yes"})
 
     def test_ack_can_target_one_conversation(self, comms):
@@ -106,3 +106,50 @@ class TestToolCatalog:
         assert result == {"acknowledged": 1}
         assert comms.bus.pending_count("b", "a") == 0
         assert comms.bus.pending_count("b", "c") == 1
+
+
+@pytest.mark.refactor_guard
+def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms, monkeypatch):
+    from dataclasses import dataclass
+
+    from agent_comms.tools import ActorBinding, SubjectBinding, ToolRequest, tool_field
+
+    monkeypatch.setattr(ToolRequest, "__registry__", dict(ToolRequest.__registry__))
+
+    @dataclass(frozen=True, kw_only=True)
+    class InspectInboxTool(ToolRequest):
+        label = "Inspect an inbox"
+        description = "Test-only declaration extends the complete adapter path."
+        context = "thread"
+        target: str = tool_field("Selected peer", binding=SubjectBinding)
+        viewer: str = tool_field("Acting thread", binding=ActorBinding)
+        include_body: bool = tool_field("Include message bodies", default=False)
+
+        def apply(self, comms):
+            messages = comms.bus.inbox(self.viewer, self.target)
+            return {
+                "count": len(messages),
+                "bodies": [row.text for row in messages] if self.include_body else [],
+            }
+
+    for name in ("a", "b"):
+        comms.threads.register(Thread(name=name, tags=frozenset(), worktree="/wt"))
+    comms.messaging.send("a", "b", "Actual inbox source")
+    schema = next(row for row in tool_catalog() if row["name"] == InspectInboxTool.declared_name)
+    assert schema["parameters"]["required"] == ["target", "viewer"]
+    assert schema["parameters"]["properties"]["include_body"]["default"] is False
+    assert schema["context_bindings"] == {"target": "subject", "viewer": "actor"}
+    assert schema in context_tool_catalog("thread")
+    result = invoke_context_tool(
+        comms,
+        InspectInboxTool.declared_name,
+        subject="a",
+        actor="b",
+        arguments={"include_body": True},
+    )
+    assert result == {"count": 1, "bodies": ["Actual inbox source"]}
+    for arguments in ({"include_body": "yes"}, {"include_body": None}, {"tool": "forged"}):
+        with pytest.raises(ValueError):
+            invoke_context_tool(
+                comms, InspectInboxTool.declared_name, subject="a", actor="b", arguments=arguments
+            )
