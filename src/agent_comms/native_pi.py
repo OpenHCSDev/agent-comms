@@ -16,7 +16,7 @@ import stat
 import sys
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractContextManager, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -25,6 +25,7 @@ from . import pi_commands as commands
 from . import pi_events as pi
 from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
+from .native_entries import NativeEntry
 from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
 from .native_tool_call import SelectedToolDenied
 from .pi_payloads import TextDelta
@@ -97,12 +98,90 @@ def main() -> int:
 
 @dataclass(frozen=True, slots=True)
 class NativeContextProof:
-    input_id: str
-    session_id: str
-    session_entry_id: str
-    request_generation: int
-    llm_context_digest: str
+    input_id: str = field(metadata={"wire_name": "inputId"})
+    session_id: str = field(metadata={"wire_name": "sessionId"})
+    session_entry_id: str = field(metadata={"wire_name": "sessionEntryId"})
+    request_generation: int = field(metadata={"wire_name": "requestGeneration"})
+    llm_context_digest: str = field(metadata={"wire_name": "llmContextDigest"})
     session_file: Path
+
+    @classmethod
+    def from_journal(cls, row: dict, session_file: Path) -> NativeContextProof:
+        """Decode only the declared strict journal envelope; never grant acceptance."""
+        from .field_codec import FieldCodec
+
+        names = {
+            item.metadata.get("wire_name", item.name)
+            for item in fields(cls)
+            if item.name != "session_file"
+        }
+        if (
+            set(row) != names | {"schema", "type"}
+            or type(row["schema"]) is not int
+            or row["schema"] != 1
+            or row["type"] != "context_committed"
+        ):
+            raise ValueError("Native Pi proof journal contains an invalid row")
+        hints = FieldCodec._types(cls)
+        proof = cls(
+            **{
+                item.name: FieldCodec.decode(
+                    hints[item.name], row[item.metadata.get("wire_name", item.name)]
+                )
+                for item in fields(cls)
+                if item.name != "session_file"
+            },
+            session_file=session_file,
+        )
+        if (
+            proof.request_generation < 1
+            or not _INPUT_ID.fullmatch(proof.input_id)
+            or not _DIGEST.fullmatch(proof.llm_context_digest)
+        ):
+            raise ValueError("Native Pi proof journal contains an invalid row")
+        return proof
+
+    @classmethod
+    def read_evidence(cls, session_file: Path, input_id: str, *, request_generation=None):
+        session_file = Path(session_file).absolute()
+        header, entries = NativeEntry.read_evidence(session_file)
+        tracked = NativeEntry.tracked_users(entries)
+        if input_id not in tracked:
+            raise NativePiUnavailable("The specified input was never durably committed")
+        previous_generation = 0
+        generation_digest = None
+        seen = set()
+        chosen = None
+        for row in _read_private_file(Path(str(session_file) + ".input-proof")):
+            try:
+                proof = cls.from_journal(row, session_file)
+                entry = tracked.get(proof.input_id)
+                if (
+                    proof.session_id != header.id
+                    or entry is None
+                    or proof.session_entry_id != entry.id
+                    or proof.request_generation < previous_generation
+                    or (
+                        proof.request_generation == previous_generation
+                        and proof.llm_context_digest != generation_digest
+                    )
+                    or (proof.request_generation, proof.input_id) in seen
+                ):
+                    raise ValueError("Native Pi proof journal contains an invalid row")
+            except (ValueError, TypeError, KeyError) as error:
+                raise NativePiUnavailable(
+                    "Native Pi proof journal contains an invalid row"
+                ) from error
+            previous_generation = proof.request_generation
+            generation_digest = proof.llm_context_digest
+            seen.add((proof.request_generation, proof.input_id))
+            if proof.input_id == input_id and (
+                request_generation is None or proof.request_generation == request_generation
+            ):
+                chosen = proof
+        if chosen is None:
+            raise NativePiUnavailable("The input has no assembled-context proof")
+        return chosen
 
 
 class NativePiTerminalFailure(NativePiUnavailable):
@@ -316,154 +395,25 @@ def _session_location(directory: Path, candidate: str) -> Path:
 
 
 def read_tracked_input_digest(session_file: Path, input_id: str) -> str:
-    """Return the durable journal digest for one tracked user input.
-
-    Corroboration only: this never proves the journal row fsynced, so callers
-    must join it to an independently recorded live proof before trusting it.
-    """
+    """Corroborating digest only; this cannot authorize recovery or input replay."""
     if type(input_id) is not str or _INPUT_ID.fullmatch(input_id) is None:
         raise ValueError("A tracked input digest lookup requires a 128-bit input ID")
-    session_file = Path(session_file).absolute()
-    _private_session_dir(session_file.parent)
-    entries = _read_private_file(session_file)
-    if (
-        not entries
-        or entries[0].get("type") != "session"
-        or type(entries[0].get("id")) is not str
-        or not entries[0]["id"]
-    ):
-        raise NativePiUnavailable("Native Pi session header is invalid")
-    observed: dict[str, str] = {}
-    for entry in entries:
-        message = entry.get("message")
-        if entry.get("type") != "message" or not isinstance(message, dict):
-            continue
-        tracked_id = message.get("inputId")
-        if tracked_id is None:
-            continue
-        digest = message.get("inputDigest")
-        if (
-            message.get("role") != "user"
-            or type(tracked_id) is not str
-            or _INPUT_ID.fullmatch(tracked_id) is None
-            or type(digest) is not str
-            or _DIGEST.fullmatch(digest) is None
-            or tracked_id in observed
-        ):
-            raise NativePiUnavailable("Native Pi session has ambiguous tracked user input")
-        observed[tracked_id] = digest
-    if input_id not in observed:
+    _header, entries = NativeEntry.read_evidence(Path(session_file).absolute())
+    users = NativeEntry.tracked_users(entries)
+    if input_id not in users:
         raise NativePiUnavailable("The specified input was never durably committed")
-    return observed[input_id]
+    return users[input_id].message.input_digest
 
 
 def _read_native_context_evidence(
     session_file: Path, input_id: str, *, request_generation: int | None = None
 ) -> NativeContextProof:
-    """Parse a private journal only as corroboration of a live, emitted Pi event.
-
-    The current copied Pi fork cannot distinguish a complete row whose fsync
-    failed; this parser by itself MUST NOT authorize recovered context state.
-    """
+    """Corroboration of live recorded events; parsed bytes alone grant no authority."""
     if type(input_id) is not str or _INPUT_ID.fullmatch(input_id) is None:
         raise ValueError("A native context lookup requires a 128-bit input ID")
-    session_file = Path(session_file).absolute()
-    _private_session_dir(session_file.parent)
-    entries = _read_private_file(session_file)
-    if (
-        not entries
-        or entries[0].get("type") != "session"
-        or type(entries[0].get("id")) is not str
-        or not entries[0]["id"]
-    ):
-        raise NativePiUnavailable("Native Pi session header is invalid")
-    session_id = entries[0]["id"]
-    tracked: dict[str, str] = {}
-    for entry in entries:
-        message = entry.get("message")
-        if entry.get("type") != "message" or not isinstance(message, dict):
-            continue
-        tracked_id = message.get("inputId")
-        if tracked_id is None:
-            continue
-        digest = message.get("inputDigest")
-        entry_id = entry.get("id")
-        if (
-            message.get("role") != "user"
-            or type(tracked_id) is not str
-            or _INPUT_ID.fullmatch(tracked_id) is None
-            or type(digest) is not str
-            or _DIGEST.fullmatch(digest) is None
-            or type(entry_id) is not str
-            or not entry_id
-            or tracked_id in tracked
-        ):
-            raise NativePiUnavailable("Native Pi session has ambiguous tracked user input")
-        tracked[tracked_id] = entry_id
-    if input_id not in tracked:
-        raise NativePiUnavailable("The specified input was never durably committed")
-    journal = _read_private_file(Path(str(session_file) + ".input-proof"))
-    expected_keys = {
-        "schema",
-        "type",
-        "sessionId",
-        "inputId",
-        "sessionEntryId",
-        "requestGeneration",
-        "llmContextDigest",
-    }
-    previous_generation = 0
-    generation_digest: str | None = None
-    seen: set[tuple[int, str]] = set()
-    chosen: dict[str, Any] | None = None
-    for row in journal:
-        generation = row.get("requestGeneration")
-        digest = row.get("llmContextDigest")
-        tracked_id = row.get("inputId")
-        if (
-            set(row) != expected_keys
-            or type(row.get("schema")) is not int
-            or row["schema"] != 1
-            or row.get("type") != "context_committed"
-            or row.get("sessionId") != session_id
-            or type(generation) is not int
-            or generation < 1
-            or generation < previous_generation
-            or type(digest) is not str
-            or _DIGEST.fullmatch(digest) is None
-            or type(tracked_id) is not str
-            or tracked.get(tracked_id) != row.get("sessionEntryId")
-            or (generation == previous_generation and digest != generation_digest)
-            or (generation, tracked_id) in seen
-        ):
-            raise NativePiUnavailable("Native Pi proof journal contains an invalid row")
-        if generation != previous_generation:
-            generation_digest = digest
-            previous_generation = generation
-        seen.add((generation, tracked_id))
-        if tracked_id == input_id and (
-            request_generation is None or generation == request_generation
-        ):
-            chosen = row
-    if chosen is None:
-        raise NativePiUnavailable("The input has no assembled-context proof")
-    return NativeContextProof(
-        input_id,
-        session_id,
-        tracked[input_id],
-        chosen["requestGeneration"],
-        chosen["llmContextDigest"],
-        session_file,
+    return NativeContextProof.read_evidence(
+        session_file, input_id, request_generation=request_generation
     )
-
-
-def load_native_context_proof(session_file: Path, input_id: str) -> NativeContextProof:
-    """Fail closed: a persisted row alone cannot prove journal fsync succeeded.
-
-    Until the native fork records a separate verified commit marker, no reboot
-    reader may promote this evidence to CONTEXT_COMMITTED or retry the input.
-    """
-    raise NativePiUnavailable("Recovered native Pi context lacks a durable commit marker")
 
 
 def _verify_context(
@@ -560,18 +510,9 @@ def prepare_native_pi_rpc_launch(
         raise NativePiUnavailable("Native Pi worktree is unavailable")
     if session_file is not None:
         session_file = _session_location(session_dir, str(session_file))
-        entries = _read_private_file(session_file)
-        if not entries or entries[0].get("type") != "session":
-            raise NativePiUnavailable("Selected native source lacks a session header")
-        marker = entries[0].get("agentCommsSelectedFresh")
-        if (marker is not None or selected_thinking_level is not None) and (
-            type(marker) is not dict
-            or marker != {"schema": 1, "thinkingLevel": selected_thinking_level}
-            or selected_thinking_level not in {"low", "high"}
-        ):
-            raise NativePiUnavailable(
-                "Selected fresh source cannot reopen without exact first-start token"
-            )
+        from .fresh_private_session import FreshPrivateSession
+
+        FreshPrivateSession.require_launch_header(session_file, selected_thinking_level)
     agent_dir = _private_agent_dir(session_dir)
     tool_arguments = (
         selected_tool_mode.launch_arguments(package)
