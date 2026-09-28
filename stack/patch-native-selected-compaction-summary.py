@@ -61,11 +61,11 @@ def main(path: Path) -> None:
                     return success(id, command.type, acSummaryDecline(command.operationId, admission.denial));
                 const selectedSession = session;
                 const slot = { operationId: command.operationId, controller: new AbortController(),
-                    started: false, timedOut: false, done: null };
+                    started: false, done: null };
                 acSummarySlot = slot;
                 acSpentSummaryIds.add(command.operationId);
                 slot.done = acExecuteSummary(slot, selectedSession, command,
-                    admission.preparation, admission.binding).finally(() => {
+                    admission.preparation, admission.binding, output).finally(() => {
                     if (acSummarySlot === slot) acSummarySlot = null;
                 });
                 return success(id, command.type, await slot.done);

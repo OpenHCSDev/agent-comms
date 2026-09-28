@@ -95,7 +95,7 @@ class SummaryResult(PiPayload):
     usage: SummaryUsage
 
     def __post_init__(self):
-        if not self.summary.strip() or len(self.summary.encode()) > 262144:
+        if not self.summary.strip():
             raise ValueError("Invalid selected native summary")
 
 
