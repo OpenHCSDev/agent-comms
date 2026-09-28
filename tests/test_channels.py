@@ -8,6 +8,8 @@ import pytest
 from agent_comms import (
     Activity,
     ActivityState,
+    AllOfMatch,
+    AnyOfMatch,
     Channel,
     ChannelSort,
     ForkSpec,
@@ -19,7 +21,6 @@ from agent_comms import (
     ThreadStatus,
     ThreadView,
     ViewKind,
-    ViewMatch,
     ViewPredicate,
     invoke_tool,
     wire,
@@ -91,13 +92,15 @@ def test_saved_views_are_typed_persistent_and_non_routable(tmp_path):
     view = SavedView(
         "api-and-ui",
         ViewKind.PARTICIPANTS,
-        ViewPredicate(ViewMatch.ALL_OF, frozenset({"api", "ui"})),
+        ViewPredicate(AllOfMatch, frozenset({"api", "ui"})),
         created_at=123,
     )
     assert comms.set_saved_view(view) == view
     assert wire(tmp_path).saved_views() == {"api-and-ui": view}
     assert [
-        name for name, thread in comms.registry.all_threads().items() if view.matches(thread.tags)
+        name
+        for name, thread in comms.registry.all_threads().items()
+        if view.predicate.matches(thread.tags)
     ] == ["both"]
     assert "#api-and-ui" not in comms.channels()
     with pytest.raises(ValueError, match="not a routable target"):
@@ -130,7 +133,7 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
         SavedView(
             "cross-team",
             ViewKind.PARTICIPANTS,
-            ViewPredicate(ViewMatch.ALL_OF, frozenset({"api", "ui"})),
+            ViewPredicate(AllOfMatch, frozenset({"api", "ui"})),
         )
     )
     comms.send("other", "#api", "target-owned historical row")
@@ -162,7 +165,7 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
         SavedView(
             "cross-team",
             ViewKind.PARTICIPANTS,
-            ViewPredicate(ViewMatch.ALL_OF, frozenset({"docs"})),
+            ViewPredicate(AllOfMatch, frozenset({"docs"})),
         )
     )
     observer.delete_tag("api")
@@ -247,7 +250,7 @@ def test_deleting_legacy_collision_preserves_revealed_exact_preferences(tmp_path
 
 def test_saved_view_names_are_reserved_for_tags_and_legacy_channels(tmp_path):
     comms = setup_wire(tmp_path)
-    predicate = ViewPredicate(ViewMatch.ANY_OF, frozenset({"api"}))
+    predicate = ViewPredicate(AnyOfMatch, frozenset({"api"}))
     with pytest.raises(ValueError, match="conflicts with channel"):
         comms.set_saved_view(SavedView("api", ViewKind.PARTICIPANTS, predicate))
     comms.set_channel("legacy", frozenset({"api"}))
@@ -292,7 +295,7 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
     from agent_comms.importing import ImportedMessage, ImportFormat, ImportRole, ImportSnapshot
 
     comms = setup_wire(tmp_path)
-    predicate = ViewPredicate(ViewMatch.ANY_OF, frozenset({"api"}))
+    predicate = ViewPredicate(AnyOfMatch, frozenset({"api"}))
     comms.set_saved_view(SavedView("reserved", ViewKind.PARTICIPANTS, predicate))
     before = comms.registry.snapshot()
 

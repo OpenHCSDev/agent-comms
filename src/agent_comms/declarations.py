@@ -25,6 +25,7 @@ import stat
 import tempfile
 import time
 import uuid
+from abc import abstractmethod
 from bisect import bisect_left
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -49,6 +50,7 @@ from .bus_publication import (
     validate_initial_record,
 )
 from .bus_route_counts import BusRouteCounts
+from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, projected
 from .goal_presentation import (
     ExecutionPresentation,
@@ -1232,49 +1234,54 @@ class ViewKind(StrEnum):
     ACTIVITY = "activity"
 
 
-class ViewMatch(StrEnum):
-    ANY_OF = "any_of"
-    ALL_OF = "all_of"
+class ViewMatch(DeclaredFamily, affix="Match"):
+    """A tag relation, selected once at the external boundary."""
+
+    @staticmethod
+    @abstractmethod
+    def matches(required: frozenset[str], observed: frozenset[str]) -> bool:
+        """Whether the observed tags satisfy this relation."""
+
+
+class AnyOfMatch(ViewMatch):
+    @staticmethod
+    def matches(required: frozenset[str], observed: frozenset[str]) -> bool:
+        return bool(required & observed)
+
+
+class AllOfMatch(ViewMatch):
+    @staticmethod
+    def matches(required: frozenset[str], observed: frozenset[str]) -> bool:
+        return required <= observed
 
 
 @dataclass(frozen=True, slots=True)
 class ViewPredicate:
     """A typed tag predicate; expression syntax is deliberately unsupported."""
 
-    match: ViewMatch
+    match: type[ViewMatch]
     tags: frozenset[str]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "match", ViewMatch(self.match))
         if not self.tags:
             raise ValueError("A view predicate requires at least one tag.")
         for tag in self.tags:
             Tag(tag)
 
     def matches(self, tags: frozenset[str]) -> bool:
-        if self.match is ViewMatch.ALL_OF:
-            return self.tags <= tags
-        return bool(self.tags & tags)
-
-    def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode(self)
-
-    @classmethod
-    def from_wire(cls, value: Mapping) -> Self:
-        return FieldCodec.decode(cls, dict(value))
+        return self.match.matches(self.tags, tags)
 
 
 @dataclass(frozen=True, slots=True)
 class SavedView:
     """A named non-routable projection over authoritative channels or activity."""
 
-    name: str
+    name: str = field(metadata={"catalog_exclude": True})
     kind: ViewKind
     predicate: ViewPredicate
     created_at: float = field(default_factory=time.time)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "kind", ViewKind(self.kind))
         if (
             not self.name
             or self.name.startswith("#")
@@ -1285,16 +1292,6 @@ class SavedView:
                 "View names must be lowercase alphanumeric with hyphens/underscores "
                 "and cannot be channel targets."
             )
-
-    def matches(self, tags: frozenset[str]) -> bool:
-        return self.predicate.matches(tags)
-
-    def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode(self)
-
-    @classmethod
-    def from_wire(cls, name: str, value: Mapping) -> Self:
-        return FieldCodec.decode(cls, {"created_at": 0.0, **value, "name": name})
 
 
 class ThreadRole(StrEnum):
