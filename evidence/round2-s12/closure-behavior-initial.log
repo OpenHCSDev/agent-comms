@@ -1,0 +1,51 @@
+..........................................................s.......F..... [ 37%]
+........................................................................ [ 75%]
+..............................................                           [100%]
+=================================== FAILURES ===================================
+___________ test_concurrent_fresh_initializers_serialize_and_reopen ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s12-20260928/.artifacts/pytest/pytest-of-ts/pytest-2/test_concurrent_fresh_initiali0')
+
+    def test_concurrent_fresh_initializers_serialize_and_reopen(tmp_path):
+        script = """import sys
+    from agent_comms.coordination import CoordinationStore
+    sys.stdin.buffer.read(1)
+    with CoordinationStore(sys.argv[1]) as store:
+        assert store.schema_version == 2
+        assert store._connection.execute("SELECT count(*) FROM schema_meta").fetchone()[0] == 1
+    print("ready")
+    """
+        for wave in range(8):
+            path = tmp_path / f"concurrent-{wave}.sqlite3"
+            children = [
+                subprocess.Popen(
+                    [sys.executable, "-c", script, str(path)],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                for _ in range(12)
+            ]
+            try:
+                for child in children:
+                    assert child.stdin is not None
+                    child.stdin.write(b"x")
+                    child.stdin.flush()
+                    child.stdin.close()
+                    child.stdin = None
+                for child in children:
+                    output, error = child.communicate(timeout=45)
+>                   assert child.returncode == 0, (wave, error.decode(errors="replace"))
+E                   AssertionError: (0, 'Traceback (most recent call last):
+E                       File "<string>", line 5, in <module>
+E                         assert store.schema_version == 2
+E                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+E                     AssertionError
+E                     ')
+E                   assert 1 == 0
+E                    +  where 1 = <Popen: returncode: 1 args: ['/home/ts/wt/comms-refactor-integration-2026092...>.returncode
+
+tests/test_coordination.py:621: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_coordination.py::test_concurrent_fresh_initializers_serialize_and_reopen
+1 failed, 188 passed, 1 skipped in 19.33s

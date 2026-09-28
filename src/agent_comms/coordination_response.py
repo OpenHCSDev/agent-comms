@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .bus_publication import stable_thread_lookup
-from .coordination import OwnerFence, PublicationIntent, RecoverySnapshot, canonical_publication_key
+from .coordination import OwnerFence, PublicationIntents, RecoverySnapshot, canonical_publication_key
 from .coordination_cohort import _assert_schema as _assert_cohort_schema
 from .coordination_store import (
     AlreadyApplied,
@@ -303,7 +303,7 @@ def _require_final_owner(
 
 
 def _intent_matches_request(
-    intent: PublicationIntent,
+    intent: PublicationIntents,
     *,
     execution_id: str,
     sender: str,
@@ -334,7 +334,7 @@ def prepare_fenced_response(
     notice: bool = False,
     timestamp: float | None = None,
     owner_witness: LiveResponseOwner,
-) -> Applied[PublicationIntent] | AlreadyApplied[PublicationIntent]:
+) -> Applied[PublicationIntents] | AlreadyApplied[PublicationIntents]:
     """Tx1: freeze the only legal reply envelope and publishing obligation.
 
     This is an explicitly test-gated coordinator API, not Pi context proof or an
@@ -390,7 +390,7 @@ def prepare_fenced_response(
                 timestamp=when,
                 notice=notice,
             )
-            intent = PublicationIntent(
+            intent = PublicationIntents(
                 execution_id=execution.execution_id,
                 sender=execution.owner_thread,
                 exact_target=execution.exact_target,
