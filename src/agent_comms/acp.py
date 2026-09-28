@@ -24,7 +24,6 @@ import re
 import sqlite3
 import sys
 import time
-from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -42,6 +41,17 @@ from acp.schema import (
 
 from . import agent_events as events
 from . import manual_compaction_bridge
+from .acp_extension import (
+    CompactionCommittedUpdate,
+    CursorAdvancedUpdate,
+    CursorEnvelope,
+    CursorScope,
+    EmptyCursorObservation,
+    TextRouteUpdate,
+    UnavailableCursorObservation,
+    VerifiedCursorObservation,
+    encode_updates,
+)
 from .agent_event_updates import AcpEventConsumer
 from .bus_publication import stable_thread_lookup
 from .cohort_foreground import _accept_visible_initials
@@ -71,6 +81,7 @@ from .runtime import (
 from .selected_write_plan import PlannedWrite, SelectedWritePlans
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
+from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
 from .transcript_updates import TranscriptUpdate
 from .turn_effects import TurnEffects
@@ -206,7 +217,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 raise RequestError(-32603, str(reason), {"reason": str(reason)})
             return PromptResponse(
                 stop_reason="end_turn",
-                field_meta={"agentComms": {"compaction": result}},
+                field_meta=encode_updates(
+                    CompactionCommittedUpdate(result["commitId"], result["summary"])
+                ),
             )
         meta = kwargs.get("_meta") or kwargs.get("field_meta") or {}
         # The ACP SDK expands _meta entries into handler keyword arguments.
@@ -278,20 +291,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             images = self._prompt_images(prompt)
         except ValueError as error:
             raise RequestError.invalid_params({"reason": str(error)}) from error
-        if images:
-            supported = (
-                self.sessions.proxy_image_support.get(session_id, False)
-                if session_id in self.sessions.proxies
-                else True
+        if images and self._prompt_text(prompt).lstrip().startswith(("@", "#", RELAY_PREFIX)):
+            raise RequestError.invalid_params(
+                {"reason": "Send images to an agent thread, not as a coordination relay."}
             )
-            if not supported:
-                raise RequestError.invalid_params(
-                    {"reason": "This owner does not support image prompts; refresh it while idle."}
-                )
-            if self._prompt_text(prompt).lstrip().startswith(("@", "#", RELAY_PREFIX)):
-                raise RequestError.invalid_params(
-                    {"reason": "Send images to an agent thread, not as a coordination relay."}
-                )
         if session_id in self.sessions.proxies:
             result = await self.sessions.proxies[session_id].request(
                 "prompt",
@@ -421,7 +424,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
-    def _private_cursor_scope(self, thread_name: str, session_id: str) -> dict[str, Any] | None:
+    def _private_cursor_scope(self, thread_name: str, session_id: str) -> CursorScope | None:
         root_id = self._private_nk_wire_root_id
         if root_id is None:
             return None
@@ -433,18 +436,16 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             return None
         if owner.pid != os.getpid():
             return None
-        return {
-            "sessionId": session_id,
-            "wireRootId": root_id,
-            "ownerThread": owner.name,
-            "ownerCreatedAt": owner.created_at,
-            "ownerPid": owner.pid,
-            "ownerEpoch": admission_generation,
-        }
+        return CursorScope(
+            session_id,
+            root_id,
+            OwnerIdentity(ThreadIncarnation(owner.name, owner.created_at), admission_generation),
+            owner.pid,
+        )
 
     def _private_cursor_metadata(
         self, thread_name: str, session_id: str, *, defer_busy: bool = False
-    ) -> dict[str, Any]:
+    ) -> CursorEnvelope:
         """Owner-scoped, ordered informational cursor for trusted ACP attach.
 
         Every status (including none/unavailable) advances the local projection
@@ -454,16 +455,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         """
         root_id = self._private_nk_wire_root_id
         if root_id is None:
-            return {}
+            raise ValueError("Native cursor requires the configured root")
         revision = self._private_cursor_revisions.get(session_id, 0) + 1
         self._private_cursor_revisions[session_id] = revision
         scope = self._private_cursor_scope(thread_name, session_id)
-        result: dict[str, Any] = {
-            "version": 1,
-            "scope": scope,
-            "revision": revision,
-            "status": "unavailable",
-        }
+        result = CursorEnvelope(scope, revision, UnavailableCursorObservation())
         if scope is None:
             return result
         try:
@@ -485,8 +481,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             current_scope = self._private_cursor_scope(thread_name, session_id)
             if defer_busy and current_scope == scope:
                 raise
-            result["scope"] = current_scope
-            return result
+            return CursorEnvelope(current_scope, revision, UnavailableCursorObservation())
         except (OSError, ValueError, sqlite3.Error, CoordinationError):
             cursor = None
             unavailable = True
@@ -497,18 +492,14 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         # snapshot may show its own current cursor.
         current_scope = self._private_cursor_scope(thread_name, session_id)
         if current_scope != scope:
-            result["scope"] = current_scope
-            return result
+            return CursorEnvelope(current_scope, revision, UnavailableCursorObservation())
         if unavailable:
             return result
-        if cursor is None:
-            result["status"] = "none"
-        else:
-            result.update(
-                status="proven" if cursor.injected_seq else "coverage_only",
-                **FieldCodec.encode(cursor),
-            )
-        return result
+        return CursorEnvelope(
+            scope,
+            revision,
+            EmptyCursorObservation() if cursor is None else VerifiedCursorObservation(cursor),
+        )
 
     async def _publish_private_cursor(
         self, session_id: str, thread_name: str, *, selected_status: str | None = None
@@ -524,36 +515,30 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         except BlockingIOError:
             return  # Read contention; the next poll refreshes this observation.
         signature = json.dumps(
-            {key: value for key, value in cursor.items() if key != "revision"},
+            {key: value for key, value in FieldCodec.encode(cursor).items() if key != "revision"},
             sort_keys=True,
         )
         if selected_status is None and self._private_cursor_announced.get(session_id) == signature:
             return
-        fields: dict[str, Any] = {"privateNativeCursor": cursor}
-        if selected_status is not None:
-            fields["lastSelectedCursorStatus"] = selected_status
+        fields = encode_updates(CursorAdvancedUpdate(cursor, selected_status))
         try:
             await self._runtime.session_update(
                 session_id=session_id,
-                update=SessionInfoUpdate(
-                    session_update="session_info_update", field_meta={"agentComms": fields}
-                ),
+                update=SessionInfoUpdate(session_update="session_info_update", field_meta=fields),
             )
         except (OSError, RuntimeError):
             return  # A disconnected client can read a fresh trusted load later.
         self._private_cursor_announced[session_id] = signature
 
-    def _session_runtime_metadata(self, thread_name: str, session_id: str) -> dict[str, Any]:
-        queue_binding, queue_state = self.inputs.queue_state(session_id)
-        return {
-            "queueBinding": queue_binding,
-            "queueState": queue_state,
-            **(
-                {"privateNativeCursor": self._private_cursor_metadata(thread_name, session_id)}
+    def _session_runtime_metadata(self, thread_name: str, session_id: str) -> tuple:
+        return (
+            self.inputs.queue_state(session_id),
+            *(
+                (CursorAdvancedUpdate(self._private_cursor_metadata(thread_name, session_id)),)
                 if self._private_nk_wire_root_id is not None
-                else {}
+                else ()
             ),
-        }
+        )
 
     def _private_nk_marker(self) -> str:
         """Require the configured, certified root before any selected request."""
@@ -718,7 +703,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=text),
-                field_meta={"agentComms": {"route": asdict(route) if route else None}},
+                field_meta=encode_updates(TextRouteUpdate(route)),
             ),
         )
 

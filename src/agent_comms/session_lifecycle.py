@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import os
 import re
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -22,10 +21,17 @@ from acp.schema import (
 )
 
 from . import backend
+from .acp_extension import (
+    ContextUsage,
+    CoordinationChangedUpdate,
+    GoalChangedUpdate,
+    encode_updates,
+)
 from .comms import Comms
 from .config_options import ConfigOptions
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
+from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .transcript_updates import TranscriptReplay
 
@@ -48,7 +54,6 @@ class SessionLifecycle:
         self.display_titles: dict[str, str | None] = {}
         self.worktrees: dict[str, str] = {}
         self.proxies: dict[str, RuntimeProxy] = {}
-        self.proxy_image_support: dict[str, bool] = {}
         self.transcript = TranscriptReplay(comms, runtime)
         self.config = ConfigOptions(comms, agent_bin, agent_args, runtime, self, effects)
 
@@ -58,12 +63,6 @@ class SessionLifecycle:
         client_capabilities: Any = None,
         client_info: Any = None,
     ) -> InitializeResponse:
-        meta = (
-            client_capabilities.get("_meta", {})
-            if isinstance(client_capabilities, dict)
-            else getattr(client_capabilities, "field_meta", None) or {}
-        )
-        self.transcript.snapshots = meta.get("agentComms", {}).get("transcriptSnapshots") is True
         capabilities = (
             client_capabilities
             if isinstance(client_capabilities, dict)
@@ -203,9 +202,6 @@ class SessionLifecycle:
                 {"reason": f"Unable to attach to {thread.name!r} owner {thread.pid}: {error}"}
             ) from error
         self.proxies[session_id] = proxy
-        self.proxy_image_support[session_id] = (
-            metadata.get("agentComms", {}).get("imagePrompts") is True
-        )
         return LoadSessionResponse(
             config_options=metadata.pop("configOptions", []), field_meta=metadata
         )
@@ -230,7 +226,7 @@ class SessionLifecycle:
                 update=SessionInfoUpdate(
                     session_update="session_info_update",
                     title=thread.title or name,
-                    field_meta={"agentComms": {"thread": name}},
+                    field_meta=self.metadata(name, session_id=session_id),
                 ),
             )
             self.titles[session_id], self.display_titles[session_id] = name, thread.title
@@ -239,7 +235,7 @@ class SessionLifecycle:
                 session_id=session_id,
                 update=SessionInfoUpdate(
                     session_update="session_info_update",
-                    field_meta={"agentComms": {"worktree": thread.worktree}},
+                    field_meta=self.metadata(name, session_id=session_id),
                 ),
             )
             self.worktrees[session_id] = thread.worktree
@@ -250,37 +246,29 @@ class SessionLifecycle:
         goal, execution = self.comms.goals.goal_snapshot(thread_name)
         info = self.comms.agents.agent_info_of(thread_name)
         usage = (
-            {"used": info.context_used, "size": info.context_size, "source": "last_response"}
+            ContextUsage(info.context_used, info.context_size)
             if info is not None and info.context_used is not None and info.context_size
             else None
         )
-        return {
-            "agentComms": {
-                "thread": thread_name,
-                "goal": goal.to_wire() if goal else None,
-                "goalExecution": asdict(execution) if execution else None,
-                "wireRoot": str(self.comms.root.resolve()),
-                "persistence": "shared on-disk wire",
-                "transport": "per-session stdio ACP",
-                "ownerPid": os.getpid(),
-                "contextUsage": usage,
-                "turnLifecycle": True,
-                **self.effects._session_runtime_metadata(thread_name, session_id or thread_name),
-                "model": thread.model,
-                "thinkingLevel": thread.thinking_level,
-                "worktree": thread.worktree,
-                "autoTitle": True,
-                "title": thread.title or thread.name,
-                "promptQueue": True,
-                "imagePrompts": True,
-            }
-        }
+        return encode_updates(
+            CoordinationChangedUpdate(
+                ThreadIncarnation(thread.name, thread.created_at),
+                str(self.comms.root.resolve()),
+                os.getpid(),
+                thread.worktree,
+                thread.model,
+                thread.thinking_level,
+                thread.title or thread.name,
+                usage,
+            ),
+            GoalChangedUpdate(goal, execution),
+            *self.effects._session_runtime_metadata(thread_name, session_id or thread_name),
+        )
 
     async def close_proxies(self) -> None:
         for proxy in self.proxies.values():
             await proxy.close()
         self.proxies.clear()
-        self.proxy_image_support.clear()
 
     async def release_owned(self) -> None:
         for name in set(self.bindings.values()):

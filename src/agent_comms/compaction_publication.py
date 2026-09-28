@@ -13,9 +13,12 @@ from typing import Any
 
 from acp.schema import AgentMessageChunk, TextContentBlock
 
+from .acp_extension import CompactionPublishedUpdate, encode_updates
 from .compaction_journal import CompactionJournal
 from .compaction_publication_lease import publication_identity_fence
+from .compaction_states import CompactionPublishedMetadata
 from .errors import RelationViolationError, UnregisteredThreadError
+from .field_codec import FieldCodec
 
 # A stalled local client must not indefinitely pin the wire's owner-identity
 # fence. wait_for joins cancellation of its transport coroutine before the
@@ -83,7 +86,9 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
             ):
                 break
             # Only exact outbox metadata, never intent/summary/recipient.
-            metadata = json.loads(item.metadata_json)
+            metadata = FieldCodec.decode(
+                CompactionPublishedMetadata, json.loads(item.metadata_json)
+            )
             try:
                 delivered = await asyncio.wait_for(
                     runtime.session_update(
@@ -91,7 +96,7 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
                         update=AgentMessageChunk(
                             session_update="agent_message_chunk",
                             content=TextContentBlock(type="text", text=""),
-                            field_meta={"agentComms": {"compactionPublication": metadata}},
+                            field_meta=encode_updates(CompactionPublishedUpdate(metadata)),
                         ),
                         _expected_client=client,
                         _expected_thread=owner.name,
