@@ -162,52 +162,36 @@ class LiveResponseOwner:
     admission_generation: int
 
 
-def _require_live_registry_owner(
-    snapshot: RegistrySnapshot,
-    fence: OwnerFence,
-    owner_pid: int | None,
-    owner_witness: LiveResponseOwner | None,
-) -> None:
-    if owner_witness is not None:
+    def require_live(self, snapshot: RegistrySnapshot, fence: OwnerFence) -> None:
+        """Recheck this exact process/turn against current registry authority."""
         if (
-            type(owner_witness) is not LiveResponseOwner
-            or owner_witness.name != fence.owner_thread
-            or type(owner_witness.active_turn) is not ActiveTurn
-            or owner_witness.active_turn.owner_pid != owner_witness.pid
-            or owner_witness.active_turn.admission_generation != owner_witness.admission_generation
-            or type(owner_witness.admission_generation) is not int
-            or owner_witness.admission_generation < 1
-            or type(owner_witness.pid) is not int
-            or (owner_pid is not None and owner_pid != owner_witness.pid)
+            self.name != fence.owner_thread
+            or type(self.active_turn) is not ActiveTurn
+            or self.active_turn.owner_pid != self.pid
+            or self.active_turn.admission_generation != self.admission_generation
+            or type(self.admission_generation) is not int
+            or self.admission_generation < 1
+            or type(self.pid) is not int
         ):
             raise StaleFence("response turn witness is invalid")
-        owner_pid = owner_witness.pid
-    if owner_pid is None:
-        return  # Legacy explicit response fixtures, never the coordinated runner.
-    if type(owner_pid) is not int or owner_pid != os.getpid():
-        raise StaleFence("response witness does not own the current process")
-    thread = snapshot.threads.get(fence.owner_thread)
-    status = snapshot.statuses.get(fence.owner_thread)
-    if (
-        thread is None
-        or status is None
-        or not status.active
-        or thread.role is not ThreadRole.AGENT
-        or thread.name != fence.owner_thread
-        or thread.pid != owner_pid
-        or (
-            owner_witness is not None
-            and (
-                thread.created_at != owner_witness.created_at
-                or stable_thread_lookup(thread.created_at) != owner_witness.recipient_lookup
-                or thread.worktree != owner_witness.worktree
-                or thread.active_turn != owner_witness.active_turn
-                or snapshot.admission_generations.get(thread.name)
-                != owner_witness.admission_generation
-            )
-        )
-    ):
-        raise StaleFence("response owner turn stopped or changed before publication")
+        if self.pid != os.getpid():
+            raise StaleFence("response witness does not own the current process")
+        thread = snapshot.threads.get(fence.owner_thread)
+        status = snapshot.statuses.get(fence.owner_thread)
+        if (
+            thread is None
+            or status is None
+            or not status.active
+            or thread.role is not ThreadRole.AGENT
+            or thread.name != fence.owner_thread
+            or thread.pid != self.pid
+            or thread.created_at != self.created_at
+            or stable_thread_lookup(thread.created_at) != self.recipient_lookup
+            or thread.worktree != self.worktree
+            or thread.active_turn != self.active_turn
+            or snapshot.admission_generations.get(thread.name) != self.admission_generation
+        ):
+            raise StaleFence("response owner turn stopped or changed before publication")
 
 
 def _require_bound_stores(bus: MessageBus, store: MutationStore) -> None:
@@ -299,11 +283,11 @@ def _require_final_owner(
     bus: MessageBus,
     fence: OwnerFence,
     wire_root_id: str,
-    owner_witness: LiveResponseOwner | None = None,
+    owner_witness: LiveResponseOwner,
 ) -> RecoverySnapshot:
     snapshot, attempt = store._assert_fence(fence)
     execution = snapshot.execution
-    if owner_witness is not None and execution.owner_lookup != owner_witness.recipient_lookup:
+    if execution.owner_lookup != owner_witness.recipient_lookup:
         raise StaleFence("response turn belongs to a different SQL recipient")
     if (
         not execution.lifecycle.active
@@ -349,8 +333,7 @@ def prepare_fenced_response(
     message_type: MessageType = MessageType.INFO,
     notice: bool = False,
     timestamp: float | None = None,
-    owner_pid: int | None = None,
-    owner_witness: LiveResponseOwner | None = None,
+    owner_witness: LiveResponseOwner,
 ) -> Applied[PublicationIntent] | AlreadyApplied[PublicationIntent]:
     """Tx1: freeze the only legal reply envelope and publishing obligation.
 
@@ -368,7 +351,7 @@ def prepare_fenced_response(
     if not isinstance(payload, str) or not payload:
         raise ValueError("response payload must be nonempty")
     with _response_boundary(bus) as registry_snapshot:
-        _require_live_registry_owner(registry_snapshot, fence, owner_pid, owner_witness)
+        owner_witness.require_live(registry_snapshot, fence)
         metadata = bus.log._private_marker_unlocked()
         # A corrupt row anywhere is never accepted as an absent publication.
         tuple(bus.log._verified_private_rows_unlocked(metadata))
@@ -455,16 +438,13 @@ def _terminal_replay(
     fence: OwnerFence,
     bus: MessageBus,
     wire_root_id: str,
-    owner_witness: LiveResponseOwner | None = None,
+    owner_witness: LiveResponseOwner,
 ) -> AlreadyApplied[RecoverySnapshot] | None:
     """A finished immutable receipt may be re-read, never re-published."""
     snapshot = store.snapshot(fence.execution_id)
     if not snapshot.execution.lifecycle.completed:
         return None
-    if (
-        owner_witness is not None
-        and snapshot.execution.owner_lookup != owner_witness.recipient_lookup
-    ):
+    if snapshot.execution.owner_lookup != owner_witness.recipient_lookup:
         raise StaleFence("finished response belongs to a different SQL recipient")
     attempt = snapshot.attempt
     if (
@@ -493,8 +473,7 @@ def _settle_fenced_response(
     fence: OwnerFence,
     *,
     allow_append: bool,
-    owner_pid: int | None,
-    owner_witness: LiveResponseOwner | None,
+    owner_witness: LiveResponseOwner,
 ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
     _require_bound_stores(bus, store)
     if type(fence) is not OwnerFence:
@@ -502,7 +481,7 @@ def _settle_fenced_response(
     # One registry revision is held through dispatch, append and Tx2. SQL's
     # current owner generation remains guarded by the transaction fence.
     with _response_boundary(bus) as registry_snapshot:
-        _require_live_registry_owner(registry_snapshot, fence, owner_pid, owner_witness)
+        owner_witness.require_live(registry_snapshot, fence)
         metadata = bus.log._private_marker_unlocked()
         wire_root_id = metadata.root_id
         first_dispatch = False
@@ -653,12 +632,11 @@ def publish_fenced_response(
     bus: MessageBus,
     fence: OwnerFence,
     *,
-    owner_pid: int | None = None,
-    owner_witness: LiveResponseOwner | None = None,
+    owner_witness: LiveResponseOwner,
 ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
     """Explicit one-time owner append + Tx2. Never call after an uncertain crash."""
     return _settle_fenced_response(
-        store, bus, fence, allow_append=True, owner_pid=owner_pid, owner_witness=owner_witness
+        store, bus, fence, allow_append=True, owner_witness=owner_witness
     )
 
 
@@ -667,10 +645,9 @@ def resolve_existing_response(
     bus: MessageBus,
     fence: OwnerFence,
     *,
-    owner_pid: int | None = None,
-    owner_witness: LiveResponseOwner | None = None,
+    owner_witness: LiveResponseOwner,
 ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
     """Read-only bus resolution of Tx1; absence never appends or retries."""
     return _settle_fenced_response(
-        store, bus, fence, allow_append=False, owner_pid=owner_pid, owner_witness=owner_witness
+        store, bus, fence, allow_append=False, owner_witness=owner_witness
     )

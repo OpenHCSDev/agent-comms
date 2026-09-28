@@ -12,8 +12,8 @@ from agent_comms.comms import Comms
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
     ClaimTransitionError,
+    ExistingFileClaim,
     WritableFileClaim,
-    normalize_existing_file,
 )
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
@@ -31,7 +31,7 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
             c.threads.register(Thread(name, frozenset({"team"}), str(work), created_at=created))
         c.messaging.initialize_private_initial_protocol()
         c.messaging.initialize_private_claim_protocol()
-        resource = WritableFileClaim("new/nested/file.py")
+        resource = WritableFileClaim(Path("new/nested/file.py"))
         committed = c.messaging.send_message("a", "#team", "Claim before create", claims=[resource])
         assert not (work / "new").exists()
         projection = Comms(root).bus.log.claim_projection()
@@ -53,19 +53,19 @@ def test_create_claim_preserves_physical_worktree_scope(tmp_path):
     (root / "link").symlink_to(outside, target_is_directory=True)
     for path in ("../outside/x", "link/missing.py", str(outside / "x"), "."):
         with pytest.raises(ClaimTransitionError):
-            WritableFileClaim(path).normalized(root)
+            WritableFileClaim(Path(path)).normalized(root)
     with pytest.raises(ClaimTransitionError):
-        normalize_existing_file(root, "new.py")
+        ExistingFileClaim(Path("new.py")).normalized(root)
     (root / "existing").write_text("a")
     (root / "alias").hardlink_to(root / "existing")
     with pytest.raises(ClaimTransitionError):
-        WritableFileClaim("existing").normalized(root)
+        WritableFileClaim(Path("existing")).normalized(root)
 
 
 def test_coding_names_and_argument_types_come_from_declarations():
     assert set(CodingTool.names()) == {"read", "bash", "edit", "write"}
     call = CodingCall.decode("call", "write", {"path": "x", "content": "value"})
-    assert isinstance(call.tool.resource_claim(), WritableFileClaim)
+    assert isinstance(call.tool.claim, WritableFileClaim)
     with pytest.raises((TypeError, ValueError)):
         CodingCall.decode("call", "write", {"path": True, "content": "v"})
     # Pi's full tool schema stays authoritative, including its current edits[]

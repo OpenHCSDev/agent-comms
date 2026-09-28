@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms import claim_admission
+from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.claim_admission import (
@@ -18,13 +19,12 @@ from agent_comms.claim_admission import (
     verify_selected_wake,
     write_selected_claimed_file,
 )
-from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination import ExecutionOrigin
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
 from agent_comms.coordination_store import IdentityConflict, MutationStore, prepare_fence_token
-from agent_comms.envelope_claim_transitions import WakeAdmission
+from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeAdmission
 from agent_comms.errors import ClaimEnvelopeUnknownError, RelationViolationError
 from agent_comms.threads import Thread
 
@@ -117,7 +117,11 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             verify_selected_wake(comms, store, admission, owner.name)
             with pytest.raises(IdentityConflict):
                 publish_selected_resource_claim(
-                    comms, store, replace(admission, recipient_lookup=bob_lookup), "Bob", resource
+                    comms,
+                    store,
+                    replace(admission, recipient_lookup=bob_lookup),
+                    "Bob",
+                    ExistingFileClaim(Path(resource)),
                 )
             assert comms.bus.log.claim_projection().get(str(resource)) is None
             append = comms.bus.log._append_private_unlocked
@@ -129,12 +133,16 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             with monkeypatch.context() as patch:
                 patch.setattr(comms.bus.log, "_append_private_unlocked", append_then_lose_receipt)
                 with pytest.raises(ClaimEnvelopeUnknownError):
-                    publish_selected_resource_claim(comms, store, admission, owner.name, resource)
+                    publish_selected_resource_claim(
+                        comms, store, admission, owner.name, ExistingFileClaim(Path(resource))
+                    )
             selected_owner = Comms(root).bus.log.claim_projection()[str(resource)]
             assert selected_owner.admission == admission
             assert selected_owner.resource == str(resource)
             assert (
-                publish_selected_resource_claim(comms, store, admission, owner.name, resource)
+                publish_selected_resource_claim(
+                    comms, store, admission, owner.name, ExistingFileClaim(Path(resource))
+                )
                 == selected_owner
             )
             assert len(comms.views.full_history()) == 2
@@ -148,7 +156,9 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
                 verify_selected_wake(comms, store, admission, "Alice")
             with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
-                publish_selected_resource_claim(comms, store, admission, "Alice", resource)
+                publish_selected_resource_claim(
+                    comms, store, admission, "Alice", ExistingFileClaim(Path(resource))
+                )
             with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
                 write_selected_claimed_file(
                     comms, store, admission, "Alice", selected_owner, b"forbidden\n"
@@ -256,11 +266,13 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                     store,
                     replace(admission, operation_id="e" * 32),
                     "Alice",
-                    resource,
+                    ExistingFileClaim(Path(resource)),
                 )
             comms.registry.unregister("Alice")
             with pytest.raises(IdentityConflict):
                 verify_selected_wake(comms, store, admission, "Alice")
             with pytest.raises(IdentityConflict):
-                publish_selected_resource_claim(comms, store, admission, "Alice", resource)
+                publish_selected_resource_claim(
+                    comms, store, admission, "Alice", ExistingFileClaim(Path(resource))
+                )
             assert len(comms.views.full_history()) == 2

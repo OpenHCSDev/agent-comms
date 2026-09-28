@@ -23,7 +23,7 @@ from .comms import Comms
 from .coordination import WakeAssignment
 from .coordination_cohort import sealed_cohort_assignments
 from .coordination_store import IdentityConflict, MutationStore
-from .envelope_claim_transitions import normalize_existing_file
+from .envelope_claim_transitions import ExistingFileClaim
 from .store_files import _store_lock
 from .threads import Thread
 
@@ -32,7 +32,7 @@ _MAX_BYTES = 1024 * 1024
 
 @dataclass(frozen=True)
 class PlannedWrite:
-    resource: Path
+    resource: ExistingFileClaim
     contents: bytes
     operation_id: str
 
@@ -150,7 +150,7 @@ class SelectedWritePlans:
                 ]
                 if len(selected) != 1:
                     raise IdentityConflict("Selected write has no one pending FULL selected claim")
-            path = normalize_existing_file(Path(owner.worktree), resource)
+            path = ExistingFileClaim(Path(resource)).normalized(Path(owner.worktree))
             self._prepare_dir()
             record_path = self._path(source_seq, lookup)
             operation_id = secrets.token_hex(16)
@@ -223,8 +223,9 @@ class SelectedWritePlans:
         operation_id = row.get("operation_id")
         if type(operation_id) is not str or len(operation_id) != 32:
             raise IdentityConflict("Selected write intent operation is invalid")
-        resource = normalize_existing_file(Path(owner.worktree), row["resource"])
-        return PlannedWrite(Path(resource), raw, operation_id)
+        resource = ExistingFileClaim(Path(row["resource"]))
+        resource.normalized(Path(owner.worktree))
+        return PlannedWrite(resource, raw, operation_id)
 
     def applied(self, assignment: WakeAssignment, owner: Thread, operation_id: str) -> None:
         path = self._path(assignment.wire_seq, stable_thread_lookup(owner.created_at))
