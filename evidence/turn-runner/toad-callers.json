@@ -1,0 +1,57 @@
+{
+  "source": "/home/ts/wt/toad-live-pins-20260928",
+  "commit": "0ded39dbab55fc902ed213028e0bc2f1119ad027",
+  "receiver_audit": [
+    {
+      "path": "tests/goal_set_owner_pilot.py",
+      "core_receivers": [
+        "owner"
+      ],
+      "unchanged_toad_receivers": []
+    },
+    {
+      "path": "tests/input_delivery_owner_pilot.py",
+      "core_receivers": [
+        "observer",
+        "owner"
+      ],
+      "unchanged_toad_receivers": [
+        "agent"
+      ]
+    },
+    {
+      "path": "tests/goal_retry_pilot.py",
+      "core_receivers": [
+        "owner"
+      ],
+      "unchanged_toad_receivers": []
+    },
+    {
+      "path": "tests/goal_edit_owner_pilot.py",
+      "core_receivers": [
+        "owner"
+      ],
+      "unchanged_toad_receivers": [
+        "agent"
+      ]
+    },
+    {
+      "path": "tests/input_failure_pilot.py",
+      "core_receivers": [
+        "server"
+      ],
+      "unchanged_toad_receivers": [
+        "receiver"
+      ]
+    },
+    {
+      "path": "tests/queue_view_backend_pilot.py",
+      "core_receivers": [
+        "producer"
+      ],
+      "unchanged_toad_receivers": [
+        "consumer"
+      ]
+    }
+  ]
+}
