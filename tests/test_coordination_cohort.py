@@ -34,7 +34,11 @@ from agent_comms.declarations import (
     ThreadRole,
     ThreadStatus,
 )
-from agent_comms.exporting import WireExportFormat, WireExportLimit, WireExportScope
+from agent_comms.exporting import (
+    ChannelScope,
+    FullLimit,
+    JsonlFormat,
+)
 from agent_comms.operations import Comms
 
 pytestmark = pytest.mark.skipif(
@@ -128,9 +132,9 @@ def test_initial_sideband_never_enters_export_or_public_page_budget(tmp_path: Pa
     output = tmp_path / "public.jsonl"
     comms.export_wire(
         output,
-        format=WireExportFormat.JSONL,
-        scope=WireExportScope.for_channel("#team"),
-        limit=WireExportLimit.full(),
+        format=JsonlFormat(),
+        scope=ChannelScope("#team"),
+        limit=FullLimit(),
         export_started_at=time.time() + 5,
     )
     assert PRIVATE_WIRE_FIELD not in output.read_text()

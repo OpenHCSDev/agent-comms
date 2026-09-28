@@ -23,7 +23,11 @@ from agent_comms.declarations import (
     Thread,
 )
 from agent_comms.envelope_claim_transitions import ClaimConflict, ClaimTransitionError
-from agent_comms.exporting import WireExportFormat, WireExportLimit, WireExportScope
+from agent_comms.exporting import (
+    EverythingScope,
+    FullLimit,
+    JsonlFormat,
+)
 from agent_comms.operations import Comms
 
 pytestmark = pytest.mark.skipif(
@@ -550,9 +554,9 @@ def test_oversize_transition_cannot_brick_a_successfully_published_root(
     destination = tmp_path / "safe-export.jsonl"
     receipt = comms.export_wire(
         destination,
-        format=WireExportFormat.JSONL,
-        scope=WireExportScope.everything(),
-        limit=WireExportLimit.full(),
+        format=JsonlFormat(),
+        scope=EverythingScope(),
+        limit=FullLimit(),
     )
     exported = [json.loads(line) for line in destination.read_text().splitlines()]
     assert receipt.exported_messages == 1

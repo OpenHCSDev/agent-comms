@@ -22,7 +22,16 @@ from typing import Any, ClassVar, Self, get_args, get_origin, get_type_hints
 from .command import Command
 from .declarations import ActivityState, MessageType
 from .declared_family import DeclaredFamily
-from .exporting import WireExportFormat, WireExportLimit, WireExportScope
+from .exporting import (
+    ChannelScope,
+    DmScope,
+    EverythingScope,
+    FullLimit,
+    JsonlFormat,
+    MaxBytesLimit,
+    RecentLimit,
+    WireExportFormat,
+)
 from .importing import ImportFormat, ImportLimits
 from .operations import Comms, ForkSpec
 
@@ -307,7 +316,7 @@ class HistoryCliCommand(CliCommand):
 class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
     help = "Export durable IRC/wire message history"
     output: str = option("--output", help="Destination file")
-    format: WireExportFormat = option("--format", default=WireExportFormat.JSONL)
+    format: WireExportFormat = option("--format", default=JsonlFormat())
     everything: bool = option(
         "--everything", help="Every wire message", group="scope", default=False
     )
@@ -341,17 +350,17 @@ class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
     def apply(self, ctx: Comms) -> Any:
         started_at = time.time()
         if self.everything:
-            scope = WireExportScope.everything()
+            scope = EverythingScope()
         elif self.channel:
-            scope = WireExportScope.for_channel(self.channel)
+            scope = ChannelScope(self.channel)
         else:
-            scope = WireExportScope.for_dm(*self.dm)
+            scope = DmScope(tuple(self.dm))
         if self.full:
-            export_limit = WireExportLimit.full()
+            export_limit = FullLimit()
         elif self.max_bytes is not None:
-            export_limit = WireExportLimit.max_bytes(self.max_bytes)
+            export_limit = MaxBytesLimit(self.max_bytes)
         else:
-            export_limit = WireExportLimit.recent(started_at - self.last)
+            export_limit = RecentLimit(started_at - self.last)
         export_receipt = ctx.export_wire(
             self.output,
             format=self.format,

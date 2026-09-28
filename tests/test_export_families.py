@@ -10,6 +10,13 @@ import pytest
 
 from agent_comms.declarations import Message, MessageType
 from agent_comms.exporting import (
+    ChannelScope,
+    DmScope,
+    EverythingScope,
+    FullLimit,
+    JsonlFormat,
+    MaxBytesLimit,
+    RecentLimit,
     WireExportBoundary,
     WireExportFormat,
     WireExportLimit,
@@ -31,19 +38,19 @@ def rows():
 CASES = list(
     product(
         [
-            WireExportScope.everything(),
-            WireExportScope.for_channel("#team"),
-            WireExportScope.for_dm("alice", "bob"),
+            EverythingScope(),
+            ChannelScope("#team"),
+            DmScope(("alice", "bob")),
         ],
-        [WireExportLimit.full(), WireExportLimit.max_bytes(850), WireExportLimit.recent(2.0)],
-        WireExportFormat,
+        [FullLimit(), MaxBytesLimit(850), RecentLimit(2.0)],
+        (member() for member in WireExportFormat.members_with(WireExportFormat)),
     )
 )
 
 
 @pytest.mark.parametrize("scope,limit,format", CASES)
 def test_pre_refactor_golden_bytes_and_entire_receipt(tmp_path, scope, limit, format):
-    name = f"{scope.declared_name}-{limit.declared_name}.{format.value}"
+    name = f"{scope.declared_name}-{limit.declared_name}.{format.declared_name}"
     destination = tmp_path / name
     receipt = (
         WireTranscriptExporter(
@@ -62,16 +69,16 @@ def test_pre_refactor_golden_bytes_and_entire_receipt(tmp_path, scope, limit, fo
     assert FieldCodec.decode(WireExportLimit, limit.to_wire()) == limit
 
 
-def test_golden_family_names_and_toad_cli_constructors():
+def test_family_names_and_boundary_decoding():
     assert WireExportScope.names() == ("everything", "channel", "dm")
     assert WireExportLimit.names() == ("full", "max_bytes", "recent")
     assert WireExportFormat.names() == ("jsonl", "text")
-    assert [kind.value for kind in WireExportFormat] == ["jsonl", "text"]
-    assert WireExportFormat("jsonl") == WireExportFormat.JSONL
-    assert WireExportFormat("text") == WireExportFormat.TEXT
-    assert WireExportFormat(WireExportFormat.JSONL) == WireExportFormat.JSONL
+    for member in WireExportFormat.members_with(WireExportFormat):
+        value = member()
+        assert WireExportFormat.decode(value.declared_name)() == value
+        assert FieldCodec.decode(WireExportFormat, FieldCodec.encode(value)) == value
     with pytest.raises(ValueError):
-        WireExportFormat("unknown")
+        WireExportFormat.decode("unknown")
 
 
 def test_new_limit_works_without_exporter_codec_or_registry_edits(tmp_path):
@@ -91,8 +98,8 @@ def test_new_limit_works_without_exporter_codec_or_registry_edits(tmp_path):
         assert FieldCodec.decode(WireExportLimit, {"kind": "last_messages", "count": 2}) == limit
         destination = tmp_path / "last.jsonl"
         receipt = WireTranscriptExporter(
-            format=WireExportFormat("jsonl"),
-            scope=WireExportScope.everything(),
+            format=JsonlFormat(),
+            scope=EverythingScope(),
             limit=limit,
             boundary=WireExportBoundary(4, 4.0),
         ).export(rows(), destination)
