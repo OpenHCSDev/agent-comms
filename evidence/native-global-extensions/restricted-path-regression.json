@@ -1,0 +1,19 @@
+{
+  "expected_failure_observed": true,
+  "exit": 1,
+  "runtime": {
+    "path": "/usr/local/bin:/usr/bin",
+    "node": "/usr/bin/node",
+    "agent_comms": null,
+    "fixture_cli": false,
+    "source_pythonpath": false
+  },
+  "registration_errors": [
+    {
+      "path": "/home/ts/wt/comms-native-global-extensions-20260928/.artifacts/restricted-path-regression/agent/extensions/agent-comms/index.ts",
+      "error": "Failed to load extension: agent-comms failed: spawnSync agent-comms ENOENT"
+    }
+  ],
+  "session_opened": false,
+  "provider_prompts": 0
+}

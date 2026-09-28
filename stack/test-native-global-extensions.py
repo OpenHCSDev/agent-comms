@@ -13,7 +13,6 @@ from pathlib import Path
 import selectors
 import shutil
 import subprocess
-import sys
 import time
 
 
@@ -22,33 +21,36 @@ def main():
     parser.add_argument("package", type=Path)
     parser.add_argument("fixture", type=Path)
     parser.add_argument("--session", type=Path)
+    parser.add_argument("--runtime-path", required=True,
+                        help="Exact child PATH under test; never augmented with a fixture CLI")
     args = parser.parse_args()
     package, root = args.package.resolve(), args.fixture.resolve()
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
-    agent, project, commands = (root / name for name in ("agent", "project", "bin"))
-    for directory in (agent, project, commands):
+    agent, project = (root / name for name in ("agent", "project"))
+    for directory in (agent, project):
         directory.mkdir(mode=0o700)
     # Discovery sees the original global filenames; no settings-based -e list
     # and no --no-extensions flag can hide the user's normal startup path.
     (agent / "extensions").symlink_to(Path.home() / ".pi/agent/extensions", target_is_directory=True)
     (agent / "settings.json").write_text('{"packages":[]}')
     repo = Path(__file__).resolve().parent.parent
-    tool_cli = commands / "agent-comms"
-    tool_cli.write_text(f'#!/bin/sh\nexec "{sys.executable}" -m agent_comms.cli "$@"\n')
-    tool_cli.chmod(0o700)
     environment = dict(os.environ, PI_CODING_AGENT_DIR=str(agent), PI_WORKTREE=str(project),
                        AGENT_COMMS_MANAGED="1", AGENT_COMMS_ROOT=str(root / "wire"),
-                       PYTHONPATH=str(repo / "src"), PI_OFFLINE="1",
-                       NODE_DISABLE_COMPILE_CACHE="1", PATH=f"{commands}:{os.environ['PATH']}")
+                       PI_OFFLINE="1", NODE_DISABLE_COMPILE_CACHE="1", PATH=args.runtime_path)
     for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE", "PI_PARENT_ID", "PI_AGENT_ID",
-                 "AGENT_COMMS_THREAD"):
+                 "AGENT_COMMS_THREAD", "PYTHONPATH", "PYTHONHOME"):
         environment.pop(name, None)
     environment["AGENT_COMMS_THREAD"] = "native-startup-fixture"
     spec = importlib.util.spec_from_file_location("native_rpc_fixture", repo / "stack/test-native-import-rpc.py")
     isolation = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(isolation)
     deny = isolation.network_denial()
-    node = shutil.which("node")
+    node = shutil.which("node", path=environment["PATH"])
+    runtime = {"path":environment["PATH"], "node":node,
+               "agent_comms":shutil.which("agent-comms", path=environment["PATH"]),
+               "fixture_cli":False, "source_pythonpath":False}
+    (root / "runtime-executables.json").write_text(json.dumps(runtime, indent=2) + "\n")
+    assert node, f"Node unavailable in supplied runtime PATH: {environment['PATH']}"
     prefix = [node, "--no-global-search-paths", "--import",
               str(package / "dist/agent-comms-import-fence.mjs")]
     probe = f"""
@@ -66,6 +68,7 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
     (root / "registration-stderr.txt").write_text(registration.stderr)
     assert registration.returncode == 0, registration.stderr
     registered = json.loads(registration.stdout)
+    (root / "registration.json").write_text(json.dumps(registered, indent=2) + "\n")
     assert not registered["errors"], registered["errors"]
     assert len(registered["extensions"]) == 4, registered
     tool_names = {tool for extension in registered["extensions"] for tool in extension["tools"]}
@@ -117,7 +120,8 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
         "success":reply["success"], "messageCount":reply["data"]["messageCount"],
         "nativeInputProofCapability":reply["data"]["nativeInputProofCapability"]},
         "saved_session_bytes":session.stat().st_size, "network":"kernel-denied",
-        "provider_prompts":0}, indent=2))
+        "provider_prompts":0, "runtime_executables":runtime,
+        "scope":"direct native discovery/get_state; not installed launcher or live send"}, indent=2))
 
 
 if __name__ == "__main__":

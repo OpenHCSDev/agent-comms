@@ -1,5 +1,15 @@
 # Native automatic global extension startup
 
+## Subsequent production correction: PATH
+
+The successful receipt below used a fixture CLI prepended to PATH. It proves
+extension packaging and saved-session parsing under that fixture, **not production
+CLI lookup or a live ACP send**. The installed owner inherited only
+`/usr/local/bin:/usr/bin`, causing `spawnSync agent-comms ENOENT` at registration.
+See `PATH-REVIEW.md` and the retained failing regression. The current harness
+requires `--runtime-path`, never creates a CLI shim, removes source PYTHONPATH,
+and records executable resolution. Parent owns installed launcher/live acceptance.
+
 ## Delivered
 
 Normal discovery now maps the four existing global extensions to native ESM
@@ -37,7 +47,8 @@ ad46139 and are untouched here.
   directories; identical to the modules used in the actual startup receipt.
 - `package-verification.txt`: final complete package commitment verified.
 
-Actual startup command (exit 0, before canonical source relocation):
+Historical startup command (exit 0 under the old fixture CLI, before canonical
+source relocation; not a command for the corrected harness):
 
 ```sh
 PYTHONPATH=src /home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python \

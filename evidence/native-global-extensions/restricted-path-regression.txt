@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-native-global-extensions-20260928/stack/test-native-global-extensions.py", line 128, in <module>
+    main()
+    ~~~~^^
+  File "/home/ts/wt/comms-native-global-extensions-20260928/stack/test-native-global-extensions.py", line 72, in main
+    assert not registered["errors"], registered["errors"]
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [{'path': '/home/ts/wt/comms-native-global-extensions-20260928/.artifacts/restricted-path-regression/agent/extensions/agent-comms/index.ts', 'error': 'Failed to load extension: agent-comms failed: spawnSync agent-comms ENOENT'}]
+
+exit: 1
