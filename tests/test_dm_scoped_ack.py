@@ -102,7 +102,7 @@ def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_pa
     assert [message.body for message in page.messages] == ["PEER_PAINTED_2", "PEER_PAINTED_5"]
     assert page.newest_seq == 5 and page.display_basis is not None
     comms.registry.unregister("peer")
-    comms.threads.delete("peer")
+    comms.registry.remove("peer")
     comms.threads.rename_managed_thread("other", "peer", owner_pid=os.getpid())
     before = comms.bus.pending_count(viewer, "peer")
     marker_path = tmp_path / "read_ledger.json"

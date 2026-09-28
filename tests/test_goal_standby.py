@@ -10,6 +10,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
@@ -21,6 +22,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_attempts import GoalAttemptStore, StaleAttemptError
 from agent_comms.goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget
 from agent_comms.goal_waits import GoalWait, GoalWaits
+from agent_comms.goals import Goal
 from agent_comms.input_drain import InputDrain
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
@@ -71,7 +73,7 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
                     "wait_for": ["@child"],
                 },
             )
-            assert result["goal"]["status"] == "active"
+            assert FieldCodec.decode(Goal, result["goal"]).state.declared_name == "active"
             assert result["goal_execution"]["state"] == "standby"
             assert [target["name"] for target in result["goal_execution"]["wait_for"]] == ["child"]
             yield ae.ToolEnd(id="wait", name="comms_goal", ok=True, output=json.dumps(result))

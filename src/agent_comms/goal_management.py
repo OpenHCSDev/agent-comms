@@ -25,7 +25,6 @@ from .goal_presentation import GoalExecution, GoalWaitTarget
 from .goals import Goal
 from .message_bus import MessageBus
 from .messages import Message
-from .owner_lifecycle import OwnerLifecycle
 from .store_files import _store_lock
 from .threads import Thread
 from .turn_lease import FinishedTurnFence
@@ -200,9 +199,7 @@ class Goals:
                 or wait.revision > goal.revision
             ):
                 return ()
-            closed = GoalWaits.closed_wait_group(
-                canonical, wait.targets, rows, snapshot, OwnerLifecycle._process_alive
-            )
+            closed = GoalWaits.closed_wait_group(canonical, wait.targets, rows, snapshot)
             if not closed:
                 return ()
             owner_aliases = frozenset(

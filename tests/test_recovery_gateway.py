@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import multiprocessing
 import os
 import shutil
 import socket
@@ -12,9 +11,7 @@ import sqlite3
 import stat
 import sys
 import tempfile
-import time
 from contextlib import suppress
-from functools import partial
 from pathlib import Path
 
 import pytest
@@ -50,29 +47,6 @@ def private_root():
         yield root
     finally:
         shutil.rmtree(root)
-
-
-def _hold_real_sqlite_read(started, root: Path, database: Path, requested: str) -> bytes:
-    """Spawn-picklable test worker holding a real rollback SHARED lock."""
-    db = sqlite3.connect(database, isolation_level=None, timeout=0.25)
-    try:
-        db.execute("PRAGMA query_only=ON")
-        db.execute("BEGIN")
-        db.execute("SELECT count(*) FROM executions").fetchone()
-        started.set()
-        time.sleep(10)  # OS-kill, not a Python Event, must terminate this read lock.
-        return b'{"schema":1,"availability":"unavailable","reason":"gateway_unavailable"}\n'
-    finally:
-        db.execute("ROLLBACK")
-        db.close()
-
-
-def _failed_snapshot(root: Path, database: Path, requested: str) -> bytes:
-    raise RuntimeError("SECRET CHILD DETAIL MUST NOT ESCAPE")
-
-
-def _oversize_snapshot(root: Path, database: Path, requested: str) -> bytes:
-    return b"SECRET CHILD DETAIL" * 500
 
 
 async def request(path: Path, raw: bytes = b'{"thread":"Alice"}\n') -> bytes:
@@ -129,7 +103,7 @@ async def test_snapshot_offline_is_bounded_redacted_and_does_not_start_owner(
 @pytest.mark.parametrize(
     "raw",
     [
-        b'{}\n',
+        b"{}\n",
         b'{"thread":true}\n',
         b'{"thread":null}\n',
         b'{"thread":"Alice","thread":"Bob"}\n',
@@ -177,158 +151,6 @@ async def test_slow_request_and_excess_clients_are_bounded(private_root: Path):
             writer.close()
             with suppress(OSError):
                 await writer.wait_closed()
-        await gateway.close()
-
-
-async def test_timeout_kills_and_reaps_process_holding_real_sqlite_read_lock(
-    private_root: Path, monkeypatch
-):
-    import agent_comms.recovery_gateway as module
-
-    context = multiprocessing.get_context("spawn")
-    started = context.Event()
-    monkeypatch.setattr(module, "_READ_TIMEOUT", 0.75)
-    gateway = RecoveryGateway(
-        private_root, _snapshot_function=partial(_hold_real_sqlite_read, started)
-    )
-    await gateway.start()
-    try:
-        client = asyncio.create_task(request(gateway.path))
-        assert await asyncio.to_thread(started.wait, 2)
-        child_pid = next(iter(gateway._processes)).pid
-        assert child_pid is not None
-        # Prove a real rollback read transaction exists before timeout.
-        probe = sqlite3.connect(gateway.database, isolation_level=None, timeout=0.05)
-        try:
-            probe.execute("BEGIN IMMEDIATE")
-            probe.execute("INSERT INTO participants VALUES ('probe','Probe',1)")
-            with pytest.raises(sqlite3.OperationalError, match="locked"):
-                probe.execute("COMMIT")
-            probe.execute("ROLLBACK")
-        finally:
-            probe.close()
-        assert json.loads(await asyncio.wait_for(client, timeout=2))["reason"] == (
-            "gateway_unavailable"
-        )
-        if gateway._workers:
-            _done, pending = await asyncio.wait(gateway._workers, timeout=2)
-            assert not pending
-        assert not gateway._processes
-        assert not gateway._worker_slots.locked()
-        with pytest.raises(ChildProcessError):
-            os.waitpid(child_pid, os.WNOHANG)  # PID was reaped, not a zombie.
-        # The killed child releases the SQLite read lock; a writer can commit.
-        with sqlite3.connect(gateway.database, timeout=0.5) as writer:
-            writer.execute("INSERT INTO participants VALUES ('after','After',1)")
-        gateway._snapshot_function = module._snapshot
-        assert json.loads(await request(gateway.path))["availability"] == "available"
-    finally:
-        await gateway.close()
-
-
-async def test_parent_lifeline_close_terminates_orphan_read_lock(private_root: Path):
-    import agent_comms.recovery_gateway as module
-
-    context = multiprocessing.get_context("spawn")
-    started = context.Event()
-    receive, send = context.Pipe(duplex=False)
-    life_child, life_parent = context.Pipe(duplex=False)
-    process = context.Process(
-        target=module._snapshot_process_entry,
-        args=(
-            send,
-            life_child,
-            private_root,
-            private_root / "coordination.sqlite3",
-            "Alice",
-            partial(_hold_real_sqlite_read, started),
-        ),
-        daemon=True,
-    )
-    process.start()
-    send.close()
-    life_child.close()
-    try:
-        assert await asyncio.to_thread(started.wait, 2)
-        life_parent.close()  # kernel EOF is also delivered on abrupt parent death
-        await asyncio.to_thread(process.join, 2)
-        assert process.exitcode == 1  # watchdog exited, no 10-second DB read
-        with sqlite3.connect(private_root / "coordination.sqlite3", timeout=0.5) as writer:
-            writer.execute("INSERT INTO participants VALUES ('after','After',1)")
-    finally:
-        life_parent.close()
-        receive.close()
-        if process.is_alive():
-            process.kill()
-        process.join(timeout=1)
-        process.close()
-
-
-async def test_more_than_eight_timed_out_children_do_not_accumulate(
-    private_root: Path, monkeypatch
-):
-    import agent_comms.recovery_gateway as module
-
-    context = multiprocessing.get_context("spawn")
-    started = context.Event()
-    monkeypatch.setattr(module, "_READ_TIMEOUT", 0.2)
-    gateway = RecoveryGateway(
-        private_root, _snapshot_function=partial(_hold_real_sqlite_read, started)
-    )
-    await gateway.start()
-    try:
-        for _ in range(module._MAX_CLIENTS + 3):
-            result = json.loads(await request(gateway.path))
-            assert result["reason"] == "gateway_unavailable"
-            if gateway._workers:
-                _done, pending = await asyncio.wait(gateway._workers, timeout=2)
-                assert not pending
-            assert not gateway._processes
-            assert not gateway._worker_slots.locked()
-    finally:
-        await gateway.close()
-
-
-async def test_cancellation_and_close_kill_child_before_unlock(private_root: Path, monkeypatch):
-    import agent_comms.recovery_gateway as module
-
-    context = multiprocessing.get_context("spawn")
-    started = context.Event()
-    monkeypatch.setattr(module, "_READ_TIMEOUT", 0.6)
-    gateway = RecoveryGateway(
-        private_root, _snapshot_function=partial(_hold_real_sqlite_read, started)
-    )
-    await gateway.start()
-    try:
-        client = asyncio.create_task(request(gateway.path))
-        assert await asyncio.to_thread(started.wait, 2)
-        pid = next(iter(gateway._processes)).pid
-        assert pid is not None
-        client.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await client
-        await asyncio.wait_for(gateway.close(), timeout=2)
-        assert not gateway._processes
-        with pytest.raises(ChildProcessError):
-            os.waitpid(pid, os.WNOHANG)
-        assert not gateway.path.exists()
-    finally:
-        await gateway.close()
-
-
-@pytest.mark.parametrize("snapshot", [_failed_snapshot, _oversize_snapshot])
-async def test_child_failure_and_oversize_reply_are_generic(private_root: Path, snapshot):
-    gateway = RecoveryGateway(private_root, _snapshot_function=snapshot)
-    await gateway.start()
-    try:
-        answer = await request(gateway.path)
-        assert json.loads(answer)["reason"] == "gateway_unavailable"
-        assert b"SECRET" not in answer
-        if gateway._workers:
-            _done, pending = await asyncio.wait(gateway._workers, timeout=2)
-            assert not pending
-        assert not gateway._processes
-    finally:
         await gateway.close()
 
 

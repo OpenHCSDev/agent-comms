@@ -543,6 +543,7 @@ class TestHandlers:
         await agent.shutdown()
 
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -555,6 +556,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
+from agent_comms.goals import Goal
 from agent_comms.threads import Thread
 
 
@@ -1479,7 +1481,7 @@ class TestAgentTurn:
             result = await proxy.request(
                 "retry_goal", goal_id=goal.id, expected_revision=blocked.revision
             )
-            assert result["goal"]["status"] == "active"
+            assert FieldCodec.decode(Goal, result["goal"]).state.declared_name == "active"
             generation = agent.turns.goal_store.snapshot(goal.id)
             assert (generation.number, generation.lifecycle) == (3, ReadyGeneration())
             assert agent.turns.goal_store.ready_grant(goal.id, 3)
