@@ -362,10 +362,11 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
         assert calls[0][0]["options"][0]["kind"] == "allow_once"
         # No subscriber may borrow another attachment's controller token.
         saved = proxies[1]._controller_token
-        proxies[1]._controller_token = "0" * 64
-        result = await asyncio.wait_for(proxies[1].request("prompt", prompt=[]), timeout=4)
-        assert result["_meta"]["answer"]["cancelled"] is True
-        assert not calls[1]
+        for absent_or_invalid in (None, "0" * 64):
+            proxies[1]._controller_token = absent_or_invalid
+            result = await asyncio.wait_for(proxies[1].request("prompt", prompt=[]), timeout=4)
+            assert result["_meta"]["answer"]["cancelled"] is True
+            assert not calls[1]
         proxies[1]._controller_token = saved
         # A controller can disappear after presentation but before answering.
         # The detached owner must deny and must not transfer the pending
