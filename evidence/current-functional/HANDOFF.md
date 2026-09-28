@@ -1,3 +1,9 @@
+## Current installed result — R6/R7, 2026-09-28
+
+Core202 +Toad99 run in runtime-r6-transcripts-20260928; primary R6/R7 source pairs200/201/98 are included. Parent evidence/r6-integration/HANDOFF.md records full saved-route and attached-source migration,111 historical identities, original #comms/#nra/saved UX display, actual configured-provider once/in-order compaction queue, local real-native4tools/leasecleanup, normaltwo-ownerrestart/launcher and fresh source61/reply62 actualread/bash16.505s. Checkpoint62/roster103, configuredmodels and original UNKNOWN preserved. R1 runtime and completed copied fixtures removed; R3 previouspackage retained with explicit no-downgrade-write warning for migratedrouteDBs.
+
+Original source audit requires residual assignment/lease names (Darwin) and builtin-global target ownership references (Pascal); both assigned. Five next-refactor debt surfaces are recorded separately, not treated as completed. Older universal size/lock guards and exhaustive real-stream/scale matrix are not established by these receipts. Operational shipping acceptance is focused local +real affected paths, CIdeferred. Goal remainsactive.
+
 # Current functional acceptance — 2026-09-28
 
 Installed source: core199 typed input/delivery ownership, paired Toad97; runtime-r3-input-documents-20260928. Current receipt: evidence/r3-integration/HANDOFF.md. Fresh installed real-provider compaction/queue and four mounted delivery/queue/native-attribution pilots passed;7780 saved input rows/96cursors/2580UNKNOWN preserved. Normal two-owner restart/launcher passed, checkpoint60/roster103 unchanged. R1 actual channel59→60 and history111choices remain dated receipts; no new production channel input sent by R3 activation. Original refactor remains incomplete: Pascal R6 and Darwin R7 actively implement. Earlier table receipts below retain their original scope and are supplemented by current acceptance.
