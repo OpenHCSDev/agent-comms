@@ -201,3 +201,43 @@ Receipts: evidence/round2-l0/d22-registry-acceptance.json and the child/native/
 entrypoint integration logs. Final cutover, history manifest refresh, runtime
 UNKNOWN preservation, remaining source/caller closure, integration of236/237
 and installed acceptance remain open. No source/live store was rewritten.
+
+Current queue metadata now emits only queueBinding/queueState; removed the old
+queue/restored projections and their unused emitter argument.12 exact-ID queue
+contract cases pass. Paired Toad107 old-key reader removal belongs toCopernicus.
+Complete newly uncovered L0 ownership is recorded in round2/04-DISPATCH.md;
+Nietzsche's new goal-state batch needs a code-bearing PR before assignment is
+considered published. Full required guard collection is not yet green: one stale
+helper import is assigned toLovelace. The independent debt ratchet passes.
+
+Further integration at9ff1161:2379463a44 +234947ab28 +2361e46842 merged
+into229.14focused combined cases pass, including actualpostfloor4tools.
+Production source+5837/-7504; fullsuite andinstalledacceptance remainopen.
+Nietzsche now owns complete goal/input/cursor retirement, including the three
+input_disposition/input_attempt/goal_management files formerly parent-owned.
+Parent retains final data conversion, runtime/queue integration andactivation.
+
+## Incarnation and alias integration
+
+Integrated Copernicus PR238 (branch fix/l0a-incarnation-delivery, published6c1a8ae)
+into229. Same-name sender/recipient history no longer becomes new inbox work.
+Parent fixed the remaining rename/read dependency: aliases resolve within the
+current snapshot, then the recorded creation identity must match. New direct
+messages bind alias targets to canonical recipients under the publisher's guarded
+snapshot before freezing audience; no unstable alias identity is published.
+
+Read/history/rename shard:41 passed; the two additional ACP rename cases initially
+failed on obsolete fixture pid=, then passed with real process identities. The
+three original DM incarnation assertions are unchanged. Source replacement test
+now replaces the bus inode with valid canonical bytes, preserving the intended
+read-evidence invalidation test rather than forging an invalid public envelope.
+
+Actual-root rehearsal (tools/cutover/current_root.py) staged102current messages,
+104threads and8UNKNOWN ACP inputs; reopened through current Comms, rebuilt the
+candidate index and fresh coordinator, and produced zero new assignments/native
+coverage. Input dispositions remain identical. Old coordinator/prompt-binding/
+compaction SQLite snapshots are retained as evidence, not active stores. There
+were no bus-sequence UNKNOWN InputAttempt rows in this actual snapshot; do not
+claim an actual-data refusal test for that absent case. Synthetic admission-floor
+coverage separately tests old bus rows. Full attached-history/durable-route/goal
+authority staging and quiet installed acceptance remain open.

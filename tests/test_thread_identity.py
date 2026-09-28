@@ -13,12 +13,13 @@ from agent_comms.read_basis import Conversation
 from agent_comms.registration import Registration
 from agent_comms.thread_identity import GenerationCounter, ThreadIncarnation, TurnIdentity
 from agent_comms.thread_status import IdleThreadStatus
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 
 
 def registry_with_owner(tmp_path):
     registry = Registration(tmp_path / "registry.json")
-    registry.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    registry.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     return registry
 
 
@@ -72,7 +73,7 @@ def test_delete_and_rebind_changes_identity_and_keeps_counter_tombstone(tmp_path
     before = registry.snapshot().owner_identity("owner")
     registry.unregister("owner")
     registry.remove("owner")
-    registry.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    registry.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     after = registry.snapshot().owner_identity("owner")
     assert after.incarnation != before.incarnation
     assert after.generation > before.generation
@@ -90,7 +91,7 @@ def test_same_process_idle_presence_does_not_rotate_identity(tmp_path):
 
 def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
     comms = Comms(tmp_path)
-    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     first = comms.agents.begin_turn("owner", "reused")
     assert first.identity.incarnation == comms.registry.require("owner").incarnation
     comms.registry.rename("owner", "renamed")
@@ -129,7 +130,7 @@ def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path):
     assert conversation.current(registry.snapshot())
     registry.unregister("owner")
     registry.remove("owner")
-    registry.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    registry.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     assert not conversation.current(registry.snapshot())
 
 

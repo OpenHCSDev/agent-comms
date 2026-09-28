@@ -17,7 +17,6 @@ from acp.schema import (
     TextContentBlock,
 )
 
-from . import backend
 from .comms import Comms
 from .coordination_store import (
     PublicationActivationBlocked,
@@ -163,9 +162,7 @@ class InputDrain(FutureInputQueue):
             "restored": restored,
         }
 
-    async def emit_queue_state(
-        self, session_id: str, *, restored: list[str] | None = None, client: Any = None
-    ) -> None:
+    async def emit_queue_state(self, session_id: str, *, client: Any = None) -> None:
         binding, state = self.queue_state(session_id)
         await (client or self.runtime).session_update(
             session_id=session_id,
@@ -176,14 +173,6 @@ class InputDrain(FutureInputQueue):
                     "agentComms": {
                         "queueBinding": binding,
                         "queueState": state,
-                        # Legacy text-only projection is informational, never
-                        # authoritative for exact-ID queue matching.
-                        "queue": [row["text"] for row in state["items"]] if state else [],
-                        "restored": (
-                            [row["text"] for row in state["restored"]]
-                            if state is not None and restored is not None
-                            else []
-                        ),
                     }
                 },
             ),
@@ -645,9 +634,7 @@ class InputDrain(FutureInputQueue):
             self.restored_inputs.setdefault(session_id, {}).update(
                 {key: replace(item, receipt=None) for key, item in remaining.items() if item.echo}
             )
-            await self.emit_queue_state(
-                session_id, restored=[item.text for item in remaining.values() if item.echo]
-            )
+            await self.emit_queue_state(session_id)
 
     async def run_owned_input(
         self,
@@ -658,15 +645,6 @@ class InputDrain(FutureInputQueue):
         images: tuple[Any, ...] = (),
         display_text: str | None = None,
     ) -> None:
-        if (
-            backend.rpc_args_for(self.effects.turns.agent_bin, self.effects.turns.agent_args)
-            is None
-        ):
-            # The plain text fallback has no Pi native input-ID protocol.
-            # Preserve its existing local command behavior without attaching
-            # a false Pi start claim to it.
-            await self.effects.turns.run_agent_turn(session_id, thread_name, task, images=images)
-            return
         key = f"acp:{uuid4().hex}"
         with _store_lock(self.comms._wire_lock_path):
             snapshot = self.comms.registry.snapshot()

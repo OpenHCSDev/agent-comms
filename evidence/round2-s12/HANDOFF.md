@@ -281,3 +281,17 @@ Reopened stores intentionally have empty in-memory _ready_grants/_owned; no
 previous READY or RESERVED/CLAIMED row is launch permission. UNKNOWN stays
 unresolved, explicit existing owner decisions still required. Parent must keep
 archived evidence without allowing old rows to bypass the durable admission floor.
+
+### Parent121f526 integration receipt
+
+Latest parent integrated without conflicts. Goal attempts, failure observations,
+goal history and lifecycle:82passed including the previously excluded ACP cases.
+ACP fixtures now explicitly configure the current private root and native package.
+These are real SQLite/process crash/reopen tests and controlled ACP backend tests,
+not an installed provider activation claim. Parent owns quiet installation.
+
+Inherited passive-channel suite still expects session startup to initialize the
+optional JSON awareness ledger; current parent has no initialize caller. Observed
+43passed2failed in combined diagnostic, first failures are missing ledger. No
+production fallback or invented awareness has been added. Parent channel owner
+should close that old caller/test boundary deliberately.

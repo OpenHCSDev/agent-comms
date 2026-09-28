@@ -14,6 +14,7 @@ import pytest
 from agent_comms import backend, owner_compaction_runtime
 from agent_comms.acp import CommsAgent
 from agent_comms.backend import PersistentPiSession
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.compaction_publication import publish_pending_local
 from agent_comms.errors import RelationViolationError
@@ -82,7 +83,7 @@ def test_canonical_owner_prepares_source_before_summary_and_commits_once(session
             "owner",
             frozenset(),
             str(root),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             session_file=str(session),
             goal=Goal("task", "goal"),
         )
@@ -118,7 +119,7 @@ def test_prepared_owner_source_refuses_later_bus_correction(session):
             "owner",
             frozenset(),
             str(root),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             session_file=str(session),
             goal=Goal("task", "goal"),
         )
@@ -159,7 +160,7 @@ async def test_owner_summary_discards_idle_manager_before_external_native_write(
             "owner",
             frozenset(),
             str(root),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             session_file=str(session),
             goal=Goal("task", "goal"),
         )
@@ -206,7 +207,7 @@ async def test_late_correction_after_summary_refuses_write_without_reusing_manag
             "owner",
             frozenset(),
             str(root),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             session_file=str(session),
             goal=Goal("task", "goal"),
         )
@@ -247,7 +248,7 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
             "owner",
             frozenset(),
             str(root),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             session_file=str(session),
             goal=Goal("task", "goal"),
         )
@@ -349,12 +350,17 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
     session.write_bytes(torn)
     started = []
 
-    async def forbidden_spawn(*args, **kwargs):
-        started.append(args)
-        raise AssertionError("Corrupt saved session must not launch or send")
-
-    monkeypatch.setattr(backend.asyncio, "create_subprocess_exec", forbidden_spawn)
     launcher = Path(PACKAGE).parents[3] / "bin/pi-native"
+    start_child = backend.AttachedChild.start
+
+    async def prevent_provider_launch(command, **kwargs):
+        if command[0] == str(launcher):
+            started.append(command)
+            raise AssertionError("Corrupt saved session must not launch or send")
+        # Read-only A14 validation itself owns a real bounded child.
+        return await start_child(command, **kwargs)
+
+    monkeypatch.setattr(backend.AttachedChild, "start", prevent_provider_launch)
     events = [
         event
         async for event in backend.stream_agent_events(
@@ -378,7 +384,7 @@ def test_three_sequential_native_commits_keep_exact_ids_and_prior_history(sessio
             "owner",
             frozenset(),
             str(root),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             session_file=str(session),
             goal=Goal("continuing task", "goal-unchanged"),
         )

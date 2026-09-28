@@ -41,7 +41,49 @@ def wired(comms: Comms) -> Comms:
             worktree="/tmp/wt1",
             parent="PR111",
             task="fix auth",
-            pid=0,
         )
     )
     return comms
+
+
+@pytest.fixture
+def native_rpc_fixture(monkeypatch):
+    """Explicit executable trust for local recorded-protocol fixtures only.
+
+    Production launch attestation is exercised separately; these fixtures test
+    native input/event contracts with actual child pipes and no provider.
+    """
+    import os
+
+    from agent_comms.native_pi import NativePiRpcLaunch
+
+    original = NativePiRpcLaunch.managed
+
+    def prepare(
+        command, arguments, *, worktree, environment=None, session_file=None, fork_session=False
+    ):
+        script = Path(command)
+        if not script.is_file():
+            return original(
+                command,
+                arguments,
+                worktree=worktree,
+                environment=environment,
+                session_file=session_file,
+                fork_session=fork_session,
+            )
+        args = NativePiRpcLaunch.rpc_arguments(arguments)
+        if session_file:
+            args += ("--fork" if fork_session else "--session", session_file)
+        env = dict(os.environ)
+        env.update(environment or {})
+        return NativePiRpcLaunch(
+            (command, *args),
+            Path(worktree),
+            env,
+            Path(worktree),
+            Path(session_file) if session_file else None,
+            Path(worktree),
+        )
+
+    monkeypatch.setattr(NativePiRpcLaunch, "managed", prepare)

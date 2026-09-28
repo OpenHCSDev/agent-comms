@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
@@ -51,7 +52,10 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
         await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
         comms.registry.register(
             replace(
-                comms.registry.require("proj"), session_file=file, model=info.model, pid=os.getpid()
+                comms.registry.require("proj"),
+                session_file=file,
+                model=info.model,
+                process_identity=ProcessIdentity.capture(os.getpid()),
             )
         )
         comms.agents.set_agent_info(

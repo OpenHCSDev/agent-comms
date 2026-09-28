@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import shutil
 import stat
 import struct
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
@@ -21,13 +23,14 @@ from pathlib import Path
 from .backend import _session_revision
 from .bus_publication import unique_wire_object
 from .catalog_store import ChannelCatalog
+from .child_process import BoundedRun, TimedOutOutcome
 from .compaction_journal import (
     CompactionJournal,
     CompactionJournalError,
     CompactionOperation,
     SelectedSummaryAttempt,
 )
-from .compaction_states import NativeOutcome
+from .compaction_states import CommittedNativeOutcome, NativeOutcome, UnknownNativeOutcome
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
 from .input_disposition import FutureInputQueue, InputDispositions
@@ -35,18 +38,17 @@ from .messages import Message
 from .native_package import COMPACTION_HELPER, verify_native_package
 from .owner_compaction_gate import OwnerCompactionAttestation
 from .owner_compaction_prepare import NativePreparation, NativeWitness, prepare_native_source
-from .owner_compaction_process import (
-    CompactionTransportUnknownError,
-    require_deadline_support,
-    run_authority_child,
-)
-from .owner_compaction_provider import valid_native_usage
+from .pi_summary_payloads import SummaryFiles, SummaryUsage
 from .registration import Registration
 from .routing import DeliveryScope
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 from .session_fence import idle_session_writer_fence
 from .store_files import _store_lock
 from .threads import Thread
+
+
+class CompactionTransportUnknownError(RuntimeError):
+    """Native mutation may have occurred; only exact reconciliation can settle it."""
 
 
 @dataclass(frozen=True)
@@ -81,7 +83,7 @@ class OwnerCompactionCommit:
         *,
         future_queue: FutureInputQueue | None = None,
     ):
-        require_deadline_support()
+        BoundedRun.require_inherited_deadline()
         self.root = registry_path.parent.resolve(strict=True)
         self.registry = Registration(registry_path)
         self.inputs = InputDispositions(self.root / InputDispositions.filename)
@@ -122,9 +124,6 @@ class OwnerCompactionCommit:
             turn_id=owner.active_turn.id,
             expected_goal_id=owner.goal.id if owner.goal is not None else None,
             expected_goal_revision=owner.goal.revision if owner.goal is not None else None,
-            # Legacy receipt field only, not authority. CompactionSource binds
-            # actual native history plus canonical bus/input revisions below.
-            correction_revision=0,
             session_file=session,
             session_leaf=witness.leaf_id,
             session_revision=witness.revision,
@@ -197,11 +196,7 @@ class OwnerCompactionCommit:
     def _settings_source(cls, paths: tuple[str, ...] | None) -> tuple[str, ...] | None:
         if paths is None:
             return None
-        if (
-            type(paths) is not tuple
-            or not paths
-            or any(type(path) is not str or not Path(path).is_absolute() for path in paths)
-        ):
+        if not paths or any(not Path(path).is_absolute() for path in paths):
             raise RelationViolationError("Exact effective settings paths required")
         states = []
         for path in paths:
@@ -322,29 +317,37 @@ class OwnerCompactionCommit:
                 inode=str(held.st_ino),
             ),
         )
-        result = run_authority_child(
-            [
-                self.environment_launcher,
-                "-u",
-                "NODE_OPTIONS",
-                "-u",
-                "NODE_PATH",
-                "-u",
-                "NODE_COMPILE_CACHE",
-                "NODE_DISABLE_COMPILE_CACHE=1",
-                self.node,
-                "--no-global-search-paths",
-                "--import",
-                str(self.import_fence),
-                str(self.helper),
-                str(self.package_dir),
-                str(fd),
-            ],
-            json.dumps(request, ensure_ascii=False, allow_nan=False).encode(),
-            authority_fd=fd,
-            timeout=timeout,
-            retained_fds=retained_fds,
-        )
+        if not math.isfinite(timeout) or not 0 < timeout <= 30:
+            raise ValueError("Compaction child deadline must be in (0, 30] seconds")
+        try:
+            result = BoundedRun.run_inherited(
+                (
+                    self.environment_launcher,
+                    "-u",
+                    "NODE_OPTIONS",
+                    "-u",
+                    "NODE_PATH",
+                    "-u",
+                    "NODE_COMPILE_CACHE",
+                    "NODE_DISABLE_COMPILE_CACHE=1",
+                    self.node,
+                    "--no-global-search-paths",
+                    "--import",
+                    str(self.import_fence),
+                    str(self.helper),
+                    str(self.package_dir),
+                    str(fd),
+                ),
+                input=json.dumps(request, ensure_ascii=False, allow_nan=False).encode(),
+                pass_fds=tuple(dict.fromkeys((fd, *retained_fds))),
+                deadline=time.monotonic() + timeout,
+            )
+        except (OSError, RuntimeError) as error:
+            raise CompactionTransportUnknownError(
+                f"Native commit transport UNKNOWN: {error}; never replay"
+            ) from error
+        if isinstance(result.outcome, TimedOutOutcome):
+            raise CompactionTransportUnknownError("Native commit timed out; never replay")
         try:
             evidence = json.loads(result.stdout)
         except (ValueError, UnicodeError) as error:
@@ -352,7 +355,7 @@ class OwnerCompactionCommit:
                 "Unparseable native outcome; never replay"
             ) from error
         try:
-            return NativeOutcome.from_wire(evidence, result.returncode)
+            return FieldCodec.decode(NativeOutcome, evidence).checked_child(result.outcome)
         except (ValueError, TypeError) as error:
             raise CompactionTransportUnknownError(str(error)) from error
 
@@ -365,46 +368,14 @@ class OwnerCompactionCommit:
         tokens_before: int,
         *,
         source: CompactionSource,
-        details: dict[str, list[str]] | None = None,
-        usage: dict | None = None,
+        details: SummaryFiles | None = None,
+        usage: SummaryUsage | None = None,
         selected_attempt: SelectedSummaryAttempt | None = None,
         timeout: float = 5,
     ) -> CompactionOperation:
         """Journal intent under authority, dispatch once, persist observed outcome."""
-        if type(source) is not CompactionSource:
-            raise ValueError("Owner-captured pre-summary source required")
-        if (
-            type(summary) is not str
-            or len(summary.encode()) > 262144
-            or type(tokens_before) is not int
-            or not 0 <= tokens_before <= 2**53 - 1
-        ):
+        if len(summary.encode()) > 262144 or not 0 <= tokens_before <= 2**53 - 1:
             raise ValueError("Bounded native compaction payload required")
-        if details is not None and (
-            type(details) is not dict
-            or set(details) != {"readFiles", "modifiedFiles"}
-            or any(
-                type(paths) is not list
-                or len(paths) > 256
-                or any(type(path) is not str or not path or "\\0" in path for path in paths)
-                for paths in details.values()
-            )
-        ):
-            raise ValueError("Bounded native file operations required")
-        try:
-            encoded_details = (
-                json.dumps(details, ensure_ascii=False, separators=(",", ":")).encode()
-                if details is not None
-                else b""
-            )
-        except UnicodeError as error:
-            raise ValueError("Invalid native file operation encoding") from error
-        if len(encoded_details) > 65536 or any(
-            len(path.encode()) > 4096 for paths in (details or {}).values() for path in paths
-        ):
-            raise ValueError("Bounded native file operations required")
-        if usage is not None and not valid_native_usage(usage):
-            raise ValueError("Bounded native usage required")
         # Preserve the summary/cut digest and bind fileOps/usage separately
         # through the native marker, writer CAS and exact-ID reconciliation.
         # Hex-encoded UTF-8 paths and IEEE-754 big-endian costs avoid divergent
@@ -412,23 +383,30 @@ class OwnerCompactionCommit:
         metadata = [
             (
                 [
-                    [path.encode("utf-8").hex() for path in details["readFiles"]],
-                    [path.encode("utf-8").hex() for path in details["modifiedFiles"]],
+                    [path.encode("utf-8").hex() for path in details.read_files],
+                    [path.encode("utf-8").hex() for path in details.modified_files],
                 ]
                 if details is not None
                 else None
             ),
             (
                 [
+                    usage.input,
+                    usage.output,
+                    usage.cache_read,
+                    usage.cache_write,
+                    usage.total_tokens,
+                    usage.reasoning,
+                    usage.cache_write_1h,
                     *[
-                        usage[key]
-                        for key in ("input", "output", "cacheRead", "cacheWrite", "totalTokens")
-                    ],
-                    usage.get("reasoning"),
-                    usage.get("cacheWrite1h"),
-                    *[
-                        struct.pack(">d", float(usage["cost"][key])).hex()
-                        for key in ("input", "output", "cacheRead", "cacheWrite", "total")
+                        struct.pack(">d", float(amount)).hex()
+                        for amount in (
+                            usage.cost.input,
+                            usage.cost.output,
+                            usage.cost.cache_read,
+                            usage.cost.cache_write,
+                            usage.cost.total,
+                        )
                     ],
                 ]
                 if usage is not None
@@ -500,18 +478,21 @@ class OwnerCompactionCommit:
                 commit=dict(
                     commitId=commit_id, payloadDigest=digest, metadataDigest=metadata_digest
                 ),
-                **({"details": details} if details is not None else {}),
-                **({"usage": usage} if usage is not None else {}),
+                **({"details": FieldCodec.encode(details)} if details is not None else {}),
+                **({"usage": FieldCodec.encode(usage)} if usage is not None else {}),
             )
             try:
                 outcome = self._call(fd, request, timeout, retained)
             except Exception as error:
                 # Includes launch/protocol errors: conservative even where no
                 # write probably occurred. Cancellation leaves durable intent.
-                outcome = NativeOutcome.unknown(str(error)[:1024])
+                outcome = UnknownNativeOutcome(str(error)[:1024])
             outcome = outcome.bind_metadata(metadata_digest)
             self.journal.resolve(
-                commit_id, outcome.state, outcome.evidence, publication=outcome.state.committed
+                commit_id,
+                outcome.state,
+                FieldCodec.encode(outcome),
+                publication=outcome.state.committed,
             )
             return self.journal.get(commit_id)
 
@@ -577,11 +558,12 @@ class OwnerCompactionCommit:
             if current != operation:
                 raise CompactionJournalError("Selected native commit changed")
             revision = _session_revision(witness.session_file)
-            evidence = json.loads(operation.evidence_json or "null")
+            evidence = FieldCodec.decode(
+                CommittedNativeOutcome, json.loads(operation.evidence_json or "null")
+            )
             if (
                 revision is None
-                or not isinstance(evidence, dict)
-                or evidence.get("revision") != ":".join(map(str, revision[0]))
+                or evidence.revision != ":".join(map(str, revision[0]))
                 or revision[1] != identity.reserved_revision[1]
             ):
                 raise CompactionJournalError("Selected native result is unavailable")
@@ -621,9 +603,12 @@ class OwnerCompactionCommit:
             try:
                 outcome = self._call(fd, request, timeout, retained)
             except Exception as error:
-                outcome = NativeOutcome.unknown(str(error)[:1024])
+                outcome = UnknownNativeOutcome(str(error)[:1024])
             outcome = outcome.bind_metadata(intent["metadataDigest"])
             self.journal.resolve(
-                commit_id, outcome.state, outcome.evidence, publication=outcome.state.committed
+                commit_id,
+                outcome.state,
+                FieldCodec.encode(outcome),
+                publication=outcome.state.committed,
             )
             return self.journal.get(commit_id)

@@ -12,8 +12,9 @@ import os
 import pytest
 
 from agent_comms import cohort_foreground, coordinated_runtime
-from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, stable_thread_lookup
 from agent_comms.assignment_states import CompletedAssignment, IgnoredAssignment
+from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_store import MutationStore
@@ -43,9 +44,20 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
 ):
     root = tmp_path / "wire"
     comms = Comms(root)
-    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     alpha = Thread(
-        "alpha", frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="openai-codex/gpt-6-sol"
+        "alpha",
+        frozenset({"team"}),
+        str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+        model="openai-codex/gpt-6-sol",
     )
     comms.threads.register(alpha)
     root_id = comms.messaging.initialize_private_initial_protocol()
@@ -113,7 +125,14 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
 def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tmp_path):
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "beta"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.threads.register(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
     message = comms.messaging.send_message("sender", "beta", "ordinary send")
     metadata = comms.bus.log.read_metadata_unlocked(required=True)
     assert metadata.private and metadata.claims
@@ -132,7 +151,14 @@ def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tm
 def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "beta"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.threads.register(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
     stored = Message(
         sender="sender", target="beta", body="preserved history", type=MessageType.INFO, seq=1
     )
@@ -147,7 +173,14 @@ def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
 def test_explicitly_disabled_private_writer_refuses(tmp_path):
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "beta"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.threads.register(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
     root_id = comms.messaging.initialize_private_initial_protocol()
     disabled = Comms(comms.root, private_initial_writes=False)
     with pytest.raises(RelationViolationError, match="Private initial publication is disabled"):

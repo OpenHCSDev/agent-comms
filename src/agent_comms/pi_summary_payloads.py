@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Literal
 
+from .field_codec import FieldCodec
 from .owner_compaction_prepare import NativeWitness
+from .owner_compaction_settings import PiCompactionSettings
 from .pi_payloads import PiCost, PiPayload, PiResponseData, PiUsage
 
 
@@ -22,20 +25,6 @@ class SelectedModel(PiPayload):
 
 
 @dataclass(frozen=True)
-class SelectedSettings(PiPayload):
-    strict_fields = True
-    reserve_tokens: int = field(metadata={"wire_name": "reserveTokens"})
-    keep_recent_tokens: int = field(metadata={"wire_name": "keepRecentTokens"})
-
-    def __post_init__(self):
-        if (
-            not 0 <= self.reserve_tokens <= 10_000_000
-            or not 0 < self.keep_recent_tokens <= 10_000_000
-        ):
-            raise ValueError("Bounded native compaction settings required")
-
-
-@dataclass(frozen=True)
 class SummaryFiles(PiPayload):
     strict_fields = True
     read_files: tuple[str, ...] = field(metadata={"wire_name": "readFiles"})
@@ -45,6 +34,15 @@ class SummaryFiles(PiPayload):
         for paths in (self.read_files, self.modified_files):
             if len(paths) > 256 or any(not p or "\0" in p or len(p.encode()) > 4096 for p in paths):
                 raise ValueError("Invalid selected native file operations")
+        if (
+            len(
+                json.dumps(
+                    FieldCodec.encode(self), ensure_ascii=False, separators=(",", ":")
+                ).encode()
+            )
+            > 65536
+        ):
+            raise ValueError("Bounded native file operations required")
 
 
 @dataclass(frozen=True)
@@ -139,7 +137,7 @@ class SummarySummarizedData(SelectedSummaryData, declared_name="summary_summariz
     status: Literal["summarized"]
     witness: NativeWitness
     selected: SelectedModel
-    settings: SelectedSettings
+    settings: PiCompactionSettings
     result: SummaryResult
 
 
@@ -161,7 +159,7 @@ class ProbeReadyData(SelectedProbeData, declared_name="probe_ready"):
     )
     witness: NativeWitness
     selected: SelectedModel
-    settings: SelectedSettings
+    settings: PiCompactionSettings
 
 
 @dataclass(frozen=True, kw_only=True)

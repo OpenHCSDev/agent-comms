@@ -12,6 +12,7 @@ from acp import RequestError
 
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.threads import Thread
@@ -29,7 +30,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
             name="worker",
             tags=frozenset({"test"}),
             worktree=str(old),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             session_file=str(old / "session.jsonl"),
             model="test/model",
             created_at=123,

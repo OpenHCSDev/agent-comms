@@ -333,7 +333,7 @@ async def test_real_pi_compacts_exact_saved_session(tmp_path, monkeypatch, statu
         # credential is copied into the private profile without changing it.
         result = await compact.ManualCompaction(
             exe,
-            ["--print", "--provider", "openrouter", "--model", "fake-compact"],
+            ["--provider", "openrouter", "--model", "fake-compact"],
             str(session),
             str(tmp_path),
             timeout_seconds=15,

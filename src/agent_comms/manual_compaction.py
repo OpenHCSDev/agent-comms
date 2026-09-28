@@ -12,19 +12,21 @@ import json
 import os
 import re
 import shutil
-import signal
 import stat
 import tempfile
 from collections.abc import Sequence
-from contextlib import suppress
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from . import pi_events as pi
-from .backend import compaction_summary, configured_model, rpc_args_for
+from .backend import compaction_summary, configured_model
+from .child_process import AttachedChild, Platform, ProcessGroups
+from .native_entries import StartupMetadataEntry
+from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .native_session_reopen import NativeSessionIdentity
 from .pi_commands import Compact, GetState, PiCommand
-from .pi_payloads import StateData
+from .pi_helper import PiHelper, PiHelperError, SessionHelperRequest
 from .pi_rpc import PiRpcChannel
 
 MAX_LINE = 64 * 1024
@@ -32,13 +34,12 @@ MAX_OUTPUT = 256 * 1024
 MAX_SESSION = 256 * 1024 * 1024
 MAX_INSTRUCTIONS = 4096
 TIMEOUT = 300.0
-GRACE = 1.0
 _POLICY = (
     b'{"retry":{"enabled":false,"maxRetries":0,"provider":{"maxRetries":0}},'
-    b'"compaction":{"enabled":false,"reserveTokens":16384,"keepRecentTokens":20000}}\n'
+    b'"compaction":{"enabled":false}}\n'
 )
 # Installed Pi 0.85.1: session retry, provider retry, session reopen, RPC and CLI
-# project-trust semantics. No stock-Pi fallback on changed bytes.
+# project-trust semantics. Changed bytes cannot select stock Pi.
 _PINNED = {
     "dist/core/compaction/compaction.js": (
         "3d5f1f2a3e801c965214717b6abad1839239b4a030517bffdf0c8eff25df5c2a"
@@ -93,17 +94,6 @@ _FLAGS = (
 # No arbitrary CLI args: --session/--no-session, --approve, --mode, --,
 # --extension and positional prompts must never override this invocation.
 _VALUE_FLAGS = frozenset({"--provider", "--model", "--api-key", "--thinking"})
-_SWITCH_FLAGS = frozenset({"--print"})
-_PREFLIGHT = r"""
-import { pathToFileURL } from 'node:url';
-const root = process.env.COMPACT_PI_PACKAGE;
-const { SessionManager } = await import(pathToFileURL(root + '/dist/core/session-manager.js'));
-const session = SessionManager.open(
-  process.env.COMPACT_SESSION, undefined, process.env.COMPACT_CWD);
-console.log(JSON.stringify({
-  sessionId: session.getSessionId(), sessionFile: session.getSessionFile(),
-}));
-"""
 
 
 def _pinned_package() -> Path:
@@ -181,9 +171,7 @@ def _safe_args(args: Sequence[str]) -> bool:
         arg = args[i]
         if not isinstance(arg, str):
             return False
-        if arg in _SWITCH_FLAGS:
-            i += 1
-        elif arg in _VALUE_FLAGS and i + 1 < len(args):
+        if arg in _VALUE_FLAGS and i + 1 < len(args):
             value = args[i + 1]
             if not isinstance(value, str) or not value or value.startswith("-") or "\x00" in value:
                 return False
@@ -260,106 +248,20 @@ def _durable_compaction_row(file: Path, before: bytes) -> None:
         os.close(fd)
 
 
-def _supported_platform() -> bool:
-    """Manual Pi compaction requires POSIX process-group teardown."""
-    return os.name == "posix" and hasattr(os, "killpg")
-
-
-def _group_alive(pid: int) -> bool:
-    try:
-        os.killpg(pid, 0)
-    except ProcessLookupError:
-        return False
-    return True
-
-
-def _signal_group(pid: int, sig: int) -> None:
-    with suppress(ProcessLookupError, PermissionError):
-        os.killpg(pid, sig)
-
-
-async def _shutdown(proc: asyncio.subprocess.Process, *, force: bool) -> bool:
-    if proc.stdin is not None and not proc.stdin.is_closing():
-        # Pi can close its read end before teardown. A broken pipe must not
-        # skip the process-group signal and child wait.
-        with suppress(BrokenPipeError, ConnectionResetError, OSError):
-            proc.stdin.close()
-    if force:
-        _signal_group(proc.pid, signal.SIGTERM)
-    try:
-        await asyncio.wait_for(proc.wait(), GRACE)
-    except TimeoutError:
-        force = True
-        _signal_group(proc.pid, signal.SIGKILL)
-        try:
-            await asyncio.wait_for(proc.wait(), GRACE)
-        except TimeoutError:
-            return False
-    deadline = asyncio.get_running_loop().time() + GRACE
-    if _group_alive(proc.pid):
-        force = True
-        _signal_group(proc.pid, signal.SIGTERM)
-    while _group_alive(proc.pid):
-        if asyncio.get_running_loop().time() >= deadline:
-            _signal_group(proc.pid, signal.SIGKILL)
-            return False
-        await asyncio.sleep(0.02)
-    return not force and proc.returncode == 0
-
-
-async def _reap_immune(proc: asyncio.subprocess.Process, *, force: bool) -> tuple[bool, bool]:
-    """Finish shutdown even under repeated caller cancellation."""
-    cleanup = asyncio.create_task(_shutdown(proc, force=force))
-    cancelled = False
-    while not cleanup.done():
-        try:
-            await asyncio.shield(cleanup)
-        except asyncio.CancelledError:
-            cancelled = True
-    return cleanup.result(), cancelled
+class ManualPreflightHelper(PiHelper):
+    script = Path(__file__).with_name("_pi_helpers") / "manual_preflight.mjs"
+    request = SessionHelperRequest
+    result = NativeSessionIdentity
 
 
 async def _preflight(
     package: Path, session: Path, cwd: Path, env: dict[str, str]
-) -> StateData | None:
-    child_env = dict(
-        env, COMPACT_PI_PACKAGE=str(package), COMPACT_SESSION=str(session), COMPACT_CWD=str(cwd)
-    )
-    proc = await asyncio.create_subprocess_exec(
-        "node",
-        "--input-type=module",
-        "-e",
-        _PREFLIGHT,
-        cwd=cwd,
-        env=child_env,
-        stdin=asyncio.subprocess.DEVNULL,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
-        start_new_session=True,
-    )
-    output = b""
-    force = False
-    cancelled = False
+) -> NativeSessionIdentity | None:
     try:
-        async with asyncio.timeout(10):
-            assert proc.stdout is not None
-            output = await proc.stdout.read(MAX_LINE + 1)
-            if len(output) > MAX_LINE:
-                force = True
-    except TimeoutError:
-        force = True
-    except asyncio.CancelledError:
-        force = True
-        cancelled = True
-    finally:
-        clean, interrupted = await _reap_immune(proc, force=force)
-    if cancelled or interrupted:
-        raise asyncio.CancelledError
-    if not clean or not output.endswith(b"\n"):
-        return None
-    try:
-        return StateData.from_wire(json.loads(output))
-    except (ValueError, TypeError, UnicodeError):
+        return await ManualPreflightHelper.run(
+            SessionHelperRequest(str(package), str(session)), cwd=cwd, env=env
+        )
+    except PiHelperError:
         return None
 
 
@@ -368,11 +270,10 @@ def _startup_metadata(before: bytes, after: bytes) -> bool:
     if not after.startswith(before):
         return False
     try:
-        return all(
-            json.loads(line).get("type") in {"model_change", "thinking_level_change"}
-            for line in after[len(before) :].splitlines()
-        )
-    except (ValueError, AttributeError, UnicodeError):
+        for line in after[len(before) :].splitlines():
+            StartupMetadataEntry.read_startup(line)
+        return True
+    except (ValueError, TypeError, UnicodeError):
         return False
 
 
@@ -427,7 +328,7 @@ class ManualCompaction:
         self.instructions = custom_instructions
         self.timeout = timeout_seconds
         self._used = False
-        self.proc: asyncio.subprocess.Process | None = None
+        self.proc: AttachedChild | None = None
         self.drain: asyncio.Task[None] | None = None
         self.reader: PiRpcChannel | None = None
         self.profile: Path | None = None
@@ -437,11 +338,12 @@ class ManualCompaction:
         self.clean = False
 
     def _validate(self) -> str | None:
-        self.rpc_args = rpc_args_for(self.agent_bin, self.agent_args)
-        if self.rpc_args is None:
-            return "Compaction requires a Pi RPC backend."
         if not _safe_args(self.agent_args):
             return "Compaction arguments could override the saved session."
+        try:
+            self.rpc_args = NativePiRpcLaunch.rpc_arguments(self.agent_args)
+        except NativePiUnavailable as error:
+            return str(error)
         selected = configured_model(self.agent_args)
         assert selected is not None and "/" in selected
         self.provider, self.model = selected.split("/", 1)
@@ -474,7 +376,7 @@ class ManualCompaction:
         if self._used:
             raise RuntimeError("Manual compaction transaction already consumed; never replay")
         self._used = True
-        if not _supported_platform():
+        if not isinstance(Platform.current(), ProcessGroups):
             return {"ok": False, "error": "Saved-session compaction requires POSIX teardown."}
         if not isinstance(self.timeout, (float, int)) or not 0 < self.timeout <= TIMEOUT:
             return {"ok": False, "error": "Compaction timeout is invalid."}
@@ -528,19 +430,11 @@ class ManualCompaction:
         if _session_bytes(self.session) != self.before:
             self.result = {"ok": False, "error": "Saved session changed before compaction."}
             return False
-        self.proc = await asyncio.create_subprocess_exec(
-            self.agent_bin,
-            *self.rpc_args,
-            "--session",
-            str(self.session),
-            *_FLAGS,
+        self.proc = await AttachedChild.start(
+            (self.agent_bin, *self.rpc_args, "--session", str(self.session), *_FLAGS),
             cwd=self.project,
             env=self.env,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
             limit=MAX_LINE,
-            start_new_session=True,
         )
         assert self.proc.stdout is not None
         self.reader = PiRpcChannel(self.proc.stdout)
@@ -622,8 +516,15 @@ class ManualCompaction:
     async def _close(self) -> None:
         try:
             if self.proc is not None:
-                self.clean, interrupted = await _reap_immune(self.proc, force=self.force)
-                self.cancelled |= interrupted
+                completion = asyncio.create_task(
+                    self.proc.stop() if self.force else self.proc.finish()
+                )
+                while not completion.done():
+                    try:
+                        await asyncio.shield(completion)
+                    except asyncio.CancelledError:
+                        self.cancelled = True
+                self.clean = not self.force and completion.result().successful
                 if self.drain is not None:
                     if not self.drain.done():
                         self.drain.cancel()

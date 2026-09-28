@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.display_order import ThreadSort
 from agent_comms.errors import RelationViolationError
@@ -16,12 +17,17 @@ from agent_comms.turn_lease import ActiveTurn
 def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity(tmp_path):
     old = Comms(tmp_path / "old")
     current = Comms(tmp_path / "current")
-    live = Thread("live", frozenset({"comms"}), str(tmp_path), pid=os.getpid())
+    live = Thread(
+        "live",
+        frozenset({"comms"}),
+        str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    )
     missing = Thread(
         "missing",
         frozenset({"nra", "openhcs"}),
         str(tmp_path),
-        pid=os.getpid(),
+        process_identity=ProcessIdentity.capture(os.getpid()),
         session_file=str(tmp_path / "saved.jsonl"),
         title="Preserved title",
         task="Original task",
@@ -44,7 +50,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     assert after.threads["live"] == before.threads["live"]
     assert after.owner_generations["live"] == before.owner_generations["live"]
     assert after.admission_generations["live"] == before.admission_generations["live"]
-    assert after.threads["missing"] == replace(missing, pid=0, active_turn=None)
+    assert after.threads["missing"] == replace(missing, process_identity=None, active_turn=None)
     assert after.statuses["missing"] == StoppedThreadStatus()
     assert after.aliases["former-name"] == "missing"
     assert current.bus.log.path.read_bytes() == bus
@@ -132,8 +138,18 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     from agent_comms.coordination_store import MutationStore
 
     old, current = Comms(tmp_path / "old"), Comms(tmp_path / "current")
-    live = Thread("live", frozenset({"comms"}), str(tmp_path), pid=os.getpid())
-    missing = Thread("missing", frozenset({"comms"}), str(tmp_path), pid=os.getpid())
+    live = Thread(
+        "live",
+        frozenset({"comms"}),
+        str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    )
+    missing = Thread(
+        "missing",
+        frozenset({"comms"}),
+        str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    )
     old.threads.register(missing)
     current.threads.register(live)
     root_id = current.messaging.initialize_private_initial_protocol()

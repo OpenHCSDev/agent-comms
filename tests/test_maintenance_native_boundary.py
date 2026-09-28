@@ -15,6 +15,7 @@ from agent_comms.errors import RelationViolationError
 from maintenance_control_fixture import FixtureMaintenanceControl
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
+
 @pytest.mark.asyncio
 async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path) -> None:
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
@@ -81,7 +82,12 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path)
 
         process = Process()
         return native_pi.NativePiRpcLaunch(
-            ("not-executed",), worktree, {"AGENT_COMMS_ROOT": str(root)}, session_dir, None
+            ("not-executed",),
+            worktree,
+            {"AGENT_COMMS_ROOT": str(root)},
+            session_dir,
+            None,
+            tmp_path,
         )
 
     async def create(*_args, **_kwargs):

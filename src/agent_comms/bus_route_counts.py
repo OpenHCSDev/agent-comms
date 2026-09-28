@@ -1,7 +1,7 @@
-"""Disposable prefix counts for bounded-cost unread projections.
+"""Disposable, declaration-owned route counts over the canonical bus.
 
-The JSONL bus owns every route. This index is rebuilt from it when the bus is
-replaced, and advances only across complete appended rows under the bus lock.
+The bus owns timestamps and publication identities. This index stores their
+projections, advances across complete appended rows, and is reset at cutover.
 """
 
 from __future__ import annotations
@@ -10,45 +10,82 @@ import json
 import os
 import sqlite3
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import ClassVar
+
+from .field_codec import FieldCodec
+from .routing import DeliveryMessage
+from .typed_table import Column, Index, TypedRow, TypedTable
+
+
+class RouteTable:
+    """Disposable tables owned and reset together by the route projection."""
+
+
+@dataclass(frozen=True)
+class RouteSourceRow(RouteTable, TypedTable):
+    id: int = field(metadata={"sql": Column(primary_key=True)})
+    identity: tuple[int, int, int, int] | None
+    offset: int
+    tail_digest: str | None
+
+
+@dataclass(frozen=True)
+class RouteEntryRow(RouteTable, TypedTable):
+    seq: int = field(metadata={"sql": Column(primary_key=True)})
+    target: str
+    sender: str
+    sender_lookup: str
+    timestamp: float
+    indexes: ClassVar = (Index(("target", "sender", "sender_lookup", "timestamp", "seq")),)
+
+
+@dataclass(frozen=True)
+class RouteTotalRow(RouteTable, TypedTable):
+    target: str = field(metadata={"sql": Column(primary_key=True)})
+    sender: str = field(metadata={"sql": Column(primary_key=True)})
+    sender_lookup: str = field(metadata={"sql": Column(primary_key=True)})
+    total: int
+    oldest: float
+    without_rowid: ClassVar = True
+
+
+@dataclass(frozen=True)
+class PendingRoute:
+    actor: str
+    target: str
+    sender: str
+    sender_lookup: str
+    since: float
+
+
+@dataclass(frozen=True)
+class ActorSeen:
+    actor: str
+    sequences: frozenset[int]
+
+
+@dataclass(frozen=True)
+class RouteUnread(TypedRow):
+    actor: str
+    target: str
+    sender: str
+    count: int
 
 
 class BusRouteCounts:
     def __init__(self, bus_path: Path):
         self.bus_path = bus_path
         self.path = bus_path.with_name("bus_route_counts.sqlite3")
+        fresh = not self.path.exists()
         self.connection = sqlite3.connect(self.path, timeout=30)
         self.connection.execute("PRAGMA synchronous=FULL")
-        self.connection.execute(
-            "CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
-        )
-        self.connection.execute(
-            "CREATE TABLE IF NOT EXISTS route_prefixes ("
-            "id INTEGER PRIMARY KEY, seq INTEGER NOT NULL, target TEXT NOT NULL, "
-            "sender TEXT NOT NULL, target_count INTEGER NOT NULL, pair_count INTEGER NOT NULL)"
-        )
-        self.connection.execute(
-            "CREATE INDEX IF NOT EXISTS route_target_seq "
-            "ON route_prefixes(target, seq DESC, id DESC)"
-        )
-        self.connection.execute(
-            "CREATE INDEX IF NOT EXISTS route_pair_seq "
-            "ON route_prefixes(target, sender, seq DESC, id DESC)"
-        )
-        self.connection.execute("CREATE INDEX IF NOT EXISTS route_seq ON route_prefixes(seq)")
-        self.connection.execute(
-            "CREATE TABLE IF NOT EXISTS route_totals ("
-            "target TEXT PRIMARY KEY, total INTEGER NOT NULL)"
-        )
-        self.connection.execute(
-            "CREATE TABLE IF NOT EXISTS pair_totals ("
-            "target TEXT NOT NULL, sender TEXT NOT NULL, total INTEGER NOT NULL, "
-            "PRIMARY KEY(target, sender)) WITHOUT ROWID"
-        )
-        self._target_after: dict[tuple[str, int], int] = {}
-        self._pair_after: dict[tuple[str, str, int], int] = {}
+        if fresh:
+            with self.connection:
+                for owner in TypedTable.members_with(RouteTable):
+                    owner.create(self.connection)
 
     def __enter__(self) -> BusRouteCounts:
         return self
@@ -56,20 +93,17 @@ class BusRouteCounts:
     def __exit__(self, *_error: object) -> None:
         self.connection.close()
 
-    def sync(self, parse_route: Callable[[Mapping[str, Any]], tuple[int, str, str]]) -> bool:
-        """Return false for an incomplete tail; caller then uses the bus directly."""
+    def sync(self, decode: Callable[[Mapping], DeliveryMessage]) -> bool:
+        """Decode only appended rows; a replaced source rebuilds the projection."""
         try:
             source = self.bus_path.open("rb")
         except FileNotFoundError:
             source = None
         try:
-            if source is None:
-                identity = None
-                size = 0
-                tail_digest = None
-            else:
+            identity, size, tail_digest = None, 0, None
+            if source is not None:
                 st = os.fstat(source.fileno())
-                identity = [st.st_dev, st.st_ino, st.st_mtime_ns, st.st_ctime_ns]
+                identity = (st.st_dev, st.st_ino, st.st_mtime_ns, st.st_ctime_ns)
                 size = st.st_size
                 if size:
                     source.seek(-1, os.SEEK_END)
@@ -77,162 +111,116 @@ class BusRouteCounts:
                         return False
                 source.seek(max(0, size - 4096))
                 tail_digest = sha256(source.read()).hexdigest()
-            row = self.connection.execute(
-                "SELECT value FROM metadata WHERE key = 'source'"
-            ).fetchone()
-            recorded = json.loads(row[0]) if row else None
-            if not isinstance(recorded, dict):
-                recorded = {}
-            recorded_identity = recorded.get("identity")
-            raw_offset = recorded.get("offset")
-            recorded_offset: int = raw_offset if type(raw_offset) is int and raw_offset >= 0 else 0
-            valid_record = (
-                recorded.get("version") == 1
-                and isinstance(recorded_identity, (list, type(None)))
-                and (recorded_identity is None or len(recorded_identity) == 4)
-                and type(raw_offset) is int
-                and raw_offset >= 0
-            )
-            rebuild = (
-                not valid_record
-                or (recorded_identity[:2] if recorded_identity is not None else None)
-                != (identity[:2] if identity is not None else None)
-                or size < recorded_offset
-                or (
-                    size == recorded_offset
-                    and identity is not None
-                    and recorded_identity is not None
-                    and identity[2:] != recorded_identity[2:]
+            records = RouteSourceRow.select(self.connection)
+            recorded = records[0] if records else None
+            rebuild = recorded is None
+            if recorded is not None:
+                rebuild = (
+                    (recorded.identity[:2] if recorded.identity else None)
+                    != (identity[:2] if identity else None)
+                    or size < recorded.offset
+                    or size == recorded.offset
+                    and recorded.identity != identity
                 )
-            )
-            offset = 0 if rebuild else recorded_offset
-            if not rebuild and source is not None and offset:
+            offset = 0 if rebuild else recorded.offset
+            if source is not None and offset:
                 source.seek(max(0, offset - 4096))
                 previous_tail = source.read(offset - max(0, offset - 4096))
-                if sha256(previous_tail).hexdigest() != recorded.get("tail_digest"):
-                    rebuild = True
-                    offset = 0
+                if sha256(previous_tail).hexdigest() != recorded.tail_digest:
+                    rebuild, offset = True, 0
             if not rebuild and offset == size:
                 return True
-            target_totals: dict[str, int] = {}
-            pair_totals: dict[tuple[str, str], int] = {}
+            totals: dict[tuple[str, str, str], RouteTotalRow] = {}
             with self.connection:
                 if rebuild:
-                    self.connection.execute("DELETE FROM route_prefixes")
-                    self.connection.execute("DELETE FROM route_totals")
-                    self.connection.execute("DELETE FROM pair_totals")
+                    for owner in TypedTable.members_with(RouteTable):
+                        self.connection.execute(f'DELETE FROM "{owner.declared_name}"')
                 if source is not None:
                     source.seek(offset)
                     for raw in source:
                         if not raw.strip():
                             continue
-                        record = json.loads(raw)
-                        if not isinstance(record, Mapping):
-                            raise ValueError("JSONL bus row must be an object.")
-                        seq, sender, target = parse_route(record)
-                        if target not in target_totals:
-                            prior = self.connection.execute(
-                                "SELECT total FROM route_totals WHERE target = ?", (target,)
-                            ).fetchone()
-                            target_totals[target] = prior[0] if prior else 0
-                        pair = target, sender
-                        if pair not in pair_totals:
-                            prior = self.connection.execute(
-                                "SELECT total FROM pair_totals WHERE target = ? AND sender = ?",
-                                pair,
-                            ).fetchone()
-                            pair_totals[pair] = prior[0] if prior else 0
-                        target_totals[target] += 1
-                        pair_totals[pair] += 1
-                        self.connection.execute(
-                            "INSERT INTO route_prefixes "
-                            "(seq, target, sender, target_count, pair_count) "
-                            "VALUES (?, ?, ?, ?, ?)",
-                            (seq, target, sender, target_totals[target], pair_totals[pair]),
+                        delivery = decode(json.loads(raw))
+                        message = delivery.message
+                        row = RouteEntryRow(
+                            message.seq,
+                            message.target,
+                            message.sender,
+                            delivery.sender_lookup,
+                            message.timestamp,
                         )
-                self.connection.executemany(
-                    "INSERT OR REPLACE INTO route_totals VALUES (?, ?)", target_totals.items()
-                )
-                self.connection.executemany(
-                    "INSERT OR REPLACE INTO pair_totals VALUES (?, ?, ?)",
-                    ((target, sender, total) for (target, sender), total in pair_totals.items()),
-                )
-                self.connection.execute(
-                    "INSERT OR REPLACE INTO metadata VALUES ('source', ?)",
-                    (
-                        json.dumps(
-                            {
-                                "version": 1,
-                                "identity": identity,
-                                "offset": size,
-                                "tail_digest": tail_digest,
-                            }
-                        ),
-                    ),
-                )
+                        row.insert(self.connection)
+                        key = row.target, row.sender, row.sender_lookup
+                        if key not in totals:
+                            prior = RouteTotalRow.select(
+                                self.connection,
+                                where="target=? AND sender=? AND sender_lookup=?",
+                                parameters=key,
+                            )
+                            totals[key] = (
+                                prior[0] if prior else RouteTotalRow(*key, 0, row.timestamp)
+                            )
+                        current = totals[key]
+                        totals[key] = replace(
+                            current,
+                            total=current.total + 1,
+                            oldest=min(current.oldest, row.timestamp),
+                        )
+                for key, total in totals.items():
+                    self.connection.execute(
+                        f'DELETE FROM "{RouteTotalRow.declared_name}" '
+                        "WHERE target=? AND sender=? AND sender_lookup=?",
+                        key,
+                    )
+                    total.insert(self.connection)
+                self.connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
+                RouteSourceRow(1, identity, size, tail_digest).insert(self.connection)
             return True
         finally:
             if source is not None:
                 source.close()
 
-    def senders(self, target: str) -> tuple[str, ...]:
-        return tuple(
-            row[0]
-            for row in self.connection.execute(
-                "SELECT sender FROM pair_totals WHERE target = ?", (target,)
-            )
-        )
+    def routes(self) -> list[RouteTotalRow]:
+        return RouteTotalRow.select(self.connection)
 
-    def routes(self) -> tuple[tuple[str, str], ...]:
-        return tuple(self.connection.execute("SELECT target, sender FROM pair_totals"))
+    def unseen_counts(
+        self, requests: list[PendingRoute], seen: list[ActorSeen]
+    ) -> list[RouteUnread]:
+        """One bulk query: route totals minus exact seen membership.
 
-    def unseen_counts(self, seen: frozenset[int]) -> tuple[tuple[str, str, int], ...]:
-        """Subtract exact painted membership from existing route totals.
-
-        The ledger supplies only currently valid display evidence. Probe the
-        sequence index once per seen sequence, not once per historical message
-        or once per route. No read watermark can represent holes in that set.
+        Common routes use prefix totals, without walking historical rows. A
+        birth crossing a route uses its covering timestamp index; timestamps
+        need not be monotonic. Seen sequences use the primary-key index once
+        per actor, not once per historical message or conversation.
         """
-        return tuple(
+        return RouteUnread.read(
             self.connection.execute(
-                "WITH painted AS ("
-                "SELECT route.target, route.sender, count(*) AS count "
-                "FROM json_each(?) AS seen CROSS JOIN route_prefixes AS route "
-                "ON route.seq = seen.value GROUP BY route.target, route.sender) "
-                "SELECT totals.target, totals.sender, totals.total - coalesce(painted.count, 0) "
-                "FROM pair_totals AS totals LEFT JOIN painted "
-                "ON totals.target = painted.target AND totals.sender = painted.sender "
-                "WHERE totals.total > coalesce(painted.count, 0)",
-                (json.dumps(sorted(seen)),),
+                f'''WITH requests AS (
+                SELECT json_extract(value, '$.actor') AS actor,
+                       json_extract(value, '$.target') AS target,
+                       json_extract(value, '$.sender') AS sender,
+                       json_extract(value, '$.sender_lookup') AS sender_lookup,
+                       json_extract(value, '$.since') AS since FROM json_each(?)
+            ), painted AS (
+                SELECT json_extract(owner.value, '$.actor') AS actor,
+                       row.target, row.sender, row.sender_lookup, row.timestamp
+                FROM json_each(?) AS owner, json_each(owner.value, '$.sequences') AS seen
+                CROSS JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq = seen.value
+            )
+            SELECT request.actor, request.target, request.sender,
+                (CASE WHEN totals.oldest >= request.since THEN totals.total ELSE (
+                    SELECT count(*) FROM "{RouteEntryRow.declared_name}" AS row
+                    WHERE row.target=request.target AND row.sender=request.sender
+                        AND row.sender_lookup=request.sender_lookup AND row.timestamp>=request.since
+                ) END) - (
+                    SELECT count(*) FROM painted WHERE painted.actor=request.actor
+                        AND painted.target=request.target AND painted.sender=request.sender
+                        AND painted.sender_lookup=request.sender_lookup
+                        AND painted.timestamp>=request.since
+                ) AS count
+            FROM requests AS request JOIN "{RouteTotalRow.declared_name}" AS totals
+                ON totals.target=request.target AND totals.sender=request.sender
+                    AND totals.sender_lookup=request.sender_lookup''',
+                (json.dumps(FieldCodec.encode(requests)), json.dumps(FieldCodec.encode(seen))),
             )
         )
-
-    def target_after(self, target: str, through: int) -> int:
-        key = target, through
-        if key not in self._target_after:
-            total = self.connection.execute(
-                "SELECT total FROM route_totals WHERE target = ?", (target,)
-            ).fetchone()
-            prefix = self.connection.execute(
-                "SELECT target_count FROM route_prefixes "
-                "WHERE target = ? AND seq <= ? ORDER BY seq DESC, id DESC LIMIT 1",
-                key,
-            ).fetchone()
-            self._target_after[key] = (total[0] if total else 0) - (prefix[0] if prefix else 0)
-        return self._target_after[key]
-
-    def pair_after(self, target: str, sender: str, through: int) -> int:
-        key = target, sender, through
-        if key not in self._pair_after:
-            total = self.connection.execute(
-                "SELECT total FROM pair_totals WHERE target = ? AND sender = ?",
-                (target, sender),
-            ).fetchone()
-            prefix = self.connection.execute(
-                "SELECT pair_count FROM route_prefixes "
-                "WHERE target = ? AND sender = ? AND seq <= ? "
-                "ORDER BY seq DESC, id DESC LIMIT 1",
-                key,
-            ).fetchone()
-            self._pair_after[key] = (total[0] if total else 0) - (prefix[0] if prefix else 0)
-        return self._pair_after[key]

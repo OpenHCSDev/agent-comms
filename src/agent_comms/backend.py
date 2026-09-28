@@ -24,7 +24,6 @@ import json
 import os
 import re
 import secrets
-import shutil
 import tempfile
 import unicodedata
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator, Sequence
@@ -43,6 +42,7 @@ from .diagnostics import FailureReason
 from .image_inputs import ImageInput
 from .maintenance_barrier import MaintenanceBarrier
 from .native_pi import CAPABILITY as NATIVE_INPUT_CAPABILITY
+from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .pi_payloads import StateData
 from .pi_rpc import PiRpcChannel
@@ -62,8 +62,6 @@ def compaction_summary(value: Any) -> str:
     )
 
 
-RPC_FLAG = "--mode"
-RPC_VALUE = "rpc"
 _TOOL_KINDS = {
     "bash": "execute",
     "read": "read",
@@ -320,17 +318,6 @@ async def terminate_task_process(task: asyncio.Task[Any]) -> None:
         await proc.stop()
 
 
-def rpc_args_for(bin_name: str, args: Sequence[str]) -> list[str] | None:
-    """RPC-mode args for a backend, or None if the backend should run in text mode.
-
-    pi gets ``--mode rpc`` inserted; the prompt arrives on stdin as a JSON
-    ``{"type": "prompt", "message": ...}`` line.
-    """
-    if Path(bin_name).name.startswith("pi") or bin_name.endswith("/pi"):
-        return [*args, RPC_FLAG, RPC_VALUE]
-    return None
-
-
 def configured_model(args: Sequence[str]) -> str | None:
     """Return the provider-qualified model selected by backend arguments."""
     provider: str | None = None
@@ -404,22 +391,18 @@ async def discover_thinking_levels(
     """Ask Pi for the thinking levels supported by one selected model."""
     if os.environ.get("AGENT_COMMS_AGENT_MODELS"):
         return ["off", "minimal", "low", "medium", "high"]
-    if rpc_args_for(agent_bin, agent_args) is None:
-        return ["off"]
     args = args_for_model(agent_args, model)
-    rpc_args = rpc_args_for(agent_bin, args)
-    assert rpc_args is not None
-    argv = [
-        agent_bin,
-        *rpc_args,
-        "--no-extensions",
-        "--no-skills",
-        "--no-context-files",
-        "--no-session",
-    ]
     levels: list[str] = []
     try:
-        async with BoundedRun.session(tuple(argv), timeout=10, limit=1024 * 1024) as proc:
+        launch = await asyncio.to_thread(
+            NativePiRpcLaunch.managed,
+            agent_bin,
+            tuple([*args, "--no-extensions", "--no-skills", "--no-context-files", "--no-session"]),
+            worktree=Path.cwd(),
+        )
+        async with BoundedRun.session(
+            launch.argv, cwd=launch.cwd, env=launch.env, timeout=10, limit=1024 * 1024
+        ) as proc:
             assert proc.stdin is not None and proc.stdout is not None
             reader = PiRpcChannel(proc.stdout)
             proc.stdin.write(reader.encode(commands.GetAvailableThinkingLevels(id="thinking")))
@@ -438,7 +421,7 @@ async def discover_thinking_levels(
                     else []
                 )
                 break
-    except (TimeoutError, ValueError, OSError):
+    except (TimeoutError, ValueError, OSError, NativePiUnavailable):
         pass
     return levels or ["off"]
 
@@ -454,15 +437,26 @@ async def discover_models(
     ]
     if explicit:
         values = explicit
-    elif (rpc_args := rpc_args_for(agent_bin, agent_args)) is None:
-        values = []
     else:
-        argv = [agent_bin, *rpc_args, "--no-extensions", "--no-skills", "--no-context-files"]
-        if "--no-session" not in argv:
-            argv.append("--no-session")
         values = []
         try:
-            async with BoundedRun.session(tuple(argv), timeout=10, limit=8 * 1024 * 1024) as proc:
+            launch = await asyncio.to_thread(
+                NativePiRpcLaunch.managed,
+                agent_bin,
+                tuple(
+                    [
+                        *agent_args,
+                        "--no-extensions",
+                        "--no-skills",
+                        "--no-context-files",
+                        "--no-session",
+                    ]
+                ),
+                worktree=Path.cwd(),
+            )
+            async with BoundedRun.session(
+                launch.argv, cwd=launch.cwd, env=launch.env, timeout=10, limit=8 * 1024 * 1024
+            ) as proc:
                 assert proc.stdin is not None and proc.stdout is not None
                 reader = PiRpcChannel(proc.stdout)
                 proc.stdin.write(reader.encode(commands.GetAvailableModels(id="models")))
@@ -479,7 +473,7 @@ async def discover_models(
                         if item.provider and item.id:
                             values.append(f"{item.provider}/{item.id}")
                     break
-        except (TimeoutError, ValueError, OSError):
+        except (TimeoutError, ValueError, OSError, NativePiUnavailable):
             pass
     if selected and selected not in values:
         values.insert(0, selected)
@@ -587,6 +581,19 @@ async def stream_agent_events(
         ).expanduser()
     )
     try:
+        try:
+            launch = await asyncio.to_thread(
+                NativePiRpcLaunch.managed,
+                agent_bin,
+                tuple(agent_args),
+                worktree=Path(cwd),
+                environment=env_extra,
+                session_file=session_file,
+                fork_session=fork_session,
+            )
+        except (OSError, ValueError, NativePiUnavailable) as error:
+            yield events.Done(ok=False, reason_code="native_launch_invalid", text=str(error))
+            return
         from .session_fence import session_writer_fence
 
         async with (
@@ -596,11 +603,8 @@ async def stream_agent_events(
             try:
                 async with aclosing(
                     TurnSession(
-                        agent_bin,
-                        agent_args,
+                        launch,
                         task,
-                        cwd,
-                        env_extra,
                         session_file=session_file,
                         steering_queue=steering_queue,
                         finish_event=finish_event,
@@ -648,11 +652,8 @@ class TurnSession:
 
     def __init__(
         self,
-        agent_bin: str,
-        agent_args: Sequence[str],
+        launch: NativePiRpcLaunch,
         task: str,
-        cwd: str,
-        env_extra: dict[str, str] | None = None,
         session_file: str | None = None,
         steering_queue: asyncio.Queue[str | dict[str, Any]] | None = None,
         finish_event: asyncio.Event | None = None,
@@ -669,14 +670,13 @@ class TurnSession:
         ) = None,
         native_start: Callable[[str | None, str, str], bool] | None = None,
         persistent_session: PersistentPiSession | None = None,
-        ui_request: Callable[[pi.ExtensionUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
+        ui_request: Callable[[pi.ExtensionUiRequest], Awaitable[pi.ExtensionUiChoice]]
+        | None = None,
         startup: NativeStartupAdmission | None = None,
     ):
-        self.agent_bin = agent_bin
-        self.agent_args = agent_args
+        self.launch = launch
         self.task = task
-        self.cwd = cwd
-        self.env_extra = env_extra
+        self.cwd = str(launch.cwd)
         self.session_file = session_file
         self.steering_queue = steering_queue
         self.finish_event = finish_event
@@ -806,8 +806,7 @@ class TurnSession:
 
     async def run(self) -> AsyncGenerator[events.AgentEvent, None]:
         self.finished = self.skip = False
-        async for event in self.prepare_launch():
-            yield event
+        self.prepare_launch()
         if self.finished:
             return
         async for event in self.validate_reopen():
@@ -818,8 +817,7 @@ class TurnSession:
             yield event
         if self.finished:
             return
-        async for event in self.initialize_output():
-            yield event
+        self.initialize_output()
         if self.finished:
             return
         async for event in self.initialize_rpc():
@@ -1022,7 +1020,7 @@ class TurnSession:
             try:
                 self.boundary_context = _maintenance_send_boundary(
                     Path(
-                        (self.env_extra or {}).get("AGENT_COMMS_ROOT")
+                        self.launch.env.get("AGENT_COMMS_ROOT")
                         or os.environ.get("AGENT_COMMS_ROOT")
                         or str(
                             Path(tempfile.gettempdir()) / f"agent-comms-startup-{getpass.getuser()}"
@@ -1189,18 +1187,7 @@ class TurnSession:
             self.finished = True
             return
 
-    async def prepare_launch(self) -> AsyncIterator[events.AgentEvent]:
-        if shutil.which(self.agent_bin) is None and (not Path(self.agent_bin).is_file()):
-            yield events.Done(text=f"agent backend {self.agent_bin!r} not found", ok=False)
-            self.finished = True
-            return
-        self.rpc_args = rpc_args_for(self.agent_bin, self.agent_args)
-        if self.images and self.rpc_args is None:
-            yield events.Done(text="This backend does not support image prompts.", ok=False)
-            self.finished = True
-            return
-        self.stdin_payload: bytes | None = None
-        self.argv: list[str]
+    def prepare_launch(self) -> None:
         self.prompt_id = (
             f"agent-comms-prompt-{secrets.token_hex(16)}"
             if self.persistent_session is not None
@@ -1209,48 +1196,29 @@ class TurnSession:
         self.preflight_id = f"agent-comms-preflight-{secrets.token_hex(16)}"
         self.original_input_id = secrets.token_hex(16)
         self.prompt_payload = b""
-        if self.rpc_args is not None:
-            self.argv = [self.agent_bin, *self.rpc_args]
-            if self.session_file:
-                self.argv += ["--fork" if self.fork_session else "--session", self.session_file]
-            self.prompt_payload = PiRpcChannel.command_bytes(
-                commands.Prompt(
-                    id=self.prompt_id,
-                    input_id=self.original_input_id,
-                    message=self.task,
-                    images=self.images or None,
-                )
+        self.prompt_payload = PiRpcChannel.command_bytes(
+            commands.Prompt(
+                id=self.prompt_id,
+                input_id=self.original_input_id,
+                message=self.task,
+                images=self.images or None,
             )
-            self.stdin_payload = PiRpcChannel.command_bytes(commands.GetState(id=self.preflight_id))
-            if not self.require_input_id:
-                self.stdin_payload += self.prompt_payload
-        else:
-            self.argv = [self.agent_bin, *self.agent_args, self.task]
-        self.env = os.environ.copy()
-        if self.env_extra:
-            self.env.update(self.env_extra)
-        if self.rpc_args is not None and self.env.get("AGENT_COMMS_MANAGED") == "1":
-            self.env["PI_WORKTREE"] = str(Path(self.cwd).resolve())
-            self.bootstrap = Path(__file__).with_name("pi_project_bootstrap.mjs").resolve().as_uri()
-            self.flag = f"--import={self.bootstrap}"
-            self.options = self.env.get("NODE_OPTIONS", "")
-            if self.flag not in self.options:
-                self.env["NODE_OPTIONS"] = f"{self.options} {self.flag}".strip()
+        )
+        self.stdin_payload = PiRpcChannel.command_bytes(commands.GetState(id=self.preflight_id))
+        if not self.require_input_id:
+            self.stdin_payload += self.prompt_payload
         self.launch_key = (
-            self.agent_bin,
-            tuple(self.rpc_args or self.agent_args),
-            str(Path(self.cwd).resolve()),
-            tuple(sorted(self.env.items())),
+            self.launch.argv,
+            self.cwd,
+            tuple(sorted(self.launch.env.items())),
             auth_revision(),
         )
 
     async def validate_reopen(self) -> AsyncIterator[events.AgentEvent]:
         self.reused = False
         if self.persistent_session is not None:
-            self.reused = (
-                self.rpc_args is not None
-                and (not self.fork_session)
-                and self.persistent_session.reusable(self.launch_key, self.session_file)
+            self.reused = (not self.fork_session) and self.persistent_session.reusable(
+                self.launch_key, self.session_file
             )
             if not self.reused:
                 await self.persistent_session.close()
@@ -1276,7 +1244,7 @@ class TurnSession:
 
                 self.validated_session_id = await asyncio.to_thread(
                     validate_native_reopen,
-                    self.agent_bin,
+                    self.launch.package,
                     self.session_file,
                     expected_session_id=self.persistent_session.reopen_session_id,
                 )
@@ -1288,12 +1256,7 @@ class TurnSession:
                 )
                 self.finished = True
                 return
-        if (
-            not self.reused
-            and self.rpc_args is not None
-            and self.require_input_id
-            and (self.startup is not None)
-        ):
+        if not self.reused and self.require_input_id and (self.startup is not None):
             await self.startup.acquire(self.finish_event)
 
     async def spawn_child(self) -> AsyncIterator[events.AgentEvent]:
@@ -1312,10 +1275,9 @@ class TurnSession:
         else:
             try:
                 self.proc = await AttachedChild.start(
-                    tuple(self.argv),
-                    cwd=self.cwd if Path(self.cwd).is_dir() else None,
-                    env=self.env,
-                    input_enabled=self.stdin_payload is not None,
+                    self.launch.argv,
+                    cwd=self.cwd,
+                    env=self.launch.env,
                 )
             except OSError as exc:
                 yield events.Done(text=f"agent launch failed: {exc}", ok=False)
@@ -1338,13 +1300,13 @@ class TurnSession:
         self.prompt_dispatched = False
         if self.stdin_payload is not None and self.proc.stdin is not None:
             try:
-                self.prompt_dispatched = not self.require_input_id and self.rpc_args is not None
+                self.prompt_dispatched = not self.require_input_id
                 self.proc.stdin.write(self.stdin_payload)
                 await self.proc.stdin.drain()
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
-    async def initialize_output(self) -> AsyncIterator[events.AgentEvent]:
+    def initialize_output(self) -> None:
         self.text_parts: list[str] = []
         self.assistant_message_parts: list[str] = []
         self.ok = True
@@ -1359,33 +1321,6 @@ class TurnSession:
             and self.persistent_session.sensitive_diagnostics
         )
         assert self.proc.stdout is not None
-        if self.rpc_args is None:
-            while True:
-                self.chunk = await self.proc.stdout.read(4096)
-                if not self.chunk:
-                    break
-                self.piece = self.chunk.decode(errors="replace")
-                self.text_parts.append(self.piece)
-                yield events.Chunk(text=self.piece)
-            await self.proc.wait()
-            self.code = self.proc.returncode
-            if self.owner is not None:
-                _ACTIVE_PROCESSES.pop(self.owner, None)
-            self.error_text = await self.stderr_task
-            yield events.Done(
-                text=(
-                    "".join(self.text_parts).strip()
-                    if self.code == 0
-                    else (
-                        "Image prompt failed; backend diagnostics withheld."
-                        if self.images and self.error_text
-                        else self.error_text or f"Backend exited with code {self.code}"
-                    )
-                ),
-                ok=self.code == 0,
-            )
-            self.finished = True
-            return
 
     async def initialize_rpc(self) -> AsyncIterator[events.AgentEvent]:
         self.steering_task: asyncio.Task[None] | None = None
@@ -1521,8 +1456,7 @@ class TurnSession:
             self.record_failure(
                 failures.InputIdUnavailable(
                     "Pi native input-ID capability preflight ended before attestation. "
-                    "The prompt was not sent. Backend startup reported:\n"
-                    + self.error_text.strip()
+                    "The prompt was not sent. Backend startup reported:\n" + self.error_text.strip()
                 )
             )
         if (
