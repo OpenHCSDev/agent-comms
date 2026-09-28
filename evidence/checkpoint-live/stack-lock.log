@@ -1,0 +1,10 @@
+Using CPython 3.14.2
+   Updating https://github.com/OpenHCSDev/agent-comms.git (421621417310d35d15348dc8541a98e5a3bc4025)
+    Updated https://github.com/OpenHCSDev/agent-comms.git (421621417310d35d15348dc8541a98e5a3bc4025)
+  × Failed to resolve dependencies for `batrachian-toad` (v0.6.20)
+  ╰─▶ Requirements contain conflicting URLs for package `agent-comms` in all
+      marker environments:
+      - git+https://github.com/OpenHCSDev/agent-comms.git@421621417310d35d15348dc8541a98e5a3bc4025
+      - git+https://github.com/OpenHCSDev/agent-comms.git@f5ddd749d3bc5f53448bfd0117711b84de4dba00
+
+hint: `batrachian-toad` (v0.6.20) was included because `agent-comms-stack` (v0.1.0) depends on `batrachian-toad`
