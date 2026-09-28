@@ -13,6 +13,8 @@ pytestmark = pytest.mark.refactor_guard
 def test_managed_execution_has_one_native_owner():
     root = Path(backend.__file__).parent
     assert not (root / "agent_loop.py").exists()
+    assert not (root / "manual_compaction.py").exists()
+    assert not (root / "_pi_helpers/manual_preflight.mjs").exists()
     for name in (
         "backend.py",
         "input_drain.py",
@@ -20,7 +22,6 @@ def test_managed_execution_has_one_native_owner():
         "turn_runner.py",
         "acp.py",
         "session_lifecycle.py",
-        "manual_compaction.py",
     ):
         tree = ast.parse((root / name).read_text())
         for node in ast.walk(tree):
