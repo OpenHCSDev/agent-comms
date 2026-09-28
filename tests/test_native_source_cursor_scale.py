@@ -66,13 +66,11 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         receipt = accept_initial_cohort(comms.bus, root_id, selected.seq, store).value
         assert len(receipt.assignments) == 1
-        with pytest.raises(Exception, match="bounded private initial scan"):
-            read_proven_source_coverage(
-                comms.bus,
-                store,
-                wire_root_id=root_id,
-                recipient_lookup=stable_thread_lookup(people[1].created_at),
-            )
+        coverage = read_proven_source_coverage(
+            comms.bus, store, wire_root_id=root_id,
+            recipient_lookup=stable_thread_lookup(people[1].created_at),
+        )
+        assert coverage.blocked_seq == selected.seq
     second = await runtime.SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
@@ -102,13 +100,18 @@ async def test_page_budget_refuses_progress_but_original_is_not_replayed(tmp_pat
     comms.threads.register(
         Thread(
             "other",
-            frozenset(),
+            frozenset({"team"}),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
+    other = comms.registry.require("other")
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        store.register_participant(stable_thread_lookup(other.created_at), "other", "other", committed=True)
     for number in range(101):
-        comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number}")
+        message = comms.messaging.send_initial_cohort("sender", "#team", f"@other note-{number}")
+        with MutationStore(str(root / "coordination.sqlite3")) as store:
+            accept_initial_cohort(comms.bus, root_id, message.seq, store)
     # The dedicated cursor scan cannot cross the second bounded page. The
     # already committed original still produces its one fake native input.
     monkeypatch.setattr(cursor_module, "_MAX_COVERAGE_PAGES", 1)

@@ -711,16 +711,3 @@ class WireLog:
                 "Existing unmarked bus data is read-only until its history is rewritten "
                 "into the current source format."
             )
-
-    def enable_claim_gate_unlocked(self) -> str:
-        if self.path.name != "bus.jsonl":
-            raise RelationViolationError("Claim envelope publication requires the canonical bus.")
-        metadata = self._private_marker_unlocked()
-        root_id = metadata.root_id
-        if metadata.claims:
-            return root_id
-        if metadata.last_seq or (self.path.exists() and self.path.stat().st_size):
-            raise RelationViolationError("Claim read barrier requires an empty private bus.")
-        metadata.claim_envelopes_version = 1
-        self.write_metadata_unlocked(metadata)
-        return root_id

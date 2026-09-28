@@ -123,8 +123,6 @@ def _root(
     for person in people:
         comms.threads.register(person)
     root_id = comms.messaging.initialize_private_initial_protocol()
-    if claims:
-        comms.messaging.initialize_private_claim_protocol()
     target = "beta" if direct else "#team"
     body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
     message = comms.messaging.send_initial_cohort("sender", target, body)

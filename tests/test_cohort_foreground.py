@@ -204,7 +204,6 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
         resource = base / "module.py"
         resource.write_bytes(b"before\n")
         root, root_id, comms = _wire(base)
-        comms.messaging.initialize_private_claim_protocol()
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
         monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
@@ -260,7 +259,6 @@ async def test_foreground_selected_write_preflight_refuses_uninitialized_or_exte
                 selected_existing_file_write=plan,
             )
         assert "alpha" not in comms.registry and resource.read_bytes() == b"before\n"
-        comms.messaging.initialize_private_claim_protocol()
         external = tmp_path / "external.py"
         external.write_bytes(b"external\n")
         with pytest.raises(ValueError, match="inside the worktree"):
@@ -359,7 +357,6 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
         resource = base / "module.py"
         resource.write_bytes(b"unchanged\n")
         root, root_id, comms = _wire(base)
-        comms.messaging.initialize_private_claim_protocol()
         comms.threads.register(
             Thread(
                 "beta",

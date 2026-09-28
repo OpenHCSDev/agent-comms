@@ -9,10 +9,8 @@ projection. The authoritative sealed claims still drive execution.
 
 from __future__ import annotations
 
-import hashlib
 import os
 import sqlite3
-import stat
 
 from .bus_publication import stable_thread_lookup
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -25,35 +23,16 @@ from .private_bus_checkpoint import PrefixWitness, verify_private_bus_checkpoint
 from .proven_source_coverage import ProvenSourceCoverage, read_proven_source_coverage
 from .threads import Thread
 
-# The old-root canonical bus read still has an 8 MiB / 1,000-row ceiling.
-# A checkpointed root pages complete addressed sources; neither its SQL
-# index nor its source sequence is native proof or an injected ACK.
 _MAX_COVERAGE_PAGES = 32  # 3,200 addressed initials per bounded owner pass.
-_MAX_SOURCE_BYTES = 8 * 1024 * 1024
 
 
-def _source_witness_unlocked(bus: MessageBus) -> PrefixWitness | tuple[int, int, int, str]:
-    """Recheck exact certified revision, or hash a bounded legacy bus."""
-    marker = bus.log._private_marker_unlocked()
-    if marker.checkpoint_seal is not None:
-        return verify_private_bus_checkpoint_unlocked(bus.log, marker)
-    descriptor = os.open(bus.log.path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    try:
-        info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode) or info.st_size > _MAX_SOURCE_BYTES:
-            raise IdentityConflict("current cursor source exceeds bounded canonical bus")
-        with os.fdopen(descriptor, "rb", closefd=False) as source:
-            contents = source.read(_MAX_SOURCE_BYTES + 1)
-        if len(contents) != info.st_size:
-            raise IdentityConflict("current cursor source changed while fingerprinting")
-        return (info.st_dev, info.st_ino, info.st_size, hashlib.sha256(contents).hexdigest())
-    finally:
-        os.close(descriptor)
+def _source_witness_unlocked(bus: MessageBus) -> PrefixWitness:
+    """Recheck the canonical writer's certified revision."""
+    return verify_private_bus_checkpoint_unlocked(bus.log, bus.log._private_marker_unlocked())
 
 
-def _source_witness(bus: MessageBus) -> PrefixWitness | tuple[int, int, int, str]:
-    certified = bus.log.path.with_name("private_bus_checkpoint.sqlite3").exists()
-    with bus.log.locked(blocking=False, max_bus_bytes=None if certified else _MAX_SOURCE_BYTES):
+def _source_witness(bus: MessageBus) -> PrefixWitness:
+    with bus.log.locked(blocking=False):
         return _source_witness_unlocked(bus)
 
 
@@ -96,12 +75,9 @@ def _bounded_coverage_pages(
         )
         if page.covered_seq < covered:
             raise IdentityConflict("canonical source coverage regressed between pages")
-        if page.source_witness is not None:
-            if source_witness is not None and page.source_witness != source_witness:
-                raise IdentityConflict("certified source changed between coverage pages")
-            source_witness = page.source_witness
-        elif source_witness is not None:
-            raise IdentityConflict("certified source disappeared between coverage pages")
+        if source_witness is not None and page.source_witness != source_witness:
+            raise IdentityConflict("certified source changed between coverage pages")
+        source_witness = page.source_witness
         covered = page.covered_seq
         injected.extend(page.injected_source_seqs)
         no_wake.extend(page.no_wake_seqs)
@@ -114,7 +90,7 @@ def _bounded_coverage_pages(
                 tuple(no_wake),
                 page.blocked_seq,
                 page.more_initials,
-                source_witness,
+                source_witness=source_witness,
             )
         if page.blocked_seq is not None or not page.more_initials:
             return ProvenSourceCoverage(
@@ -125,7 +101,7 @@ def _bounded_coverage_pages(
                 tuple(no_wake),
                 page.blocked_seq,
                 page.more_initials,
-                source_witness,
+                source_witness=source_witness,
             )
     raise IdentityConflict("source coverage exceeded bounded canonical page budget")
 
@@ -157,7 +133,7 @@ def _same_generation_prefix(
     generation: int,
     admission_generation: int,
 ) -> bool:
-    """Reject an old native proof even in a legacy persisted cursor prefix."""
+    """Reject a previous owner's native proof in a persisted cursor prefix."""
     for item in evidence:
         row = NativeRuntimeInput.one(db, input_id=item.input_id)
         if row is None or (

@@ -159,8 +159,6 @@ class Publisher:
             self._validate_publish_request(message)
             if not self.log.read_metadata_unlocked().private:
                 self._initialize_private_protocol_unlocked()
-                if self._private_claim_writes:
-                    self.log.enable_claim_gate_unlocked()
             return self.publish_initial_cohort(
                 message, _bus_locked=True, _human_origin=_human_origin
             )
@@ -182,6 +180,7 @@ class Publisher:
             raise RelationViolationError("Private initial publication is disabled.")
         self.log.require_fresh_private_root_unlocked()
         root_id = uuid.uuid4().hex
+        from .private_bus_checkpoint import install_private_bus_checkpoint
         from .private_registry_guard import PrivateRegistryGuard
 
         # Total order: caller's wire lock, bus lock, registry lock. The
@@ -193,22 +192,16 @@ class Publisher:
             guard = PrivateRegistryGuard(self._registry.store.path, root_id)
             guard.create_pending()
             self.log.write_metadata_unlocked(
-                WireMetadata(last_seq=0, writer_protocol_version=1, wire_root_id=root_id)
+                WireMetadata(
+                    last_seq=0,
+                    writer_protocol_version=1,
+                    wire_root_id=root_id,
+                    claim_envelopes_version=1,
+                )
             )
+            install_private_bus_checkpoint(self.log, _bus_locked=True)
             guard.commit_initial()
             return root_id
-
-    def initialize_private_claim_protocol(self) -> str:
-        """Claim gate for a NEW marked root, before ANY bus message exists.
-
-        The version flag in the EXISTING private bus marker is only a read
-        barrier. Claim ownership lives in one bus envelope, not in metadata
-        or an O_EXCL claim sidecar.
-        """
-        if not self._private_claim_writes:
-            raise RelationViolationError("Claim envelope publication is disabled.")
-        with self.log.locked():
-            return self.log.enable_claim_gate_unlocked()
 
     def publish_claim_envelope(
         self,
@@ -258,9 +251,7 @@ class Publisher:
                 else _locked_registry_snapshot
             )
             snapshot.require_unambiguous_ownership()
-            sender, target = self._validate_publish_request(
-                message, registry_snapshot=snapshot
-            )
+            sender, target = self._validate_publish_request(message, registry_snapshot=snapshot)
             projection, verified_sequence = self.log._claim_projection_unlocked(metadata)
             # The verified bus high-water also covers rows left by an earlier
             # uncertain append. Reserve and sync the next sequence before use.
@@ -335,19 +326,12 @@ class Publisher:
         with nullcontext() if _bus_locked else self.log.locked():
             _require_no_private_owner_rename(self.log.path.parent)
             metadata = self.log._private_marker_unlocked()
-            from .private_bus_checkpoint import (
-                certificate_enabled,
-                verify_private_bus_checkpoint_unlocked,
-            )
+            metadata.access.require_append()
+            from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
 
-            if certificate_enabled(self.log.path):
-                previous_sequence = verify_private_bus_checkpoint_unlocked(
-                    self.log, metadata
-                ).through_seq
-            else:
-                previous_sequence = 0
-                for previous, _, _ in self.log._verified_private_rows_unlocked(metadata):
-                    previous_sequence = previous.seq
+            previous_sequence = verify_private_bus_checkpoint_unlocked(
+                self.log, metadata
+            ).through_seq
             if metadata.last_seq >= MAX_WIRE_SEQ:
                 raise RelationViolationError("Private bus sequence is exhausted.")
             source_paths = (

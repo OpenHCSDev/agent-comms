@@ -1535,7 +1535,6 @@ class TestWireProtocol:
         root = tmp_path / "wire"
         comms = wire(root)
         root_id = comms.messaging.initialize_private_initial_protocol()
-        comms.messaging.initialize_private_claim_protocol()
         env = dict(
             __import__("os").environ,
             AGENT_COMMS_ROOT=str(root),

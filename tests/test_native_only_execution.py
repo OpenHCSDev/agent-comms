@@ -145,7 +145,6 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         caller_project.mkdir()
         comms = Comms(base / "wire")
         root_id = comms.messaging.initialize_private_initial_protocol()
-        comms.messaging.initialize_private_claim_protocol()
         comms.threads.register(Thread("headless", frozenset(), str(project)))
         env = dict(
             os.environ,

@@ -244,10 +244,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 return PromptResponse.model_validate(result)
             owner = self.sessions.require(session_id)
             root_id = self._private_nk_marker()
-            if root_id is None or self._private_nk_native_package is None:
-                raise RequestError.invalid_params(
-                    {"reason": "Selected write requires private N/K owner"}
-                )
             controller = self._runtime.controller.get()
             if controller is None or (
                 controller is UNBOUND_CONTROLLER and self.sessions.client is None
@@ -559,36 +555,25 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             ),
         }
 
-    def _private_session_mode(self) -> bool:
-        marker = self._private_nk_marker()
-        if marker is None:
-            return False
-        if self._private_nk_wire_root_id != marker or self._private_nk_native_package is None:
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
             raise PublicationActivationBlocked(
                 "private N/K ACP session requires explicit matching root and package"
             )
-        return True
-
-    def _private_nk_marker(self) -> str | None:
-        """Distinguish exact legacy metadata from a guarded private marker.
-
-        Both protocols use bus_meta.json. A mere file-existence test would
-        reject ordinary public ACP roots; an ambiguous/damaged marker must not
-        fall back to their legacy ACK path.
-        """
-        marker_path = self._comms.root / "bus_meta.json"
         with self._comms.bus.log.locked():
-            if marker_path.is_symlink():
-                raise IdentityConflict("ACP bus marker is redirected")
-            if not marker_path.exists():
-                return None
-            metadata = self._comms.bus.log.read_metadata_unlocked(required=True)
-            if metadata.private:
-                return self._comms.bus.log._private_marker_unlocked().root_id
-            return None
+            marker = self._comms.bus.log._private_marker_unlocked()
+            if marker.root_id != self._private_nk_wire_root_id:
+                raise PublicationActivationBlocked(
+                    "private N/K ACP root does not match configuration"
+                )
+            verify_private_bus_checkpoint_unlocked(self._comms.bus.log, marker)
+            return marker.root_id
 
     async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int:
-        """Selected private wake for this ACP session, never legacy inbox ACK.
+        """Run a selected private wake for this ACP session.
 
         This explicitly configured path reuses the reviewed one-shot native
         reservation/send boundary. No schema/participant is installed here;
@@ -606,7 +591,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         # callbacks may only invalidate a prior client binding, not replace it.
         await self._publish_private_cursor(session_id, thread_name)
         if not self.inputs.auto_wake or not self.sessions.runtime_enabled:
-            return 0  # Explicitly disabled: no legacy path or ACK fallback.
+            return 0  # Explicitly disabled by owner runtime configuration.
         if self._comms.registry.status(thread_name).stopped:
             return 0
         if (

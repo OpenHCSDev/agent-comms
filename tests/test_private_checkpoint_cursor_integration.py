@@ -5,7 +5,6 @@ Provider-free native fake only: a source certificate is not an ACK or input perm
 
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 from pathlib import Path
@@ -25,7 +24,6 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import CurrentNativeCursor
 from agent_comms.native_source_cursor import read_current_native_cursor
-from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
 from test_native_prompt_binding import _fake_model
 
@@ -66,8 +64,6 @@ def _root(tmp_path: Path):
     for person in people:
         comms.threads.register(person)
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.messaging.initialize_private_claim_protocol()
-    install_private_bus_checkpoint(comms.bus.log)  # fresh private root only
     first = comms.messaging.send_initial_cohort("sender", "#team", "selected one")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
@@ -80,9 +76,8 @@ def _root(tmp_path: Path):
     return root, root_id, comms, first, lookup
 
 
-@pytest.mark.parametrize("migrate_existing", [False, True])
 async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(
-    tmp_path, monkeypatch, migrate_existing
+    tmp_path, monkeypatch
 ):
     root, root_id, comms, first, lookup = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
@@ -100,20 +95,6 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(
         "sender", "#team", "selected after 1000 other rows"
     )
     assert second.seq == first.seq + 1001 and comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
-    if migrate_existing:
-        # Build the large fixture through the real certified publisher, then
-        # remove only its certificate to represent the same pre-migration bus.
-        # This avoids O(n**2) fixture setup through the old unindexed writer.
-        marker_path = root / "bus_meta.json"
-        marker = json.loads(marker_path.read_text())
-        del marker["checkpoint_version"]
-        del marker["checkpoint_seal"]
-        marker_path.write_text(json.dumps(marker))
-        (root / "private_bus_checkpoint.sqlite3").unlink()
-        before = comms.bus.log.path.read_bytes()
-        witness = install_private_bus_checkpoint(Comms(root).bus.log)
-        assert witness.through_seq == second.seq
-        assert comms.bus.log.path.read_bytes() == before
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second.seq, store)
     second_turn = await runtime.SelectedExecution(

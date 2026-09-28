@@ -18,9 +18,6 @@ from acp.schema import (
 )
 
 from .comms import Comms
-from .coordination_store import (
-    PublicationActivationBlocked,
-)
 from .goal_waits import GoalWait
 from .goals import Goal
 from .image_inputs import ImageInput
@@ -362,14 +359,10 @@ class InputDrain(FutureInputQueue):
         return result
 
     async def drain_owned_inbox(self, session_id: str) -> int:
-        if private_root := self.effects._private_nk_marker():
-            pushed = await self._drain_private_if_changed(session_id, private_root)
-            self.schedule_wake(session_id)
-            return pushed
-        raise PublicationActivationBlocked(
-            "This bus has no canonical protocol marker. Archive and migrate "
-            "existing history into the current source format before starting delivery."
-        )
+        private_root = self.effects._private_nk_marker()
+        pushed = await self._drain_private_if_changed(session_id, private_root)
+        self.schedule_wake(session_id)
+        return pushed
 
     def schedule_wake(self, session_id: str) -> None:
         if (

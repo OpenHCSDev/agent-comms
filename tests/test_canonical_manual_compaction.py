@@ -145,7 +145,7 @@ async def test_actual_acp_compact_uses_journal_and_reports_saved_history(tmp_pat
 
         agent.on_connect(Client())
         await agent.sessions.bind_owned(
-            comms.registry.require("owner"), "owner", fresh=False, private=True
+            comms.registry.require("owner"), "owner"
         )
         comms.agents.set_agent_info(
             "owner",
