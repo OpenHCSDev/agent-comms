@@ -124,3 +124,14 @@ def test_nominal_class_reference_retains_owner_without_inventing_state_payload()
 def test_nominal_class_reference_rejects_unknown_names_and_wrong_shapes(value):
     with pytest.raises(ValueError):
         FieldCodec.decode(ChoiceReference, {"choice": value})
+
+
+def test_request_schema_preserves_nullable_fields_and_owned_nonnull_constraint():
+    @dataclass(frozen=True)
+    class Request:
+        nullable: str | None = None
+        nonnull: str | None = field(default=None, metadata={"wire_nonnull": True})
+
+    properties = FieldCodec.record_schema(Request)["properties"]
+    assert properties["nullable"] == {"anyOf": [{"type": "string"}, {"type": "null"}]}
+    assert properties["nonnull"] == {"type": "string"}

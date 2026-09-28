@@ -19,7 +19,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.threads import Thread
-from agent_comms.tools import TOOLS
+from agent_comms.tools import ToolRequest
 
 
 def _wire(tmp_path) -> Comms:
@@ -64,7 +64,11 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
     assert reopened.goals.goal_history("reviewer", goal_id=first.id) == entries[:5]
     assert reopened.goals.goal_history("reviewer", goal_id=second.id) == entries[4:]
 
-    history_tool = next(tool for tool in TOOLS if tool.name == "comms_goal_history")
+    history_tool = next(
+        tool
+        for tool in ToolRequest.members_with(ToolRequest)
+        if tool.declared_name == "comms_goal_history"
+    )
     result = history_tool.invoke(reopened, {"goal_id": first.id})
     assert [row["after"]["revision"] for row in result["history"] if row["after"]] == [
         1,

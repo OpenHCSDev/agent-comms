@@ -1,4 +1,3 @@
-import json
 import os
 from dataclasses import replace
 from unittest.mock import patch
@@ -8,13 +7,12 @@ import pytest
 from agent_comms import invoke_tool
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.channels import AllOfMatch, AnyOfMatch, Channel, SavedView, ViewKind, ViewPredicate
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.display_order import ChannelSort, ThreadSort
-from agent_comms.messages import Message, MessageType
 from agent_comms.presentation import ThreadView
 from agent_comms.thread_management import ForkSpec
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 
 
@@ -72,7 +70,6 @@ def test_any_is_non_routable(tmp_path):
         comms.messaging.send("other", "#any", "agent send rejected")
     with pytest.raises(ValueError, match="not a routable target"):
         comms.messaging.send_user_message("#any", "user send rejected", worktree=str(tmp_path))
-
 
 
 def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path):
@@ -402,7 +399,14 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
 def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     comms = wire(tmp_path)
     comms.threads.register(Thread("moving", frozenset(), str(tmp_path)))
-    comms.threads.register(Thread("peer", frozenset({"api"}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.threads.register(
+        Thread(
+            "peer",
+            frozenset({"api"}),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     comms.channels.update_tags("moving", add=frozenset({"api"}))
     joined = comms.views.channel_history("#api")
     assert len(joined) == 1 and joined[0].membership.value == "joined"
@@ -480,7 +484,9 @@ def test_pin_lifecycle_tracks_identity_and_membership(tmp_path):
     comms.channels.set_channel_pinned("team", True)
     comms.channels.set_thread_pinned("team", "a", True)
     comms.channels.set_thread_pinned("#any", "a", True)
-    comms.registry.register(replace(comms.registry.require("a"), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.register(
+        replace(comms.registry.require("a"), process_identity=ProcessIdentity.capture(os.getpid()))
+    )
     comms.threads.rename_managed_thread("a", "renamed", owner_pid=os.getpid())
     observer = wire(tmp_path)
     assert observer.channels.catalog.read().pinned_threads("#team") == {"renamed"}
@@ -522,6 +528,6 @@ def test_invalid_pins_do_not_mutate_catalog(tmp_path):
         comms.channels.set_thread_pinned("missing", "a", True)
     with pytest.raises(ValueError, match="not a member"):
         comms.channels.set_thread_pinned("api", "b", True)
-    with pytest.raises(ValueError, match="must be boolean"):
+    with pytest.raises(ValueError, match="Expected.*bool"):
         invoke_tool(comms, "comms_pin_channel", {"name": "api", "pinned": "false"})
     assert comms.channels.catalog.path.read_text() == before

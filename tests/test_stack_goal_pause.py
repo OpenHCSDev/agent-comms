@@ -248,10 +248,14 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                     paused.state.declared_name == "paused"
                     and comms.goals.goal_pause("project").source.declared_name == "owner"
                 )
-                from agent_comms.tools import TOOLS
+                from agent_comms.tools import ToolRequest
 
                 monkeypatch.setenv("PI_AGENT_ID", "project")
-                report = next(tool for tool in TOOLS if tool.name == "comms_goal")
+                report = next(
+                    tool
+                    for tool in ToolRequest.members_with(ToolRequest)
+                    if tool.declared_name == "comms_goal"
+                )
                 with pytest.raises(ValueError, match="paused by the owner.*Do not resume"):
                     report.invoke(
                         comms, {"goal_id": paused.id, "status": "active", "progress": "4/50"}

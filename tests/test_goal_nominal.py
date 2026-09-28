@@ -1,6 +1,5 @@
 """S8 extension experiments and canonical saved-data contracts."""
 
-import importlib
 import json
 from dataclasses import dataclass, replace
 
@@ -72,11 +71,12 @@ async def test_experiment_b_new_model_action_uses_real_tool_and_event(owner, mon
         def next_state(self, ctx: GoalActionContext):
             return ctx.require_goal().state
 
-    # Production declarations load before the tool catalog. Rebuild that catalog
-    # in this test to simulate adding just the new declaration at startup.
-    importlib.reload(tools)
     try:
-        tool = next(t for t in tools.TOOLS if t.name == "comms_goal")
+        tool = next(
+            t
+            for t in tools.ToolRequest.members_with(tools.ToolRequest)
+            if t.declared_name == "comms_goal"
+        )
         assert "checkpoint" in tool.schema()["parameters"]["properties"]["status"]["enum"]
         monkeypatch.setenv("PI_AGENT_ID", "worker")
         previous = comms.goals.goal_snapshot("worker")
@@ -93,11 +93,17 @@ async def test_experiment_b_new_model_action_uses_real_tool_and_event(owner, mon
                 updates.append(kwargs)
 
         await AcpEventConsumer(None, "worker", Client()).dispatch(event)
-        assert updates[0]["update"].field_meta["agentComms"]["goal"]["revision"] == 2
+        from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
+
+        update = next(
+            row
+            for row in decode_updates(updates[0]["update"].field_meta)
+            if isinstance(row, GoalChangedUpdate)
+        )
+        assert update.goal.revision == 2
         assert comms.goals.goal_changed("worker", event.signature) is None
     finally:
         GoalAction.__registry__.pop("checkpoint")
-        importlib.reload(tools)
 
 
 @pytest.mark.parametrize(

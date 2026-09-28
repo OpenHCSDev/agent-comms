@@ -16,7 +16,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
-from agent_comms.tools import TOOLS
+from agent_comms.tools import ToolRequest
 
 
 def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path, monkeypatch):
@@ -47,8 +47,12 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         target="worker",
         text="An uncertain user follow-up",
     )
-    inbox = next(t for t in TOOLS if t.name == "comms_inbox")
-    report = next(t for t in TOOLS if t.name == "comms_goal")
+    inbox = next(
+        t for t in ToolRequest.members_with(ToolRequest) if t.declared_name == "comms_inbox"
+    )
+    report = next(
+        t for t in ToolRequest.members_with(ToolRequest) if t.declared_name == "comms_goal"
+    )
     args = {
         "goal_id": goal.id,
         "status": "standby",

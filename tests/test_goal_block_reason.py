@@ -21,7 +21,7 @@ from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_states import UnrecordedBlockGoal
 from agent_comms.goals import Goal
 from agent_comms.threads import Thread
-from agent_comms.tools import TOOLS
+from agent_comms.tools import ToolRequest
 
 
 def _owner(tmp_path):
@@ -41,7 +41,9 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
     before_history = comms.goals.goal_history("worker", goal_id=original.id)
     before_registry = (tmp_path / "registry.json").read_bytes()
     monkeypatch.setenv("PI_AGENT_ID", "worker")
-    tool = next(tool for tool in TOOLS if tool.name == "comms_goal")
+    tool = next(
+        tool for tool in ToolRequest.members_with(ToolRequest) if tool.declared_name == "comms_goal"
+    )
 
     for kwargs in (
         {},
@@ -68,7 +70,9 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
 def test_block_reason_round_trips_goal_execution_history_and_tool(tmp_path, monkeypatch):
     comms, original = _owner(tmp_path)
     monkeypatch.setenv("PI_AGENT_ID", "worker")
-    tool = next(tool for tool in TOOLS if tool.name == "comms_goal")
+    tool = next(
+        tool for tool in ToolRequest.members_with(ToolRequest) if tool.declared_name == "comms_goal"
+    )
     reason = "Need the exact ACP error text from the user before diagnosing."
     result = tool.invoke(
         comms, {"goal_id": original.id, "status": "blocked", "progress": f"  {reason}  "}
