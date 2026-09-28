@@ -1612,7 +1612,7 @@
  function sourceCallbacks(callbacks, done, total, phase) {
      return { ...callbacks, sourceProgress: {
          sourceBytesDone: (callbacks?.sourceOffset ?? 0) + done,
-@@ -503,111 +389,68 @@
+@@ -503,111 +389,74 @@
          summaryPhase: phase ?? callbacks?.sourcePhase ?? "history",
      } };
  }
@@ -1695,6 +1695,7 @@
 -                    } catch (error) {
 -                        failure ??= error;
 -                        controller.abort(error);
++    signal?.throwIfAborted();
 +    const policy=CompactionPolicy.fromEnvironment(env);
 +    const byteLimit=policy.inputBytes(model,reserveTokens);
 +    const source=new HistorySummarySource(currentMessages,previousSummary);
@@ -1706,11 +1707,14 @@
 +        if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});
 +        let combinedUsage, processedBytes=0;
 +        const summarizeSource=async (input,phase) => {
++            if (phase === 'synthesis') callbacks?.onSummaryStart?.(
++                sourceCallbacks(callbacks,processedBytes,sourceBytes,phase).sourceProgress);
 +            const result=new ReducedSummarySource();
 +            const plan=policy.plan(input.chunks(chunkBytes));
 +            const iterator=plan.segments[Symbol.iterator]();
 +            try {
 +                for(;;) {
++                    controller.signal.throwIfAborted();
 +                    const batch=[];
 +                    for(let n=0;n<plan.workers;n++) {const next=iterator.next();if(next.done)break;batch.push(next.value);}
 +                    if(!batch.length)return result;
@@ -1758,6 +1762,8 @@
 +                if(bytes<=chunkBytes) {
 +                    // This is now an admitted single model-sized source.
 +                    const text=[...reduced.pieces()].join('');
++                    callbacks?.onSummaryStart?.(
++                        sourceCallbacks(callbacks,sourceBytes,sourceBytes,'synthesis').sourceProgress);
 +                    const final=await generateSummaryWithUsage([{role:'user',content:[{type:'text',text}],timestamp:Date.now()}],
 +                        model,reserveTokens,apiKey,headers,controller.signal,customInstructions,undefined,thinkingLevel,
 +                        streamFn,env,retry,sourceCallbacks(callbacks,sourceBytes,sourceBytes,'synthesis'),sessionId,true);
@@ -1779,7 +1785,7 @@
      const maxTokens = boundedChunk ? policy.summaryTokens(model, byteLimit, reserveTokens) : Math.min(Math.floor(0.8 * reserveTokens), model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);
      // Use update prompt if we have a previous summary, otherwise initial prompt
      let basePrompt = previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
-@@ -616,8 +459,7 @@
+@@ -616,8 +465,7 @@
      }
      // Serialize conversation to text so model doesn't try to continue it
      // Convert to LLM messages first (handles custom types like bashExecution, custom, etc.)
@@ -1789,7 +1795,7 @@
      // Build the prompt with conversation wrapped in tags
      let promptText = `<conversation>\n${conversationText}\n</conversation>\n\n`;
      if (previousSummary) {
-@@ -637,72 +479,44 @@
+@@ -637,72 +485,44 @@
      const textContent = contentText(response.content);
      return { text: textContent, usage: response.usage };
  }
@@ -1900,7 +1906,7 @@
  }
  // ============================================================================
  // Main compaction function
-@@ -731,18 +545,18 @@
+@@ -731,18 +551,18 @@
   */
  export async function compact(preparation, model, apiKey, headers, customInstructions, signal, thinkingLevel, streamFn, env, retry, callbacks, sessionId) {
      const { firstKeptEntryId, messagesToSummarize, turnPrefixMessages, isSplitTurn, tokensBefore, previousSummary, fileOps, settings, } = preparation;
@@ -1924,7 +1930,7 @@
              const historyResult = await generateSummaryWithUsage(messagesToSummarize, model, settings.reserveTokens, apiKey, headers, signal, customInstructions, previousSummary, thinkingLevel, streamFn, env, retry, callbacks, sessionId);
              historyText = historyResult.text;
              historyUsage = historyResult.usage;
-@@ -777,30 +591,8 @@
+@@ -777,30 +597,8 @@
   * Generate a summary for a turn prefix (when splitting a turn).
   */
  async function generateTurnPrefixSummary(messages, model, reserveTokens, apiKey, headers, env, signal, thinkingLevel, streamFn, retry, callbacks, sessionId, customInstructions) {

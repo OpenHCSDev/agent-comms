@@ -1,4 +1,14 @@
-# Current combined checkpoint — 2026-09-28
+# Final matched candidate — 2026-09-28
+
+Canonical package: `/home/ts/wt/comms-native-session-entry-store-20260928/stack/.pi-native-0d7ebb4f4b5aa1ec/node_modules/@earendil-works/pi-coding-agent`
+Launcher: `/home/ts/wt/comms-native-session-entry-store-20260928/stack/bin/pi-native`
+Python source: this branch `src`, combined installed225 + PR242 + PR244.
+
+Production preparation and whole-package verification pass (`canonical-build-acceptance.log`). The earlier8eb7 package is superseded by this final candidate. Final source restores synthesis progress events, refuses pre-cancelled work before any provider invocation, and places previous summaries before new source during ordered map/reduce. Canonical parallel fixture passes cancellation, chronological multi-level synthesis, three successive summaries, split-turn retention and per-request reserve sizing (`parallel-canonical.log`). These are controlled local model responses, not semantic LLM-retention evidence.
+
+All three remaining previously failed real-host ACP variants now pass (`selected-owner-remaining.log`,32.15s); with `selected-owner-corrected.log` this closes all four coroutine-related failures. Parent retains actual installed/provider acceptance. Final canonical CLI compact/reopen receipt is running; independent >256MiB full-chain acceptance belongs to Lovelace and remains pending.
+
+# Combined implementation checkpoint — 2026-09-28
 
 PR243 now combines Pascal PR244 proof startup and parent PR242 compaction fixes. This source checkpoint supersedes the historical pending implementation lists below. No live installation or paid provider calls.
 

@@ -15,7 +15,10 @@ export class EntryMessageRange {
             if (messages.length) yield messages[0];
         }
     }
-    isEmpty() { return this[Symbol.iterator]().next().done; }
+    isEmpty() {
+        const iterator = this[Symbol.iterator]();
+        try { return iterator.next().done; } finally { iterator.return?.(); }
+    }
 }
 
 export class SummarySource {
@@ -46,13 +49,16 @@ export class HistorySummarySource extends SummarySource {
     constructor(messages, previousSummary) { super(); this.messages = messages; this.previousSummary = previousSummary; }
     *pieces() {
         let emitted = false;
+        if (this.previousSummary) {
+            yield `<previous-summary>\n${this.previousSummary}\n</previous-summary>`;
+            emitted = true;
+        }
         for (const message of this.messages) {
             const text = serializeConversation(convertToLlm([message]));
             if (!text) continue;
             if (emitted) yield '\n\n';
             yield text; emitted = true;
         }
-        if (this.previousSummary) yield `\n\n<previous-summary>\n${this.previousSummary}\n</previous-summary>`;
     }
 }
 

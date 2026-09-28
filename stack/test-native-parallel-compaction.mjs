@@ -27,7 +27,7 @@ const stream=async (_model, context) => ({result: async()=>{
   const index=requestCount++;
   assert.ok(Buffer.byteLength(prompt,'utf8') <= (128000-16384)*.75);
   assert.ok(prompt.includes('PRESERVE_CUSTOM_INSTRUCTION'));
-  if(prompt.includes('Combine these chronological segment summaries')){
+  if(phaseStarts.at(-1)?.summaryPhase === 'synthesis'){
     assert.equal(active,0,'synthesis waits for all map responses');
     assert.equal(phaseStarts.at(-1)?.summaryPhase,'synthesis','phase starts before provider work');
     for(let i=0;i<mapped.length;i++) assert.ok(prompt.includes(`MAP_${i}`));
@@ -86,14 +86,14 @@ const abortedBeforeStart = new AbortController();abortedBeforeStart.abort(new Er
 let afterStopCalls=0;
 await assert.rejects(()=>run(async()=>{afterStopCalls++;throw new Error('must not run');},{},abortedBeforeStart.signal),/OWNER_STOP/);
 assert.equal(afterStopCalls,0);
-let hierarchyCalls=0,synthesisCalls=0;
+let hierarchyCalls=0,synthesisCalls=0,hierarchyPhase='map';
 await run(async(_model,context)=>({result:async()=>{
   hierarchyCalls++;
   const prompt=context.messages[0].content[0].text;
-  const synth=prompt.includes('Combine these chronological segment summaries');
+  const synth=hierarchyPhase==='synthesis';
   if(synth)synthesisCalls++;
   return {stopReason:'stop',content:[{type:'text',text:synth?'bounded intermediate summary':'preserve reference '.repeat(2000)}],usage};
-}}));
+}}),{onSummaryStart:progress=>{hierarchyPhase=progress.summaryPhase;}});
 assert.ok(synthesisCalls>1,'large map outputs require bounded hierarchy, never truncation');
 console.log(`policy/hierarchy PASS serialPeak=${serialPeak} synthesisRequests=${synthesisCalls} total=${hierarchyCalls}`);
 // Three successive compactions prove adapter plumbing preserves the supplied
@@ -120,7 +120,7 @@ console.log('three-round source/summary plumbing PASS');
 const { SessionManager, sessionEntryToContextMessages } = await import(pathToFileURL(resolve(path,'../../session-manager.js')).href);
 const { prepareCompaction, compact } = await import(pathToFileURL(path).href);
 const { mkdtempSync, rmSync } = await import('node:fs');
-const repeatedRoot=mkdtempSync('/var/tmp/ac-parallel-repeat-');
+const repeatedRoot=mkdtempSync(resolve(process.env.TMPDIR ?? '/var/tmp','ac-parallel-repeat-'));
 try {
   const manager=SessionManager.create(repeatedRoot,resolve(repeatedRoot,'sessions'));
   manager.appendMessage({role:'user',content:'earlier request',timestamp:1});
