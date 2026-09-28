@@ -6,10 +6,11 @@ records retain no raw wire mirror. FieldCodec is the sole primitive validator.
 
 from __future__ import annotations
 
+import re
 import types
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, is_dataclass, replace
-from typing import Any, ClassVar, Union, get_args, get_origin
+from typing import Any, ClassVar, Literal, Union, get_args, get_origin
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
@@ -540,3 +541,116 @@ class PiToolResult(PiPayload):
     def text(self, limit=4000):
         text = "".join(part.text for part in self.content)
         return text[:limit] + ("…" if len(text) > limit else "")
+
+
+class McpCallPolicy(DeclaredFamily, affix="McpCallPolicy"):
+    @classmethod
+    def require_available(cls):
+        pass
+
+    @classmethod
+    def require_unavailable(cls):
+        raise ValueError("Inactive MCP servers cannot advertise calls")
+
+
+class AutomaticMcpCallPolicy(McpCallPolicy):
+    pass
+
+
+class ConfirmMcpCallPolicy(McpCallPolicy):
+    pass
+
+
+class UnavailableMcpCallPolicy(McpCallPolicy):
+    @classmethod
+    def require_available(cls):
+        raise ValueError("Ready MCP servers must advertise their call policy")
+
+    @classmethod
+    def require_unavailable(cls):
+        pass
+
+
+class McpServerState(DeclaredFamily, affix="McpServerState"):
+    @classmethod
+    @abstractmethod
+    def validate(cls, calls: type[McpCallPolicy], counts: tuple[int, ...]): ...
+
+
+class ReadyMcpServerState(McpServerState):
+    @classmethod
+    def validate(cls, calls, counts):
+        calls.require_available()
+
+
+class ErrorMcpServerState(McpServerState):
+    @classmethod
+    def validate(cls, calls, counts):
+        calls.require_unavailable()
+        if any(counts):
+            raise ValueError("Inactive MCP server counts must be zero")
+
+
+class DisabledMcpServerState(ErrorMcpServerState):
+    pass
+
+
+class TrustRequiredMcpServerState(ErrorMcpServerState):
+    pass
+
+
+class UnsupportedEnvMcpServerState(ErrorMcpServerState):
+    pass
+
+
+class DeniedMcpServerState(ErrorMcpServerState):
+    pass
+
+
+class StaleRestartRequiredMcpServerState(ErrorMcpServerState):
+    pass
+
+
+class ConnectingMcpServerState(ErrorMcpServerState):
+    pass
+
+
+class ApprovedMcpServerState(ErrorMcpServerState):
+    pass
+
+
+@dataclass(frozen=True)
+class McpServerReceipt:
+    id: str
+    scope: Literal["user", "project"]
+    state: type[McpServerState]
+    calls: type[McpCallPolicy]
+    tools: int
+    resources: int
+    prompts: int
+
+    def __post_init__(self):
+        if re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", self.id) is None:
+            raise ValueError("Invalid external MCP server identity")
+        counts = self.tools, self.resources, self.prompts
+        if any(not 0 <= count <= 10_000 for count in counts):
+            raise ValueError("Invalid external MCP server counts")
+        self.state.validate(self.calls, counts)
+
+
+@dataclass(frozen=True)
+class McpLiveReceipt:
+    version: Literal[1]
+    source: Literal["pi-mcp-client"]
+    input_id: str = field(metadata={"wire_name": "inputId"})
+    state: Literal["running"]
+    lifetime: Literal["turn"]
+    servers: tuple[McpServerReceipt, ...]
+
+    def __post_init__(self):
+        if re.fullmatch(r"[a-f0-9]{32}", self.input_id) is None:
+            raise ValueError("Invalid external MCP input identity")
+        if len(self.servers) > 32 or len({server.id for server in self.servers}) != len(
+            self.servers
+        ):
+            raise ValueError("Invalid external MCP server collection")

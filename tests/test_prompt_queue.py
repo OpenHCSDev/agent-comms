@@ -2,8 +2,16 @@ import asyncio
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
-from delivery_owner_fixture import canonical_agent
+from agent_comms.acp_extension import (
+    InputStartedUpdate,
+    QueueChangedUpdate,
+    QueuePromptRequest,
+    SteerPromptRequest,
+    decode_updates,
+    encode_request,
+)
 from agent_comms.comms import wire
+from delivery_owner_fixture import canonical_agent
 
 
 async def make_agent(tmp_path, monkeypatch):
@@ -16,7 +24,7 @@ async def make_agent(tmp_path, monkeypatch):
 async def test_queued_and_steered_followups_both_reach_the_next_boundary(tmp_path, monkeypatch):
     agent = await make_agent(tmp_path, monkeypatch)
     active = asyncio.Event()
-    commands, updates = [], []
+    commands, updates = ([], [])
 
     class Client:
         async def session_update(self, **kwargs):
@@ -42,22 +50,22 @@ async def test_queued_and_steered_followups_both_reach_the_next_boundary(tmp_pat
         await agent.prompt(
             "project",
             [{"type": "text", "text": "later"}],
-            field_meta={"agentComms": {"deferDisplay": True, "userText": "later"}},
+            field_meta=encode_request(QueuePromptRequest("later", True)),
         )
         assert not turn.done()
         assert len(agent.inputs.queued_inputs["project"]) == 1
         await agent.prompt(
             "project",
             [{"type": "text", "text": "now"}],
-            agentComms={"delivery": "steer"},  # ACP SDK flattens _meta into kwargs.
+            agentComms=encode_request(SteerPromptRequest(None, False))["agentComms"],
         )
         await asyncio.wait_for(turn, timeout=2)
-        # Both deliveries steer at the next boundary; only local echo is deferred.
         assert [command["streamingBehavior"] for command in commands] == ["steer", "steer"]
         starts = [
-            u["_meta"]["agentComms"]["inputStarted"]["text"]
+            fact.text
             for u in updates
-            if "inputStarted" in u.get("_meta", {}).get("agentComms", {})
+            for fact in decode_updates(u.get("_meta"))
+            if isinstance(fact, InputStartedUpdate)
         ]
         assert starts == [None, "later"]
         assert not agent.inputs.queued_inputs.get("project")
@@ -88,19 +96,15 @@ async def test_cancellation_restores_unprocessed_user_queue(tmp_path, monkeypatc
         await agent.prompt(
             "project",
             [{"type": "text", "text": "keep this queued text"}],
-            field_meta={"agentComms": {"deferDisplay": True}},
+            field_meta=encode_request(QueuePromptRequest(None, True)),
         )
         await agent.cancel("project")
         assert (await turn).stop_reason == "cancelled"
         assert any(
-            [
-                row["text"]
-                for row in (u.get("_meta", {}).get("agentComms", {}).get("queueState") or {}).get(
-                    "restored", []
-                )
-            ]
-            == ["keep this queued text"]
+            [row.text for row in fact.projection.restored] == ["keep this queued text"]
             for u in updates
+            for fact in decode_updates(u.get("_meta"))
+            if isinstance(fact, QueueChangedUpdate)
         )
     finally:
         await agent.shutdown()

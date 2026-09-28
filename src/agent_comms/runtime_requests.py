@@ -85,8 +85,6 @@ class ResultRuntimeRequest(RuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class SubscribeRuntimeRequest(RuntimeRequest):
-    transcript_snapshots: bool = field(default=False, metadata={"wire_name": "transcriptSnapshots"})
-
     async def apply(self, ctx: RuntimeRequestContext) -> None:
         agent = ctx.server.agent
         ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
@@ -95,7 +93,6 @@ class SubscribeRuntimeRequest(RuntimeRequest):
             ctx.session_id,
             ctx.name,
             client=ctx.client,
-            snapshots=self.transcript_snapshots,
         )
         await agent.turns.replay_turn_state(ctx.session_id, client=ctx.client)
         await agent.inputs.replay_unknown_inputs(ctx.session_id, client=ctx.client)

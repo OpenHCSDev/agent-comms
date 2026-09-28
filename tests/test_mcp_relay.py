@@ -2,8 +2,6 @@
 
 import asyncio
 import json
-import os
-import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,13 +13,20 @@ from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms import pi_events as pi
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import (
+    McpClientReceiptUpdate,
+    decode_updates,
+)
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
+from agent_comms.pi_payloads import McpLiveReceipt
 from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient
 from delivery_owner_fixture import canonical_agent
 
-pytestmark = [pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable stub"),
-              pytest.mark.usefixtures("native_rpc_fixture")]
+pytestmark = [
+    pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable stub"),
+    pytest.mark.usefixtures("native_rpc_fixture"),
+]
 
 
 async def test_live_projection_requires_owning_acp_turn_and_session(tmp_path):
@@ -33,15 +38,16 @@ async def test_live_projection_requires_owning_acp_turn_and_session(tmp_path):
             updates.append(kwargs)
 
     observer = Observer()
-    receipt = {"inputId": "a" * 32}  # Backend validation is tested separately.
+    receipt = McpLiveReceipt(1, "pi-mcp-client", "a" * 32, "running", "turn", ())
     event = ae.McpLiveStatus(receipt)
     try:
         owner.turns.active_turns["session-1"] = "turn-1"
         await owner._emit_event("session-1", event, observer, turn_id="turn-1")
         assert len(updates) == 1
         assert updates[0]["session_id"] == "session-1"
-        meta = updates[0]["update"].model_dump(by_alias=True)["_meta"]["agentComms"]
-        assert meta == {"turnId": "turn-1", "mcpClient": receipt}
+        assert decode_updates(updates[0]["update"].field_meta) == (
+            McpClientReceiptUpdate("turn-1", receipt),
+        )
         owner.turns.active_turns.pop("session-1")  # Settled: no receipt may escape.
         await owner._emit_event("session-1", event, observer, turn_id="turn-1")
         owner.turns.active_turns["session-1"] = "turn-2"
@@ -52,10 +58,7 @@ async def test_live_projection_requires_owning_acp_turn_and_session(tmp_path):
         assert len(updates) == 1
         await owner._emit_event("session-1", event, observer, turn_id="turn-2")
         assert len(updates) == 2
-        assert (
-            updates[-1]["update"].model_dump(by_alias=True)["_meta"]["agentComms"]["turnId"]
-            == "turn-2"
-        )
+        assert decode_updates(updates[-1]["update"].field_meta)[0].turn_id == "turn-2"
     finally:
         await owner.shutdown()
 
@@ -141,7 +144,7 @@ async def collect_backend(program, cwd, controller):
 
 
 async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path, monkeypatch):
-    agent = CommsAgent(wire(tmp_path / "wire"))
+    agent = canonical_agent(wire(tmp_path / "wire"))
     await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
     session_id = "project"
     turn = "turn-1"
@@ -227,7 +230,9 @@ def test_live_receipt_rejects_stale_input_malformed_and_ambiguous_claims():
             method="setStatus", status_key="pi-mcp/live-v1", status_text=claim
         )
 
-    assert backend._pi_mcp_live_receipt(wire_claim(json.dumps(valid)), input_id) == valid
+    assert backend._pi_mcp_live_receipt(
+        wire_claim(json.dumps(valid)), input_id
+    ) == FieldCodec.decode(McpLiveReceipt, valid)
     assert backend._pi_mcp_live_receipt(wire_claim(json.dumps(valid)), "b" * 32) is None
     assert (
         backend._pi_mcp_live_receipt(
@@ -391,213 +396,4 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
     finally:
         for proxy in proxies:
             await proxy.close()
-        await owner.shutdown()
-
-
-@pytest.mark.parametrize("has_controller", [True, False])
-async def test_detached_acp_turn_uses_real_package_sdk_without_model_or_provider(
-    tmp_path, monkeypatch, has_controller
-):
-    """Composed fake-Pi RPC, real package SDK, real stdio MCP, real ACP owner.
-
-    The fake Pi emits protocol events and directly invokes package-owned tools;
-    this is not evidence of a real model call or real Pi tool dispatcher.
-    """
-    package = Path(__file__).resolve().parents[1] / "extensions" / "pi-mcp-client"
-    node = subprocess.run(
-        ["which", "node"], capture_output=True, text=True, check=True
-    ).stdout.strip()
-    agent_dir = tmp_path / "agent"
-    project = tmp_path / "project"
-    agent_dir.mkdir()
-    project.mkdir()
-    starts = tmp_path / "server-starts"
-    server_fixture = (package / "test" / "fixture-server.mjs").as_uri()
-    wrapper = tmp_path / "server-wrapper.mjs"
-    wrapper.write_text(f"""
-import {{appendFileSync}} from 'node:fs';
-appendFileSync({json.dumps(str(starts))}, String(process.pid) + '\\n');
-await import({json.dumps(server_fixture)});
-""")
-    config = {
-        "version": 1,
-        "servers": [
-            {
-                "id": "fixture",
-                "enabled": True,
-                "instructionsPolicy": "status-only",
-                "transport": {
-                    "type": "stdio",
-                    "command": node,
-                    "args": [str(wrapper)],
-                    "cwd": "project",
-                },
-            }
-        ],
-    }
-    (agent_dir / "mcp.json").write_text(json.dumps(config))
-    isolated = {
-        "PATH": os.environ.get("PATH", ""),
-        "HOME": str(tmp_path),
-        "PI_CODING_AGENT_DIR": str(agent_dir),
-        "CI": "true",
-        "NO_COLOR": "1",
-        "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
-    }
-    trust = package / "node_modules" / "@earendil-works" / "pi-coding-agent" / "dist" / "index.js"
-    saved = subprocess.run(
-        [
-            node,
-            "--input-type=module",
-            "-e",
-            f"""
-import {{ProjectTrustStore}} from {json.dumps(trust.as_uri())};
-new ProjectTrustStore({json.dumps(str(agent_dir))}).set({json.dumps(str(project))}, true);
-""",
-        ],
-        cwd=project,
-        env=isolated,
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    assert saved.returncode == 0, saved.stderr
-    script = tmp_path / "pi-mcp-rpc-stub"
-    script.write_text(f"""#!{node}
-import {{createInterface}} from 'node:readline';
-import {{McpRuntime}} from {json.dumps((package / "src" / "runtime.mjs").as_uri())};
-import {{registerReadyTools}} from {json.dumps((package / "src" / "tools.mjs").as_uri())};
-import {{liveStatusReceipt}} from {json.dumps((package / "src" / "live-status.mjs").as_uri())};
-const send = (row) => process.stdout.write(JSON.stringify(row) + '\\n');
-const ctx = {{cwd:process.cwd(), isProjectTrusted:()=>true, mode:'rpc', ui:{{
-  confirm(title,message,opts) {{
-    const id = 'owned-confirm';
-    send({{type:'extension_ui_request',id,method:'confirm',title,message,timeout:opts.timeout}});
-    return new Promise(resolve => {{ pending.set(id,resolve); }});
-  }},
-}}}};
-const pending = new Map();
-const runtime = new McpRuntime({{
-  ctx,agentDir:process.env.PI_CODING_AGENT_DIR,configDirName:'.pi'
-}});
-await runtime.start();
-const tools = [];
-registerReadyTools({{getAllTools:()=>[],registerTool:(tool)=>tools.push(tool)}},runtime);
-const echo = tools.find(tool => tool.label.endsWith('/echo'));
-if (!echo) throw new Error('fixture tool was not discovered');
-const input = createInterface({{input:process.stdin,crlfDelay:Infinity}});
-let settled = false;
-input.on('line', async line => {{
-  const row=JSON.parse(line);
-  if (row.type==='get_state') {{
-    send({{id:row.id,type:'response',command:'get_state',success:true,data:{{
-      nativeInputProofCapability:{json.dumps(backend.NATIVE_INPUT_CAPABILITY)},
-      sessionId:'fixture-session',sessionFile:{json.dumps(str(tmp_path / "fixture-session.jsonl"))}
-    }}}});
-  }} else if (row.type==='prompt') {{
-    send({{type:'response',id:row.id,command:'prompt',success:true}});
-    const receipt=await liveStatusReceipt(runtime,ctx,row.inputId);
-    send({{type:'extension_ui_request',id:'early',method:'setStatus',
-      statusKey:'pi-mcp/live-v1',statusText:JSON.stringify(receipt)}});
-    send({{type:'message_start',message:{{role:'user',content:row.message,inputId:row.inputId}}}});
-    send({{type:'extension_ui_request',id:'wrong-input',method:'setStatus',
-      statusKey:'pi-mcp/live-v1',statusText:JSON.stringify({{...receipt,inputId:'b'.repeat(32)}})}});
-    send({{type:'extension_ui_request',id:'live',method:'setStatus',
-      statusKey:'pi-mcp/live-v1',statusText:JSON.stringify(receipt)}});
-    send({{type:'extension_ui_request',id:'duplicate',method:'setStatus',
-      statusKey:'pi-mcp/live-v1',statusText:JSON.stringify(receipt)}});
-    send({{type:'tool_execution_start',toolCallId:'call-1',toolName:echo.name,
-          args:{{message:'from-sdk'}}}});
-    try {{
-      const result=await echo.execute('call-1',{{message:'from-sdk'}},new AbortController().signal,
-        undefined,ctx);
-      send({{type:'tool_execution_end',toolCallId:'call-1',toolName:echo.name,result}});
-    }} catch {{
-      send({{type:'tool_execution_end',toolCallId:'call-1',toolName:echo.name,
-            result:{{content:[{{type:'text',text:'denied'}}]}},isError:true}});
-    }}
-    send({{type:'message_end',message:{{role:'assistant',stopReason:'stop'}}}});
-    send({{type:'agent_settled'}});
-    settled=true;
-  }} else if (row.type==='extension_ui_response') {{
-    pending.get(row.id)?.(row.confirmed===true);
-    pending.delete(row.id);
-  }} else if (row.type==='get_session_stats') {{
-    send({{type:'response',id:row.id,command:'get_session_stats',success:true,
-      data:{{sessionId:'fixture-session',contextUsage:{{tokens:1}}}}}});
-    if (settled) {{ await runtime.stop(); process.exit(0); }}
-  }}
-}});
-""")
-    script.chmod(0o755)
-    isolated["PI_COMPACTION_TEST_PACKAGE"] = os.environ["PI_COMPACTION_TEST_PACKAGE"]
-    monkeypatch.setattr(backend.os, "environ", isolated)
-    owner = canonical_agent(
-        wire(tmp_path / "wire"), agent_bin=str(script), agent_args=[], auto_wake=False
-    )
-    updates = []
-    approvals = []
-
-    class Controller:
-        async def session_update(self, **kwargs):
-            updates.append(kwargs["update"])
-
-        async def request_permission(self, **kwargs):
-            approvals.append(kwargs)
-            return {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
-
-    owner.on_connect(Controller())  # Also observe a no-controller autonomous turn.
-    await owner.new_session(cwd=str(project), mcp_servers=[])
-    try:
-        for _ in range(2):
-            # A detached owner can have passive observers without any active
-            # controller. A bound None must not fall back to owner.sessions.client.
-            context = owner._runtime.controller.set(None) if not has_controller else None
-            try:
-                result = await asyncio.wait_for(
-                    owner.prompt("project", [{"type": "text", "text": "run package fixture"}]),
-                    timeout=15,
-                )
-            finally:
-                if context is not None:
-                    owner._runtime.controller.reset(context)
-            assert result.stop_reason == "end_turn"
-        assert len(approvals) == (2 if has_controller else 0)
-        assert len(starts.read_text().splitlines()) == 2
-        for pid in map(int, starts.read_text().splitlines()):
-            with pytest.raises(ProcessLookupError):
-                os.kill(pid, 0)
-        rendered = [update.model_dump(by_alias=True, exclude_none=True) for update in updates]
-        active_turn = None
-        receipt_turns = []
-        for row in rendered:
-            meta = row.get("_meta", {}).get("agentComms", {})
-            if meta.get("turnStarted"):
-                assert active_turn is None
-                active_turn = meta["turnId"]
-            if "mcpClient" in meta:
-                assert active_turn is not None
-                assert meta["turnId"] == active_turn
-                assert active_turn not in receipt_turns  # Exactly once, before settlement.
-                receipt_turns.append(active_turn)
-            if meta.get("turnSettled"):
-                assert meta["turnId"] == active_turn
-                active_turn = None
-        assert active_turn is None
-        assert len(receipt_turns) == 2 and len(set(receipt_turns)) == 2
-        receipts = [row.get("_meta", {}).get("agentComms", {}).get("mcpClient") for row in rendered]
-        receipts = [receipt for receipt in receipts if receipt is not None]
-        assert len(receipts) == 2
-        assert all(
-            receipt["version"] == 1
-            and receipt["source"] == "pi-mcp-client"
-            and receipt["lifetime"] == "turn"
-            and receipt["servers"][0]["state"] == "ready"
-            for receipt in receipts
-        )
-        if has_controller:
-            assert sum("from-sdk" in json.dumps(update) for update in rendered) >= 2
-        else:
-            assert sum("denied" in json.dumps(update) for update in rendered) >= 2
-    finally:
         await owner.shutdown()

@@ -11,8 +11,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from .activity import ActivityState
+from .declared_family import DeclaredFamily
 from .mro_dispatch import MroDispatch, handles
-from .pi_payloads import PiUsage
+from .pi_payloads import McpLiveReceipt, PiUsage
 from .tool_results import ToolDiff
 
 if TYPE_CHECKING:
@@ -124,7 +125,7 @@ class ToolEnd(ToolEvent):
 
 
 @dataclass(frozen=True)
-class CompactionEvent(AgentEvent):
+class CompactionEvent(AgentEvent, DeclaredFamily, affix="Event"):
     reason: str = "unknown"
 
     @property
@@ -255,7 +256,7 @@ class SteeringInterrupted(AgentEvent):
 
 @dataclass(frozen=True)
 class McpLiveStatus(AgentEvent):
-    receipt: dict[str, Any]
+    receipt: McpLiveReceipt
 
 
 @dataclass(frozen=True)

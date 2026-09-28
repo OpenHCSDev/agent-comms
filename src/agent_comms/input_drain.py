@@ -17,6 +17,16 @@ from acp.schema import (
     TextContentBlock,
 )
 
+from .acp_extension import (
+    AvailableQueueProjection,
+    InputDeliveryChangedUpdate,
+    InputStartedUpdate,
+    QueueChangedUpdate,
+    QueueItem,
+    QueueScope,
+    UnavailableQueueProjection,
+    encode_updates,
+)
 from .comms import Comms
 from .goal_waits import GoalWait
 from .goals import Goal
@@ -29,6 +39,7 @@ from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .selected_summary_admission import SelectedSummaryAdmission
 from .session_lifecycle import SessionLifecycle
 from .store_files import _store_lock, file_revision
+from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
 from .wake import derive_exact_reply_target
 from .wire_watch import open_wire_watcher
@@ -111,82 +122,54 @@ class InputDrain(FutureInputQueue):
             self.restored_inputs.pop(session_id, None)
         await self.emit_queue_state(session_id)
 
-    def queue_binding(self, session_id: str) -> dict[str, Any] | None:
+    def queue_binding(self, session_id: str) -> QueueScope | None:
         try:
             owner, admission = self.comms.registry.live_owner_with_admission(
                 self.sessions.bindings.get(session_id, session_id)
             )
         except (OSError, ValueError):
             return None
-        return {
-            "version": 1,
-            "sessionId": session_id,
-            "ownerThread": owner.name,
-            "ownerCreatedAt": owner.created_at,
-            "ownerEpoch": admission,
-            "admissionGeneration": admission,
-        }
+        return QueueScope(
+            session_id,
+            OwnerIdentity(ThreadIncarnation(owner.name, owner.created_at), admission),
+            owner.pid,
+        )
 
-    def queue_state(self, session_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-        """Bounded exact-ID presentation of this ACP owner's in-memory queue.
-
-        A changed owner admission never inherits old in-memory queue entries.
-        They and their durable input dispositions remain untouched/UNKNOWN.
-        An oversized projection is unavailable, not an empty queue or retry.
-        """
+    def queue_state(self, session_id: str) -> QueueChangedUpdate:
+        """The producer owns the complete exact-ID queue projection."""
         revision = self.queue_revisions.get(session_id, 0) + 1
         self.queue_revisions[session_id] = revision
-        binding = self.queue_binding(session_id)
-        if binding is None:
-            return None, None
-        scope = {key: value for key, value in binding.items() if key != "version"}
+        scope = self.queue_binding(session_id)
+        if scope is None:
+            return QueueChangedUpdate(None, revision, UnavailableQueueProjection())
 
-        def current(values: dict[str, QueuedInput]) -> list[dict[str, str]]:
-            return [
-                {"inputId": input_id, "text": item.text}
+        def current(values: dict[str, QueuedInput]) -> tuple[QueueItem, ...]:
+            return tuple(
+                QueueItem(input_id, item.text)
                 for input_id, item in values.items()
                 if item.echo
-                and item.owner_created_at == binding["ownerCreatedAt"]
-                and item.admission == binding["admissionGeneration"]
-            ]
+                and item.owner_created_at == scope.owner_created_at
+                and item.admission == scope.admission_generation
+            )
 
         items = current(self.queued_inputs.get(session_id, {}))
         restored = current(self.restored_inputs.get(session_id, {}))
-        if len(items) + len(restored) > 32:
-            return binding, None
-        if any(type(row["text"]) is not str for row in items + restored):
-            # Historical malformed entries retain their exact IDs and UNKNOWN
-            # dispositions, but cannot be projected as a valid queue state.
-            return binding, None
+        rows = items + restored
         try:
-            sizes = [len(row["text"].encode("utf-8")) for row in items + restored]
-        except UnicodeError:
-            # JSON permits lone surrogates. They remain exact queued/UNKNOWN
-            # inputs, but cannot be advertised as a valid UTF-8 queue row.
-            return binding, None
-        if any(size > 4096 for size in sizes) or sum(sizes) > 65536:
-            return binding, None
-        return binding, {
-            "version": 1,
-            "scope": scope,
-            "revision": revision,
-            "items": items,
-            "restored": restored,
-        }
+            sizes = [len(row.text.encode("utf-8")) for row in rows]
+        except (AttributeError, UnicodeError):
+            return QueueChangedUpdate(scope, revision, UnavailableQueueProjection())
+        if len(rows) > 32 or any(size > 4096 for size in sizes) or sum(sizes) > 65536:
+            return QueueChangedUpdate(scope, revision, UnavailableQueueProjection())
+        return QueueChangedUpdate(scope, revision, AvailableQueueProjection(items, restored))
 
     async def emit_queue_state(self, session_id: str, *, client: Any = None) -> None:
-        binding, state = self.queue_state(session_id)
         await (client or self.runtime).session_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta={
-                    "agentComms": {
-                        "queueBinding": binding,
-                        "queueState": state,
-                    }
-                },
+                field_meta=encode_updates(self.queue_state(session_id)),
             ),
         )
 
@@ -196,67 +179,50 @@ class InputDrain(FutureInputQueue):
         text: str | None,
         input_id: str | None = None,
         queued_item: QueuedInput | None = None,
+        *,
+        client: Any = None,
     ) -> None:
-        proof: dict[str, Any] = {"text": text}
-        if input_id is not None:
-            proof["inputId"] = input_id
-        if input_id is not None and queued_item is not None:
-            binding = self.queue_binding(session_id)
-            if binding is not None and (
-                binding["ownerCreatedAt"],
-                binding["admissionGeneration"],
-            ) == (queued_item.owner_created_at, queued_item.admission):
-                revision = self.queue_revisions.get(session_id, 0) + 1
-                self.queue_revisions[session_id] = revision
-                proof.update(
-                    version=1,
-                    scope={key: value for key, value in binding.items() if key != "version"},
-                    revision=revision,
-                )
-        await self.runtime.session_update(
+        scope = self.queue_binding(session_id)
+        if (
+            queued_item is None
+            or scope is None
+            or (scope.owner_created_at, scope.admission_generation)
+            != (queued_item.owner_created_at, queued_item.admission)
+        ):
+            scope = None
+        revision = None
+        if scope is not None:
+            revision = self.queue_revisions.get(session_id, 0) + 1
+            self.queue_revisions[session_id] = revision
+        await (client or self.runtime).session_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta={"agentComms": {"inputStarted": proof}},
+                field_meta=encode_updates(InputStartedUpdate(input_id, text, scope, revision)),
             ),
         )
 
     async def emit_input_disposition(
         self, session_id: str, row: InputAttempt, client: Any = None
     ) -> None:
-        await self.emit_public_input_disposition(session_id, row.public(), client)
+        await self.emit_input_delivery_changed(session_id, input_id=row.public_id, client=client)
 
-    async def emit_public_input_disposition(
-        self, session_id: str, disposition: dict[str, Any], client: Any = None
+    async def emit_input_delivery_changed(
+        self, session_id: str, *, input_id: str | None = None, client: Any = None
     ) -> None:
         await (client or self.runtime).session_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta={"agentComms": {"inputDisposition": disposition}},
-            ),
-        )
-
-    async def emit_input_delivery_changed(self, session_id: str) -> None:
-        """Invalidate attached views after a notice-only owner action."""
-        await self.runtime.session_update(
-            session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta={"agentComms": {"inputDeliveryChanged": True}},
+                field_meta=encode_updates(InputDeliveryChangedUpdate(input_id)),
             ),
         )
 
     async def replay_unknown_inputs(self, session_id: str, client: Any = None) -> None:
-        owner = self.sessions.require(session_id)
-        overview = self.comms.goals.input_delivery(
-            owner, awaiting_keys=self.awaiting_input_keys(session_id)
-        )
-        for disposition in overview["inputs"]:
-            await self.emit_public_input_disposition(session_id, disposition, client=client)
+        """Refresh the producer-owned delivery ledger; this never replays an input."""
+        await self.emit_input_delivery_changed(session_id, client=client)
 
     def awaiting_input_keys(self, session_id: str) -> frozenset[str] | None:
         """Derive delivery notices from existing owner queues; never create new authority."""
@@ -511,16 +477,7 @@ class InputDrain(FutureInputQueue):
         # ACP receipt is only local acceptance. The matching inputStarted
         # update, not this end_turn, is the model-read boundary.
         return PromptResponse(
-            stop_reason="end_turn",
-            field_meta={
-                "agentComms": {
-                    "inputDisposition": {
-                        "inputId": input_id,
-                        "status": "accepted_not_started",
-                        "delivery": delivery,
-                    }
-                }
-            },
+            stop_reason="end_turn", field_meta=encode_updates(InputDeliveryChangedUpdate(input_id))
         )
 
     def bind_native_turn(

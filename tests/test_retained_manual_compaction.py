@@ -10,6 +10,12 @@ import pytest
 from acp.agent.router import build_agent_router
 
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import (
+    CompactionCommittedUpdate,
+    CompactRequest,
+    decode_updates,
+    encode_request,
+)
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
@@ -140,19 +146,24 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
         await agent.sessions.bind_owned(comms.registry.require("retained"), "retained")
         assert not agent.turns.persistent_backends
         assert comms.agents.agent_info_of("retained") is None
-        await build_agent_router(agent)(
+        response = await build_agent_router(agent)(
             "session/prompt",
             {
                 "sessionId": "retained",
                 "prompt": [
-                    {"type": "text", "text": "/compact" if mode == "manual" else "cold-start input"}
+                    {"type": "text", "text": " " if mode == "manual" else "cold-start input"}
                 ],
+                **({"_meta": encode_request(CompactRequest())} if mode == "manual" else {}),
             },
             False,
         )
         (tmp_path / "updates.json").write_text(
             json.dumps([item["update"].model_dump(mode="json") for item in updates], indent=2)
         )
+        if mode == "manual":
+            (receipt,) = decode_updates(response.field_meta)
+            assert isinstance(receipt, CompactionCommittedUpdate)
+            assert receipt.summary
         journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
         (attempt,) = journal.selected_summaries(str(session))
         if mode == "manual":

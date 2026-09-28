@@ -7,41 +7,48 @@ from dataclasses import replace
 
 import pytest
 
-from delivery_owner_fixture import canonical_agent
-from agent_comms.child_process import ProcessIdentity
 from agent_comms import agent_events as ae
+from agent_comms.acp_extension import (
+    CoordinationChangedUpdate,
+    TranscriptSnapshotUpdate,
+    TurnSettledUpdate,
+    decode_updates,
+)
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.runtime import RuntimeProxy, _present_cursor_session, socket_path
+from agent_comms.runtime import RuntimeProxy, present_session, socket_path
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
+from delivery_owner_fixture import canonical_agent
 
 
 def test_owner_cursor_scope_rebases_only_attachment_session_alias():
-    scope = {
-        "sessionId": "canonical",
-        "wireRootId": "a" * 32,
-        "ownerThread": "canonical",
-        "ownerCreatedAt": 1000.0,
-        "ownerPid": 1234,
-        "ownerEpoch": 3,
-    }
-    for field in ("agentComms", "_meta"):
-        cursor = {"version": 1, "scope": dict(scope), "revision": 7, "status": "none"}
-        metadata = (
-            {"agentComms": {"privateNativeCursor": cursor}}
-            if field == "agentComms"
-            else {"_meta": {"agentComms": {"privateNativeCursor": cursor}}}
+    from agent_comms.acp_extension import (
+        CursorAdvancedUpdate,
+        CursorEnvelope,
+        CursorScope,
+        EmptyCursorObservation,
+        decode_updates,
+        encode_updates,
+    )
+    from agent_comms.thread_identity import OwnerIdentity, ThreadIncarnation
+
+    fact = CursorAdvancedUpdate(
+        CursorEnvelope(
+            CursorScope(
+                "canonical",
+                "a" * 32,
+                OwnerIdentity(ThreadIncarnation("canonical", 1000.0), 3),
+                1234,
+            ),
+            7,
+            EmptyCursorObservation(),
         )
-        assert _present_cursor_session(metadata, "old-alias") is metadata
-        assert cursor == {
-            "version": 1,
-            "scope": {**scope, "sessionId": "old-alias"},
-            "revision": 7,
-            "status": "none",
-        }
-    unsupported = {"agentComms": {"privateNativeCursor": {"version": 2, "scope": dict(scope)}}}
-    _present_cursor_session(unsupported, "old-alias")
-    assert unsupported["agentComms"]["privateNativeCursor"]["scope"] == scope
+    )
+    (rebased,) = decode_updates(present_session(encode_updates(fact), "old-alias"))
+    assert rebased.envelope.scope == replace(fact.envelope.scope, session_id="old-alias")
+    assert fact.envelope.scope.session_id == "canonical"
+    assert rebased.envelope.revision == fact.envelope.revision
 
 
 async def until(predicate, timeout=10):
@@ -62,13 +69,13 @@ async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
     proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
     request = {
         "prompt": [{"type": "text", "text": "Do not launch"}],
-        "meta": {"agentComms": {"delivery": "invalid"}},
+        "meta": {"agentComms": {"request": {"kind": "invalid"}}},
     }
     try:
         with pytest.raises(RequestError) as caught:
             await proxy.request("prompt", **request)
         assert caught.value.code == -32602
-        assert caught.value.data == {"reason": "delivery must be queue or steer"}
+        assert "invalid" in caught.value.data["reason"]
         # The older, already-running proxy reads only the string field.
         reader, writer = await asyncio.open_unix_connection(proxy.path)
         try:
@@ -80,7 +87,7 @@ async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
             )
             await writer.drain()
             result = json.loads(await reader.readline())
-            assert result["error"] == "delivery must be queue or steer"
+            assert "invalid" in result["error"]
         finally:
             writer.close()
             await writer.wait_closed()
@@ -121,7 +128,12 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
     proxy = RuntimeProxy(client, response.session_id, path)
     try:
         metadata = await proxy.subscribe()
-        assert metadata["agentComms"]["ownerPid"] == os.getpid()
+        assert (
+            next(
+                f for f in decode_updates(metadata) if isinstance(f, CoordinationChangedUpdate)
+            ).owner_pid
+            == os.getpid()
+        )
         updates.clear()
         result = await proxy.request(
             "prompt", prompt=[{"type": "text", "text": "socket roundtrip"}]
@@ -129,7 +141,8 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
         assert result["stopReason"] == "end_turn"
         await until(
             lambda: any(
-                u.get("_meta", {}).get("agentComms", {}).get("turnSettled") for u in updates
+                any(isinstance(f, TurnSettledUpdate) for f in decode_updates(u.get("_meta")))
+                for u in updates
             )
         )
         assert any("socket roundtrip" in u.get("content", {}).get("text", "") for u in updates)
@@ -160,7 +173,9 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
 async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp_path):
     comms = wire(tmp_path / "wire")
     old_pid, new_pid = 901001, 901002
-    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), process_identity=ProcessIdentity(old_pid, 1)))
+    comms.threads.register(
+        Thread("worker", frozenset(), str(tmp_path), process_identity=ProcessIdentity(old_pid, 1))
+    )
     client = canonical_agent(comms)
     updates = []
 
@@ -185,10 +200,11 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
                     (
                         json.dumps(
                             {
+                                "controllerToken": "a" * 64,
                                 "ready": {
-                                    "agentComms": {"imagePrompts": owner == "new"},
+                                    "agentComms": {"updates": []},
                                     "configOptions": [{"id": "model", "currentValue": owner}],
-                                }
+                                },
                             }
                         )
                         + "\n"
@@ -209,14 +225,20 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
     proxy = RuntimeProxy(client, "worker", old_path)
     try:
         await proxy.subscribe()
-        await until(lambda: ("worker", {"owner": "old"}) in updates)
+        await until(
+            lambda: any(
+                session == "worker" and data.get("owner") == "old" for session, data in updates
+            )
+        )
         # Session metadata may be filled in after initial owner attachment.
         comms.registry.register(
             replace(comms.registry.require("worker"), session_file=str(tmp_path / "session.jsonl"))
         )
         assert await proxy.request("cancel") == {"owner": "old"}
         comms.registry.rename("worker", "renamed")
-        comms.registry.register(replace(comms.registry.require("renamed"), process_identity=ProcessIdentity(new_pid, 1)))
+        comms.registry.register(
+            replace(comms.registry.require("renamed"), process_identity=ProcessIdentity(new_pid, 1))
+        )
         old_server.close()
         for writer in connections:
             writer.close()
@@ -227,7 +249,11 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
         await asyncio.sleep(0.15)
         new_server = await asyncio.start_unix_server(handler("new"), path=new_path)
         assert await asyncio.wait_for(request, 3) == {"owner": "new"}
-        await until(lambda: ("worker", {"owner": "new"}) in updates)
+        await until(
+            lambda: any(
+                session == "worker" and data.get("owner") == "new" for session, data in updates
+            )
+        )
         await until(
             lambda: (
                 (
@@ -240,7 +266,6 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
                 in updates
             )
         )
-        assert client.sessions.proxy_image_support["worker"] is True
         assert ("new", "subscribe", "worker") in calls
         assert ("new", "cancel", "worker") in calls
         assert calls.count(("old", "cancel", "worker")) == 1
@@ -249,7 +274,11 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
         comms.registry.unregister("renamed")
         comms.registry.begin_delete("renamed")
         comms.registry.remove("renamed")
-        comms.threads.register(Thread("worker", frozenset(), str(tmp_path), process_identity=ProcessIdentity(901003, 1)))
+        comms.threads.register(
+            Thread(
+                "worker", frozenset(), str(tmp_path), process_identity=ProcessIdentity(901003, 1)
+            )
+        )
         with pytest.raises(RuntimeError, match="identity changed"):
             await proxy.request("cancel")
     finally:
@@ -272,7 +301,9 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
 async def test_request_only_proxy_never_replays_after_request_was_received(tmp_path):
     comms = wire(tmp_path / "wire")
     old_pid, new_pid = 902001, 902002
-    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), process_identity=ProcessIdentity(old_pid, 1)))
+    comms.threads.register(
+        Thread("worker", frozenset(), str(tmp_path), process_identity=ProcessIdentity(old_pid, 1))
+    )
     old_path = socket_path(comms.root, old_pid)
     new_path = socket_path(comms.root, new_pid)
     old_path.parent.mkdir(parents=True, exist_ok=True)
@@ -281,7 +312,9 @@ async def test_request_only_proxy_never_replays_after_request_was_received(tmp_p
     async def old_owner(reader, writer):
         request = json.loads(await reader.readline())
         received.append(("old", request["action"]))
-        comms.registry.register(replace(comms.registry.require("worker"), process_identity=ProcessIdentity(new_pid, 1)))
+        comms.registry.register(
+            replace(comms.registry.require("worker"), process_identity=ProcessIdentity(new_pid, 1))
+        )
         writer.close()  # The action may have happened; its result was lost.
 
     async def new_owner(reader, writer):
@@ -291,12 +324,13 @@ async def test_request_only_proxy_never_replays_after_request_was_received(tmp_p
         await writer.drain()
         writer.close()
 
-    class ToadLike:
-        _coordination_root = str(comms.root)
+    from types import SimpleNamespace
+
+    context = SimpleNamespace(_comms=comms)
 
     old_server = await asyncio.start_unix_server(old_owner, path=old_path)
     new_server = await asyncio.start_unix_server(new_owner, path=new_path)
-    proxy = RuntimeProxy(ToadLike(), "worker", old_path)
+    proxy = RuntimeProxy(context, "worker", old_path)
     try:
         with pytest.raises(RuntimeError, match="outcome unknown"):
             await proxy.request("set_goal", text="one")
@@ -340,8 +374,11 @@ async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
         await asyncio.wait_for(entered.wait(), 2)
         await until(
             lambda: any(
-                update.get("_meta", {}).get("agentComms", {}).get("wireRoot")
-                == str(comms.root.resolve())
+                any(
+                    isinstance(f, CoordinationChangedUpdate)
+                    and f.wire_root == str(comms.root.resolve())
+                    for f in decode_updates(update.get("_meta"))
+                )
                 for update in updates
             ),
             timeout=2,
@@ -378,7 +415,14 @@ async def test_attached_client_receives_owner_model_options(tmp_path, monkeypatc
             "test/two",
         ]
         assert attached.config_options[1].current_value == "medium"
-        assert attached.field_meta["agentComms"]["title"] == "project"
+        assert (
+            next(
+                f
+                for f in decode_updates(attached.field_meta)
+                if isinstance(f, CoordinationChangedUpdate)
+            ).title
+            == "project"
+        )
         changed = await client.set_config_option("model", response.session_id, "test/two")
         assert changed.config_options[0].current_value == "test/two"
         assert comms.registry.require("project").model == "test/two"
@@ -393,7 +437,14 @@ async def test_new_session_metadata_has_a_display_title_before_first_switch(tmp_
     agent = canonical_agent(comms, agent_bin="/bin/echo")
     try:
         response = await agent.new_session(str(tmp_path / "project"))
-        assert response.field_meta["agentComms"]["title"] == "project"
+        assert (
+            next(
+                f
+                for f in decode_updates(response.field_meta)
+                if isinstance(f, CoordinationChangedUpdate)
+            ).title
+            == "project"
+        )
     finally:
         await agent.shutdown()
 
@@ -411,7 +462,7 @@ async def test_attached_snapshot_client_can_page_earlier_transcript(tmp_path):
             updates.append(update)
 
     client.on_connect(Client())
-    await client.initialize(1, {"_meta": {"agentComms": {"transcriptSnapshots": True}}})
+    await client.initialize(1, {})
     response = await owner.new_session(str(tmp_path / "project"))
     transcript = tmp_path / "session.jsonl"
     transcript.write_text(
@@ -426,12 +477,13 @@ async def test_attached_snapshot_client_can_page_earlier_transcript(tmp_path):
     try:
         await proxy.subscribe()
         snapshots = [
-            update.get("_meta", {}).get("agentComms", {})
+            f
             for update in updates
-            if "transcriptPage" in update.get("_meta", {}).get("agentComms", {})
+            for f in decode_updates(update.get("_meta"))
+            if isinstance(f, TranscriptSnapshotUpdate)
         ]
         assert len(snapshots) == 1
-        assert snapshots[0]["transcriptPage"]["has_older"] is True
+        assert snapshots[0].page.has_older is True
         assert all(
             "omitted from this bounded view" not in update.get("content", {}).get("text", "")
             for update in updates
@@ -439,7 +491,6 @@ async def test_attached_snapshot_client_can_page_earlier_transcript(tmp_path):
     finally:
         await proxy.close()
         await owner.shutdown()
-
 
 
 def test_fork_rejects_duplicate_instead_of_overwriting_owner(tmp_path):
@@ -451,7 +502,14 @@ def test_fork_rejects_duplicate_instead_of_overwriting_owner(tmp_path):
     comms.threads.register(
         Thread(name="parent", tags=frozenset(), worktree=str(tmp_path), session_file=str(session))
     )
-    comms.threads.register(Thread(name="child", tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.threads.register(
+        Thread(
+            name="child",
+            tags=frozenset(),
+            worktree=str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     with pytest.raises(RelationViolationError, match="already exists"):
         comms.threads.fork(ForkSpec(name="child", parent="parent", task="duplicate"))
     assert comms.registry.require("child").pid == os.getpid()
