@@ -16,6 +16,7 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms import nk_foreground as foreground
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
@@ -51,7 +52,14 @@ def _private_root(tmp_path: Path):
     root.mkdir(mode=0o700)
     (root / "work").mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.threads.register(Thread("sender", frozenset(), str(root / "work"), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "sender",
+            frozenset(),
+            str(root / "work"),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     return root, comms, comms.messaging.initialize_private_initial_protocol()
 
 
@@ -165,7 +173,7 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(tmp_path: Path) 
                 == 1
             )
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[
+                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[
                     0
                 ]
                 == 1
@@ -198,7 +206,14 @@ def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(tmp_p
             native_package=root / "fake-pi",
             opt_in=True,
         )
-        comms.threads.register(Thread("alpha", frozenset({"team"}), str(root / "work"), pid=os.getpid()))
+        comms.threads.register(
+            Thread(
+                "alpha",
+                frozenset({"team"}),
+                str(root / "work"),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
         message = comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
         _accept(root, root_id, comms, message)
         failing, attempts = _fake_model(fail_on=1)
@@ -223,7 +238,7 @@ def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(tmp_p
             )
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[
+                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[
                     0
                 ]
                 == 1
@@ -235,7 +250,14 @@ def test_cli_main_ready_then_single_go_offline_model_boundary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root, comms, root_id = _private_root(tmp_path)
-    comms.threads.register(Thread("alpha", frozenset({"team"}), str(root / "work"), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "alpha",
+            frozenset({"team"}),
+            str(root / "work"),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     fake, calls = _fake_model()
     monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", _fake_package)

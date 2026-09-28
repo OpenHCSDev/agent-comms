@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 import asyncio
 import json
 import os
@@ -11,17 +10,17 @@ import sys
 
 import pytest
 
-from agent_comms.input_disposition import InputDispositions
-
 from agent_comms import agent_events as ae
 from agent_comms import compaction_publication
 from agent_comms.acp import CommsAgent
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_publication import publish_pending_local
 from agent_comms.compaction_publication_lease import publication_identity_fence
 from agent_comms.compaction_states import CommittedOperation
 from agent_comms.errors import RelationViolationError
+from agent_comms.input_disposition import InputDispositions
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX durable journal")
 
@@ -436,7 +435,13 @@ def test_cross_process_identity_rebind_is_denied_during_projection_fence(owner, 
 
     registry = Registration(comms.registry.store.path)
     registry.register(
-        Thread("project", frozenset(), str(tmp_path), pid=os.getpid(), session_file=str(first))
+        Thread(
+            "project",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+            session_file=str(first),
+        )
     )
     other = tmp_path / "other.jsonl"
     other.write_text("{}\n")

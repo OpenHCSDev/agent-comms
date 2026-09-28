@@ -17,7 +17,12 @@ def chat(wired):
     pr111 = comms.registry.require("PR111")
     fixer = comms.registry.require("fixer")
     comms.threads.register(
-        Thread(name="PR111", tags=frozenset({"ci"}), worktree=pr111.worktree, pid=pr111.pid)
+        Thread(
+            name="PR111",
+            tags=frozenset({"ci"}),
+            worktree=pr111.worktree,
+            process_identity=pr111.process_identity,
+        )
     )
     comms.threads.register(
         Thread(
@@ -26,10 +31,12 @@ def chat(wired):
             worktree=fixer.worktree,
             parent="PR111",
             task=fixer.task,
-            pid=fixer.pid,
+            process_identity=fixer.process_identity,
         )
     )
-    comms.threads.register(Thread(name="PR112", tags=frozenset({"docs"}), worktree="/tmp/wt2", pid=300))
+    comms.threads.register(
+        Thread(name="PR112", tags=frozenset({"docs"}), worktree="/tmp/wt2", process_identity=None)
+    )
     return comms
 
 
@@ -39,7 +46,9 @@ class TestChannelTargets:
         assert message.target == "#ci"
 
     def test_message_to_global_channel_is_valid(self):
-        message = Message(sender="a", target=BuiltinChannel.ALL.value, body="x", type=MessageType.INFO)
+        message = Message(
+            sender="a", target=BuiltinChannel.ALL.value, body="x", type=MessageType.INFO
+        )
         assert message.target == "#all"
 
     def test_rejects_bad_channel_characters(self):

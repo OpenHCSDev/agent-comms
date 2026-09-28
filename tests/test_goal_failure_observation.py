@@ -9,6 +9,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import agent_events as ae
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_actions import (
     GoalPrecondition,
@@ -48,7 +49,7 @@ def bound(tmp_path):
         "owner",
         frozenset(),
         "/private-worktree",
-        pid=123,
+        process_identity=ProcessIdentity.capture(os.getpid()),
         created_at=10.0,
         goal=goal,
         turn_generation=7,
@@ -245,7 +246,7 @@ def test_pause_projection_never_becomes_runnable(bound, source):
         {"name": "replacement"},
         {"created_at": 11.0},
         {"worktree": "/changed"},
-        {"pid": 0},
+        {"process_identity": None},
         {"goal": Goal("replacement", "replacement", state=BlockedGoal())},
         {"goal": Goal("active", "goal")},
         {"turn_generation": 8},

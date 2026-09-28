@@ -14,6 +14,7 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.assignment_states import FullPendingAssignment
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination import ReplayFact
 from agent_comms.coordination_store import (
     MutationStore,
@@ -68,7 +69,7 @@ def failed_owner(directory, output, exit_allowed):
     else:
         raise AssertionError("failure fixture unexpectedly succeeded")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
-        row = store._connection.execute("SELECT * FROM native_runtime_inputs").fetchone()
+        row = store._connection.execute("SELECT * FROM native_runtime_input").fetchone()
         execution_id, input_id = row["execution_id"], row["input_id"]
     os.environ["AGENT_COMMS_THREAD"] = "beta"
     comms.owners.release("beta")
@@ -110,7 +111,7 @@ def test_recovery_releases_only_failed_slot_and_never_recovers_acceptance(releas
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         before = tuple(
             store._connection.execute(
-                "SELECT * FROM native_runtime_inputs WHERE input_id=?", (input_id,)
+                "SELECT * FROM native_runtime_input WHERE input_id=?", (input_id,)
             ).fetchone()
         )
         with VerifiedOwnerLoss.observe_native_release(store, execution_id) as proof:
@@ -125,7 +126,7 @@ def test_recovery_releases_only_failed_slot_and_never_recovers_acceptance(releas
         assert not settled.replay.replay_safe
         after = tuple(
             store._connection.execute(
-                "SELECT * FROM native_runtime_inputs WHERE input_id=?", (input_id,)
+                "SELECT * FROM native_runtime_input WHERE input_id=?", (input_id,)
             ).fetchone()
         )
         assert after == before  # No forged context, cursor, or acceptance receipt.
@@ -220,7 +221,9 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
     # A historical unresolved attempt still blocks; current live failures are
     # settled separately by DurableTurn and do not produce this old shape.
     with monkeypatch.context() as historical:
-        historical.setattr(runtime.SelectedExecution, "_uncertain_failure", lambda self, error: None)
+        historical.setattr(
+            runtime.SelectedExecution, "_uncertain_failure", lambda self, error: None
+        )
         with pytest.raises(NativePiUnavailable):
             await runtime.SelectedExecution(
                 root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
@@ -243,11 +246,14 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
 def replacement_release(root):
     from dataclasses import replace
 
+    from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
 
     comms = Comms(root)
     owner = comms.registry.require("beta")
-    comms.registry.register(replace(owner, pid=os.getpid()), new_owner=True)
+    comms.registry.register(
+        replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), new_owner=True
+    )
     os.environ["AGENT_COMMS_THREAD"] = "beta"
     comms.owners.release("beta")
 

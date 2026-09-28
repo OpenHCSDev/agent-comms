@@ -1,0 +1,41 @@
+................................F
+=================================== FAILURES ===================================
+_________ test_later_attested_release_still_fences_original_admission __________
+
+released_failure = (<ForkProcess name='ForkProcess-29' pid=163396 parent=162431 stopped exitcode=0>, <Event at 0x7f472baf9670 set>, Posix...a99aaf', PosixPath('/var/tmp/ac-sealed-test-q015r3az/wire/native-sessions/08fc9dd02df9383cb28aa5d42dbe5122/one.jsonl'))
+
+    def test_later_attested_release_still_fences_original_admission(released_failure):
+        process, exit_allowed, root, execution_id, _input_id, session_file = released_failure
+        leave(process, exit_allowed)
+        replacement = multiprocessing.get_context("fork").Process(
+            target=replacement_release, args=(root,)
+        )
+        replacement.start()
+        replacement.join(5)
+>       assert replacement.exitcode == 0
+E       AssertionError: assert 1 == 0
+E        +  where 1 = <ForkProcess name='ForkProcess-30' pid=163434 parent=162431 stopped exitcode=1>.exitcode
+
+tests/test_native_failure_recovery.py:263: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Process ForkProcess-30:
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/multiprocessing/process.py", line 320, in _bootstrap
+    self.run()
+    ~~~~~~~~^^
+  File "/usr/lib/python3.14/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-refactor2-s12-20260928/tests/test_native_failure_recovery.py", line 250, in replacement_release
+    comms.registry.register(replace(owner, pid=os.getpid()), new_owner=True)
+                            ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/dataclasses.py", line 1778, in replace
+    return _replace(obj, **changes)
+  File "/usr/lib/python3.14/dataclasses.py", line 1812, in _replace
+    return self.__class__(**changes)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^
+TypeError: Thread.__init__() got an unexpected keyword argument 'pid'
+=========================== short test summary info ============================
+FAILED tests/test_native_failure_recovery.py::test_later_attested_release_still_fences_original_admission
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 32 passed in 10.12s

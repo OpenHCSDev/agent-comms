@@ -41,26 +41,27 @@ No agent opens an empty placeholder or duplicates another owner's implementation
 
 ## Follow-through after integrated source audit
 
-Audit: evidence/round2-l0/L0B-AUDIT.md (actual production both native workers;
-70 lexical matches across40files are leads, not70proven defects).
+Audit: `evidence/round2-l0/L0B-AUDIT.md`. Both observed production workers use
+native Pi. The 70 lexical matches across 40 files are leads, not proven defects.
 
-| Remaining complete batch | Owner / PR | Exact boundary |
+| Remaining batch | Owner / PR | Required closure |
 | --- | --- | --- |
-| Native-only execution and headless entrypoint | Pascal,234 (dependent draft if required) | Delete raw argv/stdout engine and rpc_args_for plus all seven production callers; reuse current native launch and owner lifecycle. Owns InputDrain.run_owned_input only, not parent queue/history regions. Darwin owns paired manual-compaction caller. |
-| Typed-table old transcript import | Cicero,237 | Delete TranscriptRoutes initializer converters and obsolete schema migration; inventory durable annotations and give parent one-shot preservation contract. |
-| Queue projection | Parent229 + CopernicusToad107 | Sole queueBinding/queueState metadata; delete old queue/top-level restored arrays and oldToad reader.12core contract checks pass; paired cancellation/UI acceptance remains. |
-| Goal states, retry grant and wait identities | Nietzsche, new Comms draft pending | Own goal_states/actions/waits/relationships plus input_disposition/input_attempt/goal_management and direct tests, new ~/wt tree fromparent229. Inventory historical unknown facts; parent owns one-shot data conversion. No implicit retry grant recreation. |
-| Remaining process-identity test consumers | Lovelace,232 | Delete stale helper imports and migrate real identity fixtures; preserve process/ACP behavior, no pid adapter. Parent owns native_prompt_binding/coordinated_runtime/private_nk_entrypoint/acp_queue_contract/prompt_queue tests. Copernicus owns DM/registry tests. |
-| UNKNOWN preservation, current history and final activation | Parent229 | Integrate Nietzsche delivery-cursor retirement and one-shot data boundaries; retain evidence without replay. Parent owns InputDrain projection and runtime callers. |
+| Native execution and headless command | Pascal, PR234 or a dependent draft | Delete raw argv/stdout execution and `rpc_args_for` with all seven production callers. Reuse current native launch and owner lifecycle. Owns only `run_owned_input` in InputDrain; Darwin owns the paired manual-compaction caller. |
+| Old transcript import | Cicero, PR237 | Delete initializer converters and old SQLite migration. Inventory durable annotations and hand parent a one-shot preservation contract. |
+| Queue projection | Parent PR229 + Copernicus Toad107 | Emit only queueBinding/queueState; delete old queue/restored arrays and the Toad reader. Twelve core checks pass; paired cancellation/UI acceptance remains. |
+| Goal/input state and wait identities | Nietzsche, [Comms239](https://github.com/OpenHCSDev/agent-comms/pull/239), branch refactor/l0-goal-wait-closure-20260928 | Own goal_states, goal_actions, goal_waits, relationships, input_disposition, input_attempt, goal_management and direct tests in a new ~/wt tree from PR229. Remove retry-time grant adoption and retired delivery cursors; retain unknown historical facts. Parent owns one-shot conversion. |
+| Process identity test consumers | Lovelace, PR232 | Remove stale imports and use real process identities. Parent owns native_prompt_binding, coordinated_runtime, private_nk_entrypoint, acp_queue_contract and prompt_queue tests. Copernicus owns DM/registry tests. |
+| History, UNKNOWN and activation | Parent, PR229 | Integrate the complete batches, current runtime projections and data rewrite. Preserve evidence without replay; verify full local suite and installed behavior. |
 
-Parent229 integrated232+234+235 throughb4cb42a; newer worker commits still need
-integration. Required local guard collection found a stale removed-test import
-in test_acp_owner_interrupt_followup; Lovelace owns the fix. Debt ratchet passes
-(-14type identity,-31long boolean chains,-23string subscripts). No CI wait.
+Parent integrated PR232/234/235 and then published PR237 at 9463a44,
+PR234 at 947ab28 and PR236 at 1e46842, reaching 9ff1161. Fourteen combined
+checks pass, including actual native four-tool execution after the admission
+floor, admission reset/rebuild, A13/A14 families and S9/S10 guards.
+Production diff against main: 5,837 added and 7,504 deleted lines across 87 files.
+This is not full-suite or installed acceptance.
 
-Integrated published2379463a44,234947ab28,2361e46842 into229 at9ff1161.
-14combined checks pass (actual postfloor native4tools, admission reset/rebuild,
-A13/A14 families and S9/S10 guards). Production diff againstmain at this head:
-5,837added/7,504deleted across87files. Not fullsuiteorinstalled acceptance.
-S9's actualsaved-session parentUUID decoder failure remainsPascal's fix;
-ThreadManagement ProcessIdentity/DMincarnation bug remainsCopernicus's fix.
+The local debt ratchet passes: type identity -14, long boolean chains -31,
+string subscripts -23. Full guard collection found a stale removed-test import
+in test_acp_owner_interrupt_followup; Lovelace owns it. Pascal owns the real
+saved-session parent UUID startup failure; Copernicus owns the ThreadManagement
+ProcessIdentity and DM incarnation fixes. Slow CI is not a hold.

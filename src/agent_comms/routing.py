@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
+from typing import TYPE_CHECKING
 
 from .channel_targets import is_channel_target
 from .messages import Message
+
+if TYPE_CHECKING:
+    from .registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +102,24 @@ class ScheduledTurn:
 
 
 @dataclass(frozen=True, slots=True)
+class DeliveryMessage:
+    """The current Message decoder plus its existing publication identity."""
+
+    message: Message
+    sender_lookup: str = ""
+
+    @classmethod
+    def from_wire(cls, record: Mapping, root_id: str | None) -> DeliveryMessage:
+        from .bus_publication import PRIVATE_WIRE_FIELD, validate_initial_record
+
+        private = record.get(PRIVATE_WIRE_FIELD, {})
+        if "initial" in private:
+            initial = validate_initial_record(record, root_id)
+            return cls(initial.message, initial.audience.sender_lookup)
+        return cls(Message.from_wire(record))
+
+
+@dataclass(frozen=True, slots=True)
 class DeliveryScope:
     actor: str
     aliases: Mapping[str, str]
@@ -110,6 +132,28 @@ class DeliveryScope:
         return self.canonical(sender) != self.actor and (
             target in self.channels or self.canonical(target) == self.actor
         )
+
+    def minimum_timestamp(
+        self, sender: str, target: str, sender_lookup: str, snapshot: RegistrySnapshot
+    ) -> float | None:
+        """Require current identities while preserving aliases of one incarnation."""
+        from .bus_publication import stable_thread_lookup
+
+        if not self.delivers(sender, target):
+            return None
+        source = snapshot.threads.get(self.canonical(sender))
+        if source is None:
+            return None
+        if sender_lookup and sender_lookup != stable_thread_lookup(source.created_at):
+            return None
+        return max(source.created_at, snapshot.threads[self.actor].created_at)
+
+    def current(self, delivery: DeliveryMessage, snapshot: RegistrySnapshot) -> bool:
+        message = delivery.message
+        since = self.minimum_timestamp(
+            message.sender, message.target, delivery.sender_lookup, snapshot
+        )
+        return since is not None and message.timestamp >= since
 
     def conversation(self, sender: str, target: str) -> str:
         if is_channel_target(target):

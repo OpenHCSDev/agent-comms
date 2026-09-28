@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordination import PublicationIntents, canonical_publication_key
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
@@ -37,7 +38,13 @@ def _root(tmp_path: Path) -> tuple[Comms, str]:
         ("outsider", {"else"}, 17004.0),
     ):
         comms.registry.register(
-            Thread(name, frozenset(tags), str(tmp_path), pid=os.getpid(), created_at=stamp)
+            Thread(
+                name,
+                frozenset(tags),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+                created_at=stamp,
+            )
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.messaging.initialize_private_claim_protocol()

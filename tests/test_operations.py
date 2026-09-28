@@ -294,7 +294,7 @@ class TestThreadOps:
             "old alias routes",
             "old process sends canonically",
         ]
-        assert history[-2].target == "PR111"
+        assert history[-2].target == "planner"
         assert history[-1].sender == "planner"
         with pytest.raises(RelationViolationError, match="cannot message itself"):
             wired.messaging.send("PR111", "planner", "alias self-DM")

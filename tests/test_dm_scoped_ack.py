@@ -13,11 +13,12 @@ import pytest
 from agent_comms import locked_store
 from agent_comms.comms import wire
 from agent_comms.read_basis import DMDisplayBasis
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 
 
 def _thread(root: Path, name: str) -> Thread:
-    return Thread(name, frozenset({"talk"}), str(root), pid=os.getpid())
+    return Thread(name, frozenset({"talk"}), str(root), process_identity=ProcessIdentity.capture(os.getpid()))
 
 
 def test_dm_page_requires_deliberate_baseline_before_omitted_older_unread(tmp_path: Path):

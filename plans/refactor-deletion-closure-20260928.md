@@ -216,3 +216,63 @@ Production source+5837/-7504; fullsuite andinstalledacceptance remainopen.
 Nietzsche now owns complete goal/input/cursor retirement, including the three
 input_disposition/input_attempt/goal_management files formerly parent-owned.
 Parent retains final data conversion, runtime/queue integration andactivation.
+
+## Incarnation and alias integration
+
+Integrated Copernicus PR238 (branch fix/l0a-incarnation-delivery, published6c1a8ae)
+into229. Same-name sender/recipient history no longer becomes new inbox work.
+Parent fixed the remaining rename/read dependency: aliases resolve within the
+current snapshot, then the recorded creation identity must match. New direct
+messages bind alias targets to canonical recipients under the publisher's guarded
+snapshot before freezing audience; no unstable alias identity is published.
+
+Read/history/rename shard:41 passed; the two additional ACP rename cases initially
+failed on obsolete fixture pid=, then passed with real process identities. The
+three original DM incarnation assertions are unchanged. Source replacement test
+now replaces the bus inode with valid canonical bytes, preserving the intended
+read-evidence invalidation test rather than forging an invalid public envelope.
+
+Actual-root rehearsal (tools/cutover/current_root.py) staged102current messages,
+104threads and8UNKNOWN ACP inputs; reopened through current Comms, rebuilt the
+candidate index and fresh coordinator, and produced zero new assignments/native
+coverage. Input dispositions remain identical. Old coordinator/prompt-binding/
+compaction SQLite snapshots are retained as evidence, not active stores. There
+were no bus-sequence UNKNOWN InputAttempt rows in this actual snapshot; do not
+claim an actual-data refusal test for that absent case. Synthetic admission-floor
+coverage separately tests old bus rows. Full attached-history/durable-route/goal
+authority staging and quiet installed acceptance remain open.
+
+## Integration checkpoint after 121f526 — 2026-09-28
+
+Parent229 now includes2328908647,2382eb571b,237bfb5712,236a346c9f and
+234e13e32e. S13 current identity fixtures are integrated. Route-table creation
+and reset now derive membership through TypedTable.members_with(RouteTable);
+removed the duplicated roster. S10 deletes the raw-text backend and independent
+Participant polling loop, routing the headless command through the canonical
+worker. S9's deleted basename gate stays deleted. S12 deletes transcript runtime
+converters and uses current declarations for goal history, response and page tables.
+These are integrated implementations, not full scope or installed completion.
+
+Focused integration:15 passed in5.48s, including actual prepared native Pi
+read/edit/write/bash on a loopback provider plus goal-history/transcript-route/
+admission-floor checks. No paid provider was used. Full guard collection currently
+fails on test_native_owner_launcher_resolution importing deleted package_for_launcher;
+Pascal owns the migration to NativePiRpcLaunch.package_for_command. The earlier
+missing goal-test helper is fixed. ACP owner followup during SelectedExecution
+also has a concrete routing failure, assigned toPascal with Nietzsche coordinating
+goal authority; no obsolete direct_interrupt path is being restored.
+
+Parent one-shot registry_history now creates only the current GoalHistoryEntry
+schema. Rehearsed all four actual registry sources, reopened all458 goal-history
+rows and compared full typed rows including pending/aborted/uncertain state,
+sequence, time and owner. Original SQLite backups remain evidence; old tables are
+excluded from the candidate runtime. Five archived pauses still lack attribution;
+no provenance invented. Receipt: d22-declared-goal-history.json. Transcript
+annotation conversion, attached-history refresh and PR239 state migration are next.
+
+Nietzsche has published the complete goal/input batch in draft2396e7c7cb;
+no longer an unbacked assignment. Source difference against fetched main is
++6989/-8805 (net1816 fewer production lines); line count is an observation,
+not proof of ownership quality. Running installation remains unchanged. Full
+local suite, real paired installed acceptance, quiet activation and deletion of
+one-shot tools remain required. Slow CI remains deferred.

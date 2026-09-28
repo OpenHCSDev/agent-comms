@@ -353,7 +353,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
         assert store.participant(lookups["beta"]).pointer.execution_id is None
         assert (
             store._connection.execute(
-                "SELECT count(*) FROM native_runtime_inputs WHERE session_id IS NOT NULL"
+                "SELECT count(*) FROM native_runtime_input WHERE session_id IS NOT NULL"
             ).fetchone()[0]
             == 3
         )
@@ -674,7 +674,7 @@ async def test_production_awareness_caller_includes_or_omits_without_losing_orig
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_inputs WHERE claim_id=?",
+                "SELECT COUNT(*) FROM native_runtime_input WHERE assignment_id=?",
                 (outcome.assignment_id,),
             ).fetchone()[0]
             == 1
@@ -715,7 +715,7 @@ async def test_slow_optional_awareness_omits_without_blocking_selected_original(
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_inputs WHERE claim_id=?",
+                "SELECT COUNT(*) FROM native_runtime_input WHERE assignment_id=?",
                 (outcome.assignment_id,),
             ).fetchone()[0]
             == 1
@@ -948,7 +948,7 @@ async def test_private_raw_send_refuses_same_session_selected_row_before_write(
     assert not Path(str(session_file) + ".input-proof").exists()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         rows = store._connection.execute(
-            "SELECT sent_owner_admission_epoch, session_id FROM native_runtime_inputs"
+            "SELECT sent_owner_admission_generation, session_id FROM native_runtime_input"
         ).fetchall()
         assert len(rows) == 1 and tuple(rows[0]) == (None, None)
         assert (
@@ -1067,7 +1067,7 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
     assert calls == [] and not saved.exists() and moved.exists()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         row = store._connection.execute(
-            "SELECT sent_owner_admission_epoch,session_id FROM native_runtime_inputs"
+            "SELECT sent_owner_admission_generation,session_id FROM native_runtime_input"
         ).fetchone()
         assert row is not None and tuple(row) == (None, None)
         assert (
@@ -1101,7 +1101,7 @@ async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
-                "SELECT count(*) FROM native_runtime_inputs WHERE session_id IS NULL"
+                "SELECT count(*) FROM native_runtime_input WHERE session_id IS NULL"
             ).fetchone()[0]
             == 1
         )
@@ -1148,7 +1148,7 @@ async def test_crash_after_triage_reservation_never_reissues_model(
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         row = store._connection.execute(
             "SELECT c.disposition,i.session_id FROM wake_claims c "
-            "JOIN native_runtime_inputs i ON i.claim_id=c.claim_id "
+            "JOIN native_runtime_input i ON i.assignment_id=c.claim_id "
             "WHERE c.recipient='alpha'"
         ).fetchone()
         assert tuple(row) == ("deferred", None)
@@ -1305,7 +1305,7 @@ async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
-                "SELECT count(*) FROM native_runtime_inputs WHERE session_id IS NOT NULL"
+                "SELECT count(*) FROM native_runtime_input WHERE session_id IS NOT NULL"
             ).fetchone()[0]
             == 0
         )
@@ -1361,7 +1361,7 @@ async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(
     assert len(comms.bus.dm_history("sender", "beta")) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[0]
+            store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
             == 0
         )
 
@@ -1409,7 +1409,7 @@ async def test_owner_generation_denies_revival_without_blocking_another_owner(
         assert len(comms.bus.dm_history("sender", "beta")) == 2
     assert comms.registry.require("beta").active_turn is None
     with MutationStore(str(root / "coordination.sqlite3")) as store:
-        inputs = store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()
+        inputs = store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()
         intents = store._connection.execute("SELECT count(*) FROM publication_intents").fetchone()
         assert (inputs[0], intents[0]) == ((0, 0) if mutation == "stop_then_heartbeat" else (1, 1))
 
@@ -1610,7 +1610,7 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
         )
         assert (
             store._connection.execute(
-                "SELECT count(*) FROM native_runtime_inputs WHERE session_id IS NOT NULL"
+                "SELECT count(*) FROM native_runtime_input WHERE session_id IS NOT NULL"
             ).fetchone()[0]
             == 1
         )
@@ -1734,7 +1734,7 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
     assert comms.registry.require("beta").active_turn == original
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[0]
+            store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
             == 0
         )
         assert (
@@ -1773,7 +1773,7 @@ async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(
     assert len(rows) == 2 and rows[-1].notice
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         row = store._connection.execute(
-            "SELECT stage,session_id FROM native_runtime_inputs"
+            "SELECT stage,session_id FROM native_runtime_input"
         ).fetchone()
         assert tuple(row) == ("full", None)
         assert store._connection.execute("SELECT state FROM obligations").fetchone()[0] == "failed"
@@ -1784,7 +1784,7 @@ def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: 
     with MutationStore(str(path)) as store:
         assert (
             store._connection.execute(
-                "SELECT 1 FROM sqlite_master WHERE name='native_runtime_inputs'"
+                "SELECT 1 FROM sqlite_master WHERE name='native_runtime_input'"
             ).fetchone()
             is None
         )
@@ -1851,7 +1851,7 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_source_cursors WHERE recipient_lookup=?",
+                "SELECT COUNT(*) FROM current_native_cursor WHERE recipient_lookup=?",
                 (lookup,),
             ).fetchone()[0]
             == 0

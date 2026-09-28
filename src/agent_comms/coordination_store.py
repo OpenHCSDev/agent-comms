@@ -7,7 +7,6 @@ particular a frozen PUBLISHING intent cannot be resolved by this store.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import secrets
 import sqlite3
@@ -146,7 +145,7 @@ class VerifiedOwnerLoss:
         """Join the existing native admission, release receipt and live registry.
 
         Keep canonical wire/bus/registry exclusion through monitor settlement.
-        A later attested release also fences earlier admission epochs of the same
+        A later attested release also fences earlier admission generations of the same
         incarnation. If send admission was never recorded, require the exact
         current owner to be attested stopped and dead: absence of an epoch is
         not proof that the input was unsent. Lease expiry or a replaced PID alone
@@ -182,39 +181,36 @@ class VerifiedOwnerLoss:
             ):
                 raise RecoveryBlocked("native attempt has no matching dispatched owner")
             admission_generation = source.sent_owner_admission_generation
-            release = comms.owners._read_owner_release_receipts().get(attempt.owner_thread)
+            try:
+                release = comms.owners.releases.read().get(attempt.owner_thread)
+            except (OSError, ValueError, TypeError) as error:
+                raise RecoveryBlocked("native owner release receipt is invalid") from error
             current = registry.threads.get(attempt.owner_thread)
             if release is None or current is None:
                 raise RecoveryBlocked("native owner release receipt is missing")
-            try:
-                released = json.loads(release["thread"])
-                pid, before, after = release["pid"], release["before"], release["after"]
-                valid = (
-                    type(pid) is int
-                    and pid > 0
-                    and type(before) is int
-                    and (
-                        (type(admission_generation) is int and before >= admission_generation)
-                        or (
-                            admission_generation is None
-                            and registry.statuses[current.name].stopped
-                            and current.pid == pid
-                            and registry.admission_generations[current.name] == after
-                        )
+            released = release.thread
+            process = released.process_identity
+            valid = (
+                process is not None
+                and current.process_identity == process
+                and (
+                    (
+                        admission_generation is not None
+                        and release.before >= admission_generation
                     )
-                    and type(after) is int
-                    and after > before
-                    and released["name"] == attempt.owner_thread
-                    and released["pid"] == pid
-                    and released["created_at"] == current.created_at
-                    and released["active_turn"] is None
-                    and stable_thread_lookup(current.created_at) == attempt.owner_lookup
-                    and registry.admission_generations[current.name] >= after
-                    and current.active_turn is None
-                    and not comms.owners._process_alive(pid)
+                    or (
+                        admission_generation is None
+                        and registry.statuses[current.name].stopped
+                        and registry.admission_generations[current.name] == release.after
+                    )
                 )
-            except (KeyError, TypeError, ValueError):
-                valid = False
+                and released.name == attempt.owner_thread
+                and released.incarnation == current.incarnation
+                and stable_thread_lookup(current.created_at) == attempt.owner_lookup
+                and registry.admission_generations[current.name] >= release.after
+                and current.active_turn is None
+                and not process.alive()
+            )
             if not valid:
                 raise RecoveryBlocked("native owner release does not prove loss of this admission")
             proof = object.__new__(cls)

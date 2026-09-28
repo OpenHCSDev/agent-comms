@@ -41,7 +41,6 @@ def wired(comms: Comms) -> Comms:
             worktree="/tmp/wt1",
             parent="PR111",
             task="fix auth",
-            pid=0,
         )
     )
     return comms

@@ -247,8 +247,8 @@ class PassiveChannelAwareness:
                 targets=frozenset({channel}),
             )
         ) as matches:
-            first = matches.fetchone()
-            if first is None or matches.fetchone() is not None:
+            first = next(matches, None)
+            if first is None or next(matches, None) is not None:
                 return None
             record, size = index.record(stream, first, max_bytes=_MAX_ROW_BYTES)
             if size > _MAX_ROW_BYTES:

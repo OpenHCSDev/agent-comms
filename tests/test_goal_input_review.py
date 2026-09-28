@@ -5,6 +5,7 @@ import os
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -24,14 +25,22 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     await agent.new_session(str(tmp_path / "worker"))
-    comms.threads.register(Thread("parent", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "parent",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     comms.agents.begin_turn("parent", "parent-delegation-in-flight")
     comms.threads.register(Thread("other", frozenset(), str(tmp_path)))
     goal = comms.goals.update_goal(
         "worker", SetGoalAction(text="Delegate and wait"), owner_store=agent.turns.open_goal_store()
     )
     messages = [
-        comms.messaging.send_message("parent", "worker", text) for text in ("Set standby", "Yes wait")
+        comms.messaging.send_message("parent", "worker", text)
+        for text in ("Set standby", "Yes wait")
     ]
     inbox = next(t for t in TOOLS if t.name == "comms_inbox")
     report = next(t for t in TOOLS if t.name == "comms_goal")
@@ -112,7 +121,9 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
             assert row.reviewed_for_goal(goal.id)
         # Durable explicit handling survives reopening and a later wait declaration.
         reopened = wire(comms.root)
-        reopened.goals.update_goal("worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
+        reopened.goals.update_goal(
+            "worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+        )
         reopened.goals.update_goal(
             "worker",
             StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("parent",)),
