@@ -52,6 +52,7 @@ from .coordination import (
 from .coordination_errors import IdentityConflict
 from .execution_states import ExecutionState, QueuedExecution
 from .messages import MessageType
+from .native_runtime_input import NativeRuntimeInput
 from .obligation_states import ResponseState
 from .recovery_states import DeferredRecovery, FailedRecovery, RecoveryCondition
 from .wake_policy import WakePolicy
@@ -162,18 +163,22 @@ class VerifiedOwnerLoss:
             attempt = snapshot.attempt
             if attempt is None or not snapshot.is_current:
                 raise RecoveryBlocked("native recovery requires the current attempted execution")
-            source = store._connection.execute(
-                "SELECT owner_lookup,owner_thread,owner_generation,sent_owner_admission_epoch "
-                "FROM native_runtime_inputs WHERE execution_id=? AND attempt_ordinal=?",
-                (execution_id, attempt.attempt_ordinal),
-            ).fetchone()
-            if source is None or tuple(source[:3]) != (
+            source = NativeRuntimeInput.one(
+                store._connection,
+                execution_id=execution_id,
+                attempt_ordinal=attempt.attempt_ordinal,
+            )
+            if source is None or (
+                source.owner_lookup,
+                source.owner_thread,
+                source.owner_generation,
+            ) != (
                 attempt.owner_lookup,
                 attempt.owner_thread,
                 attempt.owner_generation,
             ):
                 raise RecoveryBlocked("native attempt has no matching dispatched owner")
-            admission_generation = source["sent_owner_admission_epoch"]
+            admission_generation = source.sent_owner_admission_generation
             release = comms.owners._read_owner_release_receipts().get(attempt.owner_thread)
             current = registry.threads.get(attempt.owner_thread)
             if release is None or current is None:
@@ -1192,14 +1197,28 @@ class MutationStore(CoordinationStore):
             snapshot, attempt = self._assert_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
-            return Applied(self._advance_attempt(
-                fence, attempt, phase, backend_done=backend_done, process_dead=process_dead,
-                progress=progress, reason_code=reason_code,
-            ))
+            return Applied(
+                self._advance_attempt(
+                    fence,
+                    attempt,
+                    phase,
+                    backend_done=backend_done,
+                    process_dead=process_dead,
+                    progress=progress,
+                    reason_code=reason_code,
+                )
+            )
 
     def _advance_attempt(
-        self, fence: OwnerFence, attempt: AttemptRecord, phase: type[AttemptState], *,
-        backend_done: bool, process_dead: bool, progress: bool, reason_code: str | None,
+        self,
+        fence: OwnerFence,
+        attempt: AttemptRecord,
+        phase: type[AttemptState],
+        *,
+        backend_done: bool,
+        process_dead: bool,
+        progress: bool,
+        reason_code: str | None,
     ) -> StartResult:
         """Record a checked phase inside the caller's fenced transaction."""
         db = self._connection
@@ -1213,9 +1232,7 @@ class MutationStore(CoordinationStore):
                 process_dead and not attempt.lifecycle.process_dead
             )
             if phase is not type(attempt.lifecycle) or progress or not new_final_fact:
-                raise RecoveryBlocked(
-                    "final backend evidence forbids further phase or progress"
-                )
+                raise RecoveryBlocked("final backend evidence forbids further phase or progress")
         now = self._now(attempt.updated_at_ms)
         db.execute(
             "UPDATE attempts SET phase=?,revision=revision+1,updated_at_ms=?,"
@@ -1266,7 +1283,9 @@ class MutationStore(CoordinationStore):
             return self._record_replay(snapshot, after)
 
     def _record_replay(
-        self, snapshot: RecoverySnapshot, after: ReplayAssessment,
+        self,
+        snapshot: RecoverySnapshot,
+        after: ReplayAssessment,
     ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
         """Persist monotonic replay evidence inside the checked transaction."""
         db = self._connection
@@ -1287,7 +1306,12 @@ class MutationStore(CoordinationStore):
             db.execute(
                 "UPDATE replay_assessments SET facts=?,replay_safe=?,"
                 "side_effects_possible=?,revision=revision+1 WHERE execution_id=?",
-                (int(after.facts), int(after.replay_safe), int(after.side_effects_possible), after.execution_id),
+                (
+                    int(after.facts),
+                    int(after.replay_safe),
+                    int(after.side_effects_possible),
+                    after.execution_id,
+                ),
             )
         else:
             db.execute(
@@ -1303,7 +1327,10 @@ class MutationStore(CoordinationStore):
         return Applied(self.snapshot(after.execution_id))
 
     def fail_unknown_attempt(
-        self, fence: OwnerFence, *, expected_pointer_revision: int,
+        self,
+        fence: OwnerFence,
+        *,
+        expected_pointer_revision: int,
     ) -> Applied[RecoverySnapshot]:
         """Atomically fail a fenced, reaped backend; UNKNOWN is never replayable.
 
@@ -1317,21 +1344,34 @@ class MutationStore(CoordinationStore):
             if snapshot.publication_intent is not None:
                 raise PublicationUncertain("UNKNOWN failure cannot resolve frozen publication")
             before = snapshot.replay
-            self._record_replay(snapshot, ReplayAssessment(
-                fence.execution_id,
-                (before.facts if before is not None else ReplayFact.NONE) | ReplayFact.UNKNOWN_EFFECTS,
-                False,
-                True,
-                1 if before is None else before.revision + 1,
-            ))
+            self._record_replay(
+                snapshot,
+                ReplayAssessment(
+                    fence.execution_id,
+                    (before.facts if before is not None else ReplayFact.NONE)
+                    | ReplayFact.UNKNOWN_EFFECTS,
+                    False,
+                    True,
+                    1 if before is None else before.revision + 1,
+                ),
+            )
             if not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead):
                 self._advance_attempt(
-                    fence, attempt, type(attempt.lifecycle), backend_done=True, process_dead=True,
-                    progress=False, reason_code="native_unknown",
+                    fence,
+                    attempt,
+                    type(attempt.lifecycle),
+                    backend_done=True,
+                    process_dead=True,
+                    progress=False,
+                    reason_code="native_unknown",
                 )
-            return Applied(self._settle(
-                self.snapshot(fence.execution_id), success=False, reason_code="native_unknown",
-            ))
+            return Applied(
+                self._settle(
+                    self.snapshot(fence.execution_id),
+                    success=False,
+                    reason_code="native_unknown",
+                )
+            )
 
     def observe_connectivity(
         self,
@@ -1566,16 +1606,17 @@ class RecoveryMonitorCapability:
             assert attempt is not None  # The release observer requires an attempt.
             if snapshot.publication_intent is not None:
                 raise PublicationUncertain("native failure cannot resolve frozen publication")
-            reserved = store._connection.execute(
-                "SELECT * FROM native_runtime_inputs WHERE execution_id=? AND attempt_ordinal=?",
-                (execution_id, attempt.attempt_ordinal),
-            ).fetchone()
+            reserved = NativeRuntimeInput.one(
+                store._connection,
+                execution_id=execution_id,
+                attempt_ordinal=attempt.attempt_ordinal,
+            )
             assert reserved is not None  # Already joined by the release observer.
             session_dir = store.path.parent / "native-sessions" / loss.owner_lookup
             session_file = Path(session_file).absolute()
             if session_file.parent != session_dir:
                 raise RecoveryBlocked("native failure session belongs to another owner")
-            binding = read_expected_prompt_binding(store, reserved["input_id"])
+            binding = read_expected_prompt_binding(store, reserved.input_id)
             if (
                 binding is None
                 or (
@@ -1593,13 +1634,13 @@ class RecoveryMonitorCapability:
                     loss.owner_lookup,
                     attempt.owner_thread,
                     attempt.owner_generation,
-                    reserved["claim_id"],
+                    reserved.assignment_id,
                     "full",
                 )
                 or not expected_prompt_matches_journal(session_file, binding)
             ):
                 raise RecoveryBlocked("native failure lacks its bound original input")
-            proof = NativeContextProof.read_evidence(session_file, reserved["input_id"])
+            proof = NativeContextProof.read_evidence(session_file, reserved.input_id)
             _header, entries = NativeEntry.read_evidence(session_file)
             user_index = next(
                 index for index, entry in enumerate(entries) if entry.id == proof.session_entry_id

@@ -43,6 +43,18 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
     def accepts(cls, annotation: object) -> bool: ...
 
     @classmethod
+    def constraints(cls, column: str, annotation: object = None) -> tuple[str, ...]:
+        declared, _ = _base_type(annotation)
+        if get_origin(declared) is not Literal:
+            return ()
+        choices = ", ".join(
+            "'" + value.replace("'", "''") + "'" if isinstance(value, str)
+            else str(int(value)) if isinstance(value, bool) else str(value)
+            for value in get_args(declared)
+        )
+        return (f"{_identifier(column)} IN ({choices})",)
+
+    @classmethod
     def encode(cls, value: object) -> object:
         return FieldCodec.encode(value)
 
@@ -93,6 +105,10 @@ class BooleanStorage(SqlStorage):
     @classmethod
     def accepts(cls, annotation: object) -> bool:
         return annotation is bool
+
+    @classmethod
+    def constraints(cls, column: str, annotation: object = None) -> tuple[str, ...]:
+        return (*super().constraints(column, annotation), f"{_identifier(column)} IN (0, 1)")
 
     @classmethod
     def encode(cls, value: object) -> int:
@@ -253,7 +269,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
         return ", ".join(map(_identifier, names))
 
     @classmethod
-    def ddl(cls) -> tuple[str, ...]:
+    def schema_objects(cls) -> dict[str, str]:
         definitions = []
         keys = tuple(item.name for item in cls._fields() if item.column.primary_key)
         for item in cls._fields():
@@ -267,8 +283,8 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
                 target, name = column.references
                 target._column_list((name,))
                 sql += f" REFERENCES {_identifier(target.declared_name)} ({_identifier(name)})"
-            if item.storage is BooleanStorage:
-                sql += f" CHECK ({_identifier(item.name)} IN (0, 1))"
+            for constraint in item.storage.constraints(item.name, item.annotation):
+                sql += f" CHECK ({constraint})"
             if column.check:
                 sql += f" CHECK ({column.check})"
             definitions.append(sql)
@@ -280,21 +296,31 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
         definitions.extend(f"CHECK ({check})" for check in cls.checks)
         definitions.extend(reference.sql(cls) for reference in cls.references())
         table = _identifier(cls.declared_name)
-        statements = [
-            f"CREATE TABLE {table} ({', '.join(definitions)}) STRICT"
+        statements = {
+            cls.declared_name: f"CREATE TABLE {table} ({', '.join(definitions)}) STRICT"
             + (", WITHOUT ROWID" if cls.without_rowid else "")
-        ]
+        }
         indexes = cls.indexes + tuple(
             Index((item.name,)) for item in cls._fields() if item.column.index
         )
         for ordinal, index in enumerate(indexes):
-            statements.append(
+            index_name = f"{cls.declared_name}_{ordinal}_idx"
+            statements[index_name] = (
                 f"CREATE {'UNIQUE ' if index.unique else ''}INDEX "
-                f"{_identifier(f'{cls.declared_name}_{ordinal}_idx')} ON {table} "
+                f"{_identifier(index_name)} ON {table} "
                 f"({cls._column_list(index.columns)})"
                 + (f" WHERE {index.where}" if index.where else "")
             )
-        return tuple(statements)
+        statements.update(cls.triggers())
+        return statements
+
+    @classmethod
+    def triggers(cls) -> dict[str, str]:
+        return {}
+
+    @classmethod
+    def ddl(cls) -> tuple[str, ...]:
+        return tuple(cls.schema_objects().values())
 
     @classmethod
     def create(cls, db: sqlite3.Connection) -> None:
@@ -317,6 +343,19 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
                 parameters,
             )
         )
+
+    @classmethod
+    def one(cls, db: sqlite3.Connection, **key: object) -> Self | None:
+        cls._column_list(tuple(key))
+        selected = tuple(item for item in cls._fields() if item.name in key)
+        rows = cls.select(
+            db,
+            where=" AND ".join(f"{_identifier(item.name)} IS ?" for item in selected),
+            parameters=tuple(item.encode(key[item.name]) for item in selected),
+        )
+        if len(rows) > 1:
+            raise ValueError(f"Expected one {cls.declared_name} for {tuple(key)}")
+        return next(iter(rows), None)
 
     def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
         return db.execute(

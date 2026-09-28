@@ -22,8 +22,11 @@ import sqlite3
 import stat
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
+
+from .typed_table import Column, TypedRow, TypedTable
 
 from .coordination_store import IdentityConflict
 
@@ -183,27 +186,72 @@ def _connect(raw: bytes | None) -> sqlite3.Connection:
         raise
 
 
-def _verify_schema(
-    connection: sqlite3.Connection, ddl: tuple[tuple[str, str], ...], digest: str
-) -> None:
-    # Include *all* user objects, regardless of name or object type. In particular,
-    # an unprefixed trigger attached to a protected table must never be invisible.
-    actual = {
-        row["name"]: row["sql"] for row in connection.execute("SELECT name,sql FROM sqlite_master")
-    }
-    if actual != dict(ddl) or connection.execute("SELECT 1 FROM sqlite_temp_master").fetchone():
+@dataclass(frozen=True)
+class SnapshotMeta(TypedTable):
+    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
+    ddl_digest: str
+
+    @classmethod
+    def triggers(cls) -> dict[str, str]:
+        return {
+            f"{cls.declared_name}_{operation.lower()}_guard": f"CREATE TRIGGER {cls.declared_name}_{operation.lower()}_guard "
+            f"BEFORE {operation} ON {cls.declared_name} "
+            "BEGIN SELECT RAISE(ABORT,'snapshot schema is immutable'); END"
+            for operation in ("UPDATE", "DELETE")
+        }
+
+
+@dataclass(frozen=True)
+class _SchemaObject(TypedRow):
+    name: str
+    sql: str
+
+
+@dataclass(frozen=True)
+class _Database(TypedRow):
+    seq: int
+    name: str
+    file: str
+
+
+@dataclass(frozen=True)
+class _ForeignKeys(TypedRow):
+    foreign_keys: bool
+
+
+@dataclass(frozen=True)
+class _QuickCheck(TypedRow):
+    quick_check: str
+
+
+def _schema(row_type: type[TypedTable]) -> dict[str, str]:
+    return SnapshotMeta.schema_objects() | row_type.schema_objects()
+
+
+def _digest(row_type: type[TypedTable]) -> str:
+    return hashlib.sha256(json.dumps(_schema(row_type), separators=(",", ":")).encode()).hexdigest()
+
+
+def _verify_schema(connection: sqlite3.Connection, row_type: type[TypedTable]) -> None:
+    # Every named SQL object is checked, including triggers without our prefix.
+    actual = _SchemaObject.read(
+        connection.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
+    )
+    temporary = _SchemaObject.read(
+        connection.execute("SELECT name,sql FROM sqlite_temp_master WHERE sql IS NOT NULL")
+    )
+    if {row.name: row.sql for row in actual} != _schema(row_type) or temporary:
         raise IdentityConflict("Sidecar schema objects have drifted.")
-    rows = connection.execute(f"SELECT singleton,version,ddl_digest FROM {ddl[0][0]}").fetchall()
-    if len(rows) != 1 or tuple(rows[0]) != (1, 1, digest):
-        raise IdentityConflict("Sidecar schema version differs.")
-    databases = connection.execute("PRAGMA database_list").fetchall()
+    if SnapshotMeta.select(connection) != [SnapshotMeta(1, _digest(row_type))]:
+        raise IdentityConflict("Sidecar schema declaration differs.")
+    databases = _Database.read(connection.execute("PRAGMA database_list"))
     if not databases or any(
-        row["name"] not in {"main", "temp"} or row["file"] != "" for row in databases
+        row.name not in {"main", "temp"} or row.file != "" for row in databases
     ):
         raise IdentityConflict("Sidecar connection must contain only its in-memory snapshot.")
-    if connection.execute("PRAGMA foreign_keys").fetchone()[0] != 1:
+    if _ForeignKeys.read(connection.execute("PRAGMA foreign_keys")) != [_ForeignKeys(True)]:
         raise IdentityConflict("Sidecar foreign-key checking is disabled.")
-    if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+    if _QuickCheck.read(connection.execute("PRAGMA quick_check")) != [_QuickCheck("ok")]:
         raise IdentityConflict("Sidecar snapshot integrity failed.")
 
 
@@ -271,7 +319,7 @@ def _publish(
         raise
 
 
-def create_sidecar_file(path: Path, ddl: tuple[tuple[str, str], ...], digest: str) -> None:
+def create_sidecar_file(path: Path, row_type: type[TypedTable]) -> None:
     """Serialized create-or-verify; an existing empty/damaged file is not repaired."""
     with _locked_directory(path) as directory:
         snapshot = _read_snapshot(directory, path.name)
@@ -279,7 +327,7 @@ def create_sidecar_file(path: Path, ddl: tuple[tuple[str, str], ...], digest: st
             raw, identity = snapshot
             connection = _connect(raw)
             try:
-                _verify_schema(connection, ddl, digest)
+                _verify_schema(connection, row_type)
                 directory.unchanged(path.name, identity)
             finally:
                 connection.close()
@@ -287,24 +335,19 @@ def create_sidecar_file(path: Path, ddl: tuple[tuple[str, str], ...], digest: st
         connection = _connect(None)
         try:
             connection.execute("BEGIN IMMEDIATE")
-            for _, statement in ddl:
+            for statement in _schema(row_type).values():
                 connection.execute(statement)
-            connection.execute(f"INSERT INTO {ddl[0][0]} VALUES(1,1,?)", (digest,))
-            _verify_schema(connection, ddl, digest)
+            SnapshotMeta(1, _digest(row_type)).insert(connection)
+            _verify_schema(connection, row_type)
             connection.execute("COMMIT")
             _publish(directory, path.name, None, connection.serialize())
         finally:
             connection.close()
 
 
-def verify_sidecar(path: Path, ddl: tuple[tuple[str, str], ...], digest: str) -> None:
-    with sidecar_connection(path, ddl, digest):
-        pass
-
-
 @contextmanager
 def sidecar_connection(
-    path: Path, ddl: tuple[tuple[str, str], ...], digest: str, *, blocking: bool = True
+    path: Path, row_type: type[TypedTable], *, blocking: bool = True
 ) -> Iterator[sqlite3.Connection]:
     """Verify and use one exact snapshot, committing only on successful scope exit.
 
@@ -318,12 +361,12 @@ def sidecar_connection(
         raw, identity = snapshot
         connection = _connect(raw)
         try:
-            _verify_schema(connection, ddl, digest)
+            _verify_schema(connection, row_type)
             changes = connection.total_changes
             yield connection
             if connection.in_transaction:
                 raise IdentityConflict("Sidecar scope left an unfinished transaction.")
-            _verify_schema(connection, ddl, digest)
+            _verify_schema(connection, row_type)
             directory.unchanged(path.name, identity)
             if connection.total_changes != changes:
                 _publish(directory, path.name, identity, connection.serialize())
