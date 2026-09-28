@@ -1,26 +1,17 @@
 """Session ownership, declaration extension and actual ACP boundary contracts."""
 
-import json
-from dataclasses import dataclass, replace
+from dataclasses import replace
 
 import pytest
 from acp.agent.router import build_agent_router
-from acp.schema import SessionConfigSelectOption, TextContentBlock, UserMessageChunk
+from acp.schema import SessionConfigSelectOption
 
 from agent_comms import backend
 from agent_comms.acp import CommsClient
-from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 from agent_comms.config_options import ConfigOption
-from agent_comms.routing import MessageRoute
 from agent_comms.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
-from agent_comms.transcript_updates import (
-    AgentTextTranscriptUpdate,
-    StartedTranscriptUpdate,
-    TranscriptUpdate,
-    UserTranscriptUpdate,
-)
-from agent_comms.transcript_events import TranscriptEvent, TextTranscript, ToolStartTranscript
+from delivery_owner_fixture import canonical_agent
 
 
 @pytest.fixture
@@ -50,15 +41,14 @@ async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owne
     other = CommsClient(wire(tmp_path / "other"), agent_bin="pi")
     assert type(owner.sessions) is SessionLifecycle
     assert type(other.sessions) is AttachedSessionLifecycle
-    await owner.initialize(1, {"_meta": {"agentComms": {"transcriptSnapshots": True}}})
+    await owner.initialize(1, {})
     await other.initialize(1, {})
     session = await owner.new_session(str(tmp_path / "project"))
     assert (
         owner.sessions.config.session_catalog_generation[session.session_id]
         == owner.sessions.config.catalog_generation
     )
-    assert owner.sessions.transcript.snapshots is True
-    assert not other.sessions.transcript.snapshots and not other.sessions.bindings
+    assert not other.sessions.bindings
     assert not {
         "_sessions",
         "_proxies",
@@ -132,85 +122,3 @@ async def test_one_option_declaration_reaches_real_acp_router_and_persistence(
     await owner.sessions.config.sync_thread(response.session_id)
     assert len(updates) == 1
     assert updates[0].config_options[-1].current_value == "medium"
-
-
-async def test_a_new_saved_update_is_decoded_and_published_without_consumer_edits(
-    owner, monkeypatch
-):
-    monkeypatch.setattr(TranscriptUpdate, "__registry__", dict(TranscriptUpdate.__registry__))
-    monkeypatch.setattr(TranscriptEvent, "__registry__", dict(TranscriptEvent.__registry__))
-    updates = []
-
-    @dataclass(frozen=True, kw_only=True)
-    class HighlightTranscriptUpdate(TranscriptUpdate):
-        text: str
-
-        async def publish(self, session_id, client):
-            await client.session_update(
-                session_id=session_id,
-                update=UserMessageChunk(
-                    session_update="user_message_chunk",
-                    content=TextContentBlock(type="text", text="Highlight: " + self.text),
-                ),
-            )
-
-    class HighlightTranscript(TextTranscript):
-        def replay_update(self):
-            return HighlightTranscriptUpdate(text=self.text)
-
-    class Client:
-        async def session_update(self, **kwargs):
-            updates.append(kwargs["update"])
-
-    await owner._emit_event(
-        "alias",
-        HighlightTranscript("saved text").replay_update(),
-        client=Client(),
-    )
-    assert len(updates) == 1 and updates[0].content.text == "Highlight: saved text"
-
-
-async def test_typed_updates_preserve_protocol_json_and_silent_tool_replay(owner):
-    rows = []
-
-    class Client:
-        async def session_update(self, session_id, update):
-            rows.append(json.loads(update.model_dump_json(by_alias=True, exclude_none=True)))
-
-    client = Client()
-    for event in [
-        UserTranscriptUpdate(text="hello"),
-        AgentTextTranscriptUpdate(text="answer", route=MessageRoute("a", ("b",))),
-        AgentTextTranscriptUpdate(text="saved notice"),
-        StartedTranscriptUpdate(
-            turn_id="turn", started_at=12.0, activity="working", activity_detail="read"
-        ),
-        ToolStartTranscript(tool_call_id="one", tool_name="read").replay_update(),
-    ]:
-        await owner._emit_event("session", event, client=client)
-    assert rows == [
-        {"sessionUpdate": "user_message_chunk", "content": {"type": "text", "text": "hello"}},
-        {
-            "sessionUpdate": "agent_message_chunk",
-            "content": {"type": "text", "text": "answer"},
-            "_meta": {"agentComms": {"route": {"sender": "a", "targets": ["b"]}}},
-        },
-        {
-            "sessionUpdate": "agent_message_chunk",
-            "content": {"type": "text", "text": "saved notice"},
-            "_meta": {"agentComms": {"route": None}},
-        },
-        {
-            "sessionUpdate": "agent_message_chunk",
-            "content": {"type": "text", "text": ""},
-            "_meta": {
-                "agentComms": {
-                    "turnStarted": True,
-                    "turnId": "turn",
-                    "startedAt": 12.0,
-                    "activity": "working",
-                    "activityDetail": "read",
-                }
-            },
-        },
-    ]

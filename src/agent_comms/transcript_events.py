@@ -9,20 +9,19 @@ from typing import Any
 from .declared_family import DeclaredFamily
 from .routing import TurnRouting
 from .tool_results import ToolDiff
+from .transcript_merge import EventMerge, StreamingMerge
 
 
 @dataclass(frozen=True, kw_only=True)
-class TranscriptEvent(DeclaredFamily, affix="Transcript"):
+class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     routing: TurnRouting | None = None
-
-    @abstractmethod
-    def replay_update(self): ...
 
     @property
     def text_size(self) -> int:
         return 0
 
     @property
+    @abstractmethod
     def routed(self) -> bool:
         return False
 
@@ -40,15 +39,14 @@ class TextTranscript(TranscriptEvent):
         return len(self.text)
 
 
-class LiveTextTranscript(TextTranscript):
+class LiveTextTranscript(StreamingMerge, TextTranscript):
     """Text that can continue streaming inside an already mounted presentation."""
 
 
 class SilentTranscript:
-    def replay_update(self):
-        from .transcript_updates import IgnoredTranscriptUpdate
-
-        return IgnoredTranscriptUpdate()
+    @property
+    def routed(self) -> bool:
+        return False
 
 
 class AgentTextTranscript(LiveTextTranscript):
@@ -58,23 +56,11 @@ class AgentTextTranscript(LiveTextTranscript):
     def routed(self) -> bool:
         return self.routing is not None and self.routing.reply is not None
 
-    def replay_update(self):
-        from .transcript_updates import AgentTextTranscriptUpdate
-
-        return AgentTextTranscriptUpdate(
-            text=self.text, route=self.routing.reply if self.routing else None
-        )
-
 
 class UserTranscript(TextTranscript):
     @property
     def routed(self) -> bool:
         return self.routing is not None and bool(self.routing.requests)
-
-    def replay_update(self):
-        from .transcript_updates import UserTranscriptUpdate
-
-        return UserTranscriptUpdate(text=self.text)
 
 
 class AssistantTranscript(AgentTextTranscript):

@@ -1,0 +1,553 @@
+{
+  "error": {
+    "code": -32603,
+    "message": "402: {\"message\":\"The usage limit has been reached\",\"type\":\"insufficient_quota\"}"
+  },
+  "title": "Provider usage limit reached",
+  "detail": "402: {\"message\":\"The usage limit has been reached\",\"type\":\"insufficient_quota\"}",
+  "action": "Wait for the provider limit to reset or restore credits, then inspect input delivery before any explicit resend.",
+  "input_disposition": "Started \u2014 input not retried",
+  "provider_posts": 1,
+  "notification_count": 17,
+  "notifications": [
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "coordination_changed",
+                  "thread": {
+                    "name": "project",
+                    "created_at": 1790633628.858687
+                  },
+                  "wire_root": "/var/tmp/t2-native-a8xgag28/wire",
+                  "owner_pid": 1807868,
+                  "worktree": "/var/tmp/t2-native-a8xgag28/project",
+                  "model": "fixture/fixture",
+                  "thinking_level": "medium",
+                  "title": "project",
+                  "context_usage": null
+                },
+                {
+                  "kind": "goal_changed",
+                  "goal": null,
+                  "execution": null
+                },
+                {
+                  "kind": "queue_changed",
+                  "scope": {
+                    "session_id": "project",
+                    "owner": {
+                      "incarnation": {
+                        "name": "project",
+                        "created_at": 1790633628.858687
+                      },
+                      "generation": 2
+                    },
+                    "owner_pid": 1807868
+                  },
+                  "revision": 2,
+                  "projection": {
+                    "kind": "available",
+                    "items": [],
+                    "restored": []
+                  }
+                },
+                {
+                  "kind": "cursor_advanced",
+                  "envelope": {
+                    "scope": {
+                      "session_id": "project",
+                      "wire_root_id": "a9cb2d7fdeb94beb8884d23f1f1ed41a",
+                      "owner": {
+                        "incarnation": {
+                          "name": "project",
+                          "created_at": 1790633628.858687
+                        },
+                        "generation": 2
+                      },
+                      "owner_pid": 1807868
+                    },
+                    "revision": 3,
+                    "observation": {
+                      "kind": "unavailable"
+                    }
+                  },
+                  "selected_status": null
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "transcript_snapshot",
+                  "page": {
+                    "events": [],
+                    "before": {
+                      "session_file": "",
+                      "offset": 0
+                    },
+                    "after": {
+                      "session_file": "",
+                      "offset": 0
+                    },
+                    "has_older": false,
+                    "has_newer": false
+                  }
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "turn_settled",
+                  "turn_id": null
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "input_delivery_changed",
+                  "input_id": null
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "input_delivery_changed",
+                  "input_id": "b931f1f1fdf0496086028854e22882ad"
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "turn_started",
+                  "turn_id": "f919cae4e4cc443c9b153337d6584ea9",
+                  "started_at": 1790633630.6765845,
+                  "activity": "thinking",
+                  "activity_detail": "local failing provider input"
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "input_delivery_changed",
+                  "input_id": null
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "goal_changed",
+                  "goal": null,
+                  "execution": null
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "session_info_update"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "configOptions": [
+            {
+              "currentValue": "fixture/fixture",
+              "options": [
+                {
+                  "value": "fixture/fixture",
+                  "name": "fixture/fixture"
+                }
+              ],
+              "id": "model",
+              "name": "Model",
+              "description": "Model used by this persistent agent thread",
+              "category": "model",
+              "type": "select"
+            },
+            {
+              "currentValue": "medium",
+              "options": [
+                {
+                  "value": "off",
+                  "name": "Off"
+                },
+                {
+                  "value": "minimal",
+                  "name": "Minimal"
+                },
+                {
+                  "value": "low",
+                  "name": "Low"
+                },
+                {
+                  "value": "medium",
+                  "name": "Medium"
+                },
+                {
+                  "value": "high",
+                  "name": "High"
+                }
+              ],
+              "id": "thinking_level",
+              "name": "Thinking level",
+              "description": "Reasoning effort used by this persistent agent thread",
+              "category": "thought_level",
+              "type": "select"
+            }
+          ],
+          "_meta": {
+            "agentComms": {
+              "updates": []
+            }
+          },
+          "sessionUpdate": "config_option_update"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "input_delivery_changed",
+                  "input_id": "b931f1f1fdf0496086028854e22882ad"
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "input_started",
+                  "input_id": null,
+                  "text": null,
+                  "scope": null,
+                  "revision": null
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "queue_changed",
+                  "scope": {
+                    "session_id": "project",
+                    "owner": {
+                      "incarnation": {
+                        "name": "project",
+                        "created_at": 1790633628.858687
+                      },
+                      "generation": 2
+                    },
+                    "owner_pid": 1807868
+                  },
+                  "revision": 4,
+                  "projection": {
+                    "kind": "available",
+                    "items": [],
+                    "restored": []
+                  }
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "text_route",
+                  "route": null
+                },
+                {
+                  "kind": "request_failed",
+                  "failure": {
+                    "kind": "provider_quota",
+                    "code": -32603,
+                    "detail": "402: {\"message\":\"The usage limit has been reached\",\"type\":\"insufficient_quota\"}",
+                    "input_state": "started"
+                  }
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "used": 302,
+          "size": 32768,
+          "_meta": {
+            "agentComms": {
+              "updates": []
+            }
+          },
+          "sessionUpdate": "usage_update"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "turn_settled",
+                  "turn_id": "f919cae4e4cc443c9b153337d6584ea9"
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "transcript_changed",
+                  "cursor": {
+                    "session_file": "/var/tmp/t2-native-a8xgag28/config/sessions/--var-tmp-t2-native-a8xgag28-project--/2026-09-28T22-13-53-359Z_01a0ea14-e64e-77cb-a54e-d0fce9a821ca.jsonl",
+                    "offset": 2450
+                  }
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "input_delivery_changed",
+                  "input_id": null
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      }
+    }
+  ],
+  "session_id": "project"
+}

@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import backend, owner_compaction_runtime
+from agent_comms.acp_extension import CompactionPublishedUpdate, decode_updates
 from agent_comms.backend import PersistentPiSession
 from agent_comms.child_process import AttachedChild, Platform, ProcessIdentity
 from agent_comms.comms import Comms, wire
@@ -28,7 +29,7 @@ from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativePreparationError, prepare_native_source
 from agent_comms.owner_compaction_provider import NativeSummary
 from agent_comms.owner_compaction_runtime import compact_owner_once
-from agent_comms.owner_compaction_settings import PiCompactionSettings
+from agent_comms.owner_compaction_settings import PiCompactionSettings, PiSettingsEvidenceError
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
@@ -1024,15 +1025,13 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
             assert bridge.journal.pending_publications(str(session)) == ()
             assert comms.registry.require("project").goal.id == "goal-e2e"
         publications = [
-            event.get("_meta", {}).get("agentComms", {}).get("compactionPublication")
+            fact.publication
             for event in received
+            for fact in decode_updates(event.get("_meta"))
+            if isinstance(fact, CompactionPublishedUpdate)
         ]
-        publications = [event for event in publications if event is not None]
-        assert [event["commitId"] for event in publications] == commit_ids
+        assert [event.commit_id for event in publications] == commit_ids
         assert len(set(commit_ids)) == 3
-        assert all(
-            set(event) == {"commitId", "entryId", "revision", "leafId"} for event in publications
-        )
         assert "Synthetic round" not in json.dumps(received)
         bus = root / "bus.jsonl"
         assert not bus.exists() or b"Synthetic round" not in bus.read_bytes()
@@ -1064,10 +1063,5 @@ def test_unapproved_session_alias_and_bounds_are_refused(session):
             settings=PiCompactionSettings(16384, 1),
             context_window=128000,
         )
-    with pytest.raises(NativePreparationError, match="Native source cannot be prepared"):
-        prepare_native_source(
-            Path(PACKAGE),
-            str(session),
-            settings=PiCompactionSettings(16384, 0),
-            context_window=128000,
-        )
+    with pytest.raises(PiSettingsEvidenceError, match="Invalid effective Pi compaction settings"):
+        PiCompactionSettings(16384, 0)

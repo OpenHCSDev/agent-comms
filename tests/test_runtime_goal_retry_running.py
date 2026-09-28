@@ -7,6 +7,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import agent_events as ae
+from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
 from delivery_owner_fixture import canonical_agent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
@@ -157,9 +158,10 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
         owner.turns.schedule_goal(session)
         assert len(calls) == 1 and not owner.inputs.pending_turns.get(session)
         assert any(
-            FieldCodec.decode(Goal, update.field_meta["agentComms"]["goal"]).state.active
+            fact.goal.state.active
             for update in updates
-            if (getattr(update, "field_meta", None) or {}).get("agentComms", {}).get("goal")
+            for fact in decode_updates(update.field_meta)
+            if isinstance(fact, GoalChangedUpdate) and fact.goal is not None
         )
         if outcome == "cancel":
             await proxy.request("cancel")

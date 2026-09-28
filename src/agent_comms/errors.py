@@ -26,3 +26,7 @@ class HumanInitialUnknownError(RelationViolationError):
             "Private human send outcome UNKNOWN; inspect the committed bus by "
             f"root/seq/id ({wire_root_id}/{wire_seq}/{message_id}); do not retry."
         )
+
+
+class HumanAdmissionBlockedError(RelationViolationError):
+    """A prior private reservation cannot be safely retried."""
