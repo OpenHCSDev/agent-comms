@@ -1,6 +1,6 @@
 # Current functional acceptance — 2026-09-28
 
-Installed source: core196 known Pi payload ownership, paired Toad96; retains R2/R4/R5 and original bus/compaction activation. Runtime is runtime-r1-pi-payloads-20260928. Current receipt: evidence/r1-integration/HANDOFF.md. Fresh installed real-provider queue/compaction, mounted original history111choices, tool diffs and transcript process races passed. Normal two-owner restart and production source59/reply60 read/bash passed; checkpoint60, roster103. Original refactor plan remains incomplete: Darwin R3, Pascal R6, R7 queued. Earlier table receipts below retain their original scope and are supplemented by this current acceptance.
+Installed source: core199 typed input/delivery ownership, paired Toad97; runtime-r3-input-documents-20260928. Current receipt: evidence/r3-integration/HANDOFF.md. Fresh installed real-provider compaction/queue and four mounted delivery/queue/native-attribution pilots passed;7780 saved input rows/96cursors/2580UNKNOWN preserved. Normal two-owner restart/launcher passed, checkpoint60/roster103 unchanged. R1 actual channel59→60 and history111choices remain dated receipts; no new production channel input sent by R3 activation. Original refactor remains incomplete: Pascal R6 and Darwin R7 actively implement. Earlier table receipts below retain their original scope and are supplemented by current acceptance.
 
 ## Six functional requirements
 
@@ -17,7 +17,7 @@ Installed source: core196 known Pi payload ownership, paired Toad96; retains R2/
 
 The activation attempt signaled both idle owners, then restart_owners rejected a graceful release as a changed owner. Both old processes later were authoritatively absent and STOPPED, with no active turn. Starting exactly those identities recovered both; fresh57→58 proves actual subsequent use. The failed activation and recovery receipts are retained. Core188 accepts only the exact voluntary-release receipt, still proves OS exit/ownership and rejects a replaced incarnation/epoch before signals; its normal two-owner restart is now verified live. No timeout alone permits restart or replay.
 
-The original plan remains broader than completed C0/bus/D1–D4: dispatch/FINAL-ORIGINAL-PLAN-AUDIT.md records Pi payload/document-store/goal-attempt/transcript/coordinated-turn/internal vocabulary work. R4 is merged/live with installed Toad goal routes verified. R1/R2/R4/R5 are merged/live; Pascal proceeds with R6 saved transcripts and Darwin implements R3 input/delivery documents. This is assigned refactor work, not evidence of functional default-off behavior.
+The original plan remains broader than completed C0/bus/D1–D4: dispatch/FINAL-ORIGINAL-PLAN-AUDIT.md records Pi payload/document-store/goal-attempt/transcript/coordinated-turn/internal vocabulary work. R4 is merged/live with installed Toad goal routes verified. R1–R5 are merged/live; Pascal implements R6 saved transcripts and Darwin implements R7 selected execution ownership. This is assigned refactor work, not evidence of functional default-off behavior.
 
 The original proposal explicitly lists owner decision supersession, arbitrary DM obligations and task→commit heads as future. Those are not claimed shipped by the six-requirement acceptance. Native proof-journal limit issue107 remains issue-only. No current150-owner provider/UI p99 is claimed.
 
