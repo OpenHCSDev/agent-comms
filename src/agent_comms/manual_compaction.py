@@ -24,6 +24,7 @@ from uuid import uuid4
 from . import pi_events as pi
 from .backend import compaction_summary, configured_model, rpc_args_for
 from .pi_commands import Compact, GetState, PiCommand
+from .pi_payloads import StateData
 from .pi_rpc import PiRpcChannel
 
 MAX_LINE = 64 * 1024
@@ -320,7 +321,7 @@ async def _reap_immune(proc: asyncio.subprocess.Process, *, force: bool) -> tupl
 
 async def _preflight(
     package: Path, session: Path, cwd: Path, env: dict[str, str]
-) -> dict[str, Any] | None:
+) -> StateData | None:
     child_env = dict(
         env, COMPACT_PI_PACKAGE=str(package), COMPACT_SESSION=str(session), COMPACT_CWD=str(cwd)
     )
@@ -357,10 +358,9 @@ async def _preflight(
     if not clean or not output.endswith(b"\n"):
         return None
     try:
-        result = json.loads(output)
-    except (ValueError, UnicodeError):
+        return StateData.from_wire(json.loads(output))
+    except (ValueError, TypeError, UnicodeError):
         return None
-    return result if isinstance(result, dict) else None
 
 
 def _startup_metadata(before: bytes, after: bytes) -> bool:
@@ -526,12 +526,7 @@ class ManualCompaction:
 
     async def _open_session(self) -> bool:
         state = await _preflight(self.package, self.session, self.project, self.env)
-        if (
-            not state
-            or state.get("sessionFile") != str(self.session)
-            or type(state.get("sessionId")) is not str
-            or not state["sessionId"]
-        ):
+        if not state or state.session_file != str(self.session) or not state.session_id:
             self.result = {"ok": False, "error": "Compaction requires a saved Pi session."}
             return False
         if _session_bytes(self.session) != self.before:
@@ -560,7 +555,7 @@ class ManualCompaction:
             response.success is not True
             or data is None
             or data.session_file != str(self.session)
-            or data.session_id != state["sessionId"]
+            or data.session_id != state.session_id
             or data.model is None
             or data.model.provider != self.provider
             or data.model.id != self.model
@@ -572,8 +567,8 @@ class ManualCompaction:
         active = await _preflight(self.package, self.session, self.project, self.env)
         if (
             not active
-            or active.get("sessionFile") != str(self.session)
-            or active.get("sessionId") != state["sessionId"]
+            or active.session_file != str(self.session)
+            or active.session_id != state.session_id
             or _session_bytes(self.session) != current
         ):
             raise ValueError("Pi active session changed before compaction")

@@ -1849,7 +1849,7 @@ time.sleep(60)
             "message": "follow",
             "streamingBehavior": "followUp",
             "_input_id": "queued-1",
-            "images": [{"type": "image", "data": "abc", "mimeType": "image/png"}],
+            "images": [{"type": "image", "data": "YWJj", "mimeType": "image/png"}],
         }
         queue: asyncio.Queue[str | dict] = asyncio.Queue()
         queue.put_nowait(original)

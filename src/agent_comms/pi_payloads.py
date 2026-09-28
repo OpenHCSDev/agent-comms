@@ -134,7 +134,7 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
 
 @dataclass(frozen=True)
 class TextContent(PiContent):
-    text: str = ""
+    text: str = field()
     text_signature: str | None = wire_field("textSignature")
     final_text_allowed = tool_round_allowed = True
 
@@ -172,7 +172,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     opaque: ClassVar[bool] = False
     assistant: ClassVar[bool] = False
     user: ClassVar[bool] = False
-    content: tuple[PiContent, ...] | str = ()
+    content: tuple[PiContent, ...] | str | None = None
     usage: PiUsage | None = None
     input_id: str | None = wire_field("inputId")
     stop_reason: str | None = wire_field("stopReason")
@@ -187,6 +187,8 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
 
     @property
     def text(self) -> str:
+        if self.content is None:
+            return ""
         if isinstance(self.content, str):
             return self.content
         return ("\n" if self.user else "").join(p.text for p in self.content if p.text)
@@ -215,7 +217,6 @@ class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
     wire_tag = "type"
     opaque: ClassVar[bool] = False
     progress: ClassVar[bool] = False
-    delta: str = ""
 
     @classmethod
     def wire_member(cls, value):
@@ -228,7 +229,10 @@ class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
     def emit(self, session): ...
 
 
+@dataclass(frozen=True)
 class TextDelta(PiDelta, declared_name="text_delta"):
+    delta: str
+
     @property
     def progress(self):
         return bool(self.delta)
@@ -242,7 +246,10 @@ class TextDelta(PiDelta, declared_name="text_delta"):
         return (Chunk(text=self.delta),)
 
 
+@dataclass(frozen=True)
 class ThinkingDelta(PiDelta, declared_name="thinking_delta"):
+    delta: str
+
     @property
     def progress(self):
         return bool(self.delta)
@@ -368,6 +375,10 @@ class CompactionData(PiResponseData):
 class UnknownData(PiResponseData):
     payload: Any
     opaque = True
+
+    @classmethod
+    def normalize_wire(cls, value):
+        return {"kind": cls.declared_name, "payload": value}
 
 
 @dataclass(frozen=True)

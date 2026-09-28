@@ -847,7 +847,7 @@ async def run_native_pi_turn(
                     if message.error_message:
                         terminal_error = str(message.error_message)
                         continue
-                    if isinstance(content, str):
+                    if content is None or isinstance(content, str):
                         raise NativePiUnavailable("Native Pi assistant content is malformed")
                     if message.stop_reason == "toolUse" and tool_socket is not None:
                         tool_socket.announce(content)

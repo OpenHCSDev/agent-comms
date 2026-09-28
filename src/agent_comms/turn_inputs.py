@@ -50,7 +50,16 @@ class InputForwarding:
             forwarded = ForwardedInput(
                 original, wire.pop("_input_id", None), wire.pop("_input_ids", [])
             )
-            command = commands.PiCommand.from_wire(wire)
+            try:
+                command = commands.PiCommand.from_wire(wire)
+            except (ValueError, TypeError) as error:
+                from .backend import _terminate_process
+
+                session.record_failure(
+                    failures.PromptSendFailed(f"Invalid queued Pi command: {error}")
+                )
+                await _terminate_process(session.proc)
+                return
             if not await command.steer(session, forwarded):
                 return
 

@@ -1024,6 +1024,17 @@ class TurnSession:
         except json.JSONDecodeError:
             self.skip = True
             return
+        except (ValueError, TypeError) as error:
+            if self.require_input_id and not self.native_capability_confirmed:
+                self.record_failure(
+                    failures.InputIdUnavailable(
+                        f"Invalid Pi capability preflight response: {error}"
+                    )
+                )
+                await _terminate_process(self.proc)
+                self.finished = True
+                return
+            raise
 
     async def attest_input(self) -> AsyncIterator[events.AgentEvent]:
         if self.require_input_id and (not self.native_capability_confirmed):
