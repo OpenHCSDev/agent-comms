@@ -30,9 +30,11 @@ class GoalPauseEvent:
         values["source"] = {"kind": values["source"]}
         return FieldCodec.decode(cls, values)
 
-    @property
-    def owner_instruction(self) -> str | None:
-        return self.source.instruction()
+    @classmethod
+    def from_goal(cls, goal: Goal | None) -> GoalPauseEvent | None:
+        if goal is None or not isinstance(goal.state, PausedGoal):
+            return None
+        return cls(goal.id, goal.revision, goal.state.source)
 
     @property
     def key(self) -> str:
@@ -55,12 +57,6 @@ class GoalPauseEvents(LockedStore[dict[str, GoalPauseEvent]]):
 
     def _encode(self, value: dict[str, GoalPauseEvent]) -> dict:
         return {key: event.to_wire() for key, event in value.items()}
-
-    @staticmethod
-    def for_goal(goal: Goal | None) -> GoalPauseEvent | None:
-        if goal is None or not isinstance(goal.state, PausedGoal):
-            return None
-        return GoalPauseEvent(goal.id, goal.revision, goal.state.source)
 
     def record(self, event: GoalPauseEvent) -> None:
         self.update(lambda events: {**events, event.key: event})

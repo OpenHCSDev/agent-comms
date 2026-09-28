@@ -1295,7 +1295,7 @@ class TestAgentTurn:
         goal = wired.registry.require("proj").goal
         if owner_paused:
             assert goal.state.declared_name == "paused"
-            assert wired.goal_pause("proj").source.declared_name == "owner"
+            assert wired.registry.require("proj").goal.state.pause_source.declared_name == "owner"
             agent.turns.schedule_goal("proj")
             assert not agent.inputs.pending_turns.get("proj")
         store = GoalAttemptStore(wired.root / "goal-private")

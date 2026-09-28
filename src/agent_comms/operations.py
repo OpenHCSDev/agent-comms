@@ -39,7 +39,7 @@ from .field_codec import FieldCodec
 from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
 from .goal_actions import required_block_reason as _required_block_reason
 from .goal_history import GoalHistoryEntry
-from .goal_pauses import GoalPauseEvent, GoalPauseEvents
+from .goal_pauses import GoalPauseEvent
 from .goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
 from .goal_waits import GoalInputReview, GoalWait, GoalWaits
 from .registration import Registration
@@ -2632,10 +2632,6 @@ class Comms:
                 os.close(directory_fd)
         return RenameThreadResult(previous, current, True)
 
-    def goal_pause(self, name: str) -> GoalPauseEvent | None:
-        """Project the pause source carried by the current goal."""
-        return GoalPauseEvents.for_goal(self.registry.require(name).goal)
-
     def unresolved_inputs(self, name: str) -> list[dict[str, Any]]:
         """Project durable unresolved inputs; reading never schedules another attempt."""
         from .input_disposition import InputDispositions
@@ -2692,7 +2688,7 @@ class Comms:
             raise ValueError("This goal was replaced or cleared; refresh its state.")
         if not goal.state.active:
             raise ValueError(
-                (pause.owner_instruction if (pause := self.goal_pause(thread.name)) else None)
+                (source.instruction() if (source := goal.state.pause_source) else None)
                 or "This goal is no longer active; refresh its state."
             )
         if not wait_for:
@@ -2979,7 +2975,7 @@ class Comms:
                 "is_fork": t.is_fork,
                 "pending": pending[name],
                 "goal_pause": (
-                    pause.to_wire() if (pause := GoalPauseEvents.for_goal(t.goal)) else None
+                    pause.to_wire() if (pause := GoalPauseEvent.from_goal(t.goal)) else None
                 ),
                 "goal_execution": (
                     asdict(execution)

@@ -78,7 +78,7 @@ async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):
         "update_goal", status="paused", goal_id=goal.id, expected_revision=goal.revision
     )
     assert paused["goal"]["status"] == paused["goalExecution"]["state"] == "paused"
-    assert comms.goal_pause(session).source.declared_name == "owner"
+    assert comms.registry.require(session).goal.state.pause_source.declared_name == "owner"
     assert scheduled == []
 
     with pytest.raises(RuntimeError, match="changed"):

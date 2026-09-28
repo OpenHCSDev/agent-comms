@@ -52,3 +52,8 @@ All pytest runs use absolute `PYTHONPATH=<this tree>/src`, the existing historic
 Merge this full branch with paired Toad source changes before replacing the installed runtime. No dependency pin or native bundle changes are included. Build in parent's owned integration tree and exercise mounted Toad goal create/edit/pause/resume/retry/history against the canonical socket contract. Existing saved flat files can be read by the current deployed generation during the coordinated cutover; there is no destructive data migration to undo. Roll back paired packages together if needed; never replay interrupted/UNKNOWN inputs to validate.
 
 No core caller blocker remains. Actual paired Toad acceptance, configured-provider acceptance and deployment belong to parent; this source PR is not itself a deployment claim.
+
+
+## Final pause facade closure (isolated follow-up to PR166)
+
+Parent requested preserving PR166 head 9955d32 for paired Toad integration. This follow-up branch deletes the remaining Comms.goal_pause and GoalPauseEvent.owner_instruction forwarding chain, moves audit construction from GoalPauseEvents.for_goal onto GoalPauseEvent.from_goal, and removes unused pause= from read_failed_turn_projection. All actual core callers use goal.state.pause_source/source directly. The obsolete missing/stale unused-pause fixtures are replaced by current typed owner/model/runtime pause coverage. Flat JSON and Toad UI contracts are unchanged. No live mutation. See pause-facade-closure-tests.txt.

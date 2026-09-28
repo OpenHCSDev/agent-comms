@@ -177,7 +177,7 @@ def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_pa
         comms.update_goal("parent", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
     comms.update_goal("parent", PausedGoalAction(), actor=OwnerInvocable)
     comms.update_goal("parent", EditGoalAction(text="Edited @mention"))
-    assert comms.goal_pause("parent").source.declared_name == "owner"
+    assert comms.registry.require("parent").goal.state.pause_source.declared_name == "owner"
 
 
 def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path):

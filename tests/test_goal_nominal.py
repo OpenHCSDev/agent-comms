@@ -103,7 +103,10 @@ def test_experiment_a_one_new_pause_source_carries_all_behavior(owner, monkeypat
     comms.registry.register(replace(comms.registry.require("worker"), goal=paused))
     edited = comms.update_goal("worker", EditGoalAction(text="Revised objective"))
     assert edited.state.source.declared_name == "spend_cap"
-    assert comms.goal_pause("worker").owner_instruction == SpendCapPause().instruction()
+    assert (
+        comms.registry.require("worker").goal.state.pause_source.instruction()
+        == SpendCapPause().instruction()
+    )
     assert wire(comms.root).registry.require("worker").goal.state.source == SpendCapPause()
     failed = comms.block_goal_after_failed_turn(
         "worker", started_goal=goal, expected_worktree=str(comms.root), diagnostic="Backend failed"

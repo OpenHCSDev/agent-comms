@@ -24,8 +24,7 @@ from agent_comms.goal_attempts import (
     UnresolvedAttempt,
 )
 from agent_comms.goal_failure_observation import FailedTurnObservation, read_failed_turn_projection
-from agent_comms.goal_pauses import GoalPauseEvent
-from agent_comms.goal_states import BlockedGoal, ModelPause, OwnerPause, PausedGoal
+from agent_comms.goal_states import BlockedGoal, ModelPause, OwnerPause, PausedGoal, RuntimePause
 from agent_comms.thread_identity import ThreadIncarnation, TurnIdentity
 
 
@@ -74,7 +73,7 @@ def blocked(owner):
 
 def read(store, owner, **kwargs):
     return read_failed_turn_projection(
-        store.path, owner=owner, owner_status=ThreadStatus.IDLE, admission=3, pause=None, **kwargs
+        store.path, owner=owner, owner_status=ThreadStatus.IDLE, admission=3, **kwargs
     )
 
 
@@ -196,7 +195,7 @@ def test_commit_or_sync_error_never_yields_execution_success(bound, monkeypatch,
     )
 
 
-@pytest.mark.parametrize("source", [None, "stale", OwnerPause(), ModelPause()])
+@pytest.mark.parametrize("source", [OwnerPause(), ModelPause(), RuntimePause()])
 def test_pause_projection_never_becomes_runnable(bound, source):
     store, owner, _, observation = bound
     store.record_failed(observation.reservation, "failed", observation=observation)
@@ -204,26 +203,15 @@ def test_pause_projection_never_becomes_runnable(bound, source):
         owner,
         goal=replace(
             owner.goal,
-            state=PausedGoal(ModelPause() if isinstance(source, ModelPause) else OwnerPause()),
+            state=PausedGoal(source),
             revision=3,
         ),
     )
-    pause = (
-        None
-        if source is None
-        else GoalPauseEvent(
-            "goal",
-            2 if source == "stale" else 3,
-            OwnerPause() if source == "stale" else source,
-        )
-    )
     before = store.path.read_bytes()
     projection = read_failed_turn_projection(
-        store.path, owner=owner, owner_status=ThreadStatus.IDLE, admission=3, pause=pause
+        store.path, owner=owner, owner_status=ThreadStatus.IDLE, admission=3
     )
-    assert projection.state == (
-        "paused_uncertain" if isinstance(source, ModelPause) else "owner_paused"
-    )
+    assert projection.state == ("owner_paused" if source.protects_pause else "paused_uncertain")
     assert "canRetry" not in projection.to_primitive()
     assert store.path.read_bytes() == before
 
@@ -266,7 +254,7 @@ def test_reader_never_creates_repairs_or_migrates(bound, tmp_path, mode):
     before = {str(p): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
     assert (
         read_failed_turn_projection(
-            path, owner=blocked(owner), owner_status=ThreadStatus.IDLE, admission=3, pause=None
+            path, owner=blocked(owner), owner_status=ThreadStatus.IDLE, admission=3
         ).state
         == "unavailable"
     )
@@ -371,7 +359,6 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
             owner=owner,
             owner_status=wired.registry.snapshot().statuses["project"],
             admission=admission,
-            pause=wired.goal_pause("project"),
         )
         assert projection.state == expected
         assert store.path.read_bytes() == before
@@ -441,7 +428,7 @@ def test_stopped_status_is_unavailable_even_with_retained_pid(bound, status):
     store.record_failed(observation.reservation, "failed", observation=observation)
     assert (
         read_failed_turn_projection(
-            store.path, owner=blocked(owner), owner_status=status, admission=3, pause=None
+            store.path, owner=blocked(owner), owner_status=status, admission=3
         ).state
         == "unavailable"
     )

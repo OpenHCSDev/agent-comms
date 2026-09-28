@@ -286,9 +286,9 @@ def test_pause_store_golden_and_shared_algorithm(tmp_path):
         '"goal:4": {"goal_id": "goal", "revision": 4, "source": "runtime"}}'
     )
     assert rows["goal:3"].source == OwnerPause()
-    assert GoalPauseEvents.for_goal(Goal("Work", "goal", revision=3, state=PausedGoal()))
+    assert GoalPauseEvent.from_goal(Goal("Work", "goal", revision=3, state=PausedGoal()))
     assert (
-        GoalPauseEvents.for_goal(Goal("Work", "goal", revision=5, state=PausedGoal())).source
+        GoalPauseEvent.from_goal(Goal("Work", "goal", revision=5, state=PausedGoal())).source
         == OwnerPause()
     )
 
