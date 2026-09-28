@@ -1,3 +1,35 @@
+## Shipping and closure update — 2026-09-28 18:15 UTC
+
+- Comms249 merged to main at5f3957c: standalone incremental unread indexing,
+  cancellation, installed archival UI and interpreter shutdown pass. Installation
+  remains pending paired main-Toad pending feedback (Copernicus); no229dependency.
+- Parent229 moves identity uniqueness to RegistrySnapshot publication behavior;
+  Messaging scan removed, actual retained archived identities remain readable.
+  Evidence: evidence/round2-l0/registry-claim-ownership.md. Full suite belongs248.
+- Global L0 checkpoint bootstrap/whole-bus-reader closure remains parent-owned
+  in229; identified source and consumer gap, not claimed complete by lexical checks.
+- Pascal and Lovelace begin independent queued Toad T8/T7 while Darwin completes
+  the native package. Native244 support and232 combined CLI acceptance retain
+  priority when their prerequisite arrives. Toad implementation PRs pending.
+
+## Integrated source checkpoint — 2026-09-28
+
+- PR229 nowintegratesS12/237 plus245/242 at9b01741. Nominal reservation behavior
+  restored andoldflag prohibited;20journal/actualnative/manualcases and3S9guards pass.
+- Fresh combined D22 stage passes with120currentmessages,8420archivedmessages,
+ 104threads and13UNKNOWNinputs preserved. Previous derived-index schemas were
+ correctly rejected; fresh current-owner indexes/checkpoints reopen successfully.
+ Original stores unchanged; superseded owned staging copies removed.
+- Full local suite failure-driven closure belongs toNietzsche, sameintegration
+ tree onbranchfix/combined-full-suite-20260928. Nofullsuitegreenclaimyet.
+- Watcher109 andstackpin247 merged; latestnormal launchers selectcore3aefef1,
+ Toadcc2d35,Textual16ede. Actualinstalledprojectshutdownexit0; no redundantownerrestart.
+- Cicero246 fixes unread indexing/cancellation; Copernicus owns paired107 pending
+ feedbackandfullarchived-historyUIacceptance. Do notshowpartialcountsasexactzero.
+- SupersededCIpatch114closed aftersource/fixturecomparison;115 remainsCI-deferred.
+- Toad111plans/completeownershipqueue merged. Implementationdraftsremainpending
+ untilworkersfinishexistingComms/nativeassignments andstartqueuedfirst-wavework.
+
 ## Current checkpoint — latest verified 2026-09-28
 
 - Corrective PR242 merged and installed; latest Toad43e57/Textual16ede pinned.

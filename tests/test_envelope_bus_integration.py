@@ -414,21 +414,16 @@ def test_same_tick_new_owner_cannot_share_live_claim_release_authority(tmp_path:
     assert str(worktree / "a.py") not in comms.bus.log.claim_projection()
 
 
-def test_legacy_colliding_creation_id_blocks_claim_write_before_append(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_saved_colliding_creation_id_blocks_claim_write_before_append(tmp_path: Path) -> None:
     comms, worktree = _participants(tmp_path)
     claimed = comms.messaging.send_message(
         "alice", "bob", "Claim a", claims=[ExistingFileClaim(Path("a.py"))]
     )
-    actual_threads = comms.registry.all_threads
-
-    def old_registry_snapshot() -> dict[str, Thread]:
-        threads = dict(actual_threads())
+    with comms.registry.store.editing() as edit:
+        threads = edit.document.threads
         threads["bob"] = replace(threads["bob"], created_at=threads["alice"].created_at)
-        return threads
-
-    monkeypatch.setattr(comms.registry, "all_threads", old_registry_snapshot)
+        edit.commit()
+    comms = Comms(comms.root)
     with pytest.raises(RelationViolationError, match="creation identities collide"):
         comms.messaging.send_message(
             "bob", "alice", "Cannot release under duplicate ID", releases=["a.py"]

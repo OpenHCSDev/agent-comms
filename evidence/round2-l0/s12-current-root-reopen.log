@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "<stdin>", line 10, in <module>
+  File "/home/ts/wt/comms-acp-saved-session-startup-20260928/src/agent_comms/wake_candidate_index.py", line 406, in maintain
+    self._schema(db, create=True)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-acp-saved-session-startup-20260928/src/agent_comms/wake_candidate_index.py", line 214, in _schema
+    raise ProjectionRebuildRequiredError(
+        "candidate index schema changed; reset required"
+    )
+agent_comms.wake_candidate_index.ProjectionRebuildRequiredError: candidate index schema changed; reset required

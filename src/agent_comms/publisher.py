@@ -252,8 +252,14 @@ class Publisher:
             metadata = self.log._private_marker_unlocked()
             if not metadata.claims:
                 raise RelationViolationError("Claim read barrier is unavailable.")
+            snapshot = (
+                self._registry.snapshot()
+                if _locked_registry_snapshot is None
+                else _locked_registry_snapshot
+            )
+            snapshot.require_unambiguous_ownership()
             sender, target = self._validate_publish_request(
-                message, registry_snapshot=_locked_registry_snapshot
+                message, registry_snapshot=snapshot
             )
             projection, verified_sequence = self.log._claim_projection_unlocked(metadata)
             # The verified bus high-water also covers rows left by an earlier
@@ -266,7 +272,7 @@ class Publisher:
                 sender=sender,
                 target=target,
                 sequence=last_sequence + 1,
-                snapshot=_locked_registry_snapshot,
+                snapshot=snapshot,
             )
             owner_incarnation = str(incarnation)
             requested = tuple(sorted(path.normalized(worktree) for path in claims))
@@ -350,10 +356,7 @@ class Publisher:
             )
             before_revisions = tuple(file_revision(path) for path in source_paths)
             snapshot = self._registry.snapshot()
-            if len({thread.created_at for thread in snapshot.threads.values()}) != len(
-                snapshot.threads
-            ):
-                raise RelationViolationError("Registry creation identities collide.")
+            snapshot.require_unambiguous_ownership()
             sender = snapshot.aliases.get(message.sender, message.sender)
             sender_thread = snapshot.threads.get(sender)
             if sender_thread is None or not snapshot.statuses[sender].visible:
