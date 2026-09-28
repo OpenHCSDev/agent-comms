@@ -1,0 +1,86 @@
+[
+  {
+    "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "staged": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/d22-registry-goal-current-0",
+    "threads": 104,
+    "goals": 18,
+    "history_entries": 2,
+    "paused_without_attribution": [],
+    "blocked_without_reason": [
+      "53eaeec997c343e39e6edafb527596a6:2",
+      "cebb9057df6c45388ee3f474c7ce324b:5",
+      "e3356961fe9d47339c1b8c4892d0b66a:8"
+    ]
+  },
+  {
+    "source": "/home/ts/.agent-comms",
+    "staged": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/d22-registry-goal-current-1",
+    "threads": 104,
+    "goals": 20,
+    "history_entries": 456,
+    "paused_without_attribution": [],
+    "blocked_without_reason": [
+      "05ebef41b9f141d3ad3e4c9fae181de5:3",
+      "05ebef41b9f141d3ad3e4c9fae181de5:4",
+      "05ebef41b9f141d3ad3e4c9fae181de5:5",
+      "05ebef41b9f141d3ad3e4c9fae181de5:6",
+      "0857f9c3b22648f292bb76100b4ff3dd:2",
+      "4f33c0bc3db441a6b0a571b2524f873f:3",
+      "53eaeec997c343e39e6edafb527596a6:2",
+      "6d5826c8913f48b388b639682711dcda:10",
+      "6d5826c8913f48b388b639682711dcda:6",
+      "6d5826c8913f48b388b639682711dcda:8",
+      "6d5826c8913f48b388b639682711dcda:9",
+      "75d059dda42844b291f9ca9ccd293664:2",
+      "810731a13cb045b4aff8291c0e445a9f:9",
+      "9e3a23fbf8374190a100b9b6b4ccf2f7:12",
+      "9e3a23fbf8374190a100b9b6b4ccf2f7:16",
+      "9e3a23fbf8374190a100b9b6b4ccf2f7:17",
+      "9e3a23fbf8374190a100b9b6b4ccf2f7:19",
+      "9e3a23fbf8374190a100b9b6b4ccf2f7:23",
+      "9e3a23fbf8374190a100b9b6b4ccf2f7:29",
+      "b0c091047cd0475caa89cdbcd0bf8351:14",
+      "b0c091047cd0475caa89cdbcd0bf8351:25",
+      "cebb9057df6c45388ee3f474c7ce324b:5",
+      "de0d61f10d97465d82733f32930c7d7c:104",
+      "de0d61f10d97465d82733f32930c7d7c:106",
+      "de0d61f10d97465d82733f32930c7d7c:107",
+      "de0d61f10d97465d82733f32930c7d7c:113",
+      "de0d61f10d97465d82733f32930c7d7c:72",
+      "de0d61f10d97465d82733f32930c7d7c:74",
+      "de0d61f10d97465d82733f32930c7d7c:76",
+      "de0d61f10d97465d82733f32930c7d7c:92",
+      "de0d61f10d97465d82733f32930c7d7c:99",
+      "e3356961fe9d47339c1b8c4892d0b66a:8",
+      "f24503310f684e5fa0280cb0d3463727:3"
+    ]
+  },
+  {
+    "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+    "staged": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/d22-registry-goal-current-2",
+    "threads": 104,
+    "goals": 20,
+    "history_entries": 0,
+    "paused_without_attribution": [
+      "0a314919764e40a9816cc1ccf825d8b0:3",
+      "7005cfd7d8bb4f01bbb8c4275e3bdff5:3",
+      "a9bc5d395801457490130365181863c5:2",
+      "b0e7d9ec27884fbd8d94454fed299c3d:7",
+      "e0d8e26f828c401a9d3ae168e4f7c8ea:3"
+    ],
+    "blocked_without_reason": [
+      "53eaeec997c343e39e6edafb527596a6:2",
+      "cebb9057df6c45388ee3f474c7ce324b:5",
+      "e3356961fe9d47339c1b8c4892d0b66a:8"
+    ]
+  },
+  {
+    "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w",
+    "staged": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/d22-registry-goal-current-3",
+    "threads": 7,
+    "goals": 1,
+    "history_entries": 0,
+    "paused_without_attribution": [],
+    "blocked_without_reason": []
+  }
+]

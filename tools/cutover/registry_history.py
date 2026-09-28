@@ -13,7 +13,14 @@ from pathlib import Path
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_history import GoalHistoryEntry, GoalHistoryStore
 from agent_comms.goal_pauses import GoalPauseEvent
-from agent_comms.goal_states import ActiveGoal, GoalState, PausedGoal, PauseSource
+from agent_comms.goal_states import (
+    ActiveGoal,
+    BlockedGoal,
+    GoalState,
+    PausedGoal,
+    PauseSource,
+    UnrecordedBlockGoal,
+)
 from agent_comms.goals import Goal
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.store_files import _atomic_write_text, file_revision
@@ -34,9 +41,14 @@ class StoredGoal(Goal):
     def current(self, pauses: dict[str, GoalPauseEvent]) -> Goal:
         event = pauses.get(f"{self.id}:{self.revision}")
         source = self.pause_source or (type(event.source) if event else None)
+        owner = (
+            UnrecordedBlockGoal
+            if self.status is BlockedGoal and self.block_reason is None
+            else self.status
+        )
         state = FieldCodec.decode(
             GoalState,
-            self.status.wire_payload(
+            owner.wire_payload(
                 self.block_reason, source.declared_name if source is not None else None
             ),
         )
@@ -97,6 +109,7 @@ class RegistryRewrite:
     goals: int
     history_entries: int
     paused_without_attribution: tuple[str, ...]
+    blocked_without_reason: tuple[str, ...]
 
 
 def stage(source: Path, destination: Path) -> RegistryRewrite:
@@ -130,11 +143,14 @@ def stage(source: Path, destination: Path) -> RegistryRewrite:
     document = FieldCodec.encode(current)
     RegistryDocument.from_wire(document)
     missing: set[str] = set()
+    unrecorded: set[str] = set()
 
     def convert_goal(goal: StoredGoal) -> Goal:
         key = f"{goal.id}:{goal.revision}"
         if goal.status is PausedGoal and goal.pause_source is None and key not in pauses:
             missing.add(key)
+        if goal.status is BlockedGoal and goal.block_reason is None:
+            unrecorded.add(key)
         return goal.current(pauses)
 
     for thread in stored.threads.values():
@@ -193,6 +209,7 @@ def stage(source: Path, destination: Path) -> RegistryRewrite:
         sum(thread.goal is not None for thread in current.threads.values()),
         count,
         tuple(sorted(missing)),
+        tuple(sorted(unrecorded)),
     )
     _atomic_write_text(
         destination / "registry-rewrite-receipt.json",
