@@ -84,7 +84,7 @@ def verify_continued_private_session(
         elif native_id in recorded:
             proof = recorded[native_id]
             if proof.session_entry_id != entry.get("id") or proof != _read_native_context_evidence(
-                session, native_id
+                session, native_id, request_generation=proof.request_generation
             ):
                 raise ValueError("Continued private user differs from live-recorded context")
         else:
