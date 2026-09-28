@@ -26,7 +26,7 @@ def schedule_private_candidate_after_commit(bus: MessageBus, committed_seq: int)
     try:
         marker = bus.log.path.parent / "bus_meta.json"
         info = marker.stat()
-        if info.st_size > 4096 or b'"writer_protocol_version"' not in marker.read_bytes():
+        if info.st_size > 4096 or not bus.log.read_metadata_unlocked().private:
             return
         schedule_candidate_catchup(bus, committed_seq)
     except Exception as error:
@@ -70,7 +70,7 @@ def _drain_candidate(root: Path) -> None:
         # processing by merely scheduling derived maintenance.
         with bus.log.locked():
             metadata = bus.log._private_marker_unlocked()
-        root_id = str(metadata["wire_root_id"])
+        root_id = metadata.root_id
         index = WakeCandidateIndex(bus)
         for _ in range(_MAX_BATCHES):
             with _guard:

@@ -45,7 +45,7 @@ from acp.schema import (
 from . import agent_events as events
 from . import backend, manual_compaction_bridge
 from .agent_event_updates import AcpEventConsumer
-from .bus_publication import stable_thread_lookup, unique_wire_object
+from .bus_publication import stable_thread_lookup
 from .cohort_foreground import _accept_visible_initials, _preflight
 from .comms import Comms, wire
 from .coordinated_runtime import SelectedExecution
@@ -583,21 +583,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 raise IdentityConflict("ACP bus marker is redirected")
             if not marker_path.exists():
                 return None
-            try:
-                metadata = json.loads(marker_path.read_text(), object_pairs_hook=unique_wire_object)
-            except (OSError, ValueError, UnicodeError) as error:
-                raise IdentityConflict("ACP bus marker is invalid") from error
-            if type(metadata) is not dict:
-                raise IdentityConflict("ACP bus marker is not an object")
-            if "writer_protocol_version" in metadata:
-                guarded = self._comms.bus.log._private_marker_unlocked()
-                return str(guarded["wire_root_id"])
-            if (
-                set(metadata) != {"last_seq"}
-                or type(metadata["last_seq"]) is not int
-                or metadata["last_seq"] < 0
-            ):
-                raise IdentityConflict("ACP public bus marker has an unknown protocol")
+            metadata = self._comms.bus.log.read_metadata_unlocked(required=True)
+            if metadata.private:
+                return self._comms.bus.log._private_marker_unlocked().root_id
             return None
 
     async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int:

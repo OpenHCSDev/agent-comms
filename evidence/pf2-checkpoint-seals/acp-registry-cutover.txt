@@ -1,0 +1,581 @@
+command: ['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-m', 'pytest', '-q', '-o', 'addopts=', 'tests/test_acp_private_nk_delivery.py', 'tests/test_registry_revision.py', 'tests/test_private_sidecar.py', 'tests/test_cutover_process_inventory.py', 'tests/test_private_nk_entrypoint.py']
+.....FFFFF.FF........................................................... [ 83%]
+..............                                                           [100%]
+=================================== FAILURES ===================================
+_ test_private_owner_rename_migrates_generation_before_canonical_selected_send[False] _
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-0txoigif')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1a11d5dd50>
+managed = False
+
+    @pytest.mark.parametrize("managed", [False, True])
+    async def test_private_owner_rename_migrates_generation_before_canonical_selected_send(
+        tmp_path, monkeypatch, managed
+    ):
+        comms, agent, _ = _session(tmp_path)
+        lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
+        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+            before = store.participant(lookup)
+>       assert before.owner_thread == "beta" and before.generation == 1
+                                                 ^^^^^^^^^^^^^^^^^
+E       AttributeError: 'ParticipantSnapshot' object has no attribute 'generation'
+
+tests/test_acp_private_nk_delivery.py:371: AttributeError
+_ test_private_owner_rename_migrates_generation_before_canonical_selected_send[True] _
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-0v6f_467')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1a11ee55e0>
+managed = True
+
+    @pytest.mark.parametrize("managed", [False, True])
+    async def test_private_owner_rename_migrates_generation_before_canonical_selected_send(
+        tmp_path, monkeypatch, managed
+    ):
+        comms, agent, _ = _session(tmp_path)
+        lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
+        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+            before = store.participant(lookup)
+>       assert before.owner_thread == "beta" and before.generation == 1
+                                                 ^^^^^^^^^^^^^^^^^
+E       AttributeError: 'ParticipantSnapshot' object has no attribute 'generation'
+
+tests/test_acp_private_nk_delivery.py:371: AttributeError
+_ test_private_rename_does_not_replay_unserved_old_name_selected_source[False] _
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-lh4icvb_')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1a11ab98d0>
+seal_old = False
+
+    @pytest.mark.parametrize("seal_old", [False, True])
+    async def test_private_rename_does_not_replay_unserved_old_name_selected_source(
+        tmp_path, monkeypatch, seal_old
+    ):
+        comms, agent, root_id = _session(tmp_path)
+        lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
+        invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "old-before-rename"})
+        if seal_old:
+            bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
+            with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+                _accept_visible_initials(bus, root_id, store, lookup, 0, owner_name="beta")
+>       comms.threads._rename_thread("beta", "gamma")
+
+tests/test_acp_private_nk_delivery.py:415: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/thread_management.py:402: in _rename_thread
+    return self._rename_thread_unlocked(name, new_name, title=title)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.thread_management.ThreadManagement object at 0x7f1a11dc70b0>
+name = 'beta', new_name = 'gamma', title = None
+
+    def _rename_thread_unlocked(
+        self, name: str, new_name: str, *, title: str | None = None
+    ) -> RenameThreadResult:
+        from .bus_publication import stable_thread_lookup
+        from .coordination import MAX_IDENTIFIER_CHARS
+        from .coordination_store import IdentityConflict, MutationStore
+    
+        before = self.registry.require(name)
+        private_meta = self.root / "bus_meta.json"
+        if private_meta.is_symlink():
+            raise RelationViolationError("Private/legacy bus metadata cannot be a symlink.")
+        private = False
+        if private_meta.exists():
+            with self.bus.log.locked():
+                metadata = self.bus.log.read_metadata_unlocked()
+                if metadata.private:
+                    self.bus.log._private_marker_unlocked()
+                    private = True
+        if private:
+            _require_no_private_owner_rename(self.root)
+        coordinator = self.root / "coordination.sqlite3"
+        intent = self.root / PRIVATE_OWNER_RENAME_PENDING
+        intent_created = False
+        if not private or not coordinator.exists() or before.name == new_name:
+            previous, current = self.registry.rename(name, new_name)
+        else:
+            # Validate every deterministic registry/SQL name refusal *before*
+            # advancing a committed private owner's generation. The wire lock
+            # excludes cooperating sends until both authorities agree.
+            if not self.registry.status(before.name).running:
+                raise RelationViolationError("Only a running thread can rename itself.")
+            if (
+                self.registry.name_reserved(new_name)
+                and self.registry.canonical_name(new_name) != before.name
+            ):
+                raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
+            replace(before, name=new_name)
+            if len(new_name) > MAX_IDENTIFIER_CHARS:
+                raise ValueError("Private coordinator owner name exceeds its bound.")
+            with MutationStore(str(coordinator)) as store:
+                try:
+                    person = store.participant(stable_thread_lookup(before.created_at))
+                except IdentityConflict as error:
+                    if str(error) != "participant aggregate is not registered":
+                        raise
+                    previous, current = self.registry.rename(name, new_name)
+                else:
+                    if not person.committed or person.owner_thread != before.name:
+                        raise RelationViolationError(
+                            "Private coordinator owner differs from the registered owner."
+                        )
+                    # Persist a fail-closed cross-store intent before SQL or
+                    # registry changes. A crash leaves private publication and
+                    # selected execution unavailable until manual inspection;
+                    # it cannot silently turn an old attempt into a new send.
+                    _atomic_write_text(
+                        intent,
+                        json.dumps(
+                            {
+                                "version": 1,
+                                "lookup": person.lookup,
+                                "old": before.name,
+                                "new": new_name,
+                                "generation": person.participant_generation,
+>                               "wireRootId": metadata["wire_root_id"],
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^
+                            },
+                            sort_keys=True,
+                        ),
+                        fsync_parent=True,
+                    )
+E                   TypeError: 'WireMetadata' object is not subscriptable
+
+src/agent_comms/thread_management.py:468: TypeError
+_ test_private_rename_does_not_replay_unserved_old_name_selected_source[True] __
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-18usfrd0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1a11bd9910>
+seal_old = True
+
+    @pytest.mark.parametrize("seal_old", [False, True])
+    async def test_private_rename_does_not_replay_unserved_old_name_selected_source(
+        tmp_path, monkeypatch, seal_old
+    ):
+        comms, agent, root_id = _session(tmp_path)
+        lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
+        invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "old-before-rename"})
+        if seal_old:
+            bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
+            with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+                _accept_visible_initials(bus, root_id, store, lookup, 0, owner_name="beta")
+>       comms.threads._rename_thread("beta", "gamma")
+
+tests/test_acp_private_nk_delivery.py:415: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/thread_management.py:402: in _rename_thread
+    return self._rename_thread_unlocked(name, new_name, title=title)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.thread_management.ThreadManagement object at 0x7f1a11d19bf0>
+name = 'beta', new_name = 'gamma', title = None
+
+    def _rename_thread_unlocked(
+        self, name: str, new_name: str, *, title: str | None = None
+    ) -> RenameThreadResult:
+        from .bus_publication import stable_thread_lookup
+        from .coordination import MAX_IDENTIFIER_CHARS
+        from .coordination_store import IdentityConflict, MutationStore
+    
+        before = self.registry.require(name)
+        private_meta = self.root / "bus_meta.json"
+        if private_meta.is_symlink():
+            raise RelationViolationError("Private/legacy bus metadata cannot be a symlink.")
+        private = False
+        if private_meta.exists():
+            with self.bus.log.locked():
+                metadata = self.bus.log.read_metadata_unlocked()
+                if metadata.private:
+                    self.bus.log._private_marker_unlocked()
+                    private = True
+        if private:
+            _require_no_private_owner_rename(self.root)
+        coordinator = self.root / "coordination.sqlite3"
+        intent = self.root / PRIVATE_OWNER_RENAME_PENDING
+        intent_created = False
+        if not private or not coordinator.exists() or before.name == new_name:
+            previous, current = self.registry.rename(name, new_name)
+        else:
+            # Validate every deterministic registry/SQL name refusal *before*
+            # advancing a committed private owner's generation. The wire lock
+            # excludes cooperating sends until both authorities agree.
+            if not self.registry.status(before.name).running:
+                raise RelationViolationError("Only a running thread can rename itself.")
+            if (
+                self.registry.name_reserved(new_name)
+                and self.registry.canonical_name(new_name) != before.name
+            ):
+                raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
+            replace(before, name=new_name)
+            if len(new_name) > MAX_IDENTIFIER_CHARS:
+                raise ValueError("Private coordinator owner name exceeds its bound.")
+            with MutationStore(str(coordinator)) as store:
+                try:
+                    person = store.participant(stable_thread_lookup(before.created_at))
+                except IdentityConflict as error:
+                    if str(error) != "participant aggregate is not registered":
+                        raise
+                    previous, current = self.registry.rename(name, new_name)
+                else:
+                    if not person.committed or person.owner_thread != before.name:
+                        raise RelationViolationError(
+                            "Private coordinator owner differs from the registered owner."
+                        )
+                    # Persist a fail-closed cross-store intent before SQL or
+                    # registry changes. A crash leaves private publication and
+                    # selected execution unavailable until manual inspection;
+                    # it cannot silently turn an old attempt into a new send.
+                    _atomic_write_text(
+                        intent,
+                        json.dumps(
+                            {
+                                "version": 1,
+                                "lookup": person.lookup,
+                                "old": before.name,
+                                "new": new_name,
+                                "generation": person.participant_generation,
+>                               "wireRootId": metadata["wire_root_id"],
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^
+                            },
+                            sort_keys=True,
+                        ),
+                        fsync_parent=True,
+                    )
+E                   TypeError: 'WireMetadata' object is not subscriptable
+
+src/agent_comms/thread_management.py:468: TypeError
+___ test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_scan ___
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-d2j06dyj')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1a11d6d4f0>
+
+    async def test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_scan(
+        tmp_path, monkeypatch
+    ):
+        comms, agent, _ = _session(tmp_path)
+        for index in range(101):
+            comms.messaging.send_message("sender", "beta", f"old {index}")
+>       comms.threads._rename_thread("beta", "gamma")
+
+tests/test_acp_private_nk_delivery.py:434: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/thread_management.py:402: in _rename_thread
+    return self._rename_thread_unlocked(name, new_name, title=title)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.thread_management.ThreadManagement object at 0x7f1a11d1b130>
+name = 'beta', new_name = 'gamma', title = None
+
+    def _rename_thread_unlocked(
+        self, name: str, new_name: str, *, title: str | None = None
+    ) -> RenameThreadResult:
+        from .bus_publication import stable_thread_lookup
+        from .coordination import MAX_IDENTIFIER_CHARS
+        from .coordination_store import IdentityConflict, MutationStore
+    
+        before = self.registry.require(name)
+        private_meta = self.root / "bus_meta.json"
+        if private_meta.is_symlink():
+            raise RelationViolationError("Private/legacy bus metadata cannot be a symlink.")
+        private = False
+        if private_meta.exists():
+            with self.bus.log.locked():
+                metadata = self.bus.log.read_metadata_unlocked()
+                if metadata.private:
+                    self.bus.log._private_marker_unlocked()
+                    private = True
+        if private:
+            _require_no_private_owner_rename(self.root)
+        coordinator = self.root / "coordination.sqlite3"
+        intent = self.root / PRIVATE_OWNER_RENAME_PENDING
+        intent_created = False
+        if not private or not coordinator.exists() or before.name == new_name:
+            previous, current = self.registry.rename(name, new_name)
+        else:
+            # Validate every deterministic registry/SQL name refusal *before*
+            # advancing a committed private owner's generation. The wire lock
+            # excludes cooperating sends until both authorities agree.
+            if not self.registry.status(before.name).running:
+                raise RelationViolationError("Only a running thread can rename itself.")
+            if (
+                self.registry.name_reserved(new_name)
+                and self.registry.canonical_name(new_name) != before.name
+            ):
+                raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
+            replace(before, name=new_name)
+            if len(new_name) > MAX_IDENTIFIER_CHARS:
+                raise ValueError("Private coordinator owner name exceeds its bound.")
+            with MutationStore(str(coordinator)) as store:
+                try:
+                    person = store.participant(stable_thread_lookup(before.created_at))
+                except IdentityConflict as error:
+                    if str(error) != "participant aggregate is not registered":
+                        raise
+                    previous, current = self.registry.rename(name, new_name)
+                else:
+                    if not person.committed or person.owner_thread != before.name:
+                        raise RelationViolationError(
+                            "Private coordinator owner differs from the registered owner."
+                        )
+                    # Persist a fail-closed cross-store intent before SQL or
+                    # registry changes. A crash leaves private publication and
+                    # selected execution unavailable until manual inspection;
+                    # it cannot silently turn an old attempt into a new send.
+                    _atomic_write_text(
+                        intent,
+                        json.dumps(
+                            {
+                                "version": 1,
+                                "lookup": person.lookup,
+                                "old": before.name,
+                                "new": new_name,
+                                "generation": person.participant_generation,
+>                               "wireRootId": metadata["wire_root_id"],
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^
+                            },
+                            sort_keys=True,
+                        ),
+                        fsync_parent=True,
+                    )
+E                   TypeError: 'WireMetadata' object is not subscriptable
+
+src/agent_comms/thread_management.py:468: TypeError
+_ test_private_rename_compensates_registry_failure_with_new_old_owner_generation _
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-tv14sz6v')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1a133f6530>
+
+    def test_private_rename_compensates_registry_failure_with_new_old_owner_generation(
+        tmp_path, monkeypatch
+    ):
+        comms, _, root_id = _session(tmp_path)
+        lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
+        original = comms.registry.rename
+    
+        def fail_before_registry_write(name, new_name):
+            raise OSError("synthetic registry persistence failure")
+    
+        monkeypatch.setattr(comms.registry, "rename", fail_before_registry_write)
+        with pytest.raises(RelationViolationError, match="Private owner rename is uncertain"):
+>           comms.threads._rename_thread("beta", "gamma")
+
+tests/test_acp_private_nk_delivery.py:469: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/thread_management.py:402: in _rename_thread
+    return self._rename_thread_unlocked(name, new_name, title=title)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.thread_management.ThreadManagement object at 0x7f1a1346b850>
+name = 'beta', new_name = 'gamma', title = None
+
+    def _rename_thread_unlocked(
+        self, name: str, new_name: str, *, title: str | None = None
+    ) -> RenameThreadResult:
+        from .bus_publication import stable_thread_lookup
+        from .coordination import MAX_IDENTIFIER_CHARS
+        from .coordination_store import IdentityConflict, MutationStore
+    
+        before = self.registry.require(name)
+        private_meta = self.root / "bus_meta.json"
+        if private_meta.is_symlink():
+            raise RelationViolationError("Private/legacy bus metadata cannot be a symlink.")
+        private = False
+        if private_meta.exists():
+            with self.bus.log.locked():
+                metadata = self.bus.log.read_metadata_unlocked()
+                if metadata.private:
+                    self.bus.log._private_marker_unlocked()
+                    private = True
+        if private:
+            _require_no_private_owner_rename(self.root)
+        coordinator = self.root / "coordination.sqlite3"
+        intent = self.root / PRIVATE_OWNER_RENAME_PENDING
+        intent_created = False
+        if not private or not coordinator.exists() or before.name == new_name:
+            previous, current = self.registry.rename(name, new_name)
+        else:
+            # Validate every deterministic registry/SQL name refusal *before*
+            # advancing a committed private owner's generation. The wire lock
+            # excludes cooperating sends until both authorities agree.
+            if not self.registry.status(before.name).running:
+                raise RelationViolationError("Only a running thread can rename itself.")
+            if (
+                self.registry.name_reserved(new_name)
+                and self.registry.canonical_name(new_name) != before.name
+            ):
+                raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
+            replace(before, name=new_name)
+            if len(new_name) > MAX_IDENTIFIER_CHARS:
+                raise ValueError("Private coordinator owner name exceeds its bound.")
+            with MutationStore(str(coordinator)) as store:
+                try:
+                    person = store.participant(stable_thread_lookup(before.created_at))
+                except IdentityConflict as error:
+                    if str(error) != "participant aggregate is not registered":
+                        raise
+                    previous, current = self.registry.rename(name, new_name)
+                else:
+                    if not person.committed or person.owner_thread != before.name:
+                        raise RelationViolationError(
+                            "Private coordinator owner differs from the registered owner."
+                        )
+                    # Persist a fail-closed cross-store intent before SQL or
+                    # registry changes. A crash leaves private publication and
+                    # selected execution unavailable until manual inspection;
+                    # it cannot silently turn an old attempt into a new send.
+                    _atomic_write_text(
+                        intent,
+                        json.dumps(
+                            {
+                                "version": 1,
+                                "lookup": person.lookup,
+                                "old": before.name,
+                                "new": new_name,
+                                "generation": person.participant_generation,
+>                               "wireRootId": metadata["wire_root_id"],
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^
+                            },
+                            sort_keys=True,
+                        ),
+                        fsync_parent=True,
+                    )
+E                   TypeError: 'WireMetadata' object is not subscriptable
+
+src/agent_comms/thread_management.py:468: TypeError
+_______ test_private_rename_intent_fences_inflight_reserved_native_send ________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-j4oulpu8')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1a1356eba0>
+
+    async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_path, monkeypatch):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        entered, release = asyncio.Event(), asyncio.Event()
+    
+        async def held_before_raw_send(*args, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(*args, **kwargs)
+    
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", held_before_raw_send)
+        invoke_tool(
+            comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected before rename"}
+        )
+        running = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+            reserved_count = store._connection.execute(
+                "SELECT COUNT(*) FROM native_runtime_inputs"
+            ).fetchone()[0]
+            assert reserved_count == 1
+    
+        def fail_before_sql(*args, **kwargs):
+            raise OSError("synthetic SQL rename CAS outage")
+    
+        monkeypatch.setattr(MutationStore, "advance_owner_generation", fail_before_sql)
+        with pytest.raises(OSError, match="synthetic SQL rename CAS outage"):
+>           comms.threads._rename_thread("beta", "gamma")
+
+tests/test_acp_private_nk_delivery.py:516: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/thread_management.py:402: in _rename_thread
+    return self._rename_thread_unlocked(name, new_name, title=title)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.thread_management.ThreadManagement object at 0x7f1a11951130>
+name = 'beta', new_name = 'gamma', title = None
+
+    def _rename_thread_unlocked(
+        self, name: str, new_name: str, *, title: str | None = None
+    ) -> RenameThreadResult:
+        from .bus_publication import stable_thread_lookup
+        from .coordination import MAX_IDENTIFIER_CHARS
+        from .coordination_store import IdentityConflict, MutationStore
+    
+        before = self.registry.require(name)
+        private_meta = self.root / "bus_meta.json"
+        if private_meta.is_symlink():
+            raise RelationViolationError("Private/legacy bus metadata cannot be a symlink.")
+        private = False
+        if private_meta.exists():
+            with self.bus.log.locked():
+                metadata = self.bus.log.read_metadata_unlocked()
+                if metadata.private:
+                    self.bus.log._private_marker_unlocked()
+                    private = True
+        if private:
+            _require_no_private_owner_rename(self.root)
+        coordinator = self.root / "coordination.sqlite3"
+        intent = self.root / PRIVATE_OWNER_RENAME_PENDING
+        intent_created = False
+        if not private or not coordinator.exists() or before.name == new_name:
+            previous, current = self.registry.rename(name, new_name)
+        else:
+            # Validate every deterministic registry/SQL name refusal *before*
+            # advancing a committed private owner's generation. The wire lock
+            # excludes cooperating sends until both authorities agree.
+            if not self.registry.status(before.name).running:
+                raise RelationViolationError("Only a running thread can rename itself.")
+            if (
+                self.registry.name_reserved(new_name)
+                and self.registry.canonical_name(new_name) != before.name
+            ):
+                raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
+            replace(before, name=new_name)
+            if len(new_name) > MAX_IDENTIFIER_CHARS:
+                raise ValueError("Private coordinator owner name exceeds its bound.")
+            with MutationStore(str(coordinator)) as store:
+                try:
+                    person = store.participant(stable_thread_lookup(before.created_at))
+                except IdentityConflict as error:
+                    if str(error) != "participant aggregate is not registered":
+                        raise
+                    previous, current = self.registry.rename(name, new_name)
+                else:
+                    if not person.committed or person.owner_thread != before.name:
+                        raise RelationViolationError(
+                            "Private coordinator owner differs from the registered owner."
+                        )
+                    # Persist a fail-closed cross-store intent before SQL or
+                    # registry changes. A crash leaves private publication and
+                    # selected execution unavailable until manual inspection;
+                    # it cannot silently turn an old attempt into a new send.
+                    _atomic_write_text(
+                        intent,
+                        json.dumps(
+                            {
+                                "version": 1,
+                                "lookup": person.lookup,
+                                "old": before.name,
+                                "new": new_name,
+                                "generation": person.participant_generation,
+>                               "wireRootId": metadata["wire_root_id"],
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^
+                            },
+                            sort_keys=True,
+                        ),
+                        fsync_parent=True,
+                    )
+E                   TypeError: 'WireMetadata' object is not subscriptable
+
+src/agent_comms/thread_management.py:468: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:202 Optional awareness omitted; original delivered alone (ValueError)
+=========================== short test summary info ============================
+FAILED tests/test_acp_private_nk_delivery.py::test_private_owner_rename_migrates_generation_before_canonical_selected_send[False]
+FAILED tests/test_acp_private_nk_delivery.py::test_private_owner_rename_migrates_generation_before_canonical_selected_send[True]
+FAILED tests/test_acp_private_nk_delivery.py::test_private_rename_does_not_replay_unserved_old_name_selected_source[False]
+FAILED tests/test_acp_private_nk_delivery.py::test_private_rename_does_not_replay_unserved_old_name_selected_source[True]
+FAILED tests/test_acp_private_nk_delivery.py::test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_scan
+FAILED tests/test_acp_private_nk_delivery.py::test_private_rename_compensates_registry_failure_with_new_old_owner_generation
+FAILED tests/test_acp_private_nk_delivery.py::test_private_rename_intent_fences_inflight_reserved_native_send
+7 failed, 79 passed in 12.41s
+
+exit: 1

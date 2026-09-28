@@ -1,0 +1,975 @@
+{
+  "findings": [
+    {
+      "label": "DeclaredFamily semantic descent boundary",
+      "authority_candidates": [
+        "DeclaredFamily"
+      ],
+      "detector_ids": [
+        "semantic_mirror_without_descent"
+      ],
+      "finding_ids": [
+        "0703a5e342"
+      ],
+      "target_count": 5,
+      "covered_finding_count": 1,
+      "certificate_count": 1,
+      "matched_fact_count": 3,
+      "authority_kinds": [
+        "finding_declared_authority"
+      ],
+      "projection_kinds": [
+        "detector_finding"
+      ],
+      "authority_claims": [
+        {
+          "claim": {
+            "claimed_symbol": "DeclaredFamily",
+            "authority_kind": "finding_declared_authority",
+            "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+            "qualname": "DeclaredFamily",
+            "authority_id": "finding:0703a5e342:authority"
+          },
+          "status": "resolved",
+          "proof_edges": [
+            {
+              "edge_kind": "semantic_descent_graph",
+              "authority_id": "finding:0703a5e342:authority",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+              "line": 86,
+              "symbol": "DeclaredFamily",
+              "detail": "claim matched semantic-descent authority catalog"
+            }
+          ],
+          "discovery_required": null
+        }
+      ],
+      "evidence_symbols": [
+        "TurnProgress.finish_attempts:if",
+        "DeclaredFamily",
+        "ActiveGoal",
+        "CheckpointSeal",
+        "CompletedGoal"
+      ],
+      "stable_id": "a230f08530",
+      "detector_id": "semantic_mirror_without_descent",
+      "title": "Semantic mirror should descend to its nominal authority",
+      "summary": "`DeclaredFamily` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('active_goal', 'completed_goal', 'state') with class_family `DeclaredFamily`; branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface.",
+      "relation_context": "branch_literal has semantic overlap ('active_goal', 'completed_goal', 'state') with class_family `DeclaredFamily`; branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "authority_candidate": "DeclaredFamily",
+      "authority_discovery_required": false
+    },
+    {
+      "label": "DeclaredFamily semantic descent boundary",
+      "authority_candidates": [
+        "DeclaredFamily"
+      ],
+      "detector_ids": [
+        "semantic_mirror_without_descent"
+      ],
+      "finding_ids": [
+        "7e37b467e7"
+      ],
+      "target_count": 5,
+      "covered_finding_count": 1,
+      "certificate_count": 1,
+      "matched_fact_count": 3,
+      "authority_kinds": [
+        "finding_declared_authority"
+      ],
+      "projection_kinds": [
+        "detector_finding"
+      ],
+      "authority_claims": [
+        {
+          "claim": {
+            "claimed_symbol": "DeclaredFamily",
+            "authority_kind": "finding_declared_authority",
+            "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+            "qualname": "DeclaredFamily",
+            "authority_id": "finding:7e37b467e7:authority"
+          },
+          "status": "resolved",
+          "proof_edges": [
+            {
+              "edge_kind": "semantic_descent_graph",
+              "authority_id": "finding:7e37b467e7:authority",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+              "line": 86,
+              "symbol": "DeclaredFamily",
+              "detail": "claim matched semantic-descent authority catalog"
+            }
+          ],
+          "discovery_required": null
+        }
+      ],
+      "evidence_symbols": [
+        "TurnProgress.finish_attempts:if",
+        "DeclaredFamily",
+        "ActiveGoal",
+        "CheckpointSeal",
+        "PausedGoal"
+      ],
+      "stable_id": "445de0296c",
+      "detector_id": "semantic_mirror_without_descent",
+      "title": "Semantic mirror should descend to its nominal authority",
+      "summary": "`DeclaredFamily` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('active_goal', 'paused_goal', 'state') with class_family `DeclaredFamily`; branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface.",
+      "relation_context": "branch_literal has semantic overlap ('active_goal', 'paused_goal', 'state') with class_family `DeclaredFamily`; branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "authority_candidate": "DeclaredFamily",
+      "authority_discovery_required": false
+    },
+    {
+      "label": "DeclaredFamily semantic descent boundary",
+      "authority_candidates": [
+        "DeclaredFamily"
+      ],
+      "detector_ids": [
+        "semantic_mirror_without_descent"
+      ],
+      "finding_ids": [
+        "931121c1ea"
+      ],
+      "target_count": 7,
+      "covered_finding_count": 1,
+      "certificate_count": 1,
+      "matched_fact_count": 5,
+      "authority_kinds": [
+        "finding_declared_authority"
+      ],
+      "projection_kinds": [
+        "detector_finding"
+      ],
+      "authority_claims": [
+        {
+          "claim": {
+            "claimed_symbol": "DeclaredFamily",
+            "authority_kind": "finding_declared_authority",
+            "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+            "qualname": "DeclaredFamily",
+            "authority_id": "finding:931121c1ea:authority"
+          },
+          "status": "resolved",
+          "proof_edges": [
+            {
+              "edge_kind": "semantic_descent_graph",
+              "authority_id": "finding:931121c1ea:authority",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+              "line": 86,
+              "symbol": "DeclaredFamily",
+              "detail": "claim matched semantic-descent authority catalog"
+            }
+          ],
+          "discovery_required": null
+        }
+      ],
+      "evidence_symbols": [
+        "_pi_mcp_live_receipt:if",
+        "DeclaredFamily",
+        "CheckpointSeal",
+        "NativeEntry",
+        "PiContent",
+        "PiDelta",
+        "PiEvent"
+      ],
+      "stable_id": "2d34c07e17",
+      "detector_id": "semantic_mirror_without_descent",
+      "title": "Semantic mirror should descend to its nominal authority",
+      "summary": "`DeclaredFamily` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('state', 'type') with class_family `DeclaredFamily`; branch literal `_pi_mcp_live_receipt:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface.",
+      "relation_context": "branch_literal has semantic overlap ('state', 'type') with class_family `DeclaredFamily`; branch literal `_pi_mcp_live_receipt:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "authority_candidate": "DeclaredFamily",
+      "authority_discovery_required": false
+    }
+  ],
+  "plans": [],
+  "finding_payload_mode": "semantic_boundary_evidence",
+  "finding_count": 3,
+  "finding_counts": {
+    "by_pattern": [
+      {
+        "pattern_id": 1,
+        "count": 3,
+        "pattern_name": "Nominal Boundary Over Sentinel Simulation"
+      }
+    ],
+    "by_detector": [
+      {
+        "detector_id": "semantic_mirror_without_descent",
+        "count": 3
+      }
+    ]
+  },
+  "scan_status": {
+    "mode": "exact_compact_global",
+    "analyzed_detector_count": 79,
+    "omitted_detector_count": 0,
+    "complete": true,
+    "reason": "all_context_detectors_use_compact_global_projections"
+  },
+  "semantic_descent_graph": {
+    "active_graph_source": "repository",
+    "repository_graph": {
+      "authority_count": 383,
+      "fact_count": 2372,
+      "projection_count": 2548,
+      "relation_count": 12,
+      "missing_descent_count": 10,
+      "authorities_by_kind": [
+        {
+          "authority_kind": "class_family",
+          "count": 95
+        },
+        {
+          "authority_kind": "dataclass_schema",
+          "count": 273
+        },
+        {
+          "authority_kind": "enum",
+          "count": 15
+        }
+      ],
+      "projections_by_kind": [
+        {
+          "projection_kind": "branch_literal",
+          "count": 2016
+        },
+        {
+          "projection_kind": "call_literal",
+          "count": 351
+        },
+        {
+          "projection_kind": "collection_literal",
+          "count": 44
+        },
+        {
+          "projection_kind": "mapping_literal",
+          "count": 136
+        },
+        {
+          "projection_kind": "match_literal",
+          "count": 1
+        }
+      ],
+      "top_certificates": [
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "TOOLS",
+          "projection_kind": "collection_literal",
+          "projection_owner_symbol": "<module>",
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/tools.py",
+          "line": 571,
+          "matched_fact_count": 8,
+          "coverage_ratio": 0.02531645569620253,
+          "matched_tokens": [
+            "fork",
+            "model",
+            "prompt",
+            "status",
+            "type"
+          ],
+          "missing_derivation_path": "collection literal `TOOLS` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "_pi_mcp_live_receipt:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "_pi_mcp_live_receipt",
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/backend.py",
+          "line": 132,
+          "matched_fact_count": 5,
+          "coverage_ratio": 0.015822784810126583,
+          "matched_tokens": [
+            "state",
+            "type"
+          ],
+          "missing_derivation_path": "branch literal `_pi_mcp_live_receipt:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "_publication_metadata:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "_publication_metadata",
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/compaction_journal.py",
+          "line": 150,
+          "matched_fact_count": 5,
+          "coverage_ratio": 0.015822784810126583,
+          "matched_tokens": [
+            "status",
+            "type"
+          ],
+          "missing_derivation_path": "branch literal `_publication_metadata:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "_read_snapshot_result:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "_read_snapshot_result",
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/selected_source_snapshot.py",
+          "line": 227,
+          "matched_fact_count": 5,
+          "coverage_ratio": 0.015822784810126583,
+          "matched_tokens": [
+            "status",
+            "type"
+          ],
+          "missing_derivation_path": "branch literal `_read_snapshot_result:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "Goal.from_registry:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "Goal.from_registry",
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/goals.py",
+          "line": 114,
+          "matched_fact_count": 3,
+          "coverage_ratio": 0.00949367088607595,
+          "matched_tokens": [
+            "pause_source",
+            "paused_goal",
+            "status"
+          ],
+          "missing_derivation_path": "branch literal `Goal.from_registry:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "TurnProgress.finish_attempts:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "TurnProgress.finish_attempts",
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/turn_progress.py",
+          "line": 520,
+          "matched_fact_count": 3,
+          "coverage_ratio": 0.00949367088607595,
+          "matched_tokens": [
+            "active_goal",
+            "paused_goal",
+            "state"
+          ],
+          "missing_derivation_path": "branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "TurnProgress.finish_attempts:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "TurnProgress.finish_attempts",
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/turn_progress.py",
+          "line": 556,
+          "matched_fact_count": 3,
+          "coverage_ratio": 0.00949367088607595,
+          "matched_tokens": [
+            "active_goal",
+            "completed_goal",
+            "state"
+          ],
+          "missing_derivation_path": "branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "Message",
+          "authority_kind": "dataclass_schema",
+          "projection_label": "message",
+          "projection_kind": "mapping_literal",
+          "projection_owner_symbol": "ImportRole.pi_message",
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/importing.py",
+          "line": 48,
+          "matched_fact_count": 3,
+          "coverage_ratio": 0.2727272727272727,
+          "matched_tokens": [
+            "body",
+            "timestamp",
+            "type"
+          ],
+          "missing_derivation_path": "mapping literal `message` repeats fields from dataclass_schema `Message`; derive it from dataclass fields through a declaration-owned projection"
+        },
+        {
+          "authority_name": "DisplayOrder",
+          "authority_kind": "class_family",
+          "projection_label": "TOOLS",
+          "projection_kind": "collection_literal",
+          "projection_owner_symbol": "<module>",
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/tools.py",
+          "line": 571,
+          "matched_fact_count": 2,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "channel_sort",
+            "thread_sort"
+          ],
+          "missing_derivation_path": "collection literal `TOOLS` repeats members from class_family `DisplayOrder`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "ImageInput",
+          "authority_kind": "dataclass_schema",
+          "projection_label": "ImageInput.to_rpc:return",
+          "projection_kind": "mapping_literal",
+          "projection_owner_symbol": "ImageInput.to_rpc",
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/image_inputs.py",
+          "line": 39,
+          "matched_fact_count": 2,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "data",
+            "mime_type"
+          ],
+          "missing_derivation_path": "mapping literal `ImageInput.to_rpc:return` repeats fields from dataclass_schema `ImageInput`; derive it from dataclass fields through a declaration-owned projection"
+        }
+      ]
+    },
+    "finding_backed_graph": {
+      "authority_count": 3,
+      "fact_count": 11,
+      "projection_count": 3,
+      "relation_count": 3,
+      "missing_descent_count": 3,
+      "authorities_by_kind": [
+        {
+          "authority_kind": "finding_declared_authority",
+          "count": 3
+        }
+      ],
+      "projections_by_kind": [
+        {
+          "projection_kind": "detector_finding",
+          "count": 3
+        }
+      ],
+      "top_certificates": [
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "finding_declared_authority",
+          "projection_label": "`_pi_mcp_live_receipt:if` mirrors `DeclaredFamily`",
+          "projection_kind": "detector_finding",
+          "projection_owner_symbol": "semantic_mirror_without_descent",
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/backend.py",
+          "line": 132,
+          "matched_fact_count": 5,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "checkpoint_seal",
+            "native_entry",
+            "pi_content",
+            "pi_delta",
+            "pi_event"
+          ],
+          "missing_derivation_path": "branch_literal has semantic overlap ('state', 'type') with class_family `DeclaredFamily`; branch literal `_pi_mcp_live_receipt:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "finding_declared_authority",
+          "projection_label": "`TurnProgress.finish_attempts:if` mirrors `DeclaredFamily`",
+          "projection_kind": "detector_finding",
+          "projection_owner_symbol": "semantic_mirror_without_descent",
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/turn_progress.py",
+          "line": 556,
+          "matched_fact_count": 3,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "active_goal",
+            "checkpoint_seal",
+            "completed_goal"
+          ],
+          "missing_derivation_path": "branch_literal has semantic overlap ('active_goal', 'completed_goal', 'state') with class_family `DeclaredFamily`; branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "finding_declared_authority",
+          "projection_label": "`TurnProgress.finish_attempts:if` mirrors `DeclaredFamily`",
+          "projection_kind": "detector_finding",
+          "projection_owner_symbol": "semantic_mirror_without_descent",
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/turn_progress.py",
+          "line": 520,
+          "matched_fact_count": 3,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "active_goal",
+            "checkpoint_seal",
+            "paused_goal"
+          ],
+          "missing_derivation_path": "branch_literal has semantic overlap ('active_goal', 'paused_goal', 'state') with class_family `DeclaredFamily`; branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        }
+      ]
+    }
+  },
+  "timing": {
+    "parse_seconds": 18.317,
+    "analysis_seconds": 1.231,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 0.0,
+    "analysis_cache_status": "disabled",
+    "total_seconds": 19.548
+  },
+  "semantic_refactor_gate": {
+    "boundary_evidence": [
+      {
+        "label": "DeclaredFamily semantic descent boundary",
+        "authority_candidates": [
+          "DeclaredFamily"
+        ],
+        "detector_ids": [
+          "semantic_mirror_without_descent"
+        ],
+        "finding_ids": [
+          "0703a5e342"
+        ],
+        "target_count": 5,
+        "covered_finding_count": 1,
+        "certificate_count": 1,
+        "matched_fact_count": 3,
+        "authority_kinds": [
+          "finding_declared_authority"
+        ],
+        "projection_kinds": [
+          "detector_finding"
+        ],
+        "authority_claims": [
+          {
+            "claim": {
+              "claimed_symbol": "DeclaredFamily",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+              "qualname": "DeclaredFamily",
+              "authority_id": "finding:0703a5e342:authority"
+            },
+            "status": "resolved",
+            "proof_edges": [
+              {
+                "edge_kind": "semantic_descent_graph",
+                "authority_id": "finding:0703a5e342:authority",
+                "authority_kind": "finding_declared_authority",
+                "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+                "line": 86,
+                "symbol": "DeclaredFamily",
+                "detail": "claim matched semantic-descent authority catalog"
+              }
+            ],
+            "discovery_required": null
+          }
+        ],
+        "evidence_symbols": [
+          "TurnProgress.finish_attempts:if",
+          "DeclaredFamily",
+          "ActiveGoal",
+          "CheckpointSeal",
+          "CompletedGoal"
+        ],
+        "stable_id": "a230f08530",
+        "detector_id": "semantic_mirror_without_descent",
+        "title": "Semantic mirror should descend to its nominal authority",
+        "summary": "`DeclaredFamily` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('active_goal', 'completed_goal', 'state') with class_family `DeclaredFamily`; branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface.",
+        "relation_context": "branch_literal has semantic overlap ('active_goal', 'completed_goal', 'state') with class_family `DeclaredFamily`; branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+        "authority_candidate": "DeclaredFamily",
+        "authority_discovery_required": false
+      },
+      {
+        "label": "DeclaredFamily semantic descent boundary",
+        "authority_candidates": [
+          "DeclaredFamily"
+        ],
+        "detector_ids": [
+          "semantic_mirror_without_descent"
+        ],
+        "finding_ids": [
+          "7e37b467e7"
+        ],
+        "target_count": 5,
+        "covered_finding_count": 1,
+        "certificate_count": 1,
+        "matched_fact_count": 3,
+        "authority_kinds": [
+          "finding_declared_authority"
+        ],
+        "projection_kinds": [
+          "detector_finding"
+        ],
+        "authority_claims": [
+          {
+            "claim": {
+              "claimed_symbol": "DeclaredFamily",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+              "qualname": "DeclaredFamily",
+              "authority_id": "finding:7e37b467e7:authority"
+            },
+            "status": "resolved",
+            "proof_edges": [
+              {
+                "edge_kind": "semantic_descent_graph",
+                "authority_id": "finding:7e37b467e7:authority",
+                "authority_kind": "finding_declared_authority",
+                "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+                "line": 86,
+                "symbol": "DeclaredFamily",
+                "detail": "claim matched semantic-descent authority catalog"
+              }
+            ],
+            "discovery_required": null
+          }
+        ],
+        "evidence_symbols": [
+          "TurnProgress.finish_attempts:if",
+          "DeclaredFamily",
+          "ActiveGoal",
+          "CheckpointSeal",
+          "PausedGoal"
+        ],
+        "stable_id": "445de0296c",
+        "detector_id": "semantic_mirror_without_descent",
+        "title": "Semantic mirror should descend to its nominal authority",
+        "summary": "`DeclaredFamily` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('active_goal', 'paused_goal', 'state') with class_family `DeclaredFamily`; branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface.",
+        "relation_context": "branch_literal has semantic overlap ('active_goal', 'paused_goal', 'state') with class_family `DeclaredFamily`; branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+        "authority_candidate": "DeclaredFamily",
+        "authority_discovery_required": false
+      },
+      {
+        "label": "DeclaredFamily semantic descent boundary",
+        "authority_candidates": [
+          "DeclaredFamily"
+        ],
+        "detector_ids": [
+          "semantic_mirror_without_descent"
+        ],
+        "finding_ids": [
+          "931121c1ea"
+        ],
+        "target_count": 7,
+        "covered_finding_count": 1,
+        "certificate_count": 1,
+        "matched_fact_count": 5,
+        "authority_kinds": [
+          "finding_declared_authority"
+        ],
+        "projection_kinds": [
+          "detector_finding"
+        ],
+        "authority_claims": [
+          {
+            "claim": {
+              "claimed_symbol": "DeclaredFamily",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+              "qualname": "DeclaredFamily",
+              "authority_id": "finding:931121c1ea:authority"
+            },
+            "status": "resolved",
+            "proof_edges": [
+              {
+                "edge_kind": "semantic_descent_graph",
+                "authority_id": "finding:931121c1ea:authority",
+                "authority_kind": "finding_declared_authority",
+                "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+                "line": 86,
+                "symbol": "DeclaredFamily",
+                "detail": "claim matched semantic-descent authority catalog"
+              }
+            ],
+            "discovery_required": null
+          }
+        ],
+        "evidence_symbols": [
+          "_pi_mcp_live_receipt:if",
+          "DeclaredFamily",
+          "CheckpointSeal",
+          "NativeEntry",
+          "PiContent",
+          "PiDelta",
+          "PiEvent"
+        ],
+        "stable_id": "2d34c07e17",
+        "detector_id": "semantic_mirror_without_descent",
+        "title": "Semantic mirror should descend to its nominal authority",
+        "summary": "`DeclaredFamily` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('state', 'type') with class_family `DeclaredFamily`; branch literal `_pi_mcp_live_receipt:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface.",
+        "relation_context": "branch_literal has semantic overlap ('state', 'type') with class_family `DeclaredFamily`; branch literal `_pi_mcp_live_receipt:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+        "authority_candidate": "DeclaredFamily",
+        "authority_discovery_required": false
+      }
+    ],
+    "authority_discovery_findings": [],
+    "active": true,
+    "ssot_authority_finding_count": 3,
+    "policy": "authority_boundary_proof",
+    "raw_findings_default": "suppressed_when_active"
+  },
+  "active_finding_surface": "semantic_refactor_boundary_evidence",
+  "raw_findings_default": "suppressed_when_active",
+  "supporting_raw_finding_count": 3,
+  "supporting_raw_findings": [
+    {
+      "pattern_id": 1,
+      "title": "`_pi_mcp_live_receipt:if` mirrors `DeclaredFamily`",
+      "why": "The branch literal at /home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/backend.py:132 repeats CheckpointSeal, NativeEntry, PiContent, PiDelta, PiEvent from the `DeclaredFamily` semantic authority. A later class, enum member, or schema field can diverge from this hand-maintained view.",
+      "capability_gap": "derived class-family registry or polymorphic dispatch",
+      "relation_context": "branch_literal has semantic overlap ('state', 'type') with class_family `DeclaredFamily`; branch literal `_pi_mcp_live_receipt:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "confidence": "high",
+      "certification": "certified",
+      "capability_tags": [
+        "nominal_identity",
+        "provenance",
+        "enumeration",
+        "authoritative_mapping"
+      ],
+      "observation_tags": [
+        "class_family",
+        "manual_synchronization",
+        "projection_dict"
+      ],
+      "detector_id": "semantic_mirror_without_descent",
+      "summary": "`_pi_mcp_live_receipt:if` mirrors 5 member(s) of `DeclaredFamily` without a descent path",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/backend.py",
+          "line": 132,
+          "symbol": "_pi_mcp_live_receipt:if"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+          "line": 86,
+          "symbol": "DeclaredFamily"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/checkpoint_seals.py",
+          "line": 49,
+          "symbol": "CheckpointSeal"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/native_entries.py",
+          "line": 26,
+          "symbol": "NativeEntry"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/pi_payloads.py",
+          "line": 120,
+          "symbol": "PiContent"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/pi_payloads.py",
+          "line": 358,
+          "symbol": "PiDelta"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/pi_events.py",
+          "line": 30,
+          "symbol": "PiEvent"
+        }
+      ],
+      "projection_evidence": {
+        "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/backend.py",
+        "line": 132,
+        "symbol": "_pi_mcp_live_receipt:if"
+      },
+      "authority_evidence": {
+        "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+        "line": 86,
+        "symbol": "DeclaredFamily"
+      },
+      "compression_certificate": null,
+      "metrics": {
+        "registration_site_count": 5,
+        "registry_name": "_pi_mcp_live_receipt:if",
+        "class_names": [
+          "CheckpointSeal",
+          "NativeEntry",
+          "PiContent",
+          "PiDelta",
+          "PiEvent"
+        ],
+        "class_key_pairs": [
+          "CheckpointSeal='state'",
+          "NativeEntry='type'",
+          "PiContent='type'",
+          "PiDelta='type'",
+          "PiEvent='type'"
+        ]
+      },
+      "stable_id": "931121c1ea",
+      "evidence_ids": [
+        "b8dc0040af",
+        "814aad43cf",
+        "9346c490d6",
+        "6ecf5e32dd",
+        "fd7c37e24d",
+        "2987296b9f",
+        "206d3146d3"
+      ]
+    },
+    {
+      "pattern_id": 1,
+      "title": "`TurnProgress.finish_attempts:if` mirrors `DeclaredFamily`",
+      "why": "The branch literal at /home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/turn_progress.py:520 repeats ActiveGoal, CheckpointSeal, PausedGoal from the `DeclaredFamily` semantic authority. A later class, enum member, or schema field can diverge from this hand-maintained view.",
+      "capability_gap": "derived class-family registry or polymorphic dispatch",
+      "relation_context": "branch_literal has semantic overlap ('active_goal', 'paused_goal', 'state') with class_family `DeclaredFamily`; branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "confidence": "high",
+      "certification": "certified",
+      "capability_tags": [
+        "nominal_identity",
+        "provenance",
+        "enumeration",
+        "authoritative_mapping"
+      ],
+      "observation_tags": [
+        "class_family",
+        "manual_synchronization",
+        "projection_dict"
+      ],
+      "detector_id": "semantic_mirror_without_descent",
+      "summary": "`TurnProgress.finish_attempts:if` mirrors 3 member(s) of `DeclaredFamily` without a descent path",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/turn_progress.py",
+          "line": 520,
+          "symbol": "TurnProgress.finish_attempts:if"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+          "line": 86,
+          "symbol": "DeclaredFamily"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/goal_states.py",
+          "line": 109,
+          "symbol": "ActiveGoal"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/checkpoint_seals.py",
+          "line": 49,
+          "symbol": "CheckpointSeal"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/goal_states.py",
+          "line": 126,
+          "symbol": "PausedGoal"
+        }
+      ],
+      "projection_evidence": {
+        "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/turn_progress.py",
+        "line": 520,
+        "symbol": "TurnProgress.finish_attempts:if"
+      },
+      "authority_evidence": {
+        "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+        "line": 86,
+        "symbol": "DeclaredFamily"
+      },
+      "compression_certificate": null,
+      "metrics": {
+        "registration_site_count": 3,
+        "registry_name": "TurnProgress.finish_attempts:if",
+        "class_names": [
+          "ActiveGoal",
+          "CheckpointSeal",
+          "PausedGoal"
+        ],
+        "class_key_pairs": [
+          "ActiveGoal='ActiveGoal'",
+          "CheckpointSeal='state'",
+          "PausedGoal='PausedGoal'"
+        ]
+      },
+      "stable_id": "7e37b467e7",
+      "evidence_ids": [
+        "189225318c",
+        "814aad43cf",
+        "3248b2f577",
+        "9346c490d6",
+        "afc989b572"
+      ]
+    },
+    {
+      "pattern_id": 1,
+      "title": "`TurnProgress.finish_attempts:if` mirrors `DeclaredFamily`",
+      "why": "The branch literal at /home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/turn_progress.py:556 repeats ActiveGoal, CheckpointSeal, CompletedGoal from the `DeclaredFamily` semantic authority. A later class, enum member, or schema field can diverge from this hand-maintained view.",
+      "capability_gap": "derived class-family registry or polymorphic dispatch",
+      "relation_context": "branch_literal has semantic overlap ('active_goal', 'completed_goal', 'state') with class_family `DeclaredFamily`; branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "confidence": "high",
+      "certification": "certified",
+      "capability_tags": [
+        "nominal_identity",
+        "provenance",
+        "enumeration",
+        "authoritative_mapping"
+      ],
+      "observation_tags": [
+        "class_family",
+        "manual_synchronization",
+        "projection_dict"
+      ],
+      "detector_id": "semantic_mirror_without_descent",
+      "summary": "`TurnProgress.finish_attempts:if` mirrors 3 member(s) of `DeclaredFamily` without a descent path",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/turn_progress.py",
+          "line": 556,
+          "symbol": "TurnProgress.finish_attempts:if"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+          "line": 86,
+          "symbol": "DeclaredFamily"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/goal_states.py",
+          "line": 109,
+          "symbol": "ActiveGoal"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/checkpoint_seals.py",
+          "line": 49,
+          "symbol": "CheckpointSeal"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/goal_states.py",
+          "line": 204,
+          "symbol": "CompletedGoal"
+        }
+      ],
+      "projection_evidence": {
+        "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/turn_progress.py",
+        "line": 556,
+        "symbol": "TurnProgress.finish_attempts:if"
+      },
+      "authority_evidence": {
+        "file_path": "/home/ts/wt/comms-pf2-checkpoint-seals-20260928/src/agent_comms/declared_family.py",
+        "line": 86,
+        "symbol": "DeclaredFamily"
+      },
+      "compression_certificate": null,
+      "metrics": {
+        "registration_site_count": 3,
+        "registry_name": "TurnProgress.finish_attempts:if",
+        "class_names": [
+          "ActiveGoal",
+          "CheckpointSeal",
+          "CompletedGoal"
+        ],
+        "class_key_pairs": [
+          "ActiveGoal='ActiveGoal'",
+          "CheckpointSeal='state'",
+          "CompletedGoal='CompletedGoal'"
+        ]
+      },
+      "stable_id": "0703a5e342",
+      "evidence_ids": [
+        "a181fd4f4d",
+        "814aad43cf",
+        "3248b2f577",
+        "9346c490d6",
+        "fabf43bcf9"
+      ]
+    }
+  ],
+  "payload_timing": {
+    "observation_graph_seconds": 0.0,
+    "semantic_descent_graph_seconds": 0.007,
+    "source_snapshot_seconds": 0.0,
+    "source_index_payload_seconds": 0.0,
+    "semantic_refactor_gate_seconds": 0.003,
+    "finding_recipe_plan_seconds": 0.0,
+    "total_seconds": 0.016
+  }
+}
