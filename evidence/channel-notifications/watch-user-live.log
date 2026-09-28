@@ -1,0 +1,784 @@
+{"seconds": 1.19, "status": "Ready", "busy": false, "outcomes": {"79": "Blocked by earlier turn", "77": "Blocked by earlier turn"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Blocked by earlier turn"}, {"seq": 77, "id": "0c4c7de85506", "state": "Blocked by earlier turn"}, {"seq": 76, "id": "8ca410057e58", "state": "Blocked by earlier turn"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Blocked by earlier turn"}]}
+{"seconds": 19.0, "status": "Ready", "busy": false, "outcomes": {"79": "Waiting for agent", "77": "Waiting for agent"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Blocked by earlier turn"}, {"seq": 77, "id": "0c4c7de85506", "state": "Blocked by earlier turn"}, {"seq": 76, "id": "8ca410057e58", "state": "Blocked by earlier turn"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Blocked by earlier turn"}]}
+{"seconds": 19.28, "status": "Stopped", "busy": false, "outcomes": {"79": "Pending", "77": "Pending"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Waiting for agent"}, {"seq": 77, "id": "0c4c7de85506", "state": "Waiting for agent"}, {"seq": 76, "id": "8ca410057e58", "state": "Waiting for agent"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Waiting for agent"}]}
+{"seconds": 19.8, "status": "Ready", "busy": false, "outcomes": {"79": "Pending", "77": "Pending"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Pending"}, {"seq": 77, "id": "0c4c7de85506", "state": "Pending"}, {"seq": 76, "id": "8ca410057e58", "state": "Pending"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Pending"}]}
+{"seconds": 30.98, "status": "Thinking \u00b7 Checking #comms message", "busy": true, "outcomes": {"79": "Pending", "77": "Pending"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Pending"}, {"seq": 77, "id": "0c4c7de85506", "state": "Pending"}, {"seq": 76, "id": "8ca410057e58", "state": "Pending"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Checking relevance\u2026"}]}
+{"seconds": 35.66, "status": "Thinking \u00b7 Checking #comms message", "busy": true, "outcomes": {"79": "Queued behind current turn", "77": "Queued behind current turn"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Pending"}, {"seq": 77, "id": "0c4c7de85506", "state": "Pending"}, {"seq": 76, "id": "8ca410057e58", "state": "Pending"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Checking relevance\u2026"}]}
+{"seconds": 35.95, "status": "Thinking \u00b7 Responding in #comms", "busy": true, "outcomes": {"79": "Queued behind current turn", "77": "Queued behind current turn"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Queued behind current turn"}, {"seq": 77, "id": "0c4c7de85506", "state": "Queued behind current turn"}, {"seq": 76, "id": "8ca410057e58", "state": "Queued behind current turn"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Responding\u2026"}]}
+{"seconds": 40.7, "status": "Thinking \u00b7 Responding in #comms", "busy": true, "outcomes": {"79": "Pending", "77": "Pending"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Queued behind current turn"}, {"seq": 77, "id": "0c4c7de85506", "state": "Queued behind current turn"}, {"seq": 76, "id": "8ca410057e58", "state": "Queued behind current turn"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Responding\u2026"}]}
+{"seconds": 41.27, "status": "Ready", "busy": false, "outcomes": {"79": "Pending", "77": "Pending"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Pending"}, {"seq": 77, "id": "0c4c7de85506", "state": "Pending"}, {"seq": 76, "id": "8ca410057e58", "state": "Pending"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Responded"}]}
+{"seconds": 45.67, "status": "Thinking \u00b7 Checking #comms message", "busy": true, "outcomes": {"79": "Pending", "77": "Pending"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Pending"}, {"seq": 77, "id": "0c4c7de85506", "state": "Pending"}, {"seq": 76, "id": "8ca410057e58", "state": "Checking relevance\u2026"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Responded"}]}
+{"seconds": 47.04, "status": "Ready", "busy": false, "outcomes": {"79": "Pending", "77": "Pending"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Pending"}, {"seq": 77, "id": "0c4c7de85506", "state": "Pending"}, {"seq": 76, "id": "8ca410057e58", "state": "Outcome uncertain"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Responded"}]}
+{"seconds": 52.52, "status": "Working \u00b7 In a turn", "busy": true, "outcomes": {"79": "Pending", "77": "Checking relevance\u2026"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Pending"}, {"seq": 77, "id": "0c4c7de85506", "state": "Pending"}, {"seq": 76, "id": "8ca410057e58", "state": "Outcome uncertain"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Responded"}]}
+{"seconds": 52.8, "status": "Thinking \u00b7 Checking #comms message", "busy": true, "outcomes": {"79": "Pending", "77": "Checking relevance\u2026"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Pending"}, {"seq": 77, "id": "0c4c7de85506", "state": "Checking relevance\u2026"}, {"seq": 76, "id": "8ca410057e58", "state": "Outcome uncertain"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Responded"}]}
+{"seconds": 60.33, "status": "Thinking \u00b7 Checking #comms message", "busy": true, "outcomes": {"79": "Queued behind current turn", "77": "Responding\u2026"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Pending"}, {"seq": 77, "id": "0c4c7de85506", "state": "Checking relevance\u2026"}, {"seq": 76, "id": "8ca410057e58", "state": "Outcome uncertain"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Responded"}]}
+{"seconds": 60.62, "status": "Thinking \u00b7 Responding in #comms", "busy": true, "outcomes": {"79": "Queued behind current turn", "77": "Responding\u2026"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Queued behind current turn"}, {"seq": 77, "id": "0c4c7de85506", "state": "Responding\u2026"}, {"seq": 76, "id": "8ca410057e58", "state": "Outcome uncertain"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Responded"}]}
+{"seconds": 68.09, "status": "Thinking \u00b7 Responding in #comms", "busy": true, "outcomes": {"79": "Pending", "77": "Responded"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Queued behind current turn"}, {"seq": 77, "id": "0c4c7de85506", "state": "Responding\u2026"}, {"seq": 76, "id": "8ca410057e58", "state": "Outcome uncertain"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Responded"}]}
+{"seconds": 68.66, "status": "Thinking \u00b7 Responding in #comms", "busy": true, "outcomes": {"79": "Pending", "77": "Responded"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Pending"}, {"seq": 77, "id": "0c4c7de85506", "state": "Responded"}, {"seq": 76, "id": "8ca410057e58", "state": "Outcome uncertain"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Responded"}]}
+{"seconds": 68.97, "status": "Ready", "busy": false, "outcomes": {"79": "Pending", "77": "Responded"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Pending"}, {"seq": 77, "id": "0c4c7de85506", "state": "Responded"}, {"seq": 76, "id": "8ca410057e58", "state": "Outcome uncertain"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Responded"}]}
+{"seconds": 72.91, "status": "Ready", "busy": false, "outcomes": {"79": "Responding\u2026", "77": "Responded"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Pending"}, {"seq": 77, "id": "0c4c7de85506", "state": "Responded"}, {"seq": 76, "id": "8ca410057e58", "state": "Outcome uncertain"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Responded"}]}
+{"seconds": 73.17, "status": "Thinking \u00b7 Responding in #comms", "busy": true, "outcomes": {"79": "Responding\u2026", "77": "Responded"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Responding\u2026"}, {"seq": 77, "id": "0c4c7de85506", "state": "Responded"}, {"seq": 76, "id": "8ca410057e58", "state": "Outcome uncertain"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Responded"}]}
+{"seconds": 79.25, "status": "Ready", "busy": false, "outcomes": {"79": "Responded", "77": "Responded"}, "receipts": [{"seq": 79, "id": "f4a2cb9a8485", "state": "Responded"}, {"seq": 77, "id": "0c4c7de85506", "state": "Responded"}, {"seq": 76, "id": "8ca410057e58", "state": "Outcome uncertain"}, {"seq": 75, "id": "d84bccdaa9b5", "state": "Passive"}, {"seq": 74, "id": "350cb7605e62", "state": "Responded"}]}
+{
+  "messages_sent": 0,
+  "observations": [
+    {
+      "seconds": 1.19,
+      "status": "Ready",
+      "busy": false,
+      "outcomes": {
+        "79": "Blocked by earlier turn",
+        "77": "Blocked by earlier turn"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Blocked by earlier turn"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Blocked by earlier turn"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Blocked by earlier turn"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Blocked by earlier turn"
+        }
+      ]
+    },
+    {
+      "seconds": 19.0,
+      "status": "Ready",
+      "busy": false,
+      "outcomes": {
+        "79": "Waiting for agent",
+        "77": "Waiting for agent"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Blocked by earlier turn"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Blocked by earlier turn"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Blocked by earlier turn"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Blocked by earlier turn"
+        }
+      ]
+    },
+    {
+      "seconds": 19.28,
+      "status": "Stopped",
+      "busy": false,
+      "outcomes": {
+        "79": "Pending",
+        "77": "Pending"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Waiting for agent"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Waiting for agent"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Waiting for agent"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Waiting for agent"
+        }
+      ]
+    },
+    {
+      "seconds": 19.8,
+      "status": "Ready",
+      "busy": false,
+      "outcomes": {
+        "79": "Pending",
+        "77": "Pending"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Pending"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Pending"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Pending"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Pending"
+        }
+      ]
+    },
+    {
+      "seconds": 30.98,
+      "status": "Thinking \u00b7 Checking #comms message",
+      "busy": true,
+      "outcomes": {
+        "79": "Pending",
+        "77": "Pending"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Pending"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Pending"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Pending"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Checking relevance\u2026"
+        }
+      ]
+    },
+    {
+      "seconds": 35.66,
+      "status": "Thinking \u00b7 Checking #comms message",
+      "busy": true,
+      "outcomes": {
+        "79": "Queued behind current turn",
+        "77": "Queued behind current turn"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Pending"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Pending"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Pending"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Checking relevance\u2026"
+        }
+      ]
+    },
+    {
+      "seconds": 35.95,
+      "status": "Thinking \u00b7 Responding in #comms",
+      "busy": true,
+      "outcomes": {
+        "79": "Queued behind current turn",
+        "77": "Queued behind current turn"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Queued behind current turn"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Queued behind current turn"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Queued behind current turn"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Responding\u2026"
+        }
+      ]
+    },
+    {
+      "seconds": 40.7,
+      "status": "Thinking \u00b7 Responding in #comms",
+      "busy": true,
+      "outcomes": {
+        "79": "Pending",
+        "77": "Pending"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Queued behind current turn"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Queued behind current turn"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Queued behind current turn"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Responding\u2026"
+        }
+      ]
+    },
+    {
+      "seconds": 41.27,
+      "status": "Ready",
+      "busy": false,
+      "outcomes": {
+        "79": "Pending",
+        "77": "Pending"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Pending"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Pending"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Pending"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Responded"
+        }
+      ]
+    },
+    {
+      "seconds": 45.67,
+      "status": "Thinking \u00b7 Checking #comms message",
+      "busy": true,
+      "outcomes": {
+        "79": "Pending",
+        "77": "Pending"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Pending"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Pending"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Checking relevance\u2026"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Responded"
+        }
+      ]
+    },
+    {
+      "seconds": 47.04,
+      "status": "Ready",
+      "busy": false,
+      "outcomes": {
+        "79": "Pending",
+        "77": "Pending"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Pending"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Pending"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Outcome uncertain"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Responded"
+        }
+      ]
+    },
+    {
+      "seconds": 52.52,
+      "status": "Working \u00b7 In a turn",
+      "busy": true,
+      "outcomes": {
+        "79": "Pending",
+        "77": "Checking relevance\u2026"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Pending"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Pending"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Outcome uncertain"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Responded"
+        }
+      ]
+    },
+    {
+      "seconds": 52.8,
+      "status": "Thinking \u00b7 Checking #comms message",
+      "busy": true,
+      "outcomes": {
+        "79": "Pending",
+        "77": "Checking relevance\u2026"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Pending"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Checking relevance\u2026"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Outcome uncertain"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Responded"
+        }
+      ]
+    },
+    {
+      "seconds": 60.33,
+      "status": "Thinking \u00b7 Checking #comms message",
+      "busy": true,
+      "outcomes": {
+        "79": "Queued behind current turn",
+        "77": "Responding\u2026"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Pending"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Checking relevance\u2026"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Outcome uncertain"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Responded"
+        }
+      ]
+    },
+    {
+      "seconds": 60.62,
+      "status": "Thinking \u00b7 Responding in #comms",
+      "busy": true,
+      "outcomes": {
+        "79": "Queued behind current turn",
+        "77": "Responding\u2026"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Queued behind current turn"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Responding\u2026"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Outcome uncertain"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Responded"
+        }
+      ]
+    },
+    {
+      "seconds": 68.09,
+      "status": "Thinking \u00b7 Responding in #comms",
+      "busy": true,
+      "outcomes": {
+        "79": "Pending",
+        "77": "Responded"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Queued behind current turn"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Responding\u2026"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Outcome uncertain"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Responded"
+        }
+      ]
+    },
+    {
+      "seconds": 68.66,
+      "status": "Thinking \u00b7 Responding in #comms",
+      "busy": true,
+      "outcomes": {
+        "79": "Pending",
+        "77": "Responded"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Pending"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Responded"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Outcome uncertain"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Responded"
+        }
+      ]
+    },
+    {
+      "seconds": 68.97,
+      "status": "Ready",
+      "busy": false,
+      "outcomes": {
+        "79": "Pending",
+        "77": "Responded"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Pending"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Responded"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Outcome uncertain"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Responded"
+        }
+      ]
+    },
+    {
+      "seconds": 72.91,
+      "status": "Ready",
+      "busy": false,
+      "outcomes": {
+        "79": "Responding\u2026",
+        "77": "Responded"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Pending"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Responded"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Outcome uncertain"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Responded"
+        }
+      ]
+    },
+    {
+      "seconds": 73.17,
+      "status": "Thinking \u00b7 Responding in #comms",
+      "busy": true,
+      "outcomes": {
+        "79": "Responding\u2026",
+        "77": "Responded"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Responding\u2026"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Responded"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Outcome uncertain"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Responded"
+        }
+      ]
+    },
+    {
+      "seconds": 79.25,
+      "status": "Ready",
+      "busy": false,
+      "outcomes": {
+        "79": "Responded",
+        "77": "Responded"
+      },
+      "receipts": [
+        {
+          "seq": 79,
+          "id": "f4a2cb9a8485",
+          "state": "Responded"
+        },
+        {
+          "seq": 77,
+          "id": "0c4c7de85506",
+          "state": "Responded"
+        },
+        {
+          "seq": 76,
+          "id": "8ca410057e58",
+          "state": "Outcome uncertain"
+        },
+        {
+          "seq": 75,
+          "id": "d84bccdaa9b5",
+          "state": "Passive"
+        },
+        {
+          "seq": 74,
+          "id": "350cb7605e62",
+          "state": "Responded"
+        }
+      ]
+    }
+  ],
+  "verified": true,
+  "elapsed_seconds": 79.41
+}
