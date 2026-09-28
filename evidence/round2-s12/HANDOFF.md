@@ -1,14 +1,14 @@
 # S12 source closure — review-ready; parent activation pending
 
-Foundation #230 merged at reviewed cca3b282. Caller closure draft #237. Current branch:
+Foundation #230 merged at reviewed cca3b282. Caller closure #237 is ready for review. Current branch:
 `refactor/round2-s12-caller-closure`.
 
 ## Current checkpoint
 
-Code head dd4cbe1 closes all S12 production owners/callers and widens the guard
-package-wide. Coordinator schema8; wake_claims uses assignment_id; lifecycle
+Code head72ca98d integrates parenta5809ab cleanly; all S12 production owners/callers are closed and the guard covers the
+whole package. Coordinator schema8; wake_claims uses assignment_id; lifecycle
 fields are the writable state owners. See final sections below for contracts,
-checks and cutover duties. Parent720316a +24192b42ba integrated. No S12 source
+checks and cutover duties. Parenta5809ab (including24192b42ba and S9 73c9dbc) integrated. No S12 source
 work remains unassigned; overall S12 completion requires parent's quiet durable
 cutover and actual retained-session/RPC acceptance.
 
@@ -511,3 +511,26 @@ JournalSchemaObject duplicates should use A13 SQLiteJournalMode/SQLiteSchemaObje
 Parent was notified; this file was not edited. S10 owns selected_tool_broker and
 already uses NativeRuntimeInput. Parent retains actual quiet activation/unknown
 session proof and deletes one-shot tools after successful durable replacement.
+
+
+## Parent a5809ab integration checkpoint
+
+Merged parenta5809ab into S12 at72ca98d with zero conflicts. Eight focused
+notification/current-process identity and package SQL guard checks pass on the
+combined source; R0 versus parent: TypeIdentity-7, LongBooleanChain-2,
+StringSubscript-87. Prior complete-batch acceptance is unchanged; no broad suite
+was repeated. Receipts: parent-a5809ab-integration.log and parent-a5809ab-ratchet.json.
+
+History conflict guidance for any later parent edits: keep S12 NotificationAssignment
+and the typed _notification_rows/_project_notifications implementation, including
+SQLiteUserVersion; schema8 uses WakeAssignment and w.assignment_id. Preserve241
+thread.process_alive, matching active-turn ownership, blocked-prior-turn feedback,
+and notice association by message ID/sequence. Do not restore WakeClaims,
+_assignment(raw_row), or w.claim_id. Existing parent history/attachment sections
+merge unchanged. This commit requires no manual conflict resolution.
+
+No independent S12 source batch remains open. Remaining full acceptance is quiet
+runtime reset/durable one-shot carryover and retained-session/RPC proof, owned by
+parent229. Parent242 live compaction corrective activation is separate; S12 did
+not restart/install anything. S9's duplicate JournalSchemaObject/JournalMode are
+still present in73c9dbc; S9/parent owns their shared-A13 cleanup.
