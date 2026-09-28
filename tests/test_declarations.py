@@ -138,7 +138,7 @@ class TestAgentRuntimeInfo:
         assert info.context_percent == 25
         store = RuntimeInfoStore(tmp_path / "runtime.json")
         store.set(info)
-        assert store.get("a") == info
+        assert store.read()["a"] == info
 
     def test_unknown_context_stays_unknown(self):
         assert AgentRuntimeInfo(thread="a", context_size=100).context_percent is None
@@ -1249,7 +1249,7 @@ class TestSharedLedger:
 
     def test_rejects_non_string_keys(self, tmp_path: Path):
         ledger = SharedLedger(tmp_path / "ledger.json")
-        with pytest.raises(ValueError, match="string"):
+        with pytest.raises(ValueError, match="str"):
             ledger.merge({1: "x"}, author="x")
 
     def test_persistence_roundtrip(self, tmp_path: Path):

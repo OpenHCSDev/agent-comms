@@ -723,7 +723,7 @@ class HistoryViews:
     def _thread_views_for(
         self, snapshot: RegistrySnapshot, *, show_stopped: bool, show_archived: bool
     ) -> tuple[ThreadView, ...]:
-        runtime = self.agents.runtime_info.all()
+        runtime = self.agents.runtime_info.read()
         active = frozenset(t.name for t in snapshot.threads.values() if t.executing)
         activities = self.agents.activity.all_current(active=active)
         waits = GoalWaits(self.root / GoalWaits.filename).read()
@@ -919,7 +919,7 @@ class HistoryViews:
                     self.bus.log.path,
                     self.bus.history_manifest,
                     self.agents.activity._path,
-                    self.agents.runtime_info._path,
+                    self.agents.runtime_info.path,
                     self.bus.reads.path,
                     self.root / GoalWaits.filename,
                     self.bus.reads.path.with_name(self.bus.reads.legacy_filename),

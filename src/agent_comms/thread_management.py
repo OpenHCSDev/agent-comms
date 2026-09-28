@@ -612,7 +612,7 @@ class ThreadManagement:
             self.registry.begin_delete(canonical)
             messages_removed, markers_removed = self.bus.remove_thread(canonical)
             activity_removed = self.agents.activity.remove_thread(canonical)
-            runtime_removed = self.agents.runtime_info.get(canonical) is not None
+            runtime_removed = self.agents.runtime_info.read().get(canonical) is not None
             self.agents.runtime_info.remove(canonical)
             ledger_removed = self.ledger.remove_thread(canonical)
             with self.channels.catalog.editing() as document:

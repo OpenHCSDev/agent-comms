@@ -2,44 +2,31 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
-from pathlib import Path
+from dataclasses import dataclass
+from typing import Any, ClassVar, cast
 
-from .store_files import _atomic_write_text, _store_lock
+from .field_codec import FieldCodec
+from .locked_store import LockedStore
 
 
-class SharedLedger:
-    """Persists shared coordination state between threads."""
+@dataclass(frozen=True, slots=True)
+class SharedLedger(LockedStore[dict[str, Any]]):
+    """One free-form JSON document; no in-memory mirror or closed value family."""
 
-    def __init__(self, store_path: Path):
-        self._path = store_path
-        self._data: dict = {}
-        self._load()
+    filename: ClassVar[str] = "ledger.json"
+    json_indent = 2
 
-    def _load(self) -> None:
-        with _store_lock(self._path):
-            self._load_unlocked()
+    @property
+    def record_type(self) -> type[dict[str, Any]]:
+        return dict[str, Any]
 
-    def _load_unlocked(self) -> None:
-        self._data = json.loads(self._path.read_text()) if self._path.exists() else {}
-
-    def _save_unlocked(self) -> None:
-        _atomic_write_text(self._path, json.dumps(self._data, indent=2))
-
-    def read(self) -> Mapping[str, object]:
-        self._load()
-        return dict(self._data)
+    def empty(self) -> dict[str, Any]:
+        return {}
 
     def merge(self, updates: Mapping[str, object], author: str) -> None:
-        for key in updates:
-            if not isinstance(key, str):
-                raise ValueError(f"Ledger key must be a string, got {type(key).__name__}.")
-        with _store_lock(self._path):
-            self._load_unlocked()
-            self._data.update(updates)
-            self._data["last_updated_by"] = author
-            self._save_unlocked()
+        changes = FieldCodec.decode(self.record_type, dict(updates))
+        self.update(lambda values: {**values, **changes, "last_updated_by": author})
 
     def remove_thread(self, name: str) -> int:
         """Remove exact structural references to a thread identity."""
@@ -69,11 +56,14 @@ class SharedLedger:
                 return result_list, removed
             return value, 0
 
-        with _store_lock(self._path):
-            self._load_unlocked()
-            cleaned, removed = clean(self._data)
-            self._data = cleaned if isinstance(cleaned, dict) else {}
-            self._save_unlocked()
+        removed = 0
+
+        def change(values: dict[str, Any]) -> dict[str, Any]:
+            nonlocal removed
+            cleaned, removed = clean(values)
+            return cast(dict[str, Any], cleaned) if removed else values
+
+        self.update(change)
         return removed
 
     def rename_thread(self, old_name: str, new_name: str) -> int:
@@ -101,9 +91,12 @@ class SharedLedger:
                 return new_name, 1
             return value, 0
 
-        with _store_lock(self._path):
-            self._load_unlocked()
-            renamed, changed = rename(self._data)
-            self._data = renamed if isinstance(renamed, dict) else {}
-            self._save_unlocked()
+        changed = 0
+
+        def change(values: dict[str, Any]) -> dict[str, Any]:
+            nonlocal changed
+            renamed, changed = rename(values)
+            return cast(dict[str, Any], renamed) if changed else values
+
+        self.update(change)
         return changed

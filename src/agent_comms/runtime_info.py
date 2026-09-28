@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import time
-from collections.abc import Mapping
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass, field, replace
+from typing import ClassVar
 
 from .errors import RelationViolationError
-from .store_files import _atomic_write_text, _store_lock
+from .locked_store import LockedStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,7 +19,7 @@ class AgentRuntimeInfo:
     session_name: str | None = None
     context_used: int | None = None
     context_size: int | None = None
-    timestamp: float = field(default_factory=time.time)
+    timestamp: float = field(default_factory=time.time, metadata={"wire_name": "ts"})
 
     def __post_init__(self) -> None:
         if not self.thread:
@@ -43,81 +41,46 @@ class AgentRuntimeInfo:
             return ""
         return f"{self.context_used:,}/{self.context_size:,} tokens ({self.context_percent:.1f}%)"
 
-    def to_wire(self) -> dict:
-        return {
-            "thread": self.thread,
-            "model": self.model,
-            "session_name": self.session_name,
-            "context_used": self.context_used,
-            "context_size": self.context_size,
-            "ts": self.timestamp,
-        }
 
-    @classmethod
-    def from_wire(cls, data: Mapping) -> AgentRuntimeInfo:
-        return cls(
-            thread=data["thread"],
-            model=data.get("model"),
-            session_name=data.get("session_name"),
-            context_used=data.get("context_used"),
-            context_size=data.get("context_size"),
-            timestamp=data.get("ts", 0.0),
-        )
+@dataclass(frozen=True, slots=True)
+class RuntimeInfoStore(LockedStore[dict[str, AgentRuntimeInfo]]):
+    """Latest observations, independently committed from the registry/log."""
 
+    filename: ClassVar[str] = "runtime_info.json"
+    json_indent = 2
 
-class RuntimeInfoStore:
-    """Persists the latest runtime metadata for each thread."""
+    @property
+    def record_type(self) -> type[dict[str, AgentRuntimeInfo]]:
+        return dict[str, AgentRuntimeInfo]
 
-    def __init__(self, store_path: Path):
-        self._path = store_path
+    def empty(self) -> dict[str, AgentRuntimeInfo]:
+        return {}
+
+    def _decode(self, data: object) -> dict[str, AgentRuntimeInfo]:
+        # Historical missing dates mean unknown, never observation-at-read-time.
+        if isinstance(data, dict):
+            data = {name: {"ts": 0.0, **row} for name, row in data.items()}
+        return super()._decode(data)
 
     def set(self, info: AgentRuntimeInfo) -> None:
-        with _store_lock(self._path):
-            values = self._load_unlocked()
-            values[info.thread] = info
-            _atomic_write_text(
-                self._path,
-                json.dumps({name: value.to_wire() for name, value in values.items()}, indent=2),
-            )
-
-    def get(self, thread: str) -> AgentRuntimeInfo | None:
-        return self._load().get(thread)
-
-    def all(self) -> Mapping[str, AgentRuntimeInfo]:
-        return self._load()
+        self.update(lambda values: {**values, info.thread: info})
 
     def remove(self, thread: str) -> None:
-        with _store_lock(self._path):
-            values = self._load_unlocked()
-            values.pop(thread, None)
-            _atomic_write_text(
-                self._path,
-                json.dumps({name: value.to_wire() for name, value in values.items()}, indent=2),
+        self.update(
+            lambda values: (
+                {name: value for name, value in values.items() if name != thread}
+                if thread in values
+                else values
             )
+        )
 
     def rename_thread(self, old_name: str, new_name: str) -> None:
-        with _store_lock(self._path):
-            values = self._load_unlocked()
-            if info := values.pop(old_name, None):
-                values[new_name] = AgentRuntimeInfo(
-                    thread=new_name,
-                    model=info.model,
-                    session_name=info.session_name,
-                    context_used=info.context_used,
-                    context_size=info.context_size,
-                    timestamp=info.timestamp,
-                )
-            _atomic_write_text(
-                self._path,
-                json.dumps({name: value.to_wire() for name, value in values.items()}, indent=2),
-            )
+        def rename(values: dict[str, AgentRuntimeInfo]) -> dict[str, AgentRuntimeInfo]:
+            if old_name not in values or old_name == new_name:
+                return values
+            return {
+                **{name: value for name, value in values.items() if name != old_name},
+                new_name: replace(values[old_name], thread=new_name),
+            }
 
-    def _load(self) -> dict[str, AgentRuntimeInfo]:
-        with _store_lock(self._path):
-            return self._load_unlocked()
-
-    def _load_unlocked(self) -> dict[str, AgentRuntimeInfo]:
-        if not self._path.exists():
-            return {}
-        raw = json.loads(self._path.read_text())
-        return {name: AgentRuntimeInfo.from_wire(data) for name, data in raw.items()}
+        self.update(rename)

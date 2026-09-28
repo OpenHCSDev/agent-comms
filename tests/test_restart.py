@@ -222,6 +222,12 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     session.write_text("")
     comms = wire(tmp_path / "wire")
     comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
+    comms.agents.set_agent_info(
+        "worker", model="test/model", session_name="preserved", context_used=23, context_size=100
+    )
+    comms.ledger.merge({"saved": {"worker": ["work remains", 23]}}, "worker")
+    metadata = comms.agents.runtime_info.path.read_bytes()
+    collaboration = comms.ledger.path.read_bytes()
     owner = comms.owners.ensure_owner("worker", agent_bin="/bin/echo")
 
     async def ready(pid):
@@ -239,5 +245,10 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
         await ready(receipts[0].pid)
         assert comms.registry.require("worker").session_file == str(session)
         assert comms.registry.require("worker").active_turn is None
+        assert comms.agents.runtime_info.path.read_bytes() == metadata
+        assert comms.ledger.path.read_bytes() == collaboration
+        reopened = wire(comms.root)
+        assert reopened.agents.agent_info_of("worker").context_used == 23
+        assert reopened.ledger.read()["saved"] == {"worker": ["work remains", 23]}
     finally:
         await asyncio.to_thread(comms.owners.stop, "worker")
