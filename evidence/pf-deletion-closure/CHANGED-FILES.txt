@@ -24,3 +24,4 @@ tests/test_native_evidence_boundary.py
 tests/test_native_pi.py
 tests/test_private_bus_checkpoint.py
 tests/test_selected_tool_runner_hook.py
+tests/test_pf_deletion_guards.py
