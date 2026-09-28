@@ -1,0 +1,17 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- /home/ts/wt/comms-refactor-integration-20260927/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/ts/wt/comms-refactor-s7-wire-log-20260928
+configfile: pyproject.toml
+plugins: platformdirs-4.12.0, asyncio-1.4.0, xdist-3.8.0, cov-7.1.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 5 items
+
+tests/test_private_checkpoint_cursor_integration.py::test_fresh_open_1002_initials_over_eight_mib_remain_exact[False] PASSED [ 20%]
+tests/test_private_checkpoint_cursor_integration.py::test_fresh_open_1002_initials_over_eight_mib_remain_exact[True] PASSED [ 40%]
+tests/test_private_checkpoint_cursor_integration.py::test_certified_unproven_first_source_cannot_be_skipped PASSED [ 60%]
+tests/test_private_checkpoint_cursor_integration.py::test_pending_unknown_append_cold_rebuild_does_not_replay PASSED [ 80%]
+tests/test_private_checkpoint_cursor_integration.py::test_checkpoint_index_rollback_denies_cursor_without_sql_mutation PASSED [100%]
+
+========================= 5 passed in 60.74s (0:01:00) =========================
+EXIT=0

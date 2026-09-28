@@ -48,5 +48,12 @@
   "classes": {
     "log": "wire_log.WireLog",
     "publisher": "publisher.Publisher"
+  },
+  "call_replacements": {
+    "bus.send(message)": "bus.publisher.publish(message).message_id",
+    "install_private_bus_checkpoint(bus)": "install_private_bus_checkpoint(bus.log)",
+    "verify_private_bus_checkpoint_unlocked(bus, marker)": "verify_private_bus_checkpoint_unlocked(bus.log, marker)",
+    "certified_initial_page_unlocked(bus, ...)": "certified_initial_page_unlocked(bus.log, ...)",
+    "_store_lock(bus._path, ...)": "bus.log.locked(...)"
   }
 }

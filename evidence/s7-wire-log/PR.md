@@ -9,8 +9,8 @@ Complete original S7 WireLog/Publisher ownership on main183. Real persistence, d
 ## Local evidence
 - Read/history/concurrency/ingress: 223 passed.
 - Durability/receipt batch: 144 passed, 1 skipped; one migrated checkpoint fixture corrected and passed in the coordination batch.
-- Coordination: 128 passed; old pre-PR176 cutover assertion corrected, final targeted acceptance in progress.
-- ACP/native seam batch bounded at 60 seconds after 47 completed cases; remaining scale cases split, never reported as complete.
+- Coordination: 128 passed; old pre-PR176 cutover assertion corrected and passed in targeted acceptance.
+- ACP/native seam batch bounded at 60 seconds after 47 completed cases; remaining scale cases split: all 5 pass; awareness/tools 28 pass. Partial runs never reported as complete.
 - NRA full package context: 79 detectors, zero omissions, complete; one finding before and after (not a zero-finding claim or equivalence proof).
 
 Parent owns paired Toad consumers and deployment. Exact mapping and evolving acceptance: evidence/s7-wire-log/HANDOFF.md and caller-map.json. No provider calls or live writes. CI deferred by owner.
