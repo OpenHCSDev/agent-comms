@@ -50,6 +50,14 @@ This branch is not independently installable before stored data cutover and thes
 Rebased on main bf68bbb (includes #231 and #230). Removed core `_delete`/`comms_delete`; saved-view deletion remains. CLI help contract now describes current commands. Presence persistence assertions decode the declared status map, retaining fresh reopen and UI assertions. Tool context behavior is now a fast marked guard.
 
 - 73 focused local tests passed (4.13s), including catalogs, channels, all presence variants, CLI declarations and current loaders.
-- Seven marked guards passed before the additional context guard was marked (8.82s).
+- All eight marked guards pass after context guard selection (2.52s).
 - Paired Toad candidate wheels passed actual RuntimeServer goal set/edit/revision CAS/history/snapshot/publication testing. No provider turn or live data mutation.
 - The three existing DM pending-count assertions remain unchanged; parent integrates #229's ReadLedger before rerunning them.
+
+## Paired publication and remaining integration
+
+Paired draft: https://github.com/OpenHCSDev/toad/pull/107, branch `refactor/round2-l0a-callers`, worktree `~/wt/toad-refactor2-l0a-20260928`. All five Goal readers and public purge UI/direct tests are closed. Actual candidate-wheel owner and mounted goal/archive UI paths pass; full comms interaction and relationship pilots pass. Archive proves messages, goal revisions, incarnation, transcript and saved session retained. No retired production callers found by its whole-source AST guard.
+
+Toad's unchanged DM paint/rebind pending-count assertion reproduces the old-bus failure as expected. Parent owns integrating this core branch into #229 before that acceptance; no behavior/assertion relaxation. Lovelace still owns obsolete Thread decoder/date recovery removal in #232. No live activation claimed.
+
+Core source +58/-260 lines, tests +163/-396 lines (see exact machine-readable counts). Ratchet delta -2/0/-3. Toad source +8/-70, tests +144/-125. No compatibility adapters added. All disposable wheel/test targets are cleaned after recording evidence; persistent worktrees and code are kept.

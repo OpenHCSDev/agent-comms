@@ -107,7 +107,7 @@ def read_proven_source_coverage(
             source_witness, addressed, more_initials = certified_initial_page_unlocked(
                 bus.log, marker, recipient_lookup, after=after_seq, limit=limit
             )
-            if after_seq > source_witness.latest_initial_seq:
+            if after_seq > max(source_witness.latest_initial_seq, marker.admission_after_seq):
                 raise IdentityConflict("source coverage prefix exceeds certified initials")
             initials = list(addressed)
             if more_initials and not partial:

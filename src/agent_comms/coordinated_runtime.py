@@ -219,9 +219,11 @@ def _production_optional_awareness(
     oversized projection is an omission, not an independent claim or cursor.
     The builder is constructed before entering the dedicated optional reader.
     """
+    with index.bus.log.locked():
+        admission_after_seq = index.bus.log._private_marker_unlocked().admission_after_seq
     projection = OptionalAwarenessProjection(
         index,
-        after_seq=0,
+        after_seq=admission_after_seq,
         through_seq=through_seq,
         expected_participant_generation=generation,
         expected_admission_generation=admission_generation,
@@ -465,6 +467,11 @@ class SelectedExecution:
         self.store = MutationStore(str(self.root / "coordination.sqlite3"))
 
     def _select(self):
+        with self.bus.log.locked():
+            marker = self.bus.log._private_marker_unlocked()
+            if marker.root_id != self.wire_root_id:
+                raise IdentityConflict("selected admission wire root changed")
+            after_seq = max(self.after_seq, marker.admission_after_seq)
         with self.store._read_transaction():
             _assert_schema(self.store._connection)
             _assert_response_schema(self.store._connection)
@@ -483,7 +490,7 @@ class SelectedExecution:
                 self.store, self.lookup, self.owner, self.participant.participant_generation
             )
         self.assignment = next_sealed_assignment(
-            self.store, self.lookup, self.owner.name, after_seq=self.after_seq
+            self.store, self.lookup, self.owner.name, after_seq=after_seq
         )
         if self.assignment is None:
             return False

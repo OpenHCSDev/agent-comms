@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .active_route import guard_legacy_root_write
+from .active_route import guard_original_root_write
 from .candidate_maintenance import schedule_private_candidate_after_commit
 from .registration import Registration
 
@@ -61,7 +61,7 @@ class Messaging:
         releases: Sequence[str | Path] = (),
     ) -> Message:
         """Return one committed envelope, including optional guarded claims."""
-        with guard_legacy_root_write(self.root), _store_lock(self._wire_lock_path):
+        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             if sender not in self.registry:
                 raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
             owner = self.registry.require(sender)
@@ -176,7 +176,7 @@ class Messaging:
 
         # The PR116 legacy retirement fence precedes identity creation and
         # remains held through the actual bus publication on an old root.
-        with guard_legacy_root_write(self.root), _store_lock(self._wire_lock_path):
+        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             user = self._user_identity_under_wire_lock(worktree)
             committed = self.bus.publisher.publish_ordinary(
                 Message(user.name, target, body, MessageType.INFO),

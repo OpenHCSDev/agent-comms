@@ -42,10 +42,12 @@ V1 to V3 are done, the guards pass, and nothing in S10's files decodes by hand.
 
 Pascal owns `refactor/s10-pi-boundary-20260928`, tree
 `~/wt/comms-s10-pi-boundary-20260928`, based on merged226 plus R0.
-V1 and V3 are implemented together with current socket/UI producers in PR234; see
-`evidence/s10-pi-boundary/HANDOFF.md`. Full S10 remains incomplete.
-V2 is assigned here and waits Cicero's A13/NativeRuntimeInput; native child adoption now uses PR232 A12. The unused selected-Pi guardian and
-its fake-only API/tests were deleted after the complete caller trace; actual
-summary calls use backend's AttachedChild. A reproduced repeated-cancellation
-join gap belongs to Lovelace A12 and is documented in the handoff. No dependency
-is duplicated. Parent owns quiet whole-step activation.
+V1–V3 and all native child adopters are implemented in PR234. V2 uses Cicero's
+NativeRuntimeInput.one from PR237; no raw native-input row remains. Pi event and
+tracked-turn lifetimes use PR232's AttachedChild/BoundedRun, including the shared
+repeated-cancellation fix. The unused selected-Pi guardian and fake-only API/tests
+are deleted. Existing NativeEntry now owns strict startup model/thinking metadata
+for Darwin's paired PR236 consumers, with no second registry. See
+`evidence/s10-pi-boundary/HANDOFF.md` for actual loopback native tools, cancellation,
+boundary and guard receipts. Parent owns coupled integration/quiet activation;
+S9 startup consumers remain explicitly Darwin-owned until his paired closure.

@@ -20,6 +20,7 @@ def history(tmp_path):
     for created, name in enumerate(("bob", "carol"), start=11):
         old.threads.register(Thread(name, frozenset({"ops"}), str(old.root), created_at=created))
     old.registry.rename("alice-old", "alice")
+    old.messaging.initialize_private_initial_protocol()
     rows = []
     for seq in range(1, 241):
         message = Message(
@@ -46,6 +47,10 @@ def history(tmp_path):
         raw = (json.dumps(message.to_wire()) + "\n").encode()
         rows.append((message, raw))
     old.bus.log.path.write_bytes(b"".join(raw for _, raw in rows))
+    old.bus.log.path.chmod(0o600)
+    marker = old.bus.log.read_metadata_unlocked(required=True)
+    marker.last_seq = marker.admission_after_seq = rows[-1][0].seq
+    old.bus.log.write_metadata_unlocked(marker)
     live = Comms(tmp_path / "live")
     # Deliberately different membership: source scope must not use live tags.
     live.threads.register(Thread("alice", frozenset({"ops"}), str(live.root), created_at=500))

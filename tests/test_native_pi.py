@@ -462,14 +462,27 @@ async def test_redirected_private_policy_directory_denies_subprocess(tmp_path: P
         )
 
 
-async def test_cancelled_native_turn_reaps_its_real_subprocess(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("cancellations", [1, 2])
+async def test_cancelled_native_turn_reaps_its_real_subprocess(
+    tmp_path: Path, monkeypatch, cancellations: int
+) -> None:
     import agent_comms.native_pi as native
 
     original = AttachedChild.start
     started = []
 
     async def launch(*_argv, **kwargs):
-        process = await original(("/bin/sleep", "30"), **kwargs)
+        process = await original(
+            (
+                sys.executable,
+                "-u",
+                "-c",
+                "import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); "
+                "print('ready',flush=True); time.sleep(30)",
+            ),
+            **kwargs,
+        )
+        assert await process.stdout.readline() == b"ready\n"
         started.append(process)
         return process
 
@@ -491,6 +504,9 @@ async def test_cancelled_native_turn_reaps_its_real_subprocess(tmp_path: Path, m
         await asyncio.sleep(0.01)
     assert started
     task.cancel()
+    for _ in range(cancellations - 1):
+        await asyncio.sleep(0.1)
+        task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await asyncio.wait_for(task, timeout=3)
     assert started[0].returncode is not None

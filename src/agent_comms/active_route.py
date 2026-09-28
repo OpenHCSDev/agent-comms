@@ -24,7 +24,6 @@ from .errors import RelationViolationError
 
 if TYPE_CHECKING:
     from .owner_lifecycle import OwnerLifecycle
-    from .supervised_cutover import ArchiveReceipt
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,11 +86,11 @@ _route_write_owner = threading.local()
 
 
 @contextmanager
-def guard_legacy_root_write(root: Path) -> Iterator[None]:
+def guard_original_root_write(root: Path) -> Iterator[None]:
     """Fence a cooperating write through the historical root after cutover."""
-    legacy = Path.home() / ".agent-comms"
-    if root.expanduser().resolve() == legacy.resolve():
-        with guard_default_route_write(legacy):
+    original_root = Path.home() / ".agent-comms"
+    if root.expanduser().resolve() == original_root.resolve():
+        with guard_default_route_write(original_root):
             yield
     else:
         yield
@@ -334,112 +333,3 @@ def _publish_active_route_locked(
         if temporary is not None:
             with suppress(OSError):
                 os.unlink(temporary, dir_fd=directory)
-
-
-def rotate_active_route(
-    expected: ActiveRoute,
-    replacement: ActiveRoute,
-    archive: ArchiveReceipt,
-    path: Path | None = None,
-) -> None:
-    """Atomically replace a stopped private route after its immutable archive.
-
-    The caller fences explicit-root ingress and all owner processes, archives
-    the stopped source, and stages saved owners in an empty new private root.
-    Pending and UNKNOWN inputs stay in the archived source; none are replayed.
-    """
-    from .cohort_foreground import _preflight
-    from .comms import Comms
-    from .supervised_cutover import _require_unchanged_archive_source
-
-    path = active_route_path() if path is None else path
-    if path.name != "active-route.json" or not path.is_absolute():
-        raise ValueError("active comms route requires its absolute route path")
-    if expected.root == replacement.root or archive.path.is_relative_to(replacement.root):
-        raise ValueError("private route rotation requires distinct roots and archive")
-    _preflight(replacement.root, replacement.wire_root_id, replacement.native_package, True)
-    new = Comms(replacement.root)
-    with new.bus.log.locked():
-        marker = new.bus.log._private_marker_unlocked()
-        if (
-            not marker.claims
-            or marker.last_seq != 0
-            or (new.bus.log.path.exists() and new.bus.log.path.stat().st_size != 0)
-        ):
-            raise RelationViolationError("replacement route requires an empty claim-ready bus")
-    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
-    try:
-        fcntl.flock(directory, fcntl.LOCK_EX)
-        if read_active_route(path) != expected:
-            raise ValueError("active comms route is not the expected private root")
-        old = Comms(expected.root)
-        with old.bus.log.locked():
-            marker = old.bus.log._private_marker_unlocked()
-            if marker.root_id != expected.wire_root_id:
-                raise RelationViolationError("old private route identity changed")
-        _require_unchanged_archive_source(old, archive)
-        with new.bus.log.locked():
-            marker = new.bus.log._private_marker_unlocked()
-            if (
-                not marker.claims
-                or marker.last_seq != 0
-                or (new.bus.log.path.exists() and new.bus.log.path.stat().st_size != 0)
-            ):
-                raise RelationViolationError("replacement route changed before publication")
-        _publish_active_route_locked(replacement, path, directory, expected=expected)
-    finally:
-        os.close(directory)
-
-
-def withdraw_active_route(
-    expected: ActiveRoute,
-    archive_destination: Path,
-    path: Path | None = None,
-) -> ArchiveReceipt:
-    """Archive a stopped private root, then withdraw its exact default route.
-
-    The caller must fence explicit-root ingress and stop Toad and ACP owners.
-    An unconfirmed removal is never retried automatically.
-    """
-    from .comms import Comms
-    from .supervised_cutover import archive_stopped_root
-
-    path = active_route_path() if path is None else path
-    if path.name != "active-route.json" or not path.is_absolute():
-        raise ValueError("active comms route requires its absolute route path")
-    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
-    try:
-        fcntl.flock(directory, fcntl.LOCK_EX)
-        info = os.fstat(directory)
-        parent = path.parent.lstat()
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino)
-        ):
-            raise ValueError("active comms route directory changed or is not owned")
-        if stat.S_IMODE(info.st_mode) != 0o700:
-            os.fchmod(directory, 0o700)
-        if read_active_route(path) != expected:
-            raise ValueError("active comms route is not the expected private root")
-        comms = Comms(expected.root)
-        with comms.bus.log.locked():
-            marker = comms.bus.log._private_marker_unlocked()
-        if marker.root_id != expected.wire_root_id:
-            raise RelationViolationError("active comms route root ID changed")
-        receipt = archive_stopped_root(comms, archive_destination)
-        if read_active_route(path) != expected:
-            raise ValueError("active comms route changed during withdrawal")
-        parent = path.parent.lstat()
-        if (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino):
-            raise ValueError("active comms route directory changed during withdrawal")
-        os.unlink(path.name, dir_fd=directory)
-        try:
-            os.fsync(directory)
-        except OSError as error:
-            raise RelationViolationError(
-                "active comms route withdrawal outcome UNKNOWN after unlink"
-            ) from error
-        return receipt
-    finally:
-        os.close(directory)

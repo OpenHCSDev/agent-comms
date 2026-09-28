@@ -10,16 +10,33 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordinated_runtime import SelectedExecution
+from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_store import IdentityConflict, MutationStore
-from test_coordinated_runtime import _root, tmp_path
+from agent_comms.historical_native_inputs import read_historical_native_inputs
+from test_coordinated_runtime import _root
+from test_coordinated_runtime import tmp_path as private_root_fixture
+
+tmp_path = private_root_fixture
 
 
-async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch):
+@pytest.mark.parametrize("after_cutover", [False, True])
+async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch, after_cutover):
     package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
     if not package:
         pytest.skip("Prepared native package required; never build or call a paid provider")
     root, root_id, comms, initial, people = _root(tmp_path, direct=True, claims=True)
+    old_seq = initial.message.seq
+    if after_cutover:
+        with comms.bus.log.locked():
+            marker = comms.bus.log._private_marker_unlocked()
+            marker.admission_after_seq = marker.last_seq
+            comms.bus.log.write_metadata_unlocked(marker)
+        fresh = comms.messaging.send_initial_cohort("sender", "beta", "Run the coding tools now.")
+        initial = comms.bus.log.read_initial_cohort(root_id, fresh.seq)
+        with MutationStore(str(root / "coordination.sqlite3")) as store:
+            accept_initial_cohort(comms.bus, root_id, fresh.seq, store)
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, model="selected-offline/fixture", thinking_level="low"))
     (tmp_path / "input.txt").write_text("state=BEFORE\n")
@@ -32,7 +49,10 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch)
         (
             "bash",
             {
-                "command": "python -c \"from pathlib import Path; assert Path('input.txt').read_text() == Path('nested/result.txt').read_text() == 'state=AFTER\\n'\""
+                "command": (
+                    "python -c \"from pathlib import Path; assert Path('input.txt').read_text() == "
+                    "Path('nested/result.txt').read_text() == 'state=AFTER\\n'\""
+                )
             },
         ),
     ]
@@ -148,6 +168,12 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch)
             assert (
                 snapshot.attempt.lifecycle.backend_done and snapshot.attempt.lifecycle.process_dead
             )
+            assert execution.assignment.wire_seq == initial.message.seq
+            if after_cutover:
+                assert read_historical_native_inputs(
+                    store, wire_root_id=root_id,
+                    recipient_lookup=stable_thread_lookup(owner.created_at), source_seq=old_seq,
+                ) == ()
         with pytest.raises(IdentityConflict, match="cannot be reused"):
             await execution.run()
         assert len(requests) == 2

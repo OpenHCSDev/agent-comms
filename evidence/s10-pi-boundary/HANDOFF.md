@@ -1,10 +1,11 @@
-# S10 V1/V3 + A12 adoption; V2 and shared cancellation closure open
+# S10 V1–V3 and native child adoption complete; paired S9 integration next
 
 Draft PR234: https://github.com/OpenHCSDev/agent-comms/pull/234.
 
 Owner Pascal. Tree `/home/ts/wt/comms-s10-pi-boundary-20260928`, branch
-`refactor/s10-pi-boundary-20260928`, source `6f25dc8`, integrated with current main `bf68bbb` at `a5d99ea`;
-includes PR232 through `175d188`, merged226, R0/228, channel231 and A13/230.
+`refactor/s10-pi-boundary-20260928`, source `18d1863`;
+includes main `bf68bbb`, PR232 through `5d2935f`, PR237 through `9463a44`,
+merged226, R0/228, channel231 and A13/230. Earlier receipts below are historical.
 Parent owns whole-step quiet install. No live root mutation/restart/provider call.
 
 ## Implemented / deleted
@@ -99,31 +100,61 @@ Additional focused receipts:
 This adoption alone deletes804/adds252 production lines, deletes674/adds128 test
 lines (not counting imported PR232's foundation). It replaces no live data.
 
-## Remaining assigned scope / exact dependencies
+## Current closure / integration ownership
 
-**S10 is incomplete.** V2 remains the ten-column raw native_runtime_inputs read
-in selected_tool_broker.verify_sent_full_input. Cicero PR230 owns A13 and the
-canonical NativeRuntimeInput declaration; adopt that landed API here, not a copy.
+V1, V2, V3 and native A12 adoption are implemented. V2 reads
+NativeRuntimeInput.one and typed fields; the raw ten-key SELECT is deleted.
+Cicero PR237 through9463a44 is integrated, including its runtime schema4 reset
+and current assignment/generation fields. No old table reader remains in the broker.
 
-**Concrete A12 cancellation gap for Lovelace PR232:** two cancellations of a
-BoundedRun.session containing a TERM-resistant child allow the caller to finish
-before the retained stop task reaps the child. Reproduced locally; see
-`a12-repeated-cancel.log` and `repeated-cancel.py`. Child was then fully reaped by
-its owner. Native's replaced cleanup previously guaranteed join before returning,
-so coupled integration needs A12.stop/session to preserve that invariant under
-repeated cancellation. No private workaround/second cleanup algorithm added here.
-Parent was notified once; no live reproduction or installed change.
+Lovelace PR232 through5d2935f is integrated. The exact double-cancel reproduction
+now prints child.alive=False before the caller finishes. The real native-turn
+fixture covers one and two cancellations of a TERM-resistant process; both join
+retirement before returning. No duplicate local cleanup algorithm was restored.
 
-PR232 alone removes backend helpers required by old pi_events; integrate this
-branch's migrated callers with it. Parent handles serial coupled merge/full
-merged suite/quiet step activation. Guards cover current V1/V3 and retired local
-supervision; they do not claim V2 or the shared cancellation issue complete.
+Existing NativeEntry now owns timestamp and an abstract StartupMetadataEntry
+capability; ModelChangeEntry and ThinkingLevelChangeEntry share that family.
+StartupMetadataEntry.read_startup(bytes) validates the complete declared external
+record via FieldCodec, including duplicate keys, identity, parent and timestamp.
+The ordinary history projection remains distinct from strict authority evidence.
+Concrete matches_startup((provider,model),thinking_level) owns selection checks.
+Darwin PR236 owns FreshPrivateSession/manual startup consumer migration; committed
+API429232b and exact contract sent in issuecomment-5873631164. No edits to his
+consumer files or second native entry registry. Those paired S9 callers must land
+with this step; their acceptance is Darwin/parent-owned.
+
+Latest focused receipts (counts overlap):
+- v2-startup-current.log:30 passed, including exact native startup formats,
+  selected broker/socket and the expanded whole-module V2 deletion guard.
+- a12-repeated-cancel-fixed.log:exact original failed repro now joins retirement.
+- native-closure-first.log:9 passed (actual prepared Pi CLI/loopback plus fake
+  selected RPC pipes); actual four-tool test stopped at obsolete Thread(pid=...)
+  fixture before native launch. Replaced those three _root fixture arguments with
+  current ProcessIdentity.capture; native-closure-repair.log:actual Pi four tools
+  pass, including admission, current typed native row, one publication and release.
+- native-cancel-evidence.log:29 passed; real single/double native cancellation,
+  strict evidence and shared A12 deletion guards.
+- s10-closure-ratchet.json:PASS against mainbf68bbb at source18d1863;
+  coupled dependencies type checks-14, long chains-6, string subscripts-195.
+  This includes A12/A13/L0A changes and is not claimed as S10-only deletion.
+- v2-startup-first.log is a no-tests invocation error (pytest-timeout unavailable);
+  repaired command uses a bounded shell timeout. All failed evidence retained.
+
+Current source is18d1863 plus the handoff/format-only completion commit. PR234 is
+ready for parent coupled integration; no known S10 implementation blocker. Parent
+owns full merged suite/quiet reset and actual installed acceptance. No live test,
+provider send, deployment, process restart or user-state write performed here.
+
+V2/startup/adoption-fixture closure alone:production+64/-15;tests+81/-8 before
+format-only line splitting. Net source adds real strict external startup ownership;
+V2 deletes the raw row parser. Earlier substantial guardian deletion is counted
+above separately; imported A12/A13/L0A surfaces are not our own deletion claim.
 
 ## Stores and install boundary
 
 V1/V3 change only transient socket/UI records; no saved/durable format changes.
-Selected tool ledger and native runtime inputs are runtime state; their formats
-are unchanged in this draft. Wire/goal history and owner decisions untouched.
+Selected tool ledger stays runtime state. Imported S12 native runtime tables
+use the current schema4; parent resets derived/runtime stores at quiet cutover. Wire/goal history and owner decisions untouched.
 No converter or coexistence reader added. Pi RPC and ACP remain external formats.
 Parent must rebuild/seal the prepared Pi package using the new shipped extension
 before quiet step activation; an older selected extension is intentionally
