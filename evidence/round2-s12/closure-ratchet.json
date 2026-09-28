@@ -1,0 +1,32 @@
+{
+  "base_revision": "bf68bbbf5eed95dd79f890fc50886a4481d40a7d",
+  "head_revision": "c75e07fbfd815ef18e191e2611ec64bff4aa4b0e",
+  "paths": [
+    "src/agent_comms/continued_private_session.py",
+    "src/agent_comms/coordinated_runtime.py",
+    "src/agent_comms/coordinated_runtime_schema.py",
+    "src/agent_comms/coordination.py",
+    "src/agent_comms/coordination_store.py",
+    "src/agent_comms/historical_native_inputs.py",
+    "src/agent_comms/native_prompt_binding.py",
+    "src/agent_comms/native_runtime_input.py",
+    "src/agent_comms/native_source_cursor.py",
+    "src/agent_comms/private_sidecar.py",
+    "src/agent_comms/typed_table.py"
+  ],
+  "base": {
+    "TypeIdentity": 63,
+    "LongBooleanChain": 43,
+    "StringSubscript": 218
+  },
+  "head": {
+    "TypeIdentity": 63,
+    "LongBooleanChain": 43,
+    "StringSubscript": 101
+  },
+  "delta": {
+    "TypeIdentity": 0,
+    "LongBooleanChain": 0,
+    "StringSubscript": -117
+  }
+}

@@ -79,7 +79,7 @@ A13 is merged; every table in S12's scope has a row type, derived DDL and typed 
 Foundation [#230](https://github.com/OpenHCSDev/agent-comms/pull/230) merged
 at reviewed `cca3b282`. Full S12 is **in progress**, owned by
 `refactor/round2-s12-caller-closure` in `~/wt/comms-refactor2-s12-20260928`.
-The caller-closure draft follows #230; it must finish all remaining stores,
+Caller-closure draft [#237](https://github.com/OpenHCSDev/agent-comms/pull/237) follows #230; it must finish all remaining stores,
 callers and deletion guards before S12 is complete.
 
 - **A13 API:** frozen dataclass subclasses of `TypedTable` own table names,

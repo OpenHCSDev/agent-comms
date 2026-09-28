@@ -1,6 +1,6 @@
 # S12 continuation — active, not merge-ready closure
 
-Foundation #230 merged at reviewed cca3b282. Current branch:
+Foundation #230 merged at reviewed cca3b282. Caller closure draft #237. Current branch:
 `refactor/round2-s12-caller-closure`.
 
 ## Stable NativeRuntimeInput API for Pascal
