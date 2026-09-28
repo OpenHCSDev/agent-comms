@@ -23,7 +23,7 @@ from uuid import uuid4
 
 from . import pi_events as pi
 from .backend import compaction_summary, configured_model, rpc_args_for
-from .pi_commands import PiCommand
+from .pi_commands import Compact, GetState, PiCommand
 from .pi_rpc import PiRpcChannel
 
 MAX_LINE = 64 * 1024
@@ -363,29 +363,6 @@ async def _preflight(
     return result if isinstance(result, dict) else None
 
 
-async def _response(
-    proc: asyncio.subprocess.Process, command: str, request_id: str
-) -> dict[str, Any]:
-    assert proc.stdin is not None and proc.stdout is not None
-    proc.stdin.write((json.dumps({"id": request_id, "type": command}) + "\n").encode())
-    await proc.stdin.drain()
-    total = 0
-    channel = PiRpcChannel(proc.stdout)
-    while True:
-        line = await channel.readline(max_bytes=MAX_OUTPUT - total)
-        if not line:
-            raise ValueError("No correlated response")
-        total += len(line)
-        if total > MAX_OUTPUT:
-            raise ValueError("RPC output limit")
-        payload = PiRpcChannel.decode_record(line)
-        if not isinstance(payload, pi.Response) or payload.id != request_id:
-            continue
-        if payload.get("command") != command or type(payload.get("success")) is not bool:
-            raise ValueError("Invalid correlated response")
-        return payload.wire
-
-
 def _startup_metadata(before: bytes, after: bytes) -> bool:
     """Pi may append model/thinking metadata on RPC reopen, never a message."""
     if not after.startswith(before):
@@ -397,10 +374,6 @@ def _startup_metadata(before: bytes, after: bytes) -> bool:
         )
     except (ValueError, AttributeError, UnicodeError):
         return False
-
-
-def _summary(value: Any) -> str:
-    return compaction_summary(value)
 
 
 def _count(value: Any) -> int | None:
@@ -432,230 +405,238 @@ def _public_pi_compaction_error(value: Any) -> str:
     return "Pi compaction failed; inspect local diagnostics."
 
 
-async def compact_session(
-    agent_bin: str,
-    agent_args: Sequence[str],
-    session_file: str,
-    cwd: str,
-    custom_instructions: str | None = None,
-    *,
-    timeout_seconds: float = TIMEOUT,
-) -> dict[str, Any]:
-    """Serialize with Pi session writers from snapshot through durable result."""
-    if not _supported_platform():
-        return {"ok": False, "error": "Saved-session compaction requires POSIX teardown."}
-    if not isinstance(timeout_seconds, (float, int)) or not 0 < timeout_seconds <= TIMEOUT:
-        return {"ok": False, "error": "Compaction timeout is invalid."}
-    from .session_fence import session_writer_fence
+class ManualCompaction:
+    """One explicit saved-session transaction, owning its writer and cleanup.
 
-    try:
-        async with asyncio.timeout(timeout_seconds):
-            async with session_writer_fence(session_file):
-                return await _compact_session_under_fence(
-                    agent_bin,
-                    agent_args,
-                    session_file,
-                    cwd,
-                    custom_instructions,
-                    timeout_seconds=timeout_seconds,
-                )
-    except TimeoutError:
-        return {"ok": False, "error": "Compaction timed out; not retried."}
-    except OSError:
-        return {"ok": False, "error": "Saved session writer fence is unavailable."}
+    A transaction can run once. The ACP/TurnRunner boundary owns admission;
+    this owner holds the existing session fence through durable result or
+    uncertain teardown. Canonical PR95 sessions use their separate journal
+    authority and cannot enter this direct-writer transaction.
+    """
 
-
-async def _compact_session_under_fence(
-    agent_bin: str,
-    agent_args: Sequence[str],
-    session_file: str,
-    cwd: str,
-    custom_instructions: str | None = None,
-    *,
-    timeout_seconds: float = TIMEOUT,
-) -> dict[str, Any]:
-    """Run a single explicit compact on an existing Pi session; never auto-retry."""
-    if not _supported_platform():
-        return {"ok": False, "error": "Saved-session compaction requires POSIX teardown."}
-    rpc_args = rpc_args_for(agent_bin, agent_args)
-    if rpc_args is None:
-        return {"ok": False, "error": "Compaction requires a Pi RPC backend."}
-    if not _safe_args(agent_args):
-        return {"ok": False, "error": "Compaction arguments could override the saved session."}
-    selected_model = configured_model(agent_args)
-    assert selected_model is not None and "/" in selected_model
-    selected_provider, selected_id = selected_model.split("/", 1)
-    if not isinstance(custom_instructions, (str, type(None))) or (
-        custom_instructions is not None and len(custom_instructions) > MAX_INSTRUCTIONS
+    def __init__(
+        self,
+        agent_bin: str,
+        agent_args: Sequence[str],
+        session_file: str,
+        cwd: str,
+        custom_instructions: str | None = None,
+        *,
+        timeout_seconds: float = TIMEOUT,
     ):
-        return {"ok": False, "error": "Compaction instructions are invalid or too long."}
-    if not isinstance(timeout_seconds, (float, int)) or not 0 < timeout_seconds <= TIMEOUT:
-        return {"ok": False, "error": "Compaction timeout is invalid."}
-    try:
-        session = Path(session_file).absolute()
-        project = Path(cwd).absolute()
-        before = _session_bytes(session)
-        if not project.is_dir() or not (shutil.which(agent_bin) or Path(agent_bin).is_file()):
-            raise ValueError("Unavailable backend/project")
-        package = _pinned_package()
-    except (OSError, ValueError, TypeError):
-        return {"ok": False, "error": "Saved session or pinned Pi backend is unavailable."}
-    try:
+        self.agent_bin = agent_bin
+        self.agent_args = tuple(agent_args)
+        self.session_file = session_file
+        self.cwd = cwd
+        self.instructions = custom_instructions
+        self.timeout = timeout_seconds
+        self._used = False
+        self.proc: asyncio.subprocess.Process | None = None
+        self.drain: asyncio.Task[None] | None = None
+        self.reader: PiRpcChannel | None = None
+        self.profile: Path | None = None
+        self.result: dict[str, Any] = {"ok": False, "error": "Compaction did not complete."}
+        self.force = False
+        self.cancelled = False
+        self.clean = False
+
+    def _validate(self) -> str | None:
+        self.rpc_args = rpc_args_for(self.agent_bin, self.agent_args)
+        if self.rpc_args is None:
+            return "Compaction requires a Pi RPC backend."
+        if not _safe_args(self.agent_args):
+            return "Compaction arguments could override the saved session."
+        selected = configured_model(self.agent_args)
+        assert selected is not None and "/" in selected
+        self.provider, self.model = selected.split("/", 1)
+        if not isinstance(self.instructions, (str, type(None))) or (
+            self.instructions is not None and len(self.instructions) > MAX_INSTRUCTIONS
+        ):
+            return "Compaction instructions are invalid or too long."
+        try:
+            self.session = Path(self.session_file).absolute()
+            self.project = Path(self.cwd).absolute()
+            self.before = _session_bytes(self.session)
+            if not self.project.is_dir() or not (
+                shutil.which(self.agent_bin) or Path(self.agent_bin).is_file()
+            ):
+                raise ValueError("Unavailable backend/project")
+            self.package = _pinned_package()
+        except (OSError, ValueError, TypeError):
+            return "Saved session or pinned Pi backend is unavailable."
+        return None
+
+    def _prepare_profile(self) -> None:
         agent_dir = Path(os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi/agent")
-        auth_file = agent_dir / "auth.json"
-        # The private Pi profile otherwise hides an OpenRouter key saved in
-        # auth.json. Codex requires this file; OpenRouter can also use an
-        # explicit API key when no saved credential exists.
-        credentials_source = (
-            auth_file if auth_file.exists() or selected_provider == "openai-codex" else None
-        )
-        # No child until both retry layers are fsynced. Pi resolves saved
-        # credentials from this private copy when the selected model needs it.
-        profile = (
-            _private_policy(credentials_source=credentials_source)
-            if credentials_source is not None
-            else _private_policy()
-        )
-    except OSError:
-        return {"ok": False, "error": "Private no-retry policy could not be committed."}
-    env = os.environ.copy()
-    env["PI_CODING_AGENT_DIR"] = str(profile)
-    # Do not run inherited preloads in this isolated Pi invocation.
-    env["NODE_OPTIONS"] = ""
-    env["PI_OFFLINE"] = "1"
-    env["PI_TELEMETRY"] = "0"
-    proc: asyncio.subprocess.Process | None = None
-    drain: asyncio.Task[None] | None = None
-    result: dict[str, Any] = {"ok": False, "error": "Compaction did not complete."}
-    force = False
-    cancelled = False
-    clean = False
-    try:
-        async with asyncio.timeout(timeout_seconds):
-            state = await _preflight(package, session, project, env)
-            if (
-                not state
-                or state.get("sessionFile") != str(session)
-                or type(state.get("sessionId")) is not str
-                or not state["sessionId"]
-            ):
-                return {"ok": False, "error": "Compaction requires a saved Pi session."}
-            if _session_bytes(session) != before:
-                return {"ok": False, "error": "Saved session changed before compaction."}
-            proc = await asyncio.create_subprocess_exec(
-                agent_bin,
-                *rpc_args,
-                "--session",
-                str(session),
-                *_FLAGS,
-                cwd=project,
-                env=env,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                limit=MAX_LINE,
-                start_new_session=True,
-            )
-            stderr = proc.stderr
-            assert stderr is not None
+        auth = agent_dir / "auth.json"
+        credentials = auth if auth.exists() or self.provider == "openai-codex" else None
+        self.profile = _private_policy(credentials_source=credentials)
+        self.env = dict(os.environ, PI_CODING_AGENT_DIR=str(self.profile))
+        self.env.update(NODE_OPTIONS="", PI_OFFLINE="1", PI_TELEMETRY="0")
 
-            async def discard_stderr() -> None:
-                while await stderr.read(4096):
-                    pass
+    async def run(self) -> dict[str, Any]:
+        if self._used:
+            raise RuntimeError("Manual compaction transaction already consumed; never replay")
+        self._used = True
+        if not _supported_platform():
+            return {"ok": False, "error": "Saved-session compaction requires POSIX teardown."}
+        if not isinstance(self.timeout, (float, int)) or not 0 < self.timeout <= TIMEOUT:
+            return {"ok": False, "error": "Compaction timeout is invalid."}
+        from .session_fence import session_writer_fence
 
-            drain = asyncio.create_task(discard_stderr())
-            state_reply = await _response(proc, "get_state", uuid4().hex)
-            data = state_reply.get("data")
-            if (
-                state_reply["success"] is not True
-                or not isinstance(data, dict)
-                or data.get("sessionFile") != str(session)
-                or data.get("sessionId") != state["sessionId"]
-                or not isinstance(data.get("model"), dict)
-                or data["model"].get("provider") != selected_provider
-                or data["model"].get("id") != selected_id
-            ):
-                raise ValueError("Pi reopened another session")
-            current = _session_bytes(session)
-            if not _startup_metadata(before, current):
-                raise ValueError("Saved session changed during RPC startup")
-            # Recheck the exact session after Pi's startup metadata writes.
-            active = await _preflight(package, session, project, env)
-            if (
-                not active
-                or active.get("sessionFile") != str(session)
-                or active.get("sessionId") != state["sessionId"]
-                or _session_bytes(session) != current
-            ):
-                raise ValueError("Pi active session changed before compaction")
-            request_id = uuid4().hex
-            command: dict[str, Any] = {"id": request_id, "type": "compact"}
-            if custom_instructions and custom_instructions.strip():
-                command["customInstructions"] = custom_instructions.strip()
-            assert proc.stdin is not None
-            proc.stdin.write(PiRpcChannel.command_bytes(PiCommand.from_wire(command)))
-            await proc.stdin.drain()
-            # Read the exact compact id; unrelated events and responses are not success.
-            assert proc.stdout is not None
-            consumed = 0
-            channel = PiRpcChannel(proc.stdout)
-            while True:
-                row = await channel.readline(max_bytes=MAX_OUTPUT - consumed)
-                if not row:
-                    raise ValueError("No compact response")
-                consumed += len(row)
-                if consumed > MAX_OUTPUT:
-                    raise ValueError("Compact response limit")
-                payload = PiRpcChannel.decode_record(row)
-                if not isinstance(payload, pi.Response) or payload.id != request_id:
-                    continue
-                if payload.get("command") != "compact" or type(payload.get("success")) is not bool:
-                    raise ValueError("Invalid compact reply")
-                if payload["success"] is not True:
-                    result = {
-                        "ok": False,
-                        "error": _public_pi_compaction_error(payload.get("error")),
-                    }
-                    break
-                data = payload.get("data")
-                if not isinstance(data, dict):
-                    raise ValueError("Invalid compact data")
-                result = {"ok": True, "summary": _summary(data.get("summary"))}
-                for key in ("tokensBefore", "estimatedTokensAfter"):
-                    count = _count(data.get(key))
-                    if count is not None:
-                        result[key] = count
-                break
-    except TimeoutError:
-        result, force = {"ok": False, "error": "Compaction timed out; not retried."}, True
-    except asyncio.CancelledError:
-        cancelled, force = True, True
-    except (OSError, ValueError, UnicodeError, BrokenPipeError, ConnectionResetError):
-        result, force = (
-            {"ok": False, "error": "Compaction transport or session check failed."},
-            True,
-        )
-    finally:
         try:
-            if proc is not None:
-                clean, interrupted = await _reap_immune(proc, force=force)
-                cancelled |= interrupted
-                if drain is not None:
-                    if not drain.done():
-                        drain.cancel()
-                    await asyncio.gather(drain, return_exceptions=True)
+            async with asyncio.timeout(self.timeout):
+                async with session_writer_fence(self.session_file):
+                    return await self._execute()
+        except TimeoutError:
+            return {"ok": False, "error": "Compaction timed out; not retried."}
+        except OSError:
+            return {"ok": False, "error": "Saved session writer fence is unavailable."}
+
+    async def _execute(self) -> dict[str, Any]:
+        if error := self._validate():
+            return {"ok": False, "error": error}
+        try:
+            self._prepare_profile()
+        except OSError:
+            return {"ok": False, "error": "Private no-retry policy could not be committed."}
+        try:
+            if await self._open_session():
+                await self._compact()
+        except asyncio.CancelledError:
+            self.cancelled = self.force = True
+        except (OSError, ValueError, UnicodeError, BrokenPipeError, ConnectionResetError):
+            self.result = {"ok": False, "error": "Compaction transport or session check failed."}
+            self.force = True
         finally:
-            shutil.rmtree(profile)
-    if cancelled:
-        raise asyncio.CancelledError
-    if not clean and result.get("ok"):
-        return {"ok": False, "error": "Compaction process did not exit cleanly."}
-    if result.get("ok"):
+            await self._close()
+        if self.cancelled:
+            raise asyncio.CancelledError
+        if self.result.get("ok"):
+            if not self.clean:
+                return {"ok": False, "error": "Compaction process did not exit cleanly."}
+            try:
+                _durable_compaction_row(self.session, self.before)
+            except (OSError, ValueError, UnicodeError, AttributeError):
+                return {
+                    "ok": False,
+                    "error": "Saved compaction durability is uncertain; not retried.",
+                }
+        return self.result
+
+    async def _open_session(self) -> bool:
+        state = await _preflight(self.package, self.session, self.project, self.env)
+        if (
+            not state
+            or state.get("sessionFile") != str(self.session)
+            or type(state.get("sessionId")) is not str
+            or not state["sessionId"]
+        ):
+            self.result = {"ok": False, "error": "Compaction requires a saved Pi session."}
+            return False
+        if _session_bytes(self.session) != self.before:
+            self.result = {"ok": False, "error": "Saved session changed before compaction."}
+            return False
+        self.proc = await asyncio.create_subprocess_exec(
+            self.agent_bin,
+            *self.rpc_args,
+            "--session",
+            str(self.session),
+            *_FLAGS,
+            cwd=self.project,
+            env=self.env,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            limit=MAX_LINE,
+            start_new_session=True,
+        )
+        assert self.proc.stdout is not None
+        self.reader = PiRpcChannel(self.proc.stdout)
+        self.drain = asyncio.create_task(self._discard_stderr())
+        response = await self._request(GetState(id=uuid4().hex))
+        data = response.data
+        if (
+            response.success is not True
+            or not isinstance(data, dict)
+            or data.get("sessionFile") != str(self.session)
+            or data.get("sessionId") != state["sessionId"]
+            or not isinstance(data.get("model"), dict)
+            or data["model"].get("provider") != self.provider
+            or data["model"].get("id") != self.model
+        ):
+            raise ValueError("Pi reopened another session")
+        current = _session_bytes(self.session)
+        if not _startup_metadata(self.before, current):
+            raise ValueError("Saved session changed during RPC startup")
+        active = await _preflight(self.package, self.session, self.project, self.env)
+        if (
+            not active
+            or active.get("sessionFile") != str(self.session)
+            or active.get("sessionId") != state["sessionId"]
+            or _session_bytes(self.session) != current
+        ):
+            raise ValueError("Pi active session changed before compaction")
+        return True
+
+    async def _discard_stderr(self) -> None:
+        assert self.proc is not None and self.proc.stderr is not None
+        while await self.proc.stderr.read(4096):
+            pass
+
+    async def _request(self, command: PiCommand) -> pi.Response:
+        assert self.proc is not None and self.proc.stdin is not None and self.reader is not None
+        self.proc.stdin.write(self.reader.encode(command))
+        await self.proc.stdin.drain()
+        consumed = 0
+        while True:
+            row = await self.reader.readline(max_bytes=MAX_OUTPUT - consumed)
+            if not row:
+                raise ValueError("No correlated response")
+            consumed += len(row)
+            if consumed > MAX_OUTPUT:
+                raise ValueError("RPC output limit")
+            response = self.reader.decode_record(row)
+            if not isinstance(response, pi.Response) or response.id != command.id:
+                continue
+            if type(response.success) is not bool or response.command_type is not type(command):
+                raise ValueError("Invalid correlated response")
+            if self.reader.correlate(response) is not command:
+                raise ValueError("Unowned compaction response")
+            return response
+
+    async def _compact(self) -> None:
+        response = await self._request(
+            Compact(
+                id=uuid4().hex,
+                custom_instructions=(self.instructions.strip() or None)
+                if self.instructions
+                else None,
+            )
+        )
+        if not response.success:
+            self.result = {"ok": False, "error": _public_pi_compaction_error(response.error)}
+            return
+        data = response.data
+        if not isinstance(data, dict):
+            raise ValueError("Invalid compact data")
+        self.result = {"ok": True, "summary": compaction_summary(data.get("summary"))}
+        for key in ("tokensBefore", "estimatedTokensAfter"):
+            count = _count(data.get(key))
+            if count is not None:
+                self.result[key] = count
+
+    async def _close(self) -> None:
         try:
-            _durable_compaction_row(session, before)
-        except (OSError, ValueError, UnicodeError, AttributeError):
-            return {
-                "ok": False,
-                "error": "Saved compaction durability is uncertain; not retried.",
-            }
-    return result
+            if self.proc is not None:
+                self.clean, interrupted = await _reap_immune(self.proc, force=self.force)
+                self.cancelled |= interrupted
+                if self.drain is not None:
+                    if not self.drain.done():
+                        self.drain.cancel()
+                    await asyncio.gather(self.drain, return_exceptions=True)
+                if self.reader is not None:
+                    self.reader.pending.cancel_all()
+        finally:
+            if self.profile is not None:
+                shutil.rmtree(self.profile)
