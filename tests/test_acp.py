@@ -2354,7 +2354,7 @@ class TestLiveConfigSync:
         async def options(_name: str):
             return []
 
-        monkeypatch.setattr(agent, "_config_options", options)
+        monkeypatch.setattr(agent.config, "options", options)
         agent._client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         # The session response already supplied the options, so the first sync
