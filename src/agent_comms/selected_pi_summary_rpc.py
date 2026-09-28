@@ -21,11 +21,14 @@ from .pi_commands import AgentCommsSummarizeCompaction
 from .pi_events import Response
 from .pi_rpc import PiRpcChannel
 from .pi_summary_payloads import SummaryDeclinedData, SummarySummarizedData, SummaryUnknownData
-from .selected_pi_child_deadline import SelectedChildUnknown
 from .selected_pi_route import _request
 
 # Native v1 text/file limits, allowing JSON's six-byte control escaping.
 _MAX_RESPONSE = 6 * (262144 + 2 * 256 * 4096) + 65536
+
+
+class SelectedChildUnknown(RuntimeError):  # noqa: N818 - UNKNOWN is a protocol state
+    """The selected operation may have started; never replay input on uncertainty."""
 
 
 @dataclass(frozen=True)
@@ -60,7 +63,8 @@ def _summary_response(
             detail = (
                 f"Selected summary failed: {data.reason} (outcome uncertain; input not retried)"
                 if data.reason is not None
-                else "Selected summary outcome is uncertain; native child supplied no failure detail"
+                else ("Selected summary outcome is uncertain; "
+                      "native child supplied no failure detail")
             )
             raise SelectedChildUnknown(detail)
         if not isinstance(data, SummarySummarizedData) or (
@@ -108,7 +112,7 @@ class SelectedSummarySlot:
         Native v1 owns selected model/settings/route validation. A successful
         response is summary data, never commit or original-input authority.
         Every reservation stays blocking until the existing commit/recovery
-        protocol settles it. No automatic fallback follows any failure.
+        protocol settles it. Failure never authorizes another attempt.
         """
         source = json.loads(json.dumps(source, allow_nan=False))
         preparation = _request(witness, source["selected"], source["settings"])

@@ -18,7 +18,11 @@ from agent_comms.coordination_store import IdentityConflict, MutationStore, Stal
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_pi import NativePiUnavailable
-from agent_comms.selected_tool_broker import SelectedToolIntent, SelectedToolRequest
+from agent_comms.selected_tool_broker import (
+    SelectedToolIntent,
+    SelectedToolRequest,
+    SelectedWriteArguments,
+)
 from test_coordinated_runtime import _fake_model, _root
 
 
@@ -156,7 +160,7 @@ async def test_real_owner_selected_tool_writes_existing_file_once(private_root, 
     async def selected_model(*args, **kwargs):
         result = await fake(*args, **kwargs)
         mode = kwargs["selected_tool_mode"]
-        mode.action(SelectedToolRequest("call_1", "notes.txt", b"after"))
+        mode.action(SelectedToolRequest("call_1", SelectedWriteArguments("notes.txt", "after")))
         return replace(result, selected_tool_call_id="call_1")
 
     monkeypatch.setattr(runtime, "run_native_pi_turn", selected_model)
