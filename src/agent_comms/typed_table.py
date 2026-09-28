@@ -28,8 +28,8 @@ def _identifier(name: str) -> str:
 def _base_type(annotation: object) -> tuple[object, bool]:
     if get_origin(annotation) in (Union, types.UnionType):
         members = get_args(annotation)
-        if type(None) in members and len(members) == 2:
-            return next(member for member in members if member is not type(None)), True
+        if types.NoneType in members and len(members) == 2:
+            return next(member for member in members if member is not types.NoneType), True
     return annotation, False
 
 
