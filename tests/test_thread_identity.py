@@ -37,7 +37,7 @@ def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):
     assert claimed.turn_identity == TurnIdentity(identity.incarnation, 1)
     assert registry.snapshot().owner_identity("owner") == identity
     assert registry.snapshot().admission_generations == before.admission_generations
-    assert registry.finish_claimed_turn("owner", "turn")
+    assert registry.release_turn(registry.require("owner").turn_lease)[0]
     finished = registry.require("owner")
     assert finished.turn_generation == 1
     assert finished.turn_identity is None
@@ -50,7 +50,7 @@ def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):
 def test_owner_replacement_preserves_turn_counter_and_historical_incarnation(tmp_path):
     registry = registry_with_owner(tmp_path)
     registry.claim_local_turn("owner", "turn")
-    registry.finish_claimed_turn("owner", "turn")
+    registry.release_turn(registry.require("owner").turn_lease)[0]
     before = registry.snapshot()
     registry.register(before.threads["owner"], new_owner=True)
     after = registry.snapshot()
@@ -65,7 +65,7 @@ def test_registry_cannot_forge_turn_counter(tmp_path):
     registry.register(replace(registry.require("owner"), turn_generation=300))
     assert registry.require("owner").turn_generation == 0
     registry.claim_local_turn("owner", "turn")
-    registry.finish_claimed_turn("owner", "turn")
+    registry.release_turn(registry.require("owner").turn_lease)[0]
     registry.register(replace(registry.require("owner"), turn_generation=500))
     assert registry.require("owner").turn_generation == 1
 
@@ -97,11 +97,11 @@ def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
     first = comms.begin_turn("owner", "reused")
     assert first.identity.incarnation == comms.registry.require("owner").incarnation
     comms.registry.rename("owner", "renamed")
-    assert comms.finish_turn("owner", "reused", expected=first) is not None
+    assert comms.finish_turn(first) is not None
     second = comms.begin_turn("renamed", "reused")
     assert second.identity.generation == first.identity.generation + 1
-    assert comms.finish_turn("owner", "reused", expected=first) is None
-    assert comms.finish_turn("renamed", "reused", expected=second) is not None
+    assert comms.finish_turn(first) is None
+    assert comms.finish_turn(second) is not None
 
 
 @pytest.mark.parametrize("revocation", ["finish", "stop"])
@@ -111,7 +111,7 @@ def test_restored_active_turn_has_no_admission_authority(tmp_path, revocation):
     if revocation == "stop":
         registry.unregister("owner")
     else:
-        registry.finish_claimed_turn("owner", "old")
+        registry.release_turn(registry.require("owner").turn_lease)[0]
     registry.register(saved)
     for read in (registry.live_owner_with_generation, registry.live_owner_with_admission):
         with pytest.raises(RelationViolationError, match="unavailable"):
@@ -127,7 +127,7 @@ def test_saved_registry_roundtrip_preserves_identity_and_removes_dead_turn_roste
     reopened = Registration(registry.store.path)
     assert reopened.live_owner_with_generation("owner") == (claimed, generation)
     assert reopened.require("owner").incarnation == claimed.incarnation
-    reopened.finish_claimed_turn("owner", "old")
+    reopened.release_turn(reopened.require("owner").turn_lease)[0]
     persisted = json.loads(registry.store.path.read_text())
     assert not {"owner_generations", "owner_generation_counter"} & persisted.keys()
     assert "turn_epochs" not in persisted
@@ -144,7 +144,7 @@ def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path):
     assert Conversation.from_wire(conversation.to_wire()) == conversation
     registry.claim_local_turn("owner", "new")
     assert conversation.current(registry.snapshot())
-    registry.finish_claimed_turn("owner", "new")
+    registry.release_turn(registry.require("owner").turn_lease)[0]
     registry.register(registry.require("owner"), new_owner=True)
     assert conversation.current(registry.snapshot())
     registry.unregister("owner")

@@ -1524,7 +1524,7 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
         if mutation == "finish_turn":
             active = comms.registry.require("beta").active_turn
             assert active is not None
-            comms.finish_turn("beta", active.id)
+            comms.finish_turn(comms.registry.require("beta").turn_lease)
         else:
             comms.registry.unregister("beta")
             comms.registry.heartbeat("beta")
@@ -1688,7 +1688,7 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
             ).fetchone()[0]
             == 0
         )
-    comms.finish_turn("beta", "existing-real-turn")
+    comms.finish_turn(comms.registry.require("beta").turn_lease)
     result = await run_one_sealed_claim(
         root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     )

@@ -30,7 +30,7 @@ def test_document_owns_lifecycle_without_registration_or_io(tmp_path):
     claimed, generation = document.claim_turn(document.threads["owner"], "turn", None)
     assert generation == before.generation
     assert claimed.turn_generation == 1
-    document.finish_claimed_turn_with_fence("owner", "turn")
+    document.release_turn(document.threads["owner"].turn_lease)[0]
     document.rename("owner", "renamed")
     document.unregister("renamed")
     document.begin_delete("renamed")
@@ -119,7 +119,7 @@ r.register(Thread('owner', frozenset({'team'}), str(root), pid=54321, created_at
 r.register(Thread('child', frozenset(), str(root), parent='owner', created_at=20.0));capture()
 r.register(replace(r.require('owner'), title='metadata'));capture()
 r.claim_local_turn('owner','first');capture()
-r.finish_claimed_turn('owner','first');capture()
+r.release_turn(r.require('owner').turn_lease);capture()
 r.rename('owner','renamed');capture()
 r.unregister('renamed');capture()
 r.archive('renamed');capture()

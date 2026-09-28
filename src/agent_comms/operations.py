@@ -1149,30 +1149,23 @@ class Comms:
     ) -> TurnLeaseFence:
         with _store_lock(self._wire_lock_path):
             claimed, _ = self.registry.claim_local_turn(name, turn_id, routing=routing)
+            lease = claimed.turn_lease
+            assert lease is not None
             try:
                 self.activity.emit(Activity(claimed.name, ActivityState.THINKING, detail))
             except BaseException:
-                self.registry.finish_claimed_turn(claimed.name, turn_id)
+                self.registry.release_turn(lease)
                 raise
-            assert claimed.active_turn is not None
-            admission = claimed.active_turn.admission_generation
-            assert type(admission) is int
-            assert claimed.turn_identity is not None
-            return TurnLeaseFence(
-                identity=claimed.turn_identity, turn_id=turn_id, admission_generation=admission
-            )
+            return lease
 
-    def finish_turn(
-        self, name: str, turn_id: str, *, expected: TurnLeaseFence | None = None
-    ) -> FinishedTurnFence | None:
-        """Persist exact terminal identity; ID-only legacy release cannot attest a fence."""
+    def finish_turn(self, lease: TurnLeaseFence) -> FinishedTurnFence | None:
+        """Persist this lease's terminal identity before publishing idle activity."""
         with _store_lock(self._wire_lock_path):
-            released, fence = self.registry.finish_claimed_turn_with_fence(
-                name, turn_id, expected=expected
-            )
+            released, fence = self.registry.release_turn(lease)
             if not released:
                 return None
-            self.activity.emit(Activity(self.registry.canonical_name(name), ActivityState.IDLE))
+            name = self.registry.canonical_name(lease.identity.incarnation.name)
+            self.activity.emit(Activity(name, ActivityState.IDLE))
             return fence
 
     def set_agent_info(
@@ -2377,9 +2370,12 @@ class Comms:
             self._require_available_new_tags(thread.tags)
             # A fresh public registration is a new owner admission even when
             # the OS has reused its PID and the project path is unchanged.
+            # An executing declaration above keeps its existing executor/lease;
+            # re-declaring metadata cannot turn that preservation into a new owner.
             # Metadata setters re-register the saved declaration internally.
             new_owner = (
                 existing is not None
+                and not existing.executing
                 and existing.pid > 0
                 and thread.pid > 0
                 and thread.created_at != existing.created_at

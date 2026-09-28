@@ -40,7 +40,7 @@ def _finish(comms, name, turn_id):
         for claim in comms._test_claims.values()
         if comms.registry.canonical_name(claim.identity.incarnation.name) == canonical
     )
-    return comms.finish_turn(name, turn_id, expected=claim)
+    return comms.finish_turn(claim)
 
 
 def _waiting(tmp_path, *, second=False):
@@ -314,22 +314,14 @@ def test_delayed_old_finish_cannot_release_new_active_same_id(tmp_path):
     new_claim = _begin(comms, "child", "child-turn")
     assert new_claim.identity.generation == old_claim.identity.generation + 1
     active = comms.registry.require("child").active_turn
-    assert comms.finish_turn("child", "child-turn", expected=old_claim) is None
+    assert comms.finish_turn(old_claim) is None
     assert comms.registry.require("child").active_turn == active
     assert comms.release_waits_after_terminal_turn(old_fence) == ()
     assert comms.registry.require("owner").goal.state.active
     assert comms.goal_wait("owner") is not None
-    new_fence = comms.finish_turn("child", "child-turn", expected=new_claim)
+    new_fence = comms.finish_turn(new_claim)
     assert new_fence is not None and new_fence.identity.generation == new_claim.identity.generation
     assert comms.release_waits_after_terminal_turn(new_fence) == ("owner",)
-
-
-def test_legacy_id_only_finish_cannot_attest_release(tmp_path):
-    comms, _goal = _waiting(tmp_path)
-    assert comms.finish_turn("child", "child-turn") is None
-    assert comms.registry.require("child").active_turn is None
-    assert comms.release_waits_after_terminal_turn(None) == ()
-    assert comms.registry.require("owner").goal.state.active
 
 
 @pytest.mark.parametrize("reuse_turn_id", [False, True])
@@ -465,7 +457,7 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
             owner, StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
         )
         assert not agent.inputs.pending_turns.get(owner)
-        fence = comms.finish_turn(child, "child-turn", expected=claim)
+        fence = comms.finish_turn(claim)
         assert comms.release_waits_after_terminal_turn(fence) == (owner,)
         assert comms.registry.require(owner).goal.state.active
         assert comms.goal_wait(owner) is None
@@ -509,7 +501,7 @@ async def test_acp_delayed_old_callback_after_new_finish_before_reply(tmp_path, 
         await asyncio.wait_for(old_settled.wait(), 2)
         assert comms.registry.require(child).active_turn is None
         new_claim = comms.begin_turn(child, "new-child-turn")
-        new_fence = comms.finish_turn(child, "new-child-turn", expected=new_claim)
+        new_fence = comms.finish_turn(new_claim)
         release_old.set()
         await asyncio.wait_for(old_task, 2)  # OLD callback sees idle NEW turn, no reply yet.
         assert comms.registry.require("owner").goal.state.active
