@@ -119,7 +119,7 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
             assert len({row["native_id"] for row in own}) == 2
             journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
             assert len(operations) == 1
-            assert journal.selected_summary(operations[0]).status == "linked"
+            assert journal.selected_summary(operations[0]).state.declared_name == "linked"
             assert not journal.blocking_selected_summary(file)
             entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
             compact = [i for i, row in enumerate(entries) if row["type"] == "compaction"]

@@ -87,7 +87,7 @@ def test_mode_rejects_builtins_union_view_and_unknown_without_sidecar_mutation(t
 def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
     comms = populated(tmp_path)
     comms.messaging.send("alice", "bob", "member DM")
-    original = comms.bus._record_snapshot
+    original = comms.bus.log._record_snapshot
     started, finished = Event(), Event()
 
     def toggle():
@@ -107,7 +107,7 @@ def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
                 writer.join(timeout=3)
                 assert finished.is_set()
 
-    with patch.object(comms.bus, "_record_snapshot", side_effect=toggle_after_boundary):
+    with patch.object(comms.bus.log, '_record_snapshot', side_effect=toggle_after_boundary):
         first = comms.views.viewer_snapshot(str(tmp_path))
     old = next(view for view in first.channels if view.channel.name == "#api")
     assert not old.channel.any_mode
@@ -119,7 +119,7 @@ def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
     assert new.channel.any_mode
     assert new.last_activity > 0
     assert second.channel_unread["#api"] == 1
-    assert comms.bus.latest_sequence() == 1
+    assert comms.bus.log.latest_sequence() == 1
     assert len(comms.views.channel_display_page("#any").messages) == 1
 
 
@@ -148,26 +148,26 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     comms = populated(tmp_path)
     comms.messaging.send("alice", "bob", "old sender DM")
     comms.channels.set_channel_any_mode("api", True)
-    high_water = comms.bus.latest_sequence()
+    high_water = comms.bus.log.latest_sequence()
     assert bodies(comms.views.channel_display_page("#api")) == ["old sender DM"]
     initial = {view.channel.name: view for view in comms.views.viewer_snapshot(str(tmp_path)).channels}
     assert initial["#api"].last_activity > 0
 
     comms.registry.rename("alice", "renamed")
-    assert comms.bus.latest_sequence() == high_water
+    assert comms.bus.log.latest_sequence() == high_water
     assert bodies(comms.views.channel_display_page("#api")) == ["old sender DM"]
     renamed = comms.registry.require("renamed")
     comms.registry.register(
         replace(renamed, tags=frozenset({"ui"})), comms.registry.status("renamed")
     )
-    assert comms.bus.latest_sequence() == high_water
+    assert comms.bus.log.latest_sequence() == high_water
     assert bodies(comms.views.channel_display_page("#api")) == []
     after = {view.channel.name: view for view in comms.views.viewer_snapshot(str(tmp_path)).channels}
     assert after["#api"].last_activity < initial["#api"].last_activity
 
     comms.registry.register(replace(comms.registry.require("renamed"), tags=frozenset({"api"})))
     comms.channels.rename_tag("api", "services")
-    assert comms.bus.latest_sequence() == high_water
+    assert comms.bus.log.latest_sequence() == high_water
     assert comms.channels.catalog.resolve("#services").any_mode
     assert not comms.channels.catalog.resolve("#api").any_mode
     assert bodies(comms.views.channel_display_page("#services")) == ["old sender DM"]
@@ -231,7 +231,7 @@ def test_fixed_opened_boundary_excludes_later_append(tmp_path):
     comms = populated(tmp_path)
     comms.messaging.send("alice", "bob", "within boundary")
     comms.channels.set_channel_any_mode("#api", True)
-    original = comms.bus._record_snapshot
+    original = comms.bus.log._record_snapshot
     started, finished = Event(), Event()
 
     def append():
@@ -251,7 +251,7 @@ def test_fixed_opened_boundary_excludes_later_append(tmp_path):
                 writer.join(timeout=3)
                 assert finished.is_set()
 
-    with patch.object(comms.bus, "_record_snapshot", side_effect=with_append):
+    with patch.object(comms.bus.log, '_record_snapshot', side_effect=with_append):
         assert bodies(comms.views.channel_display_page("#api")) == ["within boundary"]
     assert bodies(comms.views.channel_display_page("#api")) == ["within boundary", "outside boundary"]
 
@@ -281,7 +281,7 @@ def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
     comms = populated(tmp_path)
     comms.channels.set_channel_any_mode("#api", True)
     comms.messaging.send("alice", "bob", "before retag")
-    original = comms.bus._record_snapshot
+    original = comms.bus.log._record_snapshot
     started, finished = Event(), Event()
 
     def retag_and_send():
@@ -302,7 +302,7 @@ def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
                 writer.join(timeout=3)
                 assert finished.is_set()
 
-    with patch.object(comms.bus, "_record_snapshot", side_effect=concurrent_public_change):
+    with patch.object(comms.bus.log, '_record_snapshot', side_effect=concurrent_public_change):
         assert bodies(comms.views.channel_display_page("#api")) == ["before retag"]
     later = comms.views.channel_display_page("#api")
     assert "late nonmember" not in bodies(later)
@@ -313,7 +313,7 @@ def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
 def test_direct_retag_and_send_between_basis_and_open_retries(tmp_path):
     comms = populated(tmp_path)
     comms.channels.set_channel_any_mode("#api", True)
-    original = comms.bus._record_snapshot
+    original = comms.bus.log._record_snapshot
     changed = False
 
     @contextmanager
@@ -323,11 +323,11 @@ def test_direct_retag_and_send_between_basis_and_open_retries(tmp_path):
             changed = True
             alice = comms.registry.require("alice")
             comms.registry.register(replace(alice, tags=frozenset({"ui"})))
-            comms.bus.publish(Message("alice", "bob", "late direct", MessageType.INFO))
+            comms.bus.publisher.publish(Message("alice", "bob", "late direct", MessageType.INFO))
         with original(need_sequence=need_sequence) as snapshot:
             yield snapshot
 
-    with patch.object(comms.bus, "_record_snapshot", side_effect=mutate_before_open):
+    with patch.object(comms.bus.log, '_record_snapshot', side_effect=mutate_before_open):
         assert bodies(comms.views.channel_display_page("#api")) == []
     assert changed
     assert bodies(comms.views.channel_display_page("#api")) == []
@@ -338,7 +338,7 @@ def test_direct_rename_and_own_send_do_not_inflate_unread(tmp_path):
     comms = populated(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("bob", "#api", "outside unread")
-    original = comms.bus._record_snapshot
+    original = comms.bus.log._record_snapshot
     changed = False
 
     @contextmanager
@@ -347,11 +347,11 @@ def test_direct_rename_and_own_send_do_not_inflate_unread(tmp_path):
         if not changed:
             changed = True
             comms.registry.rename(viewer, "human")
-            comms.bus.publish(Message("human", "#api", "owned unread", MessageType.INFO))
+            comms.bus.publisher.publish(Message("human", "#api", "owned unread", MessageType.INFO))
         with original(need_sequence=need_sequence) as snapshot:
             yield snapshot
 
-    with patch.object(comms.bus, "_record_snapshot", side_effect=rename_and_send_before_open):
+    with patch.object(comms.bus.log, '_record_snapshot', side_effect=rename_and_send_before_open):
         raced = comms.views.viewer_snapshot(str(tmp_path))
     assert changed
     assert raced.channel_unread["#api"] == 1
@@ -361,7 +361,7 @@ def test_direct_rename_and_own_send_do_not_inflate_unread(tmp_path):
 def test_public_mark_read_and_append_share_one_viewer_boundary(tmp_path):
     comms = populated(tmp_path)
     comms.messaging.send("bob", "#api", "row1")
-    original = comms.bus._record_snapshot
+    original = comms.bus.log._record_snapshot
     started, finished = Event(), Event()
 
     def mark_then_append():
@@ -382,14 +382,14 @@ def test_public_mark_read_and_append_share_one_viewer_boundary(tmp_path):
                 writer.join(timeout=3)
                 assert finished.is_set()
 
-    with patch.object(comms.bus, "_record_snapshot", side_effect=concurrent_public_mark):
+    with patch.object(comms.bus.log, '_record_snapshot', side_effect=concurrent_public_mark):
         assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 1
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 1
 
 
 def test_perpetual_direct_mutation_fails_closed_after_bounded_retries(tmp_path):
     comms = populated(tmp_path)
-    original = comms.bus._record_snapshot
+    original = comms.bus.log._record_snapshot
     attempts = 0
 
     @contextmanager
@@ -403,7 +403,7 @@ def test_perpetual_direct_mutation_fails_closed_after_bounded_retries(tmp_path):
             yield snapshot
 
     with (
-        patch.object(comms.bus, "_record_snapshot", side_effect=continually_retag),
+        patch.object(comms.bus.log, '_record_snapshot', side_effect=continually_retag),
         pytest.raises(RuntimeError, match="Display scope changed during snapshot"),
     ):
         comms.views.channel_display_page("#api")
@@ -420,20 +420,20 @@ def test_display_open_never_scans_missing_or_zero_bus_meta_under_wire_lock(tmp_p
         else:
             metadata.write_text(body)
         with patch.object(
-            comms.bus,
-            "_max_sequence_unlocked",
+            comms.bus.log,
+            '_max_sequence_unlocked',
             side_effect=AssertionError("display must not scan for a sequence watermark"),
         ):
             assert bodies(comms.views.channel_display_page("#api")) == ["existing row"]
             assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 1
-    with comms.bus.full_history_snapshot() as (through, records):
+    with comms.bus.log.full_history_snapshot() as (through, records):
         assert through == 1  # default export boundary still repairs the missing watermark
         assert [message.body for message in records] == ["existing row"]
 
 
 def test_new_channel_during_boundary_is_not_falsely_unknown(tmp_path):
     comms = populated(tmp_path)
-    original = comms.bus._record_snapshot
+    original = comms.bus.log._record_snapshot
     added = False
 
     @contextmanager
@@ -445,6 +445,6 @@ def test_new_channel_during_boundary_is_not_falsely_unknown(tmp_path):
         with original(need_sequence=need_sequence) as snapshot:
             yield snapshot
 
-    with patch.object(comms.bus, "_record_snapshot", side_effect=register_before_open):
+    with patch.object(comms.bus.log, '_record_snapshot', side_effect=register_before_open):
         assert bodies(comms.views.channel_display_page("#new")) == []
     assert added

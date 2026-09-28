@@ -135,7 +135,7 @@ def test_marker_changed_during_page_fails_before_basis_issued(tmp_path: Path, mo
         page = original(*args, **kwargs)
         comms.bus.reads.mark_displayed(
             viewer,
-            comms.bus.reads.capture(viewer, page.messages, comms.registry.snapshot(), comms.bus._path),
+            comms.bus.reads.capture(viewer, page.messages, comms.registry.snapshot(), comms.bus.log.path),
         )
         return page
 

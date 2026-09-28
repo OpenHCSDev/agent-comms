@@ -95,7 +95,7 @@ def _recipient(pipe, root: Path, root_id: str, name: str, decision: str = "FULL"
 
 
 def _accept(root: Path, root_id: str, comms: Comms, message) -> None:
-    initial = comms.bus.read_initial_cohort(root_id, message.seq)
+    initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
@@ -139,7 +139,7 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(tmp_path: Path) 
         assert comms.registry.require("beta").pid == ready[1]
 
         message = comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
-        initial = comms.bus.read_initial_cohort(root_id, message.seq)
+        initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
         assert len(initial.audience.recipients) == 2
         assert (
             sum(decision.__class__.__name__ == "NoWakeDecision" for decision in initial.decisions)

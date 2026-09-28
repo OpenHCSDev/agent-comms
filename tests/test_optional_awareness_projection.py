@@ -55,7 +55,7 @@ def _accepted(
     comms: Comms, store: MutationStore, root_id: str, target: str, body: str
 ) -> tuple[CommittedInitial, WakeClaim]:
     message = comms.messaging.send_initial_cohort("sender", target, body)
-    initial = comms.bus.read_initial_cohort(root_id, message.seq)
+    initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
     for recipient in initial.audience.recipients:
         store.register_participant(
             recipient.recipient_lookup,
@@ -106,7 +106,7 @@ def test_optional_generation_insert_fault_rolls_back_only_optional_rows(
     comms, store, _index, root_id = _root(tmp_path)
     try:
         message = comms.messaging.send_initial_cohort("sender", "#team", "@member000 @member001 act")
-        initial = comms.bus.read_initial_cohort(root_id, message.seq)
+        initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
         for recipient in initial.audience.recipients:
             store.register_participant(
                 recipient.recipient_lookup,
@@ -161,7 +161,7 @@ def test_acceptance_fault_before_commit_never_leaves_partial_provenance(
     comms, store, _index, root_id = _root(tmp_path)
     try:
         message = comms.messaging.send_initial_cohort("sender", "member000", "fresh")
-        initial = comms.bus.read_initial_cohort(root_id, message.seq)
+        initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
         for recipient in initial.audience.recipients:
             store.register_participant(
                 recipient.recipient_lookup,
@@ -429,7 +429,7 @@ def test_owner_generation_advance_during_snapshot_omits_at_inclusion(
         original = OptionalAwarenessProjection._open_obligations
 
         def race(self, db, lookup, owner_name):
-            with MutationStore(str(index.bus._path.with_name("coordination.sqlite3"))) as other:
+            with MutationStore(str(index.bus.log.path.with_name("coordination.sqlite3"))) as other:
                 other.advance_owner_generation(lookup, owner.name, expected_generation=1)
             return original(self, db, lookup, owner_name)
 
@@ -507,7 +507,7 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
         old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
         comms.threads._rename_thread("member000", "gamma")
         current_message = comms.messaging.send_initial_cohort("sender", "gamma", "new selected")
-        current = comms.bus.read_initial_cohort(root_id, current_message.seq)
+        current = comms.bus.log.read_initial_cohort(root_id, current_message.seq)
         receipt = accept_initial_cohort(comms.bus, root_id, current_message.seq, store).value
         assert len(receipt.claims) == 1
         current_claim = receipt.claims[0]

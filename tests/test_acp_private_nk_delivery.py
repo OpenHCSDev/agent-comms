@@ -383,12 +383,12 @@ async def test_private_owner_rename_migrates_generation_before_canonical_selecte
 
     # The old direct alias remains unsupported; it must fail before any
     # durable initial rather than become a second unstable recipient identity.
-    before_seq = comms.bus.latest_sequence()
+    before_seq = comms.bus.log.latest_sequence()
     with pytest.raises(
         RelationViolationError, match="Initial direct aliases need a stable send binding"
     ):
         invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "old alias"})
-    assert comms.bus.latest_sequence() == before_seq
+    assert comms.bus.log.latest_sequence() == before_seq
 
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
@@ -451,7 +451,7 @@ def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tm
         comms.threads._rename_thread("beta", "gamma")
     assert comms.registry.require("beta").name == "beta"
     assert "gamma" not in comms.registry
-    assert comms.bus.latest_sequence() == 0
+    assert comms.bus.log.latest_sequence() == 0
 
 
 def test_private_rename_compensates_registry_failure_with_new_old_owner_generation(
@@ -481,7 +481,7 @@ def test_private_rename_compensates_registry_failure_with_new_old_owner_generati
         pytest.raises(RelationViolationError, match="Private owner rename is pending"),
     ):
         _accept_visible_initials(bus, root_id, store, lookup, 0, owner_name="beta")
-    assert comms.bus.latest_sequence() == 0
+    assert comms.bus.log.latest_sequence() == 0
 
 
 async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_path, monkeypatch):
@@ -539,7 +539,7 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
     sent = invoke_tool(
         comms, "comms_send", {"from": "sender", "to": "beta", "body": "Compute 17+25"}
     )
-    original = comms.bus.message_by_id(sent["id"])
+    original = comms.bus.log.message_by_id(sent["id"])
     before = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
     assert before["status"] == "none"
     assert before["version"] == 1 and before["revision"] >= 1
@@ -781,7 +781,7 @@ async def test_acp_private_does_not_overlap_owner_turn(tmp_path, monkeypatch):
 async def test_acp_private_without_explicit_package_refuses_legacy_delivery(tmp_path):
     comms, agent, root_id = _session(tmp_path, package=False)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
-    original = comms.bus.message_by_id(sent["id"])
+    original = comms.bus.log.message_by_id(sent["id"])
     with pytest.raises(PublicationActivationBlocked, match="explicit matching root"):
         await agent.inputs.drain_inbox("beta")
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
@@ -812,7 +812,7 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
         "comms_send",
         {"from": "sender", "to": "#team", "body": "@alpha review this."},
     )
-    original = comms.bus.message_by_id(sent["id"])
+    original = comms.bus.log.message_by_id(sent["id"])
     assert await agent.inputs.drain_inbox("beta") == 0
     assert calls == [] and agent.inputs.inbox_cursors == {}
     cursor = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
@@ -845,7 +845,7 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
     fake, calls = _fake_model(fail_on=1)
     monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
-    assert comms.bus.message_by_id(sent["id"]) is not None
+    assert comms.bus.log.message_by_id(sent["id"]) is not None
     with pytest.raises(NativePiUnavailable):
         await agent.inputs.drain_inbox("beta")
     assert len(calls) == 1
@@ -989,7 +989,7 @@ async def test_stable_existing_goal_allows_separate_selected_direct_reply(tmp_pa
 async def test_acp_mismatched_root_and_bad_package_cannot_accept_claim(tmp_path, monkeypatch):
     comms, agent, root_id = _session(tmp_path)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
-    original = comms.bus.message_by_id(sent["id"])
+    original = comms.bus.log.message_by_id(sent["id"])
     agent._private_nk_wire_root_id = "f" * 32
     with pytest.raises(PublicationActivationBlocked, match="explicit matching root"):
         await agent.inputs.drain_inbox("beta")

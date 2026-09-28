@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 
+from .field_codec import FieldCodec
 from .native_package import verify_native_package
 
 _PREPARE = r"""
@@ -65,9 +67,30 @@ class NativePreparationError(ValueError):
 
 
 @dataclass(frozen=True)
+class NativeWitness:
+    """One decoded native cutpoint; later owner/disk CAS remains independent."""
+
+    session_id: str = field(metadata={"wire_name": "sessionId"})
+    session_file: str = field(metadata={"wire_name": "sessionFile"})
+    leaf_id: str = field(metadata={"wire_name": "leafId"})
+    first_kept_entry_id: str = field(metadata={"wire_name": "firstKeptEntryId"})
+    revision: str
+
+    def __post_init__(self):
+        if any(
+            type(value := getattr(self, item.name)) is not str or not value for item in fields(self)
+        ):
+            raise NativePreparationError("Exact native witness required")
+        if (
+            not self.session_file.startswith("/")
+            or re.fullmatch(r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision) is None
+        ):
+            raise NativePreparationError("Canonical native path and revision required")
+
+
+@dataclass(frozen=True)
 class NativePreparation:
-    session_id: str
-    witness: dict[str, str]
+    witness: NativeWitness
     tokens_before: int
     is_split_turn: bool
 
@@ -139,25 +162,19 @@ def prepare_native_source(
             return None
         if set(data) != {"status", "sessionId", "witness", "tokensBefore", "isSplitTurn"}:
             raise NativePreparationError("Invalid native preparation")
-        witness = data["witness"]
+        witness = FieldCodec.decode(NativeWitness, data["witness"])
         if (
             data["status"] != "ready"
             or type(data["tokensBefore"]) is not int
             or not 0 <= data["tokensBefore"] <= 2**53 - 1
             or type(data["isSplitTurn"]) is not bool
-            or not isinstance(witness, dict)
-            or set(witness)
-            != {"sessionId", "sessionFile", "leafId", "firstKeptEntryId", "revision"}
-            or any(type(value) is not str or not value for value in witness.values())
-            or witness["sessionId"] != data["sessionId"]
-            or witness["sessionFile"] != str(file)
-            or witness["revision"] != ":".join(map(str, revision(before)))
+            or witness.session_id != data["sessionId"]
+            or witness.session_file != str(file)
+            or witness.revision != ":".join(map(str, revision(before)))
         ):
             raise NativePreparationError("Invalid native witness")
-        return NativePreparation(
-            data["sessionId"], witness, data["tokensBefore"], data["isSplitTurn"]
-        )
-    except (OSError, subprocess.TimeoutExpired, ValueError, json.JSONDecodeError) as error:
+        return NativePreparation(witness, data["tokensBefore"], data["isSplitTurn"])
+    except (OSError, subprocess.TimeoutExpired, ValueError, TypeError) as error:
         if isinstance(error, NativePreparationError):
             raise
         raise NativePreparationError("Native source cannot be prepared") from error

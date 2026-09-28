@@ -52,7 +52,7 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
     for number in range(101):
         comms.messaging.send_initial_cohort("sender", "member000", f"unrelated-{number}")
     selected = comms.messaging.send_initial_cohort("sender", "#team", "@alpha answer this exact source")
-    frozen = comms.bus.read_initial_cohort(root_id, selected.seq)
+    frozen = comms.bus.log.read_initial_cohort(root_id, selected.seq)
     assert len(frozen.audience.recipients) == recipients
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         receipt = accept_initial_cohort(comms.bus, root_id, selected.seq, store).value
@@ -253,9 +253,9 @@ async def test_replaced_bus_between_coverage_and_commit_omits_cursor(tmp_path, m
     def replace_source(*args, **kwargs):
         result = original(*args, **kwargs)
         replacement = root / "bus-replacement.jsonl"
-        replacement.write_bytes(comms.bus._path.read_bytes())
+        replacement.write_bytes(comms.bus.log.path.read_bytes())
         replacement.chmod(0o600)
-        os.replace(replacement, comms.bus._path)
+        os.replace(replacement, comms.bus.log.path)
         return result
 
     monkeypatch.setattr(cursor_module, "_bounded_coverage_pages", replace_source)

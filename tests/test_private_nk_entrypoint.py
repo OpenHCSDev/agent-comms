@@ -268,7 +268,7 @@ def test_rotate_stopped_private_route_without_replaying_old_inputs(
     else:
         active_route.rotate_active_route(old_route, new_route, archive, route_file)
         assert active_route.read_active_route(route_file) == new_route
-        assert new.bus.latest_sequence() == 0
+        assert new.bus.log.latest_sequence() == 0
         assert archive.pending_messages == archive.unknown_inputs == 1
         assert (archive.path / "bus.jsonl").read_bytes() == (old_root / "bus.jsonl").read_bytes()
 
@@ -518,7 +518,7 @@ def test_activate_archive_stage_and_route_as_one_default_lock(tmp_path, monkeypa
             )
             direct = executor.submit(legacy.messaging.send, "observer", "receiver", "direct late")
             raw = executor.submit(
-                legacy.bus.publish,
+                legacy.bus.publisher.publish,
                 Message("observer", "receiver", "raw late", MessageType.INFO),
             )
             human = executor.submit(
@@ -537,7 +537,8 @@ def test_activate_archive_stage_and_route_as_one_default_lock(tmp_path, monkeypa
         assert selected == (witness,)
         assert archive.pending_messages == archive.unknown_inputs == 1
         assert private.registry.require("sender").pid == 0
-        assert not (private.root / "bus.jsonl").exists()
+        assert (private.root / "bus.jsonl").read_bytes() == b""
+        assert (private.root / "private_bus_checkpoint.sqlite3").is_file()
         assert [item.body for item in legacy.bus.inbox("receiver")] == ["old pending"]
         assert wire().owners._private_nk_launch == (
             private.root, route.wire_root_id, tmp_path,

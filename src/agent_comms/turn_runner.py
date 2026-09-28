@@ -167,7 +167,7 @@ class TurnRunner:
             if relay_text:
                 target, body = parse_target(relay_text)
                 self.comms.messaging.send(thread_name, target, body)
-                sent_seq = self.comms.bus.total_messages()
+                sent_seq = self.comms.bus.log.total_messages()
             self.effects._debug_log(
                 f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'} "
                 f"sent_seq={sent_seq}"

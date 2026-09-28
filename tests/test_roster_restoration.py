@@ -35,8 +35,8 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     current.messaging.initialize_private_claim_protocol()
     current.messaging.send_user_message("#comms", "Current message", worktree=str(tmp_path))
     before = current.registry.snapshot()
-    bus = current.bus._path.read_bytes()
-    old_bus = old.bus._path.read_bytes()
+    bus = current.bus.log.path.read_bytes()
+    old_bus = old.bus.log.path.read_bytes()
     source = replace(old.registry.snapshot(), aliases={"former-name": "missing"})
 
     assert current.registry.restore_stopped(source, ("live", "missing")) == ("missing",)
@@ -47,8 +47,8 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     assert after.threads["missing"] == replace(missing, pid=0, active_turn=None)
     assert after.statuses["missing"] == StoppedThreadStatus()
     assert after.aliases["former-name"] == "missing"
-    assert current.bus._path.read_bytes() == bus
-    assert old.bus._path.read_bytes() == old_bus
+    assert current.bus.log.path.read_bytes() == bus
+    assert old.bus.log.path.read_bytes() == old_bus
     assert not current.bus.inbox("missing")
     first = current.registry.store.path.read_bytes()
     assert current.registry.restore_stopped(source, ("live", "missing")) == ()
@@ -142,7 +142,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
             if repair_existing
             else None
         )
-        bus_before = current.bus._path.read_bytes() if message else None
+        bus_before = current.bus.log.path.read_bytes() if message else None
         current.threads.restore_stopped(source, (missing.name,))
         snapshot = current.registry.snapshot()
         assert snapshot.statuses[missing.name] == StoppedThreadStatus()
@@ -153,7 +153,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
             store.participant(stable_thread_lookup(missing.created_at)).pointer.execution_id is None
         )
         if bus_before is not None:
-            assert current.bus._path.read_bytes() == bus_before
+            assert current.bus.log.path.read_bytes() == bus_before
         else:
             message = current.messaging.send_user_message(
                 "#comms", "@live Reply once", worktree=str(tmp_path)

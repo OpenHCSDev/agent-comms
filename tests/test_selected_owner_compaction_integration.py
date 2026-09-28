@@ -156,9 +156,9 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         assert len(admitted) == 1
         journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
         rows = journal.blocking_selected_summary(file)
-        assert len(rows) == 1 and rows[0].status == "linked"
-        operation = journal.get(rows[0].commit_id)
-        assert operation.status == "committed"
+        assert len(rows) == 1 and rows[0].state.declared_name == "linked"
+        operation = journal.get(rows[0].state.commit_id)
+        assert operation.state.declared_name == "committed"
         intent = json.loads(operation.intent_json)
         assert intent["selectedSummaryOperationId"] == rows[0].operation_id
         assert (
@@ -360,7 +360,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
             journal = CompactionJournal(root / "compaction-commits.sqlite3")
             attempt = journal.selected_summary(summary_ids[0])
             terminal_status = "declined-prestart" if clean_decline else "linked"
-            assert attempt.status == ("reserved" if correction else terminal_status)
+            assert attempt.state.declared_name == ("reserved" if correction else terminal_status)
             assert bool(journal.blocking_selected_summary(file)) is correction
             assert native_input_admitted(root, file) is not correction
             entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
@@ -414,7 +414,8 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 assert dispositions.status("acp:next") == "started"
                 assert len(summary_ids) == 2
                 assert all(
-                    journal.selected_summary(key).status == terminal_status for key in summary_ids
+                    journal.selected_summary(key).state.declared_name == terminal_status
+                    for key in summary_ids
                 )
                 assert journal.blocking_selected_summary(file) == ()
                 assert native_input_admitted(root, file)
@@ -453,7 +454,7 @@ async def test_correction_after_native_commit_never_mints_original_admission(tmp
         admit = OwnerCompactionCommit.admit_selected_original
 
         def corrected(self, owner, epoch, operation, source, identity):
-            assert operation.status == "committed"
+            assert operation.state.declared_name == "committed"
             inputs.record(
                 "acp:correction",
                 seq=None,

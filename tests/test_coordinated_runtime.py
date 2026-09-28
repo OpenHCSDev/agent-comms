@@ -41,9 +41,9 @@ from agent_comms.coordination_store import (
     StaleFence,
 )
 from agent_comms.historical_native_inputs import read_historical_native_inputs
-from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, NativeTurnResult
 from agent_comms.native_source_cursor import read_current_native_cursor
+from agent_comms.publisher import Publisher
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
@@ -115,7 +115,7 @@ def _root(
     target = "beta" if direct else "#team"
     body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
     message = comms.messaging.send_initial_cohort("sender", target, body)
-    initial = comms.bus.read_initial_cohort(root_id, message.seq)
+    initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
@@ -1391,7 +1391,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     comms.registry.rename("beta", "gamma")
     root_id = comms.messaging.initialize_private_initial_protocol()
     incoming = comms.messaging.send_initial_cohort("sender", "gamma", "Compute 17+25")
-    initial = comms.bus.read_initial_cohort(root_id, incoming.seq)
+    initial = comms.bus.log.read_initial_cohort(root_id, incoming.seq)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
@@ -1472,7 +1472,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, _calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
-    append = MessageBus._publish_keyed_response_unlocked
+    append = Publisher._publish_keyed_response_unlocked
     started, stopped = threading.Event(), threading.Event()
     workers: list[threading.Thread] = []
 
@@ -1489,7 +1489,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
         assert not stopped.wait(0.1), "owner stop raced the locked response append"
         return append(self, intent, registry_snapshot=registry_snapshot)
 
-    monkeypatch.setattr(MessageBus, "_publish_keyed_response_unlocked", blocking_append)
+    monkeypatch.setattr(Publisher, '_publish_keyed_response_unlocked', blocking_append)
     try:
         result = await run_one_sealed_claim(
             root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
@@ -1884,7 +1884,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     assert notice.target == ("sender" if direct else "#team")
     assert "The usage limit has been reached" in notice.body
     assert "No automatic retry" in notice.body
-    notice_initial = comms.bus.read_initial_cohort(root_id, notice.seq)
+    notice_initial = comms.bus.log.read_initial_cohort(root_id, notice.seq)
     assert all(decision.wake_mode == PassiveWake() for decision in notice_initial.decisions)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         lookup = stable_thread_lookup(people[2].created_at)

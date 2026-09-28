@@ -74,7 +74,7 @@ class HistoryViews:
         self.goals = goals
         self.ledger = ledger
         self._wire_lock_path = root / "wire"
-        self.presentation = BusPresentation(bus._path)
+        self.presentation = BusPresentation(bus.log.path)
         self.transcript_reads = transcript_read_state(bus.reads.path)
         self._sent_times_signature: tuple[int, int, int] | None = None
         self._sent_times: dict[str, float] = {}
@@ -356,7 +356,7 @@ class HistoryViews:
             older_unread = False
             if page.has_older and page.oldest_seq is not None:
                 seen = self.bus.reads.seen_sequences(viewer_name, snapshot)
-                with self.bus._record_snapshot(need_sequence=False) as (_, records):
+                with self.bus.log._record_snapshot(need_sequence=False) as (_, records):
                     older_unread = any(
                         message.seq < page.oldest_seq
                         and message.seq not in seen
@@ -371,7 +371,7 @@ class HistoryViews:
                 raise ValueError("DM display changed while paging; refresh the page.")
             root_info = self.root.stat()
             try:
-                bus_info = self.bus._path.stat()
+                bus_info = self.bus.log.path.stat()
             except FileNotFoundError:
                 bus_identity = None
             else:
@@ -392,7 +392,7 @@ class HistoryViews:
                     newest_seq=page.newest_seq,
                     older_unread=older_unread,
                     displayed=self.bus.reads.capture(
-                        viewer_name, page.messages, snapshot, self.bus._path
+                        viewer_name, page.messages, snapshot, self.bus.log.path
                     ),
                 ),
             )
@@ -510,11 +510,11 @@ class HistoryViews:
                     basis = self._capture_display_basis(viewer)
                     if self._display_basis_revision() != revision:
                         continue
-                    bus_revision = file_revision(self.bus._path)
-                    _, records = stack.enter_context(self.bus._record_snapshot(need_sequence=False))
+                    bus_revision = file_revision(self.bus.log.path)
+                    _, records = stack.enter_context(self.bus.log._record_snapshot(need_sequence=False))
                     if self._display_basis_revision() != revision:
                         continue
-                    if file_revision(self.bus._path) != bus_revision:
+                    if file_revision(self.bus.log.path) != bus_revision:
                         bus_revision = None
                 if target is not None and target not in basis[1]:
                     # A newly-created channel must not be rejected from an
@@ -554,7 +554,7 @@ class HistoryViews:
                 scope = replace(
                     scope,
                     displayed=self.bus.reads.capture(
-                        viewer, page.messages, basis[0], self.bus._path
+                        viewer, page.messages, basis[0], self.bus.log.path
                     ),
                 )
             return replace(page, display_scope=scope)
@@ -613,7 +613,7 @@ class HistoryViews:
         with ExitStack() as stack:
             with _store_lock(self._wire_lock_path):
                 resolved = scope.resolve(self.channels.catalog, self.registry)
-                through, messages = stack.enter_context(self.bus.full_history_snapshot())
+                through, messages = stack.enter_context(self.bus.log.full_history_snapshot())
 
             selected = (message for message in messages if resolved.matches(message))
             return WireTranscriptExporter(
@@ -838,10 +838,10 @@ class HistoryViews:
             if through is None:
                 # Explicit Mark Read selects the entire current view, unlike painted-page ACK.
                 messages = (
-                    message for message in self.bus.full_history() if current.includes(message)
+                    message for message in self.bus.log.full_history() if current.includes(message)
                 )
-                displayed = self.bus.reads.capture(viewer, messages, basis[0], self.bus._path)
-                through = self.bus.latest_sequence()
+                displayed = self.bus.reads.capture(viewer, messages, basis[0], self.bus.log.path)
+                through = self.bus.log.latest_sequence()
             else:
                 if expected_scope is None or expected_scope.displayed is None:
                     raise ValueError("Channel display scope missing; refresh the displayed page.")
@@ -851,7 +851,7 @@ class HistoryViews:
                 ):
                     raise ValueError("Channel display changed; refresh the displayed page.")
                 displayed = expected_scope.displayed
-                displayed.validate(viewer, basis[0], self.bus.reads.bus_identity(self.bus._path))
+                displayed.validate(viewer, basis[0], self.bus.reads.bus_identity(self.bus.log.path))
             self.bus.mark_view_read(viewer, target, through, displayed=displayed)
 
     def mark_dm_view_read(
@@ -879,7 +879,7 @@ class HistoryViews:
                 peer,
                 through,
                 snapshot,
-                self.bus.reads.bus_identity(self.bus._path),
+                self.bus.reads.bus_identity(self.bus.log.path),
             )
             self.bus.reads.mark_displayed(proof.viewer, proof.displayed.through(through))
 
@@ -912,7 +912,7 @@ class HistoryViews:
                     self.channels.catalog.pins_path,
                     self.channels.catalog.metadata_path,
                     self.channels.catalog.saved_views_path,
-                    self.bus._path,
+                    self.bus.log.path,
                     self.bus.history_manifest,
                     self.agents.activity._path,
                     self.agents.runtime_info._path,

@@ -20,6 +20,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.goals import Goal
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativePreparationError, prepare_native_source
+from agent_comms.owner_compaction_provider import NativeSummary
 from agent_comms.owner_compaction_runtime import compact_owner_once
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
@@ -61,11 +62,11 @@ def test_native_preparation_is_read_only_and_matches_saved_cutpoint(session):
     package = Path(PACKAGE)
     prepared = prepare_native_source(package, str(session), keep_recent_tokens=1)
     assert prepared is not None
-    assert prepared.witness["sessionId"] == prepared.session_id
-    assert prepared.witness["sessionFile"] == str(session)
+    assert prepared.witness.session_id
+    assert prepared.witness.session_file == str(session)
     assert prepared.tokens_before > 0
     assert any(
-        json.loads(row).get("id") == prepared.witness["firstKeptEntryId"]
+        json.loads(row).get("id") == prepared.witness.first_kept_entry_id
         for row in original.splitlines()
     )
     assert session.read_bytes() == original
@@ -104,7 +105,7 @@ def test_canonical_owner_prepares_source_before_summary_and_commits_once(session
         prepared.tokens_before,
         source=source,
     )
-    assert operation.status == "committed"
+    assert operation.state.declared_name == "committed"
     assert bridge.journal.unresolved(str(session)) == ()
     assert len(bridge.journal.pending_publications(str(session))) == 1
 
@@ -184,14 +185,14 @@ async def test_owner_summary_discards_idle_manager_before_external_native_write(
     monkeypatch.setattr(bridge, "_call", checked_call)
 
     async def synthetic_summary(metadata):
-        assert metadata.session_id == persistent.session_id
+        assert metadata.witness.session_id == persistent.session_id
         assert persistent.reopen_required is None  # preparation before retirement
-        return "Synthetic provider-free summary"
+        return NativeSummary("Synthetic provider-free summary", None, None)
 
     result = await compact_owner_once(
         bridge, owner, epoch, persistent, synthetic_summary, keep_recent_tokens=1
     )
-    assert result is not None and result.status == "committed"
+    assert result is not None and result.state.declared_name == "committed"
     assert persistent.reopen_required == str(session)
     assert len(bridge.journal.pending_publications(str(session))) == 1
 
@@ -223,7 +224,7 @@ async def test_late_correction_after_summary_refuses_write_without_reusing_manag
     async def corrected_summary(metadata):
         assert metadata.tokens_before > 0
         comms.messaging.send("peer", "owner", "Correction after preparation")
-        return "Now stale"
+        return NativeSummary("Now stale", None, None)
 
     with pytest.raises(RelationViolationError, match="source changed"):
         await compact_owner_once(
@@ -280,7 +281,7 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
     monkeypatch.setattr(bridge, "_call", delayed_native)
 
     async def synthetic_summary(_metadata):
-        return "Synthetic provider-free summary"
+        return NativeSummary("Synthetic provider-free summary", None, None)
 
     async def owned_turn():
         async with turn_lock:
@@ -331,7 +332,7 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
     assert bridge.journal.unresolved(str(session)) == ()
     pending = bridge.journal.pending_publications(str(session))
     assert len(pending) == 1
-    assert bridge.journal.get(pending[0].commit_id).status == "committed"
+    assert bridge.journal.get(pending[0].commit_id).state.declared_name == "committed"
     assert persistent.reopen_required == str(session)
     assert (
         len(
@@ -428,7 +429,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
             prepared.tokens_before,
             source=source,
         )
-        assert operation.status == "committed"
+        assert operation.state.declared_name == "committed"
         commit_ids.append(operation.commit_id)
         assert bridge.journal.unresolved(str(session)) == ()
         assert registry.require("owner").goal.id == "goal-unchanged"
@@ -501,12 +502,16 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
 
             async def synthetic_summary(metadata, round_index=index):
                 assert metadata.tokens_before > 0
-                return f"Synthetic round {round_index}; goal-e2e; not a semantic retention claim"
+                return NativeSummary(
+                    f"Synthetic round {round_index}; goal-e2e; not a semantic retention claim",
+                    None,
+                    None,
+                )
 
             operation = await compact_owner_once(
                 bridge, owner, epoch, persistent, synthetic_summary, keep_recent_tokens=1
             )
-            assert operation is not None and operation.status == "committed"
+            assert operation is not None and operation.state.declared_name == "committed"
             commit_ids.append(operation.commit_id)
             assert persistent.reopen_required == str(session)
             assert await publish_pending_local(agent, "project", "project") == 1

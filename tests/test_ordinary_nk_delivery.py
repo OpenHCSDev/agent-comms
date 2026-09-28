@@ -66,7 +66,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
         comms.threads.set_thread_model(beta.name, "openai-codex/gpt-6-sol")
         # The ordinary public API, not send_initial_cohort or a candidate bridge.
         receipt = invoke_tool(comms, "comms_send", {"from": "sender", "to": target, "body": body})
-        original.append(comms.bus.message_by_id(receipt["id"]))
+        original.append(comms.bus.log.message_by_id(receipt["id"]))
 
     result = await cohort_foreground.run_foreground_once(
         root,
@@ -84,7 +84,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
     else:
         assert result.disposition is disposition
     message = original[0]
-    initial = comms.bus.read_initial_cohort(root_id, message.seq)
+    initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
     assert initial.message == message
     expected_n = 1 if target == "beta" else 2
     assert len(initial.audience.recipients) == expected_n
@@ -118,7 +118,7 @@ def test_unmarked_ordinary_send_does_not_install_or_infer_cohort(tmp_path):
     meta = json.loads((comms.root / "bus_meta.json").read_text())
     assert "writer_protocol_version" not in meta
     assert not (comms.root / "coordination.sqlite3").exists()
-    assert comms.bus.message_by_id(message.message_id) == message
+    assert comms.bus.log.message_by_id(message.message_id) == message
 
 
 def test_legacy_writer_and_explicitly_disabled_private_writer_still_refuse(tmp_path):
@@ -127,7 +127,7 @@ def test_legacy_writer_and_explicitly_disabled_private_writer_still_refuse(tmp_p
         comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
     root_id = comms.messaging.initialize_private_initial_protocol()
     with pytest.raises(RelationViolationError, match="Legacy append"):
-        comms.bus.publish(
+        comms.bus.publisher.publish(
             Message(sender="sender", target="beta", body="old writer", type=MessageType.INFO)
         )
     disabled = Comms(comms.root, private_initial_writes=False)

@@ -6,6 +6,8 @@ import json
 import pytest
 
 from agent_comms.backend import PersistentPiSession, _session_revision
+from agent_comms.field_codec import FieldCodec
+from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.selected_pi_route import SelectedPiProbeUnknownError, probe_idle_selected_pi
 
 
@@ -57,13 +59,16 @@ def request_case(tmp_path, response):
     persistent.session_id = "session-id"
     persistent.revision = _session_revision(str(session))
     persistent.launch_key = ("pi-native",)
-    witness = {
-        "sessionId": "session-id",
-        "sessionFile": str(session),
-        "leafId": "leaf",
-        "firstKeptEntryId": "kept",
-        "revision": "1:2:3:4:5",
-    }
+    witness = FieldCodec.decode(
+        NativeWitness,
+        {
+            "sessionId": "session-id",
+            "sessionFile": str(session),
+            "leafId": "leaf",
+            "firstKeptEntryId": "kept",
+            "revision": "1:2:3:4:5",
+        },
+    )
     selected = {"provider": "fixture", "modelId": "model", "contextWindow": 1000}
     settings = {"reserveTokens": 50, "keepRecentTokens": 20}
     return persistent, proc, reader, witness, selected, settings, session
@@ -231,7 +236,7 @@ async def settings_probe(case):
     persistent, _, _, witness, selected, _, _ = case
     return await read_selected_compaction_decision(
         persistent,
-        session_file=witness["sessionFile"],
+        session_file=witness.session_file,
         expected_launcher="pi-native",
         provider=selected["provider"],
         model_id=selected["modelId"],

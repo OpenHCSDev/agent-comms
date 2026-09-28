@@ -55,7 +55,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         root_id = comms.messaging.initialize_private_initial_protocol()
         comms.messaging.initialize_private_claim_protocol()
         message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")
-        initial = comms.bus.read_initial_cohort(root_id, message.seq)
+        initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             for recipient in initial.audience.recipients:
@@ -110,18 +110,18 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 publish_selected_resource_claim(
                     comms, store, replace(admission, recipient_lookup=bob_lookup), "Bob", resource
                 )
-            assert comms.bus.claim_projection().get(str(resource)) is None
-            append = comms.bus._append_private_unlocked
+            assert comms.bus.log.claim_projection().get(str(resource)) is None
+            append = comms.bus.log._append_private_unlocked
 
             def append_then_lose_receipt(metadata: dict[str, int | str], row: dict) -> None:
                 append(metadata, row)
                 raise OSError("lost acknowledgement after durable append")
 
             with monkeypatch.context() as patch:
-                patch.setattr(comms.bus, "_append_private_unlocked", append_then_lose_receipt)
+                patch.setattr(comms.bus.log, '_append_private_unlocked', append_then_lose_receipt)
                 with pytest.raises(ClaimEnvelopeUnknownError):
                     publish_selected_resource_claim(comms, store, admission, owner.name, resource)
-            selected_owner = Comms(root).bus.claim_projection()[str(resource)]
+            selected_owner = Comms(root).bus.log.claim_projection()[str(resource)]
             assert selected_owner.admission == admission
             assert selected_owner.resource == str(resource)
             assert (
@@ -151,7 +151,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             external = outside / "module.py"
             external.write_bytes(b"outside untouched\n")
             displaced = worktree / "displaced-pkg"
-            actual_projection = comms.bus._claim_projection_unlocked
+            actual_projection = comms.bus.log._claim_projection_unlocked
 
             def swap_after_projection(marker):
                 projection = actual_projection(marker)
@@ -163,7 +163,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             # old absolute stat/open followed the parent symlink despite
             # final-component O_NOFOLLOW.
             with monkeypatch.context() as patch:
-                patch.setattr(comms.bus, "_claim_projection_unlocked", swap_after_projection)
+                patch.setattr(comms.bus.log, '_claim_projection_unlocked', swap_after_projection)
                 with pytest.raises(IdentityConflict, match="directory or file changed"):
                     write_selected_claimed_file(
                         comms, store, admission, "Alice", selected_owner, b"escaped\n"

@@ -18,7 +18,6 @@ from .coordination_store import IdentityConflict, MutationStore
 from .historical_native_inputs import read_historical_native_inputs
 from .message_bus import MessageBus
 from .private_bus_checkpoint import PrefixWitness, certified_initial_page_unlocked
-from .store_files import _store_lock
 from .wake import NoWakeDecision, WakeDecision
 
 _MAX_BUS_BYTES = 8 * 1024 * 1024
@@ -94,23 +93,19 @@ def read_proven_source_coverage(
     # A certificate is a trusted append-writer-maintained *source* index,
     # never SQL seal, selected claim, native input or injected ACK authority.
     # Old roots retain the original complete bounded canonical bus parse.
-    with _store_lock(
-        bus._path,
-        blocking=False,
-        max_bus_bytes=(
+    with bus.log.locked(blocking=False, max_bus_bytes=(
             None
-            if (bus._path.with_name("private_bus_checkpoint.sqlite3")).exists()
+            if (bus.log.path.with_name("private_bus_checkpoint.sqlite3")).exists()
             else _MAX_BUS_BYTES
-        ),
-    ):
+        )):
         if time.monotonic() > deadline:
             raise IdentityConflict("source coverage exceeded its scan deadline")
-        marker = bus._private_marker_unlocked()
+        marker = bus.log._private_marker_unlocked()
         if marker["wire_root_id"] != wire_root_id:
             raise IdentityConflict("source coverage private wire root changed")
         if marker.get("checkpoint_version") == 1:
             source_witness, addressed, more_initials = certified_initial_page_unlocked(
-                bus, marker, recipient_lookup, after=after_seq, limit=limit
+                bus.log, marker, recipient_lookup, after=after_seq, limit=limit
             )
             if after_seq > source_witness.latest_initial_seq:
                 raise IdentityConflict("source coverage prefix exceeds certified initials")
@@ -122,7 +117,7 @@ def read_proven_source_coverage(
             )
         else:
             for row_count, (_, _, initial) in enumerate(
-                bus._verified_private_rows_unlocked(marker), start=1
+                bus.log._verified_private_rows_unlocked(marker), start=1
             ):
                 if row_count > _MAX_BUS_ROWS or time.monotonic() > deadline:
                     raise IdentityConflict("source coverage exceeded row or scan deadline budget")

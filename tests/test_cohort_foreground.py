@@ -216,7 +216,7 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
         )
         assert result is not None and result.response_message_id
         assert len(calls) == 1 and resource.read_bytes() == b"after selected claim\n"
-        claimed = Comms(root).bus.claim_projection()[str(resource)]
+        claimed = Comms(root).bus.log.claim_projection()[str(resource)]
         assert claimed.admission is not None and claimed.admission.wake_claim_id == result.claim_id
         assert comms.views.dm_history("sender", "beta")[-1].body == "42"
 
@@ -370,7 +370,7 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
         )
         assert isinstance(result, foreground.NoWakeReceipt)
         assert calls == [] and resource.read_bytes() == b"unchanged\n"
-        assert Comms(root).bus.claim_projection().get(str(resource)) is None
+        assert Comms(root).bus.log.claim_projection().get(str(resource)) is None
 
 
 async def test_foreground_two_recipients_one_no_wake_and_no_model(

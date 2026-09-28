@@ -258,7 +258,7 @@ def accept_initial_cohort(
     """
     if type(bus) is not MessageBus or type(store) is not MutationStore:
         raise TypeError("cohort acceptance requires the actual bus and coordinator stores")
-    initial = bus.read_initial_cohort(wire_root_id, wire_seq)
+    initial = bus.log.read_initial_cohort(wire_root_id, wire_seq)
     with store._transaction() as db:
         _assert_schema(db)
         receipt = db.execute(

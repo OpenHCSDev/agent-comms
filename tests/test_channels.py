@@ -107,7 +107,7 @@ def test_any_is_non_routable_but_preserves_legacy_rows_as_global_history(tmp_pat
         comms.messaging.send_user_message("#any", "user send rejected", worktree=str(tmp_path))
 
     legacy = Message("other", "#any", "legacy any row", MessageType.INFO, timestamp=1, seq=1)
-    comms.bus._path.write_text(json.dumps(legacy.to_wire()) + "\n")
+    comms.bus.log.path.write_text(json.dumps(legacy.to_wire()) + "\n")
     assert [message.body for message in comms.views.channel_history("#any")] == ["legacy any row"]
 
 
@@ -404,7 +404,7 @@ def test_pending_cache_observes_external_changes_without_rescanning(tmp_path):
     comms.messaging.send("other", "#team", "one")
     assert comms.bus.pending_count("a") == 1
     with patch.object(
-        comms.bus, "_iter_log_unlocked", side_effect=AssertionError("rescanned idle log")
+        comms.bus.log, '_iter_log_unlocked', side_effect=AssertionError("rescanned idle log")
     ):
         for _ in range(10):
             comms.threads.heartbeat("a")
@@ -497,7 +497,7 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     assert comms.views.coordination_snapshot().channel_order is ChannelSort.LAST_USER_INPUT
     # Reading or re-sorting must never redefine a channel's creation time.
     assert comms.channels.catalog.resolve("#alpha").created_at == 300
-    with patch.object(comms.bus, "_iter_log_unlocked", side_effect=AssertionError("idle rescan")):
+    with patch.object(comms.bus.log, '_iter_log_unlocked', side_effect=AssertionError("idle rescan")):
         comms.views.channel_views()
 
 

@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING
 
 from .bus_publication import unique_wire_object
 from .errors import RelationViolationError
-from .store_files import _store_lock
 
 if TYPE_CHECKING:
     from .supervised_cutover import ArchiveReceipt
@@ -313,12 +312,12 @@ def rotate_active_route(
         raise ValueError("private route rotation requires distinct roots and archive")
     _preflight(replacement.root, replacement.wire_root_id, replacement.native_package, True)
     new = Comms(replacement.root)
-    with _store_lock(new.bus._path):
-        marker = new.bus._private_marker_unlocked()
+    with new.bus.log.locked():
+        marker = new.bus.log._private_marker_unlocked()
         if (
             marker.get("claim_envelopes_version") != 1
             or marker["last_seq"] != 0
-            or (new.bus._path.exists() and new.bus._path.stat().st_size != 0)
+            or (new.bus.log.path.exists() and new.bus.log.path.stat().st_size != 0)
         ):
             raise RelationViolationError("replacement route requires an empty claim-ready bus")
     directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
@@ -327,17 +326,17 @@ def rotate_active_route(
         if read_active_route(path) != expected:
             raise ValueError("active comms route is not the expected private root")
         old = Comms(expected.root)
-        with _store_lock(old.bus._path):
-            marker = old.bus._private_marker_unlocked()
+        with old.bus.log.locked():
+            marker = old.bus.log._private_marker_unlocked()
             if marker["wire_root_id"] != expected.wire_root_id:
                 raise RelationViolationError("old private route identity changed")
         _require_unchanged_archive_source(old, archive)
-        with _store_lock(new.bus._path):
-            marker = new.bus._private_marker_unlocked()
+        with new.bus.log.locked():
+            marker = new.bus.log._private_marker_unlocked()
             if (
                 marker.get("claim_envelopes_version") != 1
                 or marker["last_seq"] != 0
-                or (new.bus._path.exists() and new.bus._path.stat().st_size != 0)
+                or (new.bus.log.path.exists() and new.bus.log.path.stat().st_size != 0)
             ):
                 raise RelationViolationError("replacement route changed before publication")
         _publish_active_route_locked(replacement, path, directory, expected=expected)
@@ -377,8 +376,8 @@ def withdraw_active_route(
         if read_active_route(path) != expected:
             raise ValueError("active comms route is not the expected private root")
         comms = Comms(expected.root)
-        with _store_lock(comms.bus._path):
-            marker = comms.bus._private_marker_unlocked()
+        with comms.bus.log.locked():
+            marker = comms.bus.log._private_marker_unlocked()
         if marker["wire_root_id"] != expected.wire_root_id:
             raise RelationViolationError("active comms route root ID changed")
         receipt = archive_stopped_root(comms, archive_destination)

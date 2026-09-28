@@ -160,7 +160,7 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
         before_wait = legacy.registry.snapshot()
         GoalWaits(legacy.root / "goal_waits.json").record(
             GoalWait(
-                "stage-goal", "old-wait", 0, legacy.bus.latest_sequence(),
+                "stage-goal", "old-wait", 0, legacy.bus.log.latest_sequence(),
                 (GoalWaitTarget("receiver", before_wait.threads["receiver"].created_at),),
                 owner_created_at=before_wait.threads["sender"].created_at,
                 target_turn_generations=(None,),
@@ -207,7 +207,7 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
         root_id, selected = stage_private_participants(
             legacy, private, archive, inventory, ["sender", "receiver"]
         )
-        assert private.bus._private_marker_unlocked()["claim_envelopes_version"] == 1
+        assert private.bus.log._private_marker_unlocked()["claim_envelopes_version"] == 1
         assert (private.root / "private_bus_checkpoint.sqlite3").is_file()
         assert json.loads((private.root / "bus_meta.json").read_text())["checkpoint_version"] == 1
         staged = private.registry.require("sender")
@@ -236,7 +236,7 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
             replace(private.registry.require("receiver"), pid=os.getpid()), RunningThreadStatus()
         )
         message = private.messaging.send_initial_cohort("sender", "receiver", "new private input")
-        initial = private.bus.read_initial_cohort(root_id, message.seq)
+        initial = private.bus.log.read_initial_cohort(root_id, message.seq)
         assert initial.audience.recipients[0].canonical_thread == "receiver"
         assert [item.body for item in legacy.bus.inbox("receiver")] == ["old pending message"]
         with pytest.raises(RelationViolationError, match="fresh private root"):

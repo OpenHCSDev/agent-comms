@@ -208,7 +208,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             with pytest.raises(NativePiUnavailable):
                 await agent._drain_private_nk("beta", root_id)
             assert len(calls) == 1 and resource.read_bytes() == b"before\n"
-            assert not list(Comms(root).bus.claim_projection())
+            assert not list(Comms(root).bus.log.claim_projection())
             await agent.shutdown()
             return
         if scenario in {"reconnect", "lost_process_state"}:
@@ -227,7 +227,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             return
         assert await agent._drain_private_nk("beta", root_id) == 1
         assert len(calls) == 1 and resource.read_bytes() == b"after selected\n"
-        claim = Comms(root).bus.claim_projection()[str(resource)]
+        claim = Comms(root).bus.log.claim_projection()[str(resource)]
         assert (
             claim.admission is not None and claim.admission.operation_id == receipt["operationId"]
         )
@@ -365,7 +365,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             result = event("terminal")
             assert result["pid"] == process.pid and result["drained"] == 1
             assert result["fake_inputs"] == 1 and resource.read_bytes() == b"after second pid\n"
-            owner = Comms(root).bus.claim_projection()[str(resource)]
+            owner = Comms(root).bus.log.claim_projection()[str(resource)]
             assert owner.owner == "beta" and owner.admission is not None
             with MutationStore(str(root / "coordination.sqlite3")) as store:
                 assert (

@@ -17,7 +17,6 @@ from pathlib import Path
 from .comms import Comms
 from .coordination_store import IdentityConflict, PublicationActivationBlocked
 from .native_pi import _private_session_dir
-from .store_files import _store_lock
 
 
 def publish_one(
@@ -35,8 +34,8 @@ def publish_one(
         raise PublicationActivationBlocked("cohort sender requires a private /var/tmp root")
     _private_session_dir(root)
     comms = Comms(root, private_initial_writes=True)
-    with _store_lock(comms.bus._path):
-        marker = comms.bus._private_marker_unlocked()
+    with comms.bus.log.locked():
+        marker = comms.bus.log._private_marker_unlocked()
     if marker["wire_root_id"] != wire_root_id:
         raise IdentityConflict("private initial wire root changed")
     message = comms.messaging.send_initial_cohort(sender, target, body)

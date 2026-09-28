@@ -64,9 +64,9 @@ def _store_lock(
                 bus_info = store_path.lstat()
                 if not stat.S_ISREG(bus_info.st_mode) or bus_info.st_size > max_bus_bytes:
                     raise RelationViolationError("Bus exceeds bounded read budget.")
-            from .bus_durability import _verify_claim_bus_before_read_unlocked
+            from .wire_log import WireLog
 
-            _verify_claim_bus_before_read_unlocked(store_path)
+            WireLog(store_path).verify_before_read_unlocked()
             yield lock_file.fileno()
         finally:
             if os.name == "nt":

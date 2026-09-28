@@ -36,7 +36,7 @@ def test_alias_declaration_drives_lookup_delivery_history_and_audience(monkeypat
     assert "everyone" in comms.channels.catalog.history_targets("everyone")
     message = Message("alice", "everyone", "hello", MessageType.INFO, sender_role=ThreadRole.USER)
     assert message.response_policy.starts_turn
-    comms.bus.send(message)
+    comms.bus.publisher.publish(message).message_id
     assert comms.views.channel_history("everyone")[0].target == BuiltinChannel.ALL.value
     assert comms.bus.pending_count("bob") == 1
     assert not BuiltinChannel.exact_stored_target("everyone")

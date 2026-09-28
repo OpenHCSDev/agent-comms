@@ -78,7 +78,7 @@ class Messaging:
                 ]
                 if len(set(incarnations)) != len(incarnations):
                     raise RelationViolationError("Registry creation identities collide.")
-                committed = self.bus.publish_claim_envelope(
+                committed = self.bus.publisher.publish_claim_envelope(
                     message,
                     worktree=Path(owner.worktree),
                     incarnation=str(owner.created_at),
@@ -86,7 +86,7 @@ class Messaging:
                     releases=releases,
                 )
             else:
-                committed = self.bus.publish_ordinary(message)
+                committed = self.bus.publisher.publish_ordinary(message)
         # Pure memory notification and daemon scheduling occur only AFTER the
         # canonical wire/bus publication locks are released. Projection errors
         # can never turn a committed original into an apparent failed send.
@@ -101,12 +101,12 @@ class Messaging:
     def initialize_private_initial_protocol(self) -> str:
         """Initialize the private protocol on a fresh owner-only root."""
         with _store_lock(self._wire_lock_path):
-            return self.bus.initialize_private_protocol()
+            return self.bus.publisher.initialize_private_protocol()
 
     def initialize_private_claim_protocol(self) -> str:
         """Initialize the claim read barrier on a fresh marked private bus."""
         with _store_lock(self._wire_lock_path):
-            return self.bus.initialize_private_claim_protocol()
+            return self.bus.publisher.initialize_private_claim_protocol()
 
     def send_initial_cohort(
         self,
@@ -121,7 +121,7 @@ class Messaging:
         with _store_lock(self._wire_lock_path):
             if sender not in self.registry or not self.registry.require(sender).role.executable:
                 raise RelationViolationError("Initial sender must be a registered executable.")
-            committed = self.bus.publish_initial_cohort(
+            committed = self.bus.publisher.publish_initial_cohort(
                 Message(sender=sender, target=target, body=body, type=type, notice=notice)
             )
         try:
@@ -144,7 +144,7 @@ class Messaging:
             if isinstance(receipt.get("message"), dict):
                 message = Message.from_wire(receipt["message"])
                 return message if message.message_id == receipt["id"] else None
-            return self.bus.message_by_id(receipt["id"])
+            return self.bus.log.message_by_id(receipt["id"])
         except (ValueError, KeyError, TypeError):
             return None
 
@@ -177,7 +177,7 @@ class Messaging:
         # remains held through the actual bus publication on an old root.
         with guard_legacy_root_write(self.root), _store_lock(self._wire_lock_path):
             user = self._user_identity_under_wire_lock(worktree)
-            committed = self.bus.publish_ordinary(
+            committed = self.bus.publisher.publish_ordinary(
                 Message(user.name, target, body, MessageType.INFO),
                 _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
             )

@@ -81,7 +81,7 @@ def test_original_identity_and_no_delivery_authority(migrated):
     assert [m.to_wire() for m in historical] == [m.to_wire() for m in original]
     assert all(m.sender_created_at == 10.0 for m in historical)
     assert len(live.bus.incoming_page("bob", after=0).messages) == 2
-    assert live.bus.latest_sequence() == 4
+    assert live.bus.log.latest_sequence() == 4
     assert live.views.attach_history(old.root) == source
     assert len(live.bus.history_sources()) == 2
 
@@ -167,7 +167,7 @@ def test_normal_comms_api_contains_history_and_execution_stays_live(migrated):
             assert not message.starts_turn
             assert not message.starts_turn_for("bob")
             assert message.to_display_wire()["history"]["source"] == message.source.original_root
-    assert len(live.bus.full_history()) == 4
+    assert len(live.bus.log.full_history()) == 4
 
 
 def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path):
@@ -191,7 +191,7 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
 
 def test_older_than_registry_incarnation_stays_unattributed(migrated):
     _, _, live, source = migrated
-    original = live.bus.full_history()[0]
+    original = live.bus.log.full_history()[0]
     projected = HistoricalMessage.project(
         replace(original, timestamp=1.0), source, 0, source.registry().snapshot()
     )

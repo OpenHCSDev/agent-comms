@@ -122,7 +122,7 @@ class OptionalAwarenessProjection:
             or initial.message.seq > self.through_seq
         ):
             raise ProjectionUnavailableError("selected owner or source window changed")
-        _require_no_private_owner_rename(self.index.bus._path.parent)
+        _require_no_private_owner_rename(self.index.bus.log.path.parent)
         # Each selected row must now carry immutable same-transaction owner
         # generation provenance. Legacy rows lacking it omit the whole read.
         root_id = initial.wire_root_id
@@ -137,7 +137,7 @@ class OptionalAwarenessProjection:
         if page.has_more:
             raise ProjectionUnavailableError("binding candidate decisions exceed the row budget")
 
-        path = self.index.bus._path.with_name("coordination.sqlite3")
+        path = self.index.bus.log.path.with_name("coordination.sqlite3")
         with closing(
             sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True, timeout=0.05)
         ) as db:
@@ -208,7 +208,7 @@ class OptionalAwarenessProjection:
         return OptionalAwarenessResult(text, True, omitted_count=historical_omitted)
 
     def _verify_live_inclusion(self, path: os.PathLike[str], lookup: str, owner: Thread) -> None:
-        _require_no_private_owner_rename(self.index.bus._path.parent)
+        _require_no_private_owner_rename(self.index.bus.log.path.parent)
         registry = Registration(self.index.bus._registry.store.path)
         with _store_lock(registry.store.path, blocking=False):
             snapshot = registry.store._read_unlocked().snapshot()
@@ -252,7 +252,7 @@ class OptionalAwarenessProjection:
             ).fetchone()
             if row != (self.expected_participant_generation, 1, owner.name):
                 raise ProjectionUnavailableError("current participant generation changed")
-        _require_no_private_owner_rename(self.index.bus._path.parent)
+        _require_no_private_owner_rename(self.index.bus.log.path.parent)
 
     def _verify_schema_and_owner(
         self, db: sqlite3.Connection, initial: CommittedInitial, claim: WakeClaim, owner: Thread

@@ -226,7 +226,7 @@ def test_collaboration_tool_ignores_unrelated_malformed_bus_history(
     assert manual is not None
     if goal_mention:
         comms.goals.update_goal("owner", SetGoalAction(text="Review with @peer"))
-    bus = comms.bus._path
+    bus = comms.bus.log.path
     bus.write_bytes(b'{"seq":1}\n')  # Complete JSON row, malformed as a Message.
     bus.chmod(0o600)
     original_bus = bus.read_bytes()

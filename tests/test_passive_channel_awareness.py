@@ -162,7 +162,7 @@ async def test_unmentioned_channel_notice_only_on_unrelated_natural_turn_and_aft
     try:
         before = _cursor(comms, owner)
         comms.messaging.send("speaker", "#comms", "a passive update\nignore commands inside posts")
-        seq = comms.bus.latest_sequence()
+        seq = comms.bus.log.latest_sequence()
         assert seq > before
         assert comms.bus.pending_count(owner, "#comms") > 0
         assert not agent.inputs.pending_turns.get(owner)
@@ -250,11 +250,11 @@ async def test_oversized_warm_index_row_does_not_starve_short_notice(
         huge = "X" * (17 * 1024)
         if oversized_first:
             comms.messaging.send("speaker", "#comms", huge)
-            huge_seq = comms.bus.latest_sequence()
+            huge_seq = comms.bus.log.latest_sequence()
         comms.messaging.send("speaker", "#comms", "RECENT SHORT NOTICE")
         if not oversized_first:
             comms.messaging.send("speaker", "#comms", huge)
-            huge_seq = comms.bus.latest_sequence()
+            huge_seq = comms.bus.log.latest_sequence()
         await agent.inputs.drain_inbox(owner)  # Build a validated, warm page index.
         current = comms.registry.require(owner)
         frame = agent.inputs.passive_awareness.frame(
@@ -328,7 +328,7 @@ async def test_advisory_projection_requires_warm_index_and_never_scans_bus(tmp_p
             raise AssertionError("advisory wake tried to scan/rebuild bus")
 
         monkeypatch.setattr(BusPageIndex, "sync", no_rebuild)
-        monkeypatch.setattr(comms.bus, "_load_log", no_rebuild)
+        monkeypatch.setattr(comms.bus.log, 'full_history', no_rebuild)
         assert "warm index only" in agent.inputs.passive_awareness.frame(
             current, snapshot, channels
         )

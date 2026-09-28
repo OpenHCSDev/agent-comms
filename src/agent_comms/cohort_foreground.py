@@ -63,8 +63,8 @@ def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool
     _trusted_package(native_package)
     comms = Comms(root)
     bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
-    with _store_lock(bus._path):
-        marker = bus._private_marker_unlocked()
+    with bus.log.locked():
+        marker = bus.log._private_marker_unlocked()
     if marker["wire_root_id"] != wire_root_id:
         raise IdentityConflict("private initial wire root changed")
 
@@ -84,14 +84,14 @@ def _accept_visible_initials(
     before the SQL transaction. All N identities must already be registered.
     Never infer a cohort from an ordinary public message or its body.
     """
-    with _store_lock(bus._path):
-        _require_no_private_owner_rename(bus._path.parent)
-        marker = bus._private_marker_unlocked()
+    with bus.log.locked():
+        _require_no_private_owner_rename(bus.log.path.parent)
+        marker = bus.log._private_marker_unlocked()
         if marker["wire_root_id"] != root_id:
             raise IdentityConflict("private initial wire root changed")
         initials = tuple(
             initial
-            for _message, _receipt, initial in bus._verified_private_rows_unlocked(marker)
+            for _message, _receipt, initial in bus.log._verified_private_rows_unlocked(marker)
             if initial is not None
             and initial.message.seq > after_seq
             and any(
@@ -147,8 +147,8 @@ async def run_foreground_once(
     if selected_existing_file_write is not None:
         # Refuse an uninitialized claim protocol or permanently invalid
         # resource before owner registration or an irreversible native send.
-        with _store_lock(comms.bus._path):
-            marker = comms.bus._private_marker_unlocked()
+        with comms.bus.log.locked():
+            marker = comms.bus.log._private_marker_unlocked()
         if marker.get("claim_envelopes_version") != 1:
             raise PublicationActivationBlocked("selected file write needs a private claim protocol")
         normalize_existing_file(worktree, selected_existing_file_write.resource)

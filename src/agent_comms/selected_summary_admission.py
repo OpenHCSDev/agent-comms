@@ -1,4 +1,4 @@
-"""Default-OFF, process-local selected-summary input handoff capability.
+"""Process-local selected-summary input handoff capability.
 
 A terminal-looking SQLite row is never input authority. Only a successfully
 returned journal terminal transaction may mint this unpicklable one-use object.
@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, NoReturn
 
 from .backend import _session_revision
 from .compaction_journal import CompactionJournal, CompactionJournalError, _consume_selected_ack
+from .compaction_states import SummaryState
 
 if TYPE_CHECKING:
     from .input_disposition import InputDispositions
@@ -108,8 +109,7 @@ class SelectedSummaryAdmission:
         "_path",
         "_session",
         "_operation_id",
-        "_status",
-        "_commit_id",
+        "_state",
         "_source_json",
         "_identity",
         "_process_pid",
@@ -123,8 +123,7 @@ class SelectedSummaryAdmission:
         path: Path,
         session: str,
         operation_id: str,
-        status: str,
-        commit_id: str | None,
+        state: SummaryState,
         source_json: str,
         identity: SelectedAdmissionIdentity,
     ) -> None:
@@ -133,8 +132,7 @@ class SelectedSummaryAdmission:
         self._path = path
         self._session = session
         self._operation_id = operation_id
-        self._status = status
-        self._commit_id = commit_id
+        self._state = state
         self._source_json = source_json
         self._identity = identity
         self._process_pid = os.getpid()
@@ -152,12 +150,11 @@ class SelectedSummaryAdmission:
         path: Path,
         session: str,
         operation_id: str,
-        status: str,
-        commit_id: str | None,
+        state: SummaryState,
         source_json: str,
         identity: SelectedAdmissionIdentity,
     ) -> SelectedSummaryAdmission:
-        scope = (str(path), session, operation_id, status, commit_id, source_json)
+        scope = (str(path), session, operation_id, state, source_json)
         if not _consume_selected_ack(receipt, scope):
             raise CompactionJournalError("Exact returned terminal fsync ACK required")
         try:
@@ -168,13 +165,13 @@ class SelectedSummaryAdmission:
                 and identity.owner_pid == os.getpid()
                 and identity.session_revision is not None
                 and _session_revision(session) == identity.session_revision
-                and (status == "linked" or status == "declined-prestart")
+                and state.original_eligible
             )
         except (TypeError, ValueError, OSError):
             valid = False
         if not valid:
             raise CompactionJournalError("Selected acknowledgment identity or source changed")
-        return cls(_MINT, path, session, operation_id, status, commit_id, source_json, identity)
+        return cls(_MINT, path, session, operation_id, state, source_json, identity)
 
     def invalidate(self) -> None:
         """Burn a stale owner/turn attempt before a future authority ABA."""
@@ -220,27 +217,16 @@ class SelectedSummaryAdmission:
             attempt = journal.selected_summary(self._operation_id)
             if (
                 attempt.session_file != self._session
-                or attempt.status != self._status
-                or attempt.commit_id != self._commit_id
+                or attempt.state != self._state
                 or attempt.source_json != self._source_json
                 or len(journal.blocking_selected_summary(session_file)) != 1
                 or journal.unresolved(session_file)
             ):
                 return False
-            if self._status == "linked":
-                if self._commit_id is None:
-                    return False
-                commit = journal.get(self._commit_id)
-                intent = json.loads(commit.intent_json)
-                if (
-                    commit.session_file != self._session
-                    or commit.status != "committed"
-                    or type(intent) is not dict
-                    or intent.get("selectedSummaryOperationId") != self._operation_id
-                    or intent.get("selectedSummarySourceDigest")
-                    != hashlib.sha256(self._source_json.encode()).hexdigest()
-                ):
-                    return False
+            if not self._state.verifies_original(
+                journal, self._session, self._operation_id, self._source_json
+            ):
+                return False
             row = dispositions.get(identity.ingress_key)
             if (
                 row is None

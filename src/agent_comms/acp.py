@@ -69,7 +69,6 @@ from .runtime import (
 from .selected_write_plan import PlannedWrite, SelectedWritePlans
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
-from .store_files import _store_lock
 from .threads import Thread
 from .transcript_updates import TranscriptUpdate
 from .turn_effects import TurnEffects
@@ -575,7 +574,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         fall back to their legacy ACK path.
         """
         marker_path = self._comms.root / "bus_meta.json"
-        with _store_lock(self._comms.bus._path):
+        with self._comms.bus.log.locked():
             if marker_path.is_symlink():
                 raise IdentityConflict("ACP bus marker is redirected")
             if not marker_path.exists():
@@ -587,7 +586,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             if type(metadata) is not dict:
                 raise IdentityConflict("ACP bus marker is not an object")
             if "writer_protocol_version" in metadata:
-                guarded = self._comms.bus._private_marker_unlocked()
+                guarded = self._comms.bus.log._private_marker_unlocked()
                 return str(guarded["wire_root_id"])
             if (
                 set(metadata) != {"last_seq"}

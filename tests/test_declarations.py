@@ -127,7 +127,7 @@ def test_private_bus_rejects_unattestable_windows_ownership(tmp_path: Path) -> N
     registry = Registration(tmp_path / "registry.json")
     bus = MessageBus(tmp_path / "bus.jsonl", registry, private_initial_writes=True)
     with pytest.raises(RelationViolationError, match="POSIX ownership"):
-        bus.initialize_private_protocol()
+        bus.publisher.initialize_private_protocol()
 
 
 class TestAgentRuntimeInfo:
@@ -698,45 +698,45 @@ class TestMessageBus:
 
     def test_send_returns_id(self, tmp_path: Path):
         bus = self._bus(tmp_path)
-        mid = bus.send(Message(sender="a", target="b", body="x", type=MessageType.INFO))
+        mid = bus.publisher.publish(Message(sender="a", target="b", body="x", type=MessageType.INFO)).message_id
         assert isinstance(mid, str) and len(mid) == 12
 
     def test_fail_closed_unregistered_sender(self, tmp_path: Path):
         bus = self._bus(tmp_path)
         with pytest.raises(UnregisteredThreadError, match="Sender"):
-            bus.send(Message(sender="ghost", target="b", body="x", type=MessageType.INFO))
+            bus.publisher.publish(Message(sender="ghost", target="b", body="x", type=MessageType.INFO)).message_id
 
     def test_fail_closed_unregistered_target(self, tmp_path: Path):
         bus = self._bus(tmp_path)
         with pytest.raises(UnregisteredThreadError, match="Target"):
-            bus.send(Message(sender="a", target="ghost", body="x", type=MessageType.INFO))
+            bus.publisher.publish(Message(sender="a", target="ghost", body="x", type=MessageType.INFO)).message_id
 
     def test_broadcast_target_accepted(self, tmp_path: Path):
         bus = self._bus(tmp_path)
-        bus.send(Message(sender="a", target="broadcast", body="x", type=MessageType.INFO))
-        assert bus.total_messages() == 1
+        bus.publisher.publish(Message(sender="a", target="broadcast", body="x", type=MessageType.INFO)).message_id
+        assert bus.log.total_messages() == 1
 
     def test_inbox_excludes_self_sent(self, tmp_path: Path):
         bus = self._bus(tmp_path)
-        bus.send(Message(sender="a", target="b", body="x", type=MessageType.INFO))
+        bus.publisher.publish(Message(sender="a", target="b", body="x", type=MessageType.INFO)).message_id
         assert bus.inbox("a") == []
         assert len(bus.inbox("b")) == 1
 
     def test_seq_cursor_not_hash_order(self, tmp_path: Path):
         """Regression: read cursor must be monotonic seq, never hash order."""
         bus = self._bus(tmp_path)
-        bus.send(Message(sender="a", target="b", body="first", type=MessageType.INFO))
+        bus.publisher.publish(Message(sender="a", target="b", body="first", type=MessageType.INFO)).message_id
         bus.mark_delivered("b")
         # A later message whose hash happens to sort before the first id
         # must still be delivered.
-        bus.send(Message(sender="a", target="b", body="second", type=MessageType.INFO))
+        bus.publisher.publish(Message(sender="a", target="b", body="second", type=MessageType.INFO)).message_id
         inbox = bus.inbox("b")
         assert len(inbox) == 1 and inbox[0].body == "second"
 
     def test_seq_monotonic_across_many_sends(self, tmp_path: Path):
         bus = self._bus(tmp_path)
         for i in range(10):
-            bus.send(Message(sender="a", target="b", body=f"m{i}", type=MessageType.INFO))
+            bus.publisher.publish(Message(sender="a", target="b", body=f"m{i}", type=MessageType.INFO)).message_id
         seqs = [m.seq for m in bus.inbox("b")]
         assert seqs == list(range(1, 11))
 
@@ -750,16 +750,16 @@ class TestMessageBus:
             root = Path(dirname)
             bus = self._bus(root)
             for body in ("first", "second"):
-                bus.send(Message(sender="a", target="b", body=body, type=MessageType.INFO))
+                bus.publisher.publish(Message(sender="a", target="b", body=body, type=MessageType.INFO)).message_id
             if private:
                 sequence_path = root / "bus_meta.json"
                 marker = json.loads(sequence_path.read_text())
                 marker.update(writer_protocol_version=1, wire_root_id="a" * 32)
                 sequence_path.write_text(json.dumps(marker))
                 sequence_path.chmod(0o600)
-                bus._path.chmod(0o600)
+                bus.log.path.chmod(0o600)
                 _test_only_guard_for_handcrafted_marker(bus._registry)
-                bus = MessageBus(bus._path, bus._registry, private_response_writes=True)
+                bus = MessageBus(bus.log.path, bus._registry, private_response_writes=True)
 
             original_fsync = os.fsync
 
@@ -775,26 +775,26 @@ class TestMessageBus:
                         intended = Message(
                             sender="a", target="b", body="interrupted", type=MessageType.INFO
                         )
-                        bus.publish_keyed_response(response_intent(intended))
+                        bus.publisher.publish_keyed_response(response_intent(intended))
                     else:
-                        bus.send(
+                        bus.publisher.publish(
                             Message(
                                 sender="a", target="b", body="interrupted", type=MessageType.INFO
                             )
-                        )
+                        ).message_id
 
-            reopened = MessageBus(bus._path, bus._registry, private_response_writes=private)
-            assert [message.seq for message in reopened.views.full_history()] == [1, 2]
+            reopened = MessageBus(bus.log.path, bus._registry, private_response_writes=private)
+            assert [message.seq for message in reopened.log.full_history()] == [1, 2]
             if private:
                 next_message = Message(
                     sender="a", target="b", body="after restart", type=MessageType.INFO
                 )
-                reopened.publish_keyed_response(response_intent(next_message))
+                reopened.publisher.publish_keyed_response(response_intent(next_message))
             else:
-                reopened.messaging.send(
+                reopened.publisher.publish(
                     Message(sender="a", target="b", body="after restart", type=MessageType.INFO)
                 )
-            sequences = [message.seq for message in reopened.views.full_history()]
+            sequences = [message.seq for message in reopened.log.full_history()]
             assert sequences == [1, 2, 4]
 
     @pytest.mark.skipif(os.name != "posix", reason="real /var/tmp durability fixture")
@@ -808,12 +808,12 @@ class TestMessageBus:
             root = Path(dirname)
             bus = self._bus(root)
             for body in ("first", "second"):
-                bus.send(Message(sender="a", target="b", body=body, type=MessageType.INFO))
+                bus.publisher.publish(Message(sender="a", target="b", body=body, type=MessageType.INFO)).message_id
             sequence_path = root / "bus_meta.json"
             old_metadata = sequence_path.read_bytes()
-            bus.send(Message(sender="a", target="b", body="third", type=MessageType.INFO))
+            bus.publisher.publish(Message(sender="a", target="b", body="third", type=MessageType.INFO)).message_id
             if unterminated:
-                bus._path.write_bytes(bus._path.read_bytes()[:-1])
+                bus.log.path.write_bytes(bus.log.path.read_bytes()[:-1])
 
             # Deterministic crash cut: the last fsynced row survives while an
             # older metadata directory entry is recovered on reboot.
@@ -824,15 +824,15 @@ class TestMessageBus:
             else:
                 sequence_path.unlink()
 
-            reopened = MessageBus(bus._path, bus._registry)
-            reopened.messaging.send(Message(sender="a", target="b", body="new", type=MessageType.INFO))
-            assert [message.seq for message in reopened.views.full_history()] == [1, 2, 3, 4]
+            reopened = MessageBus(bus.log.path, bus._registry)
+            reopened.publisher.publish(Message(sender="a", target="b", body="new", type=MessageType.INFO))
+            assert [message.seq for message in reopened.log.full_history()] == [1, 2, 3, 4]
 
     def test_ack_only_clears_up_to_latest(self, tmp_path: Path):
         bus = self._bus(tmp_path)
-        bus.send(Message(sender="a", target="b", body="1", type=MessageType.INFO))
+        bus.publisher.publish(Message(sender="a", target="b", body="1", type=MessageType.INFO)).message_id
         bus.mark_delivered("b")
-        bus.send(Message(sender="a", target="b", body="2", type=MessageType.INFO))
+        bus.publisher.publish(Message(sender="a", target="b", body="2", type=MessageType.INFO)).message_id
         assert [m.body for m in bus.inbox("b")] == ["2"]
 
     def test_fail_closed_inbox_unknown_thread(self, tmp_path: Path):
@@ -846,7 +846,7 @@ class TestMessageBus:
         for name in ("a", "b"):
             registry.register(Thread(name=name, tags=frozenset(), worktree="/wt"))
         bus = MessageBus(path, registry)
-        mid = bus.send(Message(sender="a", target="b", body="x", type=MessageType.ALERT))
+        mid = bus.publisher.publish(Message(sender="a", target="b", body="x", type=MessageType.ALERT)).message_id
         lines = [json.loads(line) for line in path.read_text().splitlines()]
         assert lines[0]["type"] == "alert" and lines[0]["id"] == mid
         # The bus assigns the sequence number at send time.
@@ -856,14 +856,14 @@ class TestMessageBus:
         bus = self._bus(tmp_path)
         for index in range(8):
             target = "#all" if index != 4 else "b"
-            bus.send(
+            bus.publisher.publish(
                 Message(
                     sender="a",
                     target=target,
                     body=f"m{index + 1}",
                     type=MessageType.INFO,
                 )
-            )
+            ).message_id
 
         latest = bus.channel_history_page("#all", limit=3)
         assert [message.seq for message in latest.messages] == [6, 7, 8]
@@ -890,7 +890,7 @@ class TestMessageBus:
         bus = self._bus(tmp_path)
         target = "b" if route == "dm" else "#all"
         for body in ("a" * 120_000, "b" * middle_bytes, "small"):
-            bus.send(Message(sender="a", target=target, body=body, type=MessageType.INFO))
+            bus.publisher.publish(Message(sender="a", target=target, body=body, type=MessageType.INFO)).message_id
 
         def page(after):
             if route == "channel":
@@ -915,9 +915,9 @@ class TestMessageBus:
     def test_private_sideband_does_not_change_public_history_page_budget(self, tmp_path: Path):
         bus = self._bus(tmp_path)
         for body in ("first", "second", "third"):
-            bus.send(Message(sender="a", target="#all", body=body, type=MessageType.INFO))
+            bus.publisher.publish(Message(sender="a", target="#all", body=body, type=MessageType.INFO)).message_id
 
-        lines = bus._path.read_bytes().splitlines(keepends=True)
+        lines = bus.log.path.read_bytes().splitlines(keepends=True)
         public_budget = len(lines[0]) + len(lines[1])
         before = bus.channel_history_page("#all", after=0, max_bytes=public_budget)
         assert [message.body for message in before.messages] == ["first", "second"]
@@ -926,11 +926,11 @@ class TestMessageBus:
         private = json.loads(lines[0])
         private[PRIVATE_WIRE_FIELD] = {"receipt": "SECRET" * 1024}
         lines[0] = (json.dumps(private) + "\n").encode()
-        bus._path.write_bytes(b"".join(lines))
+        bus.log.path.write_bytes(b"".join(lines))
 
         after = bus.channel_history_page("#all", after=0, max_bytes=public_budget)
         assert after == before
-        with bus._record_snapshot() as (_, records):
+        with bus.log._record_snapshot() as (_, records):
             first, charged_bytes = next(records)
         assert first.body == "first"
         assert charged_bytes == len(json.dumps(first.to_wire()).encode()) + 1
@@ -939,21 +939,21 @@ class TestMessageBus:
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     def test_keyed_response_receipt_is_same_row_and_reopens_without_reappend(self, tmp_path: Path):
         legacy = self._bus(tmp_path)
-        legacy.send(Message(sender="a", target="#all", body="legacy", type=MessageType.INFO))
-        legacy._path.chmod(0o600)
-        sequence_path = legacy._path.parent / "bus_meta.json"
+        legacy.publisher.publish(Message(sender="a", target="#all", body="legacy", type=MessageType.INFO))
+        legacy.log.path.chmod(0o600)
+        sequence_path = legacy.log.path.parent / "bus_meta.json"
         metadata = json.loads(sequence_path.read_text())
         metadata.update(writer_protocol_version=1, wire_root_id="a" * 32)
         sequence_path.write_text(json.dumps(metadata))
         _test_only_guard_for_handcrafted_marker(legacy._registry)
-        keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+        keyed = MessageBus(legacy.log.path, legacy._registry, private_response_writes=True)
         intended = Message(
             sender="a", target="#all", body="response", type=MessageType.INFO, timestamp=42.5
         )
         key = canonical_publication_key("execution-1", "#all")
 
-        stored = keyed.publish_keyed_response(response_intent(intended))
-        rows = [json.loads(line) for line in legacy._path.read_text().splitlines()]
+        stored = keyed.publisher.publish_keyed_response(response_intent(intended))
+        rows = [json.loads(line) for line in legacy.log.path.read_text().splitlines()]
         public = stored.to_wire()
         assert rows[1] == {
             **public,
@@ -968,14 +968,14 @@ class TestMessageBus:
             },
         }
         assert PRIVATE_WIRE_FIELD not in public
-        original_bus = legacy._path.read_bytes()
+        original_bus = legacy.log.path.read_bytes()
         original_meta = sequence_path.read_bytes()
-        reopened = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
-        assert reopened.publish_keyed_response(response_intent(intended)) == stored
-        assert legacy._path.read_bytes() == original_bus
+        reopened = MessageBus(legacy.log.path, legacy._registry, private_response_writes=True)
+        assert reopened.publisher.publish_keyed_response(response_intent(intended)) == stored
+        assert legacy.log.path.read_bytes() == original_bus
         assert sequence_path.read_bytes() == original_meta
         with pytest.raises(RelationViolationError, match="intent conflicts"):
-            reopened.publish_keyed_response(
+            reopened.publisher.publish_keyed_response(
                 response_intent(
                     Message(
                         sender="a",
@@ -987,16 +987,16 @@ class TestMessageBus:
                 )
             )
         with pytest.raises(RelationViolationError, match="Legacy append"):
-            legacy.send(
+            legacy.publisher.publish(
                 Message(sender="a", target="#all", body="old writer", type=MessageType.INFO)
             )
         with pytest.raises(RelationViolationError, match="Private bus protocol"):
             legacy.remove_thread("b")
-        assert legacy._path.read_bytes() == original_bus
+        assert legacy.log.path.read_bytes() == original_bus
         legacy._registry.rename("a", "renamed")
-        renamed_reopen = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
-        assert renamed_reopen.publish_keyed_response(response_intent(intended)) == stored
-        assert legacy._path.read_bytes() == original_bus
+        renamed_reopen = MessageBus(legacy.log.path, legacy._registry, private_response_writes=True)
+        assert renamed_reopen.publisher.publish_keyed_response(response_intent(intended)) == stored
+        assert legacy.log.path.read_bytes() == original_bus
         assert sequence_path.read_bytes() == original_meta
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
@@ -1013,11 +1013,11 @@ class TestMessageBus:
         )
         sequence_path.chmod(0o600)
         before = sequence_path.read_bytes()
-        keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+        keyed = MessageBus(legacy.log.path, legacy._registry, private_response_writes=True)
         message = Message(sender="a", target="#all", body="reply", type=MessageType.INFO)
         with pytest.raises(RelationViolationError, match="protocol marker"):
-            keyed.publish_keyed_response(response_intent(message))
-        assert not legacy._path.exists()
+            keyed.publisher.publish_keyed_response(response_intent(message))
+        assert not legacy.log.path.exists()
         assert sequence_path.read_bytes() == before
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
@@ -1029,11 +1029,11 @@ class TestMessageBus:
             '"wire_root_id":"' + "a" * 32 + '"}'
         )
         sequence_path.chmod(0o600)
-        keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+        keyed = MessageBus(legacy.log.path, legacy._registry, private_response_writes=True)
         message = Message(sender="a", target="#all", body="reply", type=MessageType.INFO)
         before = sequence_path.read_bytes()
         with pytest.raises(RelationViolationError, match="protocol marker"):
-            keyed.publish_keyed_response(response_intent(message))
+            keyed.publisher.publish_keyed_response(response_intent(message))
         assert sequence_path.read_bytes() == before
         sequence_path.write_text(
             json.dumps(
@@ -1043,8 +1043,8 @@ class TestMessageBus:
         _test_only_guard_for_handcrafted_marker(legacy._registry)
         before = sequence_path.read_bytes()
         with pytest.raises(RelationViolationError, match="sequence is exhausted"):
-            keyed.publish_keyed_response(response_intent(message))
-        assert not legacy._path.exists()
+            keyed.publisher.publish_keyed_response(response_intent(message))
+        assert not legacy.log.path.exists()
         assert sequence_path.read_bytes() == before
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
@@ -1057,13 +1057,13 @@ class TestMessageBus:
         sequence_path.chmod(0o600)
         _test_only_guard_for_handcrafted_marker(legacy._registry)
         intended = Message(sender="a", target="b", body="response", type=MessageType.INFO)
-        keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
-        stored = keyed.publish_keyed_response(response_intent(intended))
-        before = legacy._path.read_bytes(), sequence_path.read_bytes()
+        keyed = MessageBus(legacy.log.path, legacy._registry, private_response_writes=True)
+        stored = keyed.publisher.publish_keyed_response(response_intent(intended))
+        before = legacy.log.path.read_bytes(), sequence_path.read_bytes()
         legacy._registry.rename("b", "renamed")
-        reopened = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
-        assert reopened.publish_keyed_response(response_intent(intended)) == stored
-        assert (legacy._path.read_bytes(), sequence_path.read_bytes()) == before
+        reopened = MessageBus(legacy.log.path, legacy._registry, private_response_writes=True)
+        assert reopened.publisher.publish_keyed_response(response_intent(intended)) == stored
+        assert (legacy.log.path.read_bytes(), sequence_path.read_bytes()) == before
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     def test_keyed_writer_is_disabled_and_rejects_unsafe_or_corrupt_roots(self, tmp_path: Path):
@@ -1071,39 +1071,39 @@ class TestMessageBus:
         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
         intent = response_intent(intended)
         with pytest.raises(RelationViolationError, match="disabled"):
-            legacy.publish_keyed_response(intent)
-        keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+            legacy.publisher.publish_keyed_response(intent)
+        keyed = MessageBus(legacy.log.path, legacy._registry, private_response_writes=True)
         with pytest.raises(TypeError, match="validated PublicationIntent"):
-            keyed.publish_keyed_response(intended)  # type: ignore[arg-type]
+            keyed.publisher.publish_keyed_response(intended)  # type: ignore[arg-type]
         with pytest.raises(RelationViolationError, match="protocol marker"):
-            keyed.publish_keyed_response(intent)
+            keyed.publisher.publish_keyed_response(intent)
         metadata = {"last_seq": 0, "writer_protocol_version": 1, "wire_root_id": "a" * 32}
         (tmp_path / "bus_meta.json").write_text(json.dumps(metadata))
         (tmp_path / "bus_meta.json").chmod(0o600)
         _test_only_guard_for_handcrafted_marker(legacy._registry)
-        keyed.publish_keyed_response(intent)
-        original = legacy._path.read_bytes()
-        legacy._path.chmod(0o644)
+        keyed.publisher.publish_keyed_response(intent)
+        original = legacy.log.path.read_bytes()
+        legacy.log.path.chmod(0o644)
         with pytest.raises(RelationViolationError, match="owner-only"):
-            keyed.publish_keyed_response(intent)
-        assert legacy._path.read_bytes() == original
-        legacy._path.chmod(0o600)
-        legacy._path.write_bytes(original[:-1])
+            keyed.publisher.publish_keyed_response(intent)
+        assert legacy.log.path.read_bytes() == original
+        legacy.log.path.chmod(0o600)
+        legacy.log.path.write_bytes(original[:-1])
         with pytest.raises(RelationViolationError, match="Incomplete bus row"):
-            keyed.publish_keyed_response(intent)
+            keyed.publisher.publish_keyed_response(intent)
         duplicated = original.replace(
             b'"text": "response"', b'"text": "response", "text": "response"'
         )
         assert duplicated != original
-        legacy._path.write_bytes(duplicated)
+        legacy.log.path.write_bytes(duplicated)
         with pytest.raises(ValueError, match="Duplicate bus object key"):
-            keyed.publish_keyed_response(intent)
-        legacy._path.write_bytes(original)
-        record = json.loads(legacy._path.read_text())
+            keyed.publisher.publish_keyed_response(intent)
+        legacy.log.path.write_bytes(original)
+        record = json.loads(legacy.log.path.read_text())
         record[PRIVATE_WIRE_FIELD]["response"]["envelope_digest"] = "0" * 64
-        legacy._path.write_text(json.dumps(record) + "\n")
+        legacy.log.path.write_text(json.dumps(record) + "\n")
         with pytest.raises(RelationViolationError, match="malformed private bus receipt"):
-            keyed.publish_keyed_response(intent)
+            keyed.publisher.publish_keyed_response(intent)
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     @pytest.mark.parametrize(
@@ -1113,12 +1113,12 @@ class TestMessageBus:
         self, tmp_path: Path, broken: str
     ):
         legacy = self._bus(tmp_path)
-        legacy.send(
+        legacy.publisher.publish(
             Message(sender="a", target="#all", body="@b first", type=MessageType.INFO, notice=True)
         )
-        legacy.send(Message(sender="a", target="#all", body="second", type=MessageType.INFO))
-        legacy._path.chmod(0o600)
-        rows = [json.loads(line) for line in legacy._path.read_text().splitlines()]
+        legacy.publisher.publish(Message(sender="a", target="#all", body="second", type=MessageType.INFO))
+        legacy.log.path.chmod(0o600)
+        rows = [json.loads(line) for line in legacy.log.path.read_text().splitlines()]
         if broken == "missing":
             rows[0] = {"seq": 7}
         elif broken == "notice_bool":
@@ -1127,17 +1127,17 @@ class TestMessageBus:
             rows[0]["mentions"][0]["start"] = False  # False == 0, raw JSON differs.
         else:
             rows[1]["seq"] = 1 if broken == "duplicate" else 0
-        legacy._path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+        legacy.log.path.write_text("".join(json.dumps(row) + "\n" for row in rows))
         sequence_path = tmp_path / "bus_meta.json"
         metadata = json.loads(sequence_path.read_text())
         metadata.update(writer_protocol_version=1, wire_root_id="a" * 32)
         sequence_path.write_text(json.dumps(metadata))
-        before_log, before_meta = legacy._path.read_bytes(), sequence_path.read_bytes()
-        keyed = MessageBus(legacy._path, legacy._registry, private_response_writes=True)
+        before_log, before_meta = legacy.log.path.read_bytes(), sequence_path.read_bytes()
+        keyed = MessageBus(legacy.log.path, legacy._registry, private_response_writes=True)
         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
         with pytest.raises(RelationViolationError, match="Malformed public bus row"):
-            keyed.publish_keyed_response(response_intent(intended))
-        assert (legacy._path.read_bytes(), sequence_path.read_bytes()) == (before_log, before_meta)
+            keyed.publisher.publish_keyed_response(response_intent(intended))
+        assert (legacy.log.path.read_bytes(), sequence_path.read_bytes()) == (before_log, before_meta)
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     def test_keyed_append_checks_actual_custom_basename_repair_file(self, tmp_path: Path):
@@ -1156,7 +1156,7 @@ class TestMessageBus:
         keyed = MessageBus(path, legacy._registry, private_response_writes=True)
         intended = Message(sender="a", target="#all", body="response", type=MessageType.INFO)
         with pytest.raises(RelationViolationError, match="owner-only"):
-            keyed.publish_keyed_response(response_intent(intended))
+            keyed.publisher.publish_keyed_response(response_intent(intended))
         assert not path.exists()
         assert repair.read_text() == "old contents"
 
@@ -1169,28 +1169,28 @@ class TestMessageBus:
 
     def test_direct_legacy_remove_cannot_erase_unrelated_private_sideband(self, tmp_path: Path):
         bus = self._bus(tmp_path)
-        bus.send(Message(sender="a", target="b", body="purge", type=MessageType.INFO))
-        bus.send(Message(sender="a", target="#all", body="retain", type=MessageType.INFO))
-        lines = bus._path.read_bytes().splitlines(keepends=True)
+        bus.publisher.publish(Message(sender="a", target="b", body="purge", type=MessageType.INFO)).message_id
+        bus.publisher.publish(Message(sender="a", target="#all", body="retain", type=MessageType.INFO)).message_id
+        lines = bus.log.path.read_bytes().splitlines(keepends=True)
         retained = json.loads(lines[1])
         retained[PRIVATE_WIRE_FIELD] = {"publication_key": "SECRET"}
         lines[1] = (json.dumps(retained) + "\n").encode()
-        bus._path.write_bytes(b"".join(lines))
-        before_bus = bus._path.read_bytes()
-        sequence_path = bus._path.parent / "bus_meta.json"
+        bus.log.path.write_bytes(b"".join(lines))
+        before_bus = bus.log.path.read_bytes()
+        sequence_path = bus.log.path.parent / "bus_meta.json"
         before_meta = sequence_path.read_bytes()
 
         with pytest.raises(RelationViolationError, match="Private bus authority"):
             bus.remove_thread("b")
 
-        assert bus._path.read_bytes() == before_bus
+        assert bus.log.path.read_bytes() == before_bus
         assert sequence_path.read_bytes() == before_meta
-        assert [message.body for message in bus.full_history()] == ["purge", "retain"]
+        assert [message.body for message in bus.log.full_history()] == ["purge", "retain"]
 
     def test_dm_history_page_handles_aliases_and_byte_budget(self, tmp_path: Path):
         bus = self._bus(tmp_path)
-        bus.send(Message(sender="a", target="b", body="x" * 1000, type=MessageType.INFO))
-        bus.send(Message(sender="b", target="a", body="small", type=MessageType.INFO))
+        bus.publisher.publish(Message(sender="a", target="b", body="x" * 1000, type=MessageType.INFO)).message_id
+        bus.publisher.publish(Message(sender="b", target="a", body="small", type=MessageType.INFO)).message_id
         bus._registry.rename("a", "renamed")
 
         first = bus.dm_history_page("renamed", "b", after=0, max_bytes=10)
@@ -1206,26 +1206,26 @@ class TestMessageBus:
     ):
         bus = self._bus(tmp_path)
         for index in range(5):
-            bus.send(Message(sender="a", target="#all", body=str(index), type=MessageType.INFO))
+            bus.publisher.publish(Message(sender="a", target="#all", body=str(index), type=MessageType.INFO)).message_id
 
         monkeypatch.setattr(
-            bus,
-            "_load_log_unlocked",
+            bus.log,
+            "full_history",
             lambda: pytest.fail("paged paths must stream the log"),
         )
         assert bus.channel_history_page("#all", limit=2).newest_seq == 5
-        bus.send(Message(sender="a", target="#all", body="next", type=MessageType.INFO))
-        assert bus.latest_sequence() == 6
+        bus.publisher.publish(Message(sender="a", target="#all", body="next", type=MessageType.INFO)).message_id
+        assert bus.log.latest_sequence() == 6
 
     def test_unread_count_and_acknowledge_stream_the_log(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
         bus = self._bus(tmp_path)
         for index in range(5):
-            bus.send(Message(sender="a", target="b", body=str(index), type=MessageType.INFO))
+            bus.publisher.publish(Message(sender="a", target="b", body=str(index), type=MessageType.INFO)).message_id
         monkeypatch.setattr(
-            bus,
-            "_load_log_unlocked",
+            bus.log,
+            "full_history",
             lambda: pytest.fail("unread operations must stream the log"),
         )
 

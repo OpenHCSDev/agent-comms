@@ -75,7 +75,6 @@ from .optional_awareness_projection import OptionalAwarenessProjection
 from .private_registry_guard import _require_no_private_owner_rename
 from .private_sidecar import SidecarCommitUnknown, native_request_digest
 from .selected_write_plan import PlannedWrite
-from .store_files import _store_lock
 from .threads import Thread
 from .turn_lease import TurnLeaseFence
 from .wake import WakeDecision, derive_exact_reply_target
@@ -324,7 +323,7 @@ def _native_send_boundary(
     store_path = store.path
     # Prepare durable journal schema before the deadline-constrained raw
     # writer. A missing selected row must not mean a missing admission fence.
-    journal = CompactionJournal(bus._path.parent / "compaction-commits.sqlite3")
+    journal = CompactionJournal(bus.log.path.parent / "compaction-commits.sqlite3")
 
     @contextmanager
     def boundary(
@@ -356,7 +355,7 @@ def _native_send_boundary(
             # Rename may begin after reservation but before the isolated raw
             # send. Its wire-locked durable intent must fence the last
             # irreversible boundary, not just the outer turn entry.
-            _require_no_private_owner_rename(bus._path.parent)
+            _require_no_private_owner_rename(bus.log.path.parent)
             from .maintenance_barrier import MaintenanceBarrier
 
             MaintenanceBarrier(bus._registry.store.path).assert_open_unlocked()
@@ -483,7 +482,7 @@ def _native_send_boundary(
                 # reservation; the journal lock below covers file creation.
                 saved = actual_session_file.resolve(strict=False)
                 expected_dir = (
-                    bus._path.parent / "native-sessions" / claim.recipient_lookup
+                    bus.log.path.parent / "native-sessions" / claim.recipient_lookup
                 ).resolve(strict=True)
             except OSError as error:
                 raise IdentityConflict("native saved session unavailable before send") from error
@@ -538,7 +537,7 @@ def _require_selected(
     owner: Thread,
     generation: int,
 ) -> CommittedInitial:
-    initial = bus.read_initial_cohort(root_id, claim.wire_seq)
+    initial = bus.log.read_initial_cohort(root_id, claim.wire_seq)
     receipt = accept_initial_cohort(bus, root_id, claim.wire_seq, store).value
     if (
         receipt.message_id != claim.message_id
@@ -1022,9 +1021,9 @@ async def run_one_sealed_claim(
             raise IdentityConflict("selected tool cannot share an operator file plan")
     comms = Comms(root)
     bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
-    with _store_lock(bus._path):
+    with bus.log.locked():
         _require_no_private_owner_rename(root)
-        marker = bus._private_marker_unlocked()
+        marker = bus.log._private_marker_unlocked()
     if marker["wire_root_id"] != wire_root_id:
         raise IdentityConflict("private initial wire root changed")
     store = MutationStore(str(root / "coordination.sqlite3"))

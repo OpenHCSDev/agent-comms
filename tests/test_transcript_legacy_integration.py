@@ -134,8 +134,8 @@ def test_existing_stored_route_wins_and_plain_pages_never_scan_bus(tmp_path, mon
         str(session), ("input",), __import__("agent_comms").TurnRouting((message,), None)
     )
     monkeypatch.setattr(
-        comms.bus,
-        "_record_snapshot",
+        comms.bus.log,
+        '_record_snapshot',
         lambda **_: (_ for _ in ()).throw(
             AssertionError("Transcript pages should not scan the bus")
         ),

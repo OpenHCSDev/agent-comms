@@ -100,7 +100,7 @@ class InputDrain(FutureInputQueue):
         cursor, legacy = self.delivery_cursors.initialize(
             self.comms.registry.aliases_for(thread.name),
             thread.name,
-            high_water=self.comms.bus.latest_sequence(),
+            high_water=self.comms.bus.log.latest_sequence(),
             fresh=fresh,
         )
         with _store_lock(self.comms._wire_lock_path):
@@ -111,7 +111,7 @@ class InputDrain(FutureInputQueue):
                 self.passive_awareness.initialize(
                     owner,
                     admission=admission,
-                    high_water=self.comms.bus.latest_sequence(),
+                    high_water=self.comms.bus.log.latest_sequence(),
                     channels=self.comms.channels.catalog.targets_for(owner.tags),
                     fresh=fresh,
                 )
@@ -375,7 +375,7 @@ class InputDrain(FutureInputQueue):
             return 0
         pushed = 0
         after = self.inbox_cursors.get(session_id, 0)
-        high_water = self.comms.bus.latest_sequence()
+        high_water = self.comms.bus.log.latest_sequence()
         page = self.comms.bus.incoming_page(thread_name, after=after) if after < high_water else None
         # A private cutover on a previously empty bus may have occurred after
         # the first classification but before this page was read. Reclassify

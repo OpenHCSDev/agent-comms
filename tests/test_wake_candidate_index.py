@@ -274,7 +274,7 @@ def test_byte_budget_never_publishes_a_partial_candidate(tmp_path: Path) -> None
 
 
 def _replace_rows(comms: Comms, rows: list[dict]) -> None:
-    path = comms.bus._path
+    path = comms.bus.log.path
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     path.chmod(0o600)
 
@@ -284,7 +284,7 @@ def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> 
     messages = [
         comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3)
     ]
-    rows = [json.loads(raw) for raw in comms.bus._path.read_text().splitlines()]
+    rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
     rows[1][PRIVATE_WIRE_FIELD] = {"version": 1, "response": {}}
     _replace_rows(comms, rows)
     index = WakeCandidateIndex(comms.bus)
@@ -298,7 +298,7 @@ def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> 
             required_through_seq=messages[2].seq,
         )
     with pytest.raises(RelationViolationError, match="malformed private bus receipt"):
-        comms.bus.read_initial_cohort(root_id, messages[2].seq)
+        comms.bus.log.read_initial_cohort(root_id, messages[2].seq)
 
 
 @pytest.mark.parametrize(
@@ -316,7 +316,7 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
     messages = [
         comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3)
     ]
-    rows = [json.loads(raw) for raw in comms.bus._path.read_text().splitlines()]
+    rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
     public = {key: value for key, value in rows[1].items() if key != PRIVATE_WIRE_FIELD}
     response = {
         "wire_root_id": root_id,
@@ -338,7 +338,7 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
             required_through_seq=messages[2].seq,
         )
     with pytest.raises(RelationViolationError, match="malformed private bus receipt"):
-        comms.bus.read_initial_cohort(root_id, messages[2].seq)
+        comms.bus.log.read_initial_cohort(root_id, messages[2].seq)
 
 
 @pytest.mark.parametrize("first_batch_rows", [2, 4], ids=["stored-key", "same-batch"])
@@ -349,7 +349,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
     messages = [
         comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3, 4)
     ]
-    rows = [json.loads(raw) for raw in comms.bus._path.read_text().splitlines()]
+    rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
     for row in rows[1:3]:
         public = {key: value for key, value in row.items() if key != PRIVATE_WIRE_FIELD}
         row[PRIVATE_WIRE_FIELD] = {
@@ -404,7 +404,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
             required_through_seq=messages[3].seq,
         )
     with pytest.raises(RelationViolationError, match="malformed private bus receipt"):
-        comms.bus.read_initial_cohort(root_id, messages[3].seq)
+        comms.bus.log.read_initial_cohort(root_id, messages[3].seq)
 
 
 def test_rewrite_and_incomplete_tail_omit_optional_projection(tmp_path: Path) -> None:
@@ -412,7 +412,7 @@ def test_rewrite_and_incomplete_tail_omit_optional_projection(tmp_path: Path) ->
     message = comms.messaging.send_initial_cohort("sender", "Alice", "first")
     index = WakeCandidateIndex(comms.bus)
     assert index.maintain(rebuild=True)
-    source = comms.bus._path
+    source = comms.bus.log.path
     with source.open("ab") as output:
         output.write(b'{"partial":')
     with pytest.raises(ProjectionUnavailableError, match="incomplete tail"):

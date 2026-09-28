@@ -56,7 +56,7 @@ def test_continued_private_session_needs_no_fresh_object_and_preserves_history(c
     journal, session, inputs, source = continued
     before = session.read_bytes(), inputs.path.read_bytes()
     operation = journal.reserve_selected_summary(str(session), source)
-    assert journal.selected_summary(operation).status == "reserved"
+    assert journal.selected_summary(operation).state.declared_name == "reserved"
     assert before == (session.read_bytes(), inputs.path.read_bytes())
     with pytest.raises(CompactionJournalError):
         journal.reserve_selected_summary(str(session), source)

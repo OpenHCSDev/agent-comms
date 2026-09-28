@@ -16,6 +16,7 @@ from agent_comms.compaction_journal import (
     CompactionJournalUnknownError,
 )
 from agent_comms.compaction_send_admission import native_input_admitted
+from agent_comms.compaction_states import AbortedNoWriteOperation, CommittedOperation
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX durable journal")
 
@@ -39,7 +40,7 @@ def test_reservation_is_durable_unresolved_and_blocks_every_input(reserved):
     assert operation_id == "a" * 32
     reopened = CompactionJournal(journal.path)
     attempt = reopened.selected_summary(operation_id)
-    assert attempt.status == "reserved" and attempt.commit_id is None
+    assert attempt.state.declared_name == "reserved" and attempt.state.commit_id is None
     assert json.loads(attempt.source_json) == source
     assert reopened.unresolved_selected_summary(session) == (attempt,)
     assert not native_input_admitted(journal.path.parent, session)
@@ -48,7 +49,7 @@ def test_reservation_is_durable_unresolved_and_blocks_every_input(reserved):
     with pytest.raises(CompactionJournalError, match="never replay"):
         reopened.reserve_selected_summary(session, source)
     reopened.mark_selected_summary_unknown(operation_id)
-    assert reopened.selected_summary(operation_id).status == "unknown"
+    assert reopened.selected_summary(operation_id).state.declared_name == "unknown"
     assert not native_input_admitted(journal.path.parent, session)
     with pytest.raises(CompactionJournalError, match="Exact committed"):
         reopened.link_selected_summary_commit(operation_id, "b" * 32)
@@ -68,7 +69,7 @@ def test_raw_send_fence_blocks_every_same_session_status_not_unrelated(reserved)
             # An apparent terminal row is still not ordinary send authority.
             with journal._transaction() as db:
                 db.execute(
-                    "UPDATE selected_summary_attempts SET status = 'declined-prestart' "
+                    "UPDATE selected_summary_attempts SET status = 'declined-prestart', decline_reason = 'split_turn' "
                     "WHERE operation_id = ?",
                     (operation_id,),
                 )
@@ -230,16 +231,16 @@ def test_private_raw_prewrite_parent_fsync_unknown_never_writes_or_retries(reser
 def test_link_requires_exact_committed_native_intent_binding(reserved):
     journal, session, source = reserved
     wrong = journal.begin(session, {"selectedSummaryOperationId": "0" * 32})
-    journal.resolve(wrong, "committed", {"fixture": "metadata"})
+    journal.resolve(wrong, CommittedOperation(), {"fixture": "metadata"})
     operation_id = journal.reserve_selected_summary(session, source)
     with pytest.raises(CompactionJournalError, match="Exact committed"):
         journal.link_selected_summary_commit(operation_id, wrong)
     commit_id = journal.begin(session, {"selectedSummaryOperationId": operation_id})
     with pytest.raises(CompactionJournalError, match="Exact committed"):
         journal.link_selected_summary_commit(operation_id, commit_id)
-    journal.resolve(commit_id, "committed", {"fixture": "metadata"})
+    journal.resolve(commit_id, CommittedOperation(), {"fixture": "metadata"})
     journal.link_selected_summary_commit(operation_id, commit_id)
-    assert journal.selected_summary(operation_id).commit_id == commit_id
+    assert journal.selected_summary(operation_id).state.commit_id == commit_id
     assert journal.unresolved_selected_summary(session) == ()
     assert journal.blocking_selected_summary(session) == (journal.selected_summary(operation_id),)
     assert not native_input_admitted(journal.path.parent, session)
@@ -344,7 +345,7 @@ def test_mark_unknown_fsync_fault_stays_unresolved(reserved, monkeypatch):
     with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
         journal.mark_selected_summary_unknown(operation_id)
     monkeypatch.setattr(os, "fsync", fsync)
-    assert journal.selected_summary(operation_id).status in {"reserved", "unknown"}
+    assert journal.selected_summary(operation_id).state.declared_name in {"reserved", "unknown"}
     assert not native_input_admitted(journal.path.parent, session)
 
 
@@ -356,9 +357,9 @@ def test_competing_native_begin_refused_unless_exact_reserved_operation_bound(re
             journal.begin(session, intent)
     assert journal.unresolved(session) == ()
     commit_id = journal.begin(session, {"selectedSummaryOperationId": operation_id})
-    assert journal.get(commit_id).status == "intent"
+    assert journal.get(commit_id).state.declared_name == "intent"
     assert not native_input_admitted(journal.path.parent, session)
-    journal.resolve(commit_id, "aborted-no-write", {"status": "aborted-no-write"})
+    journal.resolve(commit_id, AbortedNoWriteOperation(), {"status": "aborted-no-write"})
     journal.mark_selected_summary_unknown(operation_id)
     with pytest.raises(CompactionJournalError, match="unrelated native commit"):
         journal.begin(session, {"selectedSummaryOperationId": operation_id})
@@ -370,7 +371,10 @@ def test_exact_prestart_clean_decline_is_recorded_but_not_send_authority(reserve
     operation_id = journal.reserve_selected_summary(session, source)
     journal.decline_selected_summary_prestart(operation_id, reason)
     attempt = journal.selected_summary(operation_id)
-    assert attempt.status == "declined-prestart" and attempt.decline_reason == reason
+    assert (
+        attempt.state.declared_name == "declined-prestart"
+        and attempt.state.decline_reason == reason
+    )
     assert journal.blocking_selected_summary(session) == (attempt,)
     assert not native_input_admitted(journal.path.parent, session)
     with pytest.raises(CompactionJournalError, match="never replay"):
@@ -385,7 +389,7 @@ def test_terminal_postcommit_fsync_unknown_blocks_across_reopen(reserved, monkey
     operation_id = journal.reserve_selected_summary(session, source, operation_id="a" * 32)
     if terminal == "linked":
         commit_id = journal.begin(session, {"selectedSummaryOperationId": operation_id})
-        journal.resolve(commit_id, "committed", {"fixture": "metadata"})
+        journal.resolve(commit_id, CommittedOperation(), {"fixture": "metadata"})
     original_fsync = os.fsync
 
     def deny_fsync(_fd):
@@ -400,7 +404,7 @@ def test_terminal_postcommit_fsync_unknown_blocks_across_reopen(reserved, monkey
     # Even a second fsync failure in the final-send read must fail closed.
     assert not native_input_admitted(journal.path.parent, session)
     monkeypatch.setattr(os, "fsync", original_fsync)
-    assert journal.selected_summary(operation_id).status == terminal
+    assert journal.selected_summary(operation_id).state.declared_name == terminal
     assert not native_input_admitted(journal.path.parent, session)
     reopened = CompactionJournal(journal.path)
     assert reopened.blocking_selected_summary(session) == (reopened.selected_summary(operation_id),)
@@ -456,7 +460,7 @@ def test_postcommit_fsync_fault_may_leave_blocking_summary_intent(reserved, monk
     with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
         journal.reserve_selected_summary(session, source, operation_id="b" * 32)
     monkeypatch.setattr(os, "fsync", fsync)
-    assert journal.selected_summary("b" * 32).status == "reserved"
+    assert journal.selected_summary("b" * 32).state.declared_name == "reserved"
     assert not native_input_admitted(journal.path.parent, session)
 
 
@@ -489,7 +493,7 @@ os._exit(17)
         timeout=10,
     )
     assert result.returncode == 17
-    assert CompactionJournal(path).selected_summary("c" * 32).status == "reserved"
+    assert CompactionJournal(path).selected_summary("c" * 32).state.declared_name == "reserved"
     assert not native_input_admitted(tmp_path, str(session))
 
 

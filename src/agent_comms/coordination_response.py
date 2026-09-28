@@ -142,8 +142,8 @@ def _response_boundary(bus: MessageBus, *, blocking: bool = True) -> Iterator[Re
     this boundary: the bus append receives this immutable loaded revision.
     """
     with (
-        _store_lock(bus._path.parent / "wire", blocking=blocking),
-        _store_lock(bus._path, blocking=blocking),
+        _store_lock(bus.log.path.parent / "wire", blocking=blocking),
+        bus.log.locked(blocking=blocking),
         _store_lock(bus._registry.store.path, blocking=blocking),
     ):
         yield bus._registry.store._read_unlocked().snapshot()
@@ -213,12 +213,12 @@ def _require_live_registry_owner(
 def _require_bound_stores(bus: MessageBus, store: MutationStore) -> None:
     if type(bus) is not MessageBus or type(store) is not MutationStore:
         raise TypeError("response requires real, explicitly gated bus and coordinator stores")
-    if bus._private_response_writes is not True:
+    if bus.publisher._private_response_writes is not True:
         raise PublicationActivationBlocked("private response publication is disabled")
     if (
         store.path.name != "coordination.sqlite3"
-        or Path(bus._path.parent).absolute() != Path(store.path.parent).absolute()
-        or bus._registry.store.path.absolute() != (bus._path.parent / "registry.json").absolute()
+        or Path(bus.log.path.parent).absolute() != Path(store.path.parent).absolute()
+        or bus._registry.store.path.absolute() != (bus.log.path.parent / "registry.json").absolute()
     ):
         raise IdentityConflict("response bus and coordinator have different trusted roots")
 
@@ -241,12 +241,12 @@ def _require_cohort_claims(
     _assert_cohort_schema(db)
     if not snapshot.claims or snapshot.obligation is None:
         raise IdentityConflict("wire response requires selected claims and obligation")
-    metadata = bus._private_marker_unlocked()
+    metadata = bus.log._private_marker_unlocked()
     if metadata["wire_root_id"] != wire_root_id:
         raise IdentityConflict("cohort bus root changed")
     originals = {
         message.seq: initial
-        for message, _receipt, initial in bus._verified_private_rows_unlocked(metadata)
+        for message, _receipt, initial in bus.log._verified_private_rows_unlocked(metadata)
         if initial is not None
     }
     for claim in snapshot.claims:
@@ -369,9 +369,9 @@ def prepare_fenced_response(
         raise ValueError("response payload must be nonempty")
     with _response_boundary(bus) as registry_snapshot:
         _require_live_registry_owner(registry_snapshot, fence, owner_pid, owner_witness)
-        metadata = bus._private_marker_unlocked()
+        metadata = bus.log._private_marker_unlocked()
         # A corrupt row anywhere is never accepted as an absent publication.
-        tuple(bus._verified_private_rows_unlocked(metadata))
+        tuple(bus.log._verified_private_rows_unlocked(metadata))
         with store._transaction() as db:
             snapshot = _require_final_owner(
                 store, bus, fence, str(metadata["wire_root_id"]), owner_witness
@@ -478,7 +478,7 @@ def _terminal_replay(
     ):
         raise StaleFence("finished response is not this owner's original attempt")
     _require_cohort_claims(store, bus, snapshot, wire_root_id, terminal=True)
-    matched, _, _ = bus._keyed_receipt_unlocked(snapshot.publication_intent)
+    matched, _, _ = bus.log._keyed_receipt_unlocked(snapshot.publication_intent)
     if matched is None or (
         matched.message_id != snapshot.publication_receipt.message_id
         or matched.seq != snapshot.publication_receipt.seq
@@ -503,7 +503,7 @@ def _settle_fenced_response(
     # current owner generation remains guarded by the transaction fence.
     with _response_boundary(bus) as registry_snapshot:
         _require_live_registry_owner(registry_snapshot, fence, owner_pid, owner_witness)
-        metadata = bus._private_marker_unlocked()
+        metadata = bus.log._private_marker_unlocked()
         wire_root_id = str(metadata["wire_root_id"])
         first_dispatch = False
         if allow_append:
@@ -576,13 +576,13 @@ def _settle_fenced_response(
                 fence.attempt_ordinal,
             ):
                 raise PublicationUncertain("no matching durable append dispatch")
-            matched, _, _ = bus._keyed_receipt_unlocked(intent)
+            matched, _, _ = bus.log._keyed_receipt_unlocked(intent)
             if matched is None:
                 if not first_dispatch:
                     raise PublicationUncertain("no keyed bus receipt; no resend authorized")
                 # This call created the durable dispatch barrier, and owns the
                 # only authorized first append while its final fence is locked.
-                matched = bus._publish_keyed_response_unlocked(
+                matched = bus.publisher._publish_keyed_response_unlocked(
                     intent, registry_snapshot=registry_snapshot
                 )
             if matched.message_id != intent.expected_message_id:

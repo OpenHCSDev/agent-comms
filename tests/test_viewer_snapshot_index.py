@@ -44,13 +44,13 @@ def test_display_checkpoint_damage_and_bus_replacement_rebuild(tmp_path):
     comms.messaging.send("bob", "#team", "second")
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
 
-    checkpoint = BusDisplayIndex(comms.bus._path, comms.messaging.user_identity(str(tmp_path)).name).path
+    checkpoint = BusDisplayIndex(comms.bus.log.path, comms.messaging.user_identity(str(tmp_path)).name).path
     cached = json.loads(checkpoint.read_text())
     cached["counts"]["#team"] = 0
     checkpoint.write_text(json.dumps(cached))
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
 
-    bus_path = comms.bus._path
+    bus_path = comms.bus.log.path
     replacement = bus_path.with_name("replacement.jsonl")
     replacement.write_bytes(bus_path.read_bytes().splitlines(keepends=True)[-1])
     os.replace(replacement, bus_path)
@@ -64,10 +64,10 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.threads.register(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     comms.messaging.send("bob", "#team", "first")
-    bus_path = comms.bus._path
+    bus_path = comms.bus.log.path
     first = json.loads(bus_path.read_text().splitlines()[0])
     raced_timestamp = first["ts"] + 10
-    original = comms.bus._record_snapshot
+    original = comms.bus.log._record_snapshot
 
     @contextmanager
     def append_before_open(*args, **kwargs):
@@ -77,7 +77,7 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
         with original(*args, **kwargs) as boundary:
             yield boundary
 
-    monkeypatch.setattr(comms.bus, "_record_snapshot", append_before_open)
+    monkeypatch.setattr(comms.bus.log, '_record_snapshot', append_before_open)
     snapshot = comms.views.viewer_snapshot(str(tmp_path))
     team = next(view for view in snapshot.channels if view.channel.name == "#team")
     assert snapshot.channel_unread["#team"] == 2
@@ -103,7 +103,7 @@ def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tm
     comms.bus.reads.mark_displayed(
         viewer,
         comms.bus.reads.capture(
-            viewer, (messages[1], messages[4]), comms.registry.snapshot(), comms.bus._path
+            viewer, (messages[1], messages[4]), comms.registry.snapshot(), comms.bus.log.path
         ),
     )
     assert wire(tmp_path).bus.pending_counts(viewer) == {"bob": 2}

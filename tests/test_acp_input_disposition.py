@@ -429,7 +429,7 @@ send({"type":"agent_settled"})
             ) = second_agent.inputs.delivery_cursors.initialize(
                 frozenset({"project"}),
                 "project",
-                high_water=second_agent._comms.bus.latest_sequence(),
+                high_water=second_agent._comms.bus.log.latest_sequence(),
                 fresh=False,
             )
 
@@ -503,7 +503,7 @@ asyncio.run(run())
             owner.inputs.delivery_cursors.initialize(
                 frozenset({"project"}),
                 "project",
-                high_water=reopened.bus.latest_sequence(),
+                high_water=reopened.bus.log.latest_sequence(),
                 fresh=False,
             )
         )
