@@ -15,6 +15,7 @@ from acp.schema import TextContentBlock
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from delivery_owner_fixture import canonical_agent
 
 
 def block(text: str) -> TextContentBlock:
@@ -23,7 +24,7 @@ def block(text: str) -> TextContentBlock:
 
 @pytest.mark.asyncio
 async def test_compact_is_exclusive_bridge_command_not_model_prompt(tmp_path, monkeypatch):
-    agent = CommsAgent(wire(tmp_path / "wire"), auto_wake=False)
+    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
     session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
     calls = []
 
@@ -49,7 +50,7 @@ async def test_compact_is_exclusive_bridge_command_not_model_prompt(tmp_path, mo
 
 @pytest.mark.asyncio
 async def test_toad_blank_prompt_metadata_compacts_without_model(tmp_path, monkeypatch):
-    agent = CommsAgent(wire(tmp_path / "wire"), auto_wake=False)
+    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
     session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
     calls = []
 
@@ -80,7 +81,7 @@ async def test_toad_blank_prompt_metadata_compacts_without_model(tmp_path, monke
 
 @pytest.mark.asyncio
 async def test_sdk_router_preserves_toad_wire_metadata(tmp_path, monkeypatch):
-    agent = CommsAgent(wire(tmp_path / "wire"), auto_wake=False)
+    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
     session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
     calls = []
 
@@ -110,7 +111,7 @@ async def test_sdk_router_preserves_toad_wire_metadata(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_compact_failure_is_not_end_turn_success(tmp_path, monkeypatch):
-    agent = CommsAgent(wire(tmp_path / "wire"), auto_wake=False)
+    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
     session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
 
     async def compact_context(*args):
@@ -128,7 +129,7 @@ async def test_compact_failure_is_not_end_turn_success(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_attached_compact_routes_to_owner_not_attached_model(tmp_path):
-    agent = CommsAgent(wire(tmp_path / "wire"), auto_wake=False)
+    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
     calls = []
 
     class Proxy:
@@ -147,7 +148,7 @@ async def test_attached_compact_routes_to_owner_not_attached_model(tmp_path):
 
 @pytest.mark.asyncio
 async def test_compact_rejects_multimodal_and_overlong_without_bridge_or_model(tmp_path):
-    agent = CommsAgent(wire(tmp_path / "wire"), auto_wake=False)
+    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
     session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
     try:
         with pytest.raises(RequestError) as multimodal:
@@ -161,7 +162,7 @@ async def test_compact_rejects_multimodal_and_overlong_without_bridge_or_model(t
 
 
 async def test_current_root_compact_refuses_unjournaled_writer_for_every_launch_form(
-    tmp_path, monkeypatch
+    tmp_path
 ):
     """Actual ACP request uses root authority, never executable-name inference."""
     comms = wire(tmp_path / "wire")
@@ -181,10 +182,6 @@ async def test_current_root_compact_refuses_unjournaled_writer_for_every_launch_
     alias = tmp_path / "renamed-native"
     alias.symlink_to(package / "dist/cli.js")
 
-    async def forbidden(*args, **kwargs):
-        raise AssertionError("Canonical ACP request reached an unjournaled writer")
-
-    monkeypatch.setattr("agent_comms.manual_compaction.ManualCompaction.run", forbidden)
     try:
         for command in ("pi", str(package / "dist/cli.js"), str(alias)):
             agent.turns.agent_bin = command

@@ -11,7 +11,7 @@ import pytest
 from agent_comms.acp import CommsClient
 from agent_comms.child_process import DetachedProcess
 from agent_comms.comms import wire
-from test_manual_compaction import LoopbackProvider
+from compaction_loopback import LoopbackProvider
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX detached owner")

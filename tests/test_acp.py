@@ -175,7 +175,7 @@ class TestHandlers:
     async def test_compaction_is_an_owner_operation_with_result_metadata(
         self, tmp_path, monkeypatch
     ):
-        agent = self._agent(tmp_path)
+        agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         session_file = tmp_path / "session.jsonl"
         session_file.touch()
@@ -193,7 +193,7 @@ class TestHandlers:
             }
 
         monkeypatch.setattr(
-            "agent_comms.manual_compaction_bridge.manual_compaction.ManualCompaction.run",
+            "agent_comms.owner_compaction_manual.compact_manual_owner",
             compact_session,
         )
 
@@ -206,7 +206,7 @@ class TestHandlers:
         result = response.field_meta["agentComms"]["compaction"]
         assert result["ok"] is True
         assert result["summary"] == "Preserved decisions."
-        assert received["args"][0].instructions == "keep test findings"
+        assert received["args"] == (agent.turns, "proj", "proj", None, "keep test findings")
         # The bridge does not promote estimated post-compaction usage to a
         # measured context receipt; it remains unknown until a fresh sample.
         assert agent._comms.agents.agent_info_of("proj").context_used is None
@@ -215,7 +215,7 @@ class TestHandlers:
     async def test_compaction_has_owner_lifecycle_and_rejects_concurrent_work(
         self, tmp_path, monkeypatch
     ):
-        agent = self._agent(tmp_path)
+        agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         session_file = tmp_path / "session.jsonl"
         session_file.touch()
@@ -236,7 +236,7 @@ class TestHandlers:
 
         agent.sessions.client = FakeClient()
         monkeypatch.setattr(
-            "agent_comms.manual_compaction_bridge.manual_compaction.ManualCompaction.run",
+            "agent_comms.owner_compaction_manual.compact_manual_owner",
             compact_session,
         )
         compaction = asyncio.create_task(compact_context(agent.turns, "proj"))
@@ -300,7 +300,7 @@ class TestHandlers:
         agent._comms.agents.finish_turn(agent._comms.registry.require("proj").turn_lease)
 
     async def test_cancel_cleans_up_compaction_lifecycle(self, tmp_path, monkeypatch):
-        agent = self._agent(tmp_path)
+        agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         session_file = tmp_path / "session.jsonl"
         session_file.touch()
@@ -313,7 +313,7 @@ class TestHandlers:
             return {"ok": True}
 
         monkeypatch.setattr(
-            "agent_comms.manual_compaction_bridge.manual_compaction.ManualCompaction.run",
+            "agent_comms.owner_compaction_manual.compact_manual_owner",
             compact_session,
         )
         compaction = asyncio.create_task(compact_context(agent.turns, "proj"))
@@ -328,7 +328,7 @@ class TestHandlers:
         assert agent._comms.agents.activity_of("proj").state.value == "idle"
 
     async def test_compaction_refuses_to_interrupt_an_active_turn(self, tmp_path):
-        agent = self._agent(tmp_path)
+        agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         agent.turns.active_turns["proj"] = "running"
 

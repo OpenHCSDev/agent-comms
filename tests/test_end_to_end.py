@@ -170,11 +170,11 @@ class TestEndToEndLifecycle:
         parent_inbox = cli(root, "inbox", "--thread", "PR111")
         assert [m["text"] for m in parent_inbox["messages"]] == []
 
-    def test_broadcast_reaches_every_thread_via_cli(self, tmp_path):
+    def test_all_channel_reaches_every_thread_via_cli(self, tmp_path):
         root = tmp_path / "wire"
         for name in ("a", "b", "c"):
             cli(root, "register", "--name", name, "--worktree", str(tmp_path))
-        cli(root, "send", "--from", "a", "--to", "broadcast", "--body", "heads up")
+        cli(root, "send", "--from", "a", "--to", "#all", "--body", "heads up")
         for name in ("b", "c"):
             inbox = cli(root, "inbox", "--thread", name)
             assert [m["text"] for m in inbox["messages"]] == ["heads up"]

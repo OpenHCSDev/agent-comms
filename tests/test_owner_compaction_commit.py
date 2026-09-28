@@ -582,7 +582,7 @@ else:
         owner = registry.snapshot().threads['owner']
         registry.register(replace(owner, goal=Goal('new', 'new-goal')))
     else:
-        Comms(root).messaging.send('owner', 'broadcast', 'late message')
+        Comms(root).messaging.send('owner', '#all', 'late message')
 print('changed', flush=True)
 """
 
