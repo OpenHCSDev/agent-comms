@@ -1,3 +1,5 @@
+> Current owner override: CI is deferred. Run the packaged ratchet and guards locally; the workflow is manual and no merge gate is enabled by TR0.
+
 # R0 and R1: stop the inflow, and make it visible
 
 **Heads:** `agent-comms` `15a4d00`, NRA `1119ca6`. **Rules:** [00-RULES.md](00-RULES.md). **Step 1**, colliding with nothing.
@@ -10,7 +12,7 @@
 
 One fast workflow, `.github/workflows/debt-ratchet.yml`, on every pull request, which is **the required status check on `main`** (D18). It runs two things:
 
-1. **The ratchet.** `tools/debt_ratchet.py` sums three measures over the Python files under `src/agent_comms/` that the PR touches, at the PR's base and at its head, and **fails if the head total is higher:**
+1. **The ratchet.** `agent-comms-ratchet --root src/agent_comms` sums three measures over the Python files under `src/agent_comms/` that the PR touches, at the PR's base and at its head, and **fails if the head total is higher:**
    - `type(x) is …` and `type(x) is not …` comparisons;
    - boolean chains of four or more operands;
    - subscripts with a string-literal key.

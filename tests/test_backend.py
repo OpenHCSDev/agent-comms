@@ -2411,10 +2411,27 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
         assert small[-1].diagnostic["budget_ms"] == 50
         assert small[-1].diagnostic["reason"] == "native_preflight_timeout"
         session.write_bytes(b"x" * 65)
+        # The send-boundary probe must not inherit the deliberate timeout delay.
+        fast_stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n"
+            + f"""
+import json, select, sys
+state = json.loads(sys.stdin.readline())
+assert state["type"] == "get_state"
+print(json.dumps({{"type":"response", "command":"get_state", "id":state["id"],
+                  "success":True, "data":{{"nativeInputProofCapability":
+                  {backend.NATIVE_INPUT_CAPABILITY!r}}}}}), flush=True)
+if select.select([sys.stdin], [], [], 0.15)[0]:
+    line = sys.stdin.readline()
+    if line: open({str(received)!r}, "w").write(line)
+""",
+            name="pi-fast-stub",
+        )
         large = [
             event
             async for event in backend.stream_agent_events(
-                stub,
+                fast_stub,
                 [],
                 "secret prompt",
                 str(tmp_path),

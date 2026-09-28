@@ -1,0 +1,2 @@
+{"views": [{"target": "#comms", "history_entries": 8}, {"target": "agent-comms-ux", "history_entries": 2}, {"target": "pr95-selected-pi-summary-owner", "history_entries": 0}], "messages_sent": 0, "bus_sequence": 149}
+PASS: mounted converted live history and interpreter shutdown

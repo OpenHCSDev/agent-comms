@@ -406,3 +406,58 @@ Full old suite is not acceptance claimed and does not hold parent deployment.
 Meaningful current native/manual/owner/socket evidence is itemized above; parent
 owns current mounted acceptance and live migration. New failures, if discovered,
 will be triaged at their actual boundary rather than restoring removed APIs.
+
+
+## Audit4da2f1d3 followthrough — original mixed fixtures closed
+
+Base: PR255 `1a5c2522` (already integrated into229/main). This checkpoint
+contains tests and this receipt only. No restored manual writer, alias reader,
+production API, installed package or live-root changes.
+
+- `tests/test_acp.py`: three manual lifecycle/result/cancellation hooks now use
+  `owner_compaction_manual.compact_manual_owner`, with canonical root/package
+  setup. Concurrent-turn refusal remains checked. Result metadata, unknown
+  post-compaction usage and lifecycle cleanup assertions retained.
+- `tests/test_acp_compact_command.py`: canonical owner setup; delete the fourth
+  monkeypatch into removed ManualCompaction. Real ACP router still proves every
+  launcher form refuses absent selected native session, preserves saved bytes
+  and clears active turn. The seven command/routing/refusal cases pass.
+- `tests/test_end_to_end.py`: actual CLI sends `#all`, and every other registered
+  thread receives it while sender does not.
+- `tests/test_owner_compaction_commit.py`: competing real process sends `#all`;
+  all six mutation variants remain blocked until actual native commit completes.
+- `tests/test_historical_page_scope.py`: retire obsolete broadcast-alias row and
+  alias-reader parametrizations (11 cases). Canonical #all and existing captured
+  scope, rename, sparse decoding, pagination and forward/reverse assertions remain:
+  78 cases pass. No source history conversion or real named-thread DM removal.
+- `tests/test_detached_owner.py`: use existing `compaction_loopback.LoopbackProvider`
+  instead of importing deleted `test_manual_compaction`. Actual detached native
+  owner survives client loss, reattaches and completes exactly one loopback POST.
+- PR115 useful intentions retained without its stale production imports or
+  dict-event API: `tests/test_candidate_maintenance.py` resolves temporary paths
+  under pytest's owned basetemp; `tests/test_backend.py` gives the send-boundary
+  probe an immediate child response, separate from deliberate preflight timeout.
+  The authority-denied assertion remains strict; timeout is not accepted instead.
+
+### Bounded local evidence
+
+Python: parent229 `.venv/bin/python`; imports explicitly this tree's absolute `src`.
+Serial `-n0 -o addopts='' --maxfail=6 --tb=short`, outer165-second bound;
+owned `.t` basetemp and `.artifacts/tmp`. Native opt-in is immutable package
+`comms-native-session-entry-store-20260928/stack/.pi-native-0d7ebb4f4b5aa1ec/`
+`node_modules/@earendil-works/pi-coding-agent`. No paid provider calls.
+
+Selection: four manual lifecycle tests in test_acp; full test_acp_compact_command,
+test_historical_page_scope, test_candidate_maintenance; CLI all-channel test;
+backend large-session bounded-preflight test; six competing-native-commit tests;
+actual detached-owner test. **100 passed in60.75s** (`audit-closure.log`).
+After placing candidate temporary directories under owned basetemp, those two
+cases separately **2 passed in0.37s** (`audit-candidate-owned.log`).
+Initial five-case manual run found one additional missing canonical owner setup;
+fixed above (initial4pass/1fail receipt retained). No full-suite rerun.
+
+Limits: this proves these mixed fixture closures and bounded actual CLI/native
+paths. It does not prove the selected claimed-write extension artifact matches
+current source; Darwin owns the already-reported rebuild/acceptance. No macOS
+execution claimed. Existing broader full-suite and installed-path qualifications
+above remain. T2 paired implementation stays separate from this checkpoint.
