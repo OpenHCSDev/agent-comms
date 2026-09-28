@@ -109,7 +109,6 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
     terminal: ClassVar[bool] = False
     original_eligible: ClassVar[bool] = False
     settled_without_original: ClassVar[bool] = False
-    reservable_commit: ClassVar[bool] = False
     commit_id: ClassVar[None] = None
     decline_reason: ClassVar[None] = None
 
@@ -124,6 +123,23 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
     @classmethod
     @abstractmethod
     def load(cls, commit_id: str | None, decline_reason: str | None) -> SummaryState: ...
+
+    def require_commit_reservation(self) -> None:
+        from .compaction_journal import CompactionJournalError
+
+        raise CompactionJournalError("Selected summary is not a commit reservation")
+
+    def manual_recovery(self) -> SummaryState:
+        from .compaction_journal import CompactionJournalError
+
+        raise CompactionJournalError(
+            "Prior selected compaction is uncertain; inspect compaction-status, never replay"
+        )
+
+    def refuse(self, reason: str) -> SummaryState:
+        from .compaction_journal import CompactionJournalError
+
+        raise CompactionJournalError("Selected summary refusal transition forbidden")
 
     def verifies_original(
         self, journal: CompactionJournal, session: str, operation_id: str, source_json: str
@@ -140,7 +156,11 @@ class UnsettledSummary(SummaryState):
 
 
 class ReservedSummary(UnsettledSummary):
-    reservable_commit = True
+    def require_commit_reservation(self) -> None:
+        pass
+
+    def refuse(self, reason: str) -> SummaryState:
+        return RefusedSummary(reason)
 
     @classmethod
     def successors(cls):
@@ -233,6 +253,14 @@ class RefusedSummary(SummaryState):
     def __post_init__(self):
         if not self.decline_reason or len(self.decline_reason) > 256:
             raise ValueError("Bounded native refusal reason required")
+
+    def manual_recovery(self) -> SummaryState:
+        return RetiredRefusalSummary(self.decline_reason)
+
+    def refuse(self, reason: str) -> SummaryState:
+        if reason != self.decline_reason:
+            return super().refuse(reason)
+        return self
 
     @classmethod
     def successors(cls):
