@@ -346,8 +346,8 @@ class CompactionJournal:
                     raise CompactionJournalError(
                         "Blocked selected summary; unrelated native commit forbidden"
                     )
-                if selected and not selected[0].state.reservable_commit:
-                    raise CompactionJournalError("Selected summary is not a commit reservation")
+                if selected:
+                    selected[0].state.require_commit_reservation()
                 CompactionOperation(commit_id, canonical, payload, IntentOperation(), None).insert(
                     db
                 )

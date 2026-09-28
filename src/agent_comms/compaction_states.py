@@ -80,12 +80,16 @@ class AbortedNoWriteOperation(TerminalOperation, OperationState, declared_name="
 class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
     terminal: ClassVar[bool] = False
     original_eligible: ClassVar[bool] = False
-    reservable_commit: ClassVar[bool] = False
     settled_without_original: ClassVar[bool] = False
 
     @classmethod
     @abstractmethod
     def successors(cls) -> tuple[type[SummaryState], ...]: ...
+
+    def require_commit_reservation(self) -> None:
+        from .compaction_journal import CompactionJournalError
+
+        raise CompactionJournalError("Selected summary is not a commit reservation")
 
     def manual_recovery(self) -> SummaryState:
         from .compaction_journal import CompactionJournalError
@@ -106,7 +110,8 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
 
 
 class ReservedSummary(SummaryState):
-    reservable_commit = True
+    def require_commit_reservation(self) -> None:
+        pass
 
     def refuse(self, reason: str) -> SummaryState:
         return RefusedSummary(reason)
