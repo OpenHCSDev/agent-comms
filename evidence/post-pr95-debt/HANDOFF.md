@@ -1,5 +1,8 @@
 # Post-PR95 audit and original S7 manual ownership — Darwin
 
+Draft PR: https://github.com/OpenHCSDev/agent-comms/pull/181
+Source candidate: b83cb8d.
+
 Persistent tree `/home/ts/wt/comms-post-pr95-compaction-20260928`, branch `codex/post-pr95-compaction-ownership-20260928`, based on completed C0 declaration head6ed78c5. Parent owns C0 combined integration and installation; this worker made no shared/live changes.
 
 Read DECISION.md for the full actual-owner trace, justified existing boundaries, implemented original omission, three concrete pending scopes with migration/deletion/acceptance and assignment status, and issue107 exclusion.
@@ -22,7 +25,7 @@ Common cwd this tree; absolute PYTHONPATH="$PWD/src"; existing interpreter `/hom
 - local-child-final.txt:6 passed (test_manual_compaction_owner.py). Real Python RPC child plus real Node preflight using a local fixture SessionManager, no provider network: saved prefix retained, exact correlated typed commands, blank instructions omitted, committed row required, wrong command rejected, timeout/cancel reaped, profile removed and no same-object replay. Earlier five-case run is retained as local-child.txt, not counted twice.
 - Total current executed focused cases55 passed. All completed with exit0. No production failure remained; no broad optional suite performed.
 - nra-before.json/nra-after.json: exact_compact_global,79 detectors,0 omitted,complete,0 findings. Full src dependency context with manual/bridge/journal/prepare/commit/runtime/process/provider report targets. Manual ownership findings are reasoned from actual state/caller duplication even though these detectors report zero; no synthesized equivalence proof claimed. Final formatting/blank-instruction omission preserves the old external request behavior and is covered by the final child cases.
-- Ruff I/F and git diff --check passed. Exact scan command: timeout60 NRA Python -m nominal_refactor_advisor --json --json-payload summary --parse-workers2 --analysis-workers2 --scan-budget-seconds45 --cache-dir .audit-work/nra-{before,after} --context-root src, followed by the eight report targets above under src/agent_comms. Each scanner ran once.
+- Ruff I/F and git diff --check passed. Exact scan command: timeout 60 NRA Python -m nominal_refactor_advisor --json --json-payload summary --parse-workers 2 --analysis-workers 2 --scan-budget-seconds 45 --cache-dir .audit-work/nra-{before,after} --context-root src, followed by the eight report targets above under src/agent_comms. Each scanner ran once.
 
 ## Parent integration / remaining limitations
 
@@ -33,3 +36,5 @@ Parent folds DECISION.md into dispatch POST-FEATURE-DEBT/index: D1 implemented; 
 Canonical pi-native/pi-comms-native explicit manual compaction still requires a real journal-aware manual admission design; it remains refused rather than bypassing native authority. Automatic adaptive PR95 stays default-on. This transaction replacement is not a claim to enable that manual feature or to revalidate stock Pi against a provider.
 
 No providers, paid tests, extra agents/models, source-history reads/replays, live data mutations/restarts or package installs. Owned disposable scanner/test artifacts cleaned after retaining evidence.
+
+Cleanup complete: removed164MiB owned scanner/fixture artifacts after all task processes exited; kept receipts and executable local fixture tests. Shared/native bundles and live data untouched.
