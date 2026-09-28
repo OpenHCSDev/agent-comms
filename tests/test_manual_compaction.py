@@ -11,6 +11,7 @@ from uuid import uuid4
 import pytest
 
 from agent_comms import manual_compaction as compact
+from agent_comms.backend import compaction_summary
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX process groups")
 PACKAGE = Path.home() / ".local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent"
@@ -18,7 +19,7 @@ PACKAGE = Path.home() / ".local/pi-npm/lib/node_modules/@earendil-works/pi-codin
 
 def test_manual_summary_preserves_markdown():
     summary = "## Decisions\n\n" + "- Keep this decision.\n" * 250 + "\n## Next\nContinue."
-    assert compact._summary(summary) == summary
+    assert compaction_summary(summary) == summary
 
 
 def test_large_saved_session_passes_local_preflight(tmp_path):
@@ -122,12 +123,12 @@ async def test_openrouter_compaction_carries_private_auth_before_preflight(tmp_p
         return profile
 
     monkeypatch.setattr(compact, "_private_policy", checked_profile)
-    result = await compact.compact_session(
+    result = await compact.ManualCompaction(
         str(backend),
         ["--provider", "openrouter", "--model", "fake"],
         str(session),
         str(tmp_path),
-    )
+    ).run()
     assert result["ok"] is False
     assert copied == [True]
 
@@ -193,7 +194,9 @@ def wrapper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, port: int) -> str:
     monkeypatch.setenv("COMPACT_TEST_PROFILE_CAPTURE", str(tmp_path / "profile"))
     monkeypatch.setenv("COMPACT_TEST_PID_CAPTURE", str(tmp_path / "pi-pid"))
     exe = tmp_path / "pi-local-only"
-    exe.write_text(f"#!{sys.executable}\n" + """
+    exe.write_text(
+        f"#!{sys.executable}\n"
+        + """
 import json, os, pathlib, shutil, stat, sys
 profile = pathlib.Path(os.environ['PI_CODING_AGENT_DIR'])
 settings = profile / 'settings.json'
@@ -223,7 +226,8 @@ cli = pathlib.Path(os.environ['COMPACT_TEST_PACKAGE']) / 'dist/cli.js'
 node = shutil.which('node')
 assert node is not None
 os.execv(node, ['node', str(cli), *sys.argv[1:]])
-""")
+"""
+    )
     exe.chmod(0o700)
     return str(exe)
 
@@ -261,8 +265,7 @@ class LoopbackProvider:
                     b'{"error":{"message":"maximum context length exceeded; '
                     b'private prompt","type":"context_length_exceeded"}}'
                     if self.status == 400
-                    else b'{"error":{"message":"loopback retryable failure",'
-                    b'"type":"server_error"}}'
+                    else b'{"error":{"message":"loopback retryable failure","type":"server_error"}}'
                 )
                 writer.write(
                     f"HTTP/1.1 {self.status} Failure\r\n".encode()
@@ -328,13 +331,13 @@ async def test_real_pi_compacts_exact_saved_session(tmp_path, monkeypatch, statu
         exe = wrapper(tmp_path, monkeypatch, port)
         # Explicit fake model and loopback URL; the inherited local fixture
         # credential is copied into the private profile without changing it.
-        result = await compact.compact_session(
+        result = await compact.ManualCompaction(
             exe,
             ["--print", "--provider", "openrouter", "--model", "fake-compact"],
             str(session),
             str(tmp_path),
             timeout_seconds=15,
-        )
+        ).run()
         if status in {400, 503}:
             # A failed provider response is an uncertain paid attempt. Pi must
             # not replay it even when inherited settings request retries.
@@ -396,13 +399,13 @@ async def test_success_requires_saved_session_file_and_parent_sync(tmp_path, mon
                 return original_parent(path)
 
             monkeypatch.setattr(compact, "_fsync", refuse_parent_sync)
-        result = await compact.compact_session(
+        result = await compact.ManualCompaction(
             exe,
             ["--provider", "openrouter", "--model", "fake-compact"],
             str(session),
             str(tmp_path),
             timeout_seconds=15,
-        )
+        ).run()
         assert result == {
             "ok": False,
             "error": "Saved compaction durability is uncertain; not retried.",
@@ -421,13 +424,13 @@ async def test_split_turn_can_compact_with_local_provider(tmp_path, monkeypatch)
         session = tmp_path / "existing.jsonl"
         before = saved_session(session, split=True)
         exe = wrapper(tmp_path, monkeypatch, server.sockets[0].getsockname()[1])
-        result = await compact.compact_session(
+        result = await compact.ManualCompaction(
             exe,
             ["--provider", "openrouter", "--model", "fake-compact"],
             str(session),
             str(tmp_path),
             timeout_seconds=15,
-        )
+        ).run()
         assert result["ok"] is True, result
         assert provider.posts >= 1
         assert session.read_bytes().startswith(before)
@@ -452,7 +455,7 @@ async def test_unsafe_args_fail_before_child(tmp_path, monkeypatch, args):
     session = tmp_path / "existing.jsonl"
     saved_session(session)
     exe = wrapper(tmp_path, monkeypatch, 1)
-    result = await compact.compact_session(exe, args, str(session), str(tmp_path))
+    result = await compact.ManualCompaction(exe, args, str(session), str(tmp_path)).run()
     assert result["ok"] is False
     assert not (tmp_path / "profile").exists()
 
@@ -469,7 +472,9 @@ async def test_rpc_rejects_foreign_id_and_wrong_reopened_session(
     monkeypatch.setenv("COMPACT_TEST_CAPTURE", str(captured))
     monkeypatch.setenv("COMPACT_TEST_WRONG_SESSION", "1" if wrong_session else "0")
     stub = tmp_path / "pi-foreign-rpc"
-    stub.write_text(f"#!{sys.executable}\n" + """
+    stub.write_text(
+        f"#!{sys.executable}\n"
+        + """
 import json, os, pathlib, sys
 path = pathlib.Path(sys.argv[sys.argv.index('--session') + 1])
 assert path.is_file()
@@ -489,15 +494,16 @@ if os.environ['COMPACT_TEST_WRONG_SESSION'] == '0':
     with open(os.environ['COMPACT_TEST_CAPTURE'], 'a') as log: log.write('compact\\n')
     print(json.dumps({'id': 'foreign', 'type': 'response', 'command': 'compact',
                       'success': True, 'data': {'summary': 'fake'}}), flush=True)
-""")
+"""
+    )
     stub.chmod(0o700)
-    result = await compact.compact_session(
+    result = await compact.ManualCompaction(
         str(stub),
         ["--provider", "openrouter", "--model", "fake-compact"],
         str(session),
         str(tmp_path),
         timeout_seconds=5,
-    )
+    ).run()
     assert result["ok"] is False
     assert captured.read_text().splitlines() == (
         ["get_state"] if wrong_session else ["get_state", "compact"]
@@ -518,13 +524,13 @@ async def test_uncertain_loopback_post_timeout_or_cancel_never_retries_or_leaks_
         saved_session(session)
         exe = wrapper(tmp_path, monkeypatch, server.sockets[0].getsockname()[1])
         task = asyncio.create_task(
-            compact.compact_session(
+            compact.ManualCompaction(
                 exe,
                 ["--provider", "openrouter", "--model", "fake-compact"],
                 str(session),
                 str(tmp_path),
                 timeout_seconds=3 if not cancel else 10,
-            )
+            ).run()
         )
         async with asyncio.timeout(5):
             while provider.posts != 1:
@@ -561,12 +567,12 @@ async def test_guard_fsync_failure_stops_before_preflight(tmp_path, monkeypatch)
         original(fd)
 
     monkeypatch.setattr(compact.os, "fsync", fail_guard)
-    result = await compact.compact_session(
+    result = await compact.ManualCompaction(
         exe,
         ["--provider", "openrouter", "--model", "fake-compact"],
         str(session),
         str(tmp_path),
-    )
+    ).run()
     assert calls == 3
     assert result["ok"] is False
     assert not (tmp_path / "profile").exists()
@@ -581,11 +587,11 @@ async def test_profile_commit_failure_stops_before_preflight(tmp_path, monkeypat
         raise OSError("injected fsync failure")
 
     monkeypatch.setattr(compact, "_fsync", fail)
-    result = await compact.compact_session(
+    result = await compact.ManualCompaction(
         exe,
         ["--provider", "openrouter", "--model", "fake-compact"],
         str(session),
         str(tmp_path),
-    )
+    ).run()
     assert result["ok"] is False
     assert not (tmp_path / "profile").exists()

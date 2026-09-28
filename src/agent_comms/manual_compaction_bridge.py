@@ -86,7 +86,7 @@ async def compact_context(
             )
             started = True
             await runner.effects._emit_event(session_id, events.CompactionStart(reason="manual"))
-            result = await manual_compaction.compact_session(
+            result = await manual_compaction.ManualCompaction(
                 runner.agent_bin,
                 backend.args_for_thinking_level(
                     backend.args_for_model(runner.agent_args, thread.model),
@@ -95,7 +95,7 @@ async def compact_context(
                 thread.session_file,
                 thread.worktree,
                 instructions.strip() if instructions else None,
-            )
+            ).run()
             success = result.get("ok") is True
             # A client may receive this terminal event then raise. Do not send
             # a contradictory abort after an uncertain delivery.

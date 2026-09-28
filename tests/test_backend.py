@@ -1290,41 +1290,6 @@ EOF
             if isinstance(event, ae.AgentInfo)
         )
 
-    async def test_manual_compaction_returns_native_summary(self, tmp_path):
-        args_path = tmp_path / "args"
-        request_path = tmp_path / "request"
-        session_path = tmp_path / "session.jsonl"
-        session_path.touch()
-        stub = _stub(
-            tmp_path,
-            f"""#!{sys.executable}
-import json, pathlib, sys
-pathlib.Path({str(args_path)!r}).write_text(" ".join(sys.argv[1:]))
-request = sys.stdin.readline()
-pathlib.Path({str(request_path)!r}).write_text(request)
-print(json.dumps({{"type": "compaction_start", "reason": "manual"}}), flush=True)
-print(json.dumps({{
-    "id": "compact", "type": "response", "command": "compact", "success": True,
-    "data": {{
-        "summary": "kept decisions", "tokensBefore": 9000, "estimatedTokensAfter": 1200,
-    }},
-}}), flush=True)
-""",
-        )
-
-        result = await backend.compact_session(
-            stub, [], str(session_path), str(tmp_path), "preserve test findings"
-        )
-
-        assert result == {
-            "ok": True,
-            "summary": "kept decisions",
-            "tokensBefore": 9000,
-            "estimatedTokensAfter": 1200,
-        }
-        assert f"--session {session_path}" in args_path.read_text()
-        assert '"customInstructions": "preserve test findings"' in request_path.read_text()
-
     async def test_rpc_stays_open_for_steered_child_reply(self, tmp_path):
         stub = _stub(
             tmp_path,
