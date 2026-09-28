@@ -1,6 +1,7 @@
 """Routing annotations keyed by durable Pi entry IDs, never reply text."""
 
 import hashlib
+import os
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass, field
@@ -57,9 +58,7 @@ def _schema(connection: sqlite3.Connection) -> dict[str, str]:
     return {
         row.name: row.sql
         for row in SQLiteSchemaObject.read(
-            connection.execute(
-                "SELECT name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"
-            )
+            connection.execute("SELECT name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
         )
     }
 
@@ -103,9 +102,7 @@ class _SessionRoutes:
         if native_id is None or self._connection is None:
             return None
         if native_id not in self._input_cache:
-            self._input_cache[native_id] = InputDisplay.one(
-                self._connection, native_id=native_id
-            )
+            self._input_cache[native_id] = InputDisplay.one(self._connection, native_id=native_id)
         return self._input_cache[native_id]
 
     def close(self) -> None:
@@ -126,6 +123,23 @@ class TranscriptRoutes:
     def __init__(self, root: Path):
         self.database_path = root / self.filename
         self._initialized = False
+
+    def snapshot(self, destination: Path) -> None:
+        """Retain a consistent current annotation store for attached history."""
+        if not self.database_path.exists():
+            return
+        target = destination / self.filename
+        descriptor = os.open(target, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+        os.close(descriptor)
+        with (
+            closing(
+                sqlite3.connect(self.database_path.resolve().as_uri() + "?mode=ro", uri=True)
+            ) as source,
+            closing(sqlite3.connect(target)) as output,
+        ):
+            _assert_schema(source)
+            source.backup(output)
+            _assert_schema(output)
 
     def _ensure_database(self, *, create: bool = False) -> bool:
         if self._initialized and self.database_path.is_file():

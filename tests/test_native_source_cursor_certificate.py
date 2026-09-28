@@ -21,6 +21,7 @@ from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import MutationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
+from agent_comms.native_runtime_input import CurrentNativeCursor
 from agent_comms.native_source_cursor import read_current_native_cursor
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
@@ -188,7 +189,7 @@ async def test_certified_cursor_rejects_changed_sidecar_without_replay(tmp_path,
             read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
         assert (
             store._connection.execute(
-                "SELECT COUNT(*) FROM current_native_cursor"
+                f"SELECT COUNT(*) FROM {CurrentNativeCursor.declared_name}"
             ).fetchone()[0]
             == 1
         )

@@ -34,6 +34,7 @@ from agent_comms.coordination_store import (
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.native_pi import NativeContextProof, NativeTurnResult
 from agent_comms.native_prompt_send import _enter_admission
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
@@ -187,7 +188,9 @@ async def test_foreground_registers_own_pid_and_seals_one_selected_direct(
         assert comms.views.dm_history("sender", "beta")[-1].body == "42"
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
+                store._connection.execute(
+                    f"SELECT count(*) FROM {NativeRuntimeInput.declared_name}"
+                ).fetchone()[0]
                 == 1
             )
 
@@ -522,7 +525,9 @@ except Exception as error:
         assert child.stdout.strip() == "StaleFence"
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
+                store._connection.execute(
+                    f"SELECT count(*) FROM {NativeRuntimeInput.declared_name}"
+                ).fetchone()[0]
                 == 0
             )
         assert comms.registry.status("beta") == RunningThreadStatus()
@@ -707,7 +712,7 @@ raise SystemExit(f.main(sys.argv[1:]))
             with MutationStore(str(root / "coordination.sqlite3")) as store:
                 assert (
                     store._connection.execute(
-                        "SELECT count(*) FROM native_runtime_input"
+                        f"SELECT count(*) FROM {NativeRuntimeInput.declared_name}"
                     ).fetchone()[0]
                     == 1
                 )
@@ -751,7 +756,9 @@ async def test_failed_model_reservation_is_not_polled_or_replayed(
         assert len(calls) == 1
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
+                store._connection.execute(
+                    f"SELECT count(*) FROM {NativeRuntimeInput.declared_name}"
+                ).fetchone()[0]
                 == 1
             )
         assert comms.registry.status("beta") == StoppedThreadStatus()

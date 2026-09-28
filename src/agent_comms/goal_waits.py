@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, replace
 from typing import ClassVar
 
@@ -20,13 +21,34 @@ class GoalWait:
     revision: int
     after_seq: int
     targets: tuple[GoalWaitTarget, ...]
-    owner_created_at: float | None = None
-    # Positional with targets. Legacy waits cannot attest a terminal callback.
-    target_turn_generations: tuple[int | None, ...] = ()
-    # The exact owner turn that reported this wait. Older unbound rows cannot
-    # prove that a later active turn is merely continuing the wait report.
-    report_turn_id: str | None = None
-    report_turn_generation: int | None = None
+    owner_created_at: float
+    # An idle dependency has no turn generation at the moment of declaration.
+    target_turn_generations: tuple[int | None, ...]
+    # Runtime declarations outside a turn explicitly carry no reporting turn.
+    report_turn_id: str | None
+    report_turn_generation: int | None
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.owner_created_at) not in (int, float)
+            or not math.isfinite(self.owner_created_at)
+            or self.owner_created_at <= 0
+            or len(self.target_turn_generations) != len(self.targets)
+            or any(
+                generation is not None and (type(generation) is not int or generation <= 0)
+                for generation in self.target_turn_generations
+            )
+        ):
+            raise ValueError("A wait requires its owner incarnation and aligned target turns.")
+        if (self.report_turn_id is None) != (self.report_turn_generation is None) or (
+            self.report_turn_id is not None
+            and (
+                not self.report_turn_id
+                or type(self.report_turn_generation) is not int
+                or self.report_turn_generation <= 0
+            )
+        ):
+            raise ValueError("A reporting turn requires both its ID and generation.")
 
     def matches(self, message: Message, snapshot: RegistrySnapshot) -> bool:
         sender = snapshot.threads.get(snapshot.aliases.get(message.sender, message.sender))
@@ -154,19 +176,11 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
             wait = rows.get(goal.id) if goal is not None and goal.state.active else None
             if wait is not None and (
                 goal is None
-                or wait.owner_created_at not in (None, thread.created_at)
+                or wait.owner_created_at != thread.created_at
                 or wait.revision > goal.revision
             ):
                 wait = None
-            dependencies = (
-                targets
-                if name == owner
-                else (
-                    wait.targets
-                    if wait is not None and wait.owner_created_at in (None, thread.created_at)
-                    else ()
-                )
-            )
+            dependencies = targets if name == owner else (wait.targets if wait is not None else ())
             for target in dependencies:
                 canonical = snapshot.aliases.get(target.name, target.name)
                 peer = snapshot.threads.get(canonical)
@@ -183,14 +197,14 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
                 )
                 if peer_wait is not None and (
                     peer_goal is None
-                    or peer_wait.owner_created_at not in (None, peer.created_at)
+                    or peer_wait.owner_created_at != peer.created_at
                     or peer_wait.revision > peer_goal.revision
                 ):
                     peer_wait = None
                 if GoalWaits.target_has_active_turn(target, snapshot) and peer.process_alive:
                     # A persisted wait does not make a *new* live owner turn
                     # part of the old wait graph. It may send the reply before
-                    # its turn finishes. Legacy unbound waits remain open here.
+                    # its turn finishes; only the reporting turn belongs here.
                     current_turn = peer.active_turn
                     if (
                         peer_wait is None

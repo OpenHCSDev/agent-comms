@@ -9,6 +9,7 @@ import pytest
 from agent_comms import HistoricalMessage, HistoryCursor
 from agent_comms.comms import Comms
 from agent_comms.read_ledger import ReadLedger
+from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
 
 
@@ -119,7 +120,11 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
         {
             "type": "message",
             "id": "one",
-            "message": {"role": "user", "content": [{"type": "text", "text": "old question"}]},
+            "message": {
+                "role": "user",
+                "inputId": "a" * 32,
+                "content": [{"type": "text", "text": "old question"}],
+            },
         },
         {
             "type": "message",
@@ -130,12 +135,19 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
     session.write_text("".join(json.dumps(r) + "\n" for r in records))
     raw["threads"]["alice"]["session_file"] = str(session)
     (old.root / "registry.json").write_text(json.dumps(raw))
+    routing = TurnRouting(reply=MessageRoute("alice", ("#team",)))
+    old.transcripts.routes.record(str(session), ("two",), routing)
+    old.transcripts.routes.record_input_display("a" * 32, "original owner question")
     live = setup(tmp_path / "live", 0)
     newer = replace(live.registry.require("alice"), created_at=20.0)
     live.registry.unregister("alice")
     live.registry.remove("alice")
     live.registry.register(newer)
     source = live.views.attach_history(old.root)
+    # Later source annotations cannot change the already attached snapshot.
+    old.transcripts.routes.record(
+        str(session), ("two",), TurnRouting(reply=MessageRoute("alice", ("#later",)))
+    )
     declarations = {h.thread.name: h.thread for h in live.views.historical_threads()}
     assert declarations["alice"].created_at == declarations["bob"].created_at == 10.0
     assert live.registry.require("alice").created_at == 20.0
@@ -143,10 +155,13 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
         "alice", historical_source=source.key, max_messages=1
     )
     assert [e.text for e in page.events] == ["old answer"]
+    assert page.events[0].routing == routing
     earlier = live.transcripts.thread_transcript_page(
         "alice", historical_source=source.key, before=page.before, max_messages=1
     )
-    assert [e.text for e in earlier.events] == ["old question"]
+    assert [e.text for e in earlier.events if e.declared_name == "user"] == [
+        "original owner question"
+    ]
     assert session.read_text() == "".join(json.dumps(r) + "\n" for r in records)
 
 

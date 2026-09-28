@@ -1,0 +1,356 @@
+F....................F.........FFF
+=================================== FAILURES ===================================
+_______________ test_silent_active_turn_does_not_age_into_ready ________________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-0/test_silent_active_turn_does_n0')
+
+    def test_silent_active_turn_does_not_age_into_ready(tmp_path):
+        comms = wire(tmp_path)
+        comms.threads.register(
+            Thread(
+                "worker",
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+        first = comms.agents.begin_turn("worker", "first", "Long-running work")
+        before = comms.registry.snapshot()
+>       comms.threads.register(Thread("worker", frozenset(), str(tmp_path)))
+
+tests/test_active_turn.py:22:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.artifacts/integration/src/agent_comms/thread_management.py:212: in register
+    thread = replace(
+/usr/lib/python3.14/dataclasses.py:1778: in replace
+    return _replace(obj, **changes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = Thread(name='worker', tags=frozenset(), worktree='/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pyt...ctive_turn=None, last_goal_report_turn=None, channel_scope_generation=0, turn_generation=0, last_finished_turn_id=None)
+changes = {'pid': 132138, 'active_turn': ActiveTurn(id='first', owner_pid=132138, started_at=1790611145.179353, routing=None, admission_generation=1, turn_generation=1), 'turn_generation': 1, 'last_finished_turn_id': None, ...}
+
+    def _replace(self, /, **changes):
+        # We're going to mutate 'changes', but that's okay because it's a
+        # new dict, even if called with 'replace(self, **my_changes)'.
+
+        # It's an error to have init=False fields in 'changes'.
+        # If a field is not in 'changes', read its value from the provided 'self'.
+
+        for f in getattr(self, _FIELDS).values():
+            # Only consider normal fields or InitVars.
+            if f._field_type is _FIELD_CLASSVAR:
+                continue
+
+            if not f.init:
+                # Error if this field is specified in changes.
+                if f.name in changes:
+                    raise TypeError(f'field {f.name} is declared with '
+                                    f'init=False, it cannot be specified with '
+                                    f'replace()')
+                continue
+
+            if f.name not in changes:
+                if f._field_type is _FIELD_INITVAR and f.default is MISSING:
+                    raise TypeError(f"InitVar {f.name!r} "
+                                    f'must be specified with replace()')
+                changes[f.name] = getattr(self, f.name)
+
+        # Create the new object, which calls __init__() and
+        # __post_init__() (if defined), using all of the init fields we've
+        # added and/or left in 'changes'.  If there are values supplied in
+        # changes that aren't fields, this will correctly raise a
+        # TypeError.
+>       return self.__class__(**changes)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: Thread.__init__() got an unexpected keyword argument 'pid'
+
+/usr/lib/python3.14/dataclasses.py:1812: TypeError
+______ test_replaced_stopped_or_active_owner_has_no_projection[mutation3] ______
+
+bound = (<agent_comms.goal_attempts.GoalAttemptStore object at 0x7f00bfaaff50>, Thread(name='owner', tags=frozenset(), worktre...turn_id='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', reason=<FailureReason.FINAL_STOP_MISSING: 'assistant_final_stop_missing'>))
+mutation = {'pid': 0}
+
+    @pytest.mark.parametrize(
+        "mutation",
+        [
+            {"name": "replacement"},
+            {"created_at": 11.0},
+            {"worktree": "/changed"},
+            {"pid": 0},
+            {"goal": Goal("replacement", "replacement", state=BlockedGoal())},
+            {"goal": Goal("active", "goal")},
+            {"turn_generation": 8},
+            {"last_finished_turn_id": "b" * 32},
+        ],
+    )
+    def test_replaced_stopped_or_active_owner_has_no_projection(bound, mutation):
+        store, owner, _, observation = bound
+        store.record_failed(observation.reservation, "failed", observation=observation)
+>       assert read(store, replace(blocked(owner), **mutation)).state == "unavailable"
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_failure_observation.py:259:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/usr/lib/python3.14/dataclasses.py:1778: in replace
+    return _replace(obj, **changes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = Thread(name='owner', tags=frozenset(), worktree='/private-worktree', parent=None, task=None, process_identity=ProcessI...ort_turn=None, channel_scope_generation=0, turn_generation=7, last_finished_turn_id='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+changes = {'pid': 0, 'name': 'owner', 'tags': frozenset(), 'worktree': '/private-worktree', ...}
+
+    def _replace(self, /, **changes):
+        # We're going to mutate 'changes', but that's okay because it's a
+        # new dict, even if called with 'replace(self, **my_changes)'.
+
+        # It's an error to have init=False fields in 'changes'.
+        # If a field is not in 'changes', read its value from the provided 'self'.
+
+        for f in getattr(self, _FIELDS).values():
+            # Only consider normal fields or InitVars.
+            if f._field_type is _FIELD_CLASSVAR:
+                continue
+
+            if not f.init:
+                # Error if this field is specified in changes.
+                if f.name in changes:
+                    raise TypeError(f'field {f.name} is declared with '
+                                    f'init=False, it cannot be specified with '
+                                    f'replace()')
+                continue
+
+            if f.name not in changes:
+                if f._field_type is _FIELD_INITVAR and f.default is MISSING:
+                    raise TypeError(f"InitVar {f.name!r} "
+                                    f'must be specified with replace()')
+                changes[f.name] = getattr(self, f.name)
+
+        # Create the new object, which calls __init__() and
+        # __post_init__() (if defined), using all of the init fields we've
+        # added and/or left in 'changes'.  If there are values supplied in
+        # changes that aren't fields, this will correctly raise a
+        # TypeError.
+>       return self.__class__(**changes)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: Thread.__init__() got an unexpected keyword argument 'pid'
+
+/usr/lib/python3.14/dataclasses.py:1812: TypeError
+_ test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-failed_done] _
+
+wired = <agent_comms.comms.Comms object at 0x7f00be2574d0>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-0/test_acp_terminal_binding_reta0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f00bfaf0750>
+outcome = 'failed_done', owner_pauses = False
+
+    @pytest.mark.parametrize(
+        "outcome", ["failed_done", "eof", "observation_error", "observation_rollback"]
+    )
+    @pytest.mark.parametrize("owner_pauses", [False, True])
+    async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
+        wired, tmp_path, monkeypatch, outcome, owner_pauses
+    ):
+        from agent_comms.acp import CommsAgent
+        from test_acp import TestAgentTurn as GoalFixture
+
+        agent = CommsAgent(wired, agent_bin="pi")
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+>       await agent.new_session(str(tmp_path / "project"))
+
+tests/test_goal_failure_observation.py:315:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.artifacts/integration/src/agent_comms/acp.py:179: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/integration/src/agent_comms/session_lifecycle.py:167: in new_session
+    thread = self.declare_thread(cwd, os.getpid())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/integration/src/agent_comms/session_lifecycle.py:130: in declare_thread
+    return self.comms.threads.claim_thread(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.thread_management.ThreadManagement object at 0x7f00be1d16d0>
+base_name = 'project', tags = frozenset({'acp'})
+worktree = '/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-0/test_acp_terminal_binding_reta0/project'
+pid = 132138, start_at_latest = True, model = 'openrouter/z-ai/glm-5.3-flash'
+thinking_level = None, auto_title_pending = True
+
+    def claim_thread(
+        self,
+        base_name: str,
+        *,
+        tags: frozenset[str],
+        worktree: str,
+        pid: int = 0,
+        start_at_latest: bool = False,
+        model: str | None = None,
+        thinking_level: str | None = None,
+        auto_title_pending: bool = False,
+    ) -> Thread:
+        """Atomically register a unique thread and optionally baseline its inbox."""
+        with _store_lock(self._wire_lock_path):
+            name = base_name
+            suffix = 2
+            while self.registry.name_reserved(name):
+                name = f"{base_name}-{suffix}"
+                suffix += 1
+>           thread = Thread(
+                name=name,
+                tags=tags,
+                worktree=worktree,
+                pid=pid,
+                model=model,
+                thinking_level=thinking_level,
+                auto_title_pending=auto_title_pending,
+            )
+E           TypeError: Thread.__init__() got an unexpected keyword argument 'pid'
+
+.artifacts/integration/src/agent_comms/thread_management.py:306: TypeError
+__ test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-eof] ___
+
+wired = <agent_comms.comms.Comms object at 0x7f00be256c10>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-0/test_acp_terminal_binding_reta1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f00be195b00>
+outcome = 'eof', owner_pauses = False
+
+    @pytest.mark.parametrize(
+        "outcome", ["failed_done", "eof", "observation_error", "observation_rollback"]
+    )
+    @pytest.mark.parametrize("owner_pauses", [False, True])
+    async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
+        wired, tmp_path, monkeypatch, outcome, owner_pauses
+    ):
+        from agent_comms.acp import CommsAgent
+        from test_acp import TestAgentTurn as GoalFixture
+
+        agent = CommsAgent(wired, agent_bin="pi")
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+>       await agent.new_session(str(tmp_path / "project"))
+
+tests/test_goal_failure_observation.py:315:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.artifacts/integration/src/agent_comms/acp.py:179: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/integration/src/agent_comms/session_lifecycle.py:167: in new_session
+    thread = self.declare_thread(cwd, os.getpid())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/integration/src/agent_comms/session_lifecycle.py:130: in declare_thread
+    return self.comms.threads.claim_thread(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.thread_management.ThreadManagement object at 0x7f00be1d3390>
+base_name = 'project', tags = frozenset({'acp'})
+worktree = '/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-0/test_acp_terminal_binding_reta1/project'
+pid = 132138, start_at_latest = True, model = 'openrouter/z-ai/glm-5.3-flash'
+thinking_level = None, auto_title_pending = True
+
+    def claim_thread(
+        self,
+        base_name: str,
+        *,
+        tags: frozenset[str],
+        worktree: str,
+        pid: int = 0,
+        start_at_latest: bool = False,
+        model: str | None = None,
+        thinking_level: str | None = None,
+        auto_title_pending: bool = False,
+    ) -> Thread:
+        """Atomically register a unique thread and optionally baseline its inbox."""
+        with _store_lock(self._wire_lock_path):
+            name = base_name
+            suffix = 2
+            while self.registry.name_reserved(name):
+                name = f"{base_name}-{suffix}"
+                suffix += 1
+>           thread = Thread(
+                name=name,
+                tags=tags,
+                worktree=worktree,
+                pid=pid,
+                model=model,
+                thinking_level=thinking_level,
+                auto_title_pending=auto_title_pending,
+            )
+E           TypeError: Thread.__init__() got an unexpected keyword argument 'pid'
+
+.artifacts/integration/src/agent_comms/thread_management.py:306: TypeError
+_ test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-observation_error] _
+
+wired = <agent_comms.comms.Comms object at 0x7f00be1fd220>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-0/test_acp_terminal_binding_reta2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f00be242900>
+outcome = 'observation_error', owner_pauses = False
+
+    @pytest.mark.parametrize(
+        "outcome", ["failed_done", "eof", "observation_error", "observation_rollback"]
+    )
+    @pytest.mark.parametrize("owner_pauses", [False, True])
+    async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
+        wired, tmp_path, monkeypatch, outcome, owner_pauses
+    ):
+        from agent_comms.acp import CommsAgent
+        from test_acp import TestAgentTurn as GoalFixture
+
+        agent = CommsAgent(wired, agent_bin="pi")
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+>       await agent.new_session(str(tmp_path / "project"))
+
+tests/test_goal_failure_observation.py:315:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.artifacts/integration/src/agent_comms/acp.py:179: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/integration/src/agent_comms/session_lifecycle.py:167: in new_session
+    thread = self.declare_thread(cwd, os.getpid())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/integration/src/agent_comms/session_lifecycle.py:130: in declare_thread
+    return self.comms.threads.claim_thread(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.thread_management.ThreadManagement object at 0x7f00be1c4050>
+base_name = 'project', tags = frozenset({'acp'})
+worktree = '/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-0/test_acp_terminal_binding_reta2/project'
+pid = 132138, start_at_latest = True, model = 'openrouter/z-ai/glm-5.3-flash'
+thinking_level = None, auto_title_pending = True
+
+    def claim_thread(
+        self,
+        base_name: str,
+        *,
+        tags: frozenset[str],
+        worktree: str,
+        pid: int = 0,
+        start_at_latest: bool = False,
+        model: str | None = None,
+        thinking_level: str | None = None,
+        auto_title_pending: bool = False,
+    ) -> Thread:
+        """Atomically register a unique thread and optionally baseline its inbox."""
+        with _store_lock(self._wire_lock_path):
+            name = base_name
+            suffix = 2
+            while self.registry.name_reserved(name):
+                name = f"{base_name}-{suffix}"
+                suffix += 1
+>           thread = Thread(
+                name=name,
+                tags=tags,
+                worktree=worktree,
+                pid=pid,
+                model=model,
+                thinking_level=thinking_level,
+                auto_title_pending=auto_title_pending,
+            )
+E           TypeError: Thread.__init__() got an unexpected keyword argument 'pid'
+
+.artifacts/integration/src/agent_comms/thread_management.py:306: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_active_turn.py::test_silent_active_turn_does_not_age_into_ready
+FAILED tests/test_goal_failure_observation.py::test_replaced_stopped_or_active_owner_has_no_projection[mutation3]
+FAILED tests/test_goal_failure_observation.py::test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-failed_done]
+FAILED tests/test_goal_failure_observation.py::test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-eof]
+FAILED tests/test_goal_failure_observation.py::test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-observation_error]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 5 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+5 failed, 29 passed in 2.17s

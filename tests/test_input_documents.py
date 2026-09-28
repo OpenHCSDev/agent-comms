@@ -6,14 +6,11 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms.acp import CommsAgent
-from agent_comms.comms import wire
 from agent_comms import field_codec
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_attempt import StartedInput, UnknownInput
-from agent_comms.input_disposition import AcpDeliveryCursors, InputDispositions
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.locked_store import LockedStore
-from agent_comms.threads import Thread
 
 
 def test_codec_reuses_declared_schema_but_decodes_each_changed_value():
@@ -66,12 +63,11 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
     assert row.unresolved  # prior snapshot is immutable and unchanged
 
 
-@pytest.mark.parametrize("store_type", [InputDispositions, AcpDeliveryCursors])
 @pytest.mark.parametrize(
     "damage", [{}, {"rows": {}}, {"version": True, "rows": {}}, {"version": 1, "rows": []}]
 )
-def test_invalid_documents_are_not_replaced_by_updates(tmp_path, store_type, damage):
-    store = store_type(tmp_path / store_type.filename)
+def test_invalid_documents_are_not_replaced_by_updates(tmp_path, damage):
+    store = InputDispositions(tmp_path / InputDispositions.filename)
     store.path.write_text(json.dumps(damage))
     original = store.path.read_bytes()
     with pytest.raises((TypeError, ValueError)):
@@ -79,18 +75,8 @@ def test_invalid_documents_are_not_replaced_by_updates(tmp_path, store_type, dam
     assert store.path.read_bytes() == original
 
 
-async def test_lost_durable_record_ack_never_advances_or_schedules_then_never_replays(
-    tmp_path, monkeypatch
-):
-    comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
-    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
-    project = tmp_path / "worker"
-    await agent.new_session(str(project))
-    comms.threads.register(Thread("peer", frozenset(), str(project)))
-    message = comms.messaging.send_message("peer", "worker", "Exactly one durable input")
-    store = agent.inputs.dispositions
-    cursor_before = agent.inputs.delivery_cursors.path.read_bytes()
+def test_lost_durable_record_ack_retains_evidence_without_new_acceptance(tmp_path, monkeypatch):
+    store = InputDispositions(tmp_path / InputDispositions.filename)
     original = LockedStore._write_unlocked
     lost = False
 
@@ -102,18 +88,12 @@ async def test_lost_durable_record_ack_never_advances_or_schedules_then_never_re
             raise OSError("durable input acknowledgement lost")
 
     monkeypatch.setattr(LockedStore, "_write_unlocked", lose_ack)
-    try:
-        with pytest.raises(OSError, match="acknowledgement lost"):
-            await agent.inputs.drain_inbox("worker")
-        assert agent.inputs.delivery_cursors.path.read_bytes() == cursor_before
-        assert not agent.inputs.pending_turns.get("worker")
-        assert not agent.inputs.backend_inboxes
-        row = store.read().rows[f"bus:{message.seq}"]
-        assert row.unattempted
-        # Reopening supplies durable evidence only, not the lost acceptance permit.
-        await agent.inputs.drain_inbox("worker")
-        assert not agent.inputs.pending_turns.get("worker")
-        assert not agent.inputs.backend_inboxes
-        assert store.read().rows[row.key] == row
-    finally:
-        await agent.shutdown()
+    args = dict(seq=1, owner="worker", admission=1, target="worker", text="Exact input")
+    with pytest.raises(OSError, match="acknowledgement lost"):
+        store.record("bus:1", **args)
+    reopened = InputDispositions(store.path)
+    before = reopened.read().rows["bus:1"]
+    assert before.unattempted
+    assert not reopened.record("bus:1", **args)
+    assert reopened.read().rows["bus:1"] == before
+    assert before.native_id is None and not before.goal_reviews

@@ -22,6 +22,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_waits import GoalWaits
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
+from goal_owner_fixture import activate_empty_source
 
 
 def _thread(comms, name, worktree):
@@ -385,14 +386,13 @@ def test_terminal_fence_survives_rename_not_stop_or_metadata_edit(tmp_path):
     assert another.registry.require("owner").goal.state.active
 
 
-def test_legacy_wait_without_turn_generation_cannot_infer_terminal_authority(tmp_path):
+def test_unbound_wait_is_rejected_without_replacing_current_wait(tmp_path):
     comms, _goal = _waiting(tmp_path)
     wait = comms.goals.goal_wait("owner")
-    assert wait is not None
-    GoalWaits(comms.root / "goal_waits.json").record(replace(wait, target_turn_generations=()))
-    fence = _finish(comms, "child", "child-turn")
-    assert comms.goals.release_waits_after_terminal_turn(fence) == ()
-    assert comms.registry.require("owner").goal.state.active
+    before = GoalWaits(comms.root / "goal_waits.json").path.read_bytes()
+    with pytest.raises(ValueError, match="aligned target turns"):
+        GoalWaits(comms.root / "goal_waits.json").record(replace(wait, target_turn_generations=()))
+    assert GoalWaits(comms.root / "goal_waits.json").path.read_bytes() == before
 
 
 async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
@@ -400,9 +400,18 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
 ):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    agent = CommsAgent(
+        comms,
+        agent_bin="pi",
+        runtime_enabled=True,
+        auto_wake=False,
+        private_nk_native_package=tmp_path,
+        private_nk_wire_root_id=root_id,
+    )
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
+    activate_empty_source(agent)
     _thread(comms, "owner", tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
     assert goal is not None
@@ -446,10 +455,19 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
 async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    agent = CommsAgent(
+        comms,
+        agent_bin="pi",
+        runtime_enabled=True,
+        auto_wake=False,
+        private_nk_native_package=tmp_path,
+        private_nk_wire_root_id=root_id,
+    )
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
+    activate_empty_source(agent)
     goal = comms.goals.update_goal(
         owner, SetGoalAction(text="Review child work"), owner_store=agent.turns.open_goal_store()
     )
@@ -476,9 +494,18 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
 async def test_acp_delayed_old_callback_after_new_finish_before_reply(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    agent = CommsAgent(
+        comms,
+        agent_bin="pi",
+        runtime_enabled=True,
+        auto_wake=False,
+        private_nk_native_package=tmp_path,
+        private_nk_wire_root_id=root_id,
+    )
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
+    activate_empty_source(agent)
     _thread(comms, "owner", tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
     assert goal is not None
@@ -527,9 +554,18 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
 ):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    agent = CommsAgent(
+        comms,
+        agent_bin="pi",
+        runtime_enabled=True,
+        auto_wake=False,
+        private_nk_native_package=tmp_path,
+        private_nk_wire_root_id=root_id,
+    )
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
+    activate_empty_source(agent)
     _thread(comms, "owner", tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
     assert goal is not None

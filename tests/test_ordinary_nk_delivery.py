@@ -21,6 +21,7 @@ from agent_comms.coordination_store import MutationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.messages import Message, MessageType
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from test_coordinated_runtime import _fake_model
@@ -113,7 +114,8 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
         assert len(rows) == expected_calls
         assert all(row.expected_prompt_equality_established for row in rows)
         assert (
-            db.execute("SELECT COUNT(*) FROM native_runtime_input").fetchone()[0] == expected_calls
+            db.execute(f"SELECT COUNT(*) FROM {NativeRuntimeInput.declared_name}").fetchone()[0]
+            == expected_calls
         )
     # A no-wake observer cannot be turned into a selected run by an inbox ACK.
     comms.messaging.acknowledge_through("beta", message.seq)
@@ -164,7 +166,9 @@ def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
     )
     comms.bus.log.path.write_text(json.dumps(stored.to_wire()) + "\n")
     before = comms.bus.log.path.read_bytes()
-    with pytest.raises(RelationViolationError, match="read-only"):
+    with pytest.raises(
+        RelationViolationError, match="Bus protocol marker is missing or redirected"
+    ):
         comms.messaging.send_message("sender", "beta", "must not append")
     assert comms.bus.log.path.read_bytes() == before
     assert not comms.bus.log.metadata_path.exists()
