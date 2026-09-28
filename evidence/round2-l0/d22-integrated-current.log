@@ -1,0 +1,35 @@
+{
+  "current": {
+    "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "candidate": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/d22-integrated-current",
+    "messages": 120,
+    "admission_after_seq": 120,
+    "threads": 104,
+    "unresolved_inputs": 13,
+    "archived_runtime_databases": [
+      "coordination.sqlite3",
+      "native_prompt_bindings.sqlite3",
+      "compaction-commits.sqlite3"
+    ]
+  },
+  "archives": [
+    {
+      "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+      "candidate": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/d22-integrated-current/history/source-0",
+      "messages": 8400,
+      "admission_after_seq": 12544,
+      "threads": 104,
+      "unresolved_inputs": 0,
+      "archived_runtime_databases": []
+    },
+    {
+      "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w",
+      "candidate": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/d22-integrated-current/history/source-1",
+      "messages": 20,
+      "admission_after_seq": 20,
+      "threads": 7,
+      "unresolved_inputs": 0,
+      "archived_runtime_databases": []
+    }
+  ]
+}
