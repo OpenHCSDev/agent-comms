@@ -144,7 +144,6 @@ class Registration:
                 or not status.active
                 or owner.pid != os.getpid()
                 or not owner.role.executable
-                or not document.generation_metadata_present
                 or generation is None
                 or (
                     owner is not None
@@ -170,7 +169,6 @@ class Registration:
                 or not status.active
                 or owner.pid != os.getpid()
                 or not owner.role.executable
-                or not document.generation_metadata_present
                 or generation is None
                 or (
                     owner is not None
@@ -198,8 +196,7 @@ class Registration:
             current = document.threads.get(expected.name)
             status = document.statuses.get(expected.name)
             if (
-                not document.generation_metadata_present
-                or document.admissions.generations.get(expected.name) != expected_generation
+                document.admissions.generations.get(expected.name) != expected_generation
                 or current is None
                 or status is None
                 or not status.active
@@ -248,8 +245,7 @@ class Registration:
             current = document.threads.get(expected.name)
             status = document.statuses.get(expected.name)
             if (
-                not document.generation_metadata_present
-                or document.owners.generations.get(expected.name) != expected_owner_generation
+                document.owners.generations.get(expected.name) != expected_owner_generation
                 or current != expected
                 or status is None
                 or not status.active
@@ -354,8 +350,7 @@ class Registration:
             generation = document.owners.generations.get(canonical)
             goal = owner.goal if owner is not None else None
             if (
-                not document.generation_metadata_present
-                or owner is None
+                owner is None
                 or status is None
                 or not status.active
                 or owner != expected
@@ -399,12 +394,7 @@ class Registration:
     def lease_local_turn(
         self, name: str, turn_id: str, *, routing: TurnRouting | None = None
     ) -> tuple[Thread, int]:
-        """Atomic local begin-turn, never reviving a stopped or replaced owner.
-
-        A legacy unmarked registry can be migrated under the same lock as the
-        claim. Marked private roots must not recreate missing generation metadata:
-        an old writer may have stripped it during an unsafe cutover.
-        """
+        """Atomic local begin-turn, never reviving a stopped or replaced owner."""
         if type(turn_id) is not str or not 0 < len(turn_id) <= 128:
             raise ValueError("live owner turn requires a bounded ID")
         with self.store.editing() as edit:
@@ -421,8 +411,6 @@ class Registration:
                 or current.active_turn is not None
             ):
                 raise RelationViolationError("live owner is stopped or unavailable")
-            if not document.generation_metadata_present:
-                document.generation_metadata_present = True
             self._assert_maintenance_open_unlocked()
             result = document.lease_turn(current, turn_id, routing)
             edit.commit()

@@ -1,12 +1,12 @@
 """An ending attempt cannot release a replacement just because its ID is reused."""
 
-import json
 import os
 from dataclasses import replace
 
 import pytest
 
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.turn_lease import ActiveTurn
 
@@ -57,8 +57,6 @@ def test_revoked_admission_cleanup_cannot_attest_goal_completion(tmp_path):
 def test_unattested_saved_turn_remains_data_without_a_lease(tmp_path):
     owner = Thread("owner", frozenset(), str(tmp_path), pid=os.getpid())
     retained = replace(owner, active_turn=ActiveTurn("retained", owner.pid))
-    restored = Thread.from_registry(
-        owner.name, json.loads(json.dumps(retained.to_wire())), tmp_path
-    )
+    restored = FieldCodec.decode(Thread, FieldCodec.encode(retained))
     assert restored.active_turn == retained.active_turn
     assert restored.turn_lease is None
