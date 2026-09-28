@@ -47,6 +47,7 @@ from .thread_identity import OwnerIdentity
 
 if TYPE_CHECKING:
     from .agent_events import GoalChanged
+    from .goal_attempts import GoalAttemptStore
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
     from .relationships import ThreadRelationships
 from .declarations import (
@@ -1302,7 +1303,7 @@ class Comms:
         runtime = self.runtime_info.all()
         active = frozenset(t.name for t in snapshot.threads.values() if t.executing)
         activities = self.activity.all_current(active=active)
-        waits = GoalWaits(self.root / GoalWaits.filename).snapshot()
+        waits = GoalWaits(self.root / GoalWaits.filename).read()
         return tuple(
             ThreadView(
                 thread,
@@ -2689,7 +2690,7 @@ class Comms:
         goal = thread.goal
         if goal is None or goal.id != goal_id:
             raise ValueError("This goal was replaced or cleared; refresh its state.")
-        if not goal.active:
+        if not goal.state.active:
             raise ValueError(
                 (pause.owner_instruction if (pause := self.goal_pause(thread.name)) else None)
                 or "This goal is no longer active; refresh its state."
@@ -2740,7 +2741,7 @@ class Comms:
 
     def goal_wait(self, name: str) -> GoalWait | None:
         waits = GoalWaits(self.root / GoalWaits.filename)
-        return waits.for_goal(self.registry.require(name).goal, waits.snapshot())
+        return waits.for_goal(self.registry.require(name).goal, waits.read())
 
     def recover_closed_goal_wait(self, name: str) -> tuple[str, ...]:
         """Release one stranded standby without replaying a dependency input.
@@ -2756,10 +2757,10 @@ class Comms:
             if owner is None or owner.active_turn is not None:
                 return ()
             goal = owner.goal
-            if goal is None or not goal.active:
+            if goal is None or not goal.state.active:
                 return ()
             waits = GoalWaits(self.root / GoalWaits.filename)
-            rows = waits.snapshot()
+            rows = waits.read()
             wait = rows.get(goal.id)
             if (
                 wait is None
@@ -2835,11 +2836,11 @@ class Comms:
                 or not snapshot.statuses[canonical].active
             ):
                 return ()
-            waits = GoalWaits(self.root / GoalWaits.filename).snapshot()
+            waits = GoalWaits(self.root / GoalWaits.filename).read()
             released: list[str] = []
             for owner in snapshot.threads.values():
                 goal = owner.goal
-                if goal is None or not goal.active:
+                if goal is None or not goal.state.active:
                     continue
                 wait = waits.get(goal.id)
                 if (
@@ -2947,7 +2948,7 @@ class Comms:
         goal = snapshot.threads[canonical].goal
         return goal, GoalWaits.execution(
             goal,
-            GoalWaits(self.root / GoalWaits.filename).snapshot(),
+            GoalWaits(self.root / GoalWaits.filename).read(),
             snapshot,
         )
 
@@ -2956,7 +2957,7 @@ class Comms:
         goal = self.registry.require(name).goal
         return bool(
             goal is not None
-            and goal.active
+            and goal.state.active
             and GoalWaits(self.root / GoalWaits.filename).clear(goal.id, wait_id=wait_id)
         )
 
@@ -2970,7 +2971,7 @@ class Comms:
         }
         activities = self.activity.all_current()
         pending = self.bus.pending_counts_all(tuple(threads))
-        waits = GoalWaits(self.root / GoalWaits.filename).snapshot()
+        waits = GoalWaits(self.root / GoalWaits.filename).read()
         return [
             {
                 **t.to_wire(),
@@ -2978,7 +2979,7 @@ class Comms:
                 "is_fork": t.is_fork,
                 "pending": pending[name],
                 "goal_pause": (
-                    asdict(pause) if (pause := GoalPauseEvents.for_goal(t.goal)) else None
+                    pause.to_wire() if (pause := GoalPauseEvents.for_goal(t.goal)) else None
                 ),
                 "goal_execution": (
                     asdict(execution)
@@ -3033,18 +3034,17 @@ class Comms:
         info = self.agent_info_of(thread.name)
         return (info.model if info else None) or fallback
 
-    def update_goal(self, name: str, action: str | GoalAction, **options: Any) -> Goal | None:
-        """Decode legacy ingress once; typed actions own the transition algorithm."""
-        if isinstance(action, str):
-            command, actor, owner_store = GoalAction.from_legacy(action, options)
-        else:
-            command = action
-            actor = options.pop("actor", RuntimeInvocable)
-            owner_store = options.pop("owner_store", None)
-            if options:
-                raise TypeError(f"Unexpected goal options: {tuple(options)}")
+    def update_goal(
+        self,
+        name: str,
+        action: GoalAction,
+        *,
+        actor: type = RuntimeInvocable,
+        owner_store: GoalAttemptStore | None = None,
+    ) -> Goal | None:
+        """Apply one declared command; external ingress owns decoding."""
         with _store_lock(self._wire_lock_path):
-            return command.apply(
+            return action.apply(
                 GoalActionContext(self, self.registry.require(name), actor, owner_store)
             )
 

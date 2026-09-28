@@ -227,7 +227,7 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
             assert db.execute("SELECT count(*) FROM response_schema_meta").fetchone()[0] == 1
             assert db.execute("SELECT count(*) FROM native_runtime_schema_meta").fetchone()[0] == 1
         assert private.goal_execution("sender").state is GoalExecutionState.STANDBY
-        migrated_wait = GoalWaits(private.root / "goal_waits.json").snapshot()["stage-goal"]
+        migrated_wait = GoalWaits(private.root / "goal_waits.json").read()["stage-goal"]
         assert migrated_wait.after_seq == 0
         assert migrated_wait.target_turn_generations == (None,)
         assert not (private.root / "bus.jsonl").exists()

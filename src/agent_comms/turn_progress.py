@@ -227,7 +227,7 @@ class TurnProgress(events.AgentEventConsumer):
             self.terminal_ok = False
         if (
             execution.goal is not None
-            and execution.goal.active
+            and execution.goal.state.active
             and (not execution.direct_interrupt)
             and (
                 execution.runner.comms.registry.require(execution.thread_name).worktree
@@ -247,7 +247,7 @@ class TurnProgress(events.AgentEventConsumer):
             if (
                 current_goal
                 and current_goal.id == execution.goal.id
-                and current_goal.active
+                and current_goal.state.active
                 and (failed or empty_success)
             ):
                 # Block the latest same-ID goal under the wire lock,
@@ -350,7 +350,7 @@ class TurnProgress(events.AgentEventConsumer):
         if (
             self.terminal_ok is None
             and execution.goal is not None
-            and execution.goal.active
+            and execution.goal.state.active
             and not execution.direct_interrupt
         ):
             # An EOF without a done event is a failed turn, not a signal to
@@ -363,7 +363,7 @@ class TurnProgress(events.AgentEventConsumer):
                 execution.current_thread.worktree == execution.thread.worktree
                 and execution.current_goal is not None
                 and execution.current_goal.id == execution.goal.id
-                and execution.current_goal.active
+                and execution.current_goal.state.active
             ):
                 execution.runner.comms.block_goal_after_failed_turn(
                     execution.thread_name,
@@ -397,7 +397,7 @@ class TurnProgress(events.AgentEventConsumer):
                         execution.goal_permit, execution.witness
                     )
                     self.goal_attempt_resolved = True
-                elif execution.current_goal.active or isinstance(
+                elif execution.current_goal.state.active or isinstance(
                     execution.current_goal.state, PausedGoal
                 ):
                     # A successful in-flight turn may finish after owner pause.

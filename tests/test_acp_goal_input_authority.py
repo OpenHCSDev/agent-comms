@@ -11,6 +11,7 @@ from acp.schema import TextContentBlock
 
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
+from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import wire
 
@@ -98,7 +99,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
         yield ae.InputStarted(id=None)
         if queued_before_activation:
             public_id, command = await queue_followup(agent, kwargs)
-        goal = comms.update_goal("project", "set", text="Read files until stopped")
+        goal = comms.update_goal("project", SetGoalAction(text="Read files until stopped"))
         yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
         assert agent.turns.goal_store.snapshot(goal.id).state == "reserved"
         if not queued_before_activation:
@@ -121,7 +122,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
         await agent.turns.run_agent_turn(
             "project", "project", "Set a goal for model", initial_display_text="Set a goal as typed"
         )
-        assert comms.registry.require("project").goal.active
+        assert comms.registry.require("project").goal.state.active
         state = agent.turns.goal_store.snapshot(observed["goal"].id)
         assert state.state == "ready" and state.number == 2
         key = "acp:" + observed["public_id"]
@@ -143,7 +144,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
     agent, comms, session, _ = await owner(tmp_path, monkeypatch)
     store = agent.turns.open_goal_store()
     original_goal = comms.update_goal(
-        "project", "set", text="Read files until stopped", owner_store=store
+        "project", SetGoalAction(text="Read files until stopped"), owner_store=store
     )
     observed = {}
 
@@ -157,10 +158,10 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         public_id, command = await queue_followup(agent, kwargs)
         observed["public_id"] = public_id
         if change == "clear":
-            comms.update_goal("project", "clear")
+            comms.update_goal("project", ClearGoalAction())
         elif change == "replace":
             observed["replacement"] = comms.update_goal(
-                "project", "set", text="A different goal", owner_store=store
+                "project", SetGoalAction(text="A different goal"), owner_store=store
             )
         with kwargs["send_boundary"](public_id, "b" * 32, command["message"]) as allowed:
             assert allowed is (change is None)
@@ -186,12 +187,12 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         assert await replay(agent) == (["follow-up as typed"] if change is None else [])
         current = comms.registry.require("project").goal
         if change is None:
-            assert current.active and current.id == original_goal.id
+            assert current.state.active and current.id == original_goal.id
             assert store.snapshot(current.id).state == "ready"
         elif change == "clear":
             assert current is None
         else:
-            assert current.active and current.id == observed["replacement"].id
+            assert current.state.active and current.id == observed["replacement"].id
             assert store.snapshot(current.id).state == "ready"
     finally:
         await agent.shutdown()

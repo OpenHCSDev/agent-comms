@@ -13,6 +13,7 @@ import pytest
 
 from agent_comms import GoalExecutionState, Thread, wire
 from agent_comms.acp import CommsAgent
+from agent_comms.goal_actions import SetGoalAction
 
 
 @pytest.mark.parametrize("restart, review_pending", [(False, False), (True, False), (True, True)])
@@ -189,8 +190,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             comms.begin_turn("child", "child-report-in-flight")
             goal = comms.update_goal(
                 "parent",
-                "set",
-                text="Review @child report",
+                SetGoalAction(text="Review @child report"),
                 owner_store=agent.turns.open_goal_store(),
             )
             goal_id = goal.id
@@ -216,7 +216,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             agent.turns.schedule_goal("parent")
             await asyncio.wait_for(agent.inputs.wake_tasks["parent"], 40)
             assert not failures, failures
-            assert comms.registry.require("parent").goal.active
+            assert comms.registry.require("parent").goal.state.active
             assert comms.goal_execution("parent").state is GoalExecutionState.STANDBY
             assert len(requests) == 2 + offset
             first_proc = agent.turns.persistent_backends["parent"].proc
@@ -249,7 +249,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                 row = agent.inputs.dispositions.get(key)
                 assert row["status"] == "unknown" and row["native_id"] is None
                 assert agent.inputs.dispositions.reviewed_for_goal(row, goal.id)
-            assert comms.registry.require("parent").goal.status == "completed"
+            assert comms.registry.require("parent").goal.state.declared_name == "completed"
             assert agent.turns.goal_store.snapshot(goal.id).state == "completed"
             session = Path(comms.registry.require("parent").session_file)
             rows = [json.loads(line) for line in session.read_text().splitlines()]
