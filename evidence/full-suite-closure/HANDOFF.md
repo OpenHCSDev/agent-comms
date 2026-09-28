@@ -266,3 +266,22 @@ retain live route, entry-ID persistence and equal private text isolation. Remove
 monkeypatch of deleted acp.backend import. Actual channel delivery remains covered
 by canonical ACP/native suites. Passive fixture changes remain uncommitted pending
 parent source disposition. Independent remainder after reply routing continues.
+
+## Runtime attachment and restart fixture closure
+
+Remainder-nine15pass12failed1skip14.77s. Current response-policy test drops its
+retired disposition_key/bus_key mechanism, retains nominal eligibility/guidance/
+batching. Actual owner restart uses pinned canonical root/package, preserving
+session and collaboration bytes. Runtime client fixtures configure current route;
+socket-only owner identities use explicit ProcessIdentity, not deleted Thread.pid.
+Removed115-line text-executor fork/drain test; actual native detached-owner test
+already proves turn survival and concurrent client attachment. Long-root socket
+roundtrip uses current owned input callbacks with real RPC server/client, keeping
+prompt/settlement/cancel/compact behavior; actual bind replaces arbitrary<100 test
+since owned persistent TMPDIR yields107 bytes accepted by this OS.
+
+Focused13:12passed1failed10.61s; corrected long-root test1passed0.83s. No production
+changes. Passive module explicitly relinquished to Cicero, own setup-only diff
+saved at.artifacts/passive-fixture-config.patch then reverted. Direct CLI delivery
+to Cicero rejected (no visible executable); parent notified to relay. Current
+independent remainder continues after runtime. Final combined suite still required.
