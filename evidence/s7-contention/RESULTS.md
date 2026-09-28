@@ -77,6 +77,6 @@ Historical peak process RSS **437.1 MiB**; maximum case scratch **11.37 MiB**. H
 
 ## Scope and deletion closure
 
-Deleted the obsolete serial listing/transcript benchmark, removed Comms facade calls and retired ACP replay manipulation from the maintained benchmark. No compatibility dispatch, replay alternative or production-lock change was added. Benchmark source diff: 372 added / 141 deleted; growth implements the missing three-process workload, actual lock timing, resource bounds and failure accounting. The historical translation exists only as a receipt patch, not as an active compatibility path.
+Deleted the obsolete serial listing/transcript benchmark, removed Comms facade calls and retired ACP replay manipulation from the maintained benchmark. No compatibility dispatch, replay alternative or production-lock change was added. Benchmark source diff: 374 added / 141 deleted; growth implements the missing three-process workload, actual lock timing, resource bounds and failure accounting. The historical translation exists only as a receipt patch, not as an active compatibility path.
 
 No benchmark acceptance measurement remains unexecuted. Production marker-reader failures are still a finding for the parent integration owner; this receipt does not call the runtime error-free. CI was not used as a gate.
