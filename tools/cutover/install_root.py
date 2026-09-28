@@ -34,7 +34,7 @@ from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.store_files import _atomic_write_text, _store_lock, file_revision
 from agent_comms.wire_log import WireLog
-from agent_comms.wire_metadata import WireMetadata
+from agent_comms.wire_metadata import ArchivedAccess, WireAccess, WireMetadata, WritableAccess
 
 
 def receipt(candidate: Path) -> RootRehearsal:
@@ -120,7 +120,7 @@ def source_lock(source: Path):
         yield
 
 
-def overlay(candidate: Path, prepared: Path) -> RootRehearsal:
+def overlay(candidate: Path, prepared: Path, access: WireAccess) -> RootRehearsal:
     """Replace converted stores; preserve untouched sessions, diagnostics and documents."""
     expected = receipt(candidate)
     old_indexes = (
@@ -189,11 +189,11 @@ def overlay(candidate: Path, prepared: Path) -> RootRehearsal:
         if reads.bus_identity == ReadLedger.bus_identity(candidate / "bus.jsonl"):
             reads = replace(reads, bus_identity=ReadLedger.bus_identity(log.path))
         _atomic_write_text(read_path, json.dumps(FieldCodec.encode(reads)))
-    verify(prepared, candidate, expected)
+    verify(prepared, candidate, expected, access)
     return expected
 
 
-def verify(root: Path, candidate: Path, expected: RootRehearsal) -> None:
+def verify(root: Path, candidate: Path, expected: RootRehearsal, access: WireAccess) -> None:
     current = Comms(root)
     if len(current.bus.log.full_history()) != expected.messages:
         raise ValueError("Installed message count differs from the staged history")
@@ -212,6 +212,8 @@ def verify(root: Path, candidate: Path, expected: RootRehearsal) -> None:
     staged = Comms(candidate)
     marker = current.bus.log.read_metadata_unlocked(required=True)
     staged_marker = staged.bus.log.read_metadata_unlocked(required=True)
+    if marker.access != access:
+        raise ValueError("Installed root does not have its assigned archive or writer access")
     if (
         replace(marker, checkpoint_version=None, checkpoint_seal=None)
         != replace(staged_marker, checkpoint_version=None, checkpoint_seal=None)
@@ -287,7 +289,7 @@ def install(source: Path, candidate: Path, backup: Path) -> RootRehearsal:
             shutil.copytree(
                 source, prepared, dirs_exist_ok=True, symlinks=True, ignore=ignore_sockets
             )
-            overlay(candidate, prepared)
+            overlay(candidate, prepared, WritableAccess())
             staged_sources = FieldCodec.decode(
                 tuple[HistorySource, ...],
                 json.loads((candidate / "history_sources.json").read_text()),
@@ -300,7 +302,7 @@ def install(source: Path, candidate: Path, backup: Path) -> RootRehearsal:
                 assert_source_unchanged(archive_source, archive_receipt)
                 relative = archive_source.relative_to(source)
                 archive_prepared = prepared / relative
-                overlay(archive_candidate, archive_prepared)
+                overlay(archive_candidate, archive_prepared, ArchivedAccess())
                 installed_sources.append(
                     replace(
                         item,
@@ -326,7 +328,7 @@ def install(source: Path, candidate: Path, backup: Path) -> RootRehearsal:
             # Readers acquire the installed root's wire lock themselves. The
             # prepared lock now names that inode and must be released first.
             try:
-                verify(source, candidate, expected)
+                verify(source, candidate, expected, WritableAccess())
                 for item in installed_sources:
                     item.validate()
                     item.registry()

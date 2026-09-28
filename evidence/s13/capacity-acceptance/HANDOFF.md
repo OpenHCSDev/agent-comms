@@ -2,7 +2,22 @@
 
 Source: existing tests/test_owner_compaction_prepare.py and stack/test-native-writer-coverage.mjs. Parent assigned production changes to Darwin/S9 and Pascal/S10; no production mechanism added here.
 
-## Final combined acceptance — PASS
+## Final CURRENT parent receiver acceptance — PASS
+
+Fast-forwarded own S13 tree to parent **1aef899** and ran directly with `PYTHONPATH=src`; no225 adapter/private A12 import. Current Thread/process_identity fixtures, PiHelper/BoundedRun, typed request/result records and current `_pi_helpers` DiskEntryStore programs all participated. Same Darwin native0d7ebb4f4b5aa1ec package; production native package verification unchanged. Current reopen API takes that verified package directly, so the old launcher argument in the large test was migrated. Obsolete `run_receiver_225.py` is deleted; its historical implementation is in c6b1e70.
+
+Focused actual checks: **4pass in16.42s** — native prepare read-only/cutpoint, owner prepare+commit, strict native reopen/no ambient preload, actual ACP manual compact with native host and saved-history report. Last uses the existing native fixture response, not a paid provider. `current-parent-focused-first.log` is complete.
+
+| Actual history bytes | Maximum native VmHWM/sample | Python VmHWM | Result |
+| --- | --- | --- | --- |
+|302,041,856|218,640KiB (213.5MiB)|87,032KiB|1pass27.95s|
+|604,009,760|223,196KiB (218.0MiB)|87,020KiB|1pass46.97s|
+
+Both serial runs complete actual CLI identity/capability+messages -> two-branch/replay/malformed coverage -> current owner preparation -> journaled native commit through inherited authority -> current strict reopen -> fresh CLI identity/capability. Original prefix preserved; append-only commit. Native128MiB V8/240MiB RSS limits held; no observer errors or exceeded budgets, all exact native identities retired, generated histories/indexes removed. Large tests use a literal summary at the actual commit API and make zero model/provider requests. They do not claim a general bound for single huge messages/full-record clients or summary quality.
+
+All **6 requested checks pass** on the changed receiver. Test caller migration only (+1/-2); obsolete225 test runner deleted(-58). No production fix, live mutation or CI wait. Ruff for the changed test and diff check pass. Parent owns copied-root installer, final pins/wheels and quiet activation. `current-parent-receipt.json`, current-parent288/576 logs and CURRENT-COMMANDS.md are the coherent current receipt; older receipts below establish chronology only.
+
+## Historical installed225/242 acceptance — PASS
 
 Darwin243 `2c03f7f` (production2755c23), combined242/244, final native package:
 `/home/ts/wt/comms-native-session-entry-store-20260928/stack/.pi-native-0d7ebb4f4b5aa1ec/node_modules/@earendil-works/pi-coding-agent`.
@@ -19,7 +34,7 @@ Two branches, retained floor/settings, old commit replay refusal and four malfor
 
 `combined-empty-file-race.log`: independent actual external initializer regression now PASS. The probe accepts refusal or coherent reload and no longer requires the old implementation's specific refusal.
 
-Receiver/test migration only: `run_receiver_225.py` loads authoritative PR232 A12 under a private test module for actual CLI cleanup/RAM observation and explicitly changes the disposable Thread fixture to this receiver's real `pid=os.getpid()` contract. It does not add a production adapter or fake birth value. The first combined attempt reached CLI open but found my probe's deleted buildSessionContext call; `combined-288-first.log` is retained as that failed test-consumer attempt. Probe now uses actual entryStore.contextSettings/buildContextEntries/sessionEntryToContextMessages; no retired API restored. Unchanged standalone manager checks were not repeated.
+Historical receiver/test migration in c6b1e70 (runner now deleted): `run_receiver_225.py` loaded authoritative PR232 A12 under a private test module for actual CLI cleanup/RAM observation and explicitly changes the disposable Thread fixture to this receiver's real `pid=os.getpid()` contract. It does not add a production adapter or fake birth value. The first combined attempt reached CLI open but found my probe's deleted buildSessionContext call; `combined-288-first.log` is retained as that failed test-consumer attempt. Probe now uses actual entryStore.contextSettings/buildContextEntries/sessionEntryToContextMessages; no retired API restored. Unchanged standalone manager checks were not repeated.
 
 This establishes the assigned two-size retained-history chain, not a general bound on a single giant message, unbounded full-record consumers, summary quality or parent251's newly integrated Python receiver. Parent owns final combined receiver/pin/wheel/copied-root install/activation. No live mutation, paid calls or CI wait. T7 is already published as Toad114; it did not delay this acceptance.
 
