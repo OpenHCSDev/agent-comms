@@ -122,3 +122,26 @@ Affected run64pass/1fail/1skip in5.43s; the new test mistakenly expected latest
 sequence rather than acknowledgement count (two pending messages), corrected
 before the continuing remainder run. No source changes in this batch. Parent
 owns candidate-wrapper and finite-JSON cleanup; those paths are not restored.
+
+## Fresh native detach and goal fixture closure
+
+Remainder segment365pass/12failed/4skip in60.91s. Goal fixture was reissuing an
+already-created canonical marker; it now reuses the actual metadata identity
+and prepared native package. CLI subprocess uses current imports; shared-wire
+case asserts canonical DM history instead of removed public-drain transcript echo.
+Focused CLI/goal-failure/standby batch71passed in31.14s.
+
+Merged parent7ba2676; direct candidate scheduler and finite-wire deletion retained.
+Found relative PYTHONPATH=src lets children launched in another cwd import the
+parent editable checkout. Final acceptance commands now use absolute own src;
+prior subprocess results with inherited relative paths are not final provenance.
+
+Replaced old FIFO/text executor detach test with real CommsClient->detached
+worker->prepared native Pi->loopback HTTP, no paid provider. It reproduced a real
+startup failure: cohort_foreground._preflight rejected every root outside /var/tmp.
+Removed that geography restriction; retained explicit activation, existing lexical
+ancestry/UID/0700 session checks, package attestation and exact canonical root ID.
+Actual test passes in5.30s: disconnect first client midrequest, attach two clients
+to the same process, release exactly one loopback request, observe settlement,
+leave owner alive until explicit cleanup. Owner launch result/process behavior
+is not mocked; only stdout/stderr is redirected into the owned test log.

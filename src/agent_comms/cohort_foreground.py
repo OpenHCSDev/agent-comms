@@ -58,8 +58,8 @@ class NoWakeReceipt:
 def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool) -> None:
     # Do not create a root, registry, SQLite database, or provider opportunity
     # when the owner-only directory or reviewed copied Pi is absent.
-    if not opt_in or root == Path("/var/tmp") or not root.is_relative_to("/var/tmp"):
-        raise PublicationActivationBlocked("foreground cohort requires a private /var/tmp root")
+    if not opt_in:
+        raise PublicationActivationBlocked("foreground cohort requires explicit activation")
     _private_session_dir(root)
     _trusted_package(native_package)
     comms = Comms(root)

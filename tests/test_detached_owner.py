@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp import CommsClient
+from agent_comms.child_process import DetachedProcess
 from agent_comms.comms import wire
 from test_manual_compaction import LoopbackProvider
 
@@ -44,9 +45,17 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
         path = profile / name
         path.write_text(json.dumps(content))
         path.chmod(0o600)
+    monkeypatch.setenv("PYTHONPATH", str(Path(__file__).parents[1] / "src"))
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(profile))
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/fake-compact")
     monkeypatch.setenv("PI_OFFLINE", "1")
+    owner_output = (tmp_path / "owner-output.log").open("wb")
+    launch = DetachedProcess.launch
+
+    def logged_launch(*args, **kwargs):
+        return launch(*args, **{**kwargs, "output": owner_output})
+
+    monkeypatch.setattr(DetachedProcess, "launch", logged_launch)
     comms = wire(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(comms.root, root_id, package)
@@ -93,10 +102,14 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
             await asyncio.gather(turn, return_exceptions=True)
         for client in (first, second, third):
             await client.shutdown()
+        if name is None and "project" in comms.registry:
+            name = "project"
+            owner = comms.registry.require(name).pid
         if name is not None:
             comms.owners.stop(name)
         if owner is not None:
             with suppress(ChildProcessError):
                 await asyncio.to_thread(os.waitpid, owner, 0)
+        owner_output.close()
         server.close()
         await server.wait_closed()
