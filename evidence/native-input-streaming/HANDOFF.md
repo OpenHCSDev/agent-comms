@@ -42,6 +42,10 @@ NRA skill/current owner deletion decisions read; no fresh global-scan claim.
 - `python-boundary-first.log`:77pass8optional skips native evidence/fresh-session/
   transcript cases. `python-capacity.log`:2pass retained >16MiB/old proof generation
   plus concurrent mutation. `transcript.log`:9pass including >256KiB record.
+- `live-claims.log`: historical UNKNOWN/no journal remains nonreplayable; live
+  fsynced context commits release pending memory, and the next generation still
+  binds the historical digest. Two cases pass.
+- `deletion-transcript.log`:10pass current deletion guard and transcript boundary.
 - `lint-current.log`: current affected Python lint passes.
 
 ## Coupled completion, not install-ready
@@ -52,7 +56,9 @@ API received onPR234: `manager.entryStore.trackedInputs()` and existing
 `manager.getTrackedInput(id)`; adopted without another store/scanner. Requested
 indexed metadata lookup including inputDigest: current base trackedInput scans
 all tracked bodies per proof row. Adopt canonical selector API once published,
-then exercise actual native startup/replay on the combined package. No pretend
+then exercise actual native startup/replay on the combined package. Current
+combined import fails because compaction still imports removed buildSessionContext
+(`real-manager-first.log`), reported on243/234/229; that caller is Darwin-owned. No pretend
 complete mark while this production dependency is unfinished.
 
 Python NativeEntry.read_evidence still materializes session entries; Darwin owns
@@ -61,3 +67,10 @@ must compose with that owner's historical projection, not introduce another inde
 Parent owns metadata/selected summary/native commit framing and final native
 manifest/import-boundary regeneration, integration and quiet activation. No
 manifest was changed to bless an incomplete package.
+
+## Current source accounting
+
+Checkpoint976be19: production source/patches +163/-259; tests including native
+JavaScript +156/-236 (before added live-claim regressions). Evidence is separate.
+No whole-history cap remains in the native input injection or Python proof
+reader; no replaced startup injection is kept alongside the implementation.

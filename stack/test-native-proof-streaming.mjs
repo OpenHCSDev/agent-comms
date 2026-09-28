@@ -58,6 +58,41 @@ test('retained proof larger than retired cap streams with no claim/body mirror o
   console.log(JSON.stringify({ journalBytes: bytes, generations: generation, peakRSS: rss, recoveryEmissions: 0 }));
 }));
 
+test('historical UNKNOWN without a proof row still prevents input replay', () => fixture((file, state) => {
+  // Durable native entry exists, but no journal fsync/live acceptance is proved.
+  state._loadNativeInputState();
+  assert.equal(state._nativeRequestGeneration, 0);
+  assert.equal(state._claimNativeInput(inputId, request), true);
+  assert.throws(() => state._claimNativeInput(inputId, {text: 'different'}), /Conflicting replay/);
+  assert.equal(state._nativeInputClaims.size, 0);
+}));
+
+test('live context commit releases only pending memory and preserves later digest binding', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'native-proof-live-'));
+  const file = join(root, 'session.input-proof'), receipts = [];
+  const state = Object.assign(Object.create(AgentSession.prototype), {
+    sessionManager: {
+      getTrackedInput(id) { return id === inputId ? entry : undefined; },
+      flushInputDurably(id) { assert.equal(id, inputId); return entry.id; },
+      getSessionId() { return 'session'; },
+    },
+    _nativeInputClaims: new Map([[inputId, inputDigest]]),
+    _awaitingNativeInputIds: new Set([inputId]), _nativeRequestGeneration: 0,
+    _nativeProofPath: () => file, _emit: event => receipts.push(event),
+  });
+  try {
+    const context = {messages: [{role: 'user', inputId, inputDigest}]};
+    await state._commitNativeContext(context);
+    assert.equal(state._nativeInputClaims.size, 0);
+    await state._commitNativeContext(context);
+    assert.deepEqual(receipts.map(row => row.requestGeneration), [1, 2]);
+    assert.equal([...state._nativeProofRows(file)].length, 2);
+    assert.equal(state._claimNativeInput(inputId, request), true);
+    await assert.rejects(() => state._commitNativeContext({messages: [
+      {...context.messages[0], inputDigest: '0'.repeat(64)}]}), /unbound native input/);
+  } finally { rmSync(root, {recursive: true, force: true}); }
+});
+
 test('malformed, incomplete, changed or inconsistent historical proof never becomes acceptance', () => {
   const valid = row();
   for (const raw of [
