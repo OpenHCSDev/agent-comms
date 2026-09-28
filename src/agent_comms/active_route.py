@@ -61,7 +61,7 @@ class ActiveRoute(CommsRoute):
         # ancestry and protocol decoder, without taking the mutation/durability
         # barrier or interpreting registry/history merely to observe identity.
         marker = WireLog(self.root / "bus.jsonl")._private_marker_unlocked()
-        if marker["wire_root_id"] != self.wire_root_id:
+        if marker.root_id != self.wire_root_id:
             raise RelationViolationError("private route root ID changed")
         return super(ActiveRoute, self).observe_root()
 
