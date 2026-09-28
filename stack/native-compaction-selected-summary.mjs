@@ -125,10 +125,10 @@ function acAdmitSummary(request, session, conflict, spent, host) {
     if (readiness.status !== "ready") return { denial: readiness.reason };
     if (!acSummaryCompatible(session)) return { denial: "extension_unsupported" };
     let preparation;
-    try { preparation = prepareCompaction(session.sessionManager.getBranch(),
-        session.settingsManager.getCompactionSettings()); }
+    try { preparation = prepareCompaction(session.sessionManager.entryStore,
+        session.settingsManager.getCompactionSettings(), session.sessionManager.getLeafId()); }
     catch { return { denial: "unsupported" }; }
-    if (!preparation || preparation.isSplitTurn || preparation.turnPrefixMessages.length ||
+    if (!preparation || preparation.isSplitTurn || !preparation.turnPrefixMessages.isEmpty() ||
         preparation.firstKeptEntryId !== request.witness.firstKeptEntryId) return { denial: "source_mismatch" };
     // Native compact() owns model-sized map/reduction requests. Total retained
     // history is not a request-size limit, and raw JSON includes metadata that

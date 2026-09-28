@@ -1,5 +1,18 @@
 import type { FileEntry, SessionEntry, SessionHeader } from './session-manager.js';
 
+export declare abstract class StoreAvailability {
+    abstract requireOpen(): void;
+    closed(cause?: unknown): StoreAvailability;
+}
+export declare class AvailableStore extends StoreAvailability {
+    requireOpen(): void;
+}
+export declare class UnavailableStore extends StoreAvailability {
+    constructor(cause?: unknown);
+    requireOpen(): never;
+    closed(): StoreAvailability;
+}
+
 export declare class EntryMetadata {
     constructor(entry: SessionEntry, sequence: number, offset?: number, length?: number);
     id: string;
@@ -30,6 +43,8 @@ export declare abstract class EntryStore {
     abstract storedAt(file: string): EntryStore;
     abstract close(): void;
     assertCurrent(): void;
+    assertUsable(): void;
+    invalidate(cause?: unknown): void;
     has(id: string): boolean;
     validate(entry: SessionEntry): void;
     static validateHeader(header: SessionHeader): SessionHeader;

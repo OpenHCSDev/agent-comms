@@ -3,7 +3,10 @@ import { CompactionPolicy } from './compaction/agent-comms-policy.js';
 import { sessionEntryToContextMessages } from './session-manager.js';
 
 export class SessionContext {
-    constructor(manager) { this.manager=manager; }
+    constructor(manager) {
+        if(new.target === SessionContext)throw new TypeError('Concrete session context required');
+        this.manager=manager;
+    }
     static restore(session) {
         const manager=session.sessionManager;
         const model=session.model;

@@ -1,0 +1,22 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: {"id":"long","type":"response","command":"agent_comms_summarize_compaction","success":true,"data":{"version":1,"status":"declined","operationId":"33333333333333333333333333333333","reason":"unsupported"}}
++ actual - expected
+
++ 'declined'
+- 'summarized'
+
+    at historyCase (file:///home/ts/wt/comms-native-session-entry-store-20260928/stack/test-native-selected-compaction-summary.mjs:254:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///home/ts/wt/comms-native-session-entry-store-20260928/stack/test-native-selected-compaction-summary.mjs:264:19 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 'declined',
+  expected: 'summarized',
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v26.5.0

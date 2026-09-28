@@ -35,8 +35,23 @@ export class EntryMetadata {
     }
 }
 
+export class StoreAvailability {
+    constructor() { if (new.target === StoreAvailability) throw new TypeError('Concrete store availability required'); }
+    requireOpen() { throw new Error('Concrete store availability required'); }
+    closed(cause) { return new UnavailableStore(cause); }
+}
+export class AvailableStore extends StoreAvailability {
+    requireOpen() {}
+}
+export class UnavailableStore extends StoreAvailability {
+    constructor(cause) { super(); this.cause = cause; }
+    requireOpen() { throw new Error('Native session store unusable; reopen validated disk, never replay', {cause:this.cause}); }
+    closed() { return this; }
+}
+
 /** Shared integrity, ancestry and context selection. Implementations own only storage. */
 export class EntryStore {
+    #availability = new AvailableStore();
     constructor() {
         if (new.target === EntryStore) throw new TypeError('EntryStore requires a concrete storage owner');
     }
@@ -51,6 +66,8 @@ export class EntryStore {
     storedAt(file) { throw new Error('EntryStore.storedAt must be implemented'); }
     close() { throw new Error('EntryStore.close must be implemented'); }
     assertCurrent() { throw new Error('Persisted native session observation required'); }
+    assertUsable() { this.#availability.requireOpen(); }
+    invalidate(cause) { this.#availability = this.#availability.closed(cause); }
     has(id) { return this.metadata(id) !== undefined; }
     validate(entry) {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry) ||
@@ -175,11 +192,11 @@ export class MemoryEntryStore extends EntryStore {
         this.#header = EntryStore.validateHeader(header);
         for (const entry of entries) this.append(entry);
     }
-    get header() { return this.#header; }
-    get lastId() { return this.#last; }
-    get(id) { return this.#entries.get(id); }
-    metadata(id) { return this.#metadata.get(id); }
-    *metadataEntries() { yield* this.#metadata.values(); }
+    get header() { this.assertUsable(); return this.#header; }
+    get lastId() { this.assertUsable(); return this.#last; }
+    get(id) { this.assertUsable(); return this.#entries.get(id); }
+    metadata(id) { this.assertUsable(); return this.#metadata.get(id); }
+    *metadataEntries() { this.assertUsable(); yield* this.#metadata.values(); }
     *branchMetadata(leafId = this.lastId) { yield* [...this.ancestors(leafId)].reverse(); }
     append(entry) {
         this.validate(entry);
@@ -196,7 +213,7 @@ export class MemoryEntryStore extends EntryStore {
         this.close();
         return store;
     }
-    close() { this.#entries.clear(); this.#metadata.clear(); }
+    close() { this.invalidate(); this.#entries.clear(); this.#metadata.clear(); }
 }
 
 /** Disk-backed, bounded-page selector index; payloads remain exclusively in the native JSONL. */
@@ -240,15 +257,17 @@ export class DiskEntryStore extends EntryStore {
             throw error;
         }
     }
-    get header() { return this.#header; }
-    get lastId() { return this.#last; }
-    get revision() { return this.#revision; }
-    metadata(id) { return EntryMetadata.fromIndex(this.#metadata.get(id)); }
+    get header() { this.assertUsable(); return this.#header; }
+    get lastId() { this.assertUsable(); return this.#last; }
+    get revision() { this.assertUsable(); return this.#revision; }
+    metadata(id) { this.assertUsable(); return EntryMetadata.fromIndex(this.#metadata.get(id)); }
     *metadataEntries() {
+        this.assertUsable();
         for (const row of this.#db.prepare('SELECT selectors FROM entries ORDER BY sequence').iterate())
             yield EntryMetadata.fromIndex(row);
     }
     *branchMetadata(leafId = this.lastId) {
+        this.assertUsable();
         if (leafId === null) return;
         for (const row of this.#db.prepare(`WITH RECURSIVE path(id,parent,sequence,selectors) AS (
             SELECT id,parent,sequence,selectors FROM entries WHERE id=? UNION ALL
@@ -269,17 +288,21 @@ export class DiskEntryStore extends EntryStore {
         return EntryMetadata.fromIndex(rows[0]);
     }
     label(id) {
+        this.assertUsable();
         const row = this.#db.prepare("SELECT selectors FROM entries WHERE json_extract(selectors,'$.label.targetId')=? ORDER BY sequence DESC LIMIT 1").get(id);
         const label = EntryMetadata.fromIndex(row)?.label;
         return label?.label ? label : undefined;
     }
     *commits(commitId) {
+        this.assertUsable();
         for (const row of this.#db.prepare('SELECT id FROM entries WHERE commit_id=? ORDER BY sequence').iterate(commitId)) yield this.get(row.id);
     }
     *children(parentId) {
+        this.assertUsable();
         for (const row of this.#db.prepare('SELECT id FROM entries WHERE parent IS ? ORDER BY sequence').iterate(parentId)) yield this.get(row.id);
     }
     assertCurrent() {
+        this.assertUsable();
         if (revision(fstatSync(this.#fd, { bigint: true })) !== this.#revision ||
             revision(statSync(this.file, { bigint: true })) !== this.#revision)
             throw new Error('Native session revision changed; reopen validated history, never replay');
@@ -375,7 +398,10 @@ export class DiskEntryStore extends EntryStore {
         this.assertCurrent(); return this;
     }
     close() {
-        this.#db?.close(); this.#db = undefined;
-        if (this.#fd !== undefined) { closeSync(this.#fd); this.#fd = undefined; }
+        this.invalidate();
+        const database = this.#db, descriptor = this.#fd;
+        this.#db = undefined; this.#fd = undefined;
+        try { database?.close(); }
+        finally { if (descriptor !== undefined) closeSync(descriptor); }
     }
 }

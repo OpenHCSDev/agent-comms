@@ -912,8 +912,7 @@ class TurnSession:
                 break
             if self.skip:
                 continue
-            async for event in self.attest_input():
-                yield event
+            await self.attest_input()
             if self.finished:
                 break
             if self.skip:
@@ -1033,7 +1032,7 @@ class TurnSession:
                 return
             raise
 
-    async def attest_input(self) -> AsyncIterator[events.AgentEvent]:
+    async def attest_input(self) -> None:
         if self.require_input_id and (not self.native_capability_confirmed):
             if (
                 not isinstance(self.payload, pi.Response)

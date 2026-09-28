@@ -33,9 +33,9 @@ METHOD = """    _installNativeCompactionBeforeProvider() {
                 this._nativeInputClaims.has(message.inputId));
             if (currentInput && estimateTokens(currentInput) > budget)
                 throw new Error("Native input is oversized and cannot be compacted; prompt refused");
-            const before = getLatestCompactionEntry(this.sessionManager.getBranch());
+            const before = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction");
             await this._runAutoCompaction("threshold", false);
-            const after = getLatestCompactionEntry(this.sessionManager.getBranch());
+            const after = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction");
             if (!after || after.id === before?.id)
                 throw new Error("Native threshold compaction did not commit; prompt refused");
             const fresh = this.agent.state.messages.slice();

@@ -67,7 +67,7 @@ export class ReducedSummarySource extends SummarySource {
         const path = join(this.#directory,'segments');
         this.#fd = openSync(path, 'wx+',0o600);
         unlinkSync(path);
-        rmSync(this.#directory);
+        rmSync(this.#directory, {recursive:true});
         this.#directory = undefined;
     }
     get count() { return this.#count; }

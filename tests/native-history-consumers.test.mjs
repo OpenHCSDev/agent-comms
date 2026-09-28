@@ -25,6 +25,11 @@ test('native branch summary consumes the store range and preserves its budget', 
     assert.deepEqual(prepareBranchEntries(entries,1000).messages.map(message=>message.content),['left','tip']);
     assert.equal(collectEntriesForBranchSummary(manager,null,right).entries.isEmpty(),true);
     assert.equal(collectEntriesForBranchSummary(manager,root,tip).entries.isEmpty(),true);
+    manager.appendLabelChange(root, 'retired label');
+    const labelled = manager.getLeafId();
+    manager.appendLabelChange(root, undefined);
+    manager.createBranchedSession(labelled);
+    assert.equal(manager.getLabel(root), undefined, 'fork preserves a later label clearing');
     manager.entryStore.close();
 });
 

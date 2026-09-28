@@ -228,9 +228,11 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
         project = tmp_path / "proj"
         project.mkdir()
 
+        updates = []
+
         class Client:
             async def session_update(self, **kwargs):
-                pass
+                updates.append(kwargs)
 
         agent = CommsAgent(
             comms,
@@ -356,7 +358,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
             else:
                 await turn
                 assert len(dispatched) == (0 if real_host else 1)
-                assert dispositions.read().rows[original_key].declared_name == "started"
+                assert dispositions.read().rows[original_key].declared_name == "started", updates
             journal = CompactionJournal(root / "compaction-commits.sqlite3")
             attempt = journal.selected_summary(summary_ids[0])
             terminal_status = "declined-prestart" if clean_decline else "linked"

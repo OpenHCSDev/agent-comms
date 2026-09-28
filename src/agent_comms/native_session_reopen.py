@@ -1,7 +1,7 @@
 """Read-only strict native session validation before a discarded idle Pi reopens.
 
-Never use SessionManager.open for this preflight: it can migrate a legacy file.
-The pinned disk entry owner enforces its actual strict v3 parse.
+The pinned EntryStore owns strict v3 parsing and the observed file revision;
+preflight does not construct a session writer or activate its consumers.
 """
 
 from __future__ import annotations

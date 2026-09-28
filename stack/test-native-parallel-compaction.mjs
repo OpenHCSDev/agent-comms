@@ -117,7 +117,7 @@ for(let round=1;round<=3;round++){
 console.log('three-round source/summary plumbing PASS');
 // Reproduce a saved compaction whose entire retained context is one split
 // turn: history messages are empty, but its prior summary is still required.
-const { SessionManager } = await import(pathToFileURL(resolve(path,'../../session-manager.js')).href);
+const { SessionManager, sessionEntryToContextMessages } = await import(pathToFileURL(resolve(path,'../../session-manager.js')).href);
 const { prepareCompaction, compact } = await import(pathToFileURL(path).href);
 const { mkdtempSync, rmSync } = await import('node:fs');
 const repeatedRoot=mkdtempSync('/var/tmp/ac-parallel-repeat-');
@@ -130,9 +130,9 @@ try {
   const previous='PRIOR_GOAL_984 EXACT_PATH_src/domain.py UNRESOLVED_FAILURE_431';
   manager.appendCompaction(previous,kept,200000);
   manager.appendMessage({role:'assistant',content:[{type:'text',text:`retained ${'r'.repeat(120000)}`}],timestamp:5,provider:'openrouter',model:'fake',api:'openai-completions',stopReason:'stop',usage});
-  const preparation=prepareCompaction(manager.getBranch(),{reserveTokens:16384,keepRecentTokens:20000});
+  const preparation=prepareCompaction(manager.entryStore,{reserveTokens:16384,keepRecentTokens:20000});
   assert.equal(preparation.isSplitTurn,true);
-  assert.equal(preparation.messagesToSummarize.length,0);
+  assert.equal(preparation.messagesToSummarize.isEmpty(),true);
   assert.equal(preparation.previousSummary,previous);
   const seen=[];
   const repeated=await compact(preparation,model,'local-only',{},'CUSTOM_KEEP_REQUEST_727',undefined,undefined,
@@ -144,7 +144,7 @@ try {
   assert.ok(seen.length>1);
   assert.ok(repeated.summary.includes(previous),'prior summary must survive byte-for-byte when there is no new history to summarize');
   manager.appendCompaction(repeated.summary,repeated.firstKeptEntryId,repeated.tokensBefore,repeated.details,false,repeated.usage);
-  assert.ok(JSON.stringify(manager.buildSessionContext()).includes('PRIOR_GOAL_984'));
+  assert.ok(JSON.stringify(manager.buildContextEntries().toArray()).includes('PRIOR_GOAL_984'));
   console.log('saved repeated split-turn prior-summary/custom-instruction PASS');
 } finally {rmSync(repeatedRoot,{recursive:true,force:true});}
 // Valid individually configurable maxima must still fit Pi's output reserve.

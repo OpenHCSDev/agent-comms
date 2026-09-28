@@ -1,16 +1,17 @@
 --- a/dist/core/session-manager.js
 +++ b/dist/core/session-manager.js
-@@ -1,7 +1,8 @@
+@@ -1,6 +1,10 @@
 +import { DiskEntryStore, MemoryEntryStore } from "./session-entry-store.js";
  import { uuidv7 } from "@earendil-works/pi-ai";
  import { randomUUID } from "crypto";
  import { appendFileSync, closeSync, createReadStream, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, statSync, writeFileSync, } from "fs";
--import { fstatSync, realpathSync, unlinkSync, readFileSync } from "fs";
 +import { fstatSync, realpathSync, unlinkSync } from "fs";
- import { createHash } from "crypto";
- import { basename } from "path";
++import { createHash } from "crypto";
++import { basename } from "path";
  import { readdir, stat } from "fs/promises";
-@@ -21,146 +22,14 @@
+ import { dirname, join, resolve } from "path";
+ import { createInterface } from "readline";
+@@ -18,146 +22,14 @@
      }
  }
  /** Generate a unique short ID (8 hex chars, collision-checked) */
@@ -159,7 +160,7 @@
  }
  /**
   * Project one selected session entry into LLM/runtime messages.
-@@ -198,46 +67,11 @@
+@@ -195,46 +67,11 @@
   * by the kept entries starting at firstKeptEntryId and all entries after the
   * compaction entry. Older summarized entries are omitted.
   */
@@ -206,20 +207,59 @@
  /**
   * Compute the default session directory for a cwd.
   * Encodes cwd into a safe directory name under ~/.pi/agent/sessions/.
-@@ -277,12 +111,6 @@
+@@ -274,51 +111,6 @@
      }
  }
  /** Exported for testing */
 -export function loadEntriesFromFile(filePath) {
 -    const resolvedFilePath = normalizePath(filePath);
--    if (!existsSync(resolvedFilePath)) return [];
--    // Reads never repair a tail, truncate a file, or migrate legacy data.
--    return acReadStrictSession(resolvedFilePath);
+-    if (!existsSync(resolvedFilePath))
+-        return [];
+-    const entries = [];
+-    let pending = "";
+-    const fd = openSync(resolvedFilePath, "r");
+-    try {
+-        const decoder = new StringDecoder("utf8");
+-        const buffer = Buffer.allocUnsafe(SESSION_READ_BUFFER_SIZE);
+-        while (true) {
+-            const bytesRead = readSync(fd, buffer, 0, buffer.length, null);
+-            if (bytesRead === 0)
+-                break;
+-            pending += decoder.write(buffer.subarray(0, bytesRead));
+-            let lineStart = 0;
+-            let newlineIndex = pending.indexOf("\n", lineStart);
+-            while (newlineIndex !== -1) {
+-                const entry = parseSessionEntryLine(pending.slice(lineStart, newlineIndex));
+-                if (entry)
+-                    entries.push(entry);
+-                lineStart = newlineIndex + 1;
+-                newlineIndex = pending.indexOf("\n", lineStart);
+-            }
+-            pending = pending.slice(lineStart);
+-        }
+-        pending += decoder.end();
+-        const finalEntry = parseSessionEntryLine(pending);
+-        if (finalEntry)
+-            entries.push(finalEntry);
+-    }
+-    finally {
+-        closeSync(fd);
+-    }
+-    // Validate session header before repairing the file.
+-    if (entries.length === 0)
+-        return entries;
+-    const header = entries[0];
+-    if (header.type !== "session" || typeof header.id !== "string") {
+-        return [];
+-    }
+-    if (pending)
+-        appendFileSync(resolvedFilePath, "\n");
+-    return entries;
 -}
  /**
   * Inspect a physical line while searching for the first parsed session entry.
   * Blank and malformed lines are skipped to match loadEntriesFromFile().
-@@ -544,15 +372,15 @@
+@@ -580,22 +372,133 @@
   * Branching moves the leaf to an earlier entry, allowing new branches without
   * modifying history.
   *
@@ -227,47 +267,123 @@
 + * Use entryStore.contextEntries() to get the resolved message list for the LLM, which
   * handles compaction summaries and follows the path from root to current leaf.
   */
- // PR48 local-only prototype: no automatic stale-lock stealing after a crash.
- function pr48DiskRevision(file) {
-     if (!file || !existsSync(file)) return null;
-     const s = lstatSync(file, { bigint: true });
--    if (!s.isFile() || s.nlink !== 1n || s.size > 256n * 1024n * 1024n)
--        throw new Error("Native session file is not a bounded regular file");
++// PR48 local-only prototype: no automatic stale-lock stealing after a crash.
++function pr48DiskRevision(file) {
++    if (!file || !existsSync(file)) return null;
++    const s = lstatSync(file, { bigint: true });
 +    if (!s.isFile() || s.nlink !== 1n)
 +        throw new Error("Native session file is not a regular file");
-     return [s.dev, s.ino, s.size, s.mtimeNs, s.ctimeNs].map(String).join(":");
- }
- function pr48WriterLock(file, write) {
-@@ -572,28 +400,6 @@
-     }
- }
- 
--function acReadStrictSession(file) {
--    pr48DiskRevision(file);
--    const raw = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(file));
--    if (raw.length === 0) return [];
--    if (!raw.endsWith("\n")) throw new Error("Incomplete native session; outcome unknown");
--    const entries = raw.slice(0, -1).split("\n").map(line => JSON.parse(line));
--    const ids = new Set();
--    for (let index = 0; index < entries.length; index++) {
--        const entry = entries[index];
--        if (!entry || typeof entry !== "object" || typeof entry.id !== "string" ||
--            ids.has(entry.id)) throw new Error("Invalid native session; outcome unknown");
--        if (index > 0 && (typeof entry.type !== "string" || entry.type === "session" ||
--            entry.parentId !== null && (typeof entry.parentId !== "string" ||
--                !ids.has(entry.parentId) || entry.parentId === entries[0].id)))
--            throw new Error("Invalid native session ancestry; outcome unknown");
--        ids.add(entry.id);
--    }
--    if (entries[0]?.type !== "session") throw new Error("Missing native session identity");
--    if (entries[0].version !== CURRENT_SESSION_VERSION)
--        throw new Error("Native session migration requires explicit recovery");
--    return entries;
--}
- 
- // Cross-language v1 metadata encoding: UTF-8 path bytes and IEEE-754 cost
- // bytes are hex, counters are safe integers, optional fields have fixed slots.
-@@ -689,13 +495,10 @@
++    return [s.dev, s.ino, s.size, s.mtimeNs, s.ctimeNs].map(String).join(":");
++}
++function pr48WriterLock(file, write) {
++    if (!file) return write();
++    const canonical = existsSync(file) ? realpathSync(file) :
++        join(realpathSync(dirname(file)), basename(file));
++    const lock = `${canonical}.pr48-writer.lock`;
++    let fd;
++    try { fd = openSync(lock, "wx", 0o600); }
++    catch { throw new Error("Native session writer lock unavailable; no replay"); }
++    try {
++        writeFileSync(fd, `${process.pid}\n`);
++        fsyncSync(fd);
++        return write();
++    } finally {
++        try { closeSync(fd); } finally { unlinkSync(lock); }
++    }
++}
++
++
++// Cross-language v1 metadata encoding: UTF-8 path bytes and IEEE-754 cost
++// bytes are hex, counters are safe integers, optional fields have fixed slots.
++// No JS/Python floating-point JSON formatting or object insertion order enters
++// the digest. The marker contains only the hash, never redundant metadata.
++function acMetadataDetails(details) {
++    if (details == null) return null;
++    const keys = Object.keys(details).filter(key => key !== "agentCommsCommit").sort();
++    if (keys.length === 0) return null;
++    if (keys.join(",") !== "modifiedFiles,readFiles" ||
++        [details.readFiles, details.modifiedFiles].some(paths =>
++            !Array.isArray(paths) || paths.some(path =>
++                typeof path !== "string" || !path || !path.isWellFormed() ||
++                Buffer.byteLength(path, "utf8") > 4096 || path.includes("\0"))))
++        throw new Error("Invalid native compaction metadata details");
++    return details;
++}
++function acMetadataDigest(details, usage) {
++    const operations = acMetadataDetails(details);
++    const paths = operations === null ? null :
++        [operations.readFiles, operations.modifiedFiles].map(values =>
++            values.map(value => Buffer.from(value, "utf8").toString("hex")));
++    let metrics = null;
++    if (usage != null) {
++        const counters = ["input", "output", "cacheRead", "cacheWrite", "totalTokens"];
++        const costs = ["input", "output", "cacheRead", "cacheWrite", "total"];
++        const safe = value => Number.isSafeInteger(value) && value >= 0;
++        const price = value => typeof value === "number" && Number.isFinite(value) &&
++            value >= 0 && value <= Number.MAX_SAFE_INTEGER;
++        if (typeof usage !== "object" || Array.isArray(usage) ||
++            Object.keys(usage).some(key => ![...counters, "reasoning", "cacheWrite1h", "cost"].includes(key)) ||
++            counters.some(key => !safe(usage[key])) ||
++            ["reasoning", "cacheWrite1h"].some(key => usage[key] !== undefined && !safe(usage[key])) ||
++            !usage.cost || typeof usage.cost !== "object" || Array.isArray(usage.cost) ||
++            Object.keys(usage.cost).sort().join(",") !== costs.slice().sort().join(",") ||
++            costs.some(key => !price(usage.cost[key])))
++            throw new Error("Invalid native compaction metadata usage");
++        const doubleHex = number => {
++            const bytes = Buffer.alloc(8);
++            bytes.writeDoubleBE(number);
++            return bytes.toString("hex");
++        };
++        metrics = [...counters.map(key => usage[key]), usage.reasoning ?? null,
++            usage.cacheWrite1h ?? null, ...costs.map(key => doubleHex(usage.cost[key]))];
++    }
++    return createHash("sha256").update("agent-comms-metadata-v1\n")
++        .update(JSON.stringify([paths, metrics])).digest("hex");
++}
++
++function acValidateCommit(commit) {
++    if (!commit || typeof commit !== "object" ||
++        !/^[0-9a-f]{32}$/.test(commit.commitId) ||
++        !/^[0-9a-f]{64}$/.test(commit.payloadDigest) ||
++        Object.keys(commit).some(key => !["commitId", "payloadDigest", "metadataDigest"].includes(key)) ||
++        (commit.metadataDigest !== undefined && !/^[0-9a-f]{64}$/.test(commit.metadataDigest)))
++        throw new Error("Invalid native compaction commit identity");
++}
++function acPayloadDigest(summary, firstKeptEntryId, tokensBefore) {
++    return createHash("sha256").update(JSON.stringify([
++        summary, firstKeptEntryId, tokensBefore,
++    ])).digest("hex");
++}
++
++function acSyncParents(directory) {
++    for (let current = directory; ; current = dirname(current)) {
++        const fd = openSync(current, "r");
++        try { fsyncSync(fd); } finally { closeSync(fd); }
++        if (dirname(current) === current) break;
++    }
++}
++
+ export class SessionManager {
++    // Irreversible for this instance. Never reset by newSession or setSessionFile.
++    #acAssertUsable() {
++        this.entryStore?.assertUsable();
++    }
++    #acMutation(action) {
++        this.#acAssertUsable();
++        try {
++            const result = action();
++            this.#acAssertUsable();
++            return result;
++        } catch (error) {
++            this.entryStore?.invalidate(error);
++            try { this.entryStore?.close(); }
++            catch (cleanup) { throw new AggregateError([error, cleanup], error.message, {cause:error}); }
++            throw error;
++        }
++    }
+     sessionId = "";
+     sessionFile;
+     sessionDir;
      cwd;
      persist;
      flushed = false;
@@ -277,13 +393,13 @@
 -    labelTimestampsById = new Map();
 +    entryStore;
      leafId = null;
-     _pr48LoadedRevision = null;
 -    constructor(cwd, sessionDir, sessionFile, persist, newSessionOptions, preloadedFileEntries) {
++    _pr48LoadedRevision = null;
 +    constructor(cwd, sessionDir, sessionFile, persist, newSessionOptions) {
          this.cwd = resolvePath(cwd);
          this.sessionDir = normalizePath(sessionDir);
          this.persist = persist;
-@@ -703,10 +506,7 @@
+@@ -603,46 +506,48 @@
              mkdirSync(this.sessionDir, { recursive: true, mode: 0o700 });
          }
          if (sessionFile) {
@@ -295,27 +411,38 @@
          }
          else {
              this.newSession(newSessionOptions);
-@@ -726,37 +526,22 @@
-         this._assertLoadedRevision();
-         });
+         }
++        this._assertLoadedRevision();
++    }
++    _assertLoadedRevision() {
++        return this.#acMutation(() => {
++        if (this.persist && pr48DiskRevision(this.sessionFile) !== this._pr48LoadedRevision)
++            throw new Error("Native session changed during load; no replay");
++        });
      }
+     /** Switch to a different session file (used for resume and branching) */
+     setSessionFile(sessionFile) {
++        return this.#acMutation(() => {
+         this._setSessionFile(sessionFile);
+-    }
 -    _setSessionFile(sessionFile, preloadedFileEntries) {
--        return this.#acMutation(() => {
 -        this.sessionFile = resolvePath(sessionFile);
--        this._pr48LoadedRevision = pr48DiskRevision(this.sessionFile);
 -        if (existsSync(this.sessionFile)) {
--            // A preloaded array carries no disk revision; reread the actual file.
--            const entries = loadEntriesFromFile(this.sessionFile);
--            this._assertLoadedRevision();
+-            const entries = preloadedFileEntries ?? loadEntriesFromFile(this.sessionFile);
 -            // If file was empty, initialize it with a valid session header. If it was
 -            // non-empty but did not parse as a pi session, fail without modifying it.
 -            if (entries.length === 0) {
++        this._assertLoadedRevision();
++        });
++    }
 +    _setSessionFile(sessionFile) {
 +        return this.#acMutation(() => {
 +            this.sessionFile = resolvePath(sessionFile);
-+            this.entryStore?.close();
++            const observedRevision = pr48DiskRevision(this.sessionFile);
 +            if (existsSync(this.sessionFile) && statSync(this.sessionFile).size) {
-+                this.entryStore = new DiskEntryStore(this.sessionFile);
++                const next = new DiskEntryStore(this.sessionFile);
++                this.entryStore?.close();
++                this.entryStore = next;
 +                this._pr48LoadedRevision = this.entryStore.revision;
 +                this.sessionId = this.entryStore.header.id;
 +                this.leafId = this.entryStore.lastId;
@@ -325,10 +452,8 @@
 -                if (statSync(explicitPath).size > 0) {
 -                    throw new Error(`Session file is not a valid ${APP_NAME} session: ${explicitPath}`);
 -                }
--                const emptyRevision = this._pr48LoadedRevision;
                  this.newSession();
                  this.sessionFile = explicitPath;
--                this._pr48LoadedRevision = emptyRevision;
 -                this._rewriteFile();
 -                this.flushed = true;
 -                return;
@@ -341,12 +466,16 @@
 -            this.newSession();
 -            this.sessionFile = explicitPath; // preserve explicit path from --session flag
 -        }
-+                this._pr48LoadedRevision = pr48DiskRevision(explicitPath);
++                this._pr48LoadedRevision = observedRevision;
 +            }
-         });
++        });
      }
      newSession(options) {
-@@ -774,10 +559,8 @@
++        return this.#acMutation(() => {
+         if (options?.id !== undefined) {
+             assertValidSessionId(options.id);
+         }
+@@ -656,68 +561,20 @@
              cwd: this.cwd,
              parentSession: options?.parentSession,
          };
@@ -359,12 +488,13 @@
          this.leafId = null;
          this.flushed = false;
          if (this.persist) {
-@@ -788,67 +571,8 @@
+             const fileTimestamp = timestamp.replace(/[:.]/g, "-");
+             this.sessionFile = join(this.getSessionDir(), `${fileTimestamp}_${this.sessionId}.jsonl`);
+         }
++        this._pr48LoadedRevision = null;
          return this.sessionFile;
-         });
-     }
+-    }
 -    _loadEntries(entries, options) {
--        return this.#acMutation(() => {
 -        const header = entries.find((e) => e.type === "session");
 -        if (header) {
 -            this.fileEntries = entries;
@@ -378,10 +508,8 @@
 -            this.fileEntries = this.fileEntries.concat(entries);
 -        }
 -        this._buildIndex();
--        });
 -    }
 -    _buildIndex() {
--        return this.#acMutation(() => {
 -        this.byId.clear();
 -        this.labelsById.clear();
 -        this.labelTimestampsById.clear();
@@ -402,42 +530,34 @@
 -                }
 -            }
 -        }
--        });
 -    }
 -    _rewriteFile() {
--        return this.#acMutation(() => {
--        if (!this.persist || !this.sessionFile) return;
--        return pr48WriterLock(this.sessionFile, () => {
--            if (pr48DiskRevision(this.sessionFile) !== this._pr48LoadedRevision)
--                throw new Error("Native session rewrite source changed; no replay");
--            const fd = openSync(this.sessionFile, "w", 0o600);
--            try {
--                for (const entry of this.fileEntries) {
--                    writeFileSync(fd, `${JSON.stringify(entry)}\n`);
--                }
--                fsyncSync(fd);
--            } catch { throw new Error("Native session rewrite outcome unknown; no replay"); }
--            finally { closeSync(fd); }
--            try { acSyncParents(dirname(this.sessionFile)); }
--            catch { throw new Error("Native session rewrite outcome unknown; no replay"); }
--            this._pr48LoadedRevision = pr48DiskRevision(this.sessionFile);
--        });
--        });
+-        if (!this.persist || !this.sessionFile)
+-            return;
+-        const fd = openSync(this.sessionFile, "w", 0o600);
+-        try {
+-            for (const entry of this.fileEntries) {
+-                writeFileSync(fd, `${JSON.stringify(entry)}\n`);
+-            }
+-        }
+-        finally {
+-            closeSync(fd);
+-        }
 -    }
++        });
++    }
 +
 +
      isPersisted() {
          return this.persist;
      }
-@@ -868,37 +592,20 @@
+@@ -737,43 +594,40 @@
          return this.sessionFile;
      }
      _persist(entry) {
--        return this.#acMutation(() => {
 -        if (!this.persist || !this.sessionFile)
 -            return;
--        const prospective = this.fileEntries.concat(entry);
--        const hasAssistant = prospective.some((e) => e.type === "message" && e.message.role === "assistant");
+-        const hasAssistant = this.fileEntries.some((e) => e.type === "message" && e.message.role === "assistant");
 -        if (!hasAssistant) {
 -            if (this.flushed) {
 -                appendFileSync(this.sessionFile, `${JSON.stringify(entry)}\n`);
@@ -458,7 +578,7 @@
 -            const fd = openSync(this.sessionFile, "wx", 0o600);
 +            const fd = openSync(this.sessionFile, existsSync(this.sessionFile) ? 'w' : 'wx', 0o600);
              try {
--                for (const e of prospective) {
+-                for (const e of this.fileEntries) {
 -                    writeFileSync(fd, `${JSON.stringify(e)}\n`);
 -                }
 -            }
@@ -473,38 +593,57 @@
 -        else {
 -            appendFileSync(this.sessionFile, `${JSON.stringify(entry)}\n`);
 -        }
--        });
 +        } else appendFileSync(this.sessionFile, JSON.stringify(entry) + '\n');
      }
      _appendEntry(entry) {
-         return this.#acMutation(() => {
-@@ -910,8 +617,7 @@
-                 throw new Error("Native session writer changed; no replay");
-             try { this._persist(entry); }
-             catch { throw new Error("Native session write outcome unknown; no replay"); }
--            this.fileEntries.push(entry);
--            this.byId.set(entry.id, entry);
+-        this.fileEntries.push(entry);
+-        this.byId.set(entry.id, entry);
+-        this.leafId = entry.id;
+-        this._persist(entry);
++        return this.#acMutation(() => {
++        return pr48WriterLock(this.persist ? this.sessionFile : undefined, () => {
++            // Every native append uses the same per-session cross-process lock.
++            // A stale in-memory manager must not attach a sibling after another
++            // process advanced the file, even for non-compaction writes.
++            if (this.persist && pr48DiskRevision(this.sessionFile) !== this._pr48LoadedRevision)
++                throw new Error("Native session writer changed; no replay");
++            try { this._persist(entry); }
++            catch { throw new Error("Native session write outcome unknown; no replay"); }
 +            this.entryStore = this.entryStore.committedAppend(entry, this.flushed ? this.sessionFile : undefined);
-             this.leafId = entry.id;
-             this._pr48LoadedRevision = this.persist ? pr48DiskRevision(this.sessionFile) : null;
-         });
-@@ -959,12 +665,7 @@
++            this.leafId = entry.id;
++            this._pr48LoadedRevision = this.persist ? pr48DiskRevision(this.sessionFile) : null;
++        });
++        });
+     }
+     /** Tracked metadata is private even if this Pi session began with an untracked turn. */
+     assertNativeInputSafe() {
++        this.#acAssertUsable();
+         if (!this.persist || !this.sessionFile || typeof process.getuid !== "function") {
+             throw new Error("Native input proof requires a persisted owner-controlled session");
+         }
+@@ -812,22 +666,21 @@
+     }
      /** Find exactly one durable or pending native tracked input, including old branches. */
      getTrackedInput(inputId) {
-         this.#acAssertUsable();
 -        const rows = this.fileEntries.filter((entry) => entry.type === "message" &&
 -            entry.message?.role === "user" && entry.message.inputId === inputId);
 -        if (rows.length > 1) {
 -            throw new Error("Duplicate native input ID in session");
 -        }
 -        return rows[0];
++        this.#acAssertUsable();
 +        return this.entryStore.trackedInput(inputId);
      }
      /**
       * Tracked input durability is explicit: ordinary session autosave behavior is unchanged.
-@@ -977,8 +678,7 @@
-             if (pr48DiskRevision(this.sessionFile) !== this._pr48LoadedRevision)
-                 throw new Error("Native session writer changed; no replay");
+      * A caller must use the returned entry ID only after file+new-parent fsync succeed.
+      */
+     flushInputDurably(inputId) {
++        return this.#acMutation(() => {
+         this.assertNativeInputSafe();
++        return pr48WriterLock(this.sessionFile, () => {
++            if (pr48DiskRevision(this.sessionFile) !== this._pr48LoadedRevision)
++                throw new Error("Native session writer changed; no replay");
          if (inputId === undefined) {
 -            const tracked = this.fileEntries.filter((entry) => entry.type === "message" &&
 -                entry.message?.role === "user" && entry.message.inputId);
@@ -512,7 +651,7 @@
              if (tracked.length !== 1) throw new Error("Explicit native input ID required");
              inputId = tracked[0].message.inputId;
          }
-@@ -992,7 +692,7 @@
+@@ -841,7 +694,7 @@
          if (!this.flushed) {
              const fd = openSync(this.sessionFile, "wx", 0o600);
              try {
@@ -521,15 +660,25 @@
                      writeFileSync(fd, `${JSON.stringify(item)}\n`);
                  }
                  fsyncSync(fd);
-@@ -1018,6 +718,7 @@
+@@ -867,7 +720,11 @@
                  closeSync(fd);
              }
          }
 +        this.entryStore = this.entryStore.storedAt(this.sessionFile);
-         this._pr48LoadedRevision = pr48DiskRevision(this.sessionFile);
++        this._pr48LoadedRevision = pr48DiskRevision(this.sessionFile);
          return entry.id;
-         });
-@@ -1036,7 +737,7 @@
++        });
++        });
+     }
+     /** Append a message as child of current leaf, then advance leaf. Returns entry id.
+      * Does not allow writing CompactionSummaryMessage and BranchSummaryMessage directly.
+@@ -876,36 +733,41 @@
+      * These need to be appended via appendCompaction() and appendBranchSummary() methods.
+      */
+     appendMessage(message) {
++        return this.#acMutation(() => {
+         if (message?.role === "user" && message.inputId && this.getTrackedInput(message.inputId)) {
+             throw new Error("Native input ID is already present in this session");
          }
          const entry = {
              type: "message",
@@ -538,8 +687,14 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              message,
-@@ -1050,7 +751,7 @@
-         return this.#acMutation(() => {
+         };
+         this._appendEntry(entry);
+         return entry.id;
++        });
+     }
+     /** Append a thinking level change as child of current leaf, then advance leaf. Returns entry id. */
+     appendThinkingLevelChange(thinkingLevel) {
++        return this.#acMutation(() => {
          const entry = {
              type: "thinking_level_change",
 -            id: generateId(this.byId),
@@ -547,8 +702,14 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              thinkingLevel,
-@@ -1064,7 +765,7 @@
-         return this.#acMutation(() => {
+         };
+         this._appendEntry(entry);
+         return entry.id;
++        });
+     }
+     /** Append a model change as child of current leaf, then advance leaf. Returns entry id. */
+     appendModelChange(provider, modelId) {
++        return this.#acMutation(() => {
          const entry = {
              type: "model_change",
 -            id: generateId(this.byId),
@@ -556,96 +717,158 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              provider,
-@@ -1083,11 +784,11 @@
-             throw new Error("Invalid native reconciliation witness");
-         return pr48WriterLock(this.sessionFile, () => {
-             const revision = pr48DiskRevision(this.sessionFile);
--            const disk = acReadStrictSession(this.sessionFile);
--            if (disk[0].id !== witness.sessionId)
+@@ -913,12 +775,157 @@
+         };
+         this._appendEntry(entry);
+         return entry.id;
++        });
++    }
++    /** File evidence only. Caller must retain registry authority and never replay. */
++    reconcileCompactionCommit(commit, witness) {
++        return this.#acMutation(() => {
++        acValidateCommit(commit);
++        if (!this.persist || !this.sessionFile || witness?.sessionFile !== this.sessionFile ||
++            typeof witness.revision !== "string" || witness.sessionId !== this.sessionId)
++            throw new Error("Invalid native reconciliation witness");
++        return pr48WriterLock(this.sessionFile, () => {
++            const revision = pr48DiskRevision(this.sessionFile);
 +            const disk = this.entryStore;
 +            disk.assertCurrent();
 +            if (disk.header.id !== witness.sessionId)
-                 return { status: "unknown", reason: "session-replaced" };
--            const matches = disk.filter(entry =>
--                entry.details?.agentCommsCommit?.commitId === commit.commitId);
++                return { status: "unknown", reason: "session-replaced" };
 +            const matches = disk.commits(commit.commitId).take(2).toArray();
-             if (matches.length === 1) {
-                 const entry = matches[0];
-                 if (entry.type !== "compaction" ||
-@@ -1104,12 +805,12 @@
-                 const fd = openSync(this.sessionFile, "r");
-                 try { fsyncSync(fd); } finally { closeSync(fd); }
-                 return { status: "committed", entryId: entry.id, revision,
--                    leafId: disk.at(-1).id,
++            if (matches.length === 1) {
++                const entry = matches[0];
++                if (entry.type !== "compaction" ||
++                    entry.details.agentCommsCommit.payloadDigest !== commit.payloadDigest ||
++                    (commit.metadataDigest !== undefined &&
++                        (entry.details.agentCommsCommit.metadataDigest !== commit.metadataDigest ||
++                         acMetadataDigest(entry.details, entry.usage) !== commit.metadataDigest)) ||
++                    acPayloadDigest(entry.summary, entry.firstKeptEntryId, entry.tokensBefore) !==
++                        commit.payloadDigest || entry.parentId !== witness.leafId ||
++                    entry.firstKeptEntryId !== witness.firstKeptEntryId)
++                    return { status: "unknown", reason: "commit-mismatch" };
++                // A visible entry after an uncertain append is not yet proof of
++                // durability. Sync it while still holding the writer fence.
++                const fd = openSync(this.sessionFile, "r");
++                try { fsyncSync(fd); } finally { closeSync(fd); }
++                return { status: "committed", entryId: entry.id, revision,
 +                    leafId: disk.lastId,
-                     ...(commit.metadataDigest !== undefined ?
-                         { metadataDigest: entry.details.agentCommsCommit.metadataDigest } : {}) };
-             }
-             if (matches.length === 0 && revision === witness.revision)
--                return { status: "aborted-no-write", revision, leafId: disk.at(-1).id };
++                    ...(commit.metadataDigest !== undefined ?
++                        { metadataDigest: entry.details.agentCommsCommit.metadataDigest } : {}) };
++            }
++            if (matches.length === 0 && revision === witness.revision)
 +                return { status: "aborted-no-write", revision, leafId: disk.lastId };
-             return { status: "unknown", reason: "changed-or-duplicate" };
-         });
-         });
-@@ -1119,7 +820,7 @@
-         this.#acAssertUsable();
-         if (!this.persist || !this.flushed || !this.sessionFile)
-             throw new Error("Persisted native compaction witness required");
--        if (!this.getBranch().some(entry => entry.id === firstKeptEntryId))
-+        if (!this.entryStore.branch(this.leafId).some(entry => entry.id === firstKeptEntryId))
-             throw new Error("First kept entry is not on the active branch");
-         const revision = pr48DiskRevision(this.sessionFile);
-         if (revision !== this._pr48LoadedRevision)
-@@ -1169,18 +870,14 @@
-             const revision = pr48DiskRevision(this.sessionFile);
-             // Re-read the actual authoritative file *under the writer lock*;
-             // an independent SessionManager may have appended since capture.
--            const disk = acReadStrictSession(this.sessionFile);
--            const diskHeader = disk.find(entry => entry.type === "session");
--            const diskLeaf = disk.at(-1)?.id ?? null;
--            const diskById = new Map(disk.filter(entry => entry.id).map(entry => [entry.id, entry]));
--            let cursor = diskById.get(diskLeaf);
--            let remaining = disk.length;
--            while (cursor && cursor.id !== witness.firstKeptEntryId && remaining-- > 0)
--                cursor = diskById.get(cursor.parentId);
++            return { status: "unknown", reason: "changed-or-duplicate" };
++        });
++        });
++    }
++    /** Native-only observation; never a registry/goal/correction attestation. */
++    captureCompactionWitness(firstKeptEntryId) {
++        this.#acAssertUsable();
++        if (!this.persist || !this.flushed || !this.sessionFile)
++            throw new Error("Persisted native compaction witness required");
++        if (!this.entryStore.branchContains(this.leafId, firstKeptEntryId))
++            throw new Error("First kept entry is not on the active branch");
++        const revision = pr48DiskRevision(this.sessionFile);
++        if (revision !== this._pr48LoadedRevision)
++            throw new Error("Native session changed before witness capture");
++        return Object.freeze({ sessionId: this.sessionId, sessionFile: this.sessionFile,
++            leafId: this.leafId, firstKeptEntryId, revision });
++    }
++    /** Prototype only: owner attestation is Python-issued evidence, not self-asserted. */
++    appendCompactionIfCurrent(witness, summary, tokensBefore, details, usage, options = {}) {
++        return this.#acMutation(() => {
++        // Blocker-2 bridge: `options.attestation` must be a Python
++        // OwnerCompactionAttestation from ThreadRegistry.attest_owner_compaction.
++        // JS binds it to this witness's session fence at handoff. JS cannot
++        // recheck the registry after handoff; Python must re-attest at commit
++        // time (blocker-1 recheck design). This check NEVER proves registry
++        // currency by itself and never bypasses the writer CAS below.
++        if (options.ownerRequired === true) {
++            const denial = "Canonical Python owner commit attestation unavailable";
++            const attestation = options.attestation;
++            if (!attestation || typeof attestation !== "object" || Array.isArray(attestation))
++                throw new Error(denial);
++            const valid =
++                typeof attestation.thread === "string" && attestation.thread.length > 0 &&
++                Number.isInteger(attestation.owner_epoch) && attestation.owner_epoch >= 1 &&
++                typeof attestation.turn_id === "string" && attestation.turn_id.length > 0 &&
++                typeof attestation.goal_id === "string" && attestation.goal_id.length > 0 &&
++                Number.isInteger(attestation.goal_revision) && attestation.goal_revision >= 0 &&
++                Number.isInteger(attestation.correction_revision) &&
++                attestation.correction_revision >= 0 &&
++                attestation.session_file === witness.sessionFile &&
++                attestation.session_leaf === witness.leafId &&
++                attestation.session_revision === witness.revision &&
++                (attestation.registry_revision === null ||
++                    (Array.isArray(attestation.registry_revision) &&
++                        attestation.registry_revision.length === 4 &&
++                        attestation.registry_revision.every(Number.isInteger)));
++            if (!valid) throw new Error(denial);
++        }
++        if (Object.keys(options).some(key => key !== "ownerRequired" && key !== "attestation") ||
++            !this.persist || !this.flushed || !this.sessionFile ||
++            !witness || witness.sessionId !== this.sessionId ||
++            witness.sessionFile !== this.sessionFile || witness.leafId !== this.leafId ||
++            typeof witness.revision !== "string" ||
++            typeof witness.firstKeptEntryId !== "string")
++            throw new Error("Invalid native compaction witness");
++        return pr48WriterLock(this.sessionFile, () => {
++            const revision = pr48DiskRevision(this.sessionFile);
++            // Re-read the actual authoritative file *under the writer lock*;
++            // an independent SessionManager may have appended since capture.
 +            const disk = this.entryStore;
 +            disk.assertCurrent();
 +            const diskHeader = disk.header;
 +            const diskLeaf = disk.lastId;
-             if (revision !== witness.revision || revision !== this._pr48LoadedRevision ||
-                 diskHeader?.id !== this.sessionId || diskLeaf !== witness.leafId ||
--                cursor?.id !== witness.firstKeptEntryId ||
--                !this.getBranch().some(entry => entry.id === witness.firstKeptEntryId))
++            if (revision !== witness.revision || revision !== this._pr48LoadedRevision ||
++                diskHeader?.id !== this.sessionId || diskLeaf !== witness.leafId ||
 +                !disk.branchContains(diskLeaf, witness.firstKeptEntryId) ||
-+                !this.entryStore.branch(this.leafId).some(entry => entry.id === witness.firstKeptEntryId))
-                 throw new Error("Native compaction source changed; no replay");
-             const commit = details?.agentCommsCommit;
-             if (commit !== undefined) {
-@@ -1193,10 +890,10 @@
-                 if (commit.metadataDigest !== undefined &&
-                     acMetadataDigest(details, usage) !== commit.metadataDigest)
-                     throw new Error("Native commit metadata mismatch; no replay");
--                if (disk.some(entry => entry.details?.agentCommsCommit?.commitId === commit.commitId))
++                !this.entryStore.branchContains(this.leafId, witness.firstKeptEntryId))
++                throw new Error("Native compaction source changed; no replay");
++            const commit = details?.agentCommsCommit;
++            if (commit !== undefined) {
++                acValidateCommit(commit);
++                if (typeof summary !== "string" || !summary.isWellFormed() ||
++                    !Number.isSafeInteger(tokensBefore) || tokensBefore < 0 ||
++                    acPayloadDigest(summary, witness.firstKeptEntryId, tokensBefore) !==
++                        commit.payloadDigest)
++                    throw new Error("Native commit payload mismatch; no replay");
++                if (commit.metadataDigest !== undefined &&
++                    acMetadataDigest(details, usage) !== commit.metadataDigest)
++                    throw new Error("Native commit metadata mismatch; no replay");
 +                if (!disk.commits(commit.commitId).next().done)
-                     throw new Error("Native commit ID already present; no replay");
-             }
--            const entry = { type: "compaction", id: generateId(this.byId),
++                    throw new Error("Native commit ID already present; no replay");
++            }
 +            const entry = { type: "compaction", id: generateId(this.entryStore),
-                 parentId: this.leafId, timestamp: new Date().toISOString(), summary,
-                 firstKeptEntryId: witness.firstKeptEntryId, tokensBefore, details, usage,
-                 fromHook: false };
-@@ -1214,8 +911,7 @@
-             } finally {
-                 if (fd !== undefined) closeSync(fd);
-             }
--            this.fileEntries.push(entry);
--            this.byId.set(entry.id, entry);
++                parentId: this.leafId, timestamp: new Date().toISOString(), summary,
++                firstKeptEntryId: witness.firstKeptEntryId, tokensBefore, details, usage,
++                fromHook: false };
++            let fd;
++            try {
++                fd = openSync(this.sessionFile, "a", 0o600);
++                const opened = fstatSync(fd, { bigint: true });
++                if (`${opened.dev}:${opened.ino}` !== revision.split(":").slice(0, 2).join(":"))
++                    throw new Error("Native session file replaced during commit");
++                writeFileSync(fd, `${JSON.stringify(entry)}\n`);
++                fsyncSync(fd);
++            } catch {
++                // Bytes may have been sent to disk before an error. Never replay.
++                throw new Error("Native compaction commit outcome unknown; no replay");
++            } finally {
++                if (fd !== undefined) closeSync(fd);
++            }
 +            this.entryStore = this.entryStore.committedAppend(entry, this.flushed ? this.sessionFile : undefined);
-             this.leafId = entry.id;
-             this._pr48LoadedRevision = pr48DiskRevision(this.sessionFile);
-             return entry.id;
-@@ -1227,7 +923,7 @@
-         return this.#acMutation(() => {
++            this.leafId = entry.id;
++            this._pr48LoadedRevision = pr48DiskRevision(this.sessionFile);
++            return entry.id;
++        });
++        });
+     }
+     /** Append a compaction summary as child of current leaf, then advance leaf. Returns entry id. */
+     appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromHook, usage) {
++        return this.#acMutation(() => {
          const entry = {
              type: "compaction",
 -            id: generateId(this.byId),
@@ -653,7 +876,16 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              summary,
-@@ -1248,7 +944,7 @@
+@@ -930,45 +937,44 @@
+         };
+         this._appendEntry(entry);
+         return entry.id;
++        });
+     }
+     /** Append a custom entry (for extensions) as child of current leaf, then advance leaf. Returns entry id. */
+     appendCustomEntry(customType, data) {
++        return this.#acMutation(() => {
+         const entry = {
              type: "custom",
              customType,
              data,
@@ -662,7 +894,13 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
          };
-@@ -1262,7 +958,7 @@
+         this._appendEntry(entry);
+         return entry.id;
++        });
+     }
+     /** Append a session info entry (e.g., display name). Returns entry id. */
+     appendSessionInfo(name) {
++        return this.#acMutation(() => {
          const sanitizedName = name.replace(/[\r\n]+/g, " ").trim();
          const entry = {
              type: "session_info",
@@ -671,10 +909,13 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              name: sanitizedName,
-@@ -1274,16 +970,9 @@
+         };
+         this._appendEntry(entry);
+         return entry.id;
++        });
+     }
      /** Get the current session name from the latest session_info entry, if any. */
      getSessionName() {
-         this.#acAssertUsable();
 -        // Walk entries in reverse to find the latest session_info entry.
 -        // Empty names explicitly clear the session title.
 -        const entries = this.getEntries();
@@ -685,13 +926,21 @@
 -            }
 -        }
 -        return undefined;
++        this.#acAssertUsable();
 +        let id;
 +        for (const meta of this.entryStore.metadataEntries()) if (meta.type === 'session_info') id = meta.id;
 +        return id ? this.entryStore.get(id).name?.trim() || undefined : undefined;
      }
      /**
       * Append a custom message entry (for extensions) that participates in LLM context.
-@@ -1301,7 +990,7 @@
+@@ -979,18 +985,20 @@
+      * @returns Entry id
+      */
+     appendCustomMessageEntry(customType, content, display, details) {
++        return this.#acMutation(() => {
+         const entry = {
+             type: "custom_message",
+             customType,
              content,
              display,
              details,
@@ -700,23 +949,29 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
          };
-@@ -1317,31 +1006,25 @@
+         this._appendEntry(entry);
+         return entry.id;
++        });
+     }
+     // =========================================================================
+     // Tree Traversal
+@@ -999,28 +1007,26 @@
+         return this.leafId;
      }
      getLeafEntry() {
-         this.#acAssertUsable();
 -        return this.leafId ? this.byId.get(this.leafId) : undefined;
++        this.#acAssertUsable();
 +        return this.leafId ? this.entryStore.get(this.leafId) : undefined;
      }
      getEntry(id) {
-         this.#acAssertUsable();
 -        return this.byId.get(id);
++        this.#acAssertUsable();
 +        return this.entryStore.get(id);
      }
      /**
       * Get all direct children of an entry.
       */
      getChildren(parentId) {
-         this.#acAssertUsable();
 -        const children = [];
 -        for (const entry of this.byId.values()) {
 -            if (entry.parentId === parentId) {
@@ -724,23 +979,25 @@
 -            }
 -        }
 -        return children;
++        this.#acAssertUsable();
 +        return this.entryStore.children(parentId);
      }
      /**
       * Get the label for an entry, if any.
       */
      getLabel(id) {
-         this.#acAssertUsable();
 -        return this.labelsById.get(id);
++        this.#acAssertUsable();
 +        return this.entryStore.label(id)?.label;
      }
      /**
       * Set or clear a label on an entry.
-@@ -1350,79 +1033,49 @@
+@@ -1028,90 +1034,68 @@
+      * Pass undefined or empty string to clear the label.
       */
      appendLabelChange(targetId, label) {
-         return this.#acMutation(() => {
 -        if (!this.byId.has(targetId)) {
++        return this.#acMutation(() => {
 +        if (!this.entryStore.has(targetId)) {
              throw new Error(`Entry ${targetId} not found`);
          }
@@ -763,7 +1020,7 @@
 -            this.labelTimestampsById.delete(targetId);
 -        }
          return entry.id;
-         });
++        });
      }
      /**
       * Walk from entry to root, returning all entries in path order.
@@ -771,7 +1028,6 @@
 -     * Use buildSessionContext() to get the resolved messages for the LLM.
 -     */
 -    getBranch(fromId) {
--        this.#acAssertUsable();
 -        const path = [];
 -        const startId = fromId ?? this.leafId;
 -        let current = startId ? this.byId.get(startId) : undefined;
@@ -790,9 +1046,9 @@
       * Uses tree traversal from current leaf.
       */
 -    buildContextEntries() {
-+    *buildContextEntries() {
-         this.#acAssertUsable();
 -        return buildContextEntries(this.getEntries(), this.leafId, this.byId);
++    *buildContextEntries() {
++        this.#acAssertUsable();
 +        yield* this.entryStore.contextEntries(this.leafId);
      }
      /**
@@ -800,14 +1056,12 @@
       * Uses tree traversal from current leaf.
       */
 -    buildSessionContext() {
--        this.#acAssertUsable();
 -        return buildSessionContext(this.getEntries(), this.leafId, this.byId);
 -    }
      /**
       * Get session header.
       */
 -    getHeader() {
--        this.#acAssertUsable();
 -        const h = this.fileEntries.find((e) => e.type === "session");
 -        return h ? h : null;
 -    }
@@ -818,18 +1072,17 @@
       * change the leaf pointer. Entries cannot be modified or deleted.
       */
 -    getEntries() {
--        this.#acAssertUsable();
 -        return this.fileEntries.filter((e) => e.type !== "session");
 -    }
 +
      /**
       * Get the session as a tree structure. Returns a shallow defensive copy of all entries.
       * A well-formed session has exactly one root (first entry with parentId === null).
-@@ -1430,17 +1083,17 @@
+      * Orphaned entries (broken parent chain) are also returned as roots.
       */
      getTree() {
-         this.#acAssertUsable();
 -        const entries = this.getEntries();
++        this.#acAssertUsable();
 +        const entries = this.entryStore;
          const nodeMap = new Map();
          const roots = [];
@@ -848,20 +1101,36 @@
              const node = nodeMap.get(entry.id);
              if (entry.parentId === null || entry.parentId === entry.id) {
                  roots.push(node);
-@@ -1477,7 +1130,7 @@
+@@ -1147,10 +1131,12 @@
+      * are not modified or deleted.
       */
      branch(branchFromId) {
-         return this.#acMutation(() => {
 -        if (!this.byId.has(branchFromId)) {
++        return this.#acMutation(() => {
 +        if (!this.entryStore.has(branchFromId)) {
              throw new Error(`Entry ${branchFromId} not found`);
          }
          this.leafId = branchFromId;
-@@ -1500,14 +1153,14 @@
++        });
+     }
+     /**
+      * Reset the leaf pointer to null (before any entries).
+@@ -1158,7 +1144,9 @@
+      * Use this when navigating to re-edit the first user message.
+      */
+     resetLeaf() {
++        return this.#acMutation(() => {
+         this.leafId = null;
++        });
+     }
+     /**
+      * Start a new branch with a summary of the abandoned path.
+@@ -1166,14 +1154,15 @@
+      * context from the abandoned conversation path.
       */
      branchWithSummary(branchFromId, summary, details, fromHook, usage) {
-         return this.#acMutation(() => {
 -        if (branchFromId !== null && !this.byId.has(branchFromId)) {
++        return this.#acMutation(() => {
 +        if (branchFromId !== null && !this.entryStore.has(branchFromId)) {
              throw new Error(`Entry ${branchFromId} not found`);
          }
@@ -874,13 +1143,19 @@
              parentId: branchFromId,
              timestamp: new Date().toISOString(),
              fromId,
-@@ -1527,116 +1180,40 @@
+@@ -1184,6 +1173,7 @@
+         };
+         this._appendEntry(entry);
+         return entry.id;
++        });
+     }
+     /**
+      * Create a new session file containing only the path from root to the specified leaf.
+@@ -1191,112 +1181,43 @@
+      * Returns the new session file path, or undefined if not persisting.
       */
      createBranchedSession(leafId) {
-         return this.#acMutation(() => {
 -        const previousSessionFile = this.sessionFile;
--        return pr48WriterLock(this.persist ? previousSessionFile : undefined, () => {
--        this._assertLoadedRevision();
 -        const path = this.getBranch(leafId);
 -        if (path.length === 0) {
 -            throw new Error(`Entry ${leafId} not found`);
@@ -906,6 +1181,7 @@
 -                    ...entry,
 -                    parentId: pathParentId,
 -                    firstKeptEntryId: replacementByLabelId.get(entry.firstKeptEntryId) ?? entry.firstKeptEntryId,
++        return this.#acMutation(() => pr48WriterLock(this.persist ? this.sessionFile : undefined, () => {
 +            this._assertLoadedRevision();
 +            if (!this.entryStore.has(leafId)) throw new Error(`Entry ${leafId} not found`);
 +            const source = this.entryStore;
@@ -922,7 +1198,8 @@
 +                        for (const entry of source.branch(leafId)) writeFileSync(fd, JSON.stringify(entry) + '\n');
 +                        fsyncSync(fd);
 +                        acSyncParents(dirname(file));
-+                    } finally { closeSync(fd); }
++                    } catch (cause) { throw new Error("Native branch outcome unknown; no replay", {cause}); }
++                    finally { closeSync(fd); }
 +                });
 +                next = new DiskEntryStore(file);
 +            } else next = new MemoryEntryStore(header, source.branch(leafId));
@@ -935,8 +1212,8 @@
 +            this.leafId = next.lastId;
 +            try {
 +                for (const meta of source.branchMetadata(leafId)) {
-+                    const label = source.label(meta.id);
-+                    if (label && label.label !== next.label(meta.id)?.label) this.appendLabelChange(meta.id, label.label);
++                    const label = source.label(meta.id)?.label;
++                    if (label !== next.label(meta.id)?.label) this.appendLabelChange(meta.id, label);
                  }
 -                : { ...entry, parentId: pathParentId });
 -            pathParentId = entry.id;
@@ -982,7 +1259,6 @@
 -            this.fileEntries = [header, ...pathWithoutLabels, ...labelEntries];
 -            this.sessionId = newSessionId;
 -            this.sessionFile = newSessionFile;
--            this._pr48LoadedRevision = null;
 -            this._buildIndex();
 -            // Only write the file now if it contains an assistant message.
 -            // Otherwise defer to _persist(), which creates the file on the
@@ -1018,13 +1294,13 @@
 -        this.sessionId = newSessionId;
 -        this._buildIndex();
 -        return undefined;
--        });
 +            } finally { source.close(); }
 +            return file;
-         });
++        }));
      }
      /**
-@@ -1656,26 +1233,10 @@
+      * Create a new session.
+@@ -1315,26 +1236,10 @@
       */
      static open(path, sessionDir, cwdOverride) {
          const resolvedPath = resolvePath(path);
@@ -1055,7 +1331,7 @@
      }
      /**
       * Continue the most recent session, or create new if none.
-@@ -1692,8 +1253,8 @@
+@@ -1351,8 +1256,8 @@
          return new SessionManager(cwd, dir, undefined, true);
      }
      /** Create an in-memory session (no file persistence), optionally from entries held outside the filesystem. */
@@ -1066,12 +1342,11 @@
      }
      /**
       * Fork a session from another project directory into the current project.
-@@ -1703,58 +1264,28 @@
+@@ -1362,45 +1267,31 @@
       * @param sessionDir Optional session directory. If omitted, uses default for targetCwd.
       */
      static forkFrom(sourcePath, targetCwd, sessionDir, options) {
 -        const resolvedSourcePath = resolvePath(sourcePath);
--        return pr48WriterLock(resolvedSourcePath, () => {
 -        const resolvedTargetCwd = resolvePath(targetCwd);
 -        const sourceEntries = loadEntriesFromFile(resolvedSourcePath);
 -        if (sourceEntries.length === 0) {
@@ -1083,6 +1358,7 @@
 -        }
 -        const dir = sessionDir ? normalizePath(sessionDir) : getDefaultSessionDir(resolvedTargetCwd);
 -        if (!existsSync(dir)) {
++        return pr48WriterLock(resolvePath(sourcePath), () => {
 +        const source = new DiskEntryStore(resolvePath(sourcePath));
 +        try {
 +            if (options?.id !== undefined) assertValidSessionId(options.id);
@@ -1107,26 +1383,14 @@
 -            cwd: resolvedTargetCwd,
 -            parentSession: resolvedSourcePath,
 -        };
--        pr48WriterLock(newSessionFile, () => {
--            // Never adopt an existing destination as permission to overwrite it.
--            let fd;
--            try {
--                fd = openSync(newSessionFile, "wx", 0o600);
--                writeFileSync(fd, `${JSON.stringify(newHeader)}\n`);
--                for (const entry of sourceEntries) {
--                    if (entry.type !== "session")
--                        writeFileSync(fd, `${JSON.stringify(entry)}\n`);
--                }
--                fsyncSync(fd);
--                acSyncParents(dirname(newSessionFile));
--            } catch {
--                throw new Error("Native session fork outcome unknown; no replay");
--            } finally {
--                if (fd !== undefined) closeSync(fd);
+-        writeFileSync(newSessionFile, `${JSON.stringify(newHeader)}\n`, { flag: "wx", mode: 0o600 });
+-        // Copy all non-header entries from source
+-        for (const entry of sourceEntries) {
+-            if (entry.type !== "session") {
+-                appendFileSync(newSessionFile, `${JSON.stringify(entry)}\n`);
 -            }
--        });
+-        }
 -        return new SessionManager(resolvedTargetCwd, dir, newSessionFile, true);
--        });
 +            const timestamp = new Date().toISOString();
 +            const id = options?.id ?? createSessionId();
 +            const header = { type: 'session', version: CURRENT_SESSION_VERSION, id, timestamp,
@@ -1139,10 +1403,12 @@
 +                    for (const entry of source.entries()) writeFileSync(fd, JSON.stringify(entry) + '\n');
 +                    fsyncSync(fd);
 +                    acSyncParents(dirname(file));
-+                } finally { closeSync(fd); }
++                } catch (cause) { throw new Error("Native fork outcome unknown; no replay", {cause}); }
++                finally { closeSync(fd); }
 +            });
 +            return SessionManager.open(file, dir, cwd);
 +        } finally { source.close(); }
++        });
      }
      /**
       * List all sessions for a directory.
@@ -1691,7 +1957,9 @@
 +        [TURN_PREFIX_SUMMARIZATION_PROMPT,customInstructions].filter(Boolean).join('\n\n'),undefined,
 +        thinkingLevel,streamFn,env,retry,callbacks,sessionId);
  }
- //# sourceMappingURL=compaction.js.map--- a/dist/core/agent-session-runtime.js
+ //# sourceMappingURL=compaction.js.map
+\ No newline at end of file
+--- a/dist/core/agent-session-runtime.js
 +++ b/dist/core/agent-session-runtime.js
 @@ -1,3 +1,4 @@
 +import { SessionContext } from "./session-context.js";
@@ -1731,19 +1999,19 @@
          this.agent.onContextReady = async (context) => await this._commitNativeContext(context);
          this._installAgentToolHooks();
          this._installAgentNextTurnRefresh();
-@@ -457,9 +459,9 @@
+@@ -481,9 +483,9 @@
                  this._nativeInputClaims.has(message.inputId));
              if (currentInput && estimateTokens(currentInput) > budget)
                  throw new Error("Native input is oversized and cannot be compacted; prompt refused");
--            const before = getLatestCompactionEntry(this.sessionManager.getBranch());
+-            const before = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction");
 +            const before = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction") ?? null;
              await this._runAutoCompaction("threshold", false);
--            const after = getLatestCompactionEntry(this.sessionManager.getBranch());
+-            const after = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction");
 +            const after = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction") ?? null;
              if (!after || after.id === before?.id)
                  throw new Error("Native threshold compaction did not commit; prompt refused");
              const fresh = this.agent.state.messages.slice();
-@@ -832,6 +834,7 @@
+@@ -856,6 +858,7 @@
          this._disconnectFromAgent();
          this._eventListeners = [];
          cleanupSessionResources(this.sessionId);
@@ -1751,7 +2019,7 @@
      }
      // =========================================================================
      // Read-only State Access
-@@ -1116,6 +1119,7 @@
+@@ -1140,6 +1143,7 @@
       * @throws Error if no model selected or no API key available (when not streaming)
       */
      async prompt(text, options) {
@@ -1759,7 +2027,7 @@
          const expandPromptTemplates = options?.expandPromptTemplates ?? true;
          const preflightResult = options?.preflightResult;
          let messages;
-@@ -1860,12 +1864,12 @@
+@@ -1884,12 +1888,12 @@
                  throw new Error(formatNoModelSelectedMessage());
              }
              const { model: requestModel, apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model);
@@ -1775,7 +2043,7 @@
                  if (lastEntry?.type === "compaction") {
                      throw new Error("Already compacted");
                  }
-@@ -1916,12 +1920,11 @@
+@@ -1940,12 +1944,11 @@
                  throw new Error("Compaction cancelled");
              }
              this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension, usage);
@@ -1791,7 +2059,7 @@
              if (this._extensionRunner && savedCompactionEntry) {
                  await this._extensionRunner.emit({
                      type: "session_compact",
-@@ -2029,7 +2032,7 @@
+@@ -2053,7 +2056,7 @@
          // Skip compaction checks if this assistant message is older than the latest
          // compaction boundary. This prevents a stale pre-compaction usage/error
          // from retriggering compaction on the first prompt after compaction.
@@ -1800,7 +2068,7 @@
          const assistantIsFromBeforeCompaction = compactionEntry !== null && assistantMessage.timestamp <= new Date(compactionEntry.timestamp).getTime();
          if (assistantIsFromBeforeCompaction) {
              return false;
-@@ -2127,8 +2130,8 @@
+@@ -2151,8 +2154,8 @@
                  return false;
              }
              const { model: requestModel, apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model);
@@ -1811,7 +2079,7 @@
              if (!preparation) {
                  return false;
              }
-@@ -2206,12 +2209,11 @@
+@@ -2230,12 +2233,11 @@
                  return false;
              }
              this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension, usage);
@@ -1827,7 +2095,7 @@
              if (this._extensionRunner && savedCompactionEntry) {
                  await this._extensionRunner.emit({
                      type: "session_compact",
-@@ -2917,7 +2919,7 @@
+@@ -2941,7 +2943,7 @@
              let summaryText;
              let summaryDetails;
              let summaryUsage;
@@ -1836,7 +2104,7 @@
                  const model = this.model;
                  const { model: requestModel, apiKey, headers, env } = await this._getSummarizationRequestAuth(model);
                  const branchSummarySettings = this.settingsManager.getBranchSummarySettings();
-@@ -2994,8 +2996,8 @@
+@@ -3018,8 +3020,8 @@
                  this.sessionManager.appendLabelChange(targetId, label);
              }
              // Update agent state
@@ -1847,7 +2115,7 @@
              // Emit session_tree event
              await this._extensionRunner.emit({
                  type: "session_tree",
-@@ -3016,7 +3018,7 @@
+@@ -3040,7 +3042,7 @@
       * Get all user messages from session for fork selector.
       */
      getUserMessagesForForking() {
@@ -1856,7 +2124,7 @@
          const result = [];
          for (const entry of entries) {
              if (entry.type !== "message")
-@@ -3042,7 +3044,7 @@
+@@ -3066,7 +3068,7 @@
          let totalMessages = 0;
          let toolCalls = 0;
          const usageTotals = createUsageTotals();
@@ -1865,7 +2133,7 @@
              if ((entry.type === "branch_summary" || entry.type === "compaction") && entry.usage) {
                  addUsageToTotals(usageTotals, entry.usage);
              }
-@@ -3097,30 +3099,20 @@
+@@ -3121,30 +3123,20 @@
          // After compaction, the last assistant usage reflects pre-compaction context size.
          // We can only trust usage from an assistant that responded after the latest compaction.
          // If no such assistant exists, context token count is unknown until the next LLM response.
@@ -1931,7 +2199,9 @@
   */
 -export declare function detectCacheMiss(entries: SessionEntry[], message: AssistantMessage, models: ModelPriceSource): CacheMiss | undefined;
 +export declare function detectCacheMiss(entries: Iterable<SessionEntry>, message: AssistantMessage, models: ModelPriceSource): CacheMiss | undefined;
- //# sourceMappingURL=cache-stats.d.ts.map--- a/dist/core/cache-stats.js
+ //# sourceMappingURL=cache-stats.d.ts.map
+\ No newline at end of file
+--- a/dist/core/cache-stats.js
 +++ b/dist/core/cache-stats.js
 @@ -51,10 +51,9 @@
          reportedCache: reportedCache || usage.cacheRead + usage.cacheWrite > 0,
@@ -2007,7 +2277,9 @@
   */
 -export declare function generateBranchSummary(entries: SessionEntry[], options: GenerateBranchSummaryOptions): Promise<BranchSummaryResult>;
 +export declare function generateBranchSummary(entries: EntryBranchRange, options: GenerateBranchSummaryOptions): Promise<BranchSummaryResult>;
- //# sourceMappingURL=branch-summarization.d.ts.map--- a/dist/core/compaction/branch-summarization.js
+ //# sourceMappingURL=branch-summarization.d.ts.map
+\ No newline at end of file
+--- a/dist/core/compaction/branch-summarization.js
 +++ b/dist/core/compaction/branch-summarization.js
 @@ -1,3 +1,4 @@
 +import { EntryBranchRange } from '../session-entry-store.js';
@@ -2275,7 +2547,9 @@
      return outputPath;
 +    } finally { sm.entryStore.close(); }
  }
- //# sourceMappingURL=index.js.map--- a/dist/core/extensions/types.d.ts
+ //# sourceMappingURL=index.js.map
+\ No newline at end of file
+--- a/dist/core/extensions/types.d.ts
 +++ b/dist/core/extensions/types.d.ts
 @@ -1,3 +1,4 @@
 +import type { EntryBranchRange } from "../session-entry-store.js";
@@ -2370,7 +2644,9 @@
 +    } finally { closeSync(fd); }
      return filePath;
  }
- //# sourceMappingURL=session-export.js.map--- a/dist/core/session-manager.d.ts
+ //# sourceMappingURL=session-export.js.map
+\ No newline at end of file
+--- a/dist/core/session-manager.d.ts
 +++ b/dist/core/session-manager.d.ts
 @@ -1,3 +1,4 @@
 +import type { EntryStore } from "./session-entry-store.js";
@@ -2536,7 +2812,9 @@
  export { formatDimensionNote, type ResizedImage, resizeImage } from "./utils/image-resize.ts";
  export { detectSupportedImageMimeTypeFromFile } from "./utils/mime.ts";
  export { getPowerShellConfig, getShellConfig } from "./utils/shell.ts";
--//# sourceMappingURL=index.d.ts.map+//# sourceMappingURL=index.d.ts.map
+-//# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=index.d.ts.map
 +export { EntryStore, DiskEntryStore, MemoryEntryStore, EntryBranchRange } from "./core/session-entry-store.js";
 --- a/dist/index.js
 +++ b/dist/index.js
@@ -2562,7 +2840,9 @@
  export { detectSupportedImageMimeTypeFromFile } from "./utils/mime.js";
  // Shell utilities
  export { getPowerShellConfig, getShellConfig } from "./utils/shell.js";
--//# sourceMappingURL=index.js.map+//# sourceMappingURL=index.js.map
+-//# sourceMappingURL=index.js.map
+\ No newline at end of file
++//# sourceMappingURL=index.js.map
 +export { EntryStore, DiskEntryStore, MemoryEntryStore, EntryBranchRange } from "./core/session-entry-store.js";
 --- a/dist/main.js
 +++ b/dist/main.js
@@ -2700,24 +2980,6 @@
  import { killTrackedDetachedChildren } from "../../utils/shell.js";
  import { theme } from "../interactive/theme/theme.js";
  import { toJsonEvent } from "../json-event.js";
-@@ -74,7 +74,7 @@
-         Object.keys(command.witness).some(key => witness[key] !== command.witness[key]))
-         return decline("source_mismatch");
-     let preparation;
--    try { preparation = prepareCompaction(manager.getBranch(), settings); }
-+    try { preparation = prepareCompaction(manager.entryStore, settings, manager.getLeafId()); }
-     catch { return decline("unsupported"); }
-     if (!preparation || preparation.firstKeptEntryId !== command.witness.firstKeptEntryId)
-         return decline("source_mismatch");
-@@ -210,7 +210,7 @@
-     if (readiness.status !== "ready") return { denial: readiness.reason };
-     if (!acSummaryCompatible(session)) return { denial: "extension_unsupported" };
-     let preparation;
--    try { preparation = prepareCompaction(session.sessionManager.getBranch(),
-+    try { preparation = prepareCompaction(session.sessionManager.entryStore.branch(session.sessionManager.getLeafId()),
-         session.settingsManager.getCompactionSettings()); }
-     catch { return { denial: "unsupported" }; }
-     if (!preparation || preparation.isSplitTurn || preparation.turnPrefixMessages.length ||
 @@ -359,6 +359,18 @@
      let unsubscribeBackpressure;
      const output = (obj) => {

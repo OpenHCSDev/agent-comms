@@ -1,3 +1,36 @@
+# Current combined checkpoint — 2026-09-28
+
+PR243 now combines Pascal PR244 proof startup and parent PR242 compaction fixes. This source checkpoint supersedes the historical pending implementation lists below. No live installation or paid provider calls.
+
+## Implemented and deleted
+
+- Complete EntryStore/SessionContext consumers: SDK, RPC, SessionManager, initial uncompacted chunking, branch summaries, HTML exports, cache notices, prepare/commit/reopen helpers and current tests. Canonical managed compaction retains its existing split-turn admission policy.
+- Deleted five superseded writer patch implementations (session-writer-prototype, compaction-journal, writer-coverage, writer-failure-state, compaction-metadata); one complete storage patch owns their locks/CAS/metadata behavior. Removed eager history bodies/maps, old loader/index/rewrite paths, preloaded constructor and old array APIs/types.
+- Corrected actual empty-file initialization race, source/destination fork locks, failed-store invalidation/resource cleanup, and cleared branch labels. Store availability owns failure state; no replacement flag on SessionManager.
+- Combined proof integration removed attest_input's only yield. Migrated its actual caller to await the coroutine; original input now starts after selected summary/commit instead of becoming UNKNOWN through a Python protocol mismatch.
+
+## Current evidence
+
+- writer-coverage-first.log: 18 actual native writer/lock/CAS cases pass.
+- writer-failure-final.log: 13 failure scenarios and 442 continuation controls pass.
+- history-consumers-final.log: 3 branch/export/cache tests pass, including label clearing.
+- combined-cas-first.log: 9 pass; two obsolete fixture calls failed. metadata-cas-current.log: both repaired cases pass.
+- combined-cli-compaction.log: actual combined CLI compacts, commits and reopens; 20 loopback requests, original bytes retained, all original messages readable.
+- combined-proof.log: old compacted/sibling tracked input is verified with zero historical body decodes and zero startup proof emissions.
+- selected-summary-current.log: actual compiled selected native path passes, including 345 model-sized source requests, cancellation and UNKNOWN cases.
+- selected-owner-corrected.log: actual ACP selected summary → journal commit → strict reopen → original input passes (14.75s). Remaining previously failed variants are pending final focused rerun.
+- canonical-build.log: prior combined package built and verified through the production preparation script. Final pin includes subsequent small ownership/label/resource-cleanup corrections; final production rebuild is pending at this checkpoint.
+
+## Remaining acceptance and boundaries
+
+Final matched canonical package build, remaining affected ACP variants, parallel chunk chronology/prefix fixture, and Lovelace's independent >256MiB full CLI/prepare/commit/reopen acceptance remain pending. Her earlier manager-only large-history memory proof is not full-chain proof. Parent owns integrated installation.
+
+Native history scanning and chunk sources avoid eager history-body arrays. RPC clients still buffer a requested complete record; explicit tree/render projections may allocate their requested result. No general bounded-memory claim is made for those paths or arbitrarily large single records. Python historical NativeEntry collections and the noncanonical stock manual helper are separate existing boundaries, not claimed replaced here.
+
+Toad T1 settings is queued after PR243 combined completion; no Toad edits started.
+
+---
+
 # Native SessionManager entry-store implementation
 
 Branch refactor/native-session-entry-store-20260928 from installed225/combined242/d04105d, persistent ~/wt/comms-native-session-entry-store-20260928. Work in progress; no live changes or provider calls.

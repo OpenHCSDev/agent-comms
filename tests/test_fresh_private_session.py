@@ -173,10 +173,10 @@ def test_optional_reviewed_copied_pi_reads_selected_bootstrap_level(tmp_path: Pa
     )
     module = (Path(package) / "dist/core/session-manager.js").as_uri()
     script = (
-        f"import {{SessionManager}} from {json.dumps(module)};"
+        f"import {{SessionManager,sessionEntryToContextMessages}} from {json.dumps(module)};"
         "const s=SessionManager.open(process.env.FRESH_FILE);"
         "console.log(JSON.stringify({id:s.getSessionId(),file:s.getSessionFile(),"
-        "leaf:s.getLeafId(),context:s.buildSessionContext()}));"
+        "leaf:s.getLeafId(),context:{...s.entryStore.contextSettings(),messages:s.buildContextEntries().flatMap(sessionEntryToContextMessages).toArray()}}));"
     )
     result = subprocess.run(
         ["node", "--input-type=module", "-e", script],
@@ -205,10 +205,10 @@ def test_optional_reviewed_copied_pi_reads_selected_bootstrap_level(tmp_path: Pa
     }
     fresh.verify_prewrite()  # Native read cannot append to bootstrap.
     append_script = (
-        f"import {{SessionManager}} from {json.dumps(module)};"
+        f"import {{SessionManager,sessionEntryToContextMessages}} from {json.dumps(module)};"
         "const s=SessionManager.open(process.env.FRESH_FILE);"
         "const id=s.appendMessage({role:'user',content:'offline fixture',timestamp:1790460000000});"
-        "console.log(JSON.stringify({id,leaf:s.getLeafId(),context:s.buildSessionContext()}));"
+        "console.log(JSON.stringify({id,leaf:s.getLeafId(),context:{...s.entryStore.contextSettings(),messages:s.buildContextEntries().flatMap(sessionEntryToContextMessages).toArray()}}));"
     )
     appended = subprocess.run(
         ["node", "--input-type=module", "-e", append_script],
@@ -243,7 +243,7 @@ def test_optional_reviewed_copied_pi_preserves_explicit_fresh_inode(tmp_path: Pa
     fresh = create_fresh_private_session(tmp_path / "native-sessions" / "a", worktree=tmp_path)
     module = (Path(package) / "dist/core/session-manager.js").as_uri()
     script = (
-        f"import {{SessionManager}} from {json.dumps(module)};"
+        f"import {{SessionManager,sessionEntryToContextMessages}} from {json.dumps(module)};"
         "const s=SessionManager.open(process.env.FRESH_FILE);"
         "if(s.getSessionId()!==process.env.FRESH_ID)throw Error('rebound session');"
         "s.appendMessage({role:'user',content:'provider-free fixture',timestamp:Date.now()});"

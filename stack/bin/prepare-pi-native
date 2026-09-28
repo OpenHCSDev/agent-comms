@@ -58,16 +58,6 @@ python3 "$stack_root/patch-native-auto-compaction.py" \
 python3 "$stack_root/patch-native-steering.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 manager=dist/core/session-manager.js
-python3 "$stack_root/patch-native-session-writer-prototype.py" --production \
-    "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
-python3 "$stack_root/patch-native-compaction-journal.py" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
-python3 "$stack_root/patch-native-writer-coverage.py" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
-python3 "$stack_root/patch-native-writer-failure-state.py" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
-python3 "$stack_root/patch-native-compaction-metadata.py" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
 services=dist/core/agent-session-services.js
 python3 "$stack_root/patch-native-model-config.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$services"
