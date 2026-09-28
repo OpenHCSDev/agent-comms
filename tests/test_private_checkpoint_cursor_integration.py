@@ -154,7 +154,7 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
     with MutationStore(str(root / "coordination.sqlite3")) as reopened:
         assert (
             reopened._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_source_cursors WHERE recipient_lookup=?",
+                "SELECT COUNT(*) FROM current_native_cursor WHERE recipient_lookup=?",
                 (lookup,),
             ).fetchone()[0]
             == 0
@@ -209,7 +209,7 @@ def test_checkpoint_index_rollback_denies_cursor_without_sql_mutation(tmp_path):
             )
         assert (
             reopened._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_source_cursors"
+                "SELECT COUNT(*) FROM current_native_cursor"
             ).fetchone()[0]
             == 0
         )

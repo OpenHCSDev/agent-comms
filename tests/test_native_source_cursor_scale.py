@@ -87,7 +87,7 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
         assert (
             current.owner_admission_generation
             == store._connection.execute(
-                "SELECT sent_owner_admission_epoch FROM native_runtime_inputs WHERE input_id=?",
+                "SELECT sent_owner_admission_generation FROM native_runtime_input WHERE input_id=?",
                 (second.input_id,),
             ).fetchone()[0]
         )
@@ -157,7 +157,7 @@ async def test_unknown_first_source_cannot_be_bridged_by_101_unrelated(tmp_path,
         )
 
 
-async def test_legacy_cross_generation_cursor_reopen_denied_without_mutating_sql(
+async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql(
     tmp_path, monkeypatch
 ):
     root, root_id, comms, _first, people = _root(tmp_path)
@@ -186,35 +186,30 @@ async def test_legacy_cross_generation_cursor_reopen_denied_without_mutating_sql
         root=root, wire_root_id=root_id, owner_name="alpha-new", native_package=tmp_path
     ).run()
     assert second is not None and second.cursor_status == "blocked_gap"
-    # Represent a supported legacy persisted row from the old cursor writer:
-    # latest input is gen2, but its covered prefix includes old gen1 seq1.
+    # Forge current generation identity while borrowing the previous owner's
+    # source coverage. Reopening must reject it without repairing or replaying it.
+    from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
+
     with MutationStore(str(root / "coordination.sqlite3")) as store:
-        proof = store._connection.execute(
-            "SELECT claim_id,stage,session_id,request_generation,"
-            "sent_owner_admission_epoch FROM native_runtime_inputs WHERE input_id=?",
-            (second.input_id,),
-        ).fetchone()
+        proof = NativeRuntimeInput.one(store._connection, input_id=second.input_id)
         assert proof is not None
-        store._connection.execute(
-            "INSERT INTO native_runtime_source_cursors VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                root_id,
-                lookup,
-                "alpha-new",
-                2,
-                proof[4],
-                second_message.seq,
-                second_message.seq,
-                second.input_id,
-                proof[0],
-                proof[1],
-                proof[2],
-                proof[3],
-            ),
-        )
+        CurrentNativeCursor(
+            wire_root_id=root_id,
+            recipient_lookup=lookup,
+            owner_thread="alpha-new",
+            owner_generation=2,
+            owner_admission_generation=proof.sent_owner_admission_generation,
+            covered_seq=second_message.seq,
+            injected_seq=second_message.seq,
+            input_id=second.input_id,
+            assignment_id=proof.assignment_id,
+            stage=proof.stage,
+            session_id=proof.session_id,
+            request_generation=proof.request_generation,
+        ).insert(store._connection)
     with MutationStore(str(root / "coordination.sqlite3")) as reopened:
         before = reopened._connection.execute(
-            "SELECT * FROM native_runtime_source_cursors WHERE owner_generation=2"
+            "SELECT * FROM current_native_cursor WHERE owner_generation=2"
         ).fetchone()
         assert before is not None
         with pytest.raises(IdentityConflict, match="borrows historical owner source proof"):
@@ -222,7 +217,7 @@ async def test_legacy_cross_generation_cursor_reopen_denied_without_mutating_sql
                 comms.bus, reopened, wire_root_id=root_id, owner_name="alpha-new"
             )
         after = reopened._connection.execute(
-            "SELECT * FROM native_runtime_source_cursors WHERE owner_generation=2"
+            "SELECT * FROM current_native_cursor WHERE owner_generation=2"
         ).fetchone()
         assert tuple(after) == tuple(before)  # No recovery mutation or replay.
     assert len(calls) == 2
@@ -253,7 +248,7 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
             read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
         assert store.participant(lookup).participant_generation == 2
         retained = store._connection.execute(
-            "SELECT owner_generation,input_id FROM native_runtime_source_cursors"
+            "SELECT owner_generation,input_id FROM current_native_cursor"
         ).fetchall()
         assert [tuple(row) for row in retained] == [(1, result.input_id)]
     monkeypatch.setattr(cursor_module, "_prefix_evidence", original)
@@ -289,8 +284,6 @@ async def test_replaced_bus_between_coverage_and_commit_omits_cursor(tmp_path, m
     assert result is not None and result.cursor_status == "unavailable" and len(calls) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_source_cursors"
-            ).fetchone()[0]
+            store._connection.execute("SELECT COUNT(*) FROM current_native_cursor").fetchone()[0]
             == 0
         )

@@ -113,7 +113,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
         assert len(rows) == expected_calls
         assert all(row.expected_prompt_equality_established for row in rows)
         assert (
-            db.execute("SELECT COUNT(*) FROM native_runtime_inputs").fetchone()[0] == expected_calls
+            db.execute("SELECT COUNT(*) FROM native_runtime_input").fetchone()[0] == expected_calls
         )
     # A no-wake observer cannot be turned into a selected run by an inbox ACK.
     comms.messaging.acknowledge_through("beta", message.seq)

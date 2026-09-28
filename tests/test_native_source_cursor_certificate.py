@@ -188,7 +188,7 @@ async def test_certified_cursor_rejects_changed_sidecar_without_replay(tmp_path,
             read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
         assert (
             store._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_source_cursors"
+                "SELECT COUNT(*) FROM current_native_cursor"
             ).fetchone()[0]
             == 1
         )

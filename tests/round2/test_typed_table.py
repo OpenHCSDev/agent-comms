@@ -59,6 +59,10 @@ def test_declared_table_family(tmp_path):
             replace(child, key="bad", parent="missing").insert(db)
         with pytest.raises(ValueError):
             replace(parent, key="bool", count=True).insert(db)
+        replace(child, weight=3.25).upsert(db)
+        assert TableChildRow.one(db, key="c").weight == 3.25
+        child.upsert(db)
+        assert TableChildRow.one(db, key="c") == child
         TableChildRow.update(db, where="key=?", parameters=("c",), enabled=False)
         with pytest.raises(ValueError):
             TableChildRow.update(db, where="key=?", parameters=("c",), missing=1)
@@ -128,3 +132,20 @@ def test_new_row_declaration_needs_no_other_edit():
             Projection.read(db.execute("SELECT 'a' AS label, 'b' AS label"))
         with pytest.raises(TypeError):
             AddedTableRow.update(db, where="1", child={"kind": "table_child"})
+
+
+def test_streamed_query_decodes_only_consumed_rows_and_releases_cursor():
+    @dataclass(frozen=True)
+    class StreamProjection(TypedRow):
+        enabled: bool
+
+    with sqlite3.connect(":memory:") as db:
+        cursor = db.execute("SELECT 1 AS enabled UNION ALL SELECT 2 AS enabled")
+        rows = StreamProjection.iterate(cursor)
+        assert next(rows) == StreamProjection(True)
+        rows.close()
+        with pytest.raises(sqlite3.ProgrammingError, match="closed cursor"):
+            cursor.fetchone()
+        rows = StreamProjection.iterate(db.execute("SELECT 2 AS enabled"))
+        with pytest.raises(ValueError):
+            next(rows)

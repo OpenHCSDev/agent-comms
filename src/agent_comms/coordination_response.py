@@ -1,4 +1,4 @@
-"""Default-off, owner-fenced response publication across the coordinator and bus.
+"""Owner-fenced response publication across the coordinator and bus.
 
 Tx1 freezes an intent without a bus append. For the bounded append/Tx2, acquire
 the shared wire lock, bus lock, registry lock, then SQLite BEGIN IMMEDIATE.
@@ -22,11 +22,23 @@ import sqlite3
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 from .bus_publication import stable_thread_lookup
-from .coordination import OwnerFence, PublicationIntents, RecoverySnapshot, canonical_publication_key
+from .coordination import (
+    Attempts,
+    CurrentExecutions,
+    Executions,
+    Obligations,
+    OwnerFence,
+    PublicationIntents,
+    PublicationReceipts,
+    RecoverySnapshot,
+    WakeClaims,
+    canonical_publication_key,
+)
 from .coordination_cohort import _assert_schema as _assert_cohort_schema
 from .coordination_store import (
     AlreadyApplied,
@@ -45,91 +57,118 @@ from .registry_document import RegistrySnapshot
 from .store_files import _store_lock
 from .thread_identity import ThreadRole
 from .turn_lease import ActiveTurn
+from .typed_table import Column, SQLiteForeignKeys, SQLiteSchemaObject, TypedRow, TypedTable
 from .wake import WakeDecision, derive_exact_reply_target
 
-_RESPONSE_DDL = (
-    (
-        "response_schema_meta",
-        """CREATE TABLE response_schema_meta (
-            singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-            version INTEGER NOT NULL CHECK (version = 1),
-            ddl_digest TEXT NOT NULL CHECK (length(ddl_digest) = 64)
-        ) STRICT""",
-    ),
-    (
-        "publication_append_dispatches",
-        """CREATE TABLE publication_append_dispatches (
-            execution_id TEXT PRIMARY KEY REFERENCES publication_intents(execution_id),
-            wire_root_id TEXT NOT NULL CHECK (
-                length(wire_root_id) = 32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'),
-            owner_generation INTEGER NOT NULL CHECK (owner_generation > 0),
-            attempt_ordinal INTEGER NOT NULL CHECK (attempt_ordinal > 0),
-            dispatched_at_ms INTEGER NOT NULL CHECK (dispatched_at_ms >= 0)
-        ) STRICT, WITHOUT ROWID""",
-    ),
-    (
-        "publication_dispatch_update_guard",
-        """CREATE TRIGGER publication_dispatch_update_guard
-        BEFORE UPDATE ON publication_append_dispatches
-        BEGIN SELECT RAISE(ABORT, 'publication dispatch is frozen'); END""",
-    ),
-    (
-        "publication_dispatch_delete_guard",
-        """CREATE TRIGGER publication_dispatch_delete_guard
-        BEFORE DELETE ON publication_append_dispatches
-        BEGIN SELECT RAISE(ABORT, 'publication dispatch cannot be deleted'); END""",
-    ),
-    (
-        "response_schema_meta_update_guard",
-        """CREATE TRIGGER response_schema_meta_update_guard
-        BEFORE UPDATE ON response_schema_meta
-        BEGIN SELECT RAISE(ABORT, 'response schema metadata is frozen'); END""",
-    ),
-    (
-        "response_schema_meta_delete_guard",
-        """CREATE TRIGGER response_schema_meta_delete_guard
-        BEFORE DELETE ON response_schema_meta
-        BEGIN SELECT RAISE(ABORT, 'response schema metadata cannot be deleted'); END""",
-    ),
-)
-_RESPONSE_DDL_DIGEST = hashlib.sha256(
-    json.dumps(_RESPONSE_DDL, separators=(",", ":")).encode()
-).hexdigest()
+
+class ResponseTable:
+    """Frozen declaration-owned response admission and append evidence."""
+
+    @classmethod
+    def triggers(cls) -> dict[str, str]:
+        return {
+            f"{cls.declared_name}_{operation.lower()}_guard": f"CREATE TRIGGER {cls.declared_name}_"
+            f"{operation.lower()}_guard "
+            f"BEFORE {operation} ON {cls.declared_name} "
+            "BEGIN SELECT RAISE(ABORT,'response evidence is frozen'); END"
+            for operation in ("UPDATE", "DELETE")
+        }
+
+
+@dataclass(frozen=True)
+class ResponseSchemaMeta(ResponseTable, TypedTable):
+    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
+    version: Literal[2]
+    ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
+
+
+@dataclass(frozen=True)
+class PublicationAppendDispatches(ResponseTable, TypedTable):
+    execution_id: str = field(
+        metadata={"sql": Column(primary_key=True, references=(PublicationIntents, "execution_id"))}
+    )
+    wire_root_id: str = field(
+        metadata={
+            "sql": Column(check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'")
+        }
+    )
+    owner_generation: int = field(metadata={"sql": Column(check="owner_generation>0")})
+    attempt_ordinal: int = field(metadata={"sql": Column(check="attempt_ordinal>0")})
+    dispatched_at_ms: int = field(metadata={"sql": Column(check="dispatched_at_ms>=0")})
+    without_rowid = True
+
+    def matches(self, wire_root_id: str, fence: OwnerFence) -> bool:
+        return (self.wire_root_id, self.owner_generation, self.attempt_ordinal) == (
+            wire_root_id,
+            fence.owner_generation,
+            fence.attempt_ordinal,
+        )
+
+
+@dataclass(frozen=True)
+class SelectedResponseRoute(TypedRow):
+    message_id: str
+    exact_target: str
+    envelope_digest: str
+    audience_digest: str
+    decisions_digest: str
+    resolver_version: str
+    policy_version: str
+    recipient_lookup: str
+    canonical_thread: str
+
+
+def _response_schema() -> dict[str, str]:
+    return {
+        name: sql
+        for table in TypedTable.members_with(ResponseTable)
+        for name, sql in table.schema_objects().items()
+    }
+
+
+def _response_digest(schema: dict[str, str]) -> str:
+    return hashlib.sha256(json.dumps(schema, separators=(",", ":")).encode()).hexdigest()
 
 
 def _assert_response_schema(db: sqlite3.Connection) -> None:
+    schema = _response_schema()
+    tables = tuple(table.declared_name for table in TypedTable.members_with(ResponseTable))
     try:
-        meta = db.execute(
-            "SELECT version,ddl_digest FROM response_schema_meta WHERE singleton=1"
-        ).fetchone()
-    except sqlite3.OperationalError as error:
-        raise PublicationActivationBlocked("private response schema is not installed") from error
-    if meta is None or tuple(meta) != (1, _RESPONSE_DDL_DIGEST):
-        raise PublicationActivationBlocked("private response schema version is unsupported")
-    actual = {
-        row["name"]: row["sql"]
-        for row in db.execute(
-            "SELECT name,sql FROM sqlite_master WHERE type IN ('table','trigger') "
-            "AND (name LIKE 'response_schema_%' OR name LIKE 'publication_dispatch_%' "
-            "OR name='publication_append_dispatches')"
+        meta = ResponseSchemaMeta.one(db, singleton=1)
+        actual = SQLiteSchemaObject.read(
+            db.execute(
+                "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND tbl_name IN ("
+                + ",".join("?" for _ in tables)
+                + ")",
+                tables,
+            )
         )
-    }
-    if actual != dict(_RESPONSE_DDL) or db.execute("PRAGMA foreign_keys").fetchone()[0] != 1:
+    except (sqlite3.Error, ValueError, TypeError) as error:
+        raise PublicationActivationBlocked("private response schema is not installed") from error
+    if meta != ResponseSchemaMeta(1, 2, _response_digest(schema)):
+        raise PublicationActivationBlocked("private response schema version is unsupported")
+    if {row.name: row.sql for row in actual} != schema or SQLiteForeignKeys.read(
+        db.execute("PRAGMA foreign_keys")
+    ) != [SQLiteForeignKeys(True)]:
         raise PublicationActivationBlocked("private response schema has drifted")
 
 
 def install_private_response_schema(store: MutationStore) -> None:
-    """Explicit fresh-root private migration; ordinary store construction is inert."""
+    """Install the current response tables on a fresh coordinator only."""
     if type(store) is not MutationStore:
         raise TypeError("response schema requires the actual coordinator store")
     with store._transaction() as db:
-        exists = db.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='response_schema_meta'"
-        ).fetchone()
-        if exists is None:
-            for _, statement in _RESPONSE_DDL:
+        exists = SQLiteSchemaObject.read(
+            db.execute(
+                "SELECT name,sql FROM sqlite_master WHERE name=?",
+                (ResponseSchemaMeta.declared_name,),
+            )
+        )
+        if not exists:
+            schema = _response_schema()
+            for statement in schema.values():
                 db.execute(statement)
-            db.execute("INSERT INTO response_schema_meta VALUES (1,1,?)", (_RESPONSE_DDL_DIGEST,))
+            ResponseSchemaMeta(1, 2, _response_digest(schema)).insert(db)
         _assert_response_schema(db)
 
 
@@ -160,7 +199,6 @@ class LiveResponseOwner:
     worktree: str
     active_turn: ActiveTurn
     admission_generation: int
-
 
     def require_live(self, snapshot: RegistrySnapshot, fence: OwnerFence) -> None:
         """Recheck this exact process/turn against current registry authority."""
@@ -235,18 +273,20 @@ def _require_cohort_assignments(
     }
     for assignment in snapshot.assignments:
         initial = originals.get(assignment.wire_seq)
-        receipt = db.execute(
-            "SELECT r.message_id,r.exact_target,r.envelope_digest,r.audience_digest,"
-            "r.decisions_digest,r.resolver_version,r.policy_version,m.recipient_lookup,"
-            "d.canonical_thread FROM claim_batch_members m JOIN claim_batch_receipts r "
-            "ON r.wire_root_id=m.wire_root_id AND r.wire_seq=m.wire_seq "
-            "JOIN cohort_delivery_receipts d "
-            "ON d.wire_root_id=m.wire_root_id AND d.wire_seq=m.wire_seq "
-            "AND d.claim_id=m.claim_id AND d.kind='selected' "
-            "WHERE m.claim_id=? AND m.wire_root_id=? AND r.sealed=1",
-            (assignment.assignment_id, wire_root_id),
-        ).fetchone()
-        if initial is None or receipt is None:
+        receipts = SelectedResponseRoute.read(
+            db.execute(
+                "SELECT r.message_id,r.exact_target,r.envelope_digest,r.audience_digest,"
+                "r.decisions_digest,r.resolver_version,r.policy_version,m.recipient_lookup,"
+                "d.canonical_thread FROM claim_batch_members m JOIN claim_batch_receipts r "
+                "ON r.wire_root_id=m.wire_root_id AND r.wire_seq=m.wire_seq "
+                "JOIN cohort_delivery_receipts d "
+                "ON d.wire_root_id=m.wire_root_id AND d.wire_seq=m.wire_seq "
+                "AND d.claim_id=m.claim_id AND d.kind='selected' "
+                "WHERE m.claim_id=? AND m.wire_root_id=? AND r.sealed=1",
+                (assignment.assignment_id, wire_root_id),
+            )
+        )
+        if initial is None or len(receipts) != 1:
             raise IdentityConflict("response claim lacks original bus/cohort authority")
         selected = {
             recipient.recipient_lookup
@@ -258,8 +298,8 @@ def _require_cohort_assignments(
         if (
             initial.wire_root_id != wire_root_id
             or assignment.message_id != initial.message.message_id
-            or tuple(receipt)
-            != (
+            or receipts[0]
+            != SelectedResponseRoute(
                 initial.message.message_id,
                 initial.message.target,
                 initial.audience.wire_envelope_digest,
@@ -356,9 +396,7 @@ def prepare_fenced_response(
         # A corrupt row anywhere is never accepted as an absent publication.
         tuple(bus.log._verified_private_rows_unlocked(metadata))
         with store._transaction() as db:
-            snapshot = _require_final_owner(
-                store, bus, fence, metadata.root_id, owner_witness
-            )
+            snapshot = _require_final_owner(store, bus, fence, metadata.root_id, owner_witness)
             execution = snapshot.execution
             assert execution.exact_target is not None
             existing = snapshot.publication_intent
@@ -404,31 +442,14 @@ def prepare_fenced_response(
                 ),
                 expected_message_id=candidate.message_id,
             )
-            db.execute(
-                "INSERT INTO publication_intents "
-                "(execution_id,sender,exact_target,message_type,notice,timestamp,payload,"
-                "payload_digest,publication_key,expected_message_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (
-                    intent.execution_id,
-                    intent.sender,
-                    intent.exact_target,
-                    intent.message_type.value,
-                    int(intent.notice),
-                    intent.timestamp,
-                    intent.payload,
-                    intent.payload_digest,
-                    intent.publication_key,
-                    intent.expected_message_id,
-                ),
-            )
-            db.execute(
-                "UPDATE obligations SET state='publishing',revision=revision+1,updated_at_ms=? "
-                "WHERE execution_id=? AND state='pending' AND revision=?",
-                (
-                    store._now(snapshot.obligation.updated_at_ms),
-                    execution.execution_id,
-                    snapshot.obligation.revision,
-                ),
+            intent.insert(db)
+            Obligations.update(
+                db,
+                where="execution_id=? AND state='pending' AND revision=?",
+                parameters=(execution.execution_id, snapshot.obligation.revision),
+                state="publishing",
+                revision=snapshot.obligation.revision + 1,
+                updated_at_ms=store._now(snapshot.obligation.updated_at_ms),
             )
             return Applied(intent)
 
@@ -503,28 +524,17 @@ def _settle_fenced_response(
                     or snapshot.publication_intent.exact_target != snapshot.execution.exact_target
                 ):
                     raise IdentityConflict("no frozen publishing intent for current owner")
-                prior = db.execute(
-                    "SELECT wire_root_id,owner_generation,attempt_ordinal "
-                    "FROM publication_append_dispatches WHERE execution_id=?",
-                    (fence.execution_id,),
-                ).fetchone()
+                prior = PublicationAppendDispatches.one(db, execution_id=fence.execution_id)
                 if prior is None:
-                    db.execute(
-                        "INSERT INTO publication_append_dispatches VALUES (?,?,?,?,?)",
-                        (
-                            fence.execution_id,
-                            wire_root_id,
-                            fence.owner_generation,
-                            fence.attempt_ordinal,
-                            store._now(snapshot.execution.updated_at_ms),
-                        ),
-                    )
+                    PublicationAppendDispatches(
+                        fence.execution_id,
+                        wire_root_id,
+                        fence.owner_generation,
+                        fence.attempt_ordinal,
+                        store._now(snapshot.execution.updated_at_ms),
+                    ).insert(db)
                     first_dispatch = True
-                elif tuple(prior) != (
-                    wire_root_id,
-                    fence.owner_generation,
-                    fence.attempt_ordinal,
-                ):
+                elif not prior.matches(wire_root_id, fence):
                     raise IdentityConflict("response dispatch belongs to another root or owner")
         with store._transaction() as db:
             _assert_response_schema(db)
@@ -544,16 +554,8 @@ def _settle_fenced_response(
                 or intent.exact_target != snapshot.execution.exact_target
             ):
                 raise IdentityConflict("no frozen publishing intent for current owner")
-            dispatch = db.execute(
-                "SELECT wire_root_id,owner_generation,attempt_ordinal "
-                "FROM publication_append_dispatches WHERE execution_id=?",
-                (fence.execution_id,),
-            ).fetchone()
-            if dispatch is None or tuple(dispatch) != (
-                wire_root_id,
-                fence.owner_generation,
-                fence.attempt_ordinal,
-            ):
+            dispatch = PublicationAppendDispatches.one(db, execution_id=fence.execution_id)
+            if dispatch is None or not dispatch.matches(wire_root_id, fence):
                 raise PublicationUncertain("no matching durable append dispatch")
             matched, _, _ = bus.log._keyed_receipt_unlocked(intent)
             if matched is None:
@@ -567,62 +569,60 @@ def _settle_fenced_response(
             if matched.message_id != intent.expected_message_id:
                 raise PublicationUncertain("bus receipt conflicts with immutable intent")
             now = store._now(max(snapshot.execution.updated_at_ms, attempt.updated_at_ms))
-            db.execute(
-                "INSERT INTO publication_receipts(execution_id,seq,message_id,received_at_ms) "
-                "VALUES (?,?,?,?)",
-                (intent.execution_id, matched.seq, matched.message_id, now),
-            )
+            PublicationReceipts(
+                execution_id=intent.execution_id,
+                seq=matched.seq,
+                message_id=matched.message_id,
+                received_at_ms=now,
+            ).insert(db)
             obligation = snapshot.obligation
-            db.execute(
-                "UPDATE obligations SET state='published',receipt_message_id=?,receipt_seq=?,"
-                "revision=revision+1,updated_at_ms=? WHERE execution_id=? AND revision=?",
-                (
-                    matched.message_id,
-                    matched.seq,
-                    store._now(obligation.updated_at_ms),
-                    intent.execution_id,
-                    obligation.revision,
-                ),
+            Obligations.update(
+                db,
+                where="execution_id=? AND revision=?",
+                parameters=(intent.execution_id, obligation.revision),
+                state="published",
+                receipt_message_id=matched.message_id,
+                receipt_seq=matched.seq,
+                revision=obligation.revision + 1,
+                updated_at_ms=store._now(obligation.updated_at_ms),
             )
-            db.execute(
-                "UPDATE attempts SET phase='succeeded',lease_expires_at_ms=NULL,"
-                "revision=revision+1,updated_at_ms=? "
-                "WHERE execution_id=? AND attempt_ordinal=? AND revision=?",
-                (
-                    store._now(attempt.updated_at_ms),
-                    intent.execution_id,
-                    attempt.attempt_ordinal,
-                    attempt.revision,
-                ),
+            Attempts.update(
+                db,
+                where="execution_id=? AND attempt_ordinal=? AND revision=?",
+                parameters=(intent.execution_id, attempt.attempt_ordinal, attempt.revision),
+                phase="succeeded",
+                lease_expires_at_ms=None,
+                revision=attempt.revision + 1,
+                updated_at_ms=store._now(attempt.updated_at_ms),
             )
-            db.execute(
-                "UPDATE executions SET status='completed',revision=revision+1,"
-                "updated_at_ms=? WHERE execution_id=? AND revision=?",
-                (
-                    store._now(snapshot.execution.updated_at_ms),
-                    intent.execution_id,
-                    snapshot.execution.revision,
-                ),
+            Executions.update(
+                db,
+                where="execution_id=? AND revision=?",
+                parameters=(intent.execution_id, snapshot.execution.revision),
+                status="completed",
+                revision=snapshot.execution.revision + 1,
+                updated_at_ms=store._now(snapshot.execution.updated_at_ms),
             )
             for assignment in snapshot.assignments:
-                db.execute(
-                    "UPDATE wake_claims SET disposition='completed',revision=revision+1,"
-                    "updated_at_ms=? WHERE claim_id=? AND revision=?",
-                    (
-                        store._now(assignment.updated_at_ms),
-                        assignment.assignment_id,
-                        assignment.revision,
-                    ),
+                WakeClaims.update(
+                    db,
+                    where="claim_id=? AND revision=?",
+                    parameters=(assignment.assignment_id, assignment.revision),
+                    disposition="completed",
+                    revision=assignment.revision + 1,
+                    updated_at_ms=store._now(assignment.updated_at_ms),
                 )
-            db.execute(
-                "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
-                "pointer_revision=pointer_revision+1 WHERE owner_lookup=? "
-                "AND pointer_revision=? AND execution_id=?",
-                (
+            CurrentExecutions.update(
+                db,
+                where="owner_lookup=? AND pointer_revision=? AND execution_id=?",
+                parameters=(
                     snapshot.execution.owner_lookup,
                     snapshot.pointer_revision,
                     intent.execution_id,
                 ),
+                execution_id=None,
+                attempt_ordinal=None,
+                pointer_revision=snapshot.pointer_revision + 1,
             )
             return Applied(store._snapshot(intent.execution_id))
 

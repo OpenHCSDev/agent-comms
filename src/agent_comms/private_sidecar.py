@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Literal
 
 from .coordination_store import IdentityConflict
-from .typed_table import Column, TypedRow, TypedTable
+from .typed_table import Column, SQLiteForeignKeys, SQLiteSchemaObject, TypedRow, TypedTable
 
 _MAX_SIDECAR_BYTES = 32 * 1024 * 1024
 
@@ -202,21 +202,10 @@ class SnapshotMeta(TypedTable):
 
 
 @dataclass(frozen=True)
-class _SchemaObject(TypedRow):
-    name: str
-    sql: str
-
-
-@dataclass(frozen=True)
 class _Database(TypedRow):
     seq: int
     name: str
     file: str
-
-
-@dataclass(frozen=True)
-class _ForeignKeys(TypedRow):
-    foreign_keys: bool
 
 
 @dataclass(frozen=True)
@@ -234,10 +223,10 @@ def _digest(row_type: type[TypedTable]) -> str:
 
 def _verify_schema(connection: sqlite3.Connection, row_type: type[TypedTable]) -> None:
     # Every named SQL object is checked, including triggers without our prefix.
-    actual = _SchemaObject.read(
+    actual = SQLiteSchemaObject.read(
         connection.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
     )
-    temporary = _SchemaObject.read(
+    temporary = SQLiteSchemaObject.read(
         connection.execute("SELECT name,sql FROM sqlite_temp_master WHERE sql IS NOT NULL")
     )
     if {row.name: row.sql for row in actual} != _schema(row_type) or temporary:
@@ -249,7 +238,9 @@ def _verify_schema(connection: sqlite3.Connection, row_type: type[TypedTable]) -
         row.name not in {"main", "temp"} or row.file != "" for row in databases
     ):
         raise IdentityConflict("Sidecar connection must contain only its in-memory snapshot.")
-    if _ForeignKeys.read(connection.execute("PRAGMA foreign_keys")) != [_ForeignKeys(True)]:
+    if SQLiteForeignKeys.read(connection.execute("PRAGMA foreign_keys")) != [
+        SQLiteForeignKeys(True)
+    ]:
         raise IdentityConflict("Sidecar foreign-key checking is disabled.")
     if _QuickCheck.read(connection.execute("PRAGMA quick_check")) != [_QuickCheck("ok")]:
         raise IdentityConflict("Sidecar snapshot integrity failed.")
