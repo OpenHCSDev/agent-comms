@@ -34,9 +34,10 @@ coding, installed sidebar and saved-history checks. Repeated compaction and
 queued-input acceptance are recorded in
 [`s7-integration`](../evidence/s7-integration/) and
 [`input-drain`](../evidence/input-drain/). These are specific measured paths, not
-a claim that every historical issue or performance limit is resolved. The current
-active bus still needs existing-root migration to PR94's scalable private
-checkpoint; the fresh-root installer cannot activate it on saved traffic.
+a claim that every historical issue or performance limit is resolved. PR176 adds lossless existing-root installation of PR94's scalable private
+checkpoint and enables it for fresh managed roots. The current live bus has
+completed this migration; see [checkpoint-live acceptance](../evidence/checkpoint-live/HANDOFF.md)
+and the [installation procedure](private-checkpoint-install.md).
 
 `prepare-pi-native` verifies the installed Pi 0.85.1 bytes, builds a pinned
 local copy with native input IDs, bounded compaction and writer-fenced session
