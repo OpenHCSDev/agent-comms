@@ -24,7 +24,9 @@ def test_every_spawn_has_its_own_process_group() -> None:
     assert spawns
     for call in spawns:
         assert any(
-            keyword.arg is None and ast.unparse(keyword.value) == "launch.options"
+            keyword.arg is None
+            and isinstance(keyword.value, ast.Attribute)
+            and keyword.value.attr == "options"
             for keyword in call.keywords
         )
     declarations = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}

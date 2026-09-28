@@ -51,8 +51,9 @@ retirement requires the exact named job, with no bare-PID fallback.
 
 ## Cross-surface closure
 
-- #234 / S10: three pi_events calls of deleted `_terminate_process` must use
-  `await session.proc.stop()`; adopt A12 in native_pi/deadline owner.
+- #234 / S10 has migrated pi_events and native_pi to A12 and deleted the test-only
+  selected guardian. Integrate its branch with232; no deleted-helper calls remain
+  there. Its reproduced repeated-cancellation gap is fixed below.
 - #236 / S9: adopt NamespacedChild/watchdog and delete lifted local machinery.
 - #235 / Copernicus: Thread constructors/replaces use process_identity;
   RegistrationChange identity decisions compare full identity, not only PID.
@@ -123,8 +124,35 @@ ThreadManagement.claim_thread's obsolete pid= constructor. This is the explicit
 constructor/replacement/full-identity scope. Parent's tests/test_private_nk_entrypoint
 still mocks the removed owner-local subprocess/reservation API; its runtime
 launch-pin acceptance must move to the shared child owner/real path alongside
-parent cutover. S10 pi_events and S12 NativeOwnerLoss remain owned dependencies.
+parent cutover. S10 pi_events adoption is already present on234 (the earlier note inspected
+main, not that branch). S12 NativeOwnerLoss remains an owned dependency.
 
 The Windows CPython/Wine test download, isolated package, and Wine prefix
 (421 MB) were removed after recording results. The probe script is retained as
 windows_process_probe.py. No live owners or installation were changed.
+
+
+## S9/S10 requested shared seams are now implemented
+
+`BoundedRun.require_inherited_deadline()` probes kernel pidfd support before
+intent. `BoundedRun.run_inherited(tuple_argv, deadline=absolute_monotonic,
+pass_fds=(authority_fd, *retained_fds), input=request, cwd/env)` runs synchronously,
+returns ChildResult, and preserves the caller as the native executable's actual
+parent. Existing gate retains descriptors; independent WatchDeadlineCommand
+inherits only pidfd, arms before exec, and survives owner SIGKILL. This is for
+the existing trusted non-forking helper contract, not a PID namespace substitute.
+Timeout returns TimedOutOutcome; setup/transport OS errors propagate for the
+caller's UNKNOWN handling. S9 retains its business 30-second limit and exact
+external authority/native request formats. No CompletedProcess adapter.
+
+A12 stop now joins the retained retirement task through repeated cancellation,
+then propagates cancellation. Bounded captured runs also join the stream task.
+`cancellation-inherited-deadline-tests.log`: **19 passed** across all current
+A12 behaviors/guards, including repeated cancellation for run and session,
+actual direct parent+inherited descriptor execution, and real flock retention
+through launcher SIGKILL until the independent deadline releases the child.
+This supersedes the earlier A12-only counts, which overlap.
+`s10-reproduction-fixed.log`: S10's exact reproduction now reports caller
+finished while child alive: False; no extra cleanup needed for retirement.
+S9/S10 have direct PR-comment API handoffs. Their own source deletions remain
+their assigned work. Parent integrates the coupled branches and activates.

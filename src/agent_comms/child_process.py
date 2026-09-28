@@ -741,6 +741,20 @@ async def _exec_error(fd: int, command: str) -> None:
         loop.remove_reader(fd)
 
 
+async def _join_retirement(task: asyncio.Task):
+    """Join owned cleanup through repeated cancellation, then propagate it."""
+    interrupted = None
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError as error:
+            interrupted = error
+    result = task.result()
+    if interrupted is not None:
+        raise interrupted
+    return result
+
+
 class ChildProcess(ABC):
     """The sole stop algorithm; cancellation retains the cleanup task."""
 
@@ -792,7 +806,7 @@ class ChildProcess(ABC):
     async def stop(self) -> ChildOutcome:
         if self._stop_task is None:
             self._stop_task = asyncio.create_task(self._stop())
-        return await asyncio.shield(self._stop_task)
+        return await _join_retirement(self._stop_task)
 
 
 class AttachedChild(ChildProcess):
@@ -899,6 +913,117 @@ class ParentLifeline:
 
 
 class BoundedRun:
+    @staticmethod
+    def require_inherited_deadline() -> PidfdHandles:
+        """Probe the existing exact-process capability before committing intent."""
+        platform = Platform.current()
+        if not isinstance(platform, PidfdHandles):
+            raise NotImplementedError("Inherited deadline requires Linux pidfd capability")
+        try:
+            descriptor = platform.open_pidfd(os.getpid())
+            try:
+                platform.signal_pidfd(descriptor, 0)
+            finally:
+                os.close(descriptor)
+        except OSError as error:
+            raise NotImplementedError("Kernel pidfd deadline support unavailable") from error
+        return platform
+
+    @classmethod
+    def run_inherited(
+        cls,
+        command: tuple[str, ...],
+        *,
+        deadline: float,
+        pass_fds: tuple[int, ...],
+        input: bytes | None = None,
+        cwd: str | Path | None = None,
+        env: dict[str, str] | None = None,
+    ) -> ChildResult:
+        """Bounded direct-parent execution retaining the caller's authority FDs.
+
+        The trusted non-forking executable keeps the owner as its real parent.
+        A sibling pidfd watchdog inherits only its pidfd, arms before exec, and
+        survives owner death. The namespace shape is a distinct stronger tree
+        capability and cannot preserve this external parent-PID proof.
+        """
+        platform = cls.require_inherited_deadline()
+        if not command or not math.isfinite(deadline) or deadline <= time.monotonic():
+            raise ValueError("A command and future finite absolute deadline are required")
+        for descriptor in pass_fds:
+            os.fstat(descriptor)
+        child = watchdog = None
+        pidfd = None
+        try:
+            with platform.launch(command, pass_fds) as launch:
+                process = subprocess.Popen(
+                    launch.argv,
+                    cwd=cwd,
+                    env=env,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    **launch.options,
+                )
+                child = DetachedProcess(platform.identity(process.pid), process)
+                pidfd = platform.open_pidfd(child.pid)
+                # Popen's normal close_fds plus this allow-list excludes every
+                # authority descriptor from the independent watchdog.
+                with platform.launch(
+                    WatchDeadlineCommand(pidfd, deadline).argv(), (pidfd,)
+                ) as watch_launch:
+                    watcher = subprocess.Popen(
+                        watch_launch.argv,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.DEVNULL,
+                        **watch_launch.options,
+                    )
+                    watchdog = DetachedProcess(platform.identity(watcher.pid), watcher)
+                    watch_launch.release(watchdog.identity)
+                    watch_launch.verify()
+                assert watcher.stdout is not None
+                with selectors.DefaultSelector() as selector:
+                    selector.register(watcher.stdout, selectors.EVENT_READ)
+                    if not selector.select(max(0, deadline - time.monotonic())):
+                        raise TimeoutError("Inherited child watchdog did not arm before deadline")
+                if watcher.stdout.readline() != b"armed\n":
+                    raise RuntimeError("Inherited child watchdog failed to arm")
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Inherited child deadline elapsed before exec")
+                launch.release(child.identity)
+                launch.verify()
+                stdout, stderr = process.communicate(
+                    input, timeout=max(0, deadline - time.monotonic())
+                )
+                if time.monotonic() >= deadline:
+                    return ChildResult(TimedOutOutcome(child.stop_sync()), stdout, stderr)
+                return ChildResult(ChildOutcome.from_returncode(process.returncode), stdout, stderr)
+        except (TimeoutError, subprocess.TimeoutExpired):
+            if child is None:
+                raise
+            return ChildResult(TimedOutOutcome(child.stop_sync()))
+        finally:
+            if pidfd is not None:
+                os.close(pidfd)
+            # Includes KeyboardInterrupt and owner-side cancellation. Do not
+            # unlock inherited file descriptions; reap before caller releases.
+            try:
+                if child is not None:
+                    child.stop_sync()
+            finally:
+                if watchdog is not None:
+                    watchdog.stop_sync()
+                for owned in (child, watchdog):
+                    if owned is not None:
+                        for stream in (
+                            owned._process.stdin,
+                            owned._process.stdout,
+                            owned._process.stderr,
+                        ):
+                            if stream is not None:
+                                stream.close()
+
     @classmethod
     @asynccontextmanager
     async def session(cls, command: tuple[str, ...], *, timeout: float, **options):
@@ -941,8 +1066,10 @@ class BoundedRun:
                 stdout, stderr = await exchange
             return ChildResult(outcome, stdout, stderr)
         finally:
-            await child.stop()
-            await exchange
+            try:
+                await child.stop()
+            finally:
+                await _join_retirement(exchange)
 
 
 class DetachedProcess(ChildProcess):
@@ -999,12 +1126,13 @@ class DetachedProcess(ChildProcess):
         self.platform.force_group(self.identity)
 
     async def stop(self) -> ChildOutcome:
-        if self._stop_task is None:
+        if self._stop_task is None and self._process is None:
             self.platform.require(self.identity)
         return await super().stop()
 
     def stop_sync(self, *, guard=nullcontext) -> ChildOutcome:
-        self.platform.require(self.identity)
+        if self._process is None:
+            self.platform.require(self.identity)
         plan = self._stop_plan(guard)
         while True:
             try:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import time
 from contextlib import closing
@@ -314,3 +315,106 @@ def test_reservation_failure_never_executes_and_reaps_child(tmp_path: Path) -> N
     assert len(captured) == 1
     assert not captured[0].alive()
     assert not receipt.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("shape", ["run", "session"])
+async def test_repeated_cancellation_joins_real_tree_before_return(
+    tmp_path: Path, shape: str
+) -> None:
+    receipt = tmp_path / "tree.json"
+
+    async def operation():
+        command = (sys.executable, "-c", TREE, str(receipt))
+        if shape == "run":
+            await BoundedRun.run(command, timeout=20)
+        else:
+            async with BoundedRun.session(command, timeout=20):
+                await asyncio.Event().wait()
+
+    task = asyncio.create_task(operation())
+    await ready(receipt)
+    task.cancel()
+    await asyncio.sleep(0.1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert all(not member.alive() for member in identities(receipt))
+
+
+def test_inherited_deadline_preserves_real_parent_and_fd(tmp_path: Path) -> None:
+    if sys.platform != "linux":
+        pytest.skip("Inherited hard deadline requires Linux pidfds")
+    destination = tmp_path / "inherited.txt"
+    with destination.open("wb") as held:
+        result = BoundedRun.run_inherited(
+            (
+                sys.executable,
+                "-c",
+                "import os,sys; assert os.getppid()==int(sys.argv[1]); "
+                "os.write(int(sys.argv[2]),b'authority held'); print(sys.stdin.read(),end='')",
+                str(os.getpid()),
+                str(held.fileno()),
+            ),
+            deadline=time.monotonic() + 5,
+            pass_fds=(held.fileno(),),
+            input=b"native request",
+        )
+    assert result.outcome == ExitedOutcome(0)
+    assert result.stdout == b"native request"
+    assert destination.read_bytes() == b"authority held"
+
+
+@pytest.mark.asyncio
+async def test_inherited_deadline_survives_parent_death_and_releases_real_lock(
+    tmp_path: Path,
+) -> None:
+    if sys.platform != "linux":
+        pytest.skip("Inherited hard deadline requires Linux pidfds")
+    import fcntl
+
+    receipt = tmp_path / "child.json"
+    lock = tmp_path / "authority.lock"
+    launcher = DetachedProcess.launch(
+        (
+            sys.executable,
+            "-c",
+            r'''import json,os,sys,time,fcntl
+from pathlib import Path
+from agent_comms.child_process import BoundedRun
+fd=os.open(sys.argv[1],os.O_RDWR|os.O_CREAT,0o600)
+fcntl.flock(fd,fcntl.LOCK_EX)
+command=(sys.executable,'-c',"""import os,sys,time,json
+from pathlib import Path
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.field_codec import FieldCodec
+assert os.getppid()==int(sys.argv[1])
+os.fstat(int(sys.argv[2]))
+Path(sys.argv[3]).write_text(json.dumps(FieldCodec.encode(ProcessIdentity.capture(os.getpid()))))
+time.sleep(60)
+""",str(os.getpid()),str(fd),sys.argv[2])
+BoundedRun.run_inherited(command,deadline=time.monotonic()+4,pass_fds=(fd,))
+''',
+            str(lock),
+            str(receipt),
+        )
+    )
+    child = None
+    try:
+        await ready(receipt)
+        child = FieldCodec.decode(ProcessIdentity, json.loads(receipt.read_text()))
+        launcher.force()
+        await launcher.wait()
+        with lock.open("rb") as observer:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(observer, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            async with asyncio.timeout(7):
+                while child.alive():
+                    await asyncio.sleep(0.02)
+            fcntl.flock(observer, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(observer, fcntl.LOCK_UN)
+    finally:
+        if launcher.alive():
+            await launcher.stop()
+        if child is not None and child.alive():
+            await DetachedProcess.attach(child).stop()
