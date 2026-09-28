@@ -6,17 +6,14 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.declarations import RelationViolationError, Thread
+from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.operations import Comms
 from agent_comms.read_basis import Conversation
 from agent_comms.registration import Registration
-from agent_comms.thread_identity import (
-    GenerationCounter,
-    ThreadIncarnation,
-    TurnIdentity,
-)
+from agent_comms.thread_identity import GenerationCounter, ThreadIncarnation, TurnIdentity
 from agent_comms.thread_status import IdleThreadStatus
+from agent_comms.threads import Thread
 
 
 def registry_with_owner(tmp_path):

@@ -24,7 +24,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedInitial
-    from .declarations import Message, MessageBus
+    from .message_bus import MessageBus
+    from .messages import Message
 
 _VERSION = 1
 _SEED = hashlib.sha256(b"agent-comms:private-bus-prefix:v1\0").digest()
@@ -100,7 +101,7 @@ def _pending_seal(
 def _write_seal(
     bus: MessageBus, marker: dict[str, int | str | object], seal: dict[str, object]
 ) -> None:
-    from .declarations import _atomic_write_text
+    from .store_files import _atomic_write_text
 
     marker["checkpoint_seal"] = seal
     _atomic_write_text(
@@ -123,7 +124,7 @@ def _check_final_seal(marker: Mapping[str, object], saved: PrefixWitness, db_pat
 
 
 def _failure(message: str) -> Exception:
-    from .declarations import RelationViolationError
+    from .errors import RelationViolationError
 
     return RelationViolationError(message)
 
@@ -154,7 +155,7 @@ def _directory_sync(path: Path) -> None:
 
 
 def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
-    from .declarations import RelationViolationError
+    from .errors import RelationViolationError
 
     if path.is_symlink() or not path.exists():
         raise RelationViolationError("Private bus checkpoint is missing or redirected.")
@@ -269,7 +270,8 @@ def _index_row(
 
 def install_private_bus_checkpoint(bus: MessageBus) -> PrefixWitness:
     """Explicit fresh-root opt-in; never auto-install or migrate an old wire."""
-    from .declarations import MessageBus, _atomic_write_text, _store_lock
+    from .message_bus import MessageBus
+    from .store_files import _atomic_write_text, _store_lock
 
     if type(bus) is not MessageBus or bus._path.name != "bus.jsonl":
         raise TypeError("Canonical private MessageBus required")
@@ -586,7 +588,7 @@ def certified_initial_page_unlocked(
     is advisory only.
     """
     from .bus_publication import PRIVATE_WIRE_FIELD, unique_wire_object, validate_initial_record
-    from .declarations import RelationViolationError
+    from .errors import RelationViolationError
 
     if (
         type(lookup) is not str

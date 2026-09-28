@@ -5,10 +5,11 @@ import os
 
 import pytest
 
-from agent_comms import Thread, wire
 from agent_comms import agent_events as ae
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
 from agent_comms.diagnostics import record_terminal_failure
+from agent_comms.threads import Thread
 
 
 def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):

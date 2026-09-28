@@ -10,10 +10,12 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.compaction_journal import CompactionJournal
-from agent_comms.declarations import RelationViolationError, Thread, _store_lock
+from agent_comms.errors import RelationViolationError
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import Comms
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
 
 
 @pytest.fixture

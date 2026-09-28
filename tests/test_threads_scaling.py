@@ -8,7 +8,8 @@ import threading
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import wire
+from agent_comms.threads import Thread
 
 
 def _expected(wired, *, active_only: bool = False) -> dict[str, int]:

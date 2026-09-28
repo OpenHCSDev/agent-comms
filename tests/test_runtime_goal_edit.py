@@ -6,11 +6,7 @@ import os
 import pytest
 
 from agent_comms.acp import CommsAgent
-from agent_comms.goal_actions import (
-    OwnerInvocable,
-    PausedGoalAction,
-    SetGoalAction,
-)
+from agent_comms.goal_actions import OwnerInvocable, PausedGoalAction, SetGoalAction
 from agent_comms.operations import wire
 from agent_comms.runtime import RuntimeProxy, socket_path
 

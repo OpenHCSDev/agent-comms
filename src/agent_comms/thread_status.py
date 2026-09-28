@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING, ClassVar
 from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from .declarations import Activity, ThreadPresentation
+    from .activity import Activity
+    from .thread_presentation import ThreadPresentation
 
 
 @dataclass(frozen=True)
@@ -44,7 +45,7 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
         return True
 
     def presentation(self, title: str, activity: Activity) -> ThreadPresentation:
-        from .declarations import ThreadPresentation
+        from .thread_presentation import ThreadPresentation
 
         return ThreadPresentation(title, "○", self.declared_name.title())
 
@@ -59,7 +60,7 @@ class ActiveThreadPresence:
         return True
 
     def for_deletion(self) -> ThreadStatus:
-        from .declarations import RelationViolationError
+        from .errors import RelationViolationError
 
         raise RelationViolationError("Stop a running thread before permanently deleting it.")
 
@@ -102,6 +103,6 @@ class DeletingThreadStatus(ThreadStatus):
         return False
 
     def require_mutable(self, name: str) -> None:
-        from .declarations import RelationViolationError
+        from .errors import RelationViolationError
 
         raise RelationViolationError(f"Thread {name!r} is being permanently deleted.")

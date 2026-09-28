@@ -10,9 +10,9 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.compaction_journal import CompactionJournal
-from agent_comms.declarations import Thread
 from agent_comms.operations import wire
 from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+from agent_comms.threads import Thread
 from test_selected_owner_compaction_integration import owner_fixture
 
 pytestmark = pytest.mark.skipif(

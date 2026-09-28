@@ -17,7 +17,7 @@ import shlex
 import sys
 from pathlib import Path
 
-from agent_comms.declarations import RelationViolationError
+from agent_comms.errors import RelationViolationError
 from agent_comms.operations import wire
 
 

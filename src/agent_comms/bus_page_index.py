@@ -115,7 +115,7 @@ class BusPageIndex:
                         raise ValueError("JSONL bus row must be an object.")
                     # Full validation on the newly indexed segment. A warm
                     # read validates each selected record again from the bus.
-                    from .declarations import Message
+                    from .messages import Message
 
                     message = Message.from_wire(record)
                     if last_sequence is not None and message.seq <= last_sequence:

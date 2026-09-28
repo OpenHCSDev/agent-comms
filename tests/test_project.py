@@ -10,10 +10,11 @@ from pathlib import Path
 import pytest
 from acp import RequestError
 
-from agent_comms import Thread, wire
 from agent_comms import agent_events as ae
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 
 

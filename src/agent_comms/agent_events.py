@@ -10,12 +10,13 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from .declarations import ActivityState
+from .activity import ActivityState
 from .mro_dispatch import MroDispatch, handles
 from .tool_results import ToolDiff
 
 if TYPE_CHECKING:
-    from .declarations import Goal, GoalExecution
+    from .goal_presentation import GoalExecution
+    from .goals import Goal
     from .operations import Comms
 
 

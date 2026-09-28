@@ -9,16 +9,17 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Message, MessageType, Thread
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
-from agent_comms.declarations import ScheduledTurn
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_drain import InputDrain
+from agent_comms.messages import Message, MessageType
 from agent_comms.operations import wire
+from agent_comms.routing import ScheduledTurn
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.threads import Thread
 
 
 def test_each_direct_sequence_gets_its_own_native_turn():
@@ -451,7 +452,7 @@ def test_hard_exit_after_direct_record_never_replays_on_reopen():
     child_code = """
 import asyncio, os, sys
 from pathlib import Path
-from agent_comms import Thread
+from agent_comms.threads import Thread
 from agent_comms.input_drain import InputDrain
 from agent_comms.acp import CommsAgent
 from agent_comms.input_disposition import InputDispositions

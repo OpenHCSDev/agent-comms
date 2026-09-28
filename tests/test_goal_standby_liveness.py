@@ -7,8 +7,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Thread, wire
 from agent_comms import agent_events as ae
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
 from agent_comms.goal_actions import (
     EditGoalAction,
@@ -21,6 +21,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_waits import GoalWaits
 from agent_comms.operations import Comms
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
 
 
 def _thread(comms, name, worktree):

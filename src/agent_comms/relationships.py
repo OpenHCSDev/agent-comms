@@ -14,18 +14,15 @@ from dataclasses import dataclass, field, fields, replace
 from threading import RLock
 from typing import TYPE_CHECKING, Literal
 
-from .declarations import (
-    Message,
-    RegistrySnapshot,
-    Thread,
-    ThreadSort,
-    ThreadView,
-    UnregisteredThreadError,
-    _store_lock,
-    file_revision,
-    is_channel_target,
-)
+from .channel_targets import is_channel_target
+from .display_order import ThreadSort
+from .errors import UnregisteredThreadError
 from .locked_store import LockedStore
+from .messages import Message
+from .presentation import ThreadView
+from .registry_document import RegistrySnapshot
+from .store_files import _store_lock, file_revision
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .operations import Comms

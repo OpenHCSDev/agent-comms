@@ -11,20 +11,15 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.bus_publication import HumanOrigin, stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_store import Applied, MutationStore
-from agent_comms.declarations import (
-    HumanInitialUnknownError,
-    HumanOrigin,
-    Message,
-    MessageType,
-    RelationViolationError,
-    Thread,
-    ThreadRole,
-)
+from agent_comms.errors import HumanInitialUnknownError, RelationViolationError
+from agent_comms.messages import Message, MessageType
 from agent_comms.operations import Comms, wire
+from agent_comms.thread_identity import ThreadRole
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="private bus requires POSIX owner/directory durability"

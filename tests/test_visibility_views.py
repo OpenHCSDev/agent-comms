@@ -1,7 +1,9 @@
 """Viewer-only presence flags reveal archived threads without reviving owners."""
 
-from agent_comms import Thread, ThreadRole, wire
+from agent_comms import wire
+from agent_comms.thread_identity import ThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
 
 
 def test_stopped_and_archived_are_explicit_view_filters(tmp_path):

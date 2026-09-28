@@ -21,11 +21,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
-from agent_comms.declarations import (  # noqa: E402
-    Goal,
-    RelationViolationError,
-    Thread,
-)
+from agent_comms.goals import Goal
+from agent_comms.errors import RelationViolationError
+from agent_comms.threads import Thread
 from agent_comms.registration import Registration  # noqa: E402
 
 SCRIPT = Path(__file__).with_suffix(".mjs")

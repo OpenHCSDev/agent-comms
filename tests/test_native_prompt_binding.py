@@ -26,8 +26,9 @@ from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import IdentityConflict, MutationStore, StaleFence
-from agent_comms.declarations import MessageBus, RelationViolationError, Thread
+from agent_comms.errors import RelationViolationError
 from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativePiUnavailable, read_tracked_input_digest
 from agent_comms.native_prompt_binding import (
     binding_store_path,
@@ -41,6 +42,7 @@ from agent_comms.native_source_cursor import (
 )
 from agent_comms.operations import Comms
 from agent_comms.proven_source_coverage import read_proven_source_coverage
+from agent_comms.threads import Thread
 
 
 @pytest.fixture

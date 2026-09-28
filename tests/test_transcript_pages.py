@@ -3,7 +3,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Thread, TranscriptCursor, wire
+from agent_comms import TranscriptCursor, wire
+from agent_comms.threads import Thread
 
 
 def transcript(path, count):

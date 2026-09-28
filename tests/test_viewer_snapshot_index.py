@@ -5,9 +5,10 @@ import os
 from contextlib import contextmanager
 from unittest.mock import patch
 
-from agent_comms import Thread, wire
+from agent_comms import wire
 from agent_comms.bus_display_index import BusDisplayIndex
-from agent_comms.declarations import Message
+from agent_comms.messages import Message
+from agent_comms.threads import Thread
 
 
 def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):

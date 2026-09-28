@@ -5,7 +5,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import wire
+from agent_comms.threads import Thread
 
 
 def prepared(root):
@@ -147,7 +148,7 @@ def test_shown_only_property_across_pages_modes_and_reopen(tmp_path, seed):
 
 
 def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
-    from agent_comms.declarations import ChannelDisplayScope
+    from agent_comms.read_basis import ChannelDisplayScope
 
     class AlternateMessages(ChannelDisplayScope):
         def includes(self, message):

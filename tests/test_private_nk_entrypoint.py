@@ -29,10 +29,12 @@ from agent_comms.coordination_store import (
     MutationStore,
     PublicationActivationBlocked,
 )
-from agent_comms.declarations import Message, MessageType, RelationViolationError, Thread
+from agent_comms.errors import RelationViolationError
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.messages import Message, MessageType
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, private_nk_launch
 from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.threads import Thread
 from test_native_prompt_binding import _root
 from test_native_prompt_binding import tmp_path as private_root_fixture
 

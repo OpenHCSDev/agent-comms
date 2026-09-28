@@ -11,8 +11,9 @@ import pytest
 
 from agent_comms import candidate_maintenance as maintenance
 from agent_comms.bus_publication import stable_thread_lookup
-from agent_comms.declarations import Thread, _store_lock
 from agent_comms.operations import Comms
+from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="private bus requires POSIX")

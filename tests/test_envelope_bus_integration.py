@@ -14,21 +14,13 @@ from threading import Barrier
 
 import pytest
 
-from agent_comms import declarations
-from agent_comms.declarations import (
-    ClaimEnvelopeUnknownError,
-    Message,
-    MessageType,
-    RelationViolationError,
-    Thread,
-)
+from agent_comms import store_files
 from agent_comms.envelope_claim_transitions import ClaimConflict, ClaimTransitionError
-from agent_comms.exporting import (
-    EverythingScope,
-    FullLimit,
-    JsonlFormat,
-)
+from agent_comms.errors import ClaimEnvelopeUnknownError, RelationViolationError
+from agent_comms.exporting import EverythingScope, FullLimit, JsonlFormat
+from agent_comms.messages import Message, MessageType
 from agent_comms.operations import Comms
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux",
@@ -87,7 +79,7 @@ def test_visible_claim_protocol_flag_after_directory_fsync_error_is_resynced(
         real_fsync(descriptor)
 
     with monkeypatch.context() as patch:
-        patch.setattr(declarations.os, "fsync", fsync)
+        patch.setattr(store_files.os, "fsync", fsync)
         with pytest.raises(OSError, match="directory fsync failed"):
             comms.initialize_private_claim_protocol()
     assert failed
@@ -115,7 +107,7 @@ def test_complete_visible_after_failed_fsync_must_be_resynced_before_read(
             raise OSError("simulated first bus fsync failure")
         real_fsync(descriptor)
 
-    monkeypatch.setattr(declarations.os, "fsync", fsync)
+    monkeypatch.setattr(store_files.os, "fsync", fsync)
     with pytest.raises(RelationViolationError, match="UNKNOWN"):
         comms.bus.full_history()
     assert str(path) in calls
@@ -247,7 +239,7 @@ def test_durable_raw_alias_claim_cannot_enter_guarded_public_or_projection(
         "releases": [],
         "generation": "b" * 32,
     }
-    with declarations._store_lock(comms.bus._path):
+    with store_files._store_lock(comms.bus._path):
         metadata = comms.bus._private_marker_unlocked()
         comms.bus._append_private_unlocked(metadata, record)
     with pytest.raises(RelationViolationError, match="Malformed claim envelope"):
@@ -458,7 +450,7 @@ def test_failed_fsync_complete_visible_row_is_unknown_not_replayed(
             raise OSError("injected claim-row fsync failure")
         real_fsync(descriptor)
 
-    monkeypatch.setattr(declarations.os, "fsync", fsync)
+    monkeypatch.setattr(store_files.os, "fsync", fsync)
     with pytest.raises(ClaimEnvelopeUnknownError, match="UNKNOWN"):
         comms.send_message("alice", "bob", "Maybe claimed", claims=["a.py"])
     assert failed
@@ -498,7 +490,7 @@ def test_fsynced_existing_bus_row_survives_single_uncommitted_marker_rename_loss
         real_fsync(descriptor)
 
     with monkeypatch.context() as patch:
-        patch.setattr(declarations.os, "fsync", fail_final_directory_fsync)
+        patch.setattr(store_files.os, "fsync", fail_final_directory_fsync)
         with pytest.raises(ClaimEnvelopeUnknownError, match="UNKNOWN"):
             comms.send_message("bob", "alice", "Bob owns b", claims=["b.py"])
     assert bus_fsynced and failed
@@ -575,13 +567,13 @@ def test_invalid_claim_record_cannot_be_exposed_as_plain_message(tmp_path: Path)
 
 
 def _private_verified_rows(comms: Comms) -> list[tuple[object, object, object]]:
-    with declarations._store_lock(comms.bus._path):
+    with store_files._store_lock(comms.bus._path):
         metadata = comms.bus._private_marker_unlocked()
         return list(comms.bus._verified_private_rows_unlocked(metadata))
 
 
 def _ordinary_locked_iterator(comms: Comms) -> list[Message]:
-    with declarations._store_lock(comms.bus._path):
+    with store_files._store_lock(comms.bus._path):
         return list(comms.bus._iter_log_unlocked())
 
 
@@ -608,7 +600,7 @@ def test_claim_bearing_visible_failed_fsync_all_reader_routes_block_then_resync(
                 raise OSError("claim row visible but not durable")
         real_fsync(descriptor)
 
-    monkeypatch.setattr(declarations.os, "fsync", fail_fsync)
+    monkeypatch.setattr(store_files.os, "fsync", fail_fsync)
     with pytest.raises(ClaimEnvelopeUnknownError, match="UNKNOWN"):
         comms.send_message("alice", "bob", "Uncertain claimed envelope", claims=["a.py"])
     assert bus.read_bytes().endswith(b"\n")
@@ -678,7 +670,7 @@ def test_reserved_metadata_sequence_is_not_a_committed_message(
         return real_open(path, flags, *args, **kwargs)
 
     with monkeypatch.context() as patch:
-        patch.setattr(declarations.os, "open", fail_before_append)
+        patch.setattr(store_files.os, "open", fail_before_append)
         with pytest.raises(ClaimEnvelopeUnknownError, match="UNKNOWN"):
             comms.send_message("alice", "bob", "Never appended", claims=["a.py"])
     assert json.loads((comms.root / "bus_meta.json").read_text())["last_seq"] == 1
@@ -698,7 +690,7 @@ def test_sigkill_across_claim_send_recovers_one_row_or_none(tmp_path: Path, phas
 import os, signal, sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[2])
-from agent_comms import declarations
+from agent_comms import store_files
 from agent_comms.operations import Comms
 root = Path(sys.argv[1]); phase = sys.argv[3]
 bus = root / 'bus.jsonl'
@@ -709,7 +701,7 @@ def kill_at_boundary(fd):
         or phase == 'after_bus_append_before_fsync' and name == str(bus)):
         os.kill(os.getpid(), signal.SIGKILL)
     real_fsync(fd)
-declarations.os.fsync = kill_at_boundary
+store_files.os.fsync = kill_at_boundary
 Comms(root, private_claim_writes=True).send_message(
     'alice', 'bob', 'Interrupted claim', claims=['a.py'])
 """

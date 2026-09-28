@@ -19,9 +19,9 @@ from agent_comms.coordination import ExecutionOrigin, WakeClaim
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import MutationStore
-from agent_comms.declarations import Thread
 from agent_comms.operations import Comms
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
+from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from test_coordinated_runtime import _fake_model
 

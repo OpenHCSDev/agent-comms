@@ -24,13 +24,11 @@ from .coordination import (
     WakeClaim,
 )
 from .coordination_cohort import _assert_schema, _receipt_matches
-from .declarations import (
-    RelationViolationError,
-    Thread,
-    _require_no_private_owner_rename,
-    _store_lock,
-)
+from .errors import RelationViolationError
+from .private_registry_guard import _require_no_private_owner_rename
 from .registration import Registration
+from .store_files import _store_lock
+from .threads import Thread
 from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 
 

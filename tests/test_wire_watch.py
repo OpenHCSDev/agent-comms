@@ -6,9 +6,9 @@ import os
 import pytest
 
 from agent_comms.acp import CommsAgent
-from agent_comms.declarations import Thread
 from agent_comms.operations import Comms, wire
 from agent_comms.private_registry_guard import PrivateRegistryGuard
+from agent_comms.threads import Thread
 from agent_comms.wire_watch import open_wire_watcher
 
 

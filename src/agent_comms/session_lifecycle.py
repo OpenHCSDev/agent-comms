@@ -23,10 +23,10 @@ from acp.schema import (
 
 from . import backend
 from .config_options import ConfigOptions
-from .declarations import Thread
 from .operations import Comms
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
+from .threads import Thread
 from .transcript_updates import TranscriptReplay
 
 

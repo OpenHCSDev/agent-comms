@@ -15,12 +15,14 @@ from agent_comms import backend, owner_compaction_runtime
 from agent_comms.acp import CommsAgent
 from agent_comms.backend import PersistentPiSession
 from agent_comms.compaction_publication import publish_pending_local
-from agent_comms.declarations import Goal, RelationViolationError, Thread
+from agent_comms.errors import RelationViolationError
+from agent_comms.goals import Goal
 from agent_comms.operations import Comms, wire
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativePreparationError, prepare_native_source
 from agent_comms.owner_compaction_runtime import compact_owner_once
 from agent_comms.registration import Registration
+from agent_comms.threads import Thread
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(

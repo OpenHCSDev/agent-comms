@@ -4,10 +4,11 @@ import os
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
 from agent_comms.input_disposition import AcpDeliveryCursors, InputDispositions
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.threads import Thread
 
 
 def seed(comms, name):

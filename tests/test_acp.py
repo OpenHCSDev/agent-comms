@@ -20,8 +20,9 @@ from acp.schema import ConfigOptionUpdate, SessionInfoUpdate
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent, CommsClient
+from agent_comms.activity import ActivityState
 from agent_comms.backend import NATIVE_INPUT_CAPABILITY
-from agent_comms.declarations import ActivityState, UnregisteredThreadError
+from agent_comms.errors import UnregisteredThreadError
 from agent_comms.manual_compaction_bridge import compact_context
 from agent_comms.operations import wire
 from agent_comms.runtime import RuntimeProxy, socket_path
@@ -540,7 +541,6 @@ class TestHandlers:
         await agent.shutdown()
 
 
-from agent_comms import Thread  # noqa: E402
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -553,6 +553,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
+from agent_comms.threads import Thread
 
 
 class TestAgentTurn:
@@ -2053,7 +2054,7 @@ class TestAgentTurnForwarding:
 
 class TestActivityLayer:
     def test_emit_and_read_current(self, wired):
-        from agent_comms import ActivityState
+        from agent_comms.activity import ActivityState
 
         wired.registry.require("PR111")
         wired.set_activity("PR111", ActivityState.WORKING, "bash: echo hi")
@@ -2062,13 +2063,13 @@ class TestActivityLayer:
         assert activity.detail == "bash: echo hi"
 
     def test_idle_cannot_carry_detail(self, wired):
-        from agent_comms import ActivityState
+        from agent_comms.activity import ActivityState
 
         with pytest.raises(Exception, match="Idle"):
             wired.set_activity("PR111", ActivityState.IDLE, "junk")
 
     def test_unknown_thread_fail_closed(self, wired):
-        from agent_comms import ActivityState
+        from agent_comms.activity import ActivityState
 
         with pytest.raises(UnregisteredThreadError):
             wired.set_activity("ghost", ActivityState.THINKING)
@@ -2076,7 +2077,7 @@ class TestActivityLayer:
     def test_stale_activity_reads_idle(self, wired):
         import time as _time
 
-        from agent_comms.declarations import Activity, ActivityState
+        from agent_comms.activity import Activity, ActivityState
 
         wired.activity.emit(Activity(thread="PR111", state=ActivityState.WORKING, detail="old"))
         # Tamper the timestamp to be stale.
@@ -2089,7 +2090,7 @@ class TestActivityLayer:
         assert wired.activity_of("PR111").state is ActivityState.IDLE
 
     def test_activity_persistence(self, tmp_path):
-        from agent_comms.declarations import Activity, ActivityLog, ActivityState
+        from agent_comms.activity import Activity, ActivityLog, ActivityState
 
         path = tmp_path / "activity.jsonl"
         log = ActivityLog(path)
@@ -2097,7 +2098,7 @@ class TestActivityLayer:
         assert ActivityLog(path).current("a").detail == "bash"
 
     def test_all_current_latest_per_thread(self, tmp_path):
-        from agent_comms.declarations import Activity, ActivityLog, ActivityState
+        from agent_comms.activity import Activity, ActivityLog, ActivityState
 
         log = ActivityLog(tmp_path / "activity.jsonl")
         log.emit(Activity(thread="a", state=ActivityState.THINKING))
@@ -2146,7 +2147,8 @@ class TestFailureFeedback:
     async def test_agent_origin_failure_notifies_origin_without_waking(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.declarations import Message, MessageType, Thread
+        from agent_comms.messages import Message, MessageType
+        from agent_comms.threads import Thread
 
         agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
         message = "Codex error: The usage limit has been reached"
@@ -2178,7 +2180,8 @@ class TestFailureFeedback:
     async def test_failed_terminal_discards_partial_reply_and_deduplicates_notice(
         self, wired, tmp_path, monkeypatch, channel
     ):
-        from agent_comms.declarations import Message, MessageType, Thread
+        from agent_comms.messages import Message, MessageType
+        from agent_comms.threads import Thread
 
         agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
@@ -2216,7 +2219,7 @@ class TestFailureFeedback:
     async def test_missing_terminal_discards_partial_reply_and_route(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.declarations import Message, MessageType
+        from agent_comms.messages import Message, MessageType
 
         agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
@@ -2243,7 +2246,7 @@ class TestFailureFeedback:
     async def test_successful_terminal_sends_complete_reply_and_records_route(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.declarations import Message, MessageType
+        from agent_comms.messages import Message, MessageType
 
         agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
@@ -2270,7 +2273,8 @@ class TestFailureFeedback:
     async def test_committed_progress_appears_in_channel_before_final_reply(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.declarations import Message, MessageType, Thread
+        from agent_comms.messages import Message, MessageType
+        from agent_comms.threads import Thread
 
         agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
@@ -2302,7 +2306,8 @@ class TestFailureFeedback:
         self, wired, tmp_path, monkeypatch
     ):
         from agent_comms import backend
-        from agent_comms.declarations import Message, MessageType, Thread
+        from agent_comms.messages import Message, MessageType
+        from agent_comms.threads import Thread
         from test_backend import _stub
 
         stub = _stub(
@@ -2349,7 +2354,8 @@ class TestFailureFeedback:
     async def test_failed_turn_notices_unique_reply_and_origin_targets(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.declarations import Message, MessageType, Thread
+        from agent_comms.messages import Message, MessageType
+        from agent_comms.threads import Thread
 
         agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
@@ -2459,7 +2465,7 @@ class TestLiveConfigSync:
 
 class TestQueueControl:
     async def test_clear_queue_request_does_not_start_a_turn(self, wired, tmp_path, monkeypatch):
-        from agent_comms.declarations import Thread
+        from agent_comms.threads import Thread
 
         agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
         ran: list[str] = []

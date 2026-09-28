@@ -5,10 +5,12 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Thread
-from agent_comms.declarations import ActiveTurn, RelationViolationError, ThreadSort
+from agent_comms.display_order import ThreadSort
+from agent_comms.errors import RelationViolationError
 from agent_comms.operations import Comms
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
+from agent_comms.turn_lease import ActiveTurn
 
 
 def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity(tmp_path):

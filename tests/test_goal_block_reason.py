@@ -5,8 +5,6 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Goal, Thread
-from agent_comms.declarations import GoalExecution
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -16,8 +14,11 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
+from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_states import BlockedGoal
+from agent_comms.goals import Goal
 from agent_comms.operations import wire
+from agent_comms.threads import Thread
 from agent_comms.tools import TOOLS
 
 

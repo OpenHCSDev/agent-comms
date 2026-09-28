@@ -51,52 +51,13 @@ if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
     from .relationships import ThreadRelationships
-from .declarations import (
-    PRIVATE_OWNER_RENAME_PENDING,
-    Activity,
-    ActivityLog,
-    ActivityState,
-    AgentRuntimeInfo,
-    BuiltinChannel,
-    Channel,
-    ChannelActivity,
-    ChannelDisplayScope,
-    ChannelSort,
-    ChannelView,
-    CoordinationSnapshot,
-    DMDisplayBasis,
-    FinishedTurnFence,
-    Goal,
-    GoalExecution,
-    GoalWaitTarget,
-    MembershipChange,
-    Message,
-    MessageBus,
-    MessagePage,
-    MessageRoute,
-    MessageType,
-    RegistrySnapshot,
-    RelationViolationError,
-    RuntimeInfoStore,
-    SavedView,
-    SharedLedger,
-    Tag,
-    Thread,
-    ThreadRole,
-    ThreadSort,
-    ThreadView,
-    TurnLeaseFence,
-    TurnRouting,
-    UnregisteredThreadError,
-    WireRevision,
-    _atomic_write_text,
-    _require_no_private_owner_rename,
-    _store_lock,
-    current_thread,
-    file_revision,
-    is_channel_target,
-)
+from .activity import Activity, ActivityLog, ActivityState
+from .bus_activity_index import ChannelActivity
+from .channel_targets import BuiltinChannel, Tag, is_channel_target
+from .channels import Channel, SavedView
+from .display_order import ChannelSort, ThreadSort
 from .envelope_claim_transitions import ClaimProjection
+from .errors import RelationViolationError, UnregisteredThreadError
 from .exporting import (
     WireExportBoundary,
     WireExportFormat,
@@ -105,10 +66,26 @@ from .exporting import (
     WireExportScope,
     WireTranscriptExporter,
 )
+from .goal_presentation import GoalExecution, GoalWaitTarget
+from .goals import Goal
 from .importing import ImportFormat, ImportLimits, ImportReceipt
 from .maintenance_barrier import MaintenanceBarrier
+from .message_bus import MessageBus
+from .message_page import MessagePage
+from .messages import MembershipChange, Message, MessageType
+from .presentation import ChannelView, CoordinationSnapshot, ThreadView, WireRevision
+from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
+from .read_basis import ChannelDisplayScope, DMDisplayBasis
+from .registry_document import RegistrySnapshot
+from .routing import MessageRoute, TurnRouting
+from .runtime_info import AgentRuntimeInfo, RuntimeInfoStore
+from .shared_ledger import SharedLedger
+from .store_files import _atomic_write_text, _store_lock, file_revision
+from .thread_identity import ThreadRole
+from .threads import Thread, current_thread
 from .tool_results import ToolDiff
 from .transcript_routes import InputDisplay, TranscriptRoutes
+from .turn_lease import FinishedTurnFence, TurnLeaseFence
 
 OBSERVATION_INTERVAL = 0.05
 _LOG = logging.getLogger(__name__)
@@ -538,7 +515,7 @@ class Comms:
 
     def send_user_message(self, target: str, body: str, *, worktree: str) -> Message:
         """Cooperative local UI send, not cryptographic same-UID authentication."""
-        from .declarations import HumanOrigin
+        from .bus_publication import HumanOrigin
 
         # The PR116 legacy retirement fence precedes identity creation and
         # remains held through the actual bus publication on an old root.
@@ -1341,7 +1318,7 @@ class Comms:
         """Local presentation scope, independent of agent delivery cursors."""
         viewer = self.user_identity(worktree).name
         with self._display_snapshot(viewer=viewer) as (basis, records, bus_revision):
-            registry, declarations, scopes, order, captured_viewer, viewer_names, pins, notice = (
+            registry, store_files, scopes, order, captured_viewer, viewer_names, pins, notice = (
                 basis
             )
             assert captured_viewer is not None
@@ -1350,7 +1327,7 @@ class Comms:
             )
             channels = self._channel_views_for(
                 registry,
-                declarations,
+                store_files,
                 pins,
                 order,
                 show_stopped=show_stopped,
@@ -2127,8 +2104,8 @@ class Comms:
         bindings. A prompt prefix or a matching body alone is not evidence.
         No transcript, input disposition, delivery/read cursor, or model is changed.
         """
-        from .declarations import ScheduledTurn
         from .input_disposition import InputDispositions
+        from .routing import ScheduledTurn
 
         rows = InputDispositions(self.root).bound_bus_inputs()
         existing = self.transcript_routes.input_bindings()

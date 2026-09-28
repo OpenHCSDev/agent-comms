@@ -13,9 +13,9 @@ from agent_comms import native_source_cursor as cursor_module
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_store import IdentityConflict, MutationStore, StaleFence
-from agent_comms.declarations import Thread
 from agent_comms.native_source_cursor import read_current_native_cursor
 from agent_comms.proven_source_coverage import read_proven_source_coverage
+from agent_comms.threads import Thread
 from test_native_prompt_binding import _fake_model, _root
 
 

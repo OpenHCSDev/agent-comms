@@ -14,7 +14,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordinated_runtime import SelectedExistingFileWrite
 from agent_comms.coordination_store import IdentityConflict, MutationStore, StaleFence
-from agent_comms.declarations import RelationViolationError
+from agent_comms.errors import RelationViolationError
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.operations import Comms
 from agent_comms.selected_tool_broker import SelectedToolIntent, SelectedToolRequest

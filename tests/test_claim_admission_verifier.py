@@ -23,9 +23,10 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordinated_runtime import _engage
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
 from agent_comms.coordination_store import IdentityConflict, MutationStore, prepare_fence_token
-from agent_comms.declarations import ClaimEnvelopeUnknownError, RelationViolationError, Thread
 from agent_comms.envelope_claim_transitions import WakeAdmission
+from agent_comms.errors import ClaimEnvelopeUnknownError, RelationViolationError
 from agent_comms.operations import Comms
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort admission requires real /var/tmp"

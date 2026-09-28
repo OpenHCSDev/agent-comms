@@ -50,8 +50,8 @@ from .coordination import (
     retry_disposition_authorized,
 )
 from .coordination_errors import IdentityConflict
-from .declarations import MessageType
 from .execution_states import ExecutionState, QueuedExecution
+from .messages import MessageType
 from .obligation_states import ResponseState
 from .recovery_states import DeferredRecovery, FailedRecovery, RecoveryCondition
 from .wake_policy import WakePolicy

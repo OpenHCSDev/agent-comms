@@ -6,8 +6,9 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Thread, wire
-from agent_comms.declarations import ActiveTurn
+from agent_comms import wire
+from agent_comms.threads import Thread
+from agent_comms.turn_lease import ActiveTurn
 
 
 def test_activity_start_failure_cannot_clear_replacement_turn(tmp_path, monkeypatch):

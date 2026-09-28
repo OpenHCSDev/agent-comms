@@ -2,7 +2,6 @@
 
 import pytest
 
-from agent_comms import Thread
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -16,6 +15,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
 from agent_comms.operations import wire
+from agent_comms.threads import Thread
 from agent_comms.tools import TOOLS
 
 

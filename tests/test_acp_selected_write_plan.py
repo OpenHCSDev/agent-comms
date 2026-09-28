@@ -23,11 +23,12 @@ from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import sealed_cohort_claims
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import IdentityConflict, MutationStore
-from agent_comms.declarations import MessageBus, Thread
+from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.operations import Comms
 from agent_comms.selected_write_plan import SelectedWritePlans
+from agent_comms.threads import Thread
 from test_coordinated_runtime import _fake_model
 
 pytestmark = pytest.mark.skipif(

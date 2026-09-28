@@ -6,7 +6,7 @@ from dataclasses import asdict, replace
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
 from agent_comms.goal_actions import (
     BlockedGoalAction,
@@ -18,6 +18,7 @@ from agent_comms.goal_actions import (
     StandbyGoalAction,
 )
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 

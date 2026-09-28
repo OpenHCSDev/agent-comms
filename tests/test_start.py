@@ -6,8 +6,10 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Thread, ThreadRole, invoke_context_tool, invoke_tool, tool_catalog, wire
-from agent_comms.declarations import ActiveTurn
+from agent_comms import invoke_context_tool, invoke_tool, tool_catalog, wire
+from agent_comms.thread_identity import ThreadRole
+from agent_comms.threads import Thread
+from agent_comms.turn_lease import ActiveTurn
 
 
 def test_start_tool_reserves_one_owner_and_preserves_saved_state(tmp_path, monkeypatch):

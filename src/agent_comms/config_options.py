@@ -18,13 +18,13 @@ from acp.schema import (
 
 from . import agent_events as events
 from . import backend
-from .declarations import Thread
 from .declared_family import DeclaredFamily
 from .operations import Comms
 from .pending_requests import PendingRequests
 from .pi_commands import PiCommand, SetModel, SetThinkingLevel
 from .runtime import RuntimeServer
 from .session_effects import SessionEffects
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .session_lifecycle import SessionLifecycle

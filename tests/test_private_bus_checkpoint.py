@@ -13,19 +13,16 @@ import pytest
 
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordination import PublicationIntent, canonical_publication_key
-from agent_comms.declarations import (
-    Message,
-    MessageBus,
-    MessageType,
-    RelationViolationError,
-    Thread,
-    _store_lock,
-)
+from agent_comms.errors import RelationViolationError
+from agent_comms.message_bus import MessageBus
+from agent_comms.messages import Message, MessageType
 from agent_comms.operations import Comms
 from agent_comms.private_bus_checkpoint import (
     certified_initial_page_unlocked,
     install_private_bus_checkpoint,
 )
+from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
 
 
 def _root(tmp_path: Path) -> tuple[Comms, str]:
@@ -353,12 +350,12 @@ def test_pending_checkpoint_does_not_repair_corrupt_sql_schema(tmp_path: Path, m
 
 
 def test_failed_marker_binding_does_not_promote_checkpoint(tmp_path: Path, monkeypatch) -> None:
-    import agent_comms.declarations as declarations
+    from agent_comms import store_files
 
     comms, _ = _root(tmp_path)
     with monkeypatch.context() as patch:
         patch.setattr(
-            declarations,
+            store_files,
             "_atomic_write_text",
             lambda *args, **kwargs: (_ for _ in ()).throw(OSError("marker sync failed")),
         )

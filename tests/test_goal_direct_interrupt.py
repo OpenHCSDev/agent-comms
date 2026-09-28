@@ -6,10 +6,9 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Thread, wire
 from agent_comms import agent_events as ae
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
-from agent_comms.declarations import ScheduledTurn
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     ClearGoalAction,
@@ -19,6 +18,8 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
+from agent_comms.routing import ScheduledTurn
+from agent_comms.threads import Thread
 
 
 async def _owner(tmp_path, monkeypatch, *, standby=False):

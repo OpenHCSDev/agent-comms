@@ -329,7 +329,7 @@ async def test_short_admission_contention_sends_once_after_release(
     import threading
 
     from agent_comms import coordinated_runtime as runtime
-    from agent_comms.declarations import _store_lock
+    from agent_comms.store_files import _store_lock
 
     root, root_id, comms, _initial, people = _root(tmp_path, direct=True)
     owner = people[2]

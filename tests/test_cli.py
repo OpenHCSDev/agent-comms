@@ -194,7 +194,7 @@ class TestStatusCommand:
         assert out == {"status": []}
 
     def test_status_shows_activity(self, cli, tmp_path):
-        from agent_comms.declarations import ActivityState
+        from agent_comms.activity import ActivityState
 
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
         from agent_comms.operations import wire

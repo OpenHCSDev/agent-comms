@@ -7,12 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Thread, wire
 from agent_comms import agent_events as ae
 from agent_comms import passive_channel_awareness as passive_store
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
 from agent_comms.bus_page_index import BusPageIndex
 from agent_comms.thread_status import RunningThreadStatus
+from agent_comms.threads import Thread
 
 
 def _sender(comms, tmp_path):
@@ -513,7 +514,7 @@ async def test_source_recheck_retains_shared_store_lock_through_exact_bus_read(
     from contextlib import contextmanager
 
     from agent_comms import locked_store
-    from agent_comms.declarations import _store_lock
+    from agent_comms.store_files import _store_lock
 
     comms, agent, owner = await _agent(tmp_path, monkeypatch)
     try:

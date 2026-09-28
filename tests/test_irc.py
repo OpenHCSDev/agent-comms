@@ -2,15 +2,11 @@
 
 import pytest
 
-from agent_comms import (
-    GLOBAL_CHANNEL,
-    Message,
-    MessageType,
-    Registration,
-    Thread,
-    UnregisteredThreadError,
-    wire,
-)
+from agent_comms import Registration, wire
+from agent_comms.channel_targets import GLOBAL_CHANNEL
+from agent_comms.errors import UnregisteredThreadError
+from agent_comms.messages import Message, MessageType
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -176,7 +172,7 @@ class TestCurrentThreadEnvFallback:
         monkeypatch.delenv("PI_AGENT_ID", raising=False)
         monkeypatch.setenv("AGENT_COMMS_THREAD", "me")
         monkeypatch.chdir(tmp_path)
-        from agent_comms import current_thread
+        from agent_comms.threads import current_thread
 
         assert current_thread().name == "me"
 
@@ -184,6 +180,6 @@ class TestCurrentThreadEnvFallback:
         monkeypatch.setenv("PI_AGENT_ID", "pi-thread")
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fallback")
         monkeypatch.chdir(tmp_path)
-        from agent_comms import current_thread
+        from agent_comms.threads import current_thread
 
         assert current_thread().name == "pi-thread"

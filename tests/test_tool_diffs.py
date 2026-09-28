@@ -5,9 +5,10 @@ import sys
 
 import pytest
 
-from agent_comms import Thread, TranscriptEvent, backend, wire
+from agent_comms import TranscriptEvent, backend, wire
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
+from agent_comms.threads import Thread
 from agent_comms.tool_results import ToolDiff, tool_result_content
 
 PATCH = "--- src/example.py\n+++ src/example.py\n@@ -40,2 +40,2 @@\n context\n-old = 1\n+new = 2\n"

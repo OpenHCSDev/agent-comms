@@ -21,11 +21,14 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import MutationStore, PublicationActivationBlocked, StaleFence
-from agent_comms.declarations import MessageBus, RelationViolationError, Thread, _store_lock
+from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.operations import Comms
+from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from test_coordinated_runtime import _fake_model
 from test_coordinated_runtime import tmp_path as private_root_fixture

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.coordination import CoordinationStore, canonical_publication_key
-from agent_comms.declarations import Message, MessageType
+from agent_comms.messages import Message, MessageType
 from agent_comms.recovery_projection import (
     AvailableRecoveryProjection,
     UnavailableRecoveryProjection,

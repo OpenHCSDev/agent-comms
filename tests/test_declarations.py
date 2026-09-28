@@ -9,35 +9,29 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms import (
-    AgentRuntimeInfo,
-    Goal,
-    Message,
-    MessageBus,
-    MessageType,
-    Registration,
-    RelationViolationError,
-    RuntimeInfoStore,
-    SharedLedger,
-    Thread,
-    UnregisteredThreadError,
-    current_thread,
-)
+from agent_comms import Registration
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, public_envelope_digest
 from agent_comms.coordination import (
     MAX_PUBLICATION_PAYLOAD_BYTES,
     PublicationIntent,
     canonical_publication_key,
 )
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.goals import Goal
+from agent_comms.message_bus import MessageBus
+from agent_comms.messages import Message, MessageType
 from agent_comms.operations import Comms
 from agent_comms.private_registry_guard import PrivateRegistryGuard
+from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
+from agent_comms.shared_ledger import SharedLedger
 from agent_comms.thread_status import DeletingThreadStatus, RunningThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread, current_thread
 
 
 def test_windows_snapshot_replace_retries_transient_sharing_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import agent_comms.declarations as declarations
+    from agent_comms import store_files
 
     source = tmp_path / "pending"
     target = tmp_path / "snapshot"
@@ -55,8 +49,8 @@ def test_windows_snapshot_replace_retries_transient_sharing_failure(
             raise error
         real_replace(src, dst)
 
-    monkeypatch.setattr(declarations.os, "replace", contested_replace)
-    declarations._replace_snapshot(source, target, windows=True)
+    monkeypatch.setattr(store_files.os, "replace", contested_replace)
+    store_files._replace_snapshot(source, target, windows=True)
     assert calls == 2
     assert target.read_text() == "new"
 
@@ -64,7 +58,7 @@ def test_windows_snapshot_replace_retries_transient_sharing_failure(
 def test_windows_snapshot_replace_does_not_retry_real_refusal(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import agent_comms.declarations as declarations
+    from agent_comms import store_files
 
     source = tmp_path / "pending"
     target = tmp_path / "snapshot"
@@ -79,9 +73,9 @@ def test_windows_snapshot_replace_does_not_retry_real_refusal(
         error.winerror = 3
         raise error
 
-    monkeypatch.setattr(declarations.os, "replace", refused_replace)
+    monkeypatch.setattr(store_files.os, "replace", refused_replace)
     with pytest.raises(PermissionError):
-        declarations._replace_snapshot(source, target, windows=True)
+        store_files._replace_snapshot(source, target, windows=True)
     assert calls == 1
     assert target.read_text() == "old"
 
@@ -442,7 +436,7 @@ class TestRegistration:
     def test_private_guard_faults_never_promote_an_unfsynced_owner(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fail_at: str
     ) -> None:
-        import agent_comms.declarations as declarations
+        from agent_comms import store_files
 
         root = tmp_path / "isolated-private-root"
         comms = Comms(root, private_initial_writes=True)
@@ -452,7 +446,7 @@ class TestRegistration:
         cold = Registration(root / "registry.json")
         assert cold.require("a").name == "a"  # cache the old revision
         original_fsync = os.fsync
-        original_write = declarations._atomic_write_text
+        original_write = store_files._atomic_write_text
         guard_calls = 0
 
         def fsync(fd: int) -> None:
@@ -474,7 +468,7 @@ class TestRegistration:
             original_write(path, text, **kwargs)
 
         monkeypatch.setattr(os, "fsync", fsync)
-        monkeypatch.setattr(declarations, "_atomic_write_text", write)
+        monkeypatch.setattr(store_files, "_atomic_write_text", write)
         with pytest.raises((OSError, RelationViolationError), match="injected|guard"):
             comms.registry.register(
                 Thread(name="b", tags=frozenset(), worktree="/wt", pid=os.getpid())

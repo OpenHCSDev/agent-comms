@@ -21,13 +21,15 @@ from pathlib import Path
 import pytest
 
 from agent_comms.compaction_journal import CompactionJournalError, CompactionJournalUnknownError
-from agent_comms.declarations import Goal, RelationViolationError, Thread
+from agent_comms.errors import RelationViolationError
+from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import Comms
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_process import CompactionTransportUnknownError
 from agent_comms.registration import Registration
 from agent_comms.session_fence import SessionWriterBusyError, session_writer_fence
+from agent_comms.threads import Thread
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(
@@ -517,7 +519,9 @@ def test_competing_writer_waits_through_real_native_commit(native, monkeypatch, 
 import fcntl,sys
 from pathlib import Path
 from dataclasses import replace
-from agent_comms.declarations import Goal, Message, MessageBus, MessageType
+from agent_comms.goals import Goal
+from agent_comms.messages import Message, MessageType
+from agent_comms.message_bus import MessageBus
 from agent_comms.registration import Registration
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import Comms

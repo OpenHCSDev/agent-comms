@@ -10,7 +10,7 @@ import pytest
 from agent_comms import coordinated_runtime as runtime
 from agent_comms import native_pi
 from agent_comms.coordination_store import MutationStore
-from agent_comms.declarations import RelationViolationError
+from agent_comms.errors import RelationViolationError
 from agent_comms.operations import Comms
 from maintenance_control_fixture import FixtureMaintenanceControl
 from test_coordinated_runtime import _root

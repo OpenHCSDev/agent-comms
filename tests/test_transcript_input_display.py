@@ -5,8 +5,9 @@ import sqlite3
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
+from agent_comms.threads import Thread
 
 GOAL_PROMPT = (
     "Persistent goal deadbeef: Read files until stopped.\n"

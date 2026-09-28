@@ -22,7 +22,9 @@ from pathlib import Path
 
 from . import agent_events as events
 from . import backend
-from .declarations import GLOBAL_CHANNEL, ActivityState, Message, is_channel_target
+from .activity import ActivityState
+from .channel_targets import GLOBAL_CHANNEL, is_channel_target
+from .messages import Message
 from .mro_dispatch import handles
 from .operations import Comms, wire
 
@@ -89,7 +91,8 @@ class Participant:
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
     def start(self) -> None:
-        from .declarations import Thread, UnregisteredThreadError, current_thread
+        from .errors import UnregisteredThreadError
+        from .threads import Thread, current_thread
 
         try:
             thread = current_thread()

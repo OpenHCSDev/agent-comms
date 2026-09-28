@@ -16,7 +16,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from .declarations import RelationViolationError, _store_lock, unique_wire_object
+from .bus_publication import unique_wire_object
+from .errors import RelationViolationError
+from .store_files import _store_lock
 
 
 @dataclass(frozen=True)

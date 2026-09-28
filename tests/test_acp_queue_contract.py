@@ -11,10 +11,10 @@ import pytest
 from acp import RequestError
 
 from agent_comms.acp import CommsAgent
-from agent_comms.declarations import Thread
 from agent_comms.input_drain import QueuedInput
 from agent_comms.operations import Comms
 from agent_comms.runtime import _present_cursor_session
+from agent_comms.threads import Thread
 
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:

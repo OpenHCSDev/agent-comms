@@ -9,7 +9,9 @@ from __future__ import annotations
 import hashlib
 import re
 
-from .declarations import GoalMentionBinding, GoalMentionSource, RegistrySnapshot, Thread
+from .goals import GoalMentionBinding, GoalMentionSource
+from .registry_document import RegistrySnapshot
+from .threads import Thread
 
 # Unlike message mentions, a dotted/path/email suffix must not yield a partial
 # thread name. Aliases are diagnostics at authoring, not new peer identities.

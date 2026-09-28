@@ -18,11 +18,12 @@ from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import IdentityConflict, MutationStore
-from agent_comms.declarations import RelationViolationError, Thread
+from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_source_cursor import read_current_native_cursor
 from agent_comms.operations import Comms
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
+from agent_comms.threads import Thread
 from test_native_prompt_binding import _fake_model
 
 

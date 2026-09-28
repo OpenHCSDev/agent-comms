@@ -5,15 +5,14 @@ from dataclasses import dataclass
 
 import pytest
 
-from agent_comms import (
+from agent_comms import invoke_tool, wire
+from agent_comms.channels import (
     AllOfMatch,
     AnyOfMatch,
     SavedView,
     ViewKind,
     ViewMatch,
     ViewPredicate,
-    invoke_tool,
-    wire,
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.tools import tool_catalog

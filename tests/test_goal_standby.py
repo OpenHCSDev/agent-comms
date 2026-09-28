@@ -7,10 +7,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import GoalExecution, GoalExecutionState, Thread
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
-from agent_comms.declarations import GoalWaitTarget, _store_lock
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
@@ -20,9 +18,12 @@ from agent_comms.goal_actions import (
     StandbyGoalAction,
 )
 from agent_comms.goal_attempts import GoalAttemptStore, StaleAttempt
+from agent_comms.goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget
 from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.input_drain import InputDrain
 from agent_comms.operations import wire
+from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
 from agent_comms.tools import TOOLS
 
 

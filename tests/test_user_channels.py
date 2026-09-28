@@ -3,9 +3,10 @@ from uuid import uuid4
 
 import pytest
 
-from agent_comms import ThreadRole, wire
 from agent_comms import agent_events as ae
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
+from agent_comms.thread_identity import ThreadRole
 
 
 def _native_receipt(args, kwargs):

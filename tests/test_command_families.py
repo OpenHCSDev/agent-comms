@@ -10,16 +10,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import wire
 from agent_comms.cli import build_parser, main
 from agent_comms.cli_commands import CliCommand, option
-from agent_comms.declarations import MessageType
+from agent_comms.messages import MessageType
 from agent_comms.runtime import RuntimeProxy, RuntimeServer
 from agent_comms.runtime_requests import (
     ResultRuntimeRequest,
     RuntimeRequest,
     SubscribeRuntimeRequest,
 )
+from agent_comms.threads import Thread
 
 
 def test_all_cli_help_and_flags_match_before_refactor(monkeypatch):

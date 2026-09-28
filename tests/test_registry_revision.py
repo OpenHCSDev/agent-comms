@@ -5,10 +5,10 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms import Thread
-from agent_comms.declarations import _atomic_write_text
 from agent_comms.registration import Registration
+from agent_comms.store_files import _atomic_write_text
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
 
 
 def test_repeated_reads_parse_once_and_observe_external_changes(tmp_path):
@@ -17,7 +17,7 @@ def test_repeated_reads_parse_once_and_observe_external_changes(tmp_path):
     writer.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     reader = Registration(path)
     original = reader.require("worker")
-    with patch("agent_comms.declarations.json.loads", wraps=json.loads) as loads:
+    with patch("agent_comms.registry_store.json.loads", wraps=json.loads) as loads:
         for _ in range(20):
             assert reader.require("worker") is original
             assert reader.status("worker") == RunningThreadStatus()

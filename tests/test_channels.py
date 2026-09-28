@@ -5,26 +5,14 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms import (
-    Activity,
-    ActivityState,
-    AllOfMatch,
-    AnyOfMatch,
-    Channel,
-    ChannelSort,
-    ForkSpec,
-    Message,
-    MessageType,
-    SavedView,
-    Thread,
-    ThreadSort,
-    ThreadView,
-    ViewKind,
-    ViewPredicate,
-    invoke_tool,
-    wire,
-)
+from agent_comms import ForkSpec, invoke_tool, wire
+from agent_comms.activity import Activity, ActivityState
+from agent_comms.channels import AllOfMatch, AnyOfMatch, Channel, SavedView, ViewKind, ViewPredicate
+from agent_comms.display_order import ChannelSort, ThreadSort
+from agent_comms.messages import Message, MessageType
+from agent_comms.presentation import ThreadView
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
 
 
 def setup_wire(path):
@@ -458,7 +446,7 @@ def test_thread_presentation_owns_lifecycle_precedence(tmp_path):
 
 
 def test_none_membership_and_independent_channel_order(tmp_path):
-    from agent_comms import ThreadSort
+    from agent_comms.display_order import ThreadSort
 
     comms = setup_wire(tmp_path)
     comms.send("a", "#none", "for untagged agents")

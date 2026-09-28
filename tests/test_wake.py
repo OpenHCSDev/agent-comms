@@ -7,17 +7,13 @@ import pytest
 
 from agent_comms.audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
 from agent_comms.coordination import MessageAudience
-from agent_comms.declarations import (
-    MembershipChange,
-    Message,
-    MessageType,
-    Thread,
-    ThreadRole,
-)
 from agent_comms.mentions import ThreadMention
+from agent_comms.messages import MembershipChange, Message, MessageType
 from agent_comms.obligation_states import SilentResponse
 from agent_comms.operations import wire
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
+from agent_comms.thread_identity import ThreadRole
+from agent_comms.threads import Thread
 from agent_comms.wake import (
     ControlClassification,
     NoWakeDecision,

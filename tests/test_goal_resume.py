@@ -4,7 +4,6 @@ import os
 
 import pytest
 
-from agent_comms import Goal, Thread
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -15,7 +14,9 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.goals import Goal
 from agent_comms.operations import Comms
+from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 
 

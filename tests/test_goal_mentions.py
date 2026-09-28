@@ -8,8 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Comms, Thread
-from agent_comms.declarations import ThreadRole
+from agent_comms import Comms
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     CompletedGoalAction,
@@ -19,6 +18,8 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
+from agent_comms.thread_identity import ThreadRole
+from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 
 

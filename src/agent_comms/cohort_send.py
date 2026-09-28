@@ -15,9 +15,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .coordination_store import IdentityConflict, PublicationActivationBlocked
-from .declarations import _store_lock
 from .native_pi import _private_session_dir
 from .operations import Comms
+from .store_files import _store_lock
 
 
 def publish_one(
