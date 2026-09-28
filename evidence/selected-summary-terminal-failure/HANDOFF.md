@@ -24,3 +24,9 @@ Canonical builder passed per-file and entire-tree manifest validation. Durable/l
 - Actual CLI stopped while HTTP request active: selected operation becomes durable UNKNOWN, input remains blocked, source unchanged, fresh reopen does not replay. Three actual native cases passed in 12.27s, no paid provider calls.
 - Receiver and durable local-pipe controls: 33 passed, two opt-in synthetic native cases skipped. Includes exact failed-receipt fence controls for foreign operation/witness/model/settings, missing proof and invalid diagnostic text.
 - The opt-in synthetic provider-error integration expectation now requires parent's FailedSummary journal implementation. Run with PI_NATIVE_PACKAGE_DIR after integrating parent changes.
+
+## Parent API integration
+
+Merged parent 855d8760 into this branch. Combined receiver/native/recovery tests: 41 passed in 31.75s with both native environment variables enabled; no skips.
+
+Upgraded the same real HTTP 400/429 fixtures to call SelectedSummarySlot and the actual journal.fail_selected_summary method. The tests assert SelectedSummaryFailed, durable FailedSummary (terminal, settled_without_original, original_eligible false), empty blocking_selected_summary, live idle child, unchanged saved source, no retries or original input events, and fresh unchanged reopen. The active-child-disconnect control still uses the actual slot/journal and remains UNKNOWN. This closes the prior direct-RPC-only gap without new provider usage.
