@@ -1,5 +1,7 @@
 # S10 V1/V3 working draft; complete surface still open
 
+Draft PR234: https://github.com/OpenHCSDev/agent-comms/pull/234.
+
 Owner Pascal. Tree `/home/ts/wt/comms-s10-pi-boundary-20260928`, branch
 `refactor/s10-pi-boundary-20260928`, source `c4b8dad`, based on merged226 + R0/228.
 Parent owns whole-step quiet install. No live root mutation/restart/provider call.
@@ -59,9 +61,9 @@ is claimed. Manual ownership/caller closure and concrete boundary tests above.
 ## Remaining assigned scope / exact dependencies
 
 **S10 is incomplete.** V2 remains the ten-column raw native_runtime_inputs read
-in selected_tool_broker.verify_sent_full_input. Cicero owns A13 and the canonical
+in selected_tool_broker.verify_sent_full_input. Cicero PR230 owns A13 and the canonical
 NativeRuntimeInput declaration; adopt that API here when landed, not a local row
-or adapter. Lovelace owns A12; S10 then migrates native_pi.py and
+or adapter. Lovelace PR232 owns A12; S10 then migrates native_pi.py and
 selected_pi_child_deadline.py native spawn/stop/guardian users and deletes local
 supervision. No edits to those files in this draft. Parent integrates narrow
 backend callback annotations with Lovelace's backend migration. No other agent
