@@ -1,0 +1,11 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-pf4-route-observation-20260928
+configfile: pyproject.toml
+plugins: platformdirs-4.12.0, asyncio-1.4.0, xdist-3.8.0, cov-7.1.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 23 items / 10 deselected / 13 selected
+
+tests/test_private_nk_entrypoint.py .............                        [100%]
+
+====================== 13 passed, 10 deselected in 1.90s =======================
