@@ -14,3 +14,9 @@ PYTHONPATH=src timeout 60 /home/ts/wt/comms-refactor-integration-20260927/.venv/
 PYTHONPATH=<core>/src:<toad>/src:<toad>/tests timeout 60 /home/ts/.local/share/agent-comms/runtime-diagnostics-20260928/bin/python tests/main_menu_transfer_pilot.py
 
 Parent owns combined core/Toad pinning, installation and activation. Already merged refactors with remaining shims are tracked in the dispatch DELETION-AUDIT.md and remain required work.
+
+## Activated
+
+Core PR157/158 and Toad PR81 merged. Installed runtime-diagnostics-20260928 contains current core e751d10 and Toad81 code; current native diagnostics bundle is active on the existing bus. Both owners restarted and became ready, 103 identities retained. Actual unmentioned channel input39 -> response40 CLEANUP_RUNTIME_OK, read+bash tool results verified successful, 17.65 seconds. Mounted installed Toad opens historical #comms/#nra and original saved session with 111 historical identities; no message was emitted during history inspection. Installed export/import pilot passed. The final ACP error display change remains Darwin-owned and is not yet deployed.
+
+Prepared native bundle initially failed path preflight under ~/.local/share: current trust boundary requires /var/tmp/agent-comms-pi-native-*. Moved the owned immutable package to that expected location, preflight passed, then activated. No source worktree is in volatile storage.
