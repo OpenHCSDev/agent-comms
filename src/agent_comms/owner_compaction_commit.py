@@ -375,7 +375,7 @@ class OwnerCompactionCommit:
             raise ValueError("Owner-captured pre-summary source required")
         if (
             type(summary) is not str
-            or len(summary.encode()) > 262144
+            or not summary.strip()
             or type(tokens_before) is not int
             or not 0 <= tokens_before <= 2**53 - 1
         ):

@@ -10,7 +10,12 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from agent_comms.owner_compaction_prepare import _PREPARE
+from agent_comms.owner_compaction_prepare import _PREPARE, NativeWitness
+from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+from agent_comms.registration import Registration
+from agent_comms.threads import Thread
+from agent_comms.field_codec import FieldCodec
+from agent_comms.pi_rpc import PiRpcChannel
 
 SOURCE = Path(
     "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-22T03-50-07-145Z_01a0c73c-3628-7073-880c-e0df5f56e98e.jsonl"
@@ -35,7 +40,10 @@ async def run(package, root, expected):
         def do_POST(self):
             data = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             requests.append(
-                {"bytes": len(json.dumps(data).encode()), "max_tokens": data.get("max_tokens")}
+                {
+                    "bytes": len(json.dumps(data).encode()),
+                    "max_tokens": data.get("max_tokens", data.get("max_completion_tokens")),
+                }
             )
             assert len(requests) <= 64
             chunk = {
@@ -151,7 +159,7 @@ async def run(package, root, expected):
             if not line:
                 raise RuntimeError((root / "native-stderr.log").read_text()[-3000:])
             data = json.loads(line)
-            if data.get("id") == command["id"]:
+            if data.get("id") == command["id"] and data.get("type") == "response":
                 return data
 
     try:
@@ -177,6 +185,21 @@ async def run(package, root, expected):
             check=True,
         )
         preparation = json.loads(prep.stdout)
+        bridge = owner = source = None
+        if expected == "summarized":
+            registry = Registration(root / "registry.json")
+            registry.register(
+                Thread(
+                    "probe", frozenset(), str(project), pid=os.getpid(), session_file=str(session)
+                )
+            )
+            owner, generation = registry.live_owner_with_generation("probe")
+            owner, generation = registry.lease_live_turn_with_generation(
+                owner, "probe", expected_owner_generation=generation
+            )
+            bridge = OwnerCompactionCommit(root / "registry.json", package)
+            witness = FieldCodec.decode(NativeWitness, preparation["witness"])
+            source = bridge.capture_source(owner, generation, witness)
         command = {
             "id": "readiness",
             "type": "agent_comms_prepare_compaction",
@@ -206,6 +229,50 @@ async def run(package, root, expected):
             "transport": "loopback only",
             "native_commit_exercised": False,
         }
+        if data.get("status") == "summarized":
+            decoded = PiRpcChannel.decode_record(
+                (json.dumps(response) + "\n").encode(), strict=True
+            ).data.result
+            receipt["read_files"] = len(decoded.details.read_files)
+            receipt["modified_files"] = len(decoded.details.modified_files)
+            proc.terminate()
+            await asyncio.wait_for(proc.wait(), 8)
+            committed = bridge.commit(
+                owner,
+                generation,
+                witness,
+                decoded.summary,
+                decoded.tokens_before,
+                source=source,
+                details=FieldCodec.encode(decoded.details),
+                usage=FieldCodec.encode(decoded.usage),
+            )
+            receipt["native_commit_exercised"] = True
+            receipt["commit_status"] = committed.state.declared_name
+            assert receipt["commit_status"] == "committed"
+            verify = subprocess.run(
+                [
+                    "node",
+                    "--input-type=module",
+                    "--eval",
+                    "import {loadEntriesFromFile,SessionManager} from "
+                    + json.dumps(str(package / "dist/core/session-manager.js"))
+                    + ";"
+                    "const rows=loadEntriesFromFile(process.argv[1]);const last=rows.at(-1);"
+                    "const manager=SessionManager.inMemory(process.cwd(),undefined,rows);"
+                    "console.log(JSON.stringify({kind:last.type,readFiles:last.details.readFiles.length,modifiedFiles:last.details.modifiedFiles.length,contextMessages:manager.buildSessionContext().messages.length}));",
+                    str(session),
+                ],
+                cwd=project,
+                capture_output=True,
+                text=True,
+                timeout=40,
+                check=True,
+            )
+            receipt["reopened"] = json.loads(verify.stdout)
+            assert receipt["reopened"]["kind"] == "compaction"
+            assert receipt["reopened"]["readFiles"] == receipt["read_files"]
+            assert receipt["reopened"]["modifiedFiles"] == receipt["modified_files"]
         (root / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
         print(json.dumps(receipt), flush=True)
         assert data.get("status") == expected, response
