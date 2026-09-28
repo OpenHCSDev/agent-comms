@@ -29,13 +29,10 @@ from .claim_admission import publish_selected_resource_claim, write_selected_cla
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination import (
-    AttemptPhase,
     ClaimDisposition,
     ExecutionOrigin,
-    ExecutionStatus,
     OwnerFence,
     WakeClaim,
-    WakeMode,
 )
 from .coordination_cohort import _assert_schema, accept_initial_cohort, sealed_cohort_claims
 from .coordination_response import (
@@ -61,6 +58,7 @@ from .declarations import (
     _store_lock,
 )
 from .diagnostics import record_terminal_failure
+from .durable_turn import DurableTurn
 from .envelope_claim_transitions import WakeAdmission
 from .fresh_private_session import FreshPrivateSession, create_fresh_private_session
 from .native_pi import (
@@ -430,17 +428,14 @@ def _native_send_boundary(
             ):
                 raise StaleFence("selected claim identity changed before native send")
             if fence is None:
-                if (
-                    current.disposition is not ClaimDisposition.DEFERRED
-                    or current.revision != claim.revision + 1
-                ):
+                if not current.lifecycle.deferred or current.revision != claim.revision + 1:
                     raise StaleFence("triage claim changed before native send")
             else:
                 snapshot, attempt = store._assert_fence(fence)
                 if (
-                    current.disposition is not ClaimDisposition.ENGAGED
-                    or snapshot.execution.status is not ExecutionStatus.ACTIVE
-                    or attempt.phase is not AttemptPhase.PROMPT_STARTING
+                    not current.lifecycle.engaged
+                    or not snapshot.execution.lifecycle.active
+                    or not attempt.lifecycle.starting
                     or attempt.backend_done
                     or attempt.process_dead
                 ):
@@ -580,8 +575,8 @@ def _reserve_triage(
         current = store.claim(claim.claim_id)
         if (
             current != claim
-            or current.wake_mode is not WakeMode.BOUNDED_TRIAGE
-            or current.disposition is not ClaimDisposition.TRIAGE_PENDING
+            or not current.lifecycle.mode.triage
+            or not current.lifecycle.triage_pending
         ):
             raise IdentityConflict("triage claim changed before native input reservation")
         if db.execute(
@@ -777,7 +772,7 @@ def _record_triage(
         ).fetchone()
         if (
             current.revision != claim.revision + 1
-            or current.disposition is not ClaimDisposition.DEFERRED
+            or not current.lifecycle.deferred
             or current.execution_id is not None
             or row is None
             or row["stage"] != "triage"
@@ -862,7 +857,7 @@ def _reserve_full(
         if (
             snapshot.execution.execution_id != execution_id
             or snapshot.pointer_revision < 1
-            or attempt.phase is not AttemptPhase.PROMPT_STARTING
+            or not attempt.lifecycle.starting
             or claim.claim_id not in {row.claim_id for row in snapshot.claims}
         ):
             raise StaleFence("full input cannot bind to the current attempt")
@@ -1067,8 +1062,7 @@ async def run_one_sealed_claim(
                     claim
                     for claim in selected
                     if claim.recipient == owner.name
-                    and claim.disposition
-                    in {ClaimDisposition.TRIAGE_PENDING, ClaimDisposition.FULL_PENDING}
+                    and (claim.lifecycle.triage_pending or claim.lifecycle.full_pending)
                 ),
                 None,
             )
@@ -1178,7 +1172,7 @@ async def run_one_sealed_claim(
             if fresh_session is not None and selected_thinking_level is not None
             else None
         )
-        if pending.disposition is ClaimDisposition.TRIAGE_PENDING:
+        if pending.lifecycle.triage_pending:
             triage_prompt = _triage_prompt(initial, pending, owner)
             if len(triage_prompt.encode("utf-8")) > _MAX_PROMPT_BYTES:
                 raise IdentityConflict("triage prompt exceeds the bounded model context")
@@ -1260,12 +1254,12 @@ async def run_one_sealed_claim(
             triage_session = result.context.session_file
             first_selected = None  # Pi has already appended this raw input.
         else:
-            if pending.wake_mode is not WakeMode.FULL:
+            if pending.lifecycle.mode.triage:
                 raise IdentityConflict("pending claim wake decision is not executable")
         _require_registry_owner(comms, owner, owner_epoch)
         execution_id = _engage(store, pending, initial, owner, person.generation)
         snapshot = store.snapshot(execution_id)
-        if snapshot.execution.status is ExecutionStatus.QUEUED:
+        if snapshot.execution.lifecycle.queued:
             snapshot = store.mark_pending(
                 execution_id, expected_revision=snapshot.execution.revision
             ).value
@@ -1413,8 +1407,16 @@ async def run_one_sealed_claim(
             )
             if not isinstance(bound_tool_mode, NativeToolMode):
                 raise IdentityConflict("selected tool mode did not bind to the owner")
+        progress = DurableTurn(store, fence, started.snapshot.pointer_revision, input_id)
+
+        async def observe_event(event):
+            nonlocal fence
+            await progress.dispatch(event)
+            fence = progress.fence
+
         result = await run_native_pi_turn(
             native_package,
+            observe_event=observe_event,
             input_id=input_id,
             prompt=prompt,
             worktree=worktree,
@@ -1492,18 +1494,7 @@ async def run_one_sealed_claim(
                 assert selected_write_plan_applied is not None
                 selected_write_plan_applied(pending, owner, selected_operation_id)
         _record_full(store, pending, owner, person.generation, fence, input_id, result)
-        pointer_revision = started.snapshot.pointer_revision
-        for phase in (AttemptPhase.PROMPT_ACCEPTED, AttemptPhase.MODEL_RUNNING):
-            fence = store.advance_attempt(
-                fence, phase, expected_pointer_revision=pointer_revision
-            ).value.fence
-        fence = store.advance_attempt(
-            fence,
-            AttemptPhase.SETTLING,
-            expected_pointer_revision=pointer_revision,
-            backend_done=True,
-            process_dead=True,
-        ).value.fence
+        fence = progress.finish()
         _require_registry_owner(comms, owner, owner_epoch)
         prepare_fenced_response(
             store, bus, fence, result.text, owner_pid=os.getpid(), owner_witness=owner_witness

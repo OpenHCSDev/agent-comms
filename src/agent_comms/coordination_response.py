@@ -27,10 +27,6 @@ from pathlib import Path
 
 from .bus_publication import stable_thread_lookup
 from .coordination import (
-    AttemptPhase,
-    ClaimDisposition,
-    ExecutionStatus,
-    ObligationState,
     OwnerFence,
     PublicationIntent,
     RecoverySnapshot,
@@ -301,8 +297,7 @@ def _require_cohort_claims(
             or claim.recipient_lookup not in selected
             or derive_exact_reply_target(initial.message) != snapshot.execution.exact_target
             or claim.exact_target != snapshot.execution.exact_target
-            or claim.disposition
-            is not (ClaimDisposition.COMPLETED if terminal else ClaimDisposition.ENGAGED)
+            or not (claim.lifecycle.completed if terminal else claim.lifecycle.engaged)
         ):
             raise IdentityConflict("response claim conflicts with original selected bus route")
 
@@ -319,8 +314,8 @@ def _require_final_owner(
     if owner_witness is not None and execution.owner_lookup != owner_witness.recipient_lookup:
         raise StaleFence("response turn belongs to a different SQL recipient")
     if (
-        execution.status is not ExecutionStatus.ACTIVE
-        or attempt.phase is not AttemptPhase.SETTLING
+        not execution.lifecycle.active
+        or not attempt.lifecycle.settling
         or not (attempt.backend_done and attempt.process_dead)
         or snapshot.obligation is None
         or snapshot.obligation.exact_target != execution.exact_target
@@ -395,7 +390,7 @@ def prepare_fenced_response(
             if existing is not None:
                 if (
                     snapshot.obligation is None
-                    or snapshot.obligation.state is not ObligationState.PUBLISHING
+                    or not snapshot.obligation.lifecycle.publishing
                     or not _intent_matches_request(
                         existing,
                         execution_id=execution.execution_id,
@@ -409,10 +404,7 @@ def prepare_fenced_response(
                 ):
                     raise IdentityConflict("prepared response envelope conflicts")
                 return AlreadyApplied(existing)
-            if (
-                snapshot.obligation is None
-                or snapshot.obligation.state is not ObligationState.PENDING
-            ):
+            if snapshot.obligation is None or not snapshot.obligation.lifecycle.pending:
                 raise IdentityConflict("response obligation cannot prepare a new intent")
             when = time.time() if timestamp is None else timestamp
             candidate = Message(
@@ -475,7 +467,7 @@ def _terminal_replay(
 ) -> AlreadyApplied[RecoverySnapshot] | None:
     """A finished immutable receipt may be re-read, never re-published."""
     snapshot = store.snapshot(fence.execution_id)
-    if snapshot.execution.status is not ExecutionStatus.COMPLETED:
+    if not snapshot.execution.lifecycle.completed:
         return None
     if (
         owner_witness is not None
@@ -535,7 +527,7 @@ def _settle_fenced_response(
                 if (
                     snapshot.publication_intent is None
                     or snapshot.obligation is None
-                    or snapshot.obligation.state is not ObligationState.PUBLISHING
+                    or not snapshot.obligation.lifecycle.publishing
                     or snapshot.publication_intent.sender != snapshot.execution.owner_thread
                     or snapshot.publication_intent.exact_target != snapshot.execution.exact_target
                 ):
@@ -576,7 +568,7 @@ def _settle_fenced_response(
             if (
                 intent is None
                 or snapshot.obligation is None
-                or snapshot.obligation.state is not ObligationState.PUBLISHING
+                or not snapshot.obligation.lifecycle.publishing
                 or intent.sender != snapshot.execution.owner_thread
                 or intent.exact_target != snapshot.execution.exact_target
             ):

@@ -6,11 +6,34 @@ import math
 import types
 from dataclasses import MISSING, Field, fields, is_dataclass
 from enum import Enum
-from typing import Any, TypeVar, Union, cast, get_args, get_origin, get_type_hints, overload
+from typing import (
+    Any,
+    Literal,
+    TypeVar,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+    overload,
+)
 
 from .declared_family import DeclaredFamily
 
 T = TypeVar("T")
+
+
+class Projected(property):
+    """A computed field declared by its owner for a named read-only view."""
+
+    def __init__(self, getter, *, view: str, name: str | None = None):
+        super().__init__(getter)
+        self.view = view
+        self.wire_name = name or getter.__name__
+
+
+def projected(*, view: str, name: str | None = None):
+    return lambda getter: Projected(getter, view=view, name=name)
 
 
 class FieldCodec:
@@ -82,11 +105,45 @@ class FieldCodec:
         return cast(T, cls._decode(target, data))
 
     @classmethod
+    def project(cls, value: object, view: str) -> Any:
+        """Encode a redacted view using field exclusions and owned properties.
+
+        Projection is deliberately one way. Excluded secrets cannot be rebuilt
+        from a read-only view, and a view never serves as a persistence record.
+        """
+        if is_dataclass(value) and not isinstance(value, type):
+            result = {
+                field.metadata.get(f"{view}_name", key): cls.project(
+                    getattr(value, field.name), view
+                )
+                for field, key in cls._fields(type(value))
+                if not field.metadata.get(f"{view}_exclude")
+            }
+            properties = {
+                name: member
+                for base in reversed(type(value).__mro__)
+                for name, member in vars(base).items()
+                if isinstance(member, Projected) and member.view == view
+            }
+            result.update(
+                (member.wire_name, cls.project(getattr(value, name), view))
+                for name, member in properties.items()
+            )
+            return result
+        if isinstance(value, (tuple, list)):
+            return [cls.project(item, view) for item in value]
+        return cls.encode(value)
+
+    @classmethod
     def _decode(cls, target: Any, data: Any) -> Any:
         if target is Any:
             cls.encode(data)  # still require JSON-compatible data
             return data
         origin, args = get_origin(target), get_args(target)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
         if origin in (Union, types.UnionType):
             for alternative in args:
                 try:
@@ -124,6 +181,10 @@ class FieldCodec:
             if not isinstance(data, dict):
                 raise ValueError("Expected a record object.")
             declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
             unknown = set(data) - {key for _, key in declared}
             if unknown:
                 raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")

@@ -26,7 +26,6 @@ from .coordination import (
     IntegrityViolationError,
     SchemaVersionError,
     WakeClaim,
-    WakeMode,
 )
 from .coordination_store import AlreadyApplied, Applied, IdentityConflict, MutationStore, _claim
 from .declarations import MessageBus
@@ -91,11 +90,7 @@ def _expected_claims(initial: CommittedInitial, accepted_at_ms: int) -> tuple[Wa
                 audience=decision.audience,
                 wake_mode=decision.wake_mode,
                 triage_verdict=None,
-                disposition={
-                    WakeMode.PASSIVE: ClaimDisposition.PASSIVE,
-                    WakeMode.BOUNDED_TRIAGE: ClaimDisposition.TRIAGE_PENDING,
-                    WakeMode.FULL: ClaimDisposition.FULL_PENDING,
-                }[decision.wake_mode],
+                disposition=ClaimDisposition(decision.wake_mode.declaration.initial_disposition()),
                 accepted_at_ms=accepted_at_ms,
                 updated_at_ms=accepted_at_ms,
                 revision=1,
