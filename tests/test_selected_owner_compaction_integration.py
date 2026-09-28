@@ -42,7 +42,7 @@ def record_fixture_history(inputs, owner, admission):
 @asynccontextmanager
 async def owner_fixture(tmp_path, monkeypatch, *, real_host=False, goal=True):
     package = Path(PACKAGE)
-    launcher = str(package.parents[3] / "bin/pi-native")
+    launcher = os.environ.get("AC_NATIVE_STACK_BIN", str(package.parents[3] / "bin/pi-native"))
     repo = Path(__file__).resolve().parents[1]
     child = await asyncio.create_subprocess_exec(
         "node",

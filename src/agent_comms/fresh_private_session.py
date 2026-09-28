@@ -22,7 +22,14 @@ from pathlib import Path
 from typing import NoReturn
 from uuid import uuid4
 
-from .native_pi import NativePiUnavailable, _durable_private_session_dir, _fsync_directory, _unique
+from .native_entries import NativeEntry, SelectedFreshMarker, SessionEntry
+from .native_pi import (
+    NativePiUnavailable,
+    _durable_private_session_dir,
+    _fsync_directory,
+    _read_private_file,
+    _unique,
+)
 
 _MINT = object()
 _ENTRY_ID = re.compile(r"[0-9a-f]{8}\Z")
@@ -71,6 +78,27 @@ class FreshPrivateSession:
     def __reduce__(self) -> NoReturn:
         raise TypeError("Fresh-session enrollment cannot cross a process boundary")
 
+    @staticmethod
+    def require_launch_header(path: Path, selected_thinking_level: str | None) -> None:
+        """A saved marker can deny reopen; it cannot recreate first-start authority."""
+        rows = _read_private_file(path)
+        try:
+            header = NativeEntry.from_evidence(rows[0])
+            if not isinstance(header, SessionEntry):
+                raise ValueError("Native source lacks a session header")
+            header.require_header()
+            expected = (
+                SelectedFreshMarker(1, selected_thinking_level)
+                if selected_thinking_level is not None
+                else None
+            )
+            if header.selected_fresh != expected:
+                raise ValueError("Selected fresh source lacks its exact first-start token")
+        except (IndexError, ValueError, TypeError, KeyError) as error:
+            raise NativePiUnavailable(
+                "Selected fresh source cannot reopen without exact first-start token"
+            ) from error
+
     def verify_saved_identity(self, *, prewrite: bool = False) -> None:
         """Verify the original header/inode, optionally requiring no Pi appends yet."""
         if os.getpid() != self.creator_pid:
@@ -116,19 +144,18 @@ class FreshPrivateSession:
                 raise NativePiUnavailable("Fresh-session bootstrap changed")
             if prewrite and info.st_size != self.bootstrap_size:
                 raise NativePiUnavailable("Fresh-session has earlier input before enrollment")
-            row = json.loads(header)
+            row = NativeEntry.from_evidence(json.loads(header))
             after = self.path.lstat()
             if (after.st_dev, after.st_ino, after.st_nlink) != (self.device, self.inode, 1) or (
                 prewrite and after.st_size != self.bootstrap_size
             ):
                 raise NativePiUnavailable("Fresh-session path changed after bootstrap read")
             if (
-                type(row) is not dict
-                or row.get("type") != "session"
-                or row.get("id") != self.session_id
-                or row.get("agentCommsSelectedFresh")
+                not isinstance(row, SessionEntry)
+                or row.id != self.session_id
+                or row.selected_fresh
                 != (
-                    {"schema": 1, "thinkingLevel": self.selected_thinking_level}
+                    SelectedFreshMarker(1, self.selected_thinking_level)
                     if self.selected_thinking_level is not None
                     else None
                 )
@@ -284,10 +311,9 @@ def create_fresh_private_session(
         # This is a denial marker, not authority to enroll or to dispatch.
         # Omission on a later path-only reopen must not bypass the selected
         # first-startup model/thinking gate.
-        header_row["agentCommsSelectedFresh"] = {
-            "schema": 1,
-            "thinkingLevel": selected_thinking_level,
-        }
+        header_row["agentCommsSelectedFresh"] = SelectedFreshMarker(
+            1, selected_thinking_level
+        ).to_wire()
     header = json.dumps(header_row, separators=(",", ":"), allow_nan=False).encode() + b"\n"
     bootstrap_leaf_id = None
     bootstrap = header

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from dataclasses import dataclass, field, replace
+from typing import Any, ClassVar, Literal
 
 from .declared_family import DeclaredFamily
 from .messages import Message
@@ -27,6 +27,7 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
     wire_tag = "type"
     opaque: ClassVar[bool] = False
     id: str | None = None
+    parent_id: str | None = field(default=None, metadata={"wire_name": "parentId"})
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
 
@@ -40,6 +41,66 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
     @classmethod
     def read(cls, raw: bytes) -> NativeEntry:
         return cls.from_wire(json.loads(raw))
+
+    @classmethod
+    def from_evidence(cls, raw: dict) -> NativeEntry:
+        """Strict tracked-input boundary, separate from tolerant display decoding."""
+        entry = cls.from_wire(raw)
+        if isinstance(entry, MessageEntry):
+            message = raw["message"]
+            # Opaque display roles must not hide a tracked ID from proof readers.
+            if message.get("inputId") is not None and not entry.message.user:
+                raise ValueError("Tracked native input must belong to a user")
+            if entry.message.user and isinstance(entry.message.content, tuple):
+                # A digest/context reader may corroborate extended native content,
+                # but continued STARTED text matching must never lose extra fields.
+                content = tuple(
+                    part.preserve_evidence(raw_part)
+                    for part, raw_part in zip(
+                        entry.message.content, message["content"], strict=True
+                    )
+                )
+                entry = replace(entry, message=replace(entry.message, content=content))
+        return entry
+
+    @classmethod
+    def read_evidence(cls, session_file):
+        """Decode once behind the existing strict private-file trust boundary."""
+        from .native_pi import NativePiUnavailable, _private_session_dir, _read_private_file
+
+        _private_session_dir(session_file.parent)
+        raw = _read_private_file(session_file)
+        try:
+            entries = tuple(cls.from_evidence(row) for row in raw)
+            if not entries or not isinstance(entries[0], SessionEntry):
+                raise ValueError("Native Pi session header is invalid")
+            entries[0].require_header()
+        except (ValueError, TypeError, KeyError) as error:
+            raise NativePiUnavailable(f"Native Pi session evidence is invalid: {error}") from error
+        return entries[0], entries
+
+    @staticmethod
+    def tracked_users(entries):
+        from .native_pi import NativePiUnavailable
+
+        tracked = {}
+        try:
+            for entry in entries:
+                user = entry.tracked_user
+                if user is None:
+                    continue
+                if user.input_id in tracked:
+                    raise ValueError("duplicate tracked input")
+                tracked[user.input_id] = user
+        except (ValueError, TypeError) as error:
+            raise NativePiUnavailable(
+                "Native Pi session has ambiguous tracked user input"
+            ) from error
+        return tracked
+
+    @property
+    def tracked_user(self) -> MessageEntry | None:
+        return None
 
     @property
     def model_choice(self) -> tuple[str, str] | None:
@@ -57,6 +118,27 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
         return False
 
 
+@dataclass(frozen=True)
+class SelectedFreshMarker(PiPayload):
+    """Saved denial marker only; FreshPrivateSession retains enrollment authority."""
+
+    strict_fields = True
+    schema: Literal[1]
+    thinking_level: Literal["low", "high"] = field(metadata={"wire_name": "thinkingLevel"})
+
+
+@dataclass(frozen=True, kw_only=True)
+class SessionEntry(NativeEntry):
+    version: int | None = None
+    selected_fresh: SelectedFreshMarker | None = field(
+        default=None, metadata={"wire_name": "agentCommsSelectedFresh"}
+    )
+
+    def require_header(self) -> None:
+        if not self.id:
+            raise ValueError("Native Pi session header is invalid")
+
+
 @dataclass(frozen=True, kw_only=True)
 class MessageEntry(NativeEntry):
     message: PiMessage
@@ -69,6 +151,32 @@ class MessageEntry(NativeEntry):
     @property
     def input_id(self) -> str | None:
         return self.message.input_id
+
+    @property
+    def tracked_user(self) -> MessageEntry | None:
+        from .native_pi import _DIGEST, _INPUT_ID
+
+        if self.message.input_id is None:
+            return None
+        if (
+            not self.message.user
+            or not _INPUT_ID.fullmatch(self.message.input_id)
+            or self.message.input_digest is None
+            or not _DIGEST.fullmatch(self.message.input_digest)
+            or not self.id
+        ):
+            raise ValueError("Native Pi session has ambiguous tracked user input")
+        return self
+
+    def require_failed_terminal(self, parent_id: str) -> None:
+        if (
+            self.parent_id != parent_id
+            or not self.message.assistant
+            or self.message.stop_reason != "error"
+            or not self.message.error_message
+            or self.message.content != ()
+        ):
+            raise ValueError("Native recovery requires an unambiguous failed terminal")
 
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         return self.message.transcript_events(context)

@@ -70,6 +70,11 @@ def test_continued_private_session_needs_no_fresh_object_and_preserves_history(c
         "unbound",
         "untracked",
         "text",
+        "extra-content-field",
+        "null-signature",
+        "signed-content",
+        "opaque-content",
+        "string-content",
         "digest",
         "revision",
         "raw",
@@ -92,6 +97,16 @@ def test_continued_private_uncertain_or_mismatched_history_never_reserves(contin
         del entries[1]["message"]["inputId"]
     if damage == "text":
         entries[1]["message"]["content"][0]["text"] = "different"
+    if damage == "extra-content-field":
+        entries[1]["message"]["content"][0]["extra"] = True
+    if damage == "null-signature":
+        entries[1]["message"]["content"][0]["textSignature"] = None
+    if damage == "signed-content":
+        entries[1]["message"]["content"][0]["textSignature"] = "signature"
+    if damage == "opaque-content":
+        entries[1]["message"]["content"][0]["type"] = "extension"
+    if damage == "string-content":
+        entries[1]["message"]["content"] = "old"
     if damage == "digest":
         entries[1]["message"]["inputDigest"] = "b" * 64
     if damage == "duplicate":
@@ -110,7 +125,9 @@ def test_continued_private_uncertain_or_mismatched_history_never_reserves(contin
     assert json.loads(inputs.path.read_text())["rows"] == rows
 
 
-@pytest.mark.parametrize("damage", [None, "context", "unsettled", "foreign", "no-marker"])
+@pytest.mark.parametrize(
+    "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+)
 def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
     from agent_comms.coordinated_runtime_schema import _DDL, _DDL_DIGEST
 
@@ -118,6 +135,16 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
     inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
     if damage != "no-marker":
         journal.reserve_private_raw_input(session, "a" * 32)
+    if damage in {"extended", "null", "opaque"}:
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        part = entries[1]["message"]["content"][0]
+        if damage == "extended":
+            part["extension"] = {"provenance": "opaque"}
+        elif damage == "null":
+            part["textSignature"] = None
+        else:
+            part["type"] = "extension"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
     proof = dict(
         schema=1,
         type="context_committed",
