@@ -214,6 +214,7 @@ class CoordinationSnapshot:
     channel_unread: Mapping[str, int] = field(default_factory=dict)
     channel_order: ChannelSort = ChannelSort.NAME
     thread_unread: Mapping[str, int] = field(default_factory=dict)
+    thread_unread_pending: frozenset[str] = frozenset()
     show_stopped: bool = True
     show_archived: bool = False
     read_marker_notice: str | None = None
