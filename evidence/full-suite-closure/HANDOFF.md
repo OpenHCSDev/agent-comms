@@ -285,3 +285,16 @@ changes. Passive module explicitly relinquished to Cicero, own setup-only diff
 saved at.artifacts/passive-fixture-config.patch then reverted. Direct CLI delivery
 to Cicero rejected (no visible executable); parent notified to relay. Current
 independent remainder continues after runtime. Final combined suite still required.
+
+## Runtime goal socket/retry fixture closure
+
+Remainder-ten12passed10failed2errors2.23s; goal owners lacked canonical native
+configuration. Edit/snapshot fixtures now use the canonical agent and actual
+ProcessIdentity. Focused14:10passed4failed25.33s; all four Retry continuations
+were prevented by an incomplete fixture root (live drain reported missing cohort
+schema). Retry fixture now explicitly installs existing cohort/response/native/
+prompt schemas and registers its actual participant. Nine Retry cases pass4.72s,
+including no overlap, UNKNOWN non-replay, owner/origin/reservation fences and
+cancellation. Together all14 affected cases pass. No production changes.
+Persistent TMPDIR shortened to.artifacts/tmp after seven-digit test PID exceeded
+Unix socket length in prior test directory. Full combined suite still pending.
