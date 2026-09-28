@@ -246,7 +246,6 @@ async def maybe_compact_owner_turn(
         context_window=context_window,
         pending_input_key=original_input_key,
         settings_paths=settings_paths,
-        allow_split_turn=False,
         on_admission=on_admission,
     )
     if operation is None:

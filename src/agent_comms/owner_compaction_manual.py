@@ -151,7 +151,6 @@ async def compact_manual_owner(
         settings=settings,
         context_window=info.context_size,
         pending_input_key=pending_input_key,
-        allow_split_turn=False,
     )
     if operation is None:
         raise ValueError("Selected native history has no complete safe compaction cut")
