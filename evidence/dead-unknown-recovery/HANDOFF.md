@@ -1,6 +1,7 @@
 # UNKNOWN native execution recovery
 
-Base: parent 844f0f6 (PF2 included). Own branch:
+Implemented on parent 844f0f6 (PF2 included), then rebased cleanly as one recovery
+commit onto merged main 0c63715 to exclude inherited PR214 squash history. Own branch:
 `fix/dead-unknown-execution-recovery-20260928`.
 No live mutation, provider calls, user restarts or PR103 pushes performed.
 
