@@ -1,0 +1,44 @@
+actual concurrent marker publications=1500 readers=3 reads=75638 failures=[{'error': 'Private registry guard marker is not owner-only', 'mode': '0o600', 'uid': 1000, 'nlink': 0, 'inode': 6072792}, {'error': 'Private registry guard marker is not owner-only', 'mode': '0o600', 'uid': 1000, 'nlink': 0, 'inode': 6072792}, {'error': 'Private registry guard marker is not owner-only', 'mode': '0o600', 'uid': 1000, 'nlink': 0, 'inode': 6072794}, {'error': 'Private registry guard marker is not owner-only', 'mode': '0o600', 'uid': 1000, 'nlink': 0, 'inode': 6072792}, {'error': 'Private registry guard marker is not owner-only', 'mode': '0o600', 'uid': 1000, 'nlink': 0, 'inode': 6072794}, {'error': 'Private registry guard marker is not owner-only', 'mode': '0o600', 'uid': 1000, 'nlink': 0, 'inode': 6072794}, {'error': 'Private registry guard marker is not owner-only', 'mode': '0o600', 'uid': 1000, 'nlink': 0, 'inode': 6072794}, {'error': 'Private registry guard marker is not owner-only', 'mode': '0o600', 'uid': 1000, 'nlink': 0, 'inode': 6072792}, {'error': 'Private registry guard marker is not owner-only', 'mode': '0o600', 'uid': 1000, 'nlink': 0, 'inode': 6072792}, {'error': 'Private registry guard marker is not owner-only', 'mode': '0o600', 'uid': 1000, 'nlink': 0, 'inode': 6072794}]
+F
+=================================== FAILURES ===================================
+_____ test_concurrent_canonical_marker_publication_keeps_registry_readable _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-registry-marker-contention-20260928/.test-roots/test_concurrent_canonical_mark0')
+
+    def test_concurrent_canonical_marker_publication_keeps_registry_readable(tmp_path):
+        comms = Comms(tmp_path / "wire")
+        comms.messaging.initialize_private_initial_protocol()
+        comms.threads.register(Thread("owner", frozenset(), str(tmp_path)))
+        context = mp.get_context("spawn")
+        ready, result, stop = context.Queue(), context.Queue(), context.Event()
+        workers = [context.Process(target=_read_registry, args=(comms.root, ready, stop, result))
+                   for _ in range(3)]
+        try:
+            for worker in workers:
+                worker.start()
+            for _ in workers:
+                ready.get(timeout=20)
+            started = time.monotonic()
+            for _ in range(1500):
+                # Use the real canonical marker publisher and durability wrapper;
+                # no fake guard, patched syscall, replaced filesystem or sleep hook.
+                with comms.bus.log.locked():
+                    metadata = comms.bus.log.read_metadata_unlocked(required=True)
+                    comms.bus.log.write_metadata_unlocked(metadata)
+                assert time.monotonic() - started < 60, "Concurrent repro exceeded its time budget"
+            stop.set()
+            observations = [result.get(timeout=20) for _ in workers]
+            for worker in workers:
+                worker.join(timeout=10)
+                assert worker.exitcode == 0
+            reads = sum(count for count, _ in observations)
+            failures = [failure for _, errors in observations for failure in errors]
+            print(f"actual concurrent marker publications=1500 readers=3 reads={reads} failures={failures[:10]}")
+            assert reads >= 1500
+>           assert not failures
+E           AssertionError: assert not [{'error': 'Private registry guard marker is not owner-only', 'mode': '0o600', 'uid': 1000, 'nlink': 0, ...}, {'error'......}, {'error': 'Private registry guard marker is not owner-only', 'mode': '0o600', 'uid': 1000, 'nlink': 0, ...}, ...]
+
+tests/test_registry_marker_contention.py:70: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_registry_marker_contention.py::test_concurrent_canonical_marker_publication_keeps_registry_readable
+1 failed in 10.46s

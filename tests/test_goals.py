@@ -18,7 +18,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import Goal
 from agent_comms.threads import Thread
-from agent_comms.tools import TOOLS
+from agent_comms.tools import ToolRequest
 
 
 def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
@@ -34,7 +34,9 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
     assert restored.model == "test/model"
     assert restored.name == "renamed"
     comms.goals.update_goal("worker", PausedGoalAction())
-    tool = next(tool for tool in TOOLS if tool.name == "comms_goal")
+    tool = next(
+        tool for tool in ToolRequest.members_with(ToolRequest) if tool.declared_name == "comms_goal"
+    )
     with pytest.raises(ValueError, match="no longer active"):
         tool.invoke(comms, {"goal_id": goal.id, "status": "active", "progress": "late update"})
     replacement = comms.goals.update_goal("worker", SetGoalAction(text="New objective"))
@@ -59,7 +61,11 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
     monkeypatch.setenv("PI_AGENT_ID", "worker")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish the release"))
     comms.goals.update_goal("worker", PausedGoalAction(progress="Paused after an uncertain turn"))
-    resume = next(tool for tool in TOOLS if tool.name == "comms_resume_goal")
+    resume = next(
+        tool
+        for tool in ToolRequest.members_with(ToolRequest)
+        if tool.declared_name == "comms_resume_goal"
+    )
 
     result = resume.invoke(
         comms, {"goal_id": goal.id, "progress": "Explicitly resumed by the user"}
@@ -98,7 +104,11 @@ def test_agent_can_set_its_own_persistent_goal(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.threads.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     monkeypatch.setenv("PI_AGENT_ID", "worker")
-    tool = next(tool for tool in TOOLS if tool.name == "comms_set_goal")
+    tool = next(
+        tool
+        for tool in ToolRequest.members_with(ToolRequest)
+        if tool.declared_name == "comms_set_goal"
+    )
 
     result = tool.invoke(comms, {"text": "Verify the autonomous workflow"})
 
