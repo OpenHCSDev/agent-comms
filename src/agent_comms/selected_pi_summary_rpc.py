@@ -79,8 +79,8 @@ def _summary_response(
             data.operation_id,
             NativeSummary(
                 data.result.summary,
-                data.result.details.to_wire(),
-                data.result.usage.to_wire(),
+                data.result.details,
+                data.result.usage,
             ),
         )
     except (ValueError, TypeError, KeyError) as error:

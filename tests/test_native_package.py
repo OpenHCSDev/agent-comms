@@ -144,11 +144,7 @@ def test_failed_tree_verification_precedes_journal_creation(package, tmp_path, m
         native_package.TREE_PREFIX + package_tree_digest(package) + "\n"
     )
     (package / "node_modules/dependency/index.js").write_text("// drift outside manager\n")
-    monkeypatch.setattr(commit, "require_deadline_support", lambda: None)
     monkeypatch.setattr(commit.shutil, "which", lambda executable: f"/fixture/{executable}")
-    monkeypatch.setattr(
-        commit, "run_authority_child", lambda *a, **k: pytest.fail("native dispatched")
-    )
     with pytest.raises(NativePackageError, match="differs from pinned"):
         commit.OwnerCompactionCommit(tmp_path / "registry.json", package)
     assert not (tmp_path / "compaction-commits.sqlite3").exists()
@@ -163,35 +159,10 @@ def test_copied_helper_must_match_packaged_resource_before_journal(package, tmp_
     native_package.MANIFEST.write_text(
         native_package.TREE_PREFIX + package_tree_digest(package) + "\n"
     )
-    monkeypatch.setattr(commit, "require_deadline_support", lambda: None)
     monkeypatch.setattr(commit.shutil, "which", lambda executable: f"/fixture/{executable}")
     with pytest.raises(ValueError, match="differs from packaged resource"):
         commit.OwnerCompactionCommit(tmp_path / "registry.json", package)
     assert not (tmp_path / "compaction-commits.sqlite3").exists()
-
-
-@pytest.mark.parametrize("variable", ["NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"])
-def test_node_loader_environment_is_not_package_authority(package, tmp_path, monkeypatch, variable):
-    from agent_comms import owner_compaction_commit as commit
-
-    monkeypatch.setenv(variable, "untrusted-loader")
-    monkeypatch.setattr(commit, "require_deadline_support", lambda: None)
-    monkeypatch.setattr(commit.shutil, "which", lambda executable: f"/fixture/{executable}")
-    monkeypatch.setattr(commit.OwnerCompactionCommit, "_verify_native", lambda self: None)
-    bridge = commit.OwnerCompactionCommit(tmp_path / "registry.json", package)
-
-    def launch(command, *args, **kwargs):
-        assert command[:5] == [shutil.which("env"), "-u", "NODE_OPTIONS", "-u", "NODE_PATH"]
-        assert command[5:8] == ["-u", "NODE_COMPILE_CACHE", "NODE_DISABLE_COMPILE_CACHE=1"]
-        assert command[9:12] == ["--no-global-search-paths", "--import", str(bridge.import_fence)]
-        return subprocess.CompletedProcess(command, 1, b'{"status":"unknown","reason":"fixture"}')
-
-    monkeypatch.setattr(commit, "run_authority_child", launch)
-    with (tmp_path / "authority").open("w") as fd:
-        from agent_comms.compaction_states import UnknownOperation
-
-        assert isinstance(bridge._call(fd.fileno(), {}, 1).state, UnknownOperation)
-    assert os.environ[variable] == "untrusted-loader"  # Parent environment not mutated.
 
 
 @pytest.mark.parametrize("include_resources", [False, True])

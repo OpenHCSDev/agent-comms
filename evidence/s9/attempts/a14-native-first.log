@@ -1,0 +1,26 @@
+...F
+=================================== FAILURES ===================================
+______________ test_invalid_input_never_launches_settings_reader _______________
+
+settings_tree = (PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-10/test_invalid_input_never_launc0/...ms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-10/test_invalid_input_never_launc0/project/.pi/settings.json'))
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7faaffcf89e0>
+
+    def test_invalid_input_never_launches_settings_reader(settings_tree, monkeypatch):
+        from agent_comms import owner_compaction_settings
+    
+        project, _, _ = settings_tree
+        calls = []
+    
+        def forbidden(*args, **kwargs):
+            calls.append((args, kwargs))
+            raise AssertionError("Invalid evidence must not invoke Pi")
+    
+>       monkeypatch.setattr(owner_compaction_settings.subprocess, "run", forbidden)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'agent_comms.owner_compaction_settings' has no attribute 'subprocess'
+
+tests/test_owner_compaction_settings.py:99: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_owner_compaction_settings.py::test_invalid_input_never_launches_settings_reader
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 3 passed in 7.39s

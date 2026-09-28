@@ -1,0 +1,99 @@
+...........F.................................                            [100%]
+=================================== FAILURES ===================================
+_____ test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt ______
+
+saved = (PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/stack/bin/pi-native'), PosixPath('/home/ts/wt/comms-refactor2-s9-2...sessions/2026-09-28T15-14-45-881Z_01a0e895-2df8-7565-b6bf-6c519874944f.jsonl'), '01a0e895-2df8-7565-b6bf-6c519874944f')
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-13/test_discarded_manager_recheck0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efd2c12cc50>
+
+    @pytest.mark.asyncio
+    async def test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt(
+        saved, tmp_path, monkeypatch
+    ):
+        launcher, file, identity = saved
+        original = native_session_reopen.validate_native_reopen
+        checks = []
+    
+        def checked(_stub, session, *, expected_session_id):
+            checks.append((session, expected_session_id))
+            return original(str(launcher), session, expected_session_id=expected_session_id)
+    
+        monkeypatch.setattr(native_session_reopen, "validate_native_reopen", checked)
+        marker = tmp_path / "provider-prompt-sent"
+        state_identity = tmp_path / "rpc-identity"
+        state_identity.write_text("wrong-session")
+        stub = tmp_path / "pi-stub"
+        stub.write_text(
+            f"#!{sys.executable}\n"
+            "import json,sys,select\n"
+            f"from pathlib import Path\n"
+            "state=json.loads(sys.stdin.readline())\n"
+            f"identity=Path({str(state_identity)!r}).read_text()\n"
+            "print(json.dumps({'type':'response','command':'get_state','id':state['id'],"
+            "'success':True,'data':{'nativeInputProofCapability':"
+            f"{backend.NATIVE_INPUT_CAPABILITY!r},'sessionId':identity,"
+            f"'sessionFile':{str(file)!r}}}}}),flush=True)\n"
+            "if select.select([sys.stdin],[],[],0.1)[0]:\n"
+            f"    Path({str(marker)!r}).write_text(sys.stdin.readline())\n"
+        )
+        stub.chmod(0o700)
+        persistent = backend.PersistentPiSession()
+        await persistent.discard_for_external_write(str(file))
+        assert persistent.proc is None and persistent.reopen_required == str(file)
+        first = [
+            event
+            async for event in backend.stream_agent_events(
+                str(stub),
+                [],
+                "never send",
+                str(tmp_path),
+                session_file=str(file),
+                persistent_session=persistent,
+            )
+        ]
+        assert first[-1].ok is False and not marker.exists()
+        assert persistent.reopen_required == str(file)
+        assert checks == [(str(file), None)]
+        state_identity.write_text(identity)
+    
+        @contextmanager
+        def refuse(_public, _native, _text):
+            yield False
+    
+        second = [
+            event
+            async for event in backend.stream_agent_events(
+                str(stub),
+                [],
+                "still no provider",
+                str(tmp_path),
+                session_file=str(file),
+                persistent_session=persistent,
+                send_boundary=refuse,
+            )
+        ]
+        assert second[-1].ok is False and not marker.exists()
+        assert checks == [(str(file), None), (str(file), None)]
+        assert persistent.reopen_required == str(file), "Only a settled validated turn clears it"
+        before = file.read_bytes()
+        file.write_bytes(before.rstrip(b"\n"))
+        third = [
+            event
+            async for event in backend.stream_agent_events(
+                str(stub),
+                [],
+                "do not retry",
+                str(tmp_path),
+                session_file=str(file),
+                persistent_session=persistent,
+            )
+        ]
+        assert third[-1].reason_code == "compaction_reopen_invalid"
+>       assert not called and not marker.exists()
+                   ^^^^^^
+E       NameError: name 'called' is not defined
+
+tests/test_native_session_reopen.py:236: NameError
+=========================== short test summary info ============================
+FAILED tests/test_native_session_reopen.py::test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt
+1 failed, 44 passed in 38.04s

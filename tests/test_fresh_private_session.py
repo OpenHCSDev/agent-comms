@@ -317,8 +317,12 @@ def _private_source() -> dict:
             "ownerPid": os.getpid(),
             "admissionGeneration": 2,
         },
-        "selected": {"provider": "openrouter", "modelId": "z-ai/glm-5.3-flash"},
-        "settings": {"keepRecentTokens": 2000},
+        "selected": {
+            "provider": "openrouter",
+            "modelId": "z-ai/glm-5.3-flash",
+            "contextWindow": 1000,
+        },
+        "settings": {"reserveTokens": 100, "keepRecentTokens": 2000},
     }
 
 
