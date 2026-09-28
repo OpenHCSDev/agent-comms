@@ -11,6 +11,7 @@ from acp.schema import AgentMessageChunk, TextContentBlock
 
 from . import agent_events as events
 from .activity import ActivityState
+from .compaction_journal import CompactionJournalError
 from .transcript_updates import StartedTranscriptUpdate
 
 if TYPE_CHECKING:
@@ -93,6 +94,8 @@ async def compact_context(
                     ),
                 )
             return result
+        except (ValueError, CompactionJournalError) as error:
+            return {"ok": False, "error": str(error)}
         finally:
             if started and not terminal_attempted:
                 with suppress(Exception, asyncio.CancelledError):

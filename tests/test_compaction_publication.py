@@ -12,13 +12,14 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms import compaction_publication
-from agent_comms.acp import CommsAgent
+from delivery_owner_fixture import canonical_agent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_publication import publish_pending_local
 from agent_comms.compaction_publication_lease import publication_identity_fence
-from agent_comms.compaction_states import CommittedOperation
+from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation
+from agent_comms.field_codec import FieldCodec
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_disposition import InputDispositions
 
@@ -36,7 +37,7 @@ def _publication_events(updates):
 @pytest.fixture
 def owner(tmp_path):
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
     session = tmp_path / "saved.jsonl"
     session.write_text("{}\n")
     journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
@@ -48,7 +49,7 @@ def owner(tmp_path):
     journal.resolve(
         commit_id,
         CommittedOperation(),
-        {"status": "committed", "entryId": "entry", "revision": "rev", "leafId": "leaf"},
+        FieldCodec.encode(CommittedNativeOutcome("entry", "rev", "leaf", "0" * 64)),
         publication=True,
     )
     return agent, comms, session, journal, commit_id

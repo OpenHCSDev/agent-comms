@@ -186,9 +186,10 @@ def test_explicitly_disabled_private_writer_refuses(tmp_path):
             )
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
+    before = comms.bus.log.path.read_bytes()
     disabled = Comms(comms.root, private_initial_writes=False)
     with pytest.raises(RelationViolationError, match="Private initial publication is disabled"):
         disabled.messaging.send_message("sender", "beta", "disabled writer")
     meta = json.loads((comms.root / "bus_meta.json").read_text())
     assert meta["wire_root_id"] == root_id and meta["last_seq"] == 0
-    assert not (comms.root / "bus.jsonl").exists()
+    assert comms.bus.log.path.read_bytes() == before

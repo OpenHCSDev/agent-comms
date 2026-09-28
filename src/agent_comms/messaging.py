@@ -14,7 +14,6 @@ from .registration import Registration
 
 if TYPE_CHECKING:
     pass
-from .channel_targets import BuiltinChannel
 from .envelope_claim_transitions import FileClaimPath
 from .errors import RelationViolationError, UnregisteredThreadError
 from .message_bus import MessageBus
@@ -135,10 +134,6 @@ class Messaging:
             return self.bus.log.message_by_id(receipt["id"])
         except (ValueError, KeyError, TypeError):
             return None
-
-    def broadcast(self, sender: str, body: str) -> str:
-        """Declare a message addressed to every peer."""
-        return self.send(sender, BuiltinChannel.ALL.value, body)
 
     def _user_identity_under_wire_lock(self, worktree: str) -> Thread:
         """Choose the durable USER identity while the caller holds the wire lock."""

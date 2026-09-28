@@ -18,6 +18,7 @@ from agent_comms.coordination_store import IdentityConflict, MutationStore, Stal
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.selected_tool_broker import (
     SelectedToolIntent,
     SelectedToolRequest,
@@ -51,18 +52,13 @@ def nominal_broker_stub(monkeypatch):
 
     def selected_tool_mode_for_owner(comms, store, admission, owner, session_dir, input_id):
         with store._read_transaction():
-            row = store._connection.execute(
-                "SELECT claim_id,owner_thread,owner_lookup,attempt_ordinal,stage,"
-                "sent_owner_admission_epoch "
-                "FROM native_runtime_inputs WHERE input_id=?",
-                (input_id,),
-            ).fetchone()
+            row = NativeRuntimeInput.one(store._connection, input_id=input_id)
         assert row is not None
-        assert row["claim_id"] == admission.wake_assignment_id
-        assert row["owner_thread"] == owner
-        assert row["owner_lookup"] == admission.recipient_lookup
-        assert row["attempt_ordinal"] == admission.attempt_ordinal == 1
-        assert row["stage"] == "full" and row["sent_owner_admission_epoch"] is None
+        assert row.assignment_id == admission.wake_assignment_id
+        assert row.owner_thread == owner
+        assert row.owner_lookup == admission.recipient_lookup
+        assert row.attempt_ordinal == admission.attempt_ordinal == 1
+        assert row.stage == "full" and row.sent_owner_admission_generation is None
         assert (
             comms.registry.snapshot().admission_generations[owner]
             == admission.owner_admission_generation
@@ -194,11 +190,8 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
         assert type(mode) is mode_type and callable(mode.action)
         result = await fake(*args, **kwargs)
         with MutationStore(str(root / "coordination.sqlite3")) as store:
-            row = store._connection.execute(
-                "SELECT sent_owner_admission_epoch FROM native_runtime_inputs WHERE input_id=?",
-                (kwargs["input_id"],),
-            ).fetchone()
-        assert row["sent_owner_admission_epoch"] == bound[0][0].owner_admission_generation
+            row = NativeRuntimeInput.one(store._connection, input_id=kwargs["input_id"])
+        assert row.sent_owner_admission_generation == bound[0][0].owner_admission_generation
         return result
 
     monkeypatch.setattr(runtime, "run_native_pi_turn", observed)

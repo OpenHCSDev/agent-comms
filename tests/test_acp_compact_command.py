@@ -188,7 +188,7 @@ async def test_current_root_compact_refuses_unjournaled_writer_for_every_launch_
     try:
         for command in ("pi", str(package / "dist/cli.js"), str(alias)):
             agent.turns.agent_bin = command
-            with pytest.raises(RequestError, match="requires the owner journal bridge"):
+            with pytest.raises(RequestError, match="requires the current selected native session"):
                 await build_agent_router(agent)(
                     "session/prompt",
                     {"sessionId": session, "prompt": [{"type": "text", "text": "/compact"}]},

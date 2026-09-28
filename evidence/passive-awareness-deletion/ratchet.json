@@ -1,0 +1,28 @@
+{
+  "base_revision": "5a4dd5051238c2d34738d8011b75797c6e036ec3",
+  "head_revision": "0502f28afd08e561ba09657a8c3de215d14bc3de",
+  "paths": [
+    "src/agent_comms/channel_management.py",
+    "src/agent_comms/input_drain.py",
+    "src/agent_comms/message_bus.py",
+    "src/agent_comms/owned_turn.py",
+    "src/agent_comms/passive_channel_awareness.py",
+    "src/agent_comms/private_bus_checkpoint.py",
+    "src/agent_comms/thread_management.py"
+  ],
+  "base": {
+    "TypeIdentity": 8,
+    "LongBooleanChain": 24,
+    "StringSubscript": 11
+  },
+  "head": {
+    "TypeIdentity": 5,
+    "LongBooleanChain": 19,
+    "StringSubscript": 11
+  },
+  "delta": {
+    "TypeIdentity": -3,
+    "LongBooleanChain": -5,
+    "StringSubscript": 0
+  }
+}

@@ -11,32 +11,14 @@ class BuiltinChannel(StrEnum):
     NONE = "#none"
     ALL = "#all"
 
-    @property
-    def aliases(self) -> tuple[str, ...]:
-        return ("broadcast",) if self is self.ALL else ()
-
-    @property
-    def names(self) -> frozenset[str]:
-        return frozenset((self.value, *self.aliases))
-
     @classmethod
     def lookup(cls, name: str) -> BuiltinChannel | None:
-        return next((channel for channel in cls if name in channel.names), None)
-
-    @classmethod
-    def canonical(cls, name: str) -> str:
-        channel = cls.lookup(name)
-        return channel.value if channel is not None else name
-
-    @classmethod
-    def is_alias(cls, name: str) -> bool:
-        channel = cls.lookup(name)
-        return channel is not None and name != channel.value
+        return next((channel for channel in cls if name == channel.value), None)
 
     @classmethod
     def exact_stored_target(cls, name: str) -> bool:
         channel = cls.lookup(name)
-        return channel is None or (not channel.aggregate and name == channel.value)
+        return channel is None or not channel.aggregate
 
     @classmethod
     def aggregate_target(cls, name: str) -> bool:
@@ -52,7 +34,7 @@ class BuiltinChannel(StrEnum):
 
     @property
     def history_targets(self) -> frozenset[str] | None:
-        return None if self.aggregate else self.names
+        return None if self.aggregate else frozenset((self.value,))
 
 
 _TAG_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")

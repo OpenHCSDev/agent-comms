@@ -24,13 +24,13 @@ from .image_inputs import ImageInput
 from .input_attempt import InputAttempt
 from .input_disposition import FutureInputQueue, InputDispositions
 from .input_effects import InputEffects
-from .passive_channel_awareness import PassiveChannelAwareness
 from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .selected_summary_admission import SelectedSummaryAdmission
 from .session_lifecycle import SessionLifecycle
 from .store_files import _store_lock, file_revision
 from .threads import Thread
+from .wake import derive_exact_reply_target
 from .wire_watch import open_wire_watcher
 
 AGENT_PREFIX = "!agent "
@@ -88,7 +88,6 @@ class InputDrain(FutureInputQueue):
         self.selected_summary_admissions: dict[str, SelectedSummaryAdmission] = {}
         self.turn_input_text: dict[str, str] = {}
         self.dispositions = InputDispositions(comms.root / InputDispositions.filename)
-        self.passive_awareness = PassiveChannelAwareness(comms.root)
         self.auto_wake = auto_wake
         self.pending_turns: dict[str, list[ScheduledTurn]] = {}
         self.drain_locks: dict[str, asyncio.Lock] = {}
@@ -397,7 +396,9 @@ class InputDrain(FutureInputQueue):
                             "\n\n".join(turn.prompt for turn in pending),
                             reply_targets=tuple(
                                 dict.fromkeys(
-                                    turn.reply_target for turn in pending if turn.reply_target
+                                    target
+                                    for turn in pending
+                                    if (target := derive_exact_reply_target(turn.origin))
                                 )
                             ),
                             origins=tuple(

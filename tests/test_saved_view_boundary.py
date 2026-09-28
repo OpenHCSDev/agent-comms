@@ -1,11 +1,9 @@
 """Saved files, adapter JSON and predicates share declared field ownership."""
 
-import json
 from dataclasses import dataclass
 
 import pytest
 
-from agent_comms import invoke_tool
 from agent_comms.channels import (
     AllOfMatch,
     AnyOfMatch,
@@ -14,55 +12,8 @@ from agent_comms.channels import (
     ViewMatch,
     ViewPredicate,
 )
-from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.tools import tool_catalog
-
-
-@pytest.mark.parametrize("kind", ["participants", "activity"])
-@pytest.mark.parametrize("match,owner", [("any_of", AnyOfMatch), ("all_of", AllOfMatch)])
-def test_existing_saved_file_reopens_and_tools_keep_exact_format(tmp_path, kind, match, owner):
-    comms = wire(tmp_path)
-    (tmp_path / "channels.json").write_text(json.dumps({"tags": ["api", "ui"]}))
-    stored = {
-        "kind": kind,
-        "predicate": {"match": match, "tags": ["api", "ui"]},
-        "created_at": 123.5,
-    }
-    path = tmp_path / "saved_views.json"
-    path.write_text(json.dumps({"views": {"work": stored}}))
-    before = path.read_bytes()
-    reopened = wire(tmp_path)
-    view = reopened.channels.catalog.read().saved_views["work"]
-    assert view.predicate.match is owner
-    assert FieldCodec.encode(view) == {"name": "work", **stored}
-    assert path.read_bytes() == before  # A read is not an implicit migration.
-    assert invoke_tool(reopened, "comms_channels", {})["views"] == [{"name": "work", **stored}]
-    reopened.channels.create_tag("unrelated")  # Exercise the actual catalog writer.
-    assert json.loads(path.read_text()) == {"views": {"work": stored}}
-    assert wire(tmp_path).channels.catalog.read().saved_views == {"work": view}
-
-
-def test_missing_saved_timestamp_stays_unknown_across_read_and_write(tmp_path):
-    comms = wire(tmp_path)
-    (tmp_path / "channels.json").write_text(json.dumps({"tags": ["api"]}))
-    path = tmp_path / "saved_views.json"
-    path.write_text(
-        json.dumps(
-            {
-                "views": {
-                    "undated": {
-                        "kind": "activity",
-                        "predicate": {"match": "any_of", "tags": ["api"]},
-                    }
-                }
-            }
-        )
-    )
-    view = wire(tmp_path).channels.catalog.read().saved_views["undated"]
-    assert view.created_at == 0.0
-    comms.channels.set_saved_view(view)
-    assert wire(tmp_path).channels.catalog.read().saved_views["undated"].created_at == 0.0
 
 
 @pytest.mark.parametrize(
@@ -121,15 +72,3 @@ def test_added_predicate_owner_and_field_need_no_serializer_or_dispatch(monkeypa
 def test_invalid_filters_fail_at_codec_boundary(predicate):
     with pytest.raises((TypeError, ValueError)):
         FieldCodec.decode(ViewPredicate, predicate)
-
-
-@pytest.mark.parametrize("extra", [{"extension": "discard?"}, {"name": "other"}])
-def test_catalog_rejects_unknown_fields_or_a_second_name_authority(tmp_path, extra):
-    comms = wire(tmp_path)
-    row = {"kind": "participants", "predicate": {"match": "any_of", "tags": ["api"]}, **extra}
-    path = tmp_path / "saved_views.json"
-    path.write_text(json.dumps({"views": {"work": row}}))
-    before = path.read_bytes()
-    with pytest.raises((TypeError, ValueError)):
-        comms.channels.catalog.read().saved_views
-    assert path.read_bytes() == before

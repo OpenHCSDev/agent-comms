@@ -268,6 +268,7 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("native_rpc_fixture")
 async def test_real_backend_fake_rpc_never_writes_prompt_after_pause(tmp_path: Path) -> None:
     import sys
 

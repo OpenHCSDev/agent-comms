@@ -23,7 +23,7 @@ from agent_comms.pi_commands import GetState
 from agent_comms.pi_events import Response
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.threads import Thread
-from test_manual_compaction import LoopbackProvider
+from compaction_loopback import LoopbackProvider
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("RETAINED_COMPACTION_SOURCE"), reason="Owned retained source opt-in"

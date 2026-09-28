@@ -253,7 +253,7 @@ def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> 
             after_seq=0,
             required_through_seq=messages[2].seq,
         )
-    with pytest.raises(RelationViolationError, match="malformed private bus receipt"):
+    with pytest.raises(RelationViolationError, match="Private bus checkpoint root/inode/size changed"):
         comms.bus.log.read_initial_cohort(root_id, messages[2].seq)
 
 
@@ -294,7 +294,7 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
             after_seq=0,
             required_through_seq=messages[2].seq,
         )
-    with pytest.raises(RelationViolationError, match="malformed private bus receipt"):
+    with pytest.raises(RelationViolationError, match="Private bus checkpoint root/inode/size changed"):
         comms.bus.log.read_initial_cohort(root_id, messages[2].seq)
 
 
@@ -361,7 +361,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
             after_seq=0,
             required_through_seq=messages[3].seq,
         )
-    with pytest.raises(RelationViolationError, match="malformed private bus receipt"):
+    with pytest.raises(RelationViolationError, match="Private bus checkpoint root/inode/size changed"):
         comms.bus.log.read_initial_cohort(root_id, messages[3].seq)
 
 

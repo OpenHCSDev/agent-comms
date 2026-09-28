@@ -107,7 +107,7 @@ class Message:
             for mention in self.mentions
         ):
             raise ValueError("Mention ranges must identify text in the message body.")
-        if not is_channel_target(self.target) and not BuiltinChannel.is_alias(self.target):
+        if not is_channel_target(self.target):
             # DM: a thread name; sending to yourself is not a conversation.
             if self.sender == self.target:
                 raise RelationViolationError(f"Thread {self.sender!r} cannot message itself.")

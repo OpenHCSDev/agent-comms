@@ -173,8 +173,6 @@ class OwnedTurn:
         self.runner.inputs.steering_input_keys.setdefault(self.session_id, {})
         self.runner.inputs.steering_goal_ids.setdefault(self.session_id, {})
 
-        self.passive_frame = ""
-        self.passive_sources: tuple[tuple[int, str, str], ...] = ()
         self.channel_batch = (
             len(self.origins) > 1
             and len({origin.seq for origin in self.origins}) == len(self.origins)
@@ -288,17 +286,6 @@ class OwnedTurn:
                     )
                     == keys[0]
                 )
-            if owner_ok and public_id is None and self.passive_frame:
-                assert current is not None
-                try:
-                    owner_ok = self.runner.inputs.passive_awareness.still_current(
-                        current,
-                        snapshot,
-                        self.runner.comms.channels.catalog.read().targets_for(current.tags),
-                        self.passive_sources,
-                    )
-                except (OSError, TypeError, ValueError):
-                    owner_ok = False  # No stale advisory frame crosses native start.
             # A newly activated goal may supersede a follow-up that has
             # not yet been sent. Owner revocation still ends the turn.
             defer_for_goal = (
@@ -580,41 +567,7 @@ class OwnedTurn:
         # Existing local ACP owner session only. If delivery is uncertain,
         # the keyed metadata remains pending; never invent a bus recipient.
         await self.runner.effects.publish_pending_compaction(self.session_id, self.thread_name)
-        # ACP delivery/ACK/UI updates above are not model context. This
-        # bounded projection is prepared ONLY inside an already authorized
-        # natural turn, from a separate owner-bound source cursor. It never
-        # advances that cursor or creates a wake, claim or native receipt.
-        with _store_lock(self.runner.comms._wire_lock_path):
-            self.snapshot = self.runner.comms.registry.snapshot()
-            self.current_thread = self.snapshot.threads.get(self.thread_name)
-            if (
-                self.current_thread is not None
-                and self.current_thread.created_at == self.thread.created_at
-                and self.snapshot.admission_generations.get(self.thread_name) == self.turn_admission
-                and self.current_thread.active_turn is not None
-                and self.current_thread.active_turn.id == self.turn_id
-            ):
-                try:
-                    self.passive_frame = self.runner.inputs.passive_awareness.frame(
-                        self.current_thread,
-                        self.snapshot,
-                        self.runner.comms.channels.catalog.read().targets_for(
-                            self.current_thread.tags
-                        ),
-                    )
-                    if self.passive_frame:
-                        self.passive_sources = self.runner.inputs.passive_awareness.sources(
-                            self.current_thread
-                        )
-                        if self.passive_sources:
-                            self.task += self.passive_frame
-                        else:
-                            self.passive_frame = ""
-                except (OSError, TypeError, ValueError):
-                    # Before native start, omit the optional projection;
-                    # the already-authorized owner task remains intact.
-                    self.passive_frame = ""
-                    self.passive_sources = ()
+        self.task += self.runner.comms.bus.awareness_prompt(self.thread)
         if (
             self.runner.adaptive_compaction_enabled
             and self.original_owner_input

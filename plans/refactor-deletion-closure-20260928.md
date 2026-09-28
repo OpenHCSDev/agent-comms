@@ -1,3 +1,55 @@
+## Deletion integration and deployment preparation — 2026-09-28
+
+Parent PR229 now includes c3e7252a: global routing alias/forwarder deletion,
+PR256 passive-awareness ledger retirement and PR257 MCP capability-claim deletion.
+Current canonical source pointers retain next-natural-turn channel awareness,
+including unmentioned observers after UI ACK, without a second cursor store.
+Stock manual writer and its exclusive callers/tests were deleted previously.
+
+- Global routing/callers: 85 local tests pass. Read-only serialized `to` audit of
+  146 current and 8,420 archived messages finds no old broadcast target needing
+  conversion. The first audit incorrectly checked `target`; corrected receipt
+  explicitly replaces that invalid check. Real agent named broadcast remains a DM.
+- Combined deletions: 14 tests pass, one native-package-dependent check skipped;
+  rerun with the prepared package passes all four channel-ownership tests.
+  This exercises actual turn preparation, not a completed model response.
+- Latest complete copied-root D22 atomic installation/reopen passes and removes
+  disposable copies. Original history, UNKNOWN, native sessions and read positions
+  remain preserved; live root has not been converted.
+- Native 302/604MB actual CLI/commit/reopen acceptance remains valid for unchanged
+  EntryStore mechanics. Darwin is preparing final package with257 producer removal.
+- Copernicus owns final paired107 integration of118/TL0A and119/T1 plus currentcore.
+  Nietzsche255 owns remaining current fixture/caller closure; Pascal254/117 TR0.
+- Parent owns final immutable runtime, merge, quiet conversion and activation.
+  User Toad894792 with ACP895195 is currently open; do not interrupt it. Prepare
+  everything before requesting its closure for the final data conversion.
+- Current live runtime remains stable main252. All four owners were checked idle
+  and send-admitted. This does not certify a new model response or final deployment.
+
+## Combined receiver and live recovery — 2026-09-28 19:12 UTC
+
+- Parent integrates243/244indexed-native history through current PiHelper,
+  232large acceptance, main252and248checkpoint861e32e. Old helper loader and256MiB
+  limits are deleted. Current receiver passes4focused native cases and real302/604MB
+  CLI/owner/journal/reopen chains, peak213.5/218MiB native RAM. No provider calls.
+- InstalledUXoldlimit_exceededrefusal was still blocking sends. Parent explicitly
+  retired that exact known prestart refusal with existing journalCAS after idle/
+  unattempted checks; originalUNKNOWNunchanged. Installed admission nowTrue.
+  PrivateSQLitebackup retained; no prompts/restarts/providercalls. Earlieralive-only
+  usability statement was too broad; send admission is now checked directly.
+- D22 installer checks assignedWritableAccess/ArchivedAccess, all convertedSQLite
+  rows, human read memberships and internal transcriptinode bindings. Latestactual
+  copied-root exchange passes138current+8420archivedmessages104threads13UNKNOWN.
+  Original301-filebackup retained during test; all owned copies then removed.
+- 248currentfixtureclosure integrated; two obsolete unread tests corrected/deleted.
+  Passive-awareness oldledgerconsumers are a concrete remaining L0finding assigned
+  Cicero withNietzsche caller/testcoordination; no oldcursorengine restoration.
+- Toad107combines114/T7+115/T8, currentinstalledUI+46savedsessions proofpassed;
+  Copernicus updatescorepinandowns118TL0AremainingMCP/callerclosure. DarwinT1 and
+  PascalTR0continueindependently. Full refactor not live yet; current stable252is.
+- Removed over600MiB of completed parentannotation/registry/native/unread test
+  copies. Retained sharedD22candidate whilepairedToadacceptancestillreferencesit.
+
 ## D22 operator integration — 2026-09-28 19:05 UTC
 
 253 compaction barrier conversion integrated; current journal retained instead of
