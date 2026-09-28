@@ -34,7 +34,7 @@ async def test_user_channel_wakes_members_and_returns_answers_without_feedback(
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         comms.send_user_message("#openhcs", "anyone receive this?", worktree=str(tmp_path))
         for name in ("first", "second"):
@@ -81,7 +81,7 @@ async def test_channel_requests_keep_their_reply_destinations(tmp_path, monkeypa
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         comms.send_user_message("#first", "first request", worktree=str(tmp_path))
         comms.send_user_message("#second", "second request", worktree=str(tmp_path))
@@ -108,7 +108,7 @@ async def test_human_channel_mention_wakes_only_named_member(tmp_path, monkeypat
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         comms.send_user_message("#team", "@beta please answer", worktree=str(tmp_path))
         for name in ("alpha", "beta"):
@@ -135,7 +135,7 @@ async def test_agent_channel_mention_wakes_only_named_member(tmp_path, monkeypat
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         comms.send("alpha", "#team", "@beta please investigate")
         for name in ("alpha", "beta"):

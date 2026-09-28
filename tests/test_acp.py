@@ -688,7 +688,7 @@ class TestAgentTurn:
             yield ae.AgentInfo(session_name="Agent-chosen title", model="test/model")
             yield ae.AgentInfo(session_name="Agent-chosen title", model="test/model")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
 
@@ -723,7 +723,7 @@ class TestAgentTurn:
             yield ae.AgentInfo(session_file=str(session_file), model="test/model")
             yield ae.StreamSettled()
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         wired.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path / "proj")))
@@ -753,7 +753,7 @@ class TestAgentTurn:
             wired.rename_self("renamed-proj")
             yield ae.ToolEnd(id="rename", ok=True, output="renamed", name="tool")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         await agent.turns.run_agent_turn("proj", "proj", "rename yourself")
@@ -784,7 +784,7 @@ class TestAgentTurn:
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text=message)
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.update_goal("proj", "set", text="Ship the release")
@@ -875,7 +875,7 @@ class TestAgentTurn:
             yield ae.StreamSettled()
             # EOF without done: never let the live drain retry an active goal.
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn("proj", "proj", "work")
         result = wired.registry.require("proj").goal
         assert result is not None
@@ -922,7 +922,7 @@ class TestAgentTurn:
                 yield ae.Error(text="busy")
                 await asyncio.Event().wait()
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn("proj", "proj", "A")
         assert "proj" not in agent.turns.emitted_errors
         seen_error.clear()
@@ -952,7 +952,7 @@ class TestAgentTurn:
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="did the work")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         agent.turns.agent_bin = "pi"
@@ -991,7 +991,7 @@ class TestAgentTurn:
             yield ae.AgentInfo(context_used=None, context_size=1000)
             yield ae.Done(ok=True, text="")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         original = wired.update_goal("proj", "set", text="Ship the release")
@@ -1026,7 +1026,7 @@ class TestAgentTurn:
             if outcome != "missing_done":
                 yield ae.Done(ok=outcome == "success", text="work")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         original_update = wired.update_goal
         original_block = wired.block_goal_after_failed_turn
         raced = False
@@ -1089,7 +1089,7 @@ class TestAgentTurn:
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text="backend unavailable")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         original_block = wired.block_goal_after_failed_turn
         superseding = None
 
@@ -1152,7 +1152,7 @@ class TestAgentTurn:
             if outcome == "failed":
                 yield ae.Done(ok=False, text="backend unavailable")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn("proj", "proj", "work")
         goal = wired.registry.require("proj").goal
         assert goal is not None and goal.id == initial.id
@@ -1190,7 +1190,7 @@ class TestAgentTurn:
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="reported")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn("proj", "proj", "Work toward the active goal")
         goal = wired.registry.require("proj").goal
         assert goal is not None and goal.id == initial.id
@@ -1229,7 +1229,7 @@ class TestAgentTurn:
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="done")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.turns.schedule_goal("proj")
         await asyncio.wait_for(agent.inputs.wake_tasks["proj"], timeout=2)
 
@@ -1271,7 +1271,7 @@ class TestAgentTurn:
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="Goal set")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn("proj", "proj", "Set a goal")
 
         goal = wired.registry.require("proj").goal
@@ -1319,7 +1319,7 @@ class TestAgentTurn:
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text="failed")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.turns.schedule_goal("proj")
         await asyncio.wait_for(agent.inputs.wake_tasks["proj"], timeout=2)
 
@@ -1350,7 +1350,7 @@ class TestAgentTurn:
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text="provider failed")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn("proj", "proj", "Set a goal")
 
         goal = wired.registry.require("proj").goal
@@ -1548,7 +1548,7 @@ class TestAgentTurn:
                 raise AssertionError("A claimed attempt must never launch again")
                 yield  # pragma: no cover
 
-            monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", forbidden_backend)
+            monkeypatch.setattr("agent_comms.backend.stream_agent_events", forbidden_backend)
             agent.turns.schedule_goal(name)
             assert not agent.inputs.pending_turns.get(name)
             await agent.turns.run_agent_turn(name, name, "continue", autonomous_goal=True)
@@ -1569,7 +1569,7 @@ class TestAgentTurn:
             raise AssertionError("An ungranted goal must not start Pi")
             yield  # pragma: no cover
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", forbidden_backend)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", forbidden_backend)
         with pytest.raises(RequestError):
             await agent.turns.run_agent_turn("proj", "proj", "continue")
         await agent.shutdown()
@@ -1594,7 +1594,7 @@ class TestAgentTurn:
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text="failed")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         first = asyncio.create_task(agent.turns.run_agent_turn("proj", "proj", "first"))
         await asyncio.wait_for(entered.wait(), timeout=2)
         with pytest.raises(RequestError):
@@ -1626,8 +1626,8 @@ class TestAgentTurn:
         def fail_usage(*args, **kwargs):
             raise StorageUncertain("fsync failed")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
-        monkeypatch.setattr("agent_comms.acp.backend.terminate_task_process", terminate)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.terminate_task_process", terminate)
         monkeypatch.setattr(agent.turns.goal_store, "record_provider_usage", fail_usage)
         with pytest.raises(StorageUncertain):
             await agent.turns.run_agent_turn("proj", "proj", "continue")
@@ -2128,7 +2128,7 @@ class TestFailureFeedback:
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text=message)
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         wired.register(
             Thread(name="peer", tags=frozenset({"team"}), worktree=str(tmp_path / "proj"))
@@ -2168,7 +2168,7 @@ class TestFailureFeedback:
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text="provider failed SECRET_PRIVATE_938")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn(
             "proj", "proj", "answer", reply_targets=(reply_target,), origins=(origin,)
         )
@@ -2201,7 +2201,7 @@ class TestFailureFeedback:
             yield ae.Chunk(text="unfinished secret answer")
             yield ae.StreamSettled()
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn(
             "proj", "proj", "answer", reply_targets=(human.name,), origins=(origin,)
         )
@@ -2229,7 +2229,7 @@ class TestFailureFeedback:
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="complete answer")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn(
             "proj", "proj", "answer", reply_targets=(human.name,), origins=(origin,)
         )
@@ -2260,7 +2260,7 @@ class TestFailureFeedback:
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="WorkingDone")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn(
             "proj", "proj", "answer", reply_targets=("#team",), origins=(origin,)
         )
@@ -2307,7 +2307,7 @@ class TestFailureFeedback:
             async for event in original(stub, [], args[2], args[3]):
                 yield event
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await asyncio.wait_for(
             agent.turns.run_agent_turn(
                 "proj", "proj", "answer", reply_targets=("#team",), origins=(origin,)
@@ -2333,7 +2333,7 @@ class TestFailureFeedback:
             yield ae.Chunk(text="unfinished")
             yield ae.Done(ok=False, text="failed")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn(
             "proj", "proj", "answer", reply_targets=(human.name, "#team"), origins=(origin,)
         )
@@ -2437,7 +2437,7 @@ class TestQueueControl:
             ran.append("turn")
             yield ae.StreamSettled()
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         wired.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path / "proj")))
         agent.inputs.backend_inboxes["proj"] = __import__("asyncio").Queue()

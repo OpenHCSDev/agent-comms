@@ -49,7 +49,7 @@ async def test_preflight_failure_keeps_its_reason_visible(tmp_path, monkeypatch)
             reason_code="pi_input_id_unavailable",
         )
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     agent.on_connect(Client())
     await agent.new_session(str(tmp_path / "project"))
     try:
@@ -121,7 +121,7 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="Goal set")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn("project", "project", "Set a goal")
         goal = comms.registry.require("project").goal
@@ -150,7 +150,7 @@ async def test_direct_cannot_launch_text_backend_without_native_start_proof(tmp_
         raise AssertionError("Text backend launched for a direct without native proof")
         yield {}
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", unexpected_backend)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", unexpected_backend)
     try:
         comms.send("peer", "project", "do not run unproved")
         assert await agent.inputs.drain_inbox("project") == 1
@@ -185,7 +185,7 @@ async def test_two_queued_directs_need_two_distinct_native_starts(tmp_path, monk
         yield ae.InputStarted(id=None)
         yield ae.Done(ok=True, text="done")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         InputDrain.schedule_wake(agent.inputs, "project")
         await asyncio.wait_for(agent.inputs.wake_tasks["project"], timeout=3)
@@ -225,7 +225,7 @@ async def test_ui_ack_does_not_hide_unknown_or_authorize_goal_superseded_direct(
             backend_calls.append(args)
             yield ae.Done(ok=False, text="not sent")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         pending = agent.inputs.pending_turns.pop("project")
         with pytest.raises(RequestError):
             await agent.turns.run_agent_turn(
@@ -260,7 +260,7 @@ async def test_project_change_after_queue_denies_stale_project_send(tmp_path, mo
             authorized.append(allowed)
         yield ae.Done(ok=False, text="not sent")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn(
             "project", "project", pending.prompt, origins=(pending.origin,)
@@ -343,7 +343,7 @@ async def test_stop_before_wake_leaves_direct_unknown_without_backend_send(tmp_p
         raise AssertionError("Stopped owner launched a backend")
         yield {}
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", unexpected_backend)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", unexpected_backend)
     try:
         InputDrain.schedule_wake(agent.inputs, "project")
         await asyncio.wait_for(agent.inputs.wake_tasks["project"], timeout=2)

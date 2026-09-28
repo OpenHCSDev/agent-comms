@@ -103,7 +103,7 @@ async def test_pending_metadata_projects_before_next_owner_input_send(owner, tmp
             assert allowed is True
         yield ae.Done(ok=False, text="No provider invoked")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     agent.on_connect(Client())
     try:
         await agent.inputs.run_owned_input("project", "project", "distinct new input")

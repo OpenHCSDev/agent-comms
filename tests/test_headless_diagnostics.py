@@ -68,7 +68,7 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
         )
 
     monkeypatch.setattr(comms, "send", publish)
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     await owner.turns.run_agent_turn(
         session, session, "Private input", origins=(incoming,), reply_targets=("#comms",)
     )

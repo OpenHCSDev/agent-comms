@@ -114,7 +114,7 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
         yield ae.StreamSettled()
         yield ae.Done(ok=change is None, text="No goal authority was used")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn(
             session,

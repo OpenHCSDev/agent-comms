@@ -515,7 +515,7 @@ async def test_acp_final_boundary_consumes_exact_ack_at_native_id_bind(tmp_path,
             observed.append(allowed)
         yield ae.Done(ok=False, text="Provider-free fake")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.inputs.run_owned_input("project", "project", "original fake input")
         assert observed == [True, False]

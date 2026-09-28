@@ -89,7 +89,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
         finally:
             active_backends -= 1
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     turn = asyncio.create_task(
         proxy.request("prompt", prompt=[{"type": "text", "text": "Current user request"}])

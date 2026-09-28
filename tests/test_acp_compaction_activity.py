@@ -45,7 +45,7 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
         assert comms.activity_of("project").state is ActivityState.IDLE
         yield ae.Done(ok=not aborted, text="Done")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn("project", "project", "Read these files")
         assert comms.activity_of("project").state is ActivityState.IDLE
@@ -65,7 +65,7 @@ async def test_compaction_eof_still_finishes_activity(tmp_path, monkeypatch):
         yield ae.CompactionStart(reason="threshold")
         assert comms.activity_of("project").detail == "Compacting context"
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn("project", "project", "Read files")
         assert comms.activity_of("project").state is ActivityState.IDLE

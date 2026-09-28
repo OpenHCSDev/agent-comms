@@ -108,7 +108,7 @@ async def test_owner_automatically_continues_same_session_in_new_project(tmp_pat
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.prompt(session, [{"type": "text", "text": "Change projects"}])
         agent.inputs.schedule_wake(session)
@@ -138,7 +138,7 @@ async def test_cancel_during_project_change_does_not_restart_work(tmp_path, monk
         await asyncio.sleep(60)
         yield ae.Done(ok=True, text="")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     prompt = asyncio.create_task(agent.prompt(session, [{"type": "text", "text": "switch"}]))
     try:
         await asyncio.wait_for(changed.wait(), timeout=2)

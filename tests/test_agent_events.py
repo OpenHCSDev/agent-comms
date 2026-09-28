@@ -94,7 +94,7 @@ async def test_new_activity_declaration_reaches_both_real_consumers(comms, tmp_p
         observed.append(comms.activity_of(owner.sessions.bindings[session.session_id]).detail)
         yield events.Done("done", True)
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", stream)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", stream)
     try:
         await owner.turns.run_agent_turn(
             session.session_id, owner.sessions.bindings[session.session_id], "task"

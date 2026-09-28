@@ -67,7 +67,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
                 diagnostic={"exit_code": 0},
             )
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", failed_events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
     try:
         await agent.turns.run_agent_turn("project", "project", "Continue", autonomous_goal=True)
         assert paused is not None

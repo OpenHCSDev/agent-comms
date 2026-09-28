@@ -340,7 +340,7 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
                 diagnostic={"exit_code": 0},
             )
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", failed_events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
     try:
         if outcome == "observation_rollback":
             with pytest.raises(StorageUncertain):

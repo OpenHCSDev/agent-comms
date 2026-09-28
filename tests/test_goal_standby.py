@@ -67,7 +67,7 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="Waiting" if len(calls) == 1 else "Received")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn("parent", "parent", "Delegate work", autonomous_goal=True)
         current = comms.registry.require("parent").goal

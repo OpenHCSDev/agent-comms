@@ -60,7 +60,7 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
             observed.append(allowed)
         yield ae.Done(ok=False, text="No provider send")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.inputs.run_owned_input("project", "project", "new correction")
         assert observed == [False]

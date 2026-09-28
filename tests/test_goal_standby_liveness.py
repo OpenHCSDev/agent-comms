@@ -397,7 +397,7 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
         raise OSError("injected optional direct-reply read failure")
 
     monkeypatch.setattr(agent, "_emit_event", capture_emit)
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     monkeypatch.setattr(comms.bus, "_history_page", unavailable)
     try:
         await agent.turns.run_agent_turn(child, child, "Finish work")
@@ -462,7 +462,7 @@ async def test_acp_delayed_old_callback_after_new_finish_before_reply(tmp_path, 
         yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr(agent, "_emit_event", delayed_emit)
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     old_task = asyncio.create_task(agent.turns.run_agent_turn(child, child, "Finish work"))
     try:
         await asyncio.wait_for(old_settled.wait(), 2)
@@ -508,7 +508,7 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
         assert comms.goal_wait("owner") is not None
         yield ae.Done(ok=True, text="Reported" if reply else "")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn(
             child, child, "Finish work", reply_targets=("owner",) if reply else ()

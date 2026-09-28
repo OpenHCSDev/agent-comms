@@ -74,7 +74,7 @@ async def test_original_and_busy_input_keep_distinct_routes(
         yield ae.StreamSettled()
         yield ae.Done(ok=terminal_ok, text="done")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn(
             "worker", "worker", ScheduledTurn.incoming(initial).prompt, origins=(initial,)

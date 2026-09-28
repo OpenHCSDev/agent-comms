@@ -116,7 +116,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="Goal set and work completed this turn.")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn(
             "project", "project", "Set a goal for model", initial_display_text="Set a goal as typed"
@@ -174,7 +174,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         yield ae.StreamSettled()
         yield ae.Done(ok=change is None, text="Finished reading this section.")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn(
             "project", "project", "Continue working toward the active goal.", autonomous_goal=True

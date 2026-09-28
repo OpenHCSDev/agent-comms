@@ -62,7 +62,7 @@ async def test_new_nondependency_direct_dm_interrupts_active_goal_without_attemp
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="Answer to outsider")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", fake_events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", fake_events)
     original_schedule = agent.inputs.schedule_wake
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
@@ -118,7 +118,7 @@ async def test_failed_direct_turn_leaves_goal_and_standby_wait_untouched(tmp_pat
         yield ae.StreamSettled()
         yield ae.Done(ok=False, text="Direct turn failed")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", failed_events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
     try:
         await agent.inputs.drain_owned_inbox(session)
         await asyncio.wait_for(agent.inputs.wake_tasks[session], timeout=3)
@@ -159,7 +159,7 @@ async def test_benign_wait_replacement_does_not_strand_queued_interrupt(tmp_path
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="Still answering")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         pending = agent.inputs.pending_turns.pop(session)[0]
         current_goal = comms.registry.require(session).goal
         # The dispatcher would rebind at dispatch; mirror that fresh capture
@@ -214,7 +214,7 @@ async def test_historical_unknown_is_not_replayed_and_dependency_path_is_distinc
             called.append(True)
             yield ae.Done(ok=True, text="unexpected")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", forbidden_events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", forbidden_events)
         await agent.turns.run_agent_turn(
             session,
             session,
@@ -258,7 +258,7 @@ async def test_new_owner_admission_refuses_old_direct_input_at_send_boundary(tmp
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text="not started")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", fake_events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", fake_events)
         await agent.turns.run_agent_turn(
             session,
             session,
@@ -346,7 +346,7 @@ async def test_queue_survives_progress_bump_and_rebinds_at_dispatch(tmp_path, mo
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="Answer after the bump")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         monkeypatch.setattr(agent.inputs, "schedule_wake", original_schedule)
         agent.inputs.schedule_wake(session)
         await asyncio.wait_for(agent.inputs.wake_tasks[session], timeout=3)
@@ -383,7 +383,7 @@ async def test_change_after_dispatch_denies_without_retry(tmp_path, monkeypatch,
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text="not started")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn(
             session,
             session,
@@ -425,7 +425,7 @@ async def test_goal_cleared_or_paused_drops_queued_interrupt_without_crash(
             called.append(True)
             yield ae.Done(ok=True, text="unexpected")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", forbidden_events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", forbidden_events)
         monkeypatch.setattr(agent.inputs, "schedule_wake", original_schedule)
         agent.inputs.schedule_wake(session)
         if agent.inputs.wake_tasks.get(session):

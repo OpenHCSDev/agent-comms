@@ -69,7 +69,7 @@ async def test_idle_owner_original_input_continues_active_goal(tmp_path, monkeyp
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="Read the requested file.")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.inputs.run_owned_input("project", "project", "testing steering")
         rows = disposition_rows(agent)
@@ -109,7 +109,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
         yield ae.Done(ok=False, text="Must not reach backend")
 
     monkeypatch.setattr(agent.inputs, "emit_input_disposition", activate_after_admission)
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         with pytest.raises(RequestError) as refused:
             await agent.inputs.run_owned_input("project", "project", "admitted before goal change")
@@ -141,7 +141,7 @@ async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monke
             boundaries.append(allowed)
         yield ae.Done(ok=False, text="Owner stopped before send")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.inputs.run_owned_input("project", "project", "do not send after stop")
         assert boundaries == [False]

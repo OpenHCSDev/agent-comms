@@ -39,7 +39,7 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
         raise AssertionError("Revoked UNKNOWN input must not launch a backend")
         yield {}
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", unexpected_backend)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", unexpected_backend)
     try:
         await agent.inputs.drain_inbox("worker")
         assert observed
@@ -120,7 +120,7 @@ async def test_channel_native_receipts_are_per_recipient_and_per_sequence(tmp_pa
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="Received")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         messages = [
             comms.send_user_message("#team", text, worktree=str(tmp_path))
@@ -243,7 +243,7 @@ async def test_channel_batch_never_credits_omitted_or_duplicate_sequences(
         assert not kwargs["native_start"](None, "a" * 32, text)
         yield ae.Done(ok=False, text="Refused malformed batch")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn("worker", "worker", prompt, origins=origins)
         rows = agent.inputs.dispositions.unknown(frozenset({"worker"}))

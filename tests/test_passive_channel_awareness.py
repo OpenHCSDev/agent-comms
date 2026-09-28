@@ -169,7 +169,7 @@ async def test_unmentioned_channel_notice_only_on_unrelated_natural_turn_and_aft
         comms.acknowledge(owner, "#comms")  # UI ACK cannot confer model delivery.
         assert comms.pending_count(owner, "#comms") == 0
         captured = []
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", _fake_events(captured))
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", _fake_events(captured))
         await agent.turns.run_agent_turn(owner, owner, "Unrelated authorized owner task")
         assert len(captured) == 1
         assert "Unrelated authorized owner task" in captured[0]
@@ -202,7 +202,7 @@ async def test_native_input_start_and_nominal_terminal_are_not_context_receipts(
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn(owner, owner, "First owner task")
         assert _cursor(comms, owner) == before
         await agent.turns.run_agent_turn(owner, owner, "Second owner task")
@@ -219,7 +219,7 @@ async def test_mentioned_recipient_not_passive_and_scope_loss_fails_closed(tmp_p
         original_cursor = _cursor(comms, owner)
         comms.send("speaker", "#comms", f"@{owner} explicitly mentioned")
         captured = []
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", _fake_events(captured))
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", _fake_events(captured))
         await agent.turns.run_agent_turn(owner, owner, "Owner-approved task")
         assert len(captured) == 1
         assert "passive channel awareness" not in captured[0]
@@ -299,7 +299,7 @@ async def test_tail_fairness_repeats_but_shows_newest_and_reports_omitted_range(
         for index in range(10):
             comms.send("speaker", "#comms", f"Passive number {index}")
         captured = []
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", _fake_events(captured))
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", _fake_events(captured))
         await agent.turns.run_agent_turn(owner, owner, "Independent natural turn")
         first = captured[-1]
         assert '"preview":"Passive number 9"' in first
@@ -344,7 +344,7 @@ async def test_uncertain_backend_failure_does_not_advance_advisory_cursor(tmp_pa
         comms.send("speaker", "#comms", "Urgent passive reminder")
         captured = []
         monkeypatch.setattr(
-            "agent_comms.acp.backend.stream_agent_events",
+            "agent_comms.backend.stream_agent_events",
             _fake_events(captured, abort=True),
         )
         with pytest.raises(RuntimeError, match="provider never gave"):
@@ -362,7 +362,7 @@ async def test_overwritten_source_and_owner_replacement_fail_closed_after_captur
     try:
         comms.send("speaker", "#comms", "ORIGINAL body")
         captured = []
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", _fake_events(captured))
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", _fake_events(captured))
         await agent.turns.run_agent_turn(owner, owner, "First natural turn")
         assert "ORIGINAL body" in captured[-1]
         bus = comms.root / "bus.jsonl"
@@ -410,7 +410,7 @@ async def test_send_boundary_rejects_stale_passive_frame_before_native_start(
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text="")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn(owner, owner, "Independently authorized task")
         assert "ORIGINAL context" in captured[0]
         assert permitted == [False]
@@ -426,7 +426,7 @@ async def test_scope_removed_then_restored_outside_api_still_invalidates_old_sou
     try:
         comms.send("speaker", "#comms", "old scoped update")
         captured = []
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", _fake_events(captured))
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", _fake_events(captured))
         await agent.turns.run_agent_turn(owner, owner, "Capture prior scope")
         assert "old scoped update" in captured[-1]
         saved = comms.registry.require(owner)
@@ -446,7 +446,7 @@ async def test_owner_rename_preserves_exact_incarnation_and_channel_scope(tmp_pa
     try:
         comms.send("speaker", "#comms", "Notice survives canonical rename")
         captured = []
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", _fake_events(captured))
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", _fake_events(captured))
         await agent.turns.run_agent_turn(owner, owner, "Prime known source")
         renamed = f"{owner}-renamed"
         comms.registry.rename(owner, renamed)
