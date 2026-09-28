@@ -1,0 +1,167 @@
+...s...............................FF.F.F..........F.F.................. [ 38%]
+........................................................................ [ 77%]
+..........................................                               [100%]
+=================================== FAILURES ===================================
+_ TestThreadRegistry.test_registering_saved_turn_never_attests_a_revoked_incarnation[stop] _
+
+self = <test_declarations.TestThreadRegistry object at 0x7fe28224dd50>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s5-identity-20260928/.artifacts/s5/identity-first/test_registering_saved_turn_ne0')
+revocation = 'stop'
+
+    @pytest.mark.parametrize("revocation", ["stop", "finish"])
+    def test_registering_saved_turn_never_attests_a_revoked_incarnation(
+        self, tmp_path: Path, revocation: str
+    ) -> None:
+        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+        owner, epoch = registry.live_owner_with_epoch("a")
+        claimed, claimed_epoch = registry.claim_live_turn_with_epoch(
+            owner, "claimed", expected_epoch=epoch
+        )
+        assert registry.live_owner_with_epoch("a") == (claimed, claimed_epoch)
+        if revocation == "stop":
+            registry.unregister("a")
+        else:
+            assert registry.finish_claimed_turn("a", "claimed")
+        registry.register(claimed)
+>       assert registry.require("a") == claimed
+E       AssertionError: assert Thread(name='..._turn_id=None) == Thread(name='..._turn_id=None)
+E         
+E         Omitting 19 identical items, use -vv to show
+E         Differing attributes:
+E         ['active_turn']
+E         
+E         Drill down into differing attribute active_turn:
+E           active_turn: ActiveTurn(id='claimed', owner_pid=2231807, started_at=1790556416.1679642, routing=None, admission_generation=1, turn_generation=1, owner_generation=None) != ActiveTurn(id='claimed', owner_pid=2231807, started_at=1790556416.1679642, routing=None, admission_generation=1, turn_generation=1, owner_generation=1)...
+E         
+E         ...Full output truncated (7 lines hidden), use '-vv' to show
+
+tests/test_declarations.py:372: AssertionError
+_ TestThreadRegistry.test_registering_saved_turn_never_attests_a_revoked_incarnation[finish] _
+
+self = <test_declarations.TestThreadRegistry object at 0x7fe282260e60>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s5-identity-20260928/.artifacts/s5/identity-first/test_registering_saved_turn_ne1')
+revocation = 'finish'
+
+    @pytest.mark.parametrize("revocation", ["stop", "finish"])
+    def test_registering_saved_turn_never_attests_a_revoked_incarnation(
+        self, tmp_path: Path, revocation: str
+    ) -> None:
+        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+        owner, epoch = registry.live_owner_with_epoch("a")
+        claimed, claimed_epoch = registry.claim_live_turn_with_epoch(
+            owner, "claimed", expected_epoch=epoch
+        )
+        assert registry.live_owner_with_epoch("a") == (claimed, claimed_epoch)
+        if revocation == "stop":
+            registry.unregister("a")
+        else:
+            assert registry.finish_claimed_turn("a", "claimed")
+        registry.register(claimed)
+>       assert registry.require("a") == claimed
+E       AssertionError: assert Thread(name='..._turn_id=None) == Thread(name='..._turn_id=None)
+E         
+E         Omitting 19 identical items, use -vv to show
+E         Differing attributes:
+E         ['active_turn']
+E         
+E         Drill down into differing attribute active_turn:
+E           active_turn: ActiveTurn(id='claimed', owner_pid=2231807, started_at=1790556416.2182102, routing=None, admission_generation=1, turn_generation=1, owner_generation=None) != ActiveTurn(id='claimed', owner_pid=2231807, started_at=1790556416.2182102, routing=None, admission_generation=1, turn_generation=1, owner_generation=1)...
+E         
+E         ...Full output truncated (7 lines hidden), use '-vv' to show
+
+tests/test_declarations.py:372: AssertionError
+_ TestThreadRegistry.test_begin_turn_migrates_unmarked_legacy_registry_without_reviving_stop _
+
+self = <test_declarations.TestThreadRegistry object at 0x7fe2822750f0>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s5-identity-20260928/.artifacts/s5/identity-first/test_begin_turn_migrates_unmar0')
+
+    def test_begin_turn_migrates_unmarked_legacy_registry_without_reviving_stop(
+        self, tmp_path: Path
+    ) -> None:
+        root = tmp_path / "legacy-wire"
+        comms = Comms(root)
+        comms.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+        registry_path = root / "registry.json"
+        data = json.loads(registry_path.read_text())
+        for field in ("owner_epochs", "owner_epoch_counter", "turn_epochs"):
+>           data.pop(field)
+E           KeyError: 'owner_epochs'
+
+tests/test_declarations.py:396: KeyError
+_ TestThreadRegistry.test_private_marker_does_not_bootstrap_stripped_owner_epoch _
+
+self = <test_declarations.TestThreadRegistry object at 0x7fe282421710>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s5-identity-20260928/.artifacts/s5/identity-first/test_private_marker_does_not_b0')
+
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
+    def test_private_marker_does_not_bootstrap_stripped_owner_epoch(self, tmp_path: Path) -> None:
+        root = tmp_path / "private-wire"
+        root.mkdir(mode=0o700)
+        comms = Comms(root, private_initial_writes=True)
+        comms.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+        comms.initialize_private_initial_protocol()
+        registry_path = root / "registry.json"
+        data = json.loads(registry_path.read_text())
+        for field in ("owner_epochs", "owner_epoch_counter", "turn_epochs"):
+>           data.pop(field)
+E           KeyError: 'owner_epochs'
+
+tests/test_declarations.py:423: KeyError
+_ TestThreadRegistry.test_private_guard_rejects_disk_downgrade_even_with_cached_revision[strip_epochs] _
+
+self = <test_declarations.TestThreadRegistry object at 0x7fe28240b850>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s5-identity-20260928/.artifacts/s5/identity-first/test_private_guard_rejects_dis3')
+damage = 'strip_epochs'
+
+    @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
+    @pytest.mark.parametrize("damage", ["missing", "corrupt", "truncated", "strip_epochs"])
+    def test_private_guard_rejects_disk_downgrade_even_with_cached_revision(
+        self, tmp_path: Path, damage: str
+    ) -> None:
+        root = tmp_path / "guarded"
+        comms = Comms(root, private_initial_writes=True)
+        comms.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+        comms.initialize_private_initial_protocol()
+        cold = ThreadRegistry(root / "registry.json")
+        assert cold.require("a").name == "a"
+        guard = root / ".registry-owner-guard"
+        if damage == "missing":
+            guard.unlink()
+        elif damage == "corrupt":
+            raw = bytearray(guard.read_bytes())
+            raw[0] ^= 1
+            guard.write_bytes(raw)
+        elif damage == "truncated":
+            guard.write_bytes(guard.read_bytes()[:-1])
+        else:
+            path = root / "registry.json"
+            data = json.loads(path.read_text())
+>           data.pop("owner_epochs")
+E           KeyError: 'owner_epochs'
+
+tests/test_declarations.py:583: KeyError
+_ TestThreadRegistry.test_missing_or_malformed_private_epoch_metadata_refuses_turn _
+
+self = <test_declarations.TestThreadRegistry object at 0x7fe282425850>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s5-identity-20260928/.artifacts/s5/identity-first/test_missing_or_malformed_priv0')
+
+    def test_missing_or_malformed_private_epoch_metadata_refuses_turn(self, tmp_path: Path):
+        path = tmp_path / "registry.json"
+        registry = ThreadRegistry(path)
+        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
+        owner, epoch = registry.live_owner_with_epoch("a")
+        data = json.loads(path.read_text())
+>       data.pop("owner_epochs")
+E       KeyError: 'owner_epochs'
+
+tests/test_declarations.py:611: KeyError
+=========================== short test summary info ============================
+FAILED tests/test_declarations.py::TestThreadRegistry::test_registering_saved_turn_never_attests_a_revoked_incarnation[stop]
+FAILED tests/test_declarations.py::TestThreadRegistry::test_registering_saved_turn_never_attests_a_revoked_incarnation[finish]
+FAILED tests/test_declarations.py::TestThreadRegistry::test_begin_turn_migrates_unmarked_legacy_registry_without_reviving_stop
+FAILED tests/test_declarations.py::TestThreadRegistry::test_private_marker_does_not_bootstrap_stripped_owner_epoch
+FAILED tests/test_declarations.py::TestThreadRegistry::test_private_guard_rejects_disk_downgrade_even_with_cached_revision[strip_epochs]
+FAILED tests/test_declarations.py::TestThreadRegistry::test_missing_or_malformed_private_epoch_metadata_refuses_turn
+6 failed, 179 passed, 1 skipped in 16.85s
