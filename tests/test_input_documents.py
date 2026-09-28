@@ -48,7 +48,7 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
                 "turn_id": "turn",
                 "native_id": "a" * 32,
                 "sent_text": "Exact sent text",
-                "status": "unknown",
+                "kind": "bound_unknown",
                 "notice_dismissed": True,
                 "goal_reviews": {"goal": {"goal_revision": 7, "turn_id": "review"}},
             }
@@ -152,8 +152,8 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
 )
 def test_incomplete_sent_evidence_is_rejected_without_overwriting_history(tmp_path, sent):
     store = InputDispositions(tmp_path / InputDispositions.filename)
-    row = ReservedInput("acp:x", None, "owner", 1, "owner", "text").stored_record()
-    row.update(sent)
+    row = FieldCodec.encode(ReservedInput("acp:x", None, "owner", 1, "owner", "text"))
+    row.update(kind="bound_unknown", **sent)
     saved = json.dumps(dict(version=1, rows={"acp:x": row}))
     store.path.write_text(saved)
     with pytest.raises(ValueError):
@@ -169,3 +169,75 @@ def test_invalid_bind_keeps_durable_reservation_intact(tmp_path, native_id):
     with pytest.raises(ValueError, match="native input"):
         store.bind("acp:x", admission=1, turn_id="turn", native_id=native_id, text="sent")
     assert store.path.read_bytes() == before
+
+
+def test_current_schema_rejects_nullable_prior_format_without_rewriting(tmp_path):
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    reserved = ReservedInput("acp:x", None, "owner", 1, "owner", "preserve at cutover")
+    prior = {
+        **FieldCodec.encode(reserved),
+        "status": "unknown",
+        "turn_id": None,
+        "native_id": None,
+        "sent_text": None,
+    }
+    del prior["kind"]
+    store.path.write_text(json.dumps(dict(version=1, rows={reserved.key: prior})))
+    before = store.path.read_bytes()
+    with pytest.raises(ValueError):
+        store.read()
+    assert store.path.read_bytes() == before
+
+
+def test_current_reservation_wire_has_only_declared_fields(tmp_path):
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store.record("acp:x", seq=None, owner="owner", admission=1, target="owner", text="retained")
+    record = json.loads(store.path.read_text())["rows"]["acp:x"]
+    assert record["kind"] == "reserved"
+    assert not {"status", "native_id", "turn_id", "sent_text"}.intersection(record)
+    assert store.finish_unbound("acp:x")
+    record = json.loads(store.path.read_text())["rows"]["acp:x"]
+    assert record["kind"] == "not_sent"
+    assert not {"native_id", "turn_id", "sent_text"}.intersection(record)
+
+
+@pytest.mark.parametrize(
+    "mismatch", [None, "owner", "admission", "turn", "sent", "original", "target", "bus"]
+)
+def test_only_exact_started_input_proves_original(mismatch):
+    from agent_comms.text_digest import TextDigest
+
+    from agent_comms.thread_identity import ThreadIncarnation, TurnId
+
+    reserved = ReservedInput("acp:x", None, "owner", 1, "owner", "original")
+    bound = reserved.bind(admission=1, turn_id="turn", native_id="a" * 32, text="wrapped input")
+    started = bound.started(turn_id="turn", native_id="a" * 32, text="wrapped input")
+    proof = dict(
+        owner=ThreadIncarnation("owner", 1.0),
+        admission=1,
+        turn=TurnId("turn"),
+        sent_digest=TextDigest.of("wrapped input"),
+        original_digest=TextDigest.of("original"),
+    )
+    for state in (MissingInput(), reserved, bound, reserved.finish_unbound()):
+        assert not state.proves_started(**proof)
+    assert reserved.digest == TextDigest.of("original")
+    assert bound.sent_digest == TextDigest.of("wrapped input")
+    assert reserved.queued_for(proof["owner"], 1, "original")
+    assert not reserved.queued_for(proof["owner"], 1, "different")
+    assert not bound.queued_for(proof["owner"], 1, "original")
+    if mismatch == "owner":
+        proof["owner"] = ThreadIncarnation("other", 1.0)
+    elif mismatch == "admission":
+        proof["admission"] = 2
+    elif mismatch == "turn":
+        proof["turn"] = TurnId("different")
+    elif mismatch == "sent":
+        proof["sent_digest"] = TextDigest.of("different wrapper")
+    elif mismatch == "original":
+        proof["original_digest"] = TextDigest.of("different original")
+    elif mismatch == "target":
+        started = replace(started, target="#channel")
+    elif mismatch == "bus":
+        started = replace(started, key="bus:1", sequence=1)
+    assert started.proves_started(**proof) is (mismatch is None)
