@@ -1,6 +1,6 @@
 """Opt-in, append-writer-maintained private bus prefix certificate.
 
-The JSONL bus remains authoritative. Only the canonical private MessageBus writer may
+The JSONL bus remains authoritative. Only the canonical private WireLog writer may
 advance this certificate, after bus and directory fsync under the bus lock. The
 fsynced bus marker independently seals the SQLite inode revision and certificate;
 SQL index contents are never trusted on bus revision alone. A pending writer
