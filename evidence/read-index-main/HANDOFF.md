@@ -30,8 +30,18 @@ no durable migration/converter. Existing main read-ledger format is preserved.
 Evidence:18 focused unread/A13-guard checks pass in2.85s. Actual143,686,055-byte
 agent-comms-ux native history returns2486 replies over138 bounded calls: max78ms,
 aggregate5.34s, reopen0.49ms. Executor cancellation/join17ms, clean interpreter
-exit. Main installed archive UI probe underway using currentmainToadcc2d35 and
+exit. Main installed archive UI probe PASSES using currentmainToadcc2d35 and
 Textual16ede fromruntime-watcher-20260928, isolated core wheel installation.
 The probe copies current main's actual root to its owned stage (excluding socket
 files), and rebinds copied checkpoint/attachment inode certificates only. That
 probe-only rebinding is not an activation/cutover requirement. Source untouched.
+
+
+Installed wheel acceptance: #comms8, agent-comms-ux2 and
+pr95-selected-pi-summary-owner0 render; messages0; watcher/child joined; final
+interpreter completion marker and exit0. No timeout increase, paid provider or
+live writes. Initial copy failed on live sockets; probe excludes socket files
+and retains that setup-failure log. Current main history format is used directly,
+without D22/229 conversion. Required local R0 vs51cbfd0 passes: zero increases in
+all three measures. Scoped Ruff and diff-check pass. Ready for main integration;
+parent can ship alongside Copernicus's separate pending-feedback Toad PR.
