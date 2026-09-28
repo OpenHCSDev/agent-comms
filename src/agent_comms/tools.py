@@ -150,7 +150,7 @@ def _bounded_inbox_response(
         "complete": False,
         "ackDeferred": ack,
         "counts": {"messages": len(messages), "unresolved_inputs": len(unresolved)},
-        "result_file": str(result_file),
+        "result_file": result_file,
         "instruction": (
             "The messages and unresolved_inputs arrays are omitted, not empty. The file is "
             "a complete public result snapshot, not current authority. Read it selectively "
@@ -665,7 +665,7 @@ class CommsInboxTool(ToolRequest):
         if bool(goal_id) != bool(wait_for):
             raise ValueError("Provide goal_id and wait_for together for standby review.")
         review = (
-            comms.goals.goal_input_review(thread, str(goal_id), wait_for)
+            comms.goals.goal_input_review(thread, goal_id, wait_for)
             if goal_id and wait_for
             else None
         )
@@ -828,7 +828,7 @@ class CommsAckTool(ToolRequest):
     def apply(self, comms: Comms) -> JsonObject:
         target = self.target
         acknowledged = comms.messaging.acknowledge(
-            self.thread, str(target) if target is not None else None
+            self.thread, target
         )
         return {"acknowledged": acknowledged}
 

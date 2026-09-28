@@ -11,6 +11,7 @@ from pathlib import Path
 
 from agent_comms.child_process import AttachedChild
 from agent_comms.comms import wire
+from agent_comms.native_package import verify_native_package
 from agent_comms.threads import Thread
 
 TREE = Path(__file__).resolve().parents[2]
@@ -18,6 +19,7 @@ PACKAGE = TREE / "stack/.pi-native-5fdef596596173bd/node_modules/@earendil-works
 
 
 async def main():
+    verify_native_package(PACKAGE)
     requests = []
 
     class Handler(BaseHTTPRequestHandler):
