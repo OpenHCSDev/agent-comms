@@ -21,11 +21,12 @@ from pathlib import Path
 import pytest
 
 from agent_comms.compaction_journal import CompactionJournalError, CompactionJournalUnknownError
-from agent_comms.declarations import Goal, RelationViolationError, Thread, ThreadRegistry
+from agent_comms.declarations import Goal, RelationViolationError, Thread
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import Comms
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_process import CompactionTransportUnknownError
+from agent_comms.registration import Registration
 from agent_comms.session_fence import SessionWriterBusyError, session_writer_fence
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
@@ -54,7 +55,7 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
         timeout=5,
     )
     witness = json.loads(result.stdout)
-    registry = ThreadRegistry(tmp_path / "registry.json")
+    registry = Registration(tmp_path / "registry.json")
     owner = Thread(
         "owner",
         frozenset(),
@@ -64,8 +65,10 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
         goal=Goal("task", "goal"),
     )
     registry.register(owner)
-    owner, epoch = registry.live_owner_with_epoch("owner")
-    owner, epoch = registry.claim_live_turn_with_epoch(owner, "turn", expected_epoch=epoch)
+    owner, epoch = registry.live_owner_with_generation("owner")
+    owner, epoch = registry.claim_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=epoch
+    )
     bridge = OwnerCompactionCommit(tmp_path / "registry.json", Path(PACKAGE))
     # Capture once BEFORE each test's summary/invalidations, never at commit.
     source = bridge.capture_source(owner, epoch, witness)
@@ -181,8 +184,9 @@ def test_metadata_digest_preserves_unicode_paths_and_binary_costs(native):
     assert operation.status == "committed"
     row = entries(witness)[-1]
     assert row["details"]["readFiles"] == ["src/⚙️-𝄞.py"]
-    assert row["details"]["agentCommsCommit"]["metadataDigest"] == (
-        json.loads(operation.intent_json)["metadataDigest"]
+    assert (
+        row["details"]["agentCommsCommit"]["metadataDigest"]
+        == (json.loads(operation.intent_json)["metadataDigest"])
     )
 
 
@@ -294,8 +298,9 @@ def test_native_metadata_reconcile_refuses_changed_persisted_entry(native, alter
     assert operation.status == "unknown"
     bridge._call = original
     rows = entries(witness)
-    assert rows[-1]["details"]["agentCommsCommit"]["metadataDigest"] == (
-        json.loads(operation.intent_json)["metadataDigest"]
+    assert (
+        rows[-1]["details"]["agentCommsCommit"]["metadataDigest"]
+        == (json.loads(operation.intent_json)["metadataDigest"])
     )
     if alter == "details":
         rows[-1]["details"]["readFiles"] = ["src/other.py"]
@@ -512,7 +517,8 @@ def test_competing_writer_waits_through_real_native_commit(native, monkeypatch, 
 import fcntl,sys
 from pathlib import Path
 from dataclasses import replace
-from agent_comms.declarations import ThreadRegistry, Goal, Message, MessageBus, MessageType
+from agent_comms.declarations import Goal, Message, MessageBus, MessageType
+from agent_comms.registration import Registration
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import Comms
 root = Path(sys.argv[1])
@@ -530,7 +536,7 @@ if mutation == 'input':
     InputDispositions(root).record('acp:late',seq=None,owner='owner',
         admission=int(sys.argv[3]),target='owner',text='late correction')
 else:
-    registry = ThreadRegistry(root / 'registry.json')
+    registry = Registration(root / 'registry.json')
     if mutation == 'stop':
         registry.unregister('owner')
     elif mutation == 'heartbeat':
@@ -718,8 +724,9 @@ bridge = OwnerCompactionCommit(Path(sys.argv[1]), Path(sys.argv[2]))
 owner = bridge.registry.snapshot().threads['owner']
 bridge.registry.unregister('owner')
 bridge.registry.register(replace(owner,pid=os.getpid(),active_turn=None))
-owner,epoch = bridge.registry.live_owner_with_epoch('owner')
-owner,epoch = bridge.registry.claim_live_turn_with_epoch(owner,'crash-turn',expected_epoch=epoch)
+owner,epoch = bridge.registry.live_owner_with_generation('owner')
+owner,epoch = bridge.registry.claim_live_turn_with_generation(
+    owner,'crash-turn',expected_owner_generation=epoch)
 call = bridge._call
 def lose_result(*args):
     result = call(*args)
@@ -759,11 +766,11 @@ bridge.commit(owner,epoch,witness,'crash summary',42,source=source)
         # the stopped owner's request and no reuse of its epoch or receipt.
         bridge.registry.unregister("owner")
         bridge.registry.register(replace(owner, active_turn=None))
-        recovered, epoch = bridge.registry.live_owner_with_epoch("owner")
-        recovered, epoch = bridge.registry.claim_live_turn_with_epoch(
+        recovered, epoch = bridge.registry.live_owner_with_generation("owner")
+        recovered, epoch = bridge.registry.claim_live_turn_with_generation(
             recovered,
             "recovery-turn",
-            expected_epoch=epoch,
+            expected_owner_generation=epoch,
         )
         result = bridge.reconcile(recovered, epoch, pending[0].commit_id)
         assert result.status == "committed"
@@ -833,8 +840,9 @@ bridge.helper = Path(sys.argv[4])  # Test-only in-memory JS method barrier.
 owner = bridge.registry.snapshot().threads['owner']
 bridge.registry.unregister('owner')
 bridge.registry.register(replace(owner,pid=os.getpid(),active_turn=None))
-owner,epoch = bridge.registry.live_owner_with_epoch('owner')
-owner,epoch = bridge.registry.claim_live_turn_with_epoch(owner,'crash',expected_epoch=epoch)
+owner,epoch = bridge.registry.live_owner_with_generation('owner')
+owner,epoch = bridge.registry.claim_live_turn_with_generation(
+    owner,'crash',expected_owner_generation=epoch)
 witness = json.loads(sys.argv[3])
 source = bridge.capture_source(owner,epoch,witness)
 bridge.commit(owner,epoch,witness,'post-parent-crash summary',42,source=source,
@@ -880,7 +888,7 @@ bridge.commit(owner,epoch,witness,'post-parent-crash summary',42,source=source,
                 """
 import fcntl,sys
 from pathlib import Path
-from agent_comms.declarations import ThreadRegistry
+from agent_comms.registration import Registration
 root = Path(sys.argv[1])
 with (root / '.registry.json.lock').open('ab') as lock:
     try:
@@ -904,7 +912,7 @@ try:
 except SessionWriterBusyError:
     pass
 print('still-fenced',flush=True)
-ThreadRegistry(root / 'registry.json').unregister('owner')
+Registration(root / 'registry.json').unregister('owner')
 print('stopped-after-native',flush=True)
 """,
                 str(tmp_path),
@@ -935,11 +943,11 @@ print('stopped-after-native',flush=True)
             assert Path(witness["sessionFile"]).read_bytes() == before
         assert bridge.journal.get(pending[0].commit_id).status == "intent"
         bridge.registry.register(replace(owner, active_turn=None))
-        recovered, epoch = bridge.registry.live_owner_with_epoch("owner")
-        recovered, epoch = bridge.registry.claim_live_turn_with_epoch(
+        recovered, epoch = bridge.registry.live_owner_with_generation("owner")
+        recovered, epoch = bridge.registry.claim_live_turn_with_generation(
             recovered,
             "recovery",
-            expected_epoch=epoch,
+            expected_owner_generation=epoch,
         )
         result = bridge.reconcile(recovered, epoch, pending[0].commit_id)
         assert result.status == ("committed" if release_native else "aborted-no-write")

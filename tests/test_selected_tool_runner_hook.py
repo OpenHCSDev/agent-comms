@@ -14,7 +14,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordinated_runtime import SelectedExistingFileWrite
 from agent_comms.coordination_store import IdentityConflict, MutationStore, StaleFence
-from agent_comms.declarations import RelationViolationError, _store_lock
+from agent_comms.declarations import RelationViolationError
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.operations import Comms
 from agent_comms.selected_tool_broker import SelectedToolIntent, SelectedToolRequest
@@ -286,10 +286,9 @@ async def test_selected_full_failure_never_reissues_or_forges_response(
         if failure == "stale_epoch":
             # Disposable-only simulated admission revocation, not a live
             # stop/restart or destructive registry state transition.
-            with _store_lock(comms.registry._path):
-                comms.registry._load_unlocked()
-                comms.registry._bump_admission_unlocked("beta")
-                comms.registry._save_unlocked()
+            with comms.registry.store.editing() as edit:
+                edit.document.admissions.advance("beta")
+                edit.commit()
         return result
 
     monkeypatch.setattr(runtime, "run_native_pi_turn", failed)

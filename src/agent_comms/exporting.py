@@ -17,9 +17,10 @@ from typing import BinaryIO, ClassVar
 
 from .bus_publication import reject_private_wire_fields
 from .channels import ChannelCatalog
-from .declarations import BuiltinChannel, Message, RelationViolationError, ThreadRegistry
+from .declarations import BuiltinChannel, Message, RelationViolationError
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from .registration import Registration
 
 
 class WireExportFormat(DeclaredFamily, affix="Format"):
@@ -102,13 +103,13 @@ class WireExportScope(DeclaredFamily, affix="Scope"):
         return FieldCodec.encode(self)
 
     @abstractmethod
-    def resolve(self, catalog: ChannelCatalog, registry: ThreadRegistry) -> ResolvedExportScope:
+    def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
         """Capture canonical names and a predicate without mutating read state."""
 
 
 @dataclass(frozen=True, slots=True)
 class EverythingScope(WireExportScope):
-    def resolve(self, catalog: ChannelCatalog, registry: ThreadRegistry) -> ResolvedExportScope:
+    def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
         return ResolvedExportScope(self, lambda message: True)
 
 
@@ -125,7 +126,7 @@ class ChannelScope(WireExportScope):
                 f"{self.channel} is an aggregate projection, not an exportable conversation."
             )
 
-    def resolve(self, catalog: ChannelCatalog, registry: ThreadRegistry) -> ResolvedExportScope:
+    def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
         if catalog.is_view_target(self.channel):
             raise RelationViolationError(
                 f"Saved view {self.channel!r} has no authoritative wire history."
@@ -151,7 +152,7 @@ class DmScope(WireExportScope):
         ):
             raise ValueError("A DM wire-export scope requires two distinct participants.")
 
-    def resolve(self, catalog: ChannelCatalog, registry: ThreadRegistry) -> ResolvedExportScope:
+    def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
         first = registry.require(self.participants[0]).name
         second = registry.require(self.participants[1]).name
         canonical = DmScope((first, second))

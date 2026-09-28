@@ -13,23 +13,22 @@ from .declarations import (
     SavedView,
     Tag,
     Thread,
-    ThreadRegistry,
     ThreadSort,
     ViewPredicate,
     _atomic_write_text,
     _store_lock,
     file_revision,
 )
+from .registration import Registration
 
 
 class ChannelCatalog:
-
     def restore_missing(self, source: "ChannelCatalog") -> tuple[str, ...]:
         """Restore catalog metadata while preserving target preferences.
 
-This copies declarations and presentation only. It never republishes a
-message, starts a recipient, or changes a thread's subscriptions.
-"""
+        This copies declarations and presentation only. It never republishes a
+        message, starts a recipient, or changes a thread's subscriptions.
+        """
         if source.path.resolve() == self.path.resolve():
             raise ValueError("Catalog restoration requires distinct stores")
         source_tags, source_named = source.read()
@@ -43,8 +42,7 @@ message, starts a recipient, or changes a thread's subscriptions.
             missing = {
                 name: channel
                 for name, channel in source_views.items()
-                if name not in self._created_at
-                and (channel.builtin is None or not had_catalog)
+                if name not in self._created_at and (channel.builtin is None or not had_catalog)
             }
             parents = dict(self._parents)
             parents.update(
@@ -78,7 +76,7 @@ message, starts a recipient, or changes a thread's subscriptions.
             self.write(source_tags | tags, source_named | named)
             return tuple(missing)
 
-    def __init__(self, path: Path, registry: ThreadRegistry):
+    def __init__(self, path: Path, registry: Registration):
         self.path = path
         # Long-lived executors may still write the older catalog schema during
         # a UI-only rollout. Keep new preferences in a catalog-owned sidecar so

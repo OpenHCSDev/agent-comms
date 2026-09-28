@@ -143,9 +143,9 @@ def _selected_claim_boundary(
     with (
         _store_lock(comms._wire_lock_path),
         _store_lock(bus._path),
-        _store_lock(comms.registry._path),
+        _store_lock(comms.registry.store.path),
     ):
-        registry = comms.registry._snapshot_unlocked()
+        registry = comms.registry.store._read_unlocked().snapshot()
         canonical = registry.aliases.get(owner_name, owner_name)
         owner = registry.threads.get(canonical)
         status = registry.statuses.get(canonical)
@@ -373,9 +373,9 @@ def write_selected_claimed_file(
     with (
         _store_lock(comms._wire_lock_path),
         _store_lock(bus._path),
-        _store_lock(comms.registry._path),
+        _store_lock(comms.registry.store.path),
     ):
-        registry = comms.registry._snapshot_unlocked()
+        registry = comms.registry.store._read_unlocked().snapshot()
         canonical = registry.aliases.get(owner_name, owner_name)
         owner = registry.threads.get(canonical)
         status = registry.statuses.get(canonical)

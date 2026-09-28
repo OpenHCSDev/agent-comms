@@ -14,13 +14,7 @@ from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.backend import PersistentPiSession
-from agent_comms.declarations import (
-    AgentRuntimeInfo,
-    Goal,
-    RelationViolationError,
-    Thread,
-    ThreadRegistry,
-)
+from agent_comms.declarations import AgentRuntimeInfo, Goal, RelationViolationError, Thread
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import wire
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
@@ -31,6 +25,7 @@ from agent_comms.owner_compaction_provider import (
     summarize_native,
 )
 from agent_comms.owner_compaction_settings import PiCompactionDecision, PiSettingsEvidenceError
+from agent_comms.registration import Registration
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(
@@ -64,7 +59,7 @@ console.log(manager.getSessionFile());
     agent_dir = tmp_path / "private-pi-agent"
     agent_dir.mkdir()
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(agent_dir))
-    registry = ThreadRegistry(tmp_path / "registry.json")
+    registry = Registration(tmp_path / "registry.json")
     registry.register(
         Thread(
             "owner",
@@ -76,8 +71,10 @@ console.log(manager.getSessionFile());
             model="openrouter/fixture",
         )
     )
-    owner, epoch = registry.live_owner_with_epoch("owner")
-    owner, epoch = registry.claim_live_turn_with_epoch(owner, "turn", expected_epoch=epoch)
+    owner, epoch = registry.live_owner_with_generation("owner")
+    owner, epoch = registry.claim_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=epoch
+    )
     assert owner.active_turn is not None
     InputDispositions(tmp_path).record(
         "acp:original",
