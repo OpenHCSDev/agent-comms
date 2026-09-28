@@ -1,0 +1,306 @@
+{
+  "timing": {
+    "parse_seconds": 2.369,
+    "analysis_seconds": 28.43,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 0.102,
+    "analysis_cache_status": "miss",
+    "total_seconds": 30.901
+  },
+  "supporting_raw_finding_count": 3,
+  "supporting_raw_findings": [
+    {
+      "pattern_id": 1,
+      "title": "`CurrentExecutions.references:return` mirrors `DeclaredFamily`",
+      "why": "The collection literal at /home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination.py:681 repeats AttemptRecord, AttemptRecord, ExecutionRecord, NativeOutcome, NativePreparationResult, Participants from the `DeclaredFamily` semantic authority. A later class, enum member, or schema field can diverge from this hand-maintained view.",
+      "capability_gap": "derived class-family registry or polymorphic dispatch",
+      "relation_context": "collection_literal has semantic overlap ('attempt', 'attempt_record', 'execution', 'execution_record', 'participants', 'status') with class_family `DeclaredFamily`; collection literal `CurrentExecutions.references:return` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "confidence": "high",
+      "certification": "certified",
+      "capability_tags": [
+        "nominal_identity",
+        "provenance",
+        "enumeration",
+        "authoritative_mapping"
+      ],
+      "observation_tags": [
+        "class_family",
+        "manual_synchronization",
+        "projection_dict"
+      ],
+      "detector_id": "semantic_mirror_without_descent",
+      "summary": "`CurrentExecutions.references:return` mirrors 6 member(s) of `DeclaredFamily` without a descent path",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination.py",
+          "line": 681,
+          "symbol": "CurrentExecutions.references:return"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/declared_family.py",
+          "line": 86,
+          "symbol": "DeclaredFamily"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination.py",
+          "line": 1123,
+          "symbol": "AttemptRecord"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/goal_attempts.py",
+          "line": 104,
+          "symbol": "AttemptRecord"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination.py",
+          "line": 730,
+          "symbol": "ExecutionRecord"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/compaction_states.py",
+          "line": 303,
+          "symbol": "NativeOutcome"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/owner_compaction_prepare.py",
+          "line": 49,
+          "symbol": "NativePreparationResult"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination.py",
+          "line": 2419,
+          "symbol": "Participants"
+        }
+      ],
+      "projection_evidence": {
+        "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination.py",
+        "line": 681,
+        "symbol": "CurrentExecutions.references:return"
+      },
+      "authority_evidence": {
+        "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/declared_family.py",
+        "line": 86,
+        "symbol": "DeclaredFamily"
+      },
+      "compression_certificate": null,
+      "metrics": {
+        "registration_site_count": 6,
+        "registry_name": "CurrentExecutions.references:return",
+        "class_names": [
+          "AttemptRecord",
+          "AttemptRecord",
+          "ExecutionRecord",
+          "NativeOutcome",
+          "NativePreparationResult",
+          "Participants"
+        ],
+        "class_key_pairs": [
+          "AttemptRecord='AttemptRecord'",
+          "AttemptRecord='AttemptRecord'",
+          "ExecutionRecord='ExecutionRecord'",
+          "NativeOutcome='status'",
+          "NativePreparationResult='status'",
+          "Participants='Participants'"
+        ]
+      },
+      "stable_id": "cf0ee285c0",
+      "evidence_ids": [
+        "a72dadf292",
+        "36041d7ba9",
+        "56861784fd",
+        "d42f985ef3",
+        "8be2449c6f",
+        "80b4492352",
+        "d452c3ac4f",
+        "d6d834f30d"
+      ]
+    },
+    {
+      "pattern_id": 1,
+      "title": "`AttemptRecord.references:return` mirrors `DeclaredFamily`",
+      "why": "The collection literal at /home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination.py:1281 repeats ExecutionRecord, NativeOutcome, NativePreparationResult, Participants from the `DeclaredFamily` semantic authority. A later class, enum member, or schema field can diverge from this hand-maintained view.",
+      "capability_gap": "derived class-family registry or polymorphic dispatch",
+      "relation_context": "collection_literal has semantic overlap ('execution', 'execution_record', 'participants', 'status') with class_family `DeclaredFamily`; collection literal `AttemptRecord.references:return` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "confidence": "high",
+      "certification": "certified",
+      "capability_tags": [
+        "nominal_identity",
+        "provenance",
+        "enumeration",
+        "authoritative_mapping"
+      ],
+      "observation_tags": [
+        "class_family",
+        "manual_synchronization",
+        "projection_dict"
+      ],
+      "detector_id": "semantic_mirror_without_descent",
+      "summary": "`AttemptRecord.references:return` mirrors 4 member(s) of `DeclaredFamily` without a descent path",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination.py",
+          "line": 1281,
+          "symbol": "AttemptRecord.references:return"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/declared_family.py",
+          "line": 86,
+          "symbol": "DeclaredFamily"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination.py",
+          "line": 730,
+          "symbol": "ExecutionRecord"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/compaction_states.py",
+          "line": 303,
+          "symbol": "NativeOutcome"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/owner_compaction_prepare.py",
+          "line": 49,
+          "symbol": "NativePreparationResult"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination.py",
+          "line": 2419,
+          "symbol": "Participants"
+        }
+      ],
+      "projection_evidence": {
+        "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination.py",
+        "line": 1281,
+        "symbol": "AttemptRecord.references:return"
+      },
+      "authority_evidence": {
+        "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/declared_family.py",
+        "line": 86,
+        "symbol": "DeclaredFamily"
+      },
+      "compression_certificate": null,
+      "metrics": {
+        "registration_site_count": 4,
+        "registry_name": "AttemptRecord.references:return",
+        "class_names": [
+          "ExecutionRecord",
+          "NativeOutcome",
+          "NativePreparationResult",
+          "Participants"
+        ],
+        "class_key_pairs": [
+          "ExecutionRecord='ExecutionRecord'",
+          "NativeOutcome='status'",
+          "NativePreparationResult='status'",
+          "Participants='Participants'"
+        ]
+      },
+      "stable_id": "db9c3cdf44",
+      "evidence_ids": [
+        "807a85a4a6",
+        "36041d7ba9",
+        "8be2449c6f",
+        "80b4492352",
+        "d452c3ac4f",
+        "d6d834f30d"
+      ]
+    },
+    {
+      "pattern_id": 1,
+      "title": "`_terminal_replay:if` mirrors `TypedRow`",
+      "why": "The branch literal at /home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination_response.py:479 repeats AttemptRecord, AttemptRecord, PublicationReceipt from the `TypedRow` semantic authority. A later class, enum member, or schema field can diverge from this hand-maintained view.",
+      "capability_gap": "derived class-family registry or polymorphic dispatch",
+      "relation_context": "branch_literal has semantic overlap ('attempt', 'publication_receipt') with class_family `TypedRow`; branch literal `_terminal_replay:if` repeats members from class_family `TypedRow`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "confidence": "high",
+      "certification": "certified",
+      "capability_tags": [
+        "nominal_identity",
+        "provenance",
+        "enumeration",
+        "authoritative_mapping"
+      ],
+      "observation_tags": [
+        "class_family",
+        "manual_synchronization",
+        "projection_dict"
+      ],
+      "detector_id": "semantic_mirror_without_descent",
+      "summary": "`_terminal_replay:if` mirrors 3 member(s) of `TypedRow` without a descent path",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination_response.py",
+          "line": 479,
+          "symbol": "_terminal_replay:if"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/typed_table.py",
+          "line": 272,
+          "symbol": "TypedRow"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination.py",
+          "line": 1123,
+          "symbol": "AttemptRecord"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/goal_attempts.py",
+          "line": 104,
+          "symbol": "AttemptRecord"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination.py",
+          "line": 2032,
+          "symbol": "PublicationReceipt"
+        }
+      ],
+      "projection_evidence": {
+        "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/coordination_response.py",
+        "line": 479,
+        "symbol": "_terminal_replay:if"
+      },
+      "authority_evidence": {
+        "file_path": "/home/ts/wt/comms-coordination-owners-20260928/src/agent_comms/typed_table.py",
+        "line": 272,
+        "symbol": "TypedRow"
+      },
+      "compression_certificate": null,
+      "metrics": {
+        "registration_site_count": 3,
+        "registry_name": "_terminal_replay:if",
+        "class_names": [
+          "AttemptRecord",
+          "AttemptRecord",
+          "PublicationReceipt"
+        ],
+        "class_key_pairs": [
+          "AttemptRecord='AttemptRecord'",
+          "AttemptRecord='AttemptRecord'",
+          "PublicationReceipt='PublicationReceipt'"
+        ]
+      },
+      "stable_id": "1649273888",
+      "evidence_ids": [
+        "108e296dd5",
+        "d5c22972ff",
+        "56861784fd",
+        "d42f985ef3",
+        "b51d3a80df"
+      ]
+    }
+  ],
+  "scope": "Coordinator owners with complete src/agent_comms dependency context; default detector scan, no patterns excluded. This CLI payload exposes no scan_status or detector omission inventory.",
+  "synthesis_statuses": [
+    {
+      "finding_id": "cf0ee285c0",
+      "status": "rejected_by_safety_check"
+    },
+    {
+      "finding_id": "db9c3cdf44",
+      "status": "rejected_by_safety_check"
+    },
+    {
+      "finding_id": "1649273888",
+      "status": "rejected_by_safety_check"
+    }
+  ]
+}

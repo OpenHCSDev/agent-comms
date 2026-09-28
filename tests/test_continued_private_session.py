@@ -131,8 +131,8 @@ def test_continued_private_uncertain_or_mismatched_history_never_reserves(contin
 def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
     from agent_comms.assignment_states import TriagePendingAssignment
     from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-    from agent_comms.coordination import MessageAudience, WakeAssignment
     from agent_comms.coordination_store import MutationStore
+    from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
     from agent_comms.native_runtime_input import NativeRuntimeInput
 
     journal, session, inputs, source = continued

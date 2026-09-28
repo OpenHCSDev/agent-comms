@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import FieldCodec
 import hashlib
 import json
 import os
@@ -12,9 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.owner_lifecycle import OwnerLifecycle
-from agent_comms.coordination import CoordinationStore, canonical_publication_key
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_tables.publications import canonical_publication_key
+from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageType
+from agent_comms.owner_lifecycle import OwnerLifecycle
 from agent_comms.recovery_projection import (
     AvailableRecoveryProjection,
     UnavailableRecoveryProjection,

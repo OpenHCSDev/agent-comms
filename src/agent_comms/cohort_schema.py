@@ -8,13 +8,12 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import Literal
 
-from .coordination import (
-    COORDINATION_SCHEMA_VERSION,
-    Participants,
-    PrivateRuntimeSchema,
-    SchemaVersionError,
-    WakeAssignment,
-)
+from agent_comms.coordination_errors import SchemaVersionError
+from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
+from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordination_tables.participants import Participants
+from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+
 from .coordination_store import MutationStore
 from .typed_table import (
     Column,

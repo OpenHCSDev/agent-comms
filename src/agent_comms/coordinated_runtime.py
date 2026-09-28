@@ -24,6 +24,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.owner_fence import OwnerFence
+
 from .activity import ActivityState
 from .assignment_states import (
     AssignmentState,
@@ -38,7 +42,6 @@ from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination import ExecutionOrigin, OwnerFence, WakeAssignment
 from .coordination_cohort import accept_initial_cohort, next_sealed_assignment
 from .coordination_response import (
     LiveResponseOwner,

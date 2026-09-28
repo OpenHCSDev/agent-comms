@@ -152,7 +152,10 @@ class HistoryViews:
         import sqlite3
         from contextlib import closing
 
-        from .coordination import COORDINATION_SCHEMA_VERSION, CurrentExecutions, WakeAssignment
+        from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
+        from agent_comms.coordination_tables.assignments import WakeAssignment
+        from agent_comms.coordination_tables.executions import CurrentExecutions
+
         from .native_runtime_input import NativeRuntimeInput
         from .recovery_projection import _preflight
 

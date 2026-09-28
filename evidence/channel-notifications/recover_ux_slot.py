@@ -2,9 +2,10 @@
 import json
 from dataclasses import asdict
 from pathlib import Path
+
 from agent_comms.comms import wire
-from agent_comms.coordination import ReplayFact
 from agent_comms.coordination_store import MutationStore, RecoveryMonitorCapability
+from agent_comms.coordination_tables.attempts import ReplayFact
 
 HERE=Path(__file__).resolve().parent
 name='agent-comms-ux'

@@ -10,9 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from agent_comms.coordination_tables.assignments import MessageAudience
+
 from .audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
 from .channel_targets import is_channel_target
-from .coordination import MessageAudience
 from .messages import Message
 from .wake_policy import BoundedTriageWake, FullWake, PassiveWake, WakePolicy
 
