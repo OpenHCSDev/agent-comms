@@ -274,13 +274,13 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
 
 @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
 @pytest.mark.parametrize(
-    "correction,future_queued",
-    [(False, False), (True, False), (False, True)],
-    ids=["unchanged", "correction", "future-queued"],
+    "correction,future_queued,queue_revoked",
+    [(False, False, False), (True, False, False), (False, True, False), (False, True, True)],
+    ids=["unchanged", "correction", "future-queued", "queue-revoked"],
 )
 @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
 async def test_acp_selected_summary_handoff_uses_final_prompt_once(
-    tmp_path, monkeypatch, correction, future_queued, clean_decline, private_session
+    tmp_path, monkeypatch, correction, future_queued, queue_revoked, clean_decline, private_session
 ):
     original_key = "acp:original-proj" if private_session else "acp:original"
     from dataclasses import replace
@@ -387,6 +387,9 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 queued_keys.append(key)
                 row = dispositions.read().lookup(key)
                 assert row.accepts_reservation and not row.has_native_binding
+                if queue_revoked:
+                    await agent.inputs.clear_queued_inputs("proj")
+                    assert dispositions.read().lookup(key) == row
             result = await selected_exchange(self, *args, **kwargs)
             summary_ids.append(result.operation_id)
             if correction:
@@ -422,6 +425,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
 
         monkeypatch.setattr(NativePiRpcLaunch, "managed", offline_launch)
         try:
+            before = Path(file).read_bytes()
             turn = agent.turns.run_agent_turn(
                 "proj",
                 "proj",
@@ -430,6 +434,20 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 original_owner_input=True,
                 original_goal_id="goal-acp",
             )
+            if queue_revoked:
+                with pytest.raises(RelationViolationError, match="Unsettled"):
+                    await turn
+                assert summary_ids == []
+                assert not CompactionJournal(
+                    root / "compaction-commits.sqlite3"
+                ).selected_summaries(file)
+                assert Path(file).read_bytes() == before
+                assert not (tmp_path / "provider-requests.json").exists()
+                for key in (original_key, *queued_keys):
+                    row = dispositions.read().lookup(key)
+                    assert row.exists and not row.has_native_binding and not row.has_started
+                assert "proj" not in agent.inputs.selected_summary_admissions
+                return
             if correction:
                 with pytest.raises(RelationViolationError, match="Unsettled"):
                     await turn
