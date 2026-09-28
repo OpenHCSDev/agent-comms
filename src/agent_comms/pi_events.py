@@ -751,3 +751,16 @@ class ToolExecutionUpdate(PiEvent):
 
     def observe_abort(self, session: TurnSession) -> None:
         session.tool_ever_started = True
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentCommsCompactionProgress(PiEvent):
+    """Actual selected compaction progress, scoped to exactly one RPC attempt."""
+
+    id: str
+    operation_id: str = field(metadata={"wire_name": "operationId"})
+    sequence: int
+
+    def __post_init__(self):
+        if type(self.sequence) is not int or self.sequence < 1:
+            raise ValueError("Positive selected compaction progress sequence required")

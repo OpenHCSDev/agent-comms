@@ -25,8 +25,7 @@ def main(path: Path) -> None:
     source = raw.decode()
     source = replace_once(source,
         'import { prepareCompaction } from "../../core/compaction/index.js";',
-        'import { compact, prepareCompaction, serializeConversation, shouldCompact } from "../../core/compaction/index.js";\n'
-        'import { convertToLlm } from "../../core/messages.js";\n'
+        'import { compact, prepareCompaction, shouldCompact } from "../../core/compaction/index.js";\n'
         'import { AssistantMessageEventStream } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js";')
     helper = Path(__file__).with_name("native-compaction-selected-summary.mjs").read_text()
     source = replace_once(source, "export async function runRpcMode(runtimeHost) {", helper + "\nexport async function runRpcMode(runtimeHost) {")
@@ -62,11 +61,11 @@ def main(path: Path) -> None:
                     return success(id, command.type, acSummaryDecline(command.operationId, admission.denial));
                 const selectedSession = session;
                 const slot = { operationId: command.operationId, controller: new AbortController(),
-                    started: false, timedOut: false, done: null };
+                    started: false, done: null };
                 acSummarySlot = slot;
                 acSpentSummaryIds.add(command.operationId);
                 slot.done = acExecuteSummary(slot, selectedSession, command,
-                    admission.preparation, admission.binding).finally(() => {
+                    admission.preparation, admission.binding, output).finally(() => {
                     if (acSummarySlot === slot) acSummarySlot = null;
                 });
                 return success(id, command.type, await slot.done);

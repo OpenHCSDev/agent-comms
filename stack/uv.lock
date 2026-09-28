@@ -2,6 +2,9 @@ version = 1
 revision = 3
 requires-python = ">=3.14"
 
+[manifest]
+overrides = [{ name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=b407c18c888872228ef0d4b2a2d6a80f4a40ef0d" }]
+
 [[package]]
 name = "agent-client-protocol"
 version = "0.12.1"
@@ -17,7 +20,7 @@ wheels = [
 [[package]]
 name = "agent-comms"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/agent-comms.git?rev=ab98c1993013d659fb7cdf8d4c941225cb7cf5f9#ab98c1993013d659fb7cdf8d4c941225cb7cf5f9" }
+source = { git = "https://github.com/OpenHCSDev/agent-comms.git?rev=b407c18c888872228ef0d4b2a2d6a80f4a40ef0d#b407c18c888872228ef0d4b2a2d6a80f4a40ef0d" }
 dependencies = [
     { name = "metaclass-registry" },
 ]
@@ -39,9 +42,9 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=ab98c1993013d659fb7cdf8d4c941225cb7cf5f9" },
-    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=7a279b0880a58c1b7e76a84b67eb028b6c758d56" },
-    { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=6ac3cdd919b1bfb3333091c9ac94df6c114d9fa9" },
+    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=b407c18c888872228ef0d4b2a2d6a80f4a40ef0d" },
+    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=43e57c91e9643cfab053630e1d5aaadd12cffad9" },
+    { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=16ede007c34bec893b2dbedb3999223381129678" },
 ]
 
 [[package]]
@@ -187,7 +190,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?rev=7a279b0880a58c1b7e76a84b67eb028b6c758d56#7a279b0880a58c1b7e76a84b67eb028b6c758d56" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?rev=43e57c91e9643cfab053630e1d5aaadd12cffad9#43e57c91e9643cfab053630e1d5aaadd12cffad9" }
 dependencies = [
     { name = "agent-comms", extra = ["acp"] },
     { name = "aiosqlite" },
@@ -811,7 +814,7 @@ wheels = [
 [[package]]
 name = "textual"
 version = "8.2.8"
-source = { git = "https://github.com/OpenHCSDev/textual.git?rev=6ac3cdd919b1bfb3333091c9ac94df6c114d9fa9#6ac3cdd919b1bfb3333091c9ac94df6c114d9fa9" }
+source = { git = "https://github.com/OpenHCSDev/textual.git?rev=16ede007c34bec893b2dbedb3999223381129678#16ede007c34bec893b2dbedb3999223381129678" }
 dependencies = [
     { name = "markdown-it-py", extra = ["linkify"] },
     { name = "mdit-py-plugins" },

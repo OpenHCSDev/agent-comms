@@ -26,7 +26,7 @@ function acMetadataDetails(details) {
     if (keys.length === 0) return null;
     if (keys.join(",") !== "modifiedFiles,readFiles" ||
         [details.readFiles, details.modifiedFiles].some(paths =>
-            !Array.isArray(paths) || paths.length > 256 || paths.some(path =>
+            !Array.isArray(paths) || paths.some(path =>
                 typeof path !== "string" || !path || !path.isWellFormed() ||
                 Buffer.byteLength(path, "utf8") > 4096 || path.includes("\0"))))
         throw new Error("Invalid native compaction metadata details");
