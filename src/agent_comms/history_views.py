@@ -861,21 +861,23 @@ class HistoryViews:
             threads = self._thread_views_for(
                 registry, show_stopped=show_stopped, show_archived=show_archived
             )
-            return CoordinationSnapshot(
+            snapshot = CoordinationSnapshot(
                 threads,
                 channels,
                 self.bus.pending_counts(captured_viewer),
                 self.last_sent_timestamps(),
                 display_unread,
                 order,
-                self.transcript_reads.counts(
-                    captured_viewer,
-                    {view.thread.name: view.thread.session_file or "" for view in threads},
-                ),
                 show_stopped=show_stopped,
                 show_archived=show_archived,
                 read_marker_notice=notice,
             )
+        # Native file IO never holds the display/bus snapshot locks.
+        unread = self.transcript_reads.counts(
+            captured_viewer,
+            {view.thread.name: view.thread.session_file or "" for view in threads},
+        )
+        return replace(snapshot, thread_unread=unread.counts, thread_unread_pending=unread.pending)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
         """Acknowledge only the native transcript boundary actually displayed."""

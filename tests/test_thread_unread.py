@@ -69,10 +69,10 @@ def test_new_process_uses_reply_index_without_reparsing_history(tmp_path):
     fresh = TranscriptReadState(comms.views.transcript_reads.path)
     sources = {"worker": str(source)}
     with patch.object(NativeEntry, "read", wraps=NativeEntry.read) as parse:
-        assert fresh.counts(str(tmp_path), sources)["worker"] == 100
+        assert fresh.counts(str(tmp_path), sources).counts["worker"] == 100
         assert parse.call_count == 0
         append(source)
-        assert fresh.counts(str(tmp_path), sources)["worker"] == 101
+        assert fresh.counts(str(tmp_path), sources).counts["worker"] == 101
         assert parse.call_count == 1
 
 
@@ -85,11 +85,16 @@ def test_many_threads_do_not_reparse_saved_histories_on_attach(tmp_path):
             append(source)
         sources[f"thread-{number}"] = str(source)
     first = TranscriptReadState(comms.views.transcript_reads.path)
-    assert set(first.counts("viewer", sources).values()) == {20}
+    for _ in range(20):
+        observed = first.counts("viewer", sources)
+        if not observed.pending:
+            break
+    assert not observed.pending
+    assert set(observed.counts.values()) == {20}
     first.close()
     fresh = TranscriptReadState(comms.views.transcript_reads.path)
     with patch.object(NativeEntry, "read", wraps=NativeEntry.read) as parse:
-        assert set(fresh.counts("viewer", sources).values()) == {20}
+        assert set(fresh.counts("viewer", sources).counts.values()) == {20}
         assert parse.call_count == 0
 
 
@@ -102,7 +107,7 @@ def test_reply_index_rebuilds_after_source_replacement(tmp_path):
     append(replacement)
     replacement.replace(source)
     fresh = TranscriptReadState(comms.views.transcript_reads.path)
-    assert fresh.counts(str(tmp_path), {"worker": str(source)}) == {"worker": 1}
+    assert fresh.counts(str(tmp_path), {"worker": str(source)}).counts == {"worker": 1}
 
 
 def test_corrupt_derived_index_rebuilds_from_transcript(tmp_path):
@@ -113,7 +118,7 @@ def test_corrupt_derived_index_rebuilds_from_transcript(tmp_path):
     comms.views.transcript_reads.close()
     index.write_bytes(b"damaged cache")
     fresh = TranscriptReadState(comms.views.transcript_reads.path)
-    assert fresh.counts(str(tmp_path), {"worker": str(source)}) == {"worker": 1}
+    assert fresh.counts(str(tmp_path), {"worker": str(source)}).counts == {"worker": 1}
 
 
 def test_open_views_share_one_incremental_index_without_sharing_markers(tmp_path):
@@ -183,3 +188,107 @@ def test_old_or_invalid_checkpoint_does_not_acknowledge_new_source(tmp_path):
             through=TranscriptCursor(str(other), other.stat().st_size + 1),
         )
     assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread["worker"] == 1
+
+
+def test_bounded_batches_resume_after_process_exit_and_preserve_read_cursor(tmp_path):
+    source = tmp_path / "large.jsonl"
+    for _ in range(1200):
+        append(source)
+    path = tmp_path / "read_ledger.json"
+    first = TranscriptReadState(path)
+    first.mark_read("viewer", str(source), source.stat().st_size)
+    sources = {"worker": str(source)}
+    partial = first.counts("viewer", sources)
+    assert partial.pending == {"worker"}
+    assert "worker" not in partial.counts  # No exact zero while the count is unknown.
+    first.close()
+    fresh = TranscriptReadState(path)
+    for _ in range(10):
+        observed = fresh.counts("viewer", sources)
+        if not observed.pending:
+            break
+    assert not observed.pending
+    assert observed.counts == {"worker": 0}
+    append(source)
+    assert fresh.counts("viewer", sources).counts == {"worker": 1}
+    fresh.close()
+
+
+def test_large_first_source_does_not_starve_other_sources(tmp_path):
+    sources = {}
+    for number in range(8):
+        source = tmp_path / f"large-{number}.jsonl"
+        for _ in range(600):
+            append(source)
+        sources[str(number)] = str(source)
+    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    completed = set()
+    for _ in range(40):
+        observed = state.counts("viewer", sources)
+        completed.update(observed.counts)
+        if not observed.pending:
+            break
+    assert completed == set(sources)
+    assert not observed.pending
+    assert set(observed.counts.values()) == {600}
+    state.close()
+
+
+def test_close_cancels_executor_without_scanning_rest_of_native_file(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from time import monotonic
+
+    source = tmp_path / "large.jsonl"
+    for _ in range(5000):
+        append(source, content="real native record " * 100)
+    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    started = monotonic()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        task = executor.submit(state.counts, "viewer", {"worker": str(source)})
+        state.close()
+        observed = task.result(timeout=2)
+        assert observed.pending == {"worker"}
+    assert monotonic() - started < 2
+    assert state.counts("viewer", {"worker": str(source)}).pending == {"worker"}
+
+
+def test_busy_index_is_not_discarded(tmp_path):
+    import sqlite3
+
+    source = tmp_path / "source.jsonl"
+    append(source)
+    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    assert state.counts("viewer", {"worker": str(source)}).counts == {"worker": 1}
+    inode = state._index_path.stat().st_ino
+    append(source)
+    blocker = sqlite3.connect(state._index_path)
+    blocker.execute("BEGIN IMMEDIATE")
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            state.counts("viewer", {"worker": str(source)})
+        assert state._index_path.stat().st_ino == inode
+    finally:
+        blocker.rollback()
+        blocker.close()
+    assert state.counts("viewer", {"worker": str(source)}).counts == {"worker": 2}
+    state.close()
+
+
+def test_oversized_native_record_is_counted_without_truncation_or_input_limit(tmp_path):
+    source = tmp_path / "oversized.jsonl"
+    append(source, content="Actual text " * 200000)
+    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    observed = state.counts("viewer", {"worker": str(source)})
+    assert not observed.pending
+    assert observed.counts == {"worker": 1}
+    state.close()
+
+
+def test_reopen_wire_does_not_reuse_cancelled_index_owner(tmp_path):
+    comms, source = setup_thread(tmp_path)
+    append(source)
+    assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread == {"worker": 1}
+    comms.views.transcript_reads.close()
+    fresh = wire(comms.root)
+    assert fresh.views.transcript_reads is not comms.views.transcript_reads
+    assert fresh.views.viewer_snapshot(str(tmp_path)).thread_unread == {"worker": 1}

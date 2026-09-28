@@ -177,8 +177,11 @@ class ReadLedger(LockedStore[ReadDocument]):
     def _transcript_key(viewer: str, source: str, inode: int) -> str:
         return json.dumps([viewer, str(Path(source).resolve()), inode])
 
-    def transcript_seen(self, viewer: str, source: str, inode: int) -> int:
-        return self.read().transcripts.get(self._transcript_key(viewer, source, inode), 0)
+    def transcript_seen(
+        self, viewer: str, source: str, inode: int, *, document: ReadDocument | None = None
+    ) -> int:
+        document = self.read() if document is None else document
+        return document.transcripts.get(self._transcript_key(viewer, source, inode), 0)
 
     def mark_transcript(
         self, viewer: str, source: str, inode: int, through: int, size: int
