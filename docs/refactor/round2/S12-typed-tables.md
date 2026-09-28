@@ -173,3 +173,8 @@ UNKNOWN/reset proof remain open.
   handwritten schema/JSON codecs/mappers removed, public history shape retained.
   Durable parent one-shot must carry ALL journal states and exact sequences into
   goal_history_entry (contract in HANDOFF), never reset this file.
+- **Goal attempt/failure stores closed:** six declared table owners, no runtime
+  migration/handwritten schema/row mappers/positional writes. Existing generation,
+  reservation/attempt state drives storage; passive evidence excludes capability
+  tokens.72 bounded local checks pass. Durable carryover contract in HANDOFF;
+  no regrant/replay on reopen, parent owns one-shot conversion.

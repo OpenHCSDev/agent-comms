@@ -9,6 +9,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import agent_events as ae
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_actions import (
     GoalPrecondition,
@@ -17,6 +18,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_attempts import (
+    AttemptRecord,
     GoalAttemptStore,
     StaleAttemptError,
     StorageUncertainError,
@@ -48,7 +50,7 @@ def bound(tmp_path):
         "owner",
         frozenset(),
         "/private-worktree",
-        pid=123,
+        process_identity=ProcessIdentity.capture(os.getpid()),
         created_at=10.0,
         goal=goal,
         turn_generation=7,
@@ -103,8 +105,8 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
             "reason": "assistant_final_stop_missing",
         }
     assert store.path.read_bytes() == before
-    assert len(rows(store, "failed_turn_observations")) == 1
-    encoded = json.dumps(rows(store, "failed_turn_observations"))
+    assert len(rows(store, "failed_turn_evidence")) == 1
+    encoded = json.dumps(rows(store, "failed_turn_evidence"))
     assert observation.reservation.token not in encoded
     assert "private diagnostic" not in encoded
 
@@ -139,11 +141,16 @@ def test_mismatched_turn_lease_is_not_bound(bound, mutation):
     assert read(store, blocked(owner)).reason == "missing_binding"
 
 
-def test_mismatched_permit_cannot_attach_observation_or_weaken_failure(bound):
+@pytest.mark.parametrize("binding", ["token", "evidence_identity"])
+def test_mismatched_permit_cannot_attach_observation_or_weaken_failure(bound, binding):
     store, owner, _, observation = bound
-    forged = replace(observation, reservation=replace(observation.reservation, token="wrong"))
+    forged = (
+        replace(observation, reservation=replace(observation.reservation, token="wrong"))
+        if binding == "token"
+        else replace(observation, evidence=replace(observation.evidence, goal_id="another"))
+    )
     store.record_failed(observation.reservation, "failed", observation=forged)
-    assert rows(store, "failed_turn_observations") == []
+    assert rows(store, "failed_turn_evidence") == []
     assert store.snapshot("goal").lifecycle == BlockedGeneration()
     assert read(store, blocked(owner)).state == "unavailable"
 
@@ -156,7 +163,7 @@ def test_unclaimed_attempt_failure_has_no_backend_incident(bound):
         reservation, "prelaunch failure", observation=replace(observation, reservation=reservation)
     )
     assert store.snapshot("unclaimed").lifecycle == BlockedGeneration()
-    assert rows(store, "failed_turn_observations") == []
+    assert rows(store, "failed_turn_evidence") == []
 
 
 def test_stale_attempt_cannot_record_an_incident(bound):
@@ -173,16 +180,22 @@ def test_observation_insert_error_does_not_rollback_failure_fence(bound):
     store, owner, _, observation = bound
     with sqlite3.connect(store.path) as conn:
         conn.execute(
-            "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_observations "
+            "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_evidence "
             "BEGIN SELECT RAISE(ABORT,'injected observation failure'); END"
         )
     store.record_failed(observation.reservation, "failed", observation=observation)
     assert store.snapshot("goal").lifecycle == BlockedGeneration()
-    assert rows(store, "attempts")[0][4] == "failed"
-    assert rows(store, "failed_turn_observations") == []
+    with sqlite3.connect(store.path) as conn:
+        assert (
+            AttemptRecord.one(
+                conn, attempt_id=observation.reservation.attempt_id
+            ).phase.declared_name
+            == "failed"
+        )
+    assert rows(store, "failed_turn_evidence") == []
     with pytest.raises(UnresolvedAttemptError):
         store.resume("goal", 1)
-    assert read(store, blocked(owner)).reason == "missing_binding"
+    assert read(store, blocked(owner)).reason == "unsupported_schema"
 
 
 @pytest.mark.parametrize("after_commit", [False, True])
@@ -199,7 +212,7 @@ def test_commit_or_sync_error_never_yields_execution_success(bound, monkeypatch,
     assert reopened.snapshot("goal").lifecycle == (
         BlockedGeneration() if after_commit else ReservedGeneration()
     )
-    assert len(rows(reopened, "failed_turn_observations")) == int(after_commit)
+    assert len(rows(reopened, "failed_turn_evidence")) == int(after_commit)
     with pytest.raises(UnresolvedAttemptError):
         reopened.resume("goal", 1)
     assert read(reopened, blocked(owner)).state == (
@@ -245,7 +258,7 @@ def test_pause_projection_never_becomes_runnable(bound, source):
         {"name": "replacement"},
         {"created_at": 11.0},
         {"worktree": "/changed"},
-        {"pid": 0},
+        {"process_identity": None},
         {"goal": Goal("replacement", "replacement", state=BlockedGoal())},
         {"goal": Goal("active", "goal")},
         {"turn_generation": 8},
@@ -258,7 +271,7 @@ def test_replaced_stopped_or_active_owner_has_no_projection(bound, mutation):
     assert read(store, replace(blocked(owner), **mutation)).state == "unavailable"
 
 
-@pytest.mark.parametrize("mode", ["missing", "invalid", "old_schema", "wal"])
+@pytest.mark.parametrize("mode", ["missing", "invalid", "invalid_schema", "wal"])
 def test_reader_never_creates_repairs_or_migrates(bound, tmp_path, mode):
     store, owner, _, observation = bound
     store.record_failed(observation.reservation, "failed", observation=observation)
@@ -270,8 +283,8 @@ def test_reader_never_creates_repairs_or_migrates(bound, tmp_path, mode):
             path.write_bytes(b"not sqlite")
         else:
             with sqlite3.connect(path) as conn:
-                if mode == "old_schema":
-                    conn.execute("UPDATE metadata SET value='4' WHERE key='schema_version'")
+                if mode == "invalid_schema":
+                    conn.execute("DROP TABLE goal_attempt_schema")
                 else:
                     conn.execute("PRAGMA journal_mode=WAL")
     before = {str(p): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
@@ -282,21 +295,6 @@ def test_reader_never_creates_repairs_or_migrates(bound, tmp_path, mode):
         == "unavailable"
     )
     assert {str(p): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before
-
-
-def test_v4_migration_preserves_original_tables_without_backfilling(bound):
-    store, owner, _, observation = bound
-    store.record_failed(observation.reservation, "historical failed attempt")
-    tables = ("goals", "attempts", "human_decisions", "provider_usage")
-    before = {table: rows(store, table) for table in tables}
-    with sqlite3.connect(store.path) as conn:
-        conn.execute("DROP TABLE failed_turn_observations")
-        conn.execute("UPDATE metadata SET value='4' WHERE key='schema_version'")
-    assert read(store, blocked(owner)).reason == "unsupported_schema"
-    migrated = GoalAttemptStore(store.root)
-    assert {table: rows(migrated, table) for table in tables} == before
-    assert rows(migrated, "failed_turn_observations") == []
-    assert read(migrated, blocked(owner)).reason == "missing_binding"
 
 
 @pytest.mark.parametrize(
@@ -337,7 +335,7 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
         action = "ROLLBACK" if outcome == "observation_rollback" else "ABORT"
         with sqlite3.connect(store.path) as conn:
             conn.execute(
-                "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_observations "
+                "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_evidence "
                 f"BEGIN SELECT RAISE({action},'injected error'); END"
             )
     pause_bytes = None
@@ -395,7 +393,7 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
             assert owner.goal.state.declared_name == "blocked"
         agent.turns.schedule_goal("project")
         assert not agent.inputs.pending_turns.get("project")
-        observations = rows(store, "failed_turn_observations")
+        observations = rows(store, "failed_turn_evidence")
         assert len(observations) == (
             0 if outcome in {"observation_error", "observation_rollback"} else 1
         )
@@ -441,7 +439,7 @@ def test_process_crash_has_no_partial_incident_or_replay_right(bound, after_comm
     assert recovered.snapshot("goal").lifecycle == (
         BlockedGeneration() if after_commit else ReservedGeneration()
     )
-    assert len(rows(recovered, "failed_turn_observations")) == int(after_commit)
+    assert len(rows(recovered, "failed_turn_evidence")) == int(after_commit)
     with pytest.raises(UnresolvedAttemptError):
         recovered.resume("goal", 1)
 

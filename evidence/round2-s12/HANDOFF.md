@@ -247,3 +247,37 @@ existing StoredGoal.current for snapshot rewrite; no new runtime reader. Preserv
 source backup, no resequencing/re-timestamping or observe()/automatic reconciliation
 while staging. Compare all rows after close/reopen; do not install old metadata.
 This extends parent's existing one-shot, not a second tool or migration store.
+
+## Goal attempt ledger closure (durable evidence, no automatic regrant)
+
+Six tables now derive from GoalLedgerTable capabilities: Generation, AttemptRecord,
+GoalHumanDecision, GoalProviderUsage, GoalAttemptSchema(version6), FailedTurnEvidence.
+Generation and AttemptRecord are the existing semantic owners; lifecycle/phase
+and Reservation are stored through FieldCodec, not reconstructed from flat rows.
+AttemptRecord's query keys derive as generated columns from Reservation; no
+second token/goal/generation authority is written. FailedTurnObservation keeps
+its reservation capability only in memory and persists separate non-secret
+FailedTurnEvidence after exact reservation/evidence identity agreement.
+
+Deleted runtime v2/v3/v4 migration, old DDL creators, positional writes, hand
+row mappers and three exclusive converter tests plus per-table mapper tests.
+72 behavior/family/guard checks pass,8ACP cases excluded until current parent
+registration/test fixture integration. Actual process crashes, concurrency,
+commit/fsync uncertainty, explicit retry and secret-free passive evidence tested.
+
+`goal-private/goal_attempts.sqlite3` must preserve evidence, not be blindly reset:
+goal generations/UNKNOWN attempts, human decision IDs and exact provider usage
+are durable. Parent owns the one-shot, no duplicate converter created here.
+Carry old goals to Generation(goal_id,number,typed GenerationState,attempt_id,
+ready_digest=...), attempts to AttemptRecord(Reservation(goal_id,generation,
+attempt_id,token),typed GoalAttemptPhase,progress_witness,resolution), all human
+decisions to GoalHumanDecision, exact canonical usage_json to GoalProviderUsage,
+and existing observations to FailedTurnEvidence. Preserve every token/digest,
+ID/generation, phase/resolution/witness and usage value; no backfilled observations.
+Create a fresh current schema via GoalAttemptStore.initialize(stage0700), then
+insert parent rows before their references and reopen for equality. Do NOT call
+create_goal/reserve/claim/authorize APIs when staging; those would mint authority.
+Reopened stores intentionally have empty in-memory _ready_grants/_owned; no
+previous READY or RESERVED/CLAIMED row is launch permission. UNKNOWN stays
+unresolved, explicit existing owner decisions still required. Parent must keep
+archived evidence without allowing old rows to bypass the durable admission floor.
