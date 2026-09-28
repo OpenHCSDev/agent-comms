@@ -14,6 +14,7 @@ from typing import ClassVar
 from .declared_family import DeclaredFamily
 from .delivery_presentation import DeliveryPresentation
 from .input_attempt import InputAttempt
+from .pi_payloads import PiDiagnostic
 
 
 class DeliveryFailure(DeliveryPresentation, DeclaredFamily, affix="Failure"):
@@ -49,6 +50,7 @@ class ACPFailure(DeliveryFailure):
     detail: str
     classification_priority: ClassVar[int] = 0
     input_state: type[InputAttempt] | None = None
+    diagnostics: tuple[PiDiagnostic, ...] = ()
 
     @property
     def description(self) -> str:
@@ -56,7 +58,7 @@ class ACPFailure(DeliveryFailure):
 
     @property
     def feedback(self) -> str:
-        return f"{self.detail}\n{self.input_disposition}\n{self.action}"
+        return f"{self.description}\n{self.input_disposition}\n{self.action}"
 
     @property
     def input_disposition(self) -> str:
@@ -77,12 +79,26 @@ class ACPFailure(DeliveryFailure):
 
     @classmethod
     @abstractmethod
-    def matches(cls, code: int | None, detail: str) -> bool:
+    def matches(
+        cls, code: int | None, detail: str, diagnostics: tuple[PiDiagnostic, ...] = ()
+    ) -> bool:
         """Display classification only; input state comes from structured facts."""
 
     @classmethod
-    def from_error(cls, code: int | None, message: str, data: object = None) -> ACPFailure:
+    def from_error(
+        cls,
+        code: int | None,
+        message: str,
+        data: object = None,
+        *,
+        diagnostics: tuple[PiDiagnostic, ...] = (),
+    ) -> ACPFailure:
         detail = _error_detail(data) or message or "ACP request failed"
+        if isinstance(data, dict) and "diagnostics" in data:
+            records = data["diagnostics"]
+            if not isinstance(records, list):
+                raise ValueError("Provider diagnostics must be an array")
+            diagnostics = tuple(PiDiagnostic.from_wire(record) for record in records)
         owner = next(
             member
             for member in sorted(
@@ -90,7 +106,7 @@ class ACPFailure(DeliveryFailure):
                 key=lambda member: member.classification_priority,
                 reverse=True,
             )
-            if member.matches(code, detail)
+            if member.matches(code, detail, diagnostics)
         )
         state = None
         if isinstance(data, dict):
@@ -109,12 +125,14 @@ class ACPFailure(DeliveryFailure):
                     ]
                     if len(matches) == 1:
                         state = matches[0]
-        return owner(code, detail, state)
+        return owner(code, detail, state, diagnostics)
 
 
 class RequestACPFailure(ACPFailure):
     @classmethod
-    def matches(cls, code: int | None, detail: str) -> bool:
+    def matches(
+        cls, code: int | None, detail: str, diagnostics: tuple[PiDiagnostic, ...] = ()
+    ) -> bool:
         return True
 
     @property
@@ -130,7 +148,9 @@ class ProviderQuotaFailure(ACPFailure):
     )
 
     @classmethod
-    def matches(cls, code: int | None, detail: str) -> bool:
+    def matches(
+        cls, code: int | None, detail: str, diagnostics: tuple[PiDiagnostic, ...] = ()
+    ) -> bool:
         return cls.display_pattern.search(detail) is not None
 
     @property
@@ -142,6 +162,34 @@ class ProviderQuotaFailure(ACPFailure):
         return (
             "Wait for the provider limit to reset or restore credits, "
             "then inspect input delivery before any explicit resend."
+        )
+
+
+class ProviderConnectionFailure(ACPFailure):
+    classification_priority = 150
+
+    @classmethod
+    def matches(cls, code, detail, diagnostics=()) -> bool:
+        return any(diagnostic.provider_connection_failure for diagnostic in diagnostics)
+
+    @property
+    def title(self) -> str:
+        return "Provider connection failed"
+
+    @property
+    def description(self) -> str:
+        known = "\n".join(
+            diagnostic.description
+            for diagnostic in self.diagnostics
+            if diagnostic.provider_connection_failure
+        )
+        return "\n".join(part for part in (self.detail, known) if part)
+
+    @property
+    def action(self) -> str:
+        return (
+            "The provider connection failed. Inspect the response and input delivery "
+            "before choosing whether to send a new message; this input was not retried."
         )
 
 

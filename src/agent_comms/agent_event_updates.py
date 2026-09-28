@@ -204,7 +204,7 @@ class AcpEventConsumer(MroDispatch):
         client = self.client
         text = str(event.text or "Backend failed")
         self.agent.turns.emitted_errors[session_id] = text
-        failure = ACPFailure.from_error(-32603, text)
+        failure = ACPFailure.from_error(-32603, text, diagnostics=event.diagnostics)
         original_keys = self.agent.inputs.turn_original_input_keys.get(session_id, ())
         rows = self.agent.inputs.dispositions.read().rows
         observed = [rows[key] for key in original_keys if key in rows]
