@@ -158,7 +158,9 @@ def _inbox(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     if bool(goal_id) != bool(wait_for):
         raise ValueError("Provide goal_id and wait_for together for standby review.")
     review = (
-        comms.goals.goal_input_review(thread, str(goal_id), wait_for) if goal_id and wait_for else None
+        comms.goals.goal_input_review(thread, str(goal_id), wait_for)
+        if goal_id and wait_for
+        else None
     )
     messages = [message.to_wire() for message in comms.bus.inbox(thread)]
     unresolved = comms.goals.unresolved_inputs(thread)
@@ -477,8 +479,10 @@ def _thread_tags(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 def _channels(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     return {
         "channels": [view.to_wire() for view in comms.views.channel_views()],
-        "views": [FieldCodec.encode(view) for view in comms.channels.catalog.saved_views().values()],
-        "order": comms.channels.catalog.list_order.value,
+        "views": [
+            FieldCodec.encode(view) for view in comms.channels.catalog.read().saved_views.values()
+        ],
+        "order": comms.channels.catalog.read().list_order.value,
     }
 
 
@@ -531,14 +535,18 @@ def _sort_channels(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 
 
 def _pin_channel(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    return comms.channels.set_channel_pinned(str(arguments["name"]), bool(arguments["pinned"])).to_wire()
+    return comms.channels.set_channel_pinned(
+        str(arguments["name"]), bool(arguments["pinned"])
+    ).to_wire()
 
 
 def _pin_thread(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     channel = str(arguments["channel"])
     comms.channels.set_thread_pinned(channel, str(arguments["name"]), bool(arguments["pinned"]))
     canonical = channel if channel.startswith("#") else f"#{channel}"
-    return next(view.to_wire() for view in comms.views.channel_views() if view.channel.name == canonical)
+    return next(
+        view.to_wire() for view in comms.views.channel_views() if view.channel.name == canonical
+    )
 
 
 def _model(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
@@ -546,7 +554,9 @@ def _model(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     thread_name = str(arguments["thread"] or _executing_thread())
     model = str(arguments["model"]).strip()
     thread = (
-        comms.threads.set_thread_model(thread_name, model) if model else comms.registry.require(thread_name)
+        comms.threads.set_thread_model(thread_name, model)
+        if model
+        else comms.registry.require(thread_name)
     )
     thinking_level = str(arguments.get("thinking_level") or "").strip()
     if thinking_level:

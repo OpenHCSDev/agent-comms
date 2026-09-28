@@ -1,0 +1,33 @@
+./tests/test_catalog_document.py:13:from agent_comms.catalog_store import CatalogMigration, ChannelCatalog
+./tests/test_catalog_document.py:50:    catalog = ChannelCatalog(root / "catalog.json")
+./tests/test_catalog_document.py:98:    catalog = ChannelCatalog(root / "catalog.json")
+./tests/test_catalog_document.py:126:    with patch.object(ChannelCatalog, "_write_unlocked", side_effect=OSError("disk full")):
+./tests/test_channel_display.py:267:    from agent_comms.catalog_store import ChannelCatalog
+./tests/test_channel_display.py:270:        patch.object(ChannelCatalog, "_write_unlocked", side_effect=OSError("catalog failure")),
+./tests/test_native_pi.py:1059:        catalog.write_text(
+./src/agent_comms/history_views.py:13:from .catalog_store import ChannelCatalog
+./src/agent_comms/history_views.py:131:        catalog = ChannelCatalog(Path(source.root) / ChannelCatalog.filename)
+./src/agent_comms/history_views.py:441:        channels = catalog.views(registry.threads)
+./src/agent_comms/history_views.py:442:        order = catalog.list_order
+./src/agent_comms/history_views.py:637:        channels = catalog.views(snapshot.threads)
+./src/agent_comms/history_views.py:642:            catalog.list_order,
+./src/agent_comms/history_views.py:764:            catalog.list_order,
+./src/agent_comms/owner_compaction_commit.py:23:from .catalog_store import ChannelCatalog
+./src/agent_comms/owner_compaction_commit.py:227:            ChannelCatalog(self.root / ChannelCatalog.filename).read().targets_for(owner.tags),
+./src/agent_comms/publisher.py:53:from .catalog_store import ChannelCatalog
+./src/agent_comms/publisher.py:62:        channels: ChannelCatalog,
+./src/agent_comms/publisher.py:394:            tags = catalog.tags
+./src/agent_comms/publisher.py:395:            explicit_channels = {name: catalog.resolve(name) for name in catalog.audiences}
+./src/agent_comms/exporting.py:20:from .catalog_store import ChannelCatalog
+./src/agent_comms/exporting.py:108:    def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
+./src/agent_comms/exporting.py:114:    def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
+./src/agent_comms/exporting.py:131:    def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
+./src/agent_comms/exporting.py:157:    def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
+./src/agent_comms/catalog_store.py:112:class ChannelCatalog(LockedStore[CatalogDocument]):
+./src/agent_comms/channel_management.py:15:from .catalog_store import ChannelCatalog
+./src/agent_comms/channel_management.py:56:        self.catalog = ChannelCatalog(root / ChannelCatalog.filename)
+./src/agent_comms/message_bus.py:54:        from .catalog_store import ChannelCatalog
+./src/agent_comms/message_bus.py:60:        self._channels = ChannelCatalog(bus_path.parent / ChannelCatalog.filename)
+./src/agent_comms/message_bus.py:97:        from .catalog_store import CatalogMigration, ChannelCatalog
+./src/agent_comms/message_bus.py:118:                        ChannelCatalog.filename,
+./src/agent_comms/message_bus.py:230:                for channel in catalog.views(self._registry.all_threads()).values()

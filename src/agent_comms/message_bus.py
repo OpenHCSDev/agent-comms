@@ -1,4 +1,5 @@
 """Delivery, indexed reads and history over owned wire/publication components."""
+
 from __future__ import annotations
 
 import json
@@ -50,21 +51,25 @@ class MessageBus:
         private_initial_writes: bool = False,
         private_claim_writes: bool = False,
     ):
-        from .channels import ChannelCatalog
+        from .catalog_store import ChannelCatalog
         from .read_ledger import ReadLedger
 
         self.reads = ReadLedger(bus_path.parent / ReadLedger.filename)
         self.log = WireLog(bus_path)
         self._registry = registry
-        self._channels = ChannelCatalog(bus_path.parent / "channels.json", registry)
+        self._channels = ChannelCatalog(bus_path.parent / ChannelCatalog.filename)
         self._pending_cache: dict[str, PendingCounts] = {}
         self._view_unread_cache: dict[str, ViewUnread] = {}
         self._channel_activity_revision: tuple | None = None
         self._channel_activity: dict[str, ChannelActivity] = {}
-        self.publisher = Publisher(self.log, registry, self._channels,
+        self.publisher = Publisher(
+            self.log,
+            registry,
+            self._channels,
             private_response_writes=private_response_writes,
             private_initial_writes=private_initial_writes,
-            private_claim_writes=private_claim_writes)
+            private_claim_writes=private_claim_writes,
+        )
 
     @property
     def history_manifest(self) -> Path:
@@ -89,6 +94,8 @@ class MessageBus:
         import shutil
         import tempfile
 
+        from .catalog_store import CatalogMigration, ChannelCatalog
+
         from .historical_views import HistorySource
 
         source_root = source_root.resolve()
@@ -108,14 +115,12 @@ class MessageBus:
                     for name in (
                         "bus.jsonl",
                         "registry.json",
-                        "channels.json",
-                        "channel_metadata.json",
+                        ChannelCatalog.filename,
                         "transcript_routes.json",
                         "bus_meta.json",
-                        "channel_pins.json",
-                        "saved_views.json",
                     )
                 ]
+                paths.extend(CatalogMigration.paths(source_root))
                 revisions = tuple(file_revision(path) for path in paths)
                 for path in paths:
                     if path.exists():
@@ -217,11 +222,12 @@ class MessageBus:
         viewer = self._registry.require(viewer).name
         if display_scopes is None:
             seen = self.reads.seen_sequences(viewer, self._registry.snapshot())
+            catalog = self._channels.read()
             scopes = tuple(
                 ChannelDisplayScope(
-                    channel.name, self._channels.history_targets(channel.name), seen_sequences=seen
+                    channel.name, catalog.history_targets(channel.name), seen_sequences=seen
                 )
-                for channel in self._channels.views().values()
+                for channel in catalog.views(self._registry.all_threads()).values()
             )
         else:
             scopes = display_scopes
@@ -287,7 +293,9 @@ class MessageBus:
         if canonical not in snapshot.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         thread = snapshot.threads[canonical]
-        return DeliveryScope(thread.name, snapshot.aliases, self._channels.targets_for(thread.tags))
+        return DeliveryScope(
+            thread.name, snapshot.aliases, self._channels.read().targets_for(thread.tags)
+        )
 
     @staticmethod
     def _marker_key(name: str, target: str) -> str:
@@ -330,7 +338,7 @@ class MessageBus:
         if target is None or BuiltinChannel.aggregate_target(target):
             return sum(counts.values())
         if is_channel_target(target) or BuiltinChannel.is_alias(target):
-            targets = self._channels.history_targets(target)
+            targets = self._channels.read().history_targets(target)
             return sum(
                 count for scope, count in counts.items() if targets is None or scope in targets
             )
@@ -342,7 +350,7 @@ class MessageBus:
         if target is None:
             return lambda message: True
         if is_channel_target(target) or BuiltinChannel.is_alias(target):
-            targets = self._channels.history_targets(target)
+            targets = self._channels.read().history_targets(target)
             return lambda message: targets is None or message.target in targets
         peer = self._registry.require(target).name
         return lambda message: delivery.conversation(message.sender, message.target) == peer
@@ -356,7 +364,7 @@ class MessageBus:
                 for path in (
                     self.log.path,
                     self._registry.store.path,
-                    self._channels.path,
+                    *self._channels.source_paths(),
                     self.reads.path,
                 )
             )
@@ -391,7 +399,7 @@ class MessageBus:
             file_revision(path)
             for path in (
                 self.log.path,
-                self._channels.path,
+                *self._channels.source_paths(),
                 self.reads.path.with_name(self.reads.legacy_filename),
             )
         )
@@ -505,7 +513,7 @@ class MessageBus:
             if actor not in deliveries:
                 thread = snapshot.threads[actor]
                 deliveries[actor] = DeliveryScope(
-                    thread.name, snapshot.aliases, self._channels.targets_for(thread.tags)
+                    thread.name, snapshot.aliases, self._channels.read().targets_for(thread.tags)
                 )
         if not deliveries:
             return {}
@@ -706,7 +714,7 @@ class MessageBus:
         """Full history of one channel (``#all`` or a tag channel)."""
         if not (is_channel_target(target) or BuiltinChannel.is_alias(target)):
             raise ValueError(f"{target!r} is not a channel target.")
-        targets = self._channels.history_targets(target)
+        targets = self._channels.read().history_targets(target)
         return [msg for msg in self.log.full_history() if targets is None or msg.target in targets]
 
     def incoming_page(self, name: str, *, after: int, limit: int = 100) -> MessagePage:
@@ -761,7 +769,7 @@ class MessageBus:
         """Return one bounded page from a channel in ascending order."""
         if not (is_channel_target(target) or BuiltinChannel.is_alias(target)):
             raise ValueError(f"{target!r} is not a channel target.")
-        targets = self._channels.history_targets(target)
+        targets = self._channels.read().history_targets(target)
         return self._history_page(
             lambda message: targets is None or message.target in targets,
             before=before,
@@ -973,7 +981,7 @@ class MessageBus:
         )
 
     def channels(self) -> Sequence[str]:
-        return list(self._channels.views())
+        return list(self._channels.read().views(self._registry.all_threads()))
 
     def _read_markers(self) -> dict[str, int]:
         marker_path = self.reads.path.with_name(self.reads.legacy_filename)

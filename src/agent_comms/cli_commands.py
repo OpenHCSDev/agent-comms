@@ -304,14 +304,26 @@ class HistoryCliCommand(CliCommand):
         if self.with_thread:
             if not self.me:
                 raise ValueError("history --with requires --as (your thread)")
-            return {"dm": [m.to_display_wire() for m in ctx.views.dm_history(self.me, self.with_thread)]}
+            return {
+                "dm": [
+                    {**m.to_wire(), **m.display_metadata}
+                    for m in ctx.views.dm_history(self.me, self.with_thread)
+                ]
+            }
         elif self.channel:
             return {
                 "channel": self.channel,
-                "messages": [m.to_display_wire() for m in ctx.views.channel_history(self.channel)],
+                "messages": [
+                    {**m.to_wire(), **m.display_metadata}
+                    for m in ctx.views.channel_history(self.channel)
+                ],
             }
         else:
-            return {"everything": [m.to_display_wire() for m in ctx.views.full_history()]}
+            return {
+                "everything": [
+                    {**m.to_wire(), **m.display_metadata} for m in ctx.views.full_history()
+                ]
+            }
 
 
 @dataclass(frozen=True, kw_only=True)

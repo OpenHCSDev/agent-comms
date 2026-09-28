@@ -54,7 +54,9 @@ def test_channel_history_is_owned_by_the_stored_target(tmp_path):
     comms.messaging.send("other", "#engineering", "union target")
     comms.messaging.send("other", "#api", "exact api target")
     comms.messaging.send("other", "#ui", "exact ui target")
-    assert [message.body for message in comms.views.channel_history("#engineering")] == ["union target"]
+    assert [message.body for message in comms.views.channel_history("#engineering")] == [
+        "union target"
+    ]
     assert [message.body for message in comms.views.channel_history("#api")] == ["exact api target"]
 
 
@@ -74,7 +76,7 @@ def test_channel_metadata_round_trips_without_changing_routing(tmp_path):
     assert [message.body for message in observer.bus.inbox("a")] == ["still routable"]
     with pytest.raises(ValueError, match="cycle"):
         observer.channels.set_channel_metadata("ui", parent="#api", archived=False)
-    assert observer.channels.catalog.resolve("#ui").parent is None
+    assert observer.channels.catalog.read().resolve("#ui").parent is None
 
 
 def test_saved_views_are_typed_persistent_and_non_routable(tmp_path):
@@ -86,7 +88,7 @@ def test_saved_views_are_typed_persistent_and_non_routable(tmp_path):
         created_at=123,
     )
     assert comms.channels.set_saved_view(view) == view
-    assert wire(tmp_path).channels.catalog.saved_views() == {"api-and-ui": view}
+    assert wire(tmp_path).channels.catalog.read().saved_views == {"api-and-ui": view}
     assert [
         name
         for name, thread in comms.registry.all_threads().items()
@@ -96,7 +98,7 @@ def test_saved_views_are_typed_persistent_and_non_routable(tmp_path):
     with pytest.raises(ValueError, match="not a routable target"):
         comms.messaging.send("other", "#api-and-ui", "must fail")
     comms.channels.delete_saved_view("api-and-ui")
-    assert not wire(tmp_path).channels.catalog.saved_views()
+    assert not wire(tmp_path).channels.catalog.read().saved_views
 
 
 def test_any_is_non_routable_but_preserves_legacy_rows_as_global_history(tmp_path):
@@ -116,7 +118,7 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
     comms.channels.create_tag("child")
     comms.channels.set_channel_sort("ui", ThreadSort.LAST_ACTIVITY)
     comms.channels.set_channel_pinned("ui", True)
-    ui_created = comms.channels.catalog.resolve("#ui").created_at
+    ui_created = comms.channels.catalog.read().resolve("#ui").created_at
     comms.channels.set_channel_metadata("api", parent="#ui", archived=True)
     comms.channels.set_channel_metadata("child", parent="#api", archived=False)
     comms.channels.set_saved_view(
@@ -135,21 +137,24 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
 
     comms.channels.rename_tag("ui", "docs")
     observer = wire(tmp_path)
-    assert observer.channels.catalog.resolve("#api").parent == "#docs"
-    assert observer.channels.catalog.resolve("#api").archived
-    docs = observer.channels.catalog.resolve("#docs")
+    assert observer.channels.catalog.read().resolve("#api").parent == "#docs"
+    assert observer.channels.catalog.read().resolve("#api").archived
+    docs = observer.channels.catalog.read().resolve("#docs")
     assert docs.order is ThreadSort.LAST_ACTIVITY
     assert docs.created_at == ui_created
     assert docs.pinned
-    assert observer.channels.catalog.resolve("#child").parent == "#api"
-    assert observer.channels.catalog.saved_views()["cross-team"].predicate.tags == {"api", "docs"}
+    assert observer.channels.catalog.read().resolve("#child").parent == "#api"
+    assert observer.channels.catalog.read().saved_views["cross-team"].predicate.tags == {
+        "api",
+        "docs",
+    }
     assert "#docs" in observer.channels.channels() and "#ui" not in observer.channels.channels()
 
     before = observer.registry.snapshot()
     with pytest.raises(ValueError, match="referenced by saved views"):
         observer.channels.delete_tag("api")
     assert observer.registry.snapshot() == before
-    assert observer.channels.catalog.resolve("#child").parent == "#api"
+    assert observer.channels.catalog.read().resolve("#child").parent == "#api"
 
     observer.channels.set_saved_view(
         SavedView(
@@ -160,12 +165,12 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
     )
     observer.channels.delete_tag("api")
     restarted = wire(tmp_path)
-    assert restarted.channels.catalog.resolve("#child").parent is None
-    assert not restarted.channels.catalog.resolve("#api").archived
+    assert restarted.channels.catalog.read().resolve("#child").parent is None
+    assert not restarted.channels.catalog.read().resolve("#api").archived
     assert [message.body for message in restarted.views.channel_history("#api")] == [
         "target-owned historical row"
     ]
-    assert restarted.channels.catalog.saved_views()["cross-team"].predicate.tags == {"docs"}
+    assert restarted.channels.catalog.read().saved_views["cross-team"].predicate.tags == {"docs"}
 
 
 def test_legacy_channel_deletion_clears_children_without_rewriting_history(tmp_path):
@@ -177,11 +182,13 @@ def test_legacy_channel_deletion_clears_children_without_rewriting_history(tmp_p
     comms.channels.delete_channel("team")
 
     restarted = wire(tmp_path)
-    assert restarted.channels.catalog.resolve("#api").parent is None
+    assert restarted.channels.catalog.read().resolve("#api").parent is None
     assert {
         name: thread.tags for name, thread in restarted.registry.all_threads().items()
     } == original_tags
-    assert [message.body for message in restarted.views.channel_history("#team")] == ["legacy target row"]
+    assert [message.body for message in restarted.views.channel_history("#team")] == [
+        "legacy target row"
+    ]
 
 
 def test_deleted_legacy_channel_name_gets_fresh_order_and_creation_on_reuse(tmp_path):
@@ -202,13 +209,13 @@ def test_deleted_exact_tag_gets_fresh_order_and_creation_on_reuse(tmp_path):
     comms = setup_wire(tmp_path)
     with patch("agent_comms.channels.time.time", return_value=100):
         comms.channels.create_tag("temporary")
-    first = comms.channels.catalog.resolve("#temporary")
+    first = comms.channels.catalog.read().resolve("#temporary")
     comms.channels.set_channel_sort("temporary", ThreadSort.LAST_ACTIVITY)
     comms.channels.delete_tag("temporary")
 
     with patch("agent_comms.channels.time.time", return_value=200):
         comms.channels.create_tag("temporary")
-    recreated = wire(tmp_path).channels.catalog.resolve("#temporary")
+    recreated = wire(tmp_path).channels.catalog.read().resolve("#temporary")
     assert first.created_at == 100
     assert recreated.created_at == 200
     assert recreated.order is ThreadSort.CREATED
@@ -222,20 +229,19 @@ def test_deleting_legacy_collision_preserves_revealed_exact_preferences(tmp_path
     comms.channels.set_channel_pinned("team", True)
     comms.channels.set_thread_pinned("team", "other", True)
     comms.channels.set_channel_metadata("team", parent="#api", archived=True)
-    tags, channels = comms.channels.catalog.read()
-    channels["#team"] = Channel("team", frozenset({"api"}), ThreadSort.LAST_ACTIVITY)
-    comms.channels.catalog.write(tags, channels)
-    before = wire(tmp_path).channels.catalog.resolve("#team")
+    with comms.channels.catalog.editing() as document:
+        document.audiences["#team"] = frozenset({"api"})
+    before = wire(tmp_path).channels.catalog.read().resolve("#team")
     assert before.exact and before.order is ThreadSort.LAST_ACTIVITY
 
     comms.channels.delete_channel("team")
     observer = wire(tmp_path)
-    revealed = observer.channels.catalog.resolve("#team")
+    revealed = observer.channels.catalog.read().resolve("#team")
     assert revealed.exact
     assert revealed.order is ThreadSort.LAST_ACTIVITY
     assert revealed.created_at == before.created_at
     assert revealed.pinned and revealed.parent == "#api" and revealed.archived
-    assert observer.channels.catalog.pinned_threads("#team") == {"other"}
+    assert observer.channels.catalog.read().pinned_threads("#team") == {"other"}
 
 
 def test_saved_view_names_are_reserved_for_tags_and_legacy_channels(tmp_path):
@@ -264,7 +270,7 @@ def test_saved_view_names_are_reserved_for_tags_and_legacy_channels(tmp_path):
     with pytest.raises(ValueError, match="reserved by a saved view"):
         comms.channels.set_channel("reserved", frozenset({"api"}))
     assert comms.registry.snapshot() == before
-    assert "reserved" not in comms.channels.catalog.tags()
+    assert "reserved" not in comms.channels.catalog.read().all_tags(comms.registry.all_threads())
 
 
 def test_tag_names_cannot_collide_with_legacy_channel_targets(tmp_path):
@@ -278,7 +284,7 @@ def test_tag_names_cannot_collide_with_legacy_channel_targets(tmp_path):
     with pytest.raises(ValueError, match="conflicts with legacy channel"):
         comms.channels.rename_tag("ui", "team")
     assert comms.registry.snapshot() == before
-    assert comms.channels.catalog.resolve("#team").tags == {"api", "ui"}
+    assert comms.channels.catalog.read().resolve("#team").tags == {"api", "ui"}
 
 
 def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
@@ -324,7 +330,9 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
         )
     parent_session = tmp_path / "parent.jsonl"
     parent_session.write_text("{}\n")
-    comms.threads.register(Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_session)))
+    comms.threads.register(
+        Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_session))
+    )
     with pytest.raises(ValueError, match="reserved by a saved view"):
         comms.threads.fork(
             ForkSpec("child", "parent", "task", frozenset({"reserved"})),
@@ -367,7 +375,7 @@ def test_named_audience_cannot_replace_an_exact_tag_channel(tmp_path):
     comms = setup_wire(tmp_path)
     with pytest.raises(ValueError, match="cannot replace"):
         comms.channels.set_channel("api", frozenset({"ui"}))
-    assert comms.channels.catalog.resolve("#api").exact
+    assert comms.channels.catalog.read().resolve("#api").exact
 
 
 def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatch):
@@ -383,7 +391,9 @@ def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatc
     invoke_tool(comms, "comms_set_channel", {"name": "team", "tags": "api,ui"})
     invoke_tool(comms, "comms_tags", {"action": "rename", "name": "api", "new_name": "backend"})
     assert "backend" in comms.registry.require("a").tags
-    assert wire(tmp_path).channels.catalog.resolve("#team").tags == frozenset({"backend", "ui"})
+    assert wire(tmp_path).channels.catalog.read().resolve("#team").tags == frozenset(
+        {"backend", "ui"}
+    )
     invoke_tool(comms, "comms_tags", {"action": "delete", "name": "backend"})
     assert not comms.registry.require("a").tags
     invoke_tool(comms, "comms_delete_channel", {"name": "team"})
@@ -404,7 +414,7 @@ def test_pending_cache_observes_external_changes_without_rescanning(tmp_path):
     comms.messaging.send("other", "#team", "one")
     assert comms.bus.pending_count("a") == 1
     with patch.object(
-        comms.bus.log, '_iter_log_unlocked', side_effect=AssertionError("rescanned idle log")
+        comms.bus.log, "_iter_log_unlocked", side_effect=AssertionError("rescanned idle log")
     ):
         for _ in range(10):
             comms.threads.heartbeat("a")
@@ -462,7 +472,9 @@ def test_none_membership_and_independent_channel_order(tmp_path):
     assert views["#any"].channel.order is ThreadSort.CREATED
     assert views["#api"].members[0] == "a"
     comms.channels.update_tags("other", add=frozenset({"ui"}))
-    assert not next(view.members for view in comms.views.channel_views() if view.channel.name == "#none")
+    assert not next(
+        view.members for view in comms.views.channel_views() if view.channel.name == "#none"
+    )
 
 
 def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
@@ -475,7 +487,9 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
 
     def names(client):
         return [
-            view.channel.name for view in client.views.channel_views() if view.channel.builtin is None
+            view.channel.name
+            for view in client.views.channel_views()
+            if view.channel.builtin is None
         ]
 
     comms.channels.set_channel_order(ChannelSort.CREATED)
@@ -483,7 +497,7 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     assert set(created_names) == {"#api", "#ui", "#alpha", "#zeta"}
     assert created_names.index("#alpha") < created_names.index("#zeta")
     comms.channels.set_channel_sort("#zeta", ThreadSort.LAST_MESSAGE)
-    assert comms.channels.catalog.resolve("#zeta").created_at == 200
+    assert comms.channels.catalog.read().resolve("#zeta").created_at == 200
     comms.agents.set_activity("b", ActivityState.WORKING, "Active in zeta")
     comms.channels.set_channel_order(ChannelSort.LAST_ACTIVITY)
     assert set(names(comms)[:2]) == {"#ui", "#zeta"}
@@ -496,8 +510,10 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     ]
     assert comms.views.coordination_snapshot().channel_order is ChannelSort.LAST_USER_INPUT
     # Reading or re-sorting must never redefine a channel's creation time.
-    assert comms.channels.catalog.resolve("#alpha").created_at == 300
-    with patch.object(comms.bus.log, '_iter_log_unlocked', side_effect=AssertionError("idle rescan")):
+    assert comms.channels.catalog.read().resolve("#alpha").created_at == 300
+    with patch.object(
+        comms.bus.log, "_iter_log_unlocked", side_effect=AssertionError("idle rescan")
+    ):
         comms.views.channel_views()
 
 
@@ -543,7 +559,7 @@ def test_channel_pins_persist_and_partition_existing_order(tmp_path, order):
         + [name for name in original if name not in {"#ui", "#none"}]
     )
     assert all(view.to_wire()["pinned"] for view in views[:2])
-    assert observer.channels.catalog.list_order is order
+    assert observer.channels.catalog.read().list_order is order
     for channel in ("#ui", "#none"):
         observer.channels.set_channel_pinned(channel, False)
     assert [view.channel.name for view in comms.views.channel_views()] == original
@@ -578,8 +594,8 @@ def test_pin_lifecycle_tracks_identity_and_membership(tmp_path):
     comms.registry.register(replace(comms.registry.require("a"), pid=os.getpid()))
     comms.threads.rename_managed_thread("a", "renamed", owner_pid=os.getpid())
     observer = wire(tmp_path)
-    assert observer.channels.catalog.pinned_threads("#team") == {"renamed"}
-    assert observer.channels.catalog.pinned_threads("#any") == {"renamed"}
+    assert observer.channels.catalog.read().pinned_threads("#team") == {"renamed"}
+    assert observer.channels.catalog.read().pinned_threads("#any") == {"renamed"}
     comms.channels.update_tags("renamed", remove=frozenset({"api"}))
     team = next(view for view in observer.views.channel_views() if view.channel.name == "#team")
     assert not team.pinned_members and "renamed" not in team.members
@@ -589,11 +605,11 @@ def test_pin_lifecycle_tracks_identity_and_membership(tmp_path):
     # Removing a thread must not leave a pin for a future reuse of its name.
     comms.registry.unregister("renamed")
     comms.threads.delete("renamed")
-    assert not observer.channels.catalog.pinned_threads("#team")
-    assert not observer.channels.catalog.pinned_threads("#any")
+    assert not observer.channels.catalog.read().pinned_threads("#team")
+    assert not observer.channels.catalog.read().pinned_threads("#any")
     comms.channels.delete_channel("team")
     comms.channels.set_channel("team", frozenset({"api"}))
-    assert not observer.channels.catalog.resolve("#team").pinned
+    assert not observer.channels.catalog.read().resolve("#team").pinned
 
 
 def test_tag_view_pins_follow_rename_and_clear_on_delete(tmp_path):
@@ -602,13 +618,13 @@ def test_tag_view_pins_follow_rename_and_clear_on_delete(tmp_path):
     comms.channels.set_thread_pinned("api", "a", True)
     comms.channels.rename_tag("api", "backend")
     observer = wire(tmp_path)
-    assert observer.channels.catalog.resolve("#backend").pinned
-    assert observer.channels.catalog.pinned_threads("#backend") == {"a"}
-    assert not observer.channels.catalog.pinned_threads("#api")
+    assert observer.channels.catalog.read().resolve("#backend").pinned
+    assert observer.channels.catalog.read().pinned_threads("#backend") == {"a"}
+    assert not observer.channels.catalog.read().pinned_threads("#api")
     comms.channels.delete_tag("backend")
     comms.channels.create_tag("backend")
-    assert not observer.channels.catalog.resolve("#backend").pinned
-    assert not observer.channels.catalog.pinned_threads("#backend")
+    assert not observer.channels.catalog.read().resolve("#backend").pinned
+    assert not observer.channels.catalog.read().pinned_threads("#backend")
 
 
 def test_invalid_pins_do_not_mutate_catalog(tmp_path):
@@ -623,18 +639,3 @@ def test_invalid_pins_do_not_mutate_catalog(tmp_path):
     with pytest.raises(ValueError, match="must be boolean"):
         invoke_tool(comms, "comms_pin_channel", {"name": "api", "pinned": "false"})
     assert comms.channels.catalog.path.read_text() == before
-
-
-def test_legacy_catalog_writers_cannot_erase_pin_preferences(tmp_path):
-    comms = setup_wire(tmp_path)
-    # Capture the catalog as an old detached executor would have loaded it.
-    legacy = json.loads(comms.channels.catalog.path.read_text())
-    observer = wire(tmp_path)
-    observer.views.channel_views()
-    comms.channels.set_channel_pinned("api", True)
-    comms.channels.set_thread_pinned("api", "a", True)
-    legacy["tags"].append("new-from-old-owner")
-    comms.channels.catalog.path.write_text(json.dumps(legacy))
-    views = {view.channel.name: view for view in observer.views.channel_views()}
-    assert views["#api"].channel.pinned and views["#api"].pinned_members == {"a"}
-    assert "#new-from-old-owner" in views
