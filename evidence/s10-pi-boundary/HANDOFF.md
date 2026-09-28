@@ -3,7 +3,8 @@
 Draft PR234: https://github.com/OpenHCSDev/agent-comms/pull/234.
 
 Owner Pascal. Tree `/home/ts/wt/comms-s10-pi-boundary-20260928`, branch
-`refactor/s10-pi-boundary-20260928`, source `6f25dc8`, includes PR232 through `175d188` and merged226 + R0/228.
+`refactor/s10-pi-boundary-20260928`, source `6f25dc8`, integrated with current main `bf68bbb` at `a5d99ea`;
+includes PR232 through `175d188`, merged226, R0/228, channel231 and A13/230.
 Parent owns whole-step quiet install. No live root mutation/restart/provider call.
 
 ## Implemented / deleted
@@ -86,7 +87,13 @@ Additional focused receipts:
   existing dependency directory. Failed receipt kept.
 - child-actual-cli-guards.log:7 passed, including actual prepared Pi CLI with
   loopback-only deterministic provider plus S10/A12 guards. No paid provider.
-- child-debt-ratchet.json:passes against main including coupled A12 changes.
+- child-main-native-seam.log:7 passed on current main, including the actual Pi
+  read/edit/write/bash loopback fixture and six S10/PF guards.
+- child-debt-ratchet.json:passes after current-main sync, including coupled A12
+  changes: type checks -12, long boolean chains -1, literal subscripts -15.
+  The pre-sync receipt failed +39 subscripts because origin/main advanced to
+  include channel/A13 deletions; that receipt is retained as before-sync.json.
+  The earlier handoff's pass label was premature and is corrected here.
 - Ruff on changed source/current seam tests and git diff --check pass.
 
 This adoption alone deletes804/adds252 production lines, deletes674/adds128 test
