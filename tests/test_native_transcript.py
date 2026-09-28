@@ -6,19 +6,19 @@ from dataclasses import fields
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.native_entries import NativeEntry, MessageEntry, UnknownEntry, TranscriptProjection
+from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProjection, UnknownEntry
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.pi_payloads import UserMessage
 from agent_comms.threads import Thread
 from agent_comms.transcript_events import (
+    AssistantTranscript,
+    NoticeTranscript,
+    ThinkingTranscript,
+    ToolEndTranscript,
+    ToolStartTranscript,
     TranscriptCodec,
     TranscriptEvent,
-    AssistantTranscript,
-    ThinkingTranscript,
-    ToolStartTranscript,
-    ToolEndTranscript,
     UserTranscript,
-    NoticeTranscript,
 )
 
 
@@ -132,3 +132,22 @@ def test_snapshot_family_roundtrip_has_only_owned_fields(event):
         assert "text" not in payload and "ok" not in payload and "diff" not in payload
     if isinstance(event, AssistantTranscript):
         assert "tool_call_id" not in payload and "raw_input" not in payload
+
+
+def test_large_record_retained_in_tail_and_both_page_directions(tmp_path):
+    path = tmp_path / "large.jsonl"
+    bodies = ["before", "λ" * (300 * 1024), "after"]
+    path.write_bytes(
+        b"".join(
+            encoded({"type": "message", "message": {"role": "assistant", "content": body}})
+            for body in bodies
+        )
+    )
+    transcript = NativeTranscript(path)
+    size = path.stat().st_size
+    forward = list(transcript.forward(0, size))
+    assert list(transcript.reverse(size)) == list(reversed(forward))
+    assert list(transcript.tail()) == [record.entry for record in reversed(forward)]
+    assert list(transcript.tail(max_bytes=size)) == list(transcript.tail())
+    # The caller-requested byte window remains a view limit, not a record quota.
+    assert list(transcript.tail(max_bytes=512)) == [forward[-1].entry]

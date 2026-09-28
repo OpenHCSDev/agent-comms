@@ -1,0 +1,11 @@
+✔ native branch summary consumes the store range and preserves its budget (4.509606ms)
+✔ HTML exports full retained entries and custom rendering without consuming history twice (23.855938ms)
+✔ cache notices use persisted identity when disk reads return distinct message objects (0.530124ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 487.326407

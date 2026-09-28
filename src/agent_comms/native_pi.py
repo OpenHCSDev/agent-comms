@@ -40,7 +40,6 @@ CAPABILITY = "pi-native-input-v1-live-only"
 _INPUT_ID = re.compile(r"[0-9a-f]{32}\Z")
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _MAX_LINE = 1 << 20
-_MAX_JOURNAL = 16 << 20
 # Every tracked launch must remove Pi session retry, provider transport retry,
 # and overflow compaction-retry before an input can reach any provider.
 _NATIVE_SETTINGS = (
@@ -177,6 +176,8 @@ class NativeContextProof:
                 raise NativePiUnavailable(
                     "Native Pi proof journal contains an invalid row"
                 ) from error
+            if proof.request_generation != previous_generation:
+                seen.clear()
             previous_generation = proof.request_generation
             generation_digest = proof.llm_context_digest
             seen.add((proof.request_generation, proof.input_id))
@@ -348,32 +349,50 @@ def _unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def _read_private_file(path: Path, *, max_bytes: int = _MAX_JOURNAL) -> list[dict[str, Any]]:
+def _read_private_file(path: Path):
+    """Yield strict private evidence rows, checking the same opened revision.
+
+    Historical bytes are not an admission quota. Memory follows one record;
+    callers must exhaust this iterator before relying on the observation.
+    """
     try:
-        info = path.lstat()
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+                or not info.st_size
+            ):
+                raise NativePiUnavailable("Native Pi evidence file is not private or is empty")
+            remaining = info.st_size
+            while remaining:
+                raw = stream.readline(remaining)
+                if not raw or not raw.endswith(b"\n"):
+                    raise NativePiUnavailable("Native Pi evidence file is incomplete")
+                remaining -= len(raw)
+                try:
+                    row = json.loads(
+                        raw.decode("utf-8", errors="strict"), object_pairs_hook=_unique
+                    )
+                except (UnicodeError, ValueError) as error:
+                    raise NativePiUnavailable("Native Pi evidence JSON is invalid") from error
+                if type(row) is not dict:
+                    raise NativePiUnavailable("Native Pi evidence row has wrong type")
+                yield row
+            after, named = os.fstat(stream.fileno()), path.lstat()
+            for observed in (after, named):
+                if (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns) != (
+                    observed.st_dev,
+                    observed.st_ino,
+                    observed.st_size,
+                    observed.st_mtime_ns,
+                    observed.st_ctime_ns,
+                ):
+                    raise NativePiUnavailable("Native Pi evidence changed during observation")
     except OSError as error:
-        raise NativePiUnavailable("Native Pi evidence file is missing") from error
-    if (
-        not stat.S_ISREG(info.st_mode)
-        or info.st_uid != os.geteuid()
-        or stat.S_IMODE(info.st_mode) != 0o600
-        or not 0 < info.st_size <= max_bytes
-    ):
-        raise NativePiUnavailable("Native Pi evidence file is not private and bounded")
-    with path.open("rb") as stream:
-        raw = stream.read(max_bytes + 1)
-    if len(raw) > max_bytes or not raw.endswith(b"\n"):
-        raise NativePiUnavailable("Native Pi evidence file is incomplete")
-    try:
-        rows = [
-            json.loads(line.decode("utf-8", errors="strict"), object_pairs_hook=_unique)
-            for line in raw.split(b"\n")[:-1]
-        ]
-    except (UnicodeError, ValueError) as error:
-        raise NativePiUnavailable("Native Pi evidence JSON is invalid") from error
-    if any(type(row) is not dict for row in rows):
-        raise NativePiUnavailable("Native Pi evidence row has wrong type")
-    return rows
+        raise NativePiUnavailable("Native Pi evidence file is unavailable") from error
 
 
 def _trusted_package(package: Path) -> Path:

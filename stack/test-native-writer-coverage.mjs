@@ -10,7 +10,8 @@ import { pathToFileURL } from 'node:url';
 const packageDir = process.env.PI_NATIVE_PACKAGE_DIR;
 assert.ok(packageDir, 'provide disposable PI_NATIVE_PACKAGE_DIR');
 const moduleURL = pathToFileURL(join(packageDir, 'dist/core/session-manager.js')).href;
-const { SessionManager, loadEntriesFromFile } = await import(moduleURL);
+const { SessionManager } = await import(moduleURL);
+const { DiskEntryStore } = await import(pathToFileURL(join(packageDir,"dist/core/session-entry-store.js")));
 const root = fs.mkdtempSync(join(tmpdir(), 'pr48-writer-coverage-'));
 const user = content => ({ role: 'user', content, timestamp: 1 });
 const assistant = { role: 'assistant', content: [{ type: 'text', text: 'answer' }],
@@ -45,7 +46,7 @@ const cases = {
         fs.writeFileSync(file, raw);
         fs.writeFileSync(`${file}.pr48-writer.lock`, 'held\n');
         try {
-            assert.throws(() => loadEntriesFromFile(file), /Incomplete/);
+            assert.throws(() => SessionManager.open(file), /Incomplete/);
             assert.deepEqual(fs.readFileSync(file), raw);
         } finally { fs.unlinkSync(`${file}.pr48-writer.lock`); }
     },
@@ -82,63 +83,53 @@ const cases = {
         entries[0].version = 2;
         fs.writeFileSync(file, entries.map(JSON.stringify).join('\n') + '\n');
         const raw = fs.readFileSync(file);
-        assert.throws(() => SessionManager.open(file), /explicit recovery/);
+        assert.throws(() => SessionManager.open(file), /Strict native v3/);
         assert.deepEqual(fs.readFileSync(file), raw);
     },
     'read-snapshot-race': () => {
         const { file } = fixture();
-        const original = fs.readFileSync;
+        const original = fs.readSync;
         let armed = true;
-        fs.readFileSync = (path, ...args) => {
-            const result = original(path, ...args);
-            if (path === file && armed) {
+        fs.readSync = (fd, ...args) => {
+            const result = original(fd, ...args);
+            if (fs.readlinkSync(`/proc/self/fd/${fd}`) === file && armed) {
                 armed = false;
                 externalAppend(file);
             }
             return result;
         };
         syncBuiltinESMExports();
-        try { assert.throws(() => SessionManager.open(file), /changed during load/); }
-        finally { fs.readFileSync = original; syncBuiltinESMExports(); }
+        try { assert.throws(() => SessionManager.open(file), /changed during strict scan/); }
+        finally { fs.readSync = original; syncBuiltinESMExports(); }
     },
     'constructor-race': () => {
         const { file } = fixture();
         const before = rows(file).length;
-        const load = SessionManager.prototype._loadEntries;
-        SessionManager.prototype._loadEntries = function(...args) {
+        const load = DiskEntryStore.prototype.refresh;
+        DiskEntryStore.prototype.refresh = function(...args) {
             const result = load.apply(this, args);
             externalAppend(file);
             return result;
         };
         try { assert.throws(() => SessionManager.open(file), /changed during load/); }
-        finally { SessionManager.prototype._loadEntries = load; }
+        finally { DiskEntryStore.prototype.refresh = load; }
         assert.equal(rows(file).length, before + 1);
         assert.equal(rows(file).at(-1).message.content, 'external');
     },
     'set-session-race': () => {
         const { file } = fixture();
         const manager = fixture().manager;
-        const load = SessionManager.prototype._loadEntries;
-        SessionManager.prototype._loadEntries = function(...args) {
+        const load = DiskEntryStore.prototype.refresh;
+        DiskEntryStore.prototype.refresh = function(...args) {
             const result = load.apply(this, args);
             externalAppend(file);
             return result;
         };
         try { assert.throws(() => manager.setSessionFile(file), /changed during load/); }
-        finally { SessionManager.prototype._loadEntries = load; }
+        finally { DiskEntryStore.prototype.refresh = load; }
         const raw = fs.readFileSync(file);
-        assert.throws(() => manager.appendMessage(user('must not attach stale sibling')), /manager unusable/);
+        assert.throws(() => manager.appendMessage(user('must not attach stale sibling')), /store unusable/);
         assert.deepEqual(fs.readFileSync(file), raw);
-    },
-    'preloaded-stale': () => {
-        const { file } = fixture();
-        const stale = rows(file);
-        externalAppend(file);
-        const leaf = rows(file).at(-1).id;
-        const manager = new SessionManager(root, dirname(file), file, true, undefined, stale);
-        assert.equal(manager.getLeafId(), leaf);
-        manager.appendMessage(user('coherent child'));
-        assert.equal(rows(file).at(-1).parentId, leaf);
     },
     'empty-file-race': () => {
         const file = join(root, 'empty.jsonl');
@@ -152,7 +143,7 @@ const cases = {
             }
             return fresh.apply(this, args);
         };
-        try { assert.throws(() => SessionManager.open(file), /rewrite source changed/); }
+        try { assert.throws(() => SessionManager.open(file), /changed during load/); }
         finally { SessionManager.prototype.newSession = fresh; }
         assert.equal(rows(file).length, 3);
         assert.equal(rows(file)[1].message.content, 'external');

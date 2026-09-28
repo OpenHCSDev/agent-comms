@@ -1235,3 +1235,33 @@ def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
     assert NativeContextProof.read_evidence(session, INPUT_ID, request_generation=1) == recorded
     with pytest.raises(NativePiUnavailable, match="no assembled-context"):
         NativeContextProof.read_evidence(session, INPUT_ID, request_generation=3)
+
+
+def test_retained_proof_beyond_old_reader_quota_preserves_first_generation(tmp_path):
+    session = _evidence(tmp_path)
+    journal = Path(str(session) + ".input-proof")
+    first = json.loads(journal.read_text())
+    with journal.open("a") as stream:
+        for generation in range(2, 80002):
+            stream.write(json.dumps({**first, "requestGeneration": generation}) + "\n")
+    assert journal.stat().st_size > 16 * 1024 * 1024
+    observed = NativeContextProof.read_evidence(session, INPUT_ID, request_generation=1)
+    assert (
+        observed.request_generation == 1
+        and observed.llm_context_digest == first["llmContextDigest"]
+    )
+    # Historical corroboration never gains live delivery/acceptance authority.
+    assert observed.input_id == INPUT_ID
+
+
+def test_proof_observation_rejects_file_mutation(tmp_path):
+    from agent_comms.native_pi import _read_private_file
+
+    session = _evidence(tmp_path)
+    journal = Path(str(session) + ".input-proof")
+    rows = _read_private_file(journal)
+    assert next(rows)["inputId"] == INPUT_ID
+    with journal.open("a") as stream:
+        stream.write("\n")
+    with pytest.raises(NativePiUnavailable, match="changed during observation"):
+        next(rows)

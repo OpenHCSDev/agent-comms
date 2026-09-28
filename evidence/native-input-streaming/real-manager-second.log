@@ -1,0 +1,10 @@
+file:///home/ts/wt/comms-native-input-proof-streaming-20260928/.artifacts/pi/dist/index.js:8
+export { calculateContextTokens, collectEntriesForBranchSummary, compact, DEFAULT_COMPACTION_SETTINGS, estimateTokens, findCutPoint, findTurnStartIndex, generateBranchSummary, generateSummary, generateSummaryWithUsage, getLastAssistantUsage, prepareBranchEntries, serializeConversation, shouldCompact, } from "./core/compaction/index.js";
+                                                                                                                       ^^^^^^^^^^^^
+SyntaxError: The requested module './core/compaction/index.js' does not provide an export named 'findCutPoint'
+    at #asyncInstantiate (node:internal/modules/esm/module_job:463:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:561:5)
+    at async node:internal/modules/esm/loader:650:26
+    at async file:///home/ts/wt/comms-native-input-proof-streaming-20260928/evidence/native-input-streaming/real-manager-proof.mjs:8:26
+
+Node.js v26.5.0

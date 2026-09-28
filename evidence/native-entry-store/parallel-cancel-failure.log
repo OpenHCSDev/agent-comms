@@ -1,0 +1,29 @@
+parallel compaction PASS maps=9 requests=10 concurrency=4
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: The input did not match the regular expression /OWNER_STOP/. Input:
+
+'Error: must not run'
+
+    at async file:///home/ts/wt/comms-native-session-entry-store-20260928/stack/test-native-parallel-compaction.mjs:87:1 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: Error: must not run
+      at file:///home/ts/wt/comms-native-session-entry-store-20260928/stack/test-native-parallel-compaction.mjs:87:63
+      at produce (file:///home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/native/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js:356:18)
+      at retryAssistantCall (file:///home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/native/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/retry.js:119:32)
+      at completeSummarization (file:///home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/native/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js:358:28)
+      at generateSummaryWithUsage (file:///home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/native/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js:475:28)
+      at file:///home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/native/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js:418:43
+      at Array.map (<anonymous>)
+      at summarizeSource (file:///home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/native/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js:416:66)
+      at generateSummaryWithUsage (file:///home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/native/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js:438:27)
+      at run (file:///home/ts/wt/comms-native-session-entry-store-20260928/stack/test-native-parallel-compaction.mjs:18:10),
+  expected: /OWNER_STOP/,
+  operator: 'rejects',
+  diff: 'simple'
+}
+
+Node.js v26.5.0
