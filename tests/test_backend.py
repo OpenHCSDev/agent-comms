@@ -13,6 +13,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.image_inputs import ImageInput
+from agent_comms.pi_rpc import PiRpcChannel
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="backend tests exec shell-script stubs; POSIX only"
@@ -306,7 +307,7 @@ for line in sys.stdin:
 
     async def test_partial_large_record_survives_cancelled_read(self):
         stream = asyncio.StreamReader(limit=8)
-        reader = backend._JsonLineReader(stream)
+        reader = PiRpcChannel(stream)
         stream.feed_data(b'{"text":"' + b"x" * 100)
         pending = asyncio.create_task(reader.readline())
         while not reader.chunks:
@@ -2203,7 +2204,7 @@ while True: time.sleep(0.1)
             assert pid_file.exists()
             with pytest.raises(ProcessLookupError):
                 os.kill(int(pid_file.read_text()), 0)
-            assert not backend._ACTIVE_STEERING_TASKS
+            assert not backend._ACTIVE_STEERING
             assert not backend._ACTIVE_PROCESSES
             assert not backend._ACTIVE_STDERR_TASKS
             await asyncio.sleep(0)
@@ -2410,7 +2411,7 @@ send({{"type":"response", "command":"get_session_stats", "success":True,
             assert events[-1].reason_code == expected_reason
             assert "original only" not in events[-1].text
         assert not backend._ACTIVE_PROCESSES
-        assert not backend._ACTIVE_STEERING_TASKS
+        assert not backend._ACTIVE_STEERING
 
     async def test_inbox_queued_at_settled_but_not_dispatched_is_not_success(self, tmp_path):
         stub = _stub(

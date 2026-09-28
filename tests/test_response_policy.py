@@ -33,7 +33,7 @@ def test_new_policy_derives_all_five_consumers_without_new_cases(tmp_path):
                 return policy
 
         message = ReviewMessage("sender", "#review", "inspect", MessageType.INFO, seq=17)
-        assert ResponseEligibility("review", ("reviewer1",)).policy.value == "review"
+        assert ResponseEligibility(policy, ("reviewer1",)).policy is policy
         assert message.response_eligibility(("reader", "reviewer1")).recipients == ("reviewer1",)
         assert message.starts_turn and message.starts_turn_for("reviewer1")
         assert not message.starts_turn_for("reader")
