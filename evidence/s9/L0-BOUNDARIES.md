@@ -21,7 +21,8 @@ Audited against the parent REPORT.md from nra-l0b-audit-20260928.
   is an internal identifier/comment or dual-format reader; renaming either would
   invalidate the external native commitment.
 - rpc_args_for removal is assigned to Pascal's current generic-text-engine closure.
-  S9 has provided its single manual caller and awaits his canonical launch API.
+  S9 has migrated manual/adaptive callers to his canonical launch API; its
+  definitions and manual-refusal authority retention remain pending integration.
   Manual stock-Pi operation and canonical-native refusal must remain distinct.
 
 No source converters, live mutations or history replay. Runtime journal schema
