@@ -1,0 +1,59 @@
+{
+  "started_at": 1790554656.8994367,
+  "runtime": "runtime-production-20260928",
+  "source_seq": 31,
+  "source_id": "474707e91784",
+  "reply_seq": 32,
+  "reply": "PRODUCTION_CODING_OK",
+  "elapsed": 15.88184666633606,
+  "claims": [
+    {
+      "recipient": "pr95-selected-pi-summary-owner",
+      "triage_verdict": "ignore",
+      "disposition": "ignored"
+    },
+    {
+      "recipient": "agent-comms-ux",
+      "triage_verdict": "engage",
+      "disposition": "completed"
+    }
+  ],
+  "inputs": [
+    {
+      "owner_thread": "agent-comms-ux",
+      "stage": "full",
+      "verdict": null,
+      "session_file": "/var/tmp/agent-comms-live-20260927-wzjtqhza/native-sessions/66e20696e728cdbd5ca8657e83697130/2026-09-28T00-17-40-210Z_01a0e55f-dd71-7512-bb42-18a00ca2ce8b.jsonl",
+      "session_entry_id": "7684c110"
+    },
+    {
+      "owner_thread": "pr95-selected-pi-summary-owner",
+      "stage": "triage",
+      "verdict": "ignore",
+      "session_file": "/var/tmp/agent-comms-live-20260927-wzjtqhza/native-sessions/11a6b43c8d3f1d9df5c343e8992d975f/2026-09-28T00-17-40-193Z_01a0e55f-dd60-736e-9864-841198bd075a.jsonl",
+      "session_entry_id": "1507e59f"
+    },
+    {
+      "owner_thread": "agent-comms-ux",
+      "stage": "triage",
+      "verdict": "full",
+      "session_file": "/var/tmp/agent-comms-live-20260927-wzjtqhza/native-sessions/66e20696e728cdbd5ca8657e83697130/2026-09-28T00-17-40-210Z_01a0e55f-dd71-7512-bb42-18a00ca2ce8b.jsonl",
+      "session_entry_id": "bb0a0f8c"
+    }
+  ],
+  "native_tool_calls": [
+    {
+      "name": "read",
+      "arguments": {
+        "path": "pyproject.toml"
+      }
+    },
+    {
+      "name": "bash",
+      "arguments": {
+        "command": "pwd"
+      }
+    }
+  ],
+  "verified_success": true
+}
