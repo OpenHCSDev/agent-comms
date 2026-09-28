@@ -9,9 +9,8 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
-from agent_comms.activity import ActivityState
-from agent_comms.agent_loop import ParticipantEventConsumer
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.activity import ActivityState
 from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.pending_requests import PendingRequests
 from agent_comms.threads import Thread
@@ -82,18 +81,7 @@ class ContextWarning(events.ActivityEvent):
         return self.text
 
 
-async def test_new_activity_declaration_reaches_both_real_consumers(comms, tmp_path, monkeypatch):
-    comms.threads.register(
-        Thread(
-            name="bot",
-            tags=frozenset(),
-            worktree=str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        )
-    )
-    participant = ParticipantEventConsumer(comms, "bot", "task")
-    await participant.dispatch(ContextWarning("context warning"))
-    assert comms.agents.activity_of("bot").detail == "context warning"
+async def test_new_activity_declaration_reaches_real_turn_consumer(comms, tmp_path, monkeypatch):
     owner = CommsAgent(comms, agent_bin="unused")
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     observed = []
@@ -205,7 +193,6 @@ def test_internal_event_consumers_do_not_recover_string_tags():
     for filename, method in (
         ("owned_turn.py", "stream"),
         ("turn_progress.py", "consume"),
-        ("agent_loop.py", "_ask_agent"),
     ):
         tree = ast.parse((root / filename).read_text())
         function = next(

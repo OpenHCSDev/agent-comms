@@ -73,12 +73,6 @@ class OwnedTurn:
         assert self.owner_task is not None
         self.thread = self.runner.comms.registry.require(self.thread_name)
         self.thread_name = self.thread.name
-        if backend.rpc_args_for(self.runner.agent_bin, self.runner.agent_args) is None and any(
-            origin.seq > 0 for origin in self.origins
-        ):
-            # A text backend has no native user-start receipt. Its process
-            # must not run for a bus input whose UNKNOWN row needs that proof.
-            return
         self.goal = self.thread.goal
         self.wait = self.runner.comms.goals.goal_wait(self.thread_name)
         if (
@@ -99,10 +93,6 @@ class OwnedTurn:
         if self.autonomous_goal and (self.goal is None or not self.goal.state.active):
             return
         if self.goal is not None and self.goal.state.active:
-            if backend.rpc_args_for(self.runner.agent_bin, self.runner.agent_args) is None:
-                if self.autonomous_goal:
-                    return
-                raise RequestError.invalid_params({"reason": "goal_requires_native_pi"})
             self.store = self.runner.goal_store
             if (
                 self.store is None
@@ -563,45 +553,42 @@ class OwnedTurn:
         # bounded projection is prepared ONLY inside an already authorized
         # natural turn, from a separate owner-bound source cursor. It never
         # advances that cursor or creates a wake, claim or native receipt.
-        if backend.rpc_args_for(self.runner.agent_bin, self.runner.agent_args) is not None:
-            with _store_lock(self.runner.comms._wire_lock_path):
-                self.snapshot = self.runner.comms.registry.snapshot()
-                self.current_thread = self.snapshot.threads.get(self.thread_name)
-                if (
-                    self.current_thread is not None
-                    and self.current_thread.created_at == self.thread.created_at
-                    and self.snapshot.admission_generations.get(self.thread_name)
-                    == self.turn_admission
-                    and self.current_thread.active_turn is not None
-                    and self.current_thread.active_turn.id == self.turn_id
-                ):
-                    try:
-                        self.passive_frame = self.runner.inputs.passive_awareness.frame(
-                            self.current_thread,
-                            self.snapshot,
-                            self.runner.comms.channels.catalog.read().targets_for(
-                                self.current_thread.tags
-                            ),
+        with _store_lock(self.runner.comms._wire_lock_path):
+            self.snapshot = self.runner.comms.registry.snapshot()
+            self.current_thread = self.snapshot.threads.get(self.thread_name)
+            if (
+                self.current_thread is not None
+                and self.current_thread.created_at == self.thread.created_at
+                and self.snapshot.admission_generations.get(self.thread_name) == self.turn_admission
+                and self.current_thread.active_turn is not None
+                and self.current_thread.active_turn.id == self.turn_id
+            ):
+                try:
+                    self.passive_frame = self.runner.inputs.passive_awareness.frame(
+                        self.current_thread,
+                        self.snapshot,
+                        self.runner.comms.channels.catalog.read().targets_for(
+                            self.current_thread.tags
+                        ),
+                    )
+                    if self.passive_frame:
+                        self.passive_sources = self.runner.inputs.passive_awareness.sources(
+                            self.current_thread
                         )
-                        if self.passive_frame:
-                            self.passive_sources = self.runner.inputs.passive_awareness.sources(
-                                self.current_thread
-                            )
-                            if self.passive_sources:
-                                self.task += self.passive_frame
-                            else:
-                                self.passive_frame = ""
-                    except (OSError, TypeError, ValueError):
-                        # Before native start, omit the optional projection;
-                        # the already-authorized owner task remains intact.
-                        self.passive_frame = ""
-                        self.passive_sources = ()
+                        if self.passive_sources:
+                            self.task += self.passive_frame
+                        else:
+                            self.passive_frame = ""
+                except (OSError, TypeError, ValueError):
+                    # Before native start, omit the optional projection;
+                    # the already-authorized owner task remains intact.
+                    self.passive_frame = ""
+                    self.passive_sources = ()
         if (
             self.runner.adaptive_compaction_enabled
             and self.original_owner_input
             and len(self.original_keys) == 1
             and self.thread.session_file is not None
-            and backend.rpc_args_for(self.runner.agent_bin, self.runner.agent_args) is not None
         ):
             from .owner_compaction_adaptive import maybe_compact_owner_turn
 
@@ -654,13 +641,9 @@ class OwnedTurn:
     async def stream(self):
         async for event in backend.stream_agent_events(
             self.runner.agent_bin,
-            (
-                backend.args_for_thinking_level(
-                    backend.args_for_model(self.runner.agent_args, self.thread.model),
-                    self.thread.thinking_level,
-                )
-                if backend.rpc_args_for(self.runner.agent_bin, self.runner.agent_args) is not None
-                else self.runner.agent_args
+            backend.args_for_thinking_level(
+                backend.args_for_model(self.runner.agent_args, self.thread.model),
+                self.thread.thinking_level,
             ),
             self.task,
             self.worktree,
@@ -675,12 +658,8 @@ class OwnedTurn:
                 public_id, native_id, text, already_bound=True
             ),
             native_start=self.native_start,
-            persistent_session=(
-                self.runner.persistent_backends.setdefault(
-                    self.session_id, backend.PersistentPiSession()
-                )
-                if backend.rpc_args_for(self.runner.agent_bin, self.runner.agent_args) is not None
-                else None
+            persistent_session=self.runner.persistent_backends.setdefault(
+                self.session_id, backend.PersistentPiSession()
             ),
             ui_request=lambda request: self.runner.extension_ui_permission(
                 self.session_id, self.turn_id, self.controller, request

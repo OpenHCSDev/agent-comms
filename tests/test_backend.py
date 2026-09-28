@@ -1,4 +1,4 @@
-"""Streaming backend: rpc parsing, text fallback, failure handling."""
+"""Native streaming: external RPC parsing and failure handling."""
 
 import asyncio
 import json
@@ -15,9 +15,12 @@ from agent_comms import backend
 from agent_comms.image_inputs import ImageInput
 from agent_comms.pi_rpc import PiRpcChannel
 
-pytestmark = pytest.mark.skipif(
-    sys.platform == "win32", reason="backend tests exec shell-script stubs; POSIX only"
-)
+pytestmark = [
+    pytest.mark.usefixtures("native_rpc_fixture"),
+    pytest.mark.skipif(
+        sys.platform == "win32", reason="backend tests exec shell-script stubs; POSIX only"
+    ),
+]
 
 
 def _stub(tmp_path: Path, body: str, name: str = "pi-stub") -> str:
@@ -268,7 +271,8 @@ class TestRpcParsing:
     ):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + """
+            f"#!{sys.executable}\n"
+            + """
 import json, sys
 def emit(value):
     print(json.dumps(value), flush=True)
@@ -1023,7 +1027,8 @@ for line in sys.stdin:
         release = tmp_path / "continue"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + """\
+            f"#!{sys.executable}\n"
+            + """\
 import json, pathlib, sys, time
 release = pathlib.Path(__RELEASE__)
 def emit(value):
@@ -1098,7 +1103,8 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
     ):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + """\
+            f"#!{sys.executable}\n"
+            + """\
 import json, sys
 
 def emit(value):
@@ -1328,7 +1334,8 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
         launch_log = tmp_path / "launches"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""\
+            f"#!{sys.executable}\n"
+            + f"""\
 import json, pathlib, sys, time
 abort_log = pathlib.Path({str(abort_log)!r})
 launch_log = pathlib.Path({str(launch_log)!r})
@@ -1376,7 +1383,6 @@ time.sleep(60)
         assert [type(event) for event in events].count(ae.Done) == 1
         assert isinstance(events[-1], ae.Done) and events[-1].ok is False
         assert "no RPC progress" in events[-1].text
-
 
     async def test_irrelevant_rpc_traffic_does_not_renew_model_lease(self, tmp_path):
         stub = _stub(
@@ -1578,7 +1584,8 @@ time.sleep(60)
         monkeypatch.setattr(backend, "PROMPT_START_TIMEOUT_SECONDS", 0.1)
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + """\
+            f"#!{sys.executable}\n"
+            + """\
 import json, sys, time
 def emit(value):
     print(json.dumps(value), flush=True)
@@ -1643,7 +1650,8 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
     async def test_prestart_compaction_failure_refuses_prompt(self, tmp_path):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + """\
+            f"#!{sys.executable}\n"
+            + """\
 import json, sys
 def emit(value):
     print(json.dumps(value), flush=True)
@@ -1783,7 +1791,8 @@ time.sleep(60)
         steering_log = tmp_path / "steering"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""\
+            f"#!{sys.executable}\n"
+            + f"""\
 import json, pathlib, sys, threading, time
 emit_lock = threading.Lock()
 def emit(value):
@@ -1889,7 +1898,8 @@ for line in sys.stdin:
         launches = tmp_path / "launches"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""\
+            f"#!{sys.executable}\n"
+            + f"""\
 import json, pathlib, sys, time
 launches = pathlib.Path({str(launches)!r})
 launches.write_text(launches.read_text() + "x" if launches.exists() else "x")
@@ -1950,44 +1960,11 @@ for line in sys.stdin:
         assert tool_end.ok is False
 
 
-class TestTextFallback:
-    async def test_non_pi_backend_streams_raw_output(self, tmp_path):
-        stub = _stub(tmp_path, "#!/bin/sh\necho plain reply\n", name="echo-stub")
-        events = [e async for e in backend.stream_agent_events(stub, [], "task", str(tmp_path))]
-        assert isinstance(events[-1], ae.Done)
-        assert "plain reply" in events[-1].text
-        assert any(isinstance(e, ae.Chunk) for e in events)
-
-    async def test_missing_backend_yields_done_not_ok(self, tmp_path):
-        events = [
-            e
-            async for e in backend.stream_agent_events(
-                "definitely-not-real-bin-xyz", [], "t", str(tmp_path)
-            )
-        ]
-        assert len(events) == 1
-        assert isinstance(events[0], ae.Done) and events[0].ok is False
-        assert "not found" in events[0].text
-
-    async def test_nonzero_exit_marks_not_ok(self, tmp_path):
-        stub = _stub(tmp_path, "#!/bin/sh\necho partial\nexit 3\n", name="echo-stub")
-        events = [e async for e in backend.stream_agent_events(stub, [], "t", str(tmp_path))]
-        assert events[-1].ok is False
-
-
-class TestRpcArgs:
-    def test_pi_gets_rpc_mode(self):
-        assert backend.rpc_args_for("pi", ["--print"]) == ["--print", "--mode", "rpc"]
-        assert backend.rpc_args_for("/usr/local/bin/pi", []) == ["--mode", "rpc"]
-
-    def test_other_backends_stay_text(self):
-        assert backend.rpc_args_for("codex", ["exec"]) is None
-
+class TestNativeConfiguration:
     def test_model_arguments_are_read_and_replaced(self):
-        args = ["--print", "--provider", "openrouter", "--model", "old/model"]
+        args = ["--provider", "openrouter", "--model", "old/model"]
         assert backend.configured_model(args) == "openrouter/old/model"
         assert backend.args_for_model(args, "anthropic/claude-sonnet") == [
-            "--print",
             "--provider",
             "anthropic",
             "--model",
@@ -2025,7 +2002,8 @@ class TestNativeInputBinding:
         received = tmp_path / "received-prompt"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""
+            f"#!{sys.executable}\n"
+            + f"""
 import json, select, sys
 state = json.loads(sys.stdin.readline())
 print(json.dumps({{"type":"response", "command":"get_state", "id":state["id"],
@@ -2059,7 +2037,8 @@ if select.select([sys.stdin], [], [], 0.3)[0]:
         pid_file = tmp_path / "pi.pid"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""
+            f"#!{sys.executable}\n"
+            + f"""
 import json, os, signal, sys, time
 state = json.loads(sys.stdin.readline())
 print(json.dumps({{"type":"response","command":"get_state","id":state["id"],
@@ -2096,7 +2075,8 @@ while True: time.sleep(0.1)
         pid_file = tmp_path / "pi.pid"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""
+            f"#!{sys.executable}\n"
+            + f"""
 import json, os, signal, sys, time
 state = json.loads(sys.stdin.readline())
 print(json.dumps({{"type":"response","command":"get_state","id":state["id"],
@@ -2155,7 +2135,8 @@ while True: time.sleep(0.1)
     ):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""
+            f"#!{sys.executable}\n"
+            + f"""
 import json, sys
 state = json.loads(sys.stdin.readline())
 assert state["type"] == "get_state"
@@ -2177,8 +2158,6 @@ if case != "eof":
         assert events[-1].reason_code == "pi_input_id_unavailable"
         assert "preflight" in events[-1].text
 
-
-
     @pytest.mark.parametrize(
         ("case", "expected_reason"),
         [
@@ -2196,7 +2175,8 @@ if case != "eof":
         """An original-only final/stats cannot settle an ACP-acknowledged queued input."""
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""
+            f"#!{sys.executable}\n"
+            + f"""
 import json, sys
 send = lambda event: print(json.dumps(event), flush=True)
 state = json.loads(sys.stdin.readline())
@@ -2250,7 +2230,8 @@ send({{"type":"response", "command":"get_session_stats", "success":True,
     async def test_inbox_queued_at_settled_but_not_dispatched_is_not_success(self, tmp_path):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + """
+            f"#!{sys.executable}\n"
+            + """
 import json, sys
 send = lambda event: print(json.dumps(event), flush=True)
 state = json.loads(sys.stdin.readline())
@@ -2288,7 +2269,8 @@ for line in sys.stdin:
         received = tmp_path / "received-prompt"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""
+            f"#!{sys.executable}\n"
+            + f"""
 import json, select, sys
 state = json.loads(sys.stdin.readline())
 assert state["type"] == "get_state"
@@ -2315,7 +2297,8 @@ if select.select([sys.stdin], [], [], 0.2)[0]:
         )
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""
+            f"#!{sys.executable}\n"
+            + f"""
 import json, select, sys
 state = json.loads(sys.stdin.readline())
 assert state["type"] == "get_state"
@@ -2350,7 +2333,8 @@ sys.exit(1)
         received = tmp_path / "received-prompt"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""
+            f"#!{sys.executable}\n"
+            + f"""
 import json, select, sys, time
 state = json.loads(sys.stdin.readline())
 assert state["type"] == "get_state"
@@ -2397,7 +2381,8 @@ if select.select([sys.stdin], [], [], 0)[0]:
         received = tmp_path / "received-prompt"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""
+            f"#!{sys.executable}\n"
+            + f"""
 import json, select, sys, time
 state = json.loads(sys.stdin.readline())
 assert state["type"] == "get_state"
@@ -2461,7 +2446,8 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
         stats_marker = tmp_path / "stats-delayed"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""
+            f"#!{sys.executable}\n"
+            + f"""
 import json, os, sys, time
 send = lambda event: print(json.dumps(event), flush=True)
 delayed_stats = False
@@ -2751,7 +2737,8 @@ for line in sys.stdin:
     async def test_rpc_user_start_binds_native_input_id(self, tmp_path, case, expected_ok):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""
+            f"#!{sys.executable}\n"
+            + f"""
 import json, sys
 send = lambda event: print(json.dumps(event), flush=True)
 state = json.loads(sys.stdin.readline())
@@ -2795,7 +2782,8 @@ send({{"type":"agent_settled"}})
     async def test_native_steer_start_before_prompt_ack_is_authoritative(self, tmp_path):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + """
+            f"#!{sys.executable}\n"
+            + """
 import json, sys
 send = lambda event: print(json.dumps(event), flush=True)
 state = json.loads(sys.stdin.readline())
@@ -2846,7 +2834,8 @@ for line in sys.stdin:
         checked = tmp_path / "send-boundary-checked"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""
+            f"#!{sys.executable}\n"
+            + f"""
 import json, pathlib, sys, time
 send = lambda event: print(json.dumps(event), flush=True)
 state = json.loads(sys.stdin.readline())
@@ -3225,7 +3214,8 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
     ):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""
+            f"#!{sys.executable}\n"
+            + f"""
 import json, sys
 send = lambda value: print(json.dumps(value), flush=True)
 state = json.loads(sys.stdin.readline())
@@ -3265,7 +3255,8 @@ send({{"type": "agent_settled"}})
         """The two possible sources have identical stock Pi RPC event shapes."""
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + """
+            f"#!{sys.executable}\n"
+            + """
 import json, sys
 send = lambda value: print(json.dumps(value), flush=True)
 sys.stdin.readline()
@@ -3301,7 +3292,8 @@ send({"type": "agent_settled"})
         calls = tmp_path / "prompt-calls"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n" + f"""
+            f"#!{sys.executable}\n"
+            + f"""
 import json, sys, time
 sys.stdin.readline()
 prompt = json.loads(sys.stdin.readline())

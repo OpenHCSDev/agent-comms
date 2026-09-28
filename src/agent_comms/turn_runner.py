@@ -62,7 +62,6 @@ RELAY_PREFIX = "!relay "
 GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
 DEFAULT_AGENT_BIN = "pi"
 DEFAULT_AGENT_ARGS = [
-    "--print",
     "--provider",
     "openrouter",
     "--model",
@@ -552,8 +551,6 @@ class TurnRunner:
         """Commit a UI goal through its executing owner and private launch ledger."""
         if not isinstance(text, str) or not text.strip():
             raise ValueError("A goal requires text.")
-        if backend.rpc_args_for(self.agent_bin, self.agent_args) is None:
-            raise ValueError("Persistent goals require a native Pi backend.")
         name = self.sessions.require(session_id)
         goal = self.comms.goals.update_goal(
             name,
