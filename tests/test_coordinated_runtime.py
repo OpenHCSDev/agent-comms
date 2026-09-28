@@ -34,8 +34,8 @@ from agent_comms.compaction_journal import (
     CompactionJournalUnknownError,
     SelectedSummaryAttempt,
 )
-from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.compaction_states import ReservedSummary
+from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
     install_native_runtime_schema,
@@ -2021,3 +2021,54 @@ async def test_selected_execution_cannot_be_run_twice_or_reentered(tmp_path, mon
         if not task.done():
             task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_native_rpc_refusal_retains_private_details_without_replay(tmp_path, monkeypatch):
+    from agent_comms.native_pi import NativePiPromptRejected
+    from agent_comms.pi_commands import Prompt
+    from agent_comms.pi_events import Response
+
+    root, root_id, comms, initial, people = _root(tmp_path)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    failing, calls = _fake_model(fail_on=1)
+    response = Response(
+        command=Prompt,
+        id="native-prompt",
+        success=False,
+        error="Native preflight refused: private failure detail",
+    )
+
+    async def refused(package, **kwargs):
+        try:
+            await failing(package, **kwargs)
+        except NativePiUnavailable:
+            raise NativePiPromptRejected(response) from None
+        pytest.fail("Expected refused native attempt")
+
+    monkeypatch.setattr(runtime, "run_native_pi_turn", refused)
+    with pytest.raises(NativePiPromptRejected):
+        await SelectedExecution(
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=tmp_path,
+        ).run()
+    notice = comms.views.full_history()[-1]
+    assert notice.notice and "input is uncertain" in notice.body
+    assert "No automatic retry" in notice.body
+    assert response.error not in notice.body
+    (diagnostic,) = (root / "diagnostics").glob("*.json")
+    evidence = json.loads(diagnostic.read_text())
+    assert evidence["native_response"] == response.rejection_details()
+    assert evidence["sequences"] == [initial.message.seq]
+    assert len(calls) == 1
+    assert (
+        await SelectedExecution(
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=tmp_path,
+        ).run()
+        is None
+    )
+    assert len(calls) == 1

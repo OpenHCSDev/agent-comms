@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .errors import RelationViolationError
 from .input_attempt import (
@@ -19,9 +19,31 @@ from .locked_store import LockedStore
 from .messages import Message
 from .threads import Thread
 
+if TYPE_CHECKING:
+    from .selected_source import SelectedSource
+
 
 class FutureInputQueue(ABC):
     """Process-local queue authority; never reconstructed from UNKNOWN rows."""
+
+    def compaction_inputs(
+        self, source: SelectedSource, owner: Thread, inputs: InputDocument
+    ) -> InputDocument:
+        """Current live queue evidence, checked under the wire/document boundary."""
+        from .reservation_rules import CommitReservationCheck
+        from .thread_identity import TurnId
+
+        if owner.active_turn is None:
+            raise RelationViolationError("Selected owner has no active turn")
+        CommitReservationCheck(
+            source=source,
+            revision=source.reserved_revision,
+            incarnation=owner.incarnation,
+            owner=owner.process_identity,
+            turn=TurnId(owner.active_turn.id),
+            pending_input_key=source.pending_input_key,
+        ).require_valid()
+        return replace(inputs, rows=inputs.compaction_rows(owner, source.pending_input_key, self))
 
     @abstractmethod
     def future_inputs(
@@ -43,7 +65,7 @@ class InputDocument:
 
     def compaction_rows(
         self, owner: Thread, pending_input_key: str | None, queue: FutureInputQueue | None = None
-    ) -> dict[str, InputAttempt]:
+    ) -> dict[str, StoredInput]:
         """Caller holds wire; native CAS additionally retains document lock."""
         assert owner.active_turn is not None
         pending = self.lookup(pending_input_key)

@@ -1,0 +1,13 @@
+{
+  "exception": "NativePiPromptRejected",
+  "description": "Native Pi rejected the tracked prompt (see diagnostic)",
+  "response": {
+    "command": "prompt",
+    "id": "native-prompt",
+    "success": false,
+    "error": "No API key found for openai-codex.\n\nUse /login to log into a provider via OAuth or API key. See:\n  /home/ts/wt/comms-selected-cold-compaction-native-20260928/stack/.pi-native-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent/docs/providers.md\n  /home/ts/wt/comms-selected-cold-compaction-native-20260928/stack/.pi-native-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent/docs/models.md"
+  },
+  "copied_history_unchanged": true,
+  "source_unchanged": true,
+  "network_attempts": ""
+}
