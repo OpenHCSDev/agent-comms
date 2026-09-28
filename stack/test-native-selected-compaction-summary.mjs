@@ -231,8 +231,8 @@ void runRpcMode(host);
   }
   child.stdin.end();
   assert.equal(await new Promise(resolve=>child.on('exit',resolve)),0,stderr);
-  // Native map/synthesis uses the SAME captured stream for 2-4 chunks; the
-  // next history requires >4 calls and must become UNKNOWN, never retry.
+  // Native map/synthesis uses the SAME captured stream for every planned chunk.
+  // Larger history must complete beyond four calls without replaying any input.
   async function historyCase(repeat, expected, expectedCalls='bounded') {
     const source=childSource.replace("content:'Question '+i",`content:'Question '+i+'x'.repeat(${repeat})`);
     assert.notEqual(source,childSource);
@@ -260,6 +260,7 @@ void runRpcMode(host);
     assert.equal(reply.data.status,expected,JSON.stringify(reply));
     const count=(diagnostic.match(/CALL /g)||[]).length;
     if(expectedCalls==='bounded') assert.ok(count>=2 && count<=4,`native calls ${count}: ${diagnostic}`);
+    else if(expectedCalls==='larger') assert.ok(count>4,`larger native plan calls ${count}`);
     else assert.equal(count,expectedCalls);
     assert.deepEqual(readFileSync(f.sessionFile),snapshot,'long summary never appends');
     other.stdin.end();
@@ -267,7 +268,7 @@ void runRpcMode(host);
     return count;
   }
   const longCalls=await historyCase(1700,'summarized');
-  const cappedCalls=await historyCase(7000,'unknown');
+  const largerCalls=await historyCase(7000,'summarized','larger');
   const sourceCalls=await historyCase(400000,'declined',0);
   // Only the throwaway test copy shortens the timeout; production patch keeps
   // the exact 90s cap. Fake stream holds until AbortSignal to prove join/UNKNOWN.
@@ -360,7 +361,7 @@ void runRpcMode(host);
     bad.kill('SIGKILL'); // disposable exact test child, not a production retirement claim
     await new Promise(resolve=>bad.on('exit',resolve));
   }
-  console.log(JSON.stringify({ok:true,cases:42,calls:calls(),longCalls,cappedCalls,sourceCalls}));
+  console.log(JSON.stringify({ok:true,cases:42,calls:calls(),longCalls,largerCalls,sourceCalls}));
   }
 } finally {
   if (!integrated) rmSync(patched,{force:true});
