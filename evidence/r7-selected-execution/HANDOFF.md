@@ -2,6 +2,9 @@
 
 ## State / ownership
 
+Published draft: https://github.com/OpenHCSDev/agent-comms/pull/201
+Implementation `8cc8566`; current main198 reconciled at `e1a84f0`.
+
 Complete source candidate on `refactor/r7-selected-execution-20260928`, own tree
 `/home/ts/wt/comms-refactor-r7-selected-execution-20260928`, based main199 `065a4da`.
 Parent owns installed acceptance, paired Toad and activation; Pascal owns R6.
@@ -114,3 +117,11 @@ activation retires old owners before new owners start. R7 adds no data migration
 rollback is package selection with the same persisted/native formats. Do not
 replay UNKNOWN. Preserve the published source/evidence; discard only owned test
 caches and temporary transformation scripts once local processes finish.
+
+## Final cleanup and deletion check
+
+Owned `.audit-work`, temporary transformation scripts and census scratch are
+removed. Persistent source, runnable tests and all receipts are retained.
+`deletion-check.txt` reports zero obsolete selected/attention/lease APIs and zero
+Python identifiers containing epoch in production (external string spellings
+remain by design). No native bundle, live root or other worktree was removed.
