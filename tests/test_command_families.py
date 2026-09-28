@@ -23,7 +23,7 @@ from agent_comms.runtime_requests import (
 from agent_comms.threads import Thread
 
 
-def test_all_cli_help_and_flags_match_before_refactor(monkeypatch):
+def test_all_cli_help_and_flags_match_current_commands(monkeypatch):
     monkeypatch.setenv("COLUMNS", "80")
     monkeypatch.setenv("NO_COLOR", "1")
     monkeypatch.delenv("AGENT_COMMS_AGENT_ARGS", raising=False)

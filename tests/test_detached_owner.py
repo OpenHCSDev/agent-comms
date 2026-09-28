@@ -4,13 +4,11 @@ import asyncio
 import os
 import sys
 from contextlib import suppress
-from threading import Thread as WorkerThread
 
 import pytest
 
 from agent_comms.acp import CommsClient
 from agent_comms.comms import wire
-from agent_comms.threads import Thread
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Named FIFO fixture requires POSIX")
@@ -49,7 +47,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
         await first.shutdown()
         turn.cancel()
         await asyncio.gather(turn, return_exceptions=True)
-        assert comms.owners._process_alive(owner) and comms.registry.require(name).executing
+        assert comms.registry.require(name).process_alive and comms.registry.require(name).executing
         attachments = await asyncio.gather(
             second.load_session(str(project), name), third.load_session(str(project), name)
         )
@@ -60,7 +58,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
         assert not comms.registry.require(name).executing
         await second.shutdown()
         await third.shutdown()
-        assert comms.owners._process_alive(owner)
+        assert comms.registry.require(name).process_alive
         assert comms.registry.require(name).pid == owner
     finally:
         turn.cancel()
@@ -71,34 +69,3 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
         comms.owners.stop(name)
         with suppress(ChildProcessError):
             await asyncio.to_thread(os.waitpid, owner, 0)
-
-
-def test_owner_launch_reservation_is_shared_and_never_adopts_a_ui(tmp_path, monkeypatch):
-    comms = wire(tmp_path)
-    comms.threads.register(Thread("worker", frozenset(), str(tmp_path)))
-    launches = []
-
-    class Process:
-        pid = 424242
-
-        def __init__(self, command, **kwargs):
-            launches.append((command, kwargs))
-            if kwargs["pass_fds"]:
-                inherited = os.dup(kwargs["pass_fds"][0])
-
-                def accept_reservation():
-                    try:
-                        os.read(inherited, 1024)
-                    finally:
-                        os.close(inherited)
-
-                WorkerThread(target=accept_reservation, daemon=True).start()
-
-    monkeypatch.setattr("agent_comms.owner_lifecycle.subprocess.Popen", Process)
-    monkeypatch.setattr(type(comms), "_process_alive", staticmethod(lambda pid: pid == Process.pid))
-    monkeypatch.setattr(type(comms), "_is_local_participant", lambda self, thread, wait=True: True)
-    one = comms.owners.ensure_owner("worker", agent_args=["a value with spaces"])
-    two = wire(tmp_path).owners.ensure_owner("worker")
-    assert one.pid == two.pid == Process.pid and len(launches) == 1
-    assert launches[0][1]["start_new_session"]
-    assert launches[0][1]["env"]["AGENT_COMMS_AGENT_ARGS"] == "'a value with spaces'"

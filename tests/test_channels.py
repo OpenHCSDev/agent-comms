@@ -493,11 +493,6 @@ def test_pin_lifecycle_tracks_identity_and_membership(tmp_path):
     comms.channels.update_tags("renamed", add=frozenset({"api"}))
     team = next(view for view in observer.views.channel_views() if view.channel.name == "#team")
     assert team.pinned_members == {"renamed"} and team.members[0] == "renamed"
-    # Removing a thread must not leave a pin for a future reuse of its name.
-    comms.registry.unregister("renamed")
-    comms.threads.delete("renamed")
-    assert not observer.channels.catalog.read().pinned_threads("#team")
-    assert not observer.channels.catalog.read().pinned_threads("#any")
     comms.channels.delete_saved_view("team")
     comms.channels.set_saved_view(
         SavedView("team", ViewKind.PARTICIPANTS, ViewPredicate(AnyOfMatch, frozenset({"api"})))

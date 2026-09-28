@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .bus_publication import stable_thread_lookup
+from .child_process import ProcessIdentity
 from .cohort_schema import install_private_cohort_schema
 from .comms import Comms
 from .coordinated_runtime import (
@@ -90,6 +91,7 @@ def _accept_visible_initials(
         marker = bus.log._private_marker_unlocked()
         if marker.root_id != root_id:
             raise IdentityConflict("private initial wire root changed")
+        after_seq = max(after_seq, marker.admission_after_seq)
         initials = tuple(
             initial
             for _message, _receipt, initial in bus.log._verified_private_rows_unlocked(marker)
@@ -159,7 +161,9 @@ async def run_foreground_once(
         if not marker.claims:
             raise PublicationActivationBlocked("selected file write needs a private claim protocol")
         selected_existing_file_write.resource.normalized(worktree)
-    thread = Thread(name, tags, str(worktree), pid=os.getpid())
+    thread = Thread(
+        name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid())
+    )
     # The registry name reservation and registration must be ONE wire-locked
     # operation; `claim_thread` silently chooses a suffix on a collision.
     with _store_lock(comms._wire_lock_path):

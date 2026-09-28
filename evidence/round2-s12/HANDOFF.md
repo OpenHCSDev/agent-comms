@@ -189,3 +189,38 @@ Runtime/derived `transcript_reply_index.sqlite3` is separately resettable; new d
   removed _read_owner_release_receipts. S12 owns the typed current caller fix;
   no old receipt fallback. Integrate parent process-identity/release declarations
   before validating that fix.
+
+## Parent b4cb42a integration and current response/page closure
+
+Parent229/b4cb42a integrated without conflicts, preserving access/admission floor,
+current history validation and parent one-shot tools. Changes below are S12;
+inherited parent/Darwin/Pascal/Copernicus changes retain their original owners.
+
+- VerifiedOwnerLoss now reads the typed OwnerReleaseStore; no removed raw reader,
+  nested thread JSON decoding or PID-only liveness. Require the released/current
+  exact process identity, then identity-bound death. Prior admitted generations
+  can still settle after a later attested release of the same incarnation. Unsent
+  UNKNOWN requires exact stopped generation; source input/proof stays unchanged.
+  35 checks pass including real child lifetime, PID/start-time mismatch refusal,
+  later release and UNKNOWN abandonment followed only by new input.
+- coordination_response.py fully adopts A13: ResponseSchemaMeta (version2),
+  PublicationAppendDispatches and SelectedResponseRoute projection. Deleted
+  response DDL roster, raw fetches, positional writes and handwritten updates.
+  All terminal obligation/attempt/execution/assignment/pointer writes use their
+  row declarations. Existing transaction/dispatch no-resend fences remain.
+- Runtime reset: coordination.sqlite3 additionally includes response_schema_meta
+  and publication_append_dispatches; same whole-file quiet reset, not migration.
+- BusPageSource and BusPageRow derive the bus page index schema (physical names
+  bus_page_source and bus_page). Typed offsets STREAM, close their cursors, and
+  validate only consumed rows; history never materializes the whole index.
+  bus_page_index.sqlite3 is derived/resettable at quiet cutover. Current cache
+  damage still uses authoritative bus rows; old schemas are not interpreted.
+  MessageBus history needs no edits; passive_channel_awareness._exact adopts the
+  typed iterator with next(), retaining exact-source checks and no wake rebuild.
+- SQLiteSchemaObject/SQLiteForeignKeys are shared A13 projections; deleted copies
+  from sidecar/native schema modules rather than adding more metadata mirrors.
+- 24 page/response/admission-floor/A13 checks pass (pages-response-floor-focused),
+  including real DB reset/reopen/index rebuild excluding rows <= admission floor.
+  Broad passive-awareness testing is blocked on Darwin's current registration
+  source: ThreadManagement.claim_thread still passes removed pid argument.
+  Reported concretely on235; no registration compatibility added here.

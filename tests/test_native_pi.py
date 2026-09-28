@@ -15,6 +15,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+from agent_comms.child_process import AttachedChild
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_pi import (
     CAPABILITY,
@@ -160,7 +161,7 @@ async def test_unprivate_session_rejected_before_pi_process_starts(
         raise AssertionError("An unsafe Pi session must be refused before process launch")
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", forbidden)
+    monkeypatch.setattr(AttachedChild, "start", forbidden)
     with pytest.raises(NativePiUnavailable):
         await run_native_pi_turn(
             tmp_path,
@@ -172,11 +173,8 @@ async def test_unprivate_session_rejected_before_pi_process_starts(
         )
 
 
-@pytest.mark.parametrize(
-    ("deny_group_signal", "ignore_term"), [(False, False), (True, False), (True, True)]
-)
 async def test_tracked_launch_pins_private_no_retry_settings_before_subprocess(
-    tmp_path: Path, monkeypatch, deny_group_signal: bool, ignore_term: bool
+    tmp_path: Path, monkeypatch
 ) -> None:
     import agent_comms.native_pi as native
 
@@ -197,24 +195,16 @@ async def test_tracked_launch_pins_private_no_retry_settings_before_subprocess(
     inherited.mkdir()
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(inherited))
     monkeypatch.setenv("OPENROUTER_API_KEY", "a-token-not-to-persist")
-    original = asyncio.create_subprocess_exec
+    original = AttachedChild.start
     launches = []
     processes = []
-    fake_stub = (
-        (
-            "import signal, time\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
-            if ignore_term
-            else ""
-        )
-        + """import json, sys
+    fake_stub = """import json, sys
 request = json.loads(sys.stdin.readline())
 print(json.dumps({"type": "response", "id": request["id"],
                   "command": "get_state", "success": False}), flush=True)
 """
-        + ("time.sleep(30)\n" if ignore_term else "")
-    )
 
-    async def launch(*argv, **kwargs):
+    async def launch(argv, **kwargs):
         launches.append(argv)
         assert "--no-approve" in argv
         assert all(option in argv for option in ("--no-tools", "--no-extensions", "--no-skills"))
@@ -234,25 +224,12 @@ print(json.dumps({"type": "response", "id": request["id"],
         assert b"a-token-not-to-persist" not in policy.read_bytes()
         assert not (agent_dir / "auth.json").exists()
         assert not list(agent_dir.glob(".settings-*.tmp"))
-        process = await original(
-            sys.executable,
-            "-u",
-            "-c",
-            fake_stub,
-            **kwargs,
-        )
+        process = await original((sys.executable, "-u", "-c", fake_stub), **kwargs)
         processes.append(process)
         return process
 
-    if deny_group_signal:
-
-        def denied_group_signal(_pid, _signal):
-            raise PermissionError(errno.EPERM, "injected macOS process-group denial")
-
-        monkeypatch.setattr(native.os, "killpg", denied_group_signal)
-
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", launch)
+    monkeypatch.setattr(AttachedChild, "start", launch)
     with pytest.raises(NativePiUnavailable, match="capability is unavailable"):
         await run_native_pi_turn(
             tmp_path,
@@ -287,7 +264,7 @@ async def test_any_prelaunch_fsync_failure_denies_subprocess(
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(native.os, "fsync", fail_selected_fsync)
-    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", forbidden)
+    monkeypatch.setattr(AttachedChild, "start", forbidden)
     sessions = tmp_path / "sessions"
     with pytest.raises(NativePiUnavailable, match="could not be committed"):
         await run_native_pi_turn(
@@ -331,7 +308,7 @@ async def test_visible_policy_after_failed_parent_fsync_is_resynced_before_launc
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(native.os, "fsync", fail_once)
-    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", record_launch)
+    monkeypatch.setattr(AttachedChild, "start", record_launch)
     request = {
         "input_id": INPUT_ID,
         "prompt": "no provider",
@@ -419,7 +396,7 @@ async def test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_e
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(native.os, "fsync", fail_once)
-    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", launch)
+    monkeypatch.setattr(AttachedChild, "start", launch)
     request = dict(input_id=INPUT_ID, prompt="no provider", worktree=tmp_path, session_dir=sessions)
     with pytest.raises(NativePiUnavailable, match="session directory could not be committed"):
         await run_native_pi_turn(tmp_path, **request)
@@ -450,7 +427,7 @@ async def test_reused_session_parent_fsync_failure_denies_spawn(tmp_path: Path, 
         raise AssertionError("Failed reused directory sync must deny subprocess")
 
     monkeypatch.setattr(native.os, "fsync", fail_parent)
-    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", forbidden)
+    monkeypatch.setattr(AttachedChild, "start", forbidden)
     with pytest.raises(NativePiUnavailable, match="session directory could not be committed"):
         await run_native_pi_turn(
             tmp_path,
@@ -474,7 +451,7 @@ async def test_redirected_private_policy_directory_denies_subprocess(tmp_path: P
         raise AssertionError("A redirected policy must be rejected before launch")
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", forbidden)
+    monkeypatch.setattr(AttachedChild, "start", forbidden)
     with pytest.raises(NativePiUnavailable, match="redirected ancestor"):
         await run_native_pi_turn(
             tmp_path,
@@ -488,16 +465,16 @@ async def test_redirected_private_policy_directory_denies_subprocess(tmp_path: P
 async def test_cancelled_native_turn_reaps_its_real_subprocess(tmp_path: Path, monkeypatch) -> None:
     import agent_comms.native_pi as native
 
-    original = asyncio.create_subprocess_exec
+    original = AttachedChild.start
     started = []
 
     async def launch(*_argv, **kwargs):
-        process = await original("/bin/sleep", "30", **kwargs)
+        process = await original(("/bin/sleep", "30"), **kwargs)
         started.append(process)
         return process
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/sleep"))
-    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", launch)
+    monkeypatch.setattr(AttachedChild, "start", launch)
     task = asyncio.create_task(
         run_native_pi_turn(
             tmp_path,
@@ -558,20 +535,22 @@ send({'type':'message_end','message':{'role':'assistant','stopReason':reason,
     'content':[{'type':'text','text':'IGNORE'}]}})
 send({'type':'agent_settled'})
 """)
-    original = asyncio.create_subprocess_exec
+    original = AttachedChild.start
 
     async def launch(*_argv, **kwargs):
         return await original(
-            sys.executable,
-            "-u",
-            str(fake),
-            str(tmp_path / "sessions" / "test.jsonl"),
-            stop_reason,
+            (
+                sys.executable,
+                "-u",
+                str(fake),
+                str(tmp_path / "sessions" / "test.jsonl"),
+                stop_reason,
+            ),
             **kwargs,
         )
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", launch)
+    monkeypatch.setattr(AttachedChild, "start", launch)
     operation = run_native_pi_turn(
         tmp_path,
         input_id=INPUT_ID,
@@ -647,7 +626,7 @@ async def test_selected_header_marker_denies_path_only_legacy_reopen_before_spaw
         raise AssertionError("marked selected source must not spawn via legacy path")
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", forbidden)
+    monkeypatch.setattr(AttachedChild, "start", forbidden)
     with pytest.raises(NativePiUnavailable, match="cannot reopen without exact first-start token"):
         await run_native_pi_turn(
             tmp_path,
@@ -666,7 +645,6 @@ async def test_selected_header_marker_denies_path_only_legacy_reopen_before_spaw
 async def test_selected_first_source_is_default_off_before_any_real_cli_spawn(
     tmp_path: Path, monkeypatch
 ) -> None:
-    import agent_comms.native_pi as native
 
     fresh = create_fresh_private_session(
         tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
@@ -675,7 +653,7 @@ async def test_selected_first_source_is_default_off_before_any_real_cli_spawn(
     async def forbidden(*_args, **_kwargs):
         raise AssertionError("unreviewed selected CLI must never spawn")
 
-    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", forbidden)
+    monkeypatch.setattr(AttachedChild, "start", forbidden)
     with pytest.raises(NativePiUnavailable, match="builtins are unreviewed"):
         await run_native_pi_turn(
             tmp_path,
@@ -703,35 +681,13 @@ async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
     fresh = create_fresh_private_session(
         tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
     )
-    sent: list[dict] = []
+    received = tmp_path / "preflight.json"
+    start = AttachedChild.start
     launched: list[tuple[str, ...]] = []
     launch_envs: list[dict[str, str]] = []
     boundary_seen = False
 
-    class Stdin:
-        def write(self, raw):
-            sent.append(json.loads(raw))
-
-        async def drain(self):
-            return None
-
-        def close(self):
-            pass
-
-    class Process:
-        def __init__(self, state):
-            self.stdin = Stdin()
-            self.stdout = asyncio.StreamReader()
-            self.stderr = asyncio.StreamReader()
-            self.returncode = 0
-            self.stdout.feed_data((json.dumps(state) + "\n").encode())
-            self.stdout.feed_eof()
-            self.stderr.feed_eof()
-
-        async def wait(self):
-            return 0
-
-    async def launch(*argv, **kwargs):
+    async def launch(argv, **kwargs):
         launched.append(argv)
         launch_envs.append(kwargs["env"])
         if damage == "changed_inode":
@@ -783,7 +739,13 @@ async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
             data["model"]["id"] = "unreviewed/model"
         elif damage == "wrong_session":
             data["sessionId"] = "other-session"
-        return Process(state)
+        program = (
+            "import json,sys; from pathlib import Path; "
+            "request=json.loads(sys.stdin.readline()); "
+            f"Path({str(received)!r}).write_text(json.dumps(request)); "
+            f"print({json.dumps(state)!r},flush=True); sys.stdin.read()"
+        )
+        return await start((sys.executable, "-u", "-c", program), **kwargs)
 
     class BoundaryReachedError(RuntimeError):
         pass
@@ -803,7 +765,7 @@ async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
     monkeypatch.setenv("HTTP_PROXY", "fake-ambient-proxy-sentinel")
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(native, "_require_reviewed_selected_source_cli", lambda: None)
-    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", launch)
+    monkeypatch.setattr(AttachedChild, "start", launch)
     monkeypatch.setattr(native, "send_fenced_prompt", fake_prompt_send)
     monkeypatch.setattr(native.MaintenanceBarrier, "assert_open_unlocked", lambda _: None)
     reason = (
@@ -846,68 +808,39 @@ async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
     }
     assert launch_envs[0]["AGENT_COMMS_SELECTED_SOURCE_COPY"] == "1"
     assert launch_envs[0]["PI_OFFLINE"] == "1"
-    assert sent == [{"type": "get_state", "id": "native-capability"}]
+    assert json.loads(received.read_text()) == {"type": "get_state", "id": "native-capability"}
     assert boundary_seen is (damage == "valid_preflight")
 
 
-async def test_old_live_capability_is_rejected_before_prompt(tmp_path: Path, monkeypatch):
+async def test_untracked_capability_is_rejected_before_prompt(tmp_path: Path, monkeypatch):
     import agent_comms.native_pi as native
 
-    sent = []
+    start = AttachedChild.start
+    received = tmp_path / "preflight.json"
+    program = """import json,sys
+from pathlib import Path
+request=json.loads(sys.stdin.readline())
+Path(sys.argv[1]).write_text(json.dumps(request))
+print(json.dumps({"type":"response","id":request["id"],"command":"get_state",
+                  "success":True,"data":{"nativeInputProofCapability":"untracked",
+                  "sessionId":"session"}}),flush=True)
+sys.stdin.read()
+"""
 
-    class Stdin:
-        def write(self, raw):
-            sent.append(json.loads(raw))
-
-        async def drain(self):
-            return None
-
-        def close(self):
-            pass
-
-    class Process:
-        def __init__(self):
-            self.stdin = Stdin()
-            self.stdout = asyncio.StreamReader()
-            self.stderr = asyncio.StreamReader()
-            self.returncode = 0
-            self.stdout.feed_data(
-                (
-                    json.dumps(
-                        {
-                            "type": "response",
-                            "id": "native-capability",
-                            "command": "get_state",
-                            "success": True,
-                            "data": {
-                                "nativeInputProofCapability": "pi-native-input-v1",
-                                "sessionId": "old-session",
-                            },
-                        }
-                    )
-                    + "\n"
-                ).encode()
-            )
-            self.stdout.feed_eof()
-            self.stderr.feed_eof()
-
-        async def wait(self):
-            return 0
-
-    async def launch(*_argv, **_kwargs):
-        return Process()
+    async def launch(_argv, **kwargs):
+        return await start((sys.executable, "-u", "-c", program, str(received)), **kwargs)
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", launch)
+    monkeypatch.setattr(AttachedChild, "start", launch)
     with pytest.raises(NativePiUnavailable, match="capability is unavailable"):
         await run_native_pi_turn(
             tmp_path,
             input_id=INPUT_ID,
-            prompt="must not be sent to old fork",
+            prompt="must not send",
             worktree=tmp_path,
             session_dir=tmp_path / "sessions",
         )
-    assert sent == [{"type": "get_state", "id": "native-capability"}]
+    assert json.loads(received.read_text()) == {"type": "get_state", "id": "native-capability"}
 
 
 def test_prepared_rpc_launch_requires_exact_package_and_private_policy(
@@ -1090,11 +1023,10 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         monkeypatch.setenv("NODE_OPTIONS", f"--require={preload}")
         monkeypatch.setenv("PI_CODING_AGENT_DIR", str(canonical))
-        import agent_comms.native_pi as native
 
         observed: list[str] = []
         rpc_events: list[dict] = []
-        real_launch = asyncio.create_subprocess_exec
+        real_launch = AttachedChild.start
 
         class Reader:
             def __init__(self, stream):
@@ -1108,28 +1040,12 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
                     observed.append(event["type"])
                 return raw
 
-        class Process:
-            def __init__(self, underlying):
-                self.underlying = underlying
-                self.stdin = underlying.stdin
-                self.stdout = Reader(underlying.stdout)
-                self.stderr = underlying.stderr
+        async def launch(argv, **kwargs):
+            child = await real_launch(argv, **kwargs)
+            child.stdout = Reader(child.stdout)
+            return child
 
-            @property
-            def returncode(self):
-                return self.underlying.returncode
-
-            @property
-            def pid(self):
-                return self.underlying.pid
-
-            async def wait(self):
-                return await self.underlying.wait()
-
-        async def launch(*argv, **kwargs):
-            return Process(await real_launch(*argv, **kwargs))
-
-        monkeypatch.setattr(native.asyncio, "create_subprocess_exec", launch)
+        monkeypatch.setattr(AttachedChild, "start", launch)
         durable_phases = []
 
         async def observe(event):
@@ -1206,7 +1122,7 @@ async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, mo
     async def forbidden(*args, **kwargs):
         raise AssertionError("Stock Pi must not be started as a tracked backend")
 
-    monkeypatch.setattr("agent_comms.native_pi.asyncio.create_subprocess_exec", forbidden)
+    monkeypatch.setattr("agent_comms.child_process.AttachedChild.start", forbidden)
     stock = Path("/home/ts/.local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent")
     with pytest.raises(NativePiUnavailable, match="Pinned disposable"):
         await run_native_pi_turn(

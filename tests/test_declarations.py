@@ -387,21 +387,6 @@ class TestRegistration:
         assert comms.registry.status("a") == StoppedThreadStatus()
         assert comms.registry.require("a").active_turn is None
 
-    def test_begin_turn_migrates_unmarked_legacy_registry_without_reviving_stop(
-        self, tmp_path: Path
-    ) -> None:
-        root = tmp_path / "legacy-wire"
-        comms = Comms(root)
-        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
-        registry_path = root / "registry.json"
-        data = json.loads(registry_path.read_text())
-        for field in ("owner_epochs", "owner_epoch_counter"):
-            data.pop(field)
-        registry_path.write_text(json.dumps(data))
-        comms.agents.begin_turn("a", "migrated-turn")
-        assert comms.registry.require("a").active_turn is not None
-        assert comms.registry.live_owner_with_generation("a")[1] > 0
-        comms.agents.finish_turn(comms.registry.require("a").turn_lease)
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     def test_private_marker_can_precede_first_registry_snapshot(self, tmp_path: Path) -> None:
@@ -424,7 +409,7 @@ class TestRegistration:
         comms.messaging.initialize_private_initial_protocol()
         registry_path = root / "registry.json"
         data = json.loads(registry_path.read_text())
-        for field in ("owner_epochs", "owner_epoch_counter"):
+        for field in ("owners", "admissions"):
             data.pop(field)
         registry_path.write_text(json.dumps(data))
         with pytest.raises(RelationViolationError, match="guard does not match"):
@@ -585,8 +570,8 @@ class TestRegistration:
         else:
             path = root / "registry.json"
             data = json.loads(path.read_text())
-            data.pop("owner_epochs")
-            data.pop("owner_epoch_counter")
+            data.pop("owners")
+            data.pop("admissions")
             path.write_text(json.dumps(data))  # simulated old writer ignores marker
         with pytest.raises(RelationViolationError, match="Private registry guard"):
             cold.require("a")
@@ -609,28 +594,6 @@ class TestRegistration:
         assert registry.release_turn(leased.turn_lease)[0]
         assert registry.require("c").active_turn is None
 
-    def test_missing_or_malformed_private_generation_metadata_refuses_turn(self, tmp_path: Path):
-        path = tmp_path / "registry.json"
-        registry = Registration(path)
-        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
-        owner, admission_generation = registry.live_owner_with_generation("a")
-        data = json.loads(path.read_text())
-        data.pop("owner_epochs")
-        data.pop("owner_epoch_counter")
-        path.write_text(json.dumps(data))
-        with pytest.raises(RelationViolationError, match="stopped or changed"):
-            registry.lease_live_turn_with_generation(
-                owner, "claimed", expected_owner_generation=admission_generation
-            )
-        with pytest.raises(RelationViolationError, match="unavailable"):
-            registry.live_owner_with_generation("a")
-        data["owner_epochs"] = {"a": True}
-        data["owner_epoch_counter"] = admission_generation
-        path.write_text(json.dumps(data))
-        with pytest.raises(
-            RelationViolationError, match="invalid private registry owner generations"
-        ):
-            registry.live_owner_with_generation("a")
 
     def test_deleting_thread_cannot_be_revived(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")

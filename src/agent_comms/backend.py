@@ -25,7 +25,6 @@ import os
 import re
 import secrets
 import shutil
-import signal
 import tempfile
 import unicodedata
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator, Sequence
@@ -39,6 +38,7 @@ from . import pi_commands as commands
 from . import pi_events as pi
 from . import turn_failure as failures
 from . import turn_phase as phases
+from .child_process import AttachedChild, BoundedRun, TimedOutOutcome
 from .diagnostics import FailureReason
 from .image_inputs import ImageInput
 from .maintenance_barrier import MaintenanceBarrier
@@ -72,7 +72,7 @@ _TOOL_KINDS = {
     "grep": "search",
     "glob": "search",
 }
-_ACTIVE_PROCESSES: dict[asyncio.Task[Any], asyncio.subprocess.Process] = {}
+_ACTIVE_PROCESSES: dict[asyncio.Task[Any], AttachedChild] = {}
 _ACTIVE_STDERR_TASKS: dict[asyncio.Task[Any], asyncio.Task[str]] = {}
 _ACTIVE_STEERING: dict[asyncio.Task[Any], asyncio.Task[None]] = {}
 _ACTIVE_INPUT_RESTORERS: dict[asyncio.Task[Any], Callable[[], None]] = {}
@@ -211,7 +211,7 @@ class PersistentPiSession:
 
     def __init__(self) -> None:
         self.lock = asyncio.Lock()
-        self.proc: asyncio.subprocess.Process | None = None
+        self.proc: AttachedChild | None = None
         self.reader: PiRpcChannel | None = None
         self.stderr_task: asyncio.Task[str] | None = None
         self.launch_key: tuple[Any, ...] | None = None
@@ -251,7 +251,7 @@ class PersistentPiSession:
 
             async def finish() -> None:
                 if proc is not None:
-                    await _terminate_process(proc)
+                    await proc.stop()
                 if stderr_task is not None:
                     await asyncio.gather(stderr_task, return_exceptions=True)
 
@@ -308,42 +308,6 @@ def auth_revision() -> tuple[int, int]:
         return 0, 0
 
 
-def _close_child_stdin(proc: asyncio.subprocess.Process) -> None:
-    """Broken stdin must not prevent signaling and reaping an uncertain child."""
-    if proc.stdin is not None:
-        with suppress(OSError, RuntimeError, ValueError):
-            proc.stdin.close()
-
-
-async def _terminate_process(proc: asyncio.subprocess.Process) -> None:
-    """Terminate one process and its POSIX process group."""
-    _close_child_stdin(proc)
-    if proc.returncode is not None:
-        return
-    try:
-        if os.name == "posix":
-            os.killpg(proc.pid, signal.SIGTERM)
-        else:
-            proc.terminate()
-    except OSError:
-        # A process-group signal may race child exit or fail independently of
-        # the child handle. Try that handle before waiting for reaping.
-        with suppress(ProcessLookupError):
-            proc.terminate()
-    try:
-        await asyncio.wait_for(proc.wait(), timeout=1.0)
-    except TimeoutError:
-        try:
-            if os.name == "posix":
-                os.killpg(proc.pid, signal.SIGKILL)
-            else:
-                proc.kill()
-        except OSError:
-            with suppress(ProcessLookupError):
-                proc.kill()
-        await proc.wait()
-
-
 async def terminate_task_process(task: asyncio.Task[Any]) -> None:
     """Terminate the backend subprocess owned by an agent turn task."""
     if steering := _ACTIVE_STEERING.pop(task, None):
@@ -353,7 +317,7 @@ async def terminate_task_process(task: asyncio.Task[Any]) -> None:
         restore_inputs()
     proc = _ACTIVE_PROCESSES.pop(task, None)
     if proc is not None:
-        await _terminate_process(proc)
+        await proc.stop()
 
 
 def rpc_args_for(bin_name: str, args: Sequence[str]) -> list[str] | None:
@@ -453,23 +417,13 @@ async def discover_thinking_levels(
         "--no-context-files",
         "--no-session",
     ]
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *argv,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-            limit=1024 * 1024,
-        )
-    except OSError:
-        return ["off"]
     levels: list[str] = []
     try:
-        assert proc.stdin is not None and proc.stdout is not None
-        reader = PiRpcChannel(proc.stdout)
-        proc.stdin.write(reader.encode(commands.GetAvailableThinkingLevels(id="thinking")))
-        await proc.stdin.drain()
-        async with asyncio.timeout(10):
+        async with BoundedRun.session(tuple(argv), timeout=10, limit=1024 * 1024) as proc:
+            assert proc.stdin is not None and proc.stdout is not None
+            reader = PiRpcChannel(proc.stdout)
+            proc.stdin.write(reader.encode(commands.GetAvailableThinkingLevels(id="thinking")))
+            await proc.stdin.drain()
             while line := await reader.readline():
                 payload = PiRpcChannel.decode_record(line)
                 if (
@@ -486,14 +440,6 @@ async def discover_thinking_levels(
                 break
     except (TimeoutError, ValueError, OSError):
         pass
-    finally:
-        if proc.stdin is not None:
-            proc.stdin.close()
-        try:
-            await asyncio.wait_for(proc.wait(), timeout=1)
-        except TimeoutError:
-            proc.terminate()
-            await proc.wait()
     return levels or ["off"]
 
 
@@ -514,54 +460,27 @@ async def discover_models(
         argv = [agent_bin, *rpc_args, "--no-extensions", "--no-skills", "--no-context-files"]
         if "--no-session" not in argv:
             argv.append("--no-session")
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *argv,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-                limit=8 * 1024 * 1024,
-            )
-        except OSError:
-            proc = None
         values = []
-        if proc is not None:
-            try:
+        try:
+            async with BoundedRun.session(tuple(argv), timeout=10, limit=8 * 1024 * 1024) as proc:
                 assert proc.stdin is not None and proc.stdout is not None
                 reader = PiRpcChannel(proc.stdout)
                 proc.stdin.write(reader.encode(commands.GetAvailableModels(id="models")))
                 await proc.stdin.drain()
-                async with asyncio.timeout(10):
-                    while line := await reader.readline():
-                        payload = PiRpcChannel.decode_record(line)
-                        if (
-                            not isinstance(payload, pi.Response)
-                            or payload.id != "models"
-                            or payload.command is not commands.GetAvailableModels
-                        ):
-                            continue
-                        for item in (
-                            payload.data.models if payload.success and payload.data else ()
-                        ):
-                            provider = item.provider
-                            model_id = item.id
-                            if provider and model_id:
-                                values.append(f"{provider}/{model_id}")
-                        break
-            except (TimeoutError, ValueError, OSError):
-                pass
-            finally:
-                if proc.stdin is not None:
-                    proc.stdin.close()
-                try:
-                    await asyncio.wait_for(proc.wait(), timeout=1)
-                except TimeoutError:
-                    proc.terminate()
-                    try:
-                        await asyncio.wait_for(proc.wait(), timeout=1)
-                    except TimeoutError:
-                        proc.kill()
-                        await proc.wait()
+                while line := await reader.readline():
+                    payload = PiRpcChannel.decode_record(line)
+                    if (
+                        not isinstance(payload, pi.Response)
+                        or payload.id != "models"
+                        or payload.command is not commands.GetAvailableModels
+                    ):
+                        continue
+                    for item in payload.data.models if payload.success and payload.data else ():
+                        if item.provider and item.id:
+                            values.append(f"{item.provider}/{item.id}")
+                    break
+        except (TimeoutError, ValueError, OSError):
+            pass
     if selected and selected not in values:
         values.insert(0, selected)
     return [Model(value, value) for value in dict.fromkeys(values)]
@@ -648,7 +567,7 @@ async def stream_agent_events(
     ) = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
     persistent_session: PersistentPiSession | None = None,
-    ui_request: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]] | None = None,
+    ui_request: Callable[[pi.ExtensionUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
 ) -> AsyncIterator[events.AgentEvent]:
     """Run the backend and yield events. Always ends with a ``done`` event.
 
@@ -750,7 +669,7 @@ class TurnSession:
         ) = None,
         native_start: Callable[[str | None, str, str], bool] | None = None,
         persistent_session: PersistentPiSession | None = None,
-        ui_request: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]] | None = None,
+        ui_request: Callable[[pi.ExtensionUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
         startup: NativeStartupAdmission | None = None,
     ):
         self.agent_bin = agent_bin
@@ -844,7 +763,7 @@ class TurnSession:
             except (TimeoutError, OSError):
                 pass
         if self.proc.returncode is None:
-            await _terminate_process(self.proc)
+            await self.proc.stop()
 
     def turn_state(
         self,
@@ -1031,7 +950,7 @@ class TurnSession:
                         f"Invalid Pi capability preflight response: {error}"
                     )
                 )
-                await _terminate_process(self.proc)
+                await self.proc.stop()
                 self.finished = True
                 return
             raise
@@ -1047,7 +966,7 @@ class TurnSession:
                         "Pi native input-ID capability preflight returned another event."
                     )
                 )
-                await _terminate_process(self.proc)
+                await self.proc.stop()
                 self.finished = True
                 return
             self.state = self.payload.data
@@ -1060,7 +979,7 @@ class TurnSession:
                 self.record_failure(
                     failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
                 )
-                await _terminate_process(self.proc)
+                await self.proc.stop()
                 self.finished = True
                 return
             if (
@@ -1080,7 +999,7 @@ class TurnSession:
             ):
                 self.session_identity_uncertain = True
                 self.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
-                await _terminate_process(self.proc)
+                await self.proc.stop()
                 self.finished = True
                 return
             self.native_capability_confirmed = True
@@ -1122,7 +1041,7 @@ class TurnSession:
                     self.record_failure(
                         failures.InputMissing("Input authority changed before Pi prompt send.")
                     )
-                    await _terminate_process(self.proc)
+                    await self.proc.stop()
                     self.finished = True
                     return
                 await self.proc.stdin.drain()
@@ -1132,7 +1051,7 @@ class TurnSession:
                         "Pi RPC prompt could not be sent after capability preflight."
                     )
                 )
-                await _terminate_process(self.proc)
+                await self.proc.stop()
                 self.finished = True
                 return
 
@@ -1392,18 +1311,11 @@ class TurnSession:
             self.spawn_ms = 0
         else:
             try:
-                self.proc = await asyncio.create_subprocess_exec(
-                    *self.argv,
+                self.proc = await AttachedChild.start(
+                    tuple(self.argv),
                     cwd=self.cwd if Path(self.cwd).is_dir() else None,
                     env=self.env,
-                    stdin=(
-                        asyncio.subprocess.PIPE
-                        if self.stdin_payload is not None
-                        else asyncio.subprocess.DEVNULL
-                    ),
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    start_new_session=os.name == "posix",
+                    input_enabled=self.stdin_payload is not None,
                 )
             except OSError as exc:
                 yield events.Done(text=f"agent launch failed: {exc}", ok=False)
@@ -1455,7 +1367,8 @@ class TurnSession:
                 self.piece = self.chunk.decode(errors="replace")
                 self.text_parts.append(self.piece)
                 yield events.Chunk(text=self.piece)
-            self.code = await self.proc.wait()
+            await self.proc.wait()
+            self.code = self.proc.returncode
             if self.owner is not None:
                 _ACTIVE_PROCESSES.pop(self.owner, None)
             self.error_text = await self.stderr_task
@@ -1589,16 +1502,8 @@ class TurnSession:
                 self.persistent_session.reopen_required = None
                 self.persistent_session.reopen_session_id = None
         else:
-            _close_child_stdin(self.proc)
-            try:
-                await asyncio.wait_for(self.proc.wait(), timeout=5.0)
-            except TimeoutError:
-                self.proc.terminate()
-                try:
-                    await asyncio.wait_for(self.proc.wait(), timeout=5.0)
-                except TimeoutError:
-                    self.proc.kill()
-                    await self.proc.wait()
+            outcome = await self.proc.finish()
+            if isinstance(outcome, TimedOutOutcome):
                 self.ok = False
                 self.record_failure(failures.BackendDidNotExit("agent backend did not exit"))
         if False:
@@ -1746,7 +1651,7 @@ class TurnSession:
                     f"spawn_ms={self.spawn_ms}, session_bytes={self.session_size})."
                 )
             )
-            await _terminate_process(self.proc)
+            await self.proc.stop()
             self.finished = True
             return
         if (
@@ -1757,7 +1662,7 @@ class TurnSession:
             self.record_failure(
                 failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
             )
-            await _terminate_process(self.proc)
+            await self.proc.stop()
             self.finished = True
             return
         if self.stats.requested:

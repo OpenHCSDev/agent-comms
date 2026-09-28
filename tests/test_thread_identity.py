@@ -115,23 +115,6 @@ def test_restored_active_turn_has_no_admission_authority(tmp_path, revocation):
             read("owner")
 
 
-def test_saved_registry_roundtrip_preserves_identity_and_removes_dead_turn_roster(tmp_path):
-    registry = registry_with_owner(tmp_path)
-    leased, generation = registry.lease_local_turn("owner", "old")
-    raw = json.loads(registry.store.path.read_text())
-    raw["turn_epochs"] = {"owner": generation}
-    registry.store.path.write_text(json.dumps(raw))
-    reopened = Registration(registry.store.path)
-    assert reopened.live_owner_with_generation("owner") == (leased, generation)
-    assert reopened.require("owner").incarnation == leased.incarnation
-    reopened.release_turn(reopened.require("owner").turn_lease)[0]
-    persisted = json.loads(registry.store.path.read_text())
-    assert not {"owner_generations", "owner_generation_counter"} & persisted.keys()
-    assert "turn_epochs" not in persisted
-    assert persisted["owner_epochs"]["owner"] == generation
-    assert Registration(registry.store.path).require("owner").turn_generation == 1
-
-
 def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path):
     registry = registry_with_owner(tmp_path)
     owner = registry.require("owner")

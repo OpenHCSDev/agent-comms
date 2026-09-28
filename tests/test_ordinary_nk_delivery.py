@@ -1,7 +1,7 @@
 """Ordinary Comms sends on explicitly marked private roots execute selected N/K.
 
-Fake model responses exercise pipeline state only; no native/provider acceptance
-is inferred. Public roots remain legacy and no cutover is performed by send.
+Model fixtures exercise pipeline state; actual native acceptance is checked
+separately. Every ordinary send uses the canonical publication protocol.
 """
 
 from __future__ import annotations
@@ -110,26 +110,45 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
     assert PRIVATE_WIRE_FIELD not in message.to_wire()
 
 
-def test_unmarked_ordinary_send_does_not_install_or_infer_cohort(tmp_path):
+def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tmp_path):
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "beta"):
         comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
-    message = comms.messaging.send_message("sender", "beta", "legacy ordinary send")
-    meta = json.loads((comms.root / "bus_meta.json").read_text())
-    assert "writer_protocol_version" not in meta
-    assert not (comms.root / "coordination.sqlite3").exists()
-    assert comms.bus.log.message_by_id(message.message_id) == message
+    message = comms.messaging.send_message("sender", "beta", "ordinary send")
+    metadata = comms.bus.log.read_metadata_unlocked(required=True)
+    assert metadata.private and metadata.claims
+    initial = comms.bus.log.read_initial_cohort(metadata.root_id, message.seq)
+    assert initial.message == message
+    assert initial.audience.canonical_members == frozenset({"beta"})
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    reply = comms.messaging.send_message("sender", viewer, "human notification")
+    human = comms.bus.log.read_initial_cohort(metadata.root_id, reply.seq)
+    assert human.message.notice
+    assert human.audience.recipients == ()
+    assert human.decisions == ()
+    assert comms.views.dm_display_page("sender", worktree=str(tmp_path)).messages[-1] == reply
 
 
-def test_legacy_writer_and_explicitly_disabled_private_writer_still_refuse(tmp_path):
+def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
+    comms = Comms(tmp_path / "wire")
+    for name in ("sender", "beta"):
+        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+    stored = Message(
+        sender="sender", target="beta", body="preserved history", type=MessageType.INFO, seq=1
+    )
+    comms.bus.log.path.write_text(json.dumps(stored.to_wire()) + "\n")
+    before = comms.bus.log.path.read_bytes()
+    with pytest.raises(RelationViolationError, match="read-only"):
+        comms.messaging.send_message("sender", "beta", "must not append")
+    assert comms.bus.log.path.read_bytes() == before
+    assert not comms.bus.log.metadata_path.exists()
+
+
+def test_explicitly_disabled_private_writer_refuses(tmp_path):
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "beta"):
         comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
     root_id = comms.messaging.initialize_private_initial_protocol()
-    with pytest.raises(RelationViolationError, match="Legacy append"):
-        comms.bus.publisher.publish(
-            Message(sender="sender", target="beta", body="old writer", type=MessageType.INFO)
-        )
     disabled = Comms(comms.root, private_initial_writes=False)
     with pytest.raises(RelationViolationError, match="Private initial publication is disabled"):
         disabled.messaging.send_message("sender", "beta", "disabled writer")

@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import LockedStore
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument
@@ -53,7 +54,7 @@ def test_store_owns_document_and_failed_edit_cannot_leak_into_cache(tmp_path):
     assert not {"_threads", "_owners", "_admissions", "_statuses"} & vars(registration).keys()
 
 
-def test_registry_a8_update_uses_existing_wire_projection(tmp_path):
+def test_registry_update_persists_across_reopen(tmp_path):
     registry = Registration(tmp_path / "registry.json")
     registry.register(owner(tmp_path))
 
@@ -63,9 +64,6 @@ def test_registry_a8_update_uses_existing_wire_projection(tmp_path):
         return modified
 
     registry.store.update(change)
-    raw = json.loads(registry.store.path.read_text())
-    assert raw["threads"]["owner"]["title"] == "a8 update"
-    assert "owner_epochs" in raw and "owners" not in raw
     assert Registration(registry.store.path).require("owner").title == "a8 update"
 
 
@@ -74,10 +72,8 @@ def test_new_thread_field_has_no_second_registry_decoder_roster(tmp_path):
     class ExtendedThread(Thread):
         external_reference: str = "default"
 
-    raw = json.loads(json.dumps(owner(tmp_path).to_wire())) | {
-        "external_reference": "declared here"
-    }
-    loaded = ExtendedThread.from_registry("owner", raw, tmp_path)
+    raw = FieldCodec.encode(owner(tmp_path)) | {"external_reference": "declared here"}
+    loaded = FieldCodec.decode(ExtendedThread, raw)
     assert loaded.external_reference == "declared here"
     assert loaded.to_wire()["external_reference"] == "declared here"
 
@@ -141,7 +137,7 @@ print(json.dumps(steps,sort_keys=True))
     assert steps[3]["threads"]["owner"]["active_turn"]["id"] == "first"
     assert steps[4]["threads"]["owner"]["active_turn"] is None
     assert steps[5]["threads"]["renamed"]["created_at"] == 10.0
-    assert steps[6]["threads"]["renamed"]["status"] == "stopped"
+    assert steps[6]["statuses"]["renamed"]["kind"] == "stopped"
     assert "renamed" not in steps[-1]["threads"]
     restored = Registration(tmp_path / "current" / "registry.json")
     assert restored.require("child").created_at == 20.0

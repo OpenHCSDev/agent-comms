@@ -220,7 +220,9 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
     # A historical unresolved attempt still blocks; current live failures are
     # settled separately by DurableTurn and do not produce this old shape.
     with monkeypatch.context() as historical:
-        historical.setattr(runtime.SelectedExecution, "_uncertain_failure", lambda self, error: None)
+        historical.setattr(
+            runtime.SelectedExecution, "_uncertain_failure", lambda self, error: None
+        )
         with pytest.raises(NativePiUnavailable):
             await runtime.SelectedExecution(
                 root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
@@ -243,11 +245,14 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
 def replacement_release(root):
     from dataclasses import replace
 
+    from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
 
     comms = Comms(root)
     owner = comms.registry.require("beta")
-    comms.registry.register(replace(owner, pid=os.getpid()), new_owner=True)
+    comms.registry.register(
+        replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), new_owner=True
+    )
     os.environ["AGENT_COMMS_THREAD"] = "beta"
     comms.owners.release("beta")
 

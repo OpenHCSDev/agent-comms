@@ -13,8 +13,10 @@ from acp.schema import PromptResponse
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
+from agent_comms import pi_events as pi
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable stub")
@@ -66,11 +68,11 @@ def stub(tmp_path: Path, body: str) -> str:
 @pytest.mark.parametrize(
     "method,choice,answer",
     [
-        ("confirm", {"confirmed": True}, {"confirmed": True}),
+        ("confirm", pi.ConfirmedUiChoice(True), {"confirmed": True}),
         ("confirm", None, {"cancelled": True}),
-        ("confirm", {"value": "forged"}, {"confirmed": False}),
-        ("select", {"value": "one"}, {"value": "one"}),
-        ("select", {"value": "forged"}, {"cancelled": True}),
+        ("confirm", pi.ValueUiChoice("forged"), {"cancelled": True}),
+        ("select", pi.ValueUiChoice("one"), {"value": "one"}),
+        ("select", pi.ValueUiChoice("forged"), {"cancelled": True}),
     ],
 )
 async def test_same_child_ui_reply_is_correlated_and_denied_without_controller(
@@ -142,7 +144,9 @@ async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path
     session_id = "project"
     turn = "turn-1"
     agent.turns.active_turns[session_id] = turn
-    request = {"id": "ui-1", "method": "confirm", "title": "Confirm", "message": "One action"}
+    request = pi.ExtensionUiRequest(
+        id="ui-1", method="confirm", title="Confirm", message="One action"
+    )
 
     class DirectController:
         async def request_permission(self, **kwargs):
@@ -151,13 +155,16 @@ async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path
 
     controller = DirectController()
     agent.sessions.client = controller
-    assert (await agent.turns.extension_ui_permission(session_id, turn, controller, request)) == {
-        "confirmed": True,
-    }
+    assert (
+        await agent.turns.extension_ui_permission(session_id, turn, controller, request)
+    ) == pi.ConfirmedUiChoice(True)
     assert (
         await agent.turns.extension_ui_permission(session_id, "wrong-turn", controller, request)
-    ) is None
-    assert await agent.turns.extension_ui_permission(session_id, turn, None, request) is None
+    ) == pi.CancelledUiChoice()
+    assert (
+        await agent.turns.extension_ui_permission(session_id, turn, None, request)
+        == pi.CancelledUiChoice()
+    )
     assert agent._runtime.controller.get() is UNBOUND_CONTROLLER
     entered, release = asyncio.Event(), asyncio.Event()
 
@@ -173,7 +180,7 @@ async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path
     await asyncio.wait_for(entered.wait(), timeout=1)
     agent.turns.active_turns[session_id] = "successor-turn"
     release.set()
-    assert await asyncio.wait_for(in_flight, timeout=1) is None
+    assert await asyncio.wait_for(in_flight, timeout=1) == pi.CancelledUiChoice()
     agent.turns.active_turns[session_id] = turn
     monkeypatch.setattr("agent_comms.turn_runner.ACP_PERMISSION_TIMEOUT_SECONDS", 0.05)
 
@@ -185,7 +192,7 @@ async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path
         await asyncio.wait_for(
             agent.turns.extension_ui_permission(session_id, turn, controller, request), timeout=1
         )
-        is None
+        == pi.CancelledUiChoice()
     )
     await agent.shutdown()
 
@@ -326,12 +333,12 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
             proxies.append(proxy)
         assert proxies[0]._controller_token != proxies[1]._controller_token
         assert "controllerToken" not in owner.sessions.metadata(session_id)["agentComms"]
-        request = {
-            "id": "only-one-child",
-            "method": "confirm",
-            "title": "Approve once?",
-            "message": "Exactly this request",
-        }
+        request = pi.ExtensionUiRequest(
+            id="only-one-child",
+            method="confirm",
+            title="Approve once?",
+            message="Exactly this request",
+        )
 
         async def fake_prompt(session_id, prompt, **kwargs):
             controller = owner._runtime.controller.get()
@@ -342,11 +349,14 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
                 )
             finally:
                 owner.turns.active_turns.pop(session_id, None)
-            return PromptResponse(stop_reason="end_turn", field_meta={"answer": answer})
+            return PromptResponse(
+                stop_reason="end_turn",
+                field_meta={"answer": FieldCodec.encode(answer.response(request))},
+            )
 
         monkeypatch.setattr(owner, "prompt", fake_prompt)
         result = await asyncio.wait_for(proxies[0].request("prompt", prompt=[]), timeout=4)
-        assert result["_meta"]["answer"] == {"confirmed": True}
+        assert result["_meta"]["answer"]["confirmed"] is True
         assert len(calls[0]) == 1 and not calls[1]
         assert calls[0][0]["session_id"] == session_id
         assert calls[0][0]["options"][0]["kind"] == "allow_once"
@@ -354,7 +364,7 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
         saved = proxies[1]._controller_token
         proxies[1]._controller_token = "0" * 64
         result = await asyncio.wait_for(proxies[1].request("prompt", prompt=[]), timeout=4)
-        assert result["_meta"]["answer"] is None
+        assert result["_meta"]["answer"]["cancelled"] is True
         assert not calls[1]
         proxies[1]._controller_token = saved
         # A controller can disappear after presentation but before answering.
@@ -373,7 +383,7 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
         await asyncio.wait_for(entered.wait(), timeout=4)
         await proxies[0].close()
         disconnected = await asyncio.wait_for(pending, timeout=4)
-        assert disconnected["_meta"]["answer"] is None
+        assert disconnected["_meta"]["answer"]["cancelled"] is True
         assert not calls[1]
     finally:
         for proxy in proxies:

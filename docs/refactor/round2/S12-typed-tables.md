@@ -161,3 +161,11 @@ UNKNOWN/reset proof remain open.
   transcript_reply_index.sqlite3; durable ReadLedger remains untouched.
 - **Still open:** full lifecycle/core/cohort/response table caller closure and
   remaining unowned tables. S12 is not globally complete.
+- **Response module closed:** two response tables and join projection now use A13;
+  all response mutation callers use declared rows, old SQL roster/mappers deleted.
+- **Page index closed:** bus_page_index.sqlite3 uses BusPageSource/BusPageRow;
+  A13 typed streaming preserves bounded history and closes cursor resources.
+  Runtime quiet reset required. passive_channel_awareness adopts that iterator.
+- **Current release contract:** VerifiedOwnerLoss consumes typed release evidence
+  with full process identity after parent229/b4cb42a integration. No raw receipt
+  fallback; UNKNOWN preserved and only new input eligible after explicit recovery.

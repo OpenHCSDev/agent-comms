@@ -1,0 +1,29 @@
+{
+  "base_revision": "bf68bbbf5eed95dd79f890fc50886a4481d40a7d",
+  "head_revision": "fac49a3f289208be1ba92cdb1e17cabe86211c90",
+  "paths": [
+    "src/agent_comms/cli_commands.py",
+    "src/agent_comms/goal_history.py",
+    "src/agent_comms/goals.py",
+    "src/agent_comms/registration.py",
+    "src/agent_comms/registry_document.py",
+    "src/agent_comms/registry_store.py",
+    "src/agent_comms/thread_management.py",
+    "src/agent_comms/tools.py"
+  ],
+  "base": {
+    "TypeIdentity": 21,
+    "LongBooleanChain": 22,
+    "StringSubscript": 98
+  },
+  "head": {
+    "TypeIdentity": 19,
+    "LongBooleanChain": 22,
+    "StringSubscript": 95
+  },
+  "delta": {
+    "TypeIdentity": -2,
+    "LongBooleanChain": 0,
+    "StringSubscript": -3
+  }
+}

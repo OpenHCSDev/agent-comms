@@ -220,7 +220,6 @@ class TurnProgress(events.AgentEventConsumer):
         if (
             execution.goal is not None
             and execution.goal.state.active
-            and (not execution.direct_interrupt)
             and (
                 execution.runner.comms.registry.require(execution.thread_name).worktree
                 == execution.thread.worktree
@@ -339,12 +338,7 @@ class TurnProgress(events.AgentEventConsumer):
 
     async def publish_result(self):
         execution = self.execution
-        if (
-            self.terminal_ok is None
-            and execution.goal is not None
-            and execution.goal.state.active
-            and not execution.direct_interrupt
-        ):
+        if self.terminal_ok is None and execution.goal is not None and execution.goal.state.active:
             # An EOF without a done event is a failed turn, not a signal to
             # schedule the still-active goal again on the next live drain.
             execution.current_thread = execution.runner.comms.registry.require(

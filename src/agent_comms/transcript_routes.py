@@ -10,7 +10,7 @@ from .errors import RelationViolationError
 from .routing import TurnRouting
 from .store_files import _store_lock
 from .transcript_events import TranscriptCodec
-from .typed_table import Column, JsonStorage, TypedRow, TypedTable
+from .typed_table import Column, JsonStorage, SQLiteSchemaObject, TypedTable
 
 
 class RouteAnnotationTable:
@@ -53,16 +53,10 @@ class InputDisplay(RouteAnnotationTable, TypedTable):
         )
 
 
-@dataclass(frozen=True)
-class _AnnotationSchema(TypedRow):
-    name: str
-    sql: str
-
-
 def _schema(connection: sqlite3.Connection) -> dict[str, str]:
     return {
         row.name: row.sql
-        for row in _AnnotationSchema.read(
+        for row in SQLiteSchemaObject.read(
             connection.execute(
                 "SELECT name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"
             )

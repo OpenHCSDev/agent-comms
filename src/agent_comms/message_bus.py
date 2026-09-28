@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from bisect import bisect_left
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import closing
@@ -25,7 +24,6 @@ from .message_page import MessagePage
 from .messages import Message, MessageType
 from .read_basis import (
     ChannelDisplayScope,
-    DisplayBasis,
     DMDisplayScope,
     MessageDisplayScope,
     ViewUnread,
@@ -43,8 +41,10 @@ if TYPE_CHECKING:
     from .historical_views import HistorySource, HistoryView
     from .registration import Registration
 
+from .private_registry_guard import PrivateRegistryGuard
 from .publisher import Publisher
 from .wire_log import WireLog
+from .wire_metadata import ArchivedAccess, WireMetadata
 
 
 class MessageBus:
@@ -101,7 +101,6 @@ class MessageBus:
         import tempfile
 
         from .catalog_store import ChannelCatalog
-
         from .historical_views import HistorySource
 
         source_root = source_root.resolve()
@@ -129,22 +128,28 @@ class MessageBus:
                 revisions = tuple(file_revision(path) for path in paths)
                 for path in paths:
                     if path.exists():
-                        shutil.copyfile(path, stage / path.name)
+                        shutil.copy2(path, stage / path.name)
                 if revisions != tuple(file_revision(path) for path in paths):
                     raise ValueError("Historical source changed during snapshot; retry")
                 bus_info = paths[0].stat() if paths[0].exists() else None
                 if bus_info is None:
                     (stage / "bus.jsonl").touch()
-                # Source metadata is provenance only. Never turn the snapshot
-                # into an active private root or copy coordinator/native state.
-                meta = stage / "bus_meta.json"
-                marker = json.loads(meta.read_text()) if meta.exists() else {}
-                if meta.exists():
-                    meta.rename(stage / "source_bus_meta.json")
+                # One current marker format; snapshots retain source identity
+                # and explicitly prohibit publication or historical admission.
+                archived = WireLog(stage / "bus.jsonl")
+                marker = archived.read_metadata_unlocked(required=True)
+                marker.admission_after_seq = marker.last_seq
+                marker.access = ArchivedAccess()
+                marker.checkpoint_version = None
+                marker.checkpoint_seal = None
+                guard = PrivateRegistryGuard(stage / "registry.json", marker.root_id)
+                guard.create_pending()
+                archived.write_metadata_unlocked(marker)
+                guard.commit_initial()
                 source = HistorySource(
                     str(stage.resolve()),
                     str(source_root),
-                    marker.get("wire_root_id", ""),
+                    marker.root_id,
                     (bus_info.st_dev, bus_info.st_ino) if bus_info else (0, 0),
                     bus_info.st_size if bus_info else 0,
                     file_revision(stage / "bus.jsonl"),
@@ -153,7 +158,7 @@ class MessageBus:
                 registry = source.registry().snapshot()
                 previous = 0
                 for record, size in _iter_jsonl_records(stage / "bus.jsonl"):
-                    message, _ = self.log._public_page_record(record, size)
+                    message, _ = archived._public_page_record(record, size, marker)
                     if message.seq <= previous:
                         raise ValueError("Historical source has nonascending sequences")
                     previous = message.seq
@@ -256,12 +261,6 @@ class MessageBus:
         self._view_unread_cache[viewer] = ViewUnread(revision, scopes, counts)
         return dict(counts)
 
-    def mark_view_read(
-        self, viewer: str, target: str, through: int, *, displayed: DisplayBasis
-    ) -> None:
-        """Compatibility entry point; only an actual display basis advances reads."""
-        self.reads.mark_displayed(viewer, displayed.through(through))
-
     def channel_activity(self) -> Mapping[str, ChannelActivity]:
         """Aggregate channel history clocks once per wire revision, not per viewer."""
         with self.log.locked():
@@ -307,40 +306,18 @@ class MessageBus:
             thread.name, snapshot.aliases, self._channels.read().targets_for(thread.tags)
         )
 
-    @staticmethod
-    def _marker_key(name: str, target: str) -> str:
-        return json.dumps([name, target], separators=(",", ":"))
-
     def inbox(self, name: str, target: str | None = None) -> Sequence[Message]:
         delivery = self._delivery_scope(name)
         name = delivery.actor
         matches = self._scope_filter(delivery, target)
-        if self.reads.human(self._registry.require(name).role):
-            seen = self.reads.seen_sequences(name, self._registry.snapshot())
-            return [
-                message
-                for message in self.log.full_history()
-                if delivery.delivers(message.sender, message.target)
-                and matches(message)
-                and message.seq not in seen
-            ]
-        markers = self._read_markers()
-        global_read = markers.get(name, 0)
-        with self.log.locked():
-            return [
-                msg
-                for msg in self.log._iter_log_unlocked()
-                if msg.seq > global_read
-                and delivery.delivers(msg.sender, msg.target)
-                and matches(msg)
-                and msg.seq
-                > max(
-                    global_read,
-                    markers.get(
-                        self._marker_key(name, delivery.conversation(msg.sender, msg.target)), 0
-                    ),
-                )
-            ]
+        seen = self.reads.seen_sequences(name, self._registry.snapshot())
+        return [
+            message
+            for message in self.log.full_history()
+            if delivery.delivers(message.sender, message.target)
+            and matches(message)
+            and message.seq not in seen
+        ]
 
     def pending_count(self, name: str, target: str | None = None) -> int:
         """Count unread messages without retaining their bodies."""
@@ -367,91 +344,38 @@ class MessageBus:
 
     def pending_counts(self, name: str) -> Mapping[str, int]:
         """Count one thread's unread messages by conversation in one log pass."""
-        if self.reads.human(self._registry.require(name).role):
-            delivery = self._delivery_scope(name)
-            revision = tuple(
-                file_revision(path)
-                for path in (
-                    self.log.path,
-                    self._registry.store.path,
-                    self._channels.path,
-                    self.reads.path,
-                )
-            )
-            cached = self._pending_cache.get(name)
-            if cached is not None and cached.revision == revision and cached.delivery == delivery:
-                return dict(cached.counts)
-            seen = self.reads.seen_sequences(delivery.actor, self._registry.snapshot())
-            counts: dict[str, int] = {}
-            with self.log.locked():
-                try:
-                    with BusRouteCounts(self.log.path) as route_counts:
-                        if route_counts.sync(self._pending_route_fields):
-                            for target, sender, unread in route_counts.unseen_counts(seen):
-                                if delivery.delivers(sender, target):
-                                    conversation = delivery.conversation(sender, target)
-                                    counts[conversation] = counts.get(conversation, 0) + unread
-                            self._pending_cache[name] = PendingCounts(revision, delivery, counts)
-                            return dict(counts)
-                except (OSError, sqlite3.DatabaseError):
-                    # The index is disposable; exact ledger membership still owns unread.
-                    pass
-                for message in self.log._iter_log_unlocked():
-                    if (
-                        delivery.delivers(message.sender, message.target)
-                        and message.seq not in seen
-                    ):
-                        conversation = delivery.conversation(message.sender, message.target)
-                        counts[conversation] = counts.get(conversation, 0) + 1
-            self._pending_cache[name] = PendingCounts(revision, delivery, counts)
-            return dict(counts)
+        delivery = self._delivery_scope(name)
         revision = tuple(
             file_revision(path)
             for path in (
                 self.log.path,
+                self._registry.store.path,
                 self._channels.path,
-                self.reads.path.with_name(self.reads.legacy_filename),
+                self.reads.path,
             )
         )
-        delivery = self._delivery_scope(name)
         cached = self._pending_cache.get(name)
         if cached is not None and cached.revision == revision and cached.delivery == delivery:
             return dict(cached.counts)
-        markers = self._read_markers()
-        global_read = markers.get(delivery.actor, 0)
+        seen = self.reads.seen_sequences(delivery.actor, self._registry.snapshot())
         counts: dict[str, int] = {}
         with self.log.locked():
             try:
                 with BusRouteCounts(self.log.path) as route_counts:
                     if route_counts.sync(self._pending_route_fields):
-                        for target, raw_sender in route_counts.routes():
-                            if not delivery.delivers(raw_sender, target):
-                                continue
-                            scope = delivery.conversation(raw_sender, target)
-                            cutoff = max(
-                                global_read,
-                                markers.get(self._marker_key(delivery.actor, scope), 0),
-                            )
-                            unread = route_counts.pair_after(target, raw_sender, cutoff)
-                            if unread:
-                                counts[scope] = counts.get(scope, 0) + unread
+                        for target, sender, unread in route_counts.unseen_counts(seen):
+                            if delivery.delivers(sender, target):
+                                conversation = delivery.conversation(sender, target)
+                                counts[conversation] = counts.get(conversation, 0) + unread
                         self._pending_cache[name] = PendingCounts(revision, delivery, counts)
                         return dict(counts)
             except (OSError, sqlite3.DatabaseError):
-                # The JSONL bus remains authoritative if its disposable index fails.
+                # The index is disposable; exact ledger membership still owns unread.
                 pass
             for message in self.log._iter_log_unlocked():
-                if message.seq <= global_read or not delivery.delivers(
-                    message.sender, message.target
-                ):
-                    continue
-                scope = delivery.conversation(message.sender, message.target)
-                if message.seq <= max(
-                    global_read,
-                    markers.get(self._marker_key(delivery.actor, scope), 0),
-                ):
-                    continue
-                counts[scope] = counts.get(scope, 0) + 1
+                if delivery.delivers(message.sender, message.target) and message.seq not in seen:
+                    conversation = delivery.conversation(message.sender, message.target)
+                    counts[conversation] = counts.get(conversation, 0) + 1
         self._pending_cache[name] = PendingCounts(revision, delivery, counts)
         return dict(counts)
 
@@ -493,218 +417,55 @@ class MessageBus:
             yield self._pending_route_fields(record)
 
     def pending_counts_all(self, names: Sequence[str]) -> Mapping[str, int]:
-        """Count selected inboxes in one locked wire pass for a thread listing.
-
-        The CLI starts a new process for each call, so the per-viewer cache in
-        ``pending_counts`` cannot amortize one scan per registered thread.
-        Build a single registry/channel delivery snapshot, then decode each
-        wire row only once. This is a read projection, never a read ACK.
-        """
+        """Count every requested inbox from one wire and read-ledger snapshot."""
         snapshot = self._registry.snapshot()
-        humans = tuple(
-            name
-            for name in names
-            if snapshot.aliases.get(name, name) in snapshot.threads
-            and self.reads.human(snapshot.threads[snapshot.aliases.get(name, name)].role)
-        )
-        if humans:
-            counts = {name: sum(self.pending_counts(name).values()) for name in humans}
-            executors = tuple(name for name in names if name not in humans)
-            if executors:
-                counts.update(self.pending_counts_all(executors))
-            return counts
-        actors: dict[str, str] = {}
-        deliveries: dict[str, DeliveryScope] = {}
-        for name in names:
-            actor = snapshot.aliases.get(name, name)
+        catalog = self._channels.read()
+        document = self.reads.read()
+        actors = {name: snapshot.aliases.get(name, name) for name in names}
+        deliveries = {}
+        seen = {}
+        channel_members: dict[str, set[str]] = {}
+        for actor in set(actors.values()):
             if actor not in snapshot.threads:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-            actors[name] = actor
-            if actor not in deliveries:
-                thread = snapshot.threads[actor]
-                deliveries[actor] = DeliveryScope(
-                    thread.name, snapshot.aliases, self._channels.read().targets_for(thread.tags)
-                )
-        if not deliveries:
-            return {}
-        markers = self._read_markers()
-        # A scoped marker key is JSON-encoded. Decoding it once matters as much
-        # as the one-pass wire scan: rebuilding it for every recipient of every
-        # broadcast would recreate a threads × messages serialization loop.
-        scoped_markers: dict[str, dict[str, int]] = {actor: {} for actor in deliveries}
-        for key, sequence in markers.items():
-            if not isinstance(key, str) or not key.startswith("["):
-                continue
-            try:
-                scope = json.loads(key)
-            except json.JSONDecodeError:
-                continue
-            if (
-                isinstance(scope, list)
-                and len(scope) == 2
-                and isinstance(scope[0], str)
-                and isinstance(scope[1], str)
-                and scope[0] in scoped_markers
-                and key == self._marker_key(scope[0], scope[1])
-            ):
-                scoped_markers[scope[0]][scope[1]] = sequence
-        # Every channel message has the same conversation scope for its
-        # recipients. Sort their read thresholds once and range-add each row's
-        # eligible recipients: O(messages log threads), not O(messages × threads).
-        channel_members: dict[str, list[str]] = {}
-        channel_cutoffs: dict[str, list[int]] = {}
-        channel_deltas: dict[str, list[int]] = {}
-        channel_self_cutoffs: dict[str, dict[str, int]] = {}
-        channel_direct_actor: dict[str, str] = {}
-        channels: dict[str, list[DeliveryScope]] = {}
-        for delivery in deliveries.values():
-            for target in delivery.channels:
-                channels.setdefault(target, []).append(delivery)
-        for target, recipients in channels.items():
-            # Legacy "broadcast" is a channel route, but if a real thread has
-            # that name its conversation scope is the sender, not "broadcast".
-            direct_actor = (
-                snapshot.aliases.get(target, target) if not target.startswith("#") else ""
+                raise UnregisteredThreadError(f"Thread {actor!r} is not registered.")
+            owner = snapshot.threads[actor]
+            deliveries[actor] = DeliveryScope(
+                actor, snapshot.aliases, catalog.targets_for(owner.tags)
             )
-            if direct_actor in deliveries:
-                channel_direct_actor[target] = direct_actor
-            ordinary = [
-                (
-                    max(
-                        markers.get(delivery.actor, 0),
-                        scoped_markers[delivery.actor].get(target, 0),
-                    ),
-                    delivery.actor,
-                )
-                for delivery in recipients
-                if delivery.actor != direct_actor
-            ]
-            ordinary.sort()
-            channel_cutoffs[target] = [after for after, _ in ordinary]
-            channel_members[target] = [actor for _, actor in ordinary]
-            channel_self_cutoffs[target] = {actor: after for after, actor in ordinary}
-            channel_deltas[target] = [0] * (len(ordinary) + 1)
+            seen[actor] = self.reads.seen_sequences(actor, snapshot, document=document)
+            for target in deliveries[actor].channels:
+                channel_members.setdefault(target, set()).add(actor)
         counts = dict.fromkeys(deliveries, 0)
         with self.log.locked():
-            try:
-                with BusRouteCounts(self.log.path) as route_counts:
-                    if route_counts.sync(self._pending_route_fields):
-                        senders: dict[str, list[str]] = {}
-                        for target, raw_sender in route_counts.routes():
-                            senders.setdefault(target, []).append(raw_sender)
-                            sender = snapshot.aliases.get(raw_sender, raw_sender)
-                            route_actor: str | None
-                            if target in channel_cutoffs:
-                                route_actor = channel_direct_actor.get(target)
-                            else:
-                                route_actor = snapshot.aliases.get(target, target)
-                            if route_actor in counts and route_actor != sender:
-                                cutoff = max(
-                                    markers.get(route_actor, 0),
-                                    scoped_markers[route_actor].get(sender, 0),
-                                )
-                                counts[route_actor] += route_counts.pair_after(
-                                    target, raw_sender, cutoff
-                                )
-                        for target, members in channel_members.items():
-                            for actor in members:
-                                cutoff = channel_self_cutoffs[target][actor]
-                                total = route_counts.target_after(target, cutoff)
-                                for raw_sender in senders.get(target, ()):
-                                    if snapshot.aliases.get(raw_sender, raw_sender) == actor:
-                                        total -= route_counts.pair_after(target, raw_sender, cutoff)
-                                counts[actor] += total
-                        return {name: counts[actor] for name, actor in actors.items()}
-            except (OSError, sqlite3.DatabaseError):
-                # The bus remains authoritative if its disposable index is
-                # unavailable. Route validation errors still fail closed.
-                pass
-            for seq, raw_sender, target in self._iter_pending_routes_unlocked():
+            for sequence, raw_sender, target in self._iter_pending_routes_unlocked():
                 sender = snapshot.aliases.get(raw_sender, raw_sender)
-                if target in channel_cutoffs:
-                    eligible = bisect_left(channel_cutoffs[target], seq)
-                    if eligible:
-                        deltas = channel_deltas[target]
-                        deltas[0] += 1
-                        deltas[eligible] -= 1
-                        # Sending to one's own channel never creates unread.
-                        own_after = channel_self_cutoffs[target].get(sender)
-                        if own_after is not None and seq > own_after:
-                            counts[sender] -= 1
-                    direct = channel_direct_actor.get(target)
-                    if (
-                        direct is not None
-                        and direct != sender
-                        and seq > max(markers.get(direct, 0), scoped_markers[direct].get(sender, 0))
-                    ):
-                        counts[direct] += 1
-                else:
-                    actor = snapshot.aliases.get(target, target)
-                    if (
-                        actor in deliveries
-                        and actor != sender
-                        and seq > max(markers.get(actor, 0), scoped_markers[actor].get(sender, 0))
-                    ):
+                direct = snapshot.aliases.get(target, target)
+                recipients = channel_members.get(
+                    target, {direct} if direct in deliveries else set()
+                )
+                for actor in recipients:
+                    if actor != sender and sequence not in seen[actor]:
                         counts[actor] += 1
-        for target, members in channel_members.items():
-            running = 0
-            for actor, delta in zip(members, channel_deltas[target], strict=False):
-                running += delta
-                counts[actor] += running
         return {name: counts[actor] for name, actor in actors.items()}
 
     def mark_delivered(self, name: str, target: str | None = None) -> int:
         """Mark unread messages delivered and return the count without retaining them."""
-        if self.reads.human(self._registry.require(name).role):
-            messages = self.inbox(name, target)
-            basis = self.reads.capture(name, messages, self._registry.snapshot(), self.log.path)
-            self.reads.mark_displayed(basis.viewer, basis)
-            return len(messages)
-        delivery = self._delivery_scope(name)
-        name = delivery.actor
-        matches = self._scope_filter(delivery, target)
-        markers = self._read_markers()
-        global_read = markers.get(name, 0)
-        count = 0
-        latest = 0
-        scoped: dict[str, int] = {}
-        with self.log.locked():
-            for msg in self.log._iter_log_unlocked():
-                if (
-                    msg.seq > global_read
-                    and delivery.delivers(msg.sender, msg.target)
-                    and matches(msg)
-                    and msg.seq
-                    > max(
-                        global_read,
-                        markers.get(
-                            self._marker_key(name, delivery.conversation(msg.sender, msg.target)), 0
-                        ),
-                    )
-                ):
-                    count += 1
-                    latest = msg.seq
-                    scoped[
-                        self._marker_key(name, delivery.conversation(msg.sender, msg.target))
-                    ] = msg.seq
-        if not count:
-            return 0
-        self._write_markers({name: latest} if target is None else scoped)
-        return count
+        messages = self.inbox(name, target)
+        basis = self.reads.capture(name, messages, self._registry.snapshot(), self.log.path)
+        self.reads.mark_displayed(basis.viewer, basis)
+        return len(messages)
 
     def mark_delivered_through(self, name: str, sequence: int) -> None:
         """Advance a thread's global inbox cursor without loading messages."""
         canonical = self._registry.require(name).name
         if sequence < 0:
             raise ValueError("Delivery sequence cannot be negative.")
-        if self.reads.human(self._registry.require(canonical).role):
-            messages = (message for message in self.inbox(canonical) if message.seq <= sequence)
-            displayed = self.reads.capture(
-                canonical, messages, self._registry.snapshot(), self.log.path
-            )
-            self.reads.mark_displayed(canonical, displayed)
-            return
-        self._write_markers({canonical: sequence})
+        messages = (message for message in self.inbox(canonical) if message.seq <= sequence)
+        displayed = self.reads.capture(
+            canonical, messages, self._registry.snapshot(), self.log.path
+        )
+        self.reads.mark_displayed(canonical, displayed)
+        return
 
     def dm_history(self, a: str, b: str) -> Sequence[Message]:
         """Full conversation between two threads, in seq order."""
@@ -825,9 +586,12 @@ class MessageBus:
                 # The JSONL bus remains authoritative if the disposable
                 # index is unavailable or its selected offsets disagree.
                 pass
+            metadata = (
+                self.log._private_marker_unlocked() if self.log.path.exists() else WireMetadata()
+            )
             return self._collect_history_page(
                 (
-                    self.log._public_page_record(record, size)
+                    self.log._public_page_record(record, size, metadata)
                     for record, size in _iter_jsonl_records(self.log.path)
                 ),
                 matches,
@@ -858,6 +622,7 @@ class MessageBus:
             raise ValueError("History page byte budget must be positive.")
         page: deque[tuple[Message, int]] = deque()
         page_bytes = 0
+        metadata = self.log._private_marker_unlocked()
         with self.log.path.open("rb") as stream:
 
             def has_match(*, lower: int | None, upper: int | None) -> bool:
@@ -865,7 +630,9 @@ class MessageBus:
                     index.offsets(lower=lower, upper=upper, descending=True, targets=targets)
                 ) as rows:
                     for row in rows:
-                        message, _ = self.log._public_page_record(*index.record(stream, row))
+                        message, _ = self.log._public_page_record(
+                            *index.record(stream, row), metadata
+                        )
                         if matches(message):
                             return True
                 return False
@@ -880,7 +647,9 @@ class MessageBus:
                 rows = index.offsets(lower=None, upper=before, descending=True, targets=targets)
             with closing(rows):
                 for row in rows:
-                    message, encoded_size = self.log._public_page_record(*index.record(stream, row))
+                    message, encoded_size = self.log._public_page_record(
+                        *index.record(stream, row), metadata
+                    )
                     if not matches(message):
                         continue
                     if len(page) >= limit or (page and page_bytes + encoded_size > max_bytes):
@@ -985,69 +754,3 @@ class MessageBus:
 
     def channels(self) -> Sequence[str]:
         return list(self._channels.read().views(self._registry.all_threads()))
-
-    def _read_markers(self) -> dict[str, int]:
-        marker_path = self.reads.path.with_name(self.reads.legacy_filename)
-        with _store_lock(marker_path):
-            return self._read_markers_unlocked(marker_path)
-
-    @staticmethod
-    def _read_markers_unlocked(marker_path: Path) -> dict[str, int]:
-        if not marker_path.exists():
-            return {}
-        markers: dict[str, int] = json.loads(marker_path.read_text())
-        return markers
-
-    def _write_markers(self, markers: dict[str, int]) -> None:
-        marker_path = self.reads.path.with_name(self.reads.legacy_filename)
-        with _store_lock(marker_path):
-            current = self._read_markers_unlocked(marker_path)
-            for name, sequence in markers.items():
-                current[name] = max(sequence, current.get(name, 0))
-            _atomic_write_text(marker_path, json.dumps(current, indent=2))
-
-    def rename_thread(self, old_name: str, new_name: str) -> None:
-        """Move read markers to canonical names without rewriting message history."""
-        marker_path = self.reads.path.with_name(self.reads.legacy_filename)
-        with _store_lock(marker_path):
-            markers = self._read_markers_unlocked(marker_path)
-            renamed: dict[str, int] = {}
-            for key, sequence in markers.items():
-                if key == old_name:
-                    key = new_name
-                else:
-                    try:
-                        scope = json.loads(key)
-                    except json.JSONDecodeError:
-                        scope = None
-                    if isinstance(scope, list) and len(scope) == 2:
-                        scope = [new_name if value == old_name else value for value in scope]
-                        key = json.dumps(scope, separators=(",", ":"))
-                renamed[key] = max(sequence, renamed.get(key, 0))
-            _atomic_write_text(marker_path, json.dumps(renamed, indent=2))
-
-    def remove_thread(self, name: str) -> tuple[int, int]:
-        """Purge legacy messages, never rewriting a private authority row."""
-        names = self._registry.aliases_for(name)
-        messages_removed = self.log.remove_legacy_threads(names)
-
-        marker_path = self.reads.path.with_name(self.reads.legacy_filename)
-        with _store_lock(marker_path):
-            markers = self._read_markers_unlocked(marker_path)
-
-            def references_thread(key: str) -> bool:
-                if key in names:
-                    return True
-                try:
-                    scope = json.loads(key)
-                except json.JSONDecodeError:
-                    return False
-                return (
-                    isinstance(scope, list) and len(scope) == 2 and bool(names.intersection(scope))
-                )
-
-            retained_markers = {
-                key: sequence for key, sequence in markers.items() if not references_thread(key)
-            }
-            _atomic_write_text(marker_path, json.dumps(retained_markers, indent=2))
-        return messages_removed, len(markers) - len(retained_markers)
