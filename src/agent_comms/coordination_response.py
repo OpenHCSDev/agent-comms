@@ -296,7 +296,7 @@ def _require_cohort_claims(
             )
             or claim.recipient_lookup not in selected
             or derive_exact_reply_target(initial.message) != snapshot.execution.exact_target
-            or claim.exact_target != snapshot.execution.exact_target
+            or claim.lifecycle.exact_target != snapshot.execution.exact_target
             or not (claim.lifecycle.completed if terminal else claim.lifecycle.engaged)
         ):
             raise IdentityConflict("response claim conflicts with original selected bus route")
@@ -316,7 +316,7 @@ def _require_final_owner(
     if (
         not execution.lifecycle.active
         or not attempt.lifecycle.settling
-        or not (attempt.backend_done and attempt.process_dead)
+        or not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead)
         or snapshot.obligation is None
         or snapshot.obligation.exact_target != execution.exact_target
         or execution.exact_target is None

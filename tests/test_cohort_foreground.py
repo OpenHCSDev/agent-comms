@@ -38,6 +38,24 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def _configured_thread(*args, **kwargs):
+    """Offline foreground owners still have an explicit saved selection."""
+    return Thread(*args, **kwargs, model="openai-codex/gpt-6-sol")
+
+
+def _fake_package(package):
+    """Supply the actual extension bytes; only the provider boundary is faked."""
+    dist = Path(package) / "dist"
+    dist.mkdir(parents=True, exist_ok=True)
+    extension = Path(__file__).parents[1] / "src/agent_comms/channel_coding_tools.mjs"
+    (dist / extension.name).write_bytes(extension.read_bytes())
+
+
+@pytest.fixture(autouse=True)
+def configured_foreground(monkeypatch):
+    monkeypatch.setattr(foreground, "Thread", _configured_thread)
+
+
 def _wire(base: Path) -> tuple[Path, str, Comms]:
     root = base / "wire"
     root.mkdir(mode=0o700)
@@ -99,6 +117,20 @@ def _fake_pi(calls: list[str]):
             + "\n"
         )
         proof.chmod(0o600)
+        from agent_comms.pi_events import PiEvent
+
+        observer = _kwargs["observe_event"]
+        await observer(
+            PiEvent.from_wire(
+                {
+                    "type": "response",
+                    "id": "native-prompt",
+                    "command": "prompt",
+                    "success": True,
+                }
+            )
+        )
+        await observer(PiEvent.from_wire({"type": "context_committed", "inputId": input_id}))
         return NativeTurnResult(
             "42", NativeContextProof(input_id, "foreground", entry_id, 1, digest, session_file)
         )
@@ -114,8 +146,8 @@ async def test_foreground_registers_own_pid_and_seals_one_selected_direct(
         base.chmod(0o700)
         root, root_id, comms = _wire(base)
         calls: list[str] = []
-        monkeypatch.setattr(foreground, "_trusted_package", lambda _: None)
-        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
+        monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
         monkeypatch.setattr(runtime, "run_native_pi_turn", _fake_pi(calls))
 
         def ready(thread: Thread) -> None:
@@ -159,8 +191,8 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
         root, root_id, comms = _wire(base)
         comms.initialize_private_claim_protocol()
         calls: list[str] = []
-        monkeypatch.setattr(foreground, "_trusted_package", lambda _: None)
-        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
+        monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
         monkeypatch.setattr(runtime, "run_native_pi_turn", _fake_pi(calls))
 
         def ready(thread: Thread) -> None:
@@ -197,7 +229,7 @@ async def test_foreground_selected_write_preflight_refuses_uninitialized_or_exte
         resource = base / "module.py"
         resource.write_bytes(b"before\n")
         root, root_id, comms = _wire(base)
-        monkeypatch.setattr(foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
         plan = runtime.SelectedExistingFileWrite(resource, b"forbidden\n")
         with pytest.raises(PublicationActivationBlocked, match="private claim protocol"):
             await foreground.run_foreground_once(
@@ -240,7 +272,7 @@ def test_foreground_cli_passes_bounded_source_to_explicit_selected_write_entry(
         source.write_bytes(b"operator bytes\n")
         root, root_id, _comms = _wire(base)
         observed = []
-        monkeypatch.setattr(foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
 
         async def capture(*args, **kwargs):
             observed.append(kwargs["selected_existing_file_write"])
@@ -308,8 +340,8 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
         comms.initialize_private_claim_protocol()
         comms.register(Thread("beta", frozenset({"team"}), str(base), pid=os.getpid()))
         calls: list[str] = []
-        monkeypatch.setattr(foreground, "_trusted_package", lambda _: None)
-        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
+        monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
         monkeypatch.setattr(runtime, "run_native_pi_turn", _fake_pi(calls))
 
         def ready(thread: Thread) -> None:
@@ -348,8 +380,8 @@ async def test_foreground_two_recipients_one_no_wake_and_no_model(
         base.chmod(0o700)
         root, root_id, comms = _wire(base)
         calls: list[str] = []
-        monkeypatch.setattr(foreground, "_trusted_package", lambda _: None)
-        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
+        monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
         monkeypatch.setattr(runtime, "run_native_pi_turn", _fake_pi(calls))
         ready_names: set[str] = set()
 
@@ -422,7 +454,7 @@ async def test_foreground_refuses_takeover_and_cosmetic_subprocess_pid(
         initial = comms.send_initial_cohort("sender", "beta", "one message")
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             accept_initial_cohort(comms.bus, root_id, initial.seq, store)
-        monkeypatch.setattr(foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
         with pytest.raises(IdentityConflict, match="no takeover"):
             await foreground.run_foreground_once(
                 root,
@@ -474,9 +506,10 @@ def test_actual_foreground_command_owns_its_recipient_process(tmp_path: Path) ->
         # bus, SQLite acceptance/claim and publication run in its actual PID.
         script = """import sys
 from agent_comms import cohort_foreground as f, coordinated_runtime as r
-from test_cohort_foreground import _fake_pi
-f._trusted_package = lambda _: None
-r._trusted_package = lambda _: None
+from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
+f.Thread = _configured_thread
+f._trusted_package = _fake_package
+r._trusted_package = _fake_package
 r.run_native_pi_turn = _fake_pi([])
 raise SystemExit(f.main(sys.argv[1:]))
 """
@@ -556,9 +589,10 @@ def test_two_real_recipient_processes_emit_selected_and_typed_no_wake(tmp_path: 
         root, root_id, comms = _wire(base)
         script = """import sys
 from agent_comms import cohort_foreground as f, coordinated_runtime as r
-from test_cohort_foreground import _fake_pi
-f._trusted_package = lambda _: None
-r._trusted_package = lambda _: None
+from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
+f.Thread = _configured_thread
+f._trusted_package = _fake_package
+r._trusted_package = _fake_package
 r.run_native_pi_turn = _fake_pi([])
 raise SystemExit(f.main(sys.argv[1:]))
 """
@@ -657,8 +691,8 @@ async def test_failed_model_reservation_is_not_polled_or_replayed(
         base.chmod(0o700)
         root, root_id, comms = _wire(base)
         calls: list[str] = []
-        monkeypatch.setattr(foreground, "_trusted_package", lambda _: None)
-        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
+        monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
 
         async def uncertain(*args, input_id: str, **kwargs):
             calls.append(input_id)

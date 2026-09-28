@@ -11,8 +11,9 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from .audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
-from .coordination import MessageAudience, WakeMode
+from .coordination import MessageAudience
 from .declarations import BuiltinChannel, Message, is_channel_target
+from .wake_policy import BoundedTriageWake, FullWake, PassiveWake, WakePolicy
 
 
 class ControlClassification(StrEnum):
@@ -52,13 +53,13 @@ class NoWakeDecision:
 class WakeDecision:
     recipient: str  # Stable recipient_lookup, never the mutable canonical name.
     audience: MessageAudience
-    wake_mode: WakeMode
+    wake_mode: WakePolicy
 
     def __post_init__(self) -> None:
         if not isinstance(self.recipient, str) or not self.recipient:
             raise ValueError("decision recipient requires a stable lookup.")
-        if type(self.audience) is not MessageAudience or type(self.wake_mode) is not WakeMode:
-            raise TypeError("wake decision requires exact MessageAudience and WakeMode enums.")
+        if type(self.audience) is not MessageAudience or not isinstance(self.wake_mode, WakePolicy):
+            raise TypeError("wake decision requires MessageAudience and a nominal WakePolicy.")
 
 
 def _require_stored(message: Message) -> None:
@@ -125,15 +126,15 @@ def _member_decision(
     else:
         audience = MessageAudience.COLLECTIVE
     if message.notice or message.membership is not None or control.passive:
-        mode = WakeMode.PASSIVE
+        mode = PassiveWake()
     elif not channel:
-        mode = WakeMode.FULL
+        mode = FullWake()
     elif effective_mentions:
         if recipient.canonical_thread not in effective_mentions:
             return NoWakeDecision(recipient.recipient_lookup)
-        mode = WakeMode.FULL
+        mode = FullWake()
     else:
-        mode = WakeMode.BOUNDED_TRIAGE
+        mode = BoundedTriageWake()
     return WakeDecision(recipient.recipient_lookup, audience, mode)
 
 

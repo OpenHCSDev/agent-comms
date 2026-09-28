@@ -11,15 +11,16 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms import claim_admission
+from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.claim_admission import (
     publish_selected_resource_claim,
     verify_selected_wake,
     write_selected_claimed_file,
 )
+from agent_comms.claim_states import FullPendingClaim
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordinated_runtime import _engage
-from agent_comms.coordination import AttemptPhase, ClaimDisposition
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
 from agent_comms.coordination_store import IdentityConflict, MutationStore, prepare_fence_token
 from agent_comms.declarations import ClaimEnvelopeUnknownError, RelationViolationError, Thread
@@ -68,7 +69,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             bob_lookup = stable_thread_lookup(comms.registry.require("Bob").created_at)
             assert sealed_cohort_claims(store, bob_lookup) == ()
             claim = sealed_cohort_claims(store, alice_lookup)[0]
-            assert claim.disposition is ClaimDisposition.FULL_PENDING
+            assert type(claim.lifecycle) is FullPendingClaim
             owner, admission_generation = comms.registry.live_owner_with_admission("Alice")
             owner, admission_generation = comms.registry.claim_live_turn_with_admission(
                 owner, "selected-turn", expected_generation=admission_generation
@@ -221,13 +222,13 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 with pytest.raises(IdentityConflict):
                     verify_selected_wake(comms, store, candidate, name)
             fence = started.value.fence
-            for phase in (AttemptPhase.PROMPT_ACCEPTED, AttemptPhase.MODEL_RUNNING):
+            for phase in (PromptAcceptedAttempt, ModelRunningAttempt):
                 fence = store.advance_attempt(
                     fence, phase, expected_pointer_revision=started.value.snapshot.pointer_revision
                 ).value.fence
             store.advance_attempt(
                 fence,
-                AttemptPhase.SETTLING,
+                SettlingAttempt,
                 expected_pointer_revision=started.value.snapshot.pointer_revision,
                 backend_done=True,
                 process_dead=True,

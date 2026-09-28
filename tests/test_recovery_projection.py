@@ -183,11 +183,11 @@ def test_sqlite_read_transaction_cannot_mix_owner_rows(private_db: Path, monkeyp
     assert not reader.is_alive() and not changing.is_alive()
     assert committed.is_set()
     assert isinstance(result[0], AvailableRecoveryProjection)
-    assert result[0].current is not None and result[0].current.status.value == "pending"
+    assert result[0].current is not None and result[0].current.status.declared_name == "pending"
     monkeypatch.setattr(projection, "_read_in_transaction", original)
     latest = view(private_db)
     assert isinstance(latest, AvailableRecoveryProjection)
-    assert latest.current is not None and latest.current.status.value == "failed"
+    assert latest.current is not None and latest.current.status.declared_name == "failed"
 
 
 def test_current_pointer_and_offline_compaction_phase_are_evidence_not_lifecycle(
@@ -197,8 +197,7 @@ def test_current_pointer_and_offline_compaction_phase_are_evidence_not_lifecycle
         db.execute("BEGIN IMMEDIATE")
         pending(db, "a", "Alice", "later-pending")
         db.execute(
-            "UPDATE executions SET revision=2,updated_at_ms=100 "
-            "WHERE execution_id='later-pending'"
+            "UPDATE executions SET revision=2,updated_at_ms=100 WHERE execution_id='later-pending'"
         )
         db.execute(
             "INSERT INTO attempts (execution_id,attempt_ordinal,owner_lookup,owner_thread,"
@@ -234,9 +233,9 @@ def test_current_pointer_and_offline_compaction_phase_are_evidence_not_lifecycle
     result = view(private_db)
     assert isinstance(result, AvailableRecoveryProjection)
     assert result.current is not None and result.current.is_current
-    assert result.current.status.value == "active"
+    assert result.current.status.declared_name == "active"
     assert result.current.attempt is not None
-    assert result.current.attempt.phase.value == "compaction"
+    assert result.current.attempt.phase.declared_name == "compaction"
     assert result.current.attempt.backend_done and not result.current.attempt.backend_process_exited
     assert result.to_primitive()["current"]["attempt"]["backendProcessExited"] is False
     assert "processDead" not in json.dumps(result.to_primitive())
@@ -251,7 +250,7 @@ def test_current_pointer_and_offline_compaction_phase_are_evidence_not_lifecycle
     # Pi RPC child exit and registry-owner connectivity are independent facts.
     with sqlite3.connect(private_db) as db:
         db.execute(
-            "UPDATE attempts SET process_dead=1,revision=5 " "WHERE execution_id='alice-execution'"
+            "UPDATE attempts SET process_dead=1,revision=5 WHERE execution_id='alice-execution'"
         )
         db.execute(
             "UPDATE connectivity SET owner_state='connected',revision=2,"
@@ -302,7 +301,7 @@ def test_invalid_connectivity_timestamp_fails_closed(active_db: Path):
     with sqlite3.connect(active_db) as db:
         db.execute("PRAGMA ignore_check_constraints=ON")
         db.execute(
-            "INSERT INTO connectivity VALUES " "('alice-execution','connected','disconnected',1,-1)"
+            "INSERT INTO connectivity VALUES ('alice-execution','connected','disconnected',1,-1)"
         )
     assert view(active_db) == UnavailableRecoveryProjection("invalid_store")
 

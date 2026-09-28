@@ -13,13 +13,6 @@ from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
-from .coordination import (
-    AttemptPhase,
-    ClaimDisposition,
-    ExecutionStatus,
-    TriageVerdict,
-    WakeMode,
-)
 from .coordination_cohort import _assert_schema, _receipt_matches
 from .coordination_store import IdentityConflict, MutationStore
 from .declarations import (
@@ -94,32 +87,19 @@ def _verify_selected_wake_state(
             or claim.wire_seq != admission.source_seq
             or claim.message_id != admission.source_message_id
             or claim.revision != admission.wake_revision
-            or claim.execution_id != admission.execution_id
-            or claim.disposition is not ClaimDisposition.ENGAGED
-            or not (
-                claim.wake_mode is WakeMode.FULL
-                or (
-                    claim.wake_mode is WakeMode.BOUNDED_TRIAGE
-                    and claim.triage_verdict is TriageVerdict.ENGAGE
-                )
-            )
+            or claim.lifecycle.execution_id != admission.execution_id
+            or not claim.lifecycle.engaged
             or not participant.committed
             or participant.owner_thread != owner.name
             or participant.generation != admission.participant_generation
-            or snapshot.execution.status is not ExecutionStatus.ACTIVE
+            or not snapshot.execution.lifecycle.active
             or snapshot.execution.owner_lookup != admission.recipient_lookup
             or snapshot.execution.owner_thread != owner.name
             or not snapshot.is_current
             or attempt is None
-            or attempt.phase
-            not in {
-                AttemptPhase.PROMPT_STARTING,
-                AttemptPhase.PROMPT_ACCEPTED,
-                AttemptPhase.MODEL_RUNNING,
-                AttemptPhase.TOOL_RUNNING,
-            }
-            or attempt.backend_done
-            or attempt.process_dead
+            or not attempt.lifecycle.allows_tool_admission
+            or attempt.lifecycle.backend_done
+            or attempt.lifecycle.process_dead
             or attempt.attempt_ordinal != admission.attempt_ordinal
             or attempt.owner_generation != admission.participant_generation
             or attempt.owner_thread != owner.name

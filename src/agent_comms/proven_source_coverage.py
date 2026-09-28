@@ -13,7 +13,6 @@ from dataclasses import dataclass
 
 from .bus_publication import CommittedInitial
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination import WakeMode
 from .coordination_cohort import _assert_schema, _receipt_matches
 from .coordination_store import IdentityConflict, MutationStore
 from .declarations import MessageBus, _store_lock
@@ -178,9 +177,9 @@ def read_proven_source_coverage(
             if claim.recipient_lookup == recipient_lookup
             and claim.recipient == recipient.canonical_thread
         ]
-        if len(claims) != 1 or claims[0].wake_mode is not decision.wake_mode:
+        if len(claims) != 1 or claims[0].lifecycle.mode != decision.wake_mode:
             raise IdentityConflict("selected claim differs from frozen bus recipient")
-        if decision.wake_mode is WakeMode.PASSIVE:
+        if not decision.wake_mode.active:
             blocked = seq  # PASSIVE has no native injection semantics.
             break
         evidence = read_historical_native_inputs(
@@ -192,7 +191,7 @@ def read_proven_source_coverage(
         stages = {proof.stage: proof for proof in evidence}
         needed = (
             ("full",)
-            if decision.wake_mode is WakeMode.FULL
+            if decision.wake_mode.active and not decision.wake_mode.triage
             else (
                 ("triage", "full")
                 if stages.get("triage") and stages["triage"].triage_result == "full"
@@ -205,7 +204,7 @@ def read_proven_source_coverage(
                 for stage in needed
             )
             or (
-                decision.wake_mode is WakeMode.BOUNDED_TRIAGE
+                decision.wake_mode.triage
                 and (
                     "triage" not in stages
                     or stages["triage"].triage_result not in {"ignore", "full"}

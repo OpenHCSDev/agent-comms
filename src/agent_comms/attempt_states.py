@@ -18,6 +18,7 @@ from .lifecycle import LifecycleState
 @dataclass(frozen=True)
 class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
     terminal: ClassVar[bool] = False
+    allows_tool_admission: ClassVar[bool] = False
     succeeded: ClassVar[bool] = False
     failed: ClassVar[bool] = False
     starting: ClassVar[bool] = False
@@ -73,6 +74,7 @@ class TerminalAttempt(AttemptState):
 
 
 class PromptStartingAttempt(LiveAttempt):
+    allows_tool_admission = True
     starting = True
 
     @classmethod
@@ -85,6 +87,8 @@ class PromptStartingAttempt(LiveAttempt):
 
 
 class PromptAcceptedAttempt(LiveAttempt):
+    allows_tool_admission = True
+
     @classmethod
     def successors(cls):
         return (
@@ -96,6 +100,7 @@ class PromptAcceptedAttempt(LiveAttempt):
 
 
 class ModelRunningAttempt(LiveAttempt):
+    allows_tool_admission = True
     running = True
 
     @classmethod
@@ -112,6 +117,8 @@ class ModelRunningAttempt(LiveAttempt):
 
 
 class ToolRunningAttempt(LiveAttempt):
+    allows_tool_admission = True
+
     @classmethod
     def successors(cls):
         return (

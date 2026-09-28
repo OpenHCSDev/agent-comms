@@ -47,7 +47,7 @@ class WakePolicy(DeclaredFamily, affix="Wake"):
 
     @classmethod
     @abstractmethod
-    def initial_disposition(cls) -> str: ...
+    def initial_state(cls): ...
 
     def engage(self, execution_id: str, target: str) -> Engagement:
         return Engagement.decode(self.declared_name)(execution_id, target)
@@ -58,17 +58,15 @@ class WakePolicy(DeclaredFamily, affix="Wake"):
     def full_expectation(self):
         return "this is yours; answer the original committed message"
 
-    @property
-    def engagement_verdict(self) -> str | None:
-        return None
-
 
 class PassiveWake(WakePolicy):
     active = False
 
     @classmethod
-    def initial_disposition(cls):
-        return "passive"
+    def initial_state(cls):
+        from .claim_states import PassiveClaim
+
+        return PassiveClaim
 
     def engage(self, execution_id, target):
         raise IntegrityViolationError("passive claim cannot engage")
@@ -81,15 +79,15 @@ class BoundedTriageWake(WakePolicy):
         return "engage only if this concerns your assigned task; otherwise IGNORE"
 
     @classmethod
-    def initial_disposition(cls):
-        return "triage_pending"
+    def initial_state(cls):
+        from .claim_states import TriagePendingClaim
 
-    @property
-    def engagement_verdict(self):
-        return "engage"
+        return TriagePendingClaim
 
 
 class FullWake(WakePolicy):
     @classmethod
-    def initial_disposition(cls):
-        return "full_pending"
+    def initial_state(cls):
+        from .claim_states import FullPendingClaim
+
+        return FullPendingClaim

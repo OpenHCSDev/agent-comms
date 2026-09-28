@@ -14,13 +14,12 @@ from pathlib import Path
 import pytest
 
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, stable_thread_lookup
+from agent_comms.claim_states import DeferredClaim, FullPendingClaim
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordination import (
-    ClaimDisposition,
     MessageAudience,
     PublicationIntent,
     WakeClaim,
-    WakeMode,
     canonical_publication_key,
 )
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
@@ -40,6 +39,7 @@ from agent_comms.exporting import (
     JsonlFormat,
 )
 from agent_comms.operations import Comms
+from agent_comms.wake_policy import BoundedTriageWake, FullWake
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="private initial bus requires POSIX owner/directory durability"
@@ -111,7 +111,7 @@ def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_
     assert isinstance(first, Applied)
     assert (first.value.member_count, first.value.claim_count) == (2, 1)
     assert first.value.claims[0].recipient_lookup == lookups["Alice"]
-    assert first.value.claims[0].wake_mode is WakeMode.FULL
+    assert first.value.claims[0].lifecycle.mode == FullWake()
     assert first.value.accepted_at_ms == 4723
     assert len(sealed_cohort_claims(coordinator, lookups["Alice"])) == 1
     assert sealed_cohort_claims(coordinator, lookups["Bob"]) == ()
@@ -158,7 +158,7 @@ def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Pa
     assert {claim.recipient for claim in result.value.claims} == {"Alice", "Bob"}
     assert {claim.audience for claim in result.value.claims} == {MessageAudience.COLLECTIVE}
     store.transition_preengagement(
-        result.value.claims[0].claim_id, ClaimDisposition.DEFERRED, expected_revision=1
+        result.value.claims[0].claim_id, DeferredClaim, expected_revision=1
     )
     store.close()
     # The SQL COMMIT succeeded, but the client lost its reply. No reappend or
@@ -167,7 +167,7 @@ def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Pa
     again = accept_initial_cohort(reopened.bus, root_id, message.seq, recovered)
     assert isinstance(again, AlreadyApplied)
     assert again.value.accepted_at_ms == 4788
-    assert any(claim.disposition is ClaimDisposition.DEFERRED for claim in again.value.claims)
+    assert any(type(claim.lifecycle) is DeferredClaim for claim in again.value.claims)
     assert [claim.recipient_lookup for claim in again.value.claims] == [
         claim.recipient_lookup for claim in result.value.claims
     ]
@@ -207,13 +207,10 @@ def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Pat
         recipient_lookup=lookups["Alice"],
         wire_seq=sent.seq,
         message_id=sent.message_id,
-        exact_target=None,
         audience=MessageAudience.MENTIONED,
-        wake_mode=WakeMode.FULL,
-        triage_verdict=None,
-        disposition=ClaimDisposition.FULL_PENDING,
         accepted_at_ms=1,
         updated_at_ms=1,
+        lifecycle=FullPendingClaim.load(FullWake(), None, None, None),
     )
     store.accept_claim(legacy)
     with pytest.raises(IdentityConflict, match="legacy singleton"):
@@ -306,7 +303,7 @@ def test_all_channel_excludes_sender_and_nonexecutors_and_control_is_not_forgeab
         lookups["Bob"],
         lookups["Charlie"],
     }
-    assert {claim.wake_mode for claim in result.value.claims} == {WakeMode.BOUNDED_TRIAGE}
+    assert {claim.lifecycle.mode for claim in result.value.claims} == {BoundedTriageWake()}
 
 
 def test_wrong_and_partial_db_receipt_never_accepts_one_n_member(tmp_path: Path) -> None:

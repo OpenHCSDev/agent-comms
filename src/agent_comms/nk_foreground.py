@@ -188,7 +188,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             {
                 "status": "terminal",
                 "name": owner.name,
-                "disposition": result.disposition.value if result else None,
+                "disposition": result.disposition.declared_name if result else None,
                 "response_id": result.response_message_id if result else None,
                 "route": result.exact_target if result else None,
             }

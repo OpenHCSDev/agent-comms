@@ -15,7 +15,6 @@ from .attempt_states import (
     SettlingAttempt,
     ToolRunningAttempt,
 )
-from .coordination import AttemptPhase
 from .coordination_errors import IdentityConflict
 from .mro_dispatch import MroDispatch, handles
 from .turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase
@@ -37,7 +36,7 @@ class DurableTurn(MroDispatch):
             return
         result = self.store.advance_attempt(
             self.fence,
-            AttemptPhase(state.declared_name),
+            state,
             expected_pointer_revision=self.pointer_revision,
             progress=True,
         ).value
@@ -91,7 +90,7 @@ class DurableTurn(MroDispatch):
         self.advance(SettlingAttempt)
         self.fence = self.store.advance_attempt(
             self.fence,
-            AttemptPhase.SETTLING,
+            SettlingAttempt,
             expected_pointer_revision=self.pointer_revision,
             backend_done=True,
             process_dead=True,

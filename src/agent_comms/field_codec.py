@@ -86,6 +86,8 @@ class FieldCodec:
                 )
             )
             return result
+        if isinstance(value, type) and issubclass(value, DeclaredFamily):
+            return value.declared_name
         if isinstance(value, Enum):
             return cls.encode(value.value)
         if value is None or type(value) in (str, int, bool):
@@ -140,6 +142,10 @@ class FieldCodec:
             cls.encode(data)  # still require JSON-compatible data
             return data
         origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
         if origin is Literal:
             if any(type(data) is type(value) and data == value for value in args):
                 return data

@@ -286,7 +286,9 @@ class WakeCandidateIndex:
                         recipient.recipient_lookup,
                         message.sender,
                         message.target,
-                        decision.wake_mode.value if type(decision) is WakeDecision else None,
+                        decision.wake_mode.declared_name
+                        if type(decision) is WakeDecision
+                        else None,
                     )
                 )
             return _ParsedRow(message.seq, tuple(rows), None)

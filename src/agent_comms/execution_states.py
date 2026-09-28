@@ -6,6 +6,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
+from .claim_states import ClaimState, CompletedClaim, DeferredClaim, EngagedClaim, FailedClaim
 from .coordination_errors import IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
@@ -34,9 +35,9 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
     @abstractmethod
     def successors(cls) -> tuple[type[ExecutionState], ...]: ...
 
-    @property
-    def claim_disposition(self) -> str:
-        return self.declared_name
+    @classmethod
+    @abstractmethod
+    def claim_state(cls) -> type[ClaimState]: ...
 
     def validate_budget(self, maximum: int) -> None:
         ordinal = self.current_attempt_ordinal
@@ -62,9 +63,9 @@ class UnstartedExecution(ExecutionState):
             raise IntegrityViolationError("unstarted execution cannot reference an attempt")
         return cls()
 
-    @property
-    def claim_disposition(self) -> str:
-        return "engaged"
+    @classmethod
+    def claim_state(cls) -> type[ClaimState]:
+        return EngagedClaim
 
 
 class QueuedExecution(UnstartedExecution):
@@ -113,9 +114,9 @@ class ActiveExecution(AttemptExecution):
     def successors(cls):
         return DeferredExecution, CompletedExecution, FailedExecution
 
-    @property
-    def claim_disposition(self) -> str:
-        return "engaged"
+    @classmethod
+    def claim_state(cls) -> type[ClaimState]:
+        return EngagedClaim
 
     def accepts_attempt(self, phase):
         return not phase.terminal
@@ -133,6 +134,10 @@ class ActiveExecution(AttemptExecution):
 class CompletedExecution(AttemptExecution):
     terminal = True
     completed = True
+
+    @classmethod
+    def claim_state(cls) -> type[ClaimState]:
+        return CompletedClaim
 
     @classmethod
     def successors(cls):
@@ -161,6 +166,10 @@ class DeferredExecution(InterruptedExecution):
     retry = True
 
     @classmethod
+    def claim_state(cls) -> type[ClaimState]:
+        return DeferredClaim
+
+    @classmethod
     def successors(cls):
         return ActiveExecution, FailedExecution
 
@@ -177,6 +186,10 @@ class DeferredExecution(InterruptedExecution):
 class FailedExecution(InterruptedExecution):
     terminal = True
     failed = True
+
+    @classmethod
+    def claim_state(cls) -> type[ClaimState]:
+        return FailedClaim
 
     @classmethod
     def successors(cls):
