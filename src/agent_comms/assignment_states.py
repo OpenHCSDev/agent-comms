@@ -37,13 +37,33 @@ class PendingDecision:
 class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     notification_state: ClassVar[str] = "Pending"
     notification_detail: ClassVar[str] = "Awaiting a recorded notification outcome."
+    notification_priority: ClassVar[int] = 3
+    notification_busy: ClassVar[bool] = False
 
     def notification(
-        self, *, owner_active: bool, current_turn: bool = False, triage_inflight: bool = False
-    ) -> tuple[str, str]:
+        self,
+        recipient: str,
+        *,
+        owner_active: bool,
+        current_turn: bool = False,
+        triage_inflight: bool = False,
+    ):
+        from .presentation import MessageNotification
+
         if not owner_active and (self.triage_pending or self.full_pending):
-            return "Waiting for agent", "Agent is stopped; this message has not been checked."
-        return self.notification_state, self.notification_detail
+            return MessageNotification(
+                recipient,
+                "Waiting for agent",
+                "Agent is stopped; this message has not been checked.",
+                priority=4,
+            )
+        return MessageNotification(
+            recipient,
+            self.notification_state,
+            self.notification_detail,
+            self.notification_priority,
+            self.notification_busy,
+        )
 
     terminal: ClassVar[bool] = False
     engaged: ClassVar[bool] = False
@@ -148,6 +168,7 @@ class FullPendingAssignment(AssignmentState):
 
 
 class IgnoredAssignment(AssignmentState):
+    notification_priority = 2
     notification_state = "Checked — no response"
     notification_detail = "The agent checked this message and chose not to respond."
 
@@ -199,13 +220,21 @@ class BoundAssignment(AssignmentDecision, AssignmentState):
 
 
 class EngagedAssignment(BoundAssignment):
-    def notification(self, *, owner_active, current_turn=False, triage_inflight=False):
-        if not current_turn:
-            return "Paused", "A response was selected, but no matching active turn is running."
-        return super().notification(owner_active=owner_active)
+    def notification(self, recipient, *, owner_active, current_turn=False, triage_inflight=False):
+        from .presentation import MessageNotification
 
-    notification_state = "Responding"
+        if not current_turn:
+            return MessageNotification(
+                recipient,
+                "Paused",
+                "A response was selected, but no matching active turn is running.",
+            )
+        return super().notification(recipient, owner_active=owner_active)
+
+    notification_state = "Responding…"
     notification_detail = "The agent chose to respond; work is in progress."
+    notification_priority = 1
+    notification_busy = True
 
     engaged = True
 
@@ -215,6 +244,7 @@ class EngagedAssignment(BoundAssignment):
 
 
 class CompletedAssignment(BoundAssignment):
+    notification_priority = 2
     notification_state = "Responded"
     notification_detail = "The response workflow completed."
 
@@ -239,10 +269,18 @@ class InterruptedAssignment(AssignmentDecision, AssignmentState):
 
 
 class DeferredAssignment(InterruptedAssignment):
-    def notification(self, *, owner_active, current_turn=False, triage_inflight=False):
+    def notification(self, recipient, *, owner_active, current_turn=False, triage_inflight=False):
+        from .presentation import MessageNotification
+
         if current_turn and triage_inflight:
-            return "Checking", "Checking relevance before deciding whether to respond."
-        return super().notification(owner_active=owner_active)
+            return MessageNotification(
+                recipient,
+                "Checking relevance…",
+                "Checking relevance before deciding whether to respond.",
+                priority=0,
+                busy=True,
+            )
+        return super().notification(recipient, owner_active=owner_active)
 
     notification_state = "Paused"
     notification_detail = "Processing was deferred; this is not a successful receipt."

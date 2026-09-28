@@ -34,6 +34,8 @@ class MessageNotification:
     recipient: str
     state: str
     detail: str
+    priority: int = 3
+    busy: bool = False
 
 
 class BusPresentation:

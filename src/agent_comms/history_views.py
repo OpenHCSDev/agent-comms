@@ -159,12 +159,13 @@ class HistoryViews:
                     and owner.active_turn.started_at * 1000 <= assignment.updated_at_ms + 1
                     and OwnerLifecycle._process_alive(owner.pid)
                 )
-                state, detail = assignment.lifecycle.notification(
+                notification = assignment.lifecycle.notification(
+                    assignment.recipient,
                     owner_active=owner is not None,
                     current_turn=current_turn,
                     triage_inflight=bool(row["triage_inflight"]),
                 )
-                result[key].append(MessageNotification(assignment.recipient, state, detail))
+                result[key].append(notification)
         return {key: tuple(rows) for key, rows in result.items()}
 
     @staticmethod
