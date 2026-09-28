@@ -1,0 +1,41 @@
+{
+  "base_revision": "bf68bbbf5eed95dd79f890fc50886a4481d40a7d",
+  "head_revision": "6f25dc8f86dc6f2aeb0c5c8504b55cd4eae2aa81",
+  "paths": [
+    "src/agent_comms/backend.py",
+    "src/agent_comms/catalog_document.py",
+    "src/agent_comms/catalog_store.py",
+    "src/agent_comms/channel_management.py",
+    "src/agent_comms/channels.py",
+    "src/agent_comms/child_process.py",
+    "src/agent_comms/history_views.py",
+    "src/agent_comms/message_bus.py",
+    "src/agent_comms/native_pi.py",
+    "src/agent_comms/optional_awareness_projection.py",
+    "src/agent_comms/pi_events.py",
+    "src/agent_comms/publisher.py",
+    "src/agent_comms/read_basis.py",
+    "src/agent_comms/selected_pi_child_deadline.py",
+    "src/agent_comms/selected_pi_summary_rpc.py",
+    "src/agent_comms/selected_tool_broker.py",
+    "src/agent_comms/tools.py",
+    "src/agent_comms/turn_inputs.py",
+    "src/agent_comms/turn_runner.py",
+    "src/agent_comms/typed_table.py"
+  ],
+  "base": {
+    "TypeIdentity": 55,
+    "LongBooleanChain": 61,
+    "StringSubscript": 157
+  },
+  "head": {
+    "TypeIdentity": 43,
+    "LongBooleanChain": 61,
+    "StringSubscript": 196
+  },
+  "delta": {
+    "TypeIdentity": -12,
+    "LongBooleanChain": 0,
+    "StringSubscript": 39
+  }
+}

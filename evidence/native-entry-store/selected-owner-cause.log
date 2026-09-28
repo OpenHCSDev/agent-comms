@@ -1,0 +1,194 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_acp_selected_summary_handoff_uses_final_prompt_once[summary-True-False-ordinary] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/pytest-of-ts/pytest-3/test_acp_selected_summary_hand0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff0706e89d0>
+correction = False, real_host = True, clean_decline = False
+private_session = False
+
+    @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+    @pytest.mark.parametrize("correction", [False, True])
+    @pytest.mark.parametrize("real_host", [False, True])
+    @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
+    async def test_acp_selected_summary_handoff_uses_final_prompt_once(
+        tmp_path, monkeypatch, correction, real_host, clean_decline, private_session
+    ):
+        original_key = "acp:original-proj" if private_session else "acp:original"
+        from dataclasses import replace
+    
+        from agent_comms import backend
+        from agent_comms.acp import CommsAgent
+        from agent_comms.comms import wire
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.goal_attempts import GoalAttemptStore
+        from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+    
+        if private_session:
+            if not real_host:
+                pytest.skip("Private-session coverage needs the real SDK host")
+            monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
+        if clean_decline:
+            monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
+        async with owner_fixture(tmp_path, monkeypatch, real_host=real_host) as (
+            persistent,
+            _registry,
+            _inputs,
+            file,
+            launcher,
+            info,
+        ):
+            root = tmp_path if private_session else tmp_path / "acp-wire"
+            comms = wire(root)
+            project = tmp_path / "proj"
+            project.mkdir()
+    
+            updates = []
+    
+            class Client:
+                async def session_update(self, **kwargs):
+                    updates.append(kwargs)
+    
+            agent = CommsAgent(
+                comms,
+                agent_bin=launcher,
+                agent_args=[],
+                runtime_enabled=True,
+                auto_wake=False,
+            )
+            agent.on_connect(Client())
+            await agent.new_session(cwd=str(project), mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            comms.registry.register(
+                replace(
+                    comms.registry.require("proj"),
+                    goal=Goal("retain history", "goal-acp"),
+                    session_file=file,
+                    model=info.model,
+                    pid=os.getpid(),
+                )
+            )
+            comms.agents.set_agent_info(
+                "proj",
+                model=info.model,
+                context_used=info.context_used,
+                context_size=info.context_size,
+            )
+            private = root / "goal-private"
+            private.mkdir(mode=0o700)
+            store = GoalAttemptStore.initialize(private)
+            store.create_goal("goal-acp")
+            agent.turns.goal_store = store
+            agent.turns.persistent_backends["proj"] = persistent
+            dispositions = InputDispositions(root / InputDispositions.filename)
+            if private_session:
+                record_fixture_history(
+                    dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
+                )
+            dispositions.record(
+                original_key,
+                seq=None,
+                owner="proj",
+                admission=comms.registry.snapshot().admission_generations["proj"],
+                target="proj",
+                text="Continue",
+            )
+            selected_exchange = SelectedSummarySlot.run_selected_summary
+            summary_ids = []
+    
+            async def selected_with_correction(self, *args, **kwargs):
+                result = await selected_exchange(self, *args, **kwargs)
+                summary_ids.append(result.operation_id)
+                if correction:
+                    dispositions.record(
+                        "acp:correction",
+                        seq=None,
+                        owner="proj",
+                        admission=comms.registry.snapshot().admission_generations["proj"],
+                        target="proj",
+                        text="Changed requirement before native commit",
+                    )
+                return result
+    
+            monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", selected_with_correction)
+            dispatched = []
+    
+            async def native_stream(*args, **kwargs):
+                task = args[2]
+                # Exercise actual ACP admission/bind callbacks; no provider or
+                # second native user turn is started by this synthetic receiver.
+                assert task != "Continue" and task.endswith("Continue")
+                if clean_decline:
+                    assert persistent.proc is not None and persistent.reopen_required is None
+                else:
+                    assert persistent.proc is None and persistent.reopen_required == file
+                with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
+                    assert allowed is True
+                    dispatched.append(task)
+                with kwargs["send_boundary"](None, "b" * 32, task) as allowed:
+                    assert allowed is False
+                assert kwargs["native_start"](None, "a" * 32, task)
+                yield ae.InputStarted(id=None)
+                yield ae.StreamSettled()
+                yield ae.Done(ok=True, text="processed")
+    
+            if real_host:
+                # Use the real backend subprocess/reopen/proof protocol. Replace
+                # only its executable with an offline host of the same prepared
+                # SDK and RPC; the selected model stream never accesses a network.
+                spawn = asyncio.create_subprocess_exec
+    
+                async def offline_spawn(program, *args, **kwargs):
+                    if program == launcher:
+                        kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
+                        return await spawn(
+                            "node",
+                            str(
+                                Path(__file__).resolve().parents[1]
+                                / "stack/test-native-selected-owner-host.mjs"
+                            ),
+                            *args,
+                            **kwargs,
+                        )
+                    return await spawn(program, *args, **kwargs)
+    
+                monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+            else:
+                monkeypatch.setattr(backend, "stream_agent_events", native_stream)
+            try:
+                turn = agent.turns.run_agent_turn(
+                    "proj",
+                    "proj",
+                    "Continue",
+                    original_keys=(original_key,),
+                    original_owner_input=True,
+                    original_goal_id="goal-acp",
+                )
+                if correction:
+                    with pytest.raises(RelationViolationError, match="Unsettled"):
+                        await turn
+                    assert dispatched == []
+                    assert dispositions.read().rows.get(original_key).native_id is None
+                else:
+                    await turn
+                    assert len(dispatched) == (0 if real_host else 1)
+>                   assert dispositions.read().rows[original_key].declared_name == "started", updates
+E                   AssertionError: [{'session_id': 'proj', 'update': AgentMessageChunk(content=TextContentBlock(annotations=None, text='', field_meta=Non...26-13-560Z_01a0e944-77b8-721d-bd3f-8febe9da8887.jsonl', 'offset': 4174}}}, session_update='agent_message_chunk')}, ...]
+E                   assert 'unknown' == 'started'
+E                     
+E                     - started
+E                     + unknown
+
+tests/test_selected_owner_compaction_integration.py:361: AssertionError
+=============================== warnings summary ===============================
+tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[summary-True-False-ordinary]
+  /home/ts/wt/comms-native-session-entry-store-20260928/src/agent_comms/backend.py:915: RuntimeWarning: coroutine 'TurnSession.attest_input' was never awaited
+    async for event in self.attest_input():
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[summary-True-False-ordinary]
+1 failed, 1 warning in 8.04s

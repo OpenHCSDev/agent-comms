@@ -1,0 +1,20 @@
+F.....................................................................   [100%]
+=================================== FAILURES ===================================
+________ test_reservation_is_durable_unresolved_and_blocks_every_input _________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7ffaa567f620>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_reservation_is_durable_unresolved_and_blocks_every_input(reserved):
+        journal, session, source = reserved
+        operation_id = journal.reserve_selected_summary(session, source, operation_id="a" * 32)
+        assert operation_id == "a" * 32
+        reopened = CompactionJournal(journal.path)
+        attempt = reopened.selected_summary(operation_id)
+>       assert attempt.state.declared_name == "reserved" and attempt.state.commit_id is None
+                                                             ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'ReservedSummary' object has no attribute 'commit_id'
+
+tests/test_selected_summary_journal.py:49: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_selected_summary_journal.py::test_reservation_is_durable_unresolved_and_blocks_every_input
+1 failed, 69 passed in 6.50s

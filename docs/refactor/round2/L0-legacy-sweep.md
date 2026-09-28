@@ -83,3 +83,32 @@ Two agents, disjoint files:
 > **`refactor-l0a`:** Complete L0 part A per `docs/refactor/round2/L0-legacy-sweep.md`. Read `00-RULES.md` first. Delete, do not preserve. Done when part A's targets are gone and the guard passes for your files.
 
 > **`refactor-l0b`:** Complete L0 part B per `docs/refactor/round2/L0-legacy-sweep.md`. Read `00-RULES.md` first. For each dual path, establish which path serves production from evidence, then end with exactly one path. Wait for D22 before touching `wire_log.py`'s legacy rows. Done when part B's guards pass and `supervised_cutover.py` is deleted.
+
+## Certified bootstrap and source coverage closure — Cicero, PR251
+
+PR251 targets parent229 and integrates `7ba2676`. Fresh Publisher establishes the
+existing checkpoint and claims marker before committing the registry guard. Native
+coverage now uses only certified addressed pages and PrefixWitness; hashed-source
+and whole-bus alternate readers, their caps, the separate claim initializer and
+ACP public-mode execution branches are deleted. The current admission floor,
+UNKNOWN, proof gaps, archived reads and registry publication checks are preserved.
+
+Acceptance and exact file/store scope: `evidence/certified-bootstrap/HANDOFF.md`.
+Fresh native tool/cursor and ACP compaction checks pass using the pinned Pi package
+and a local deterministic provider. No live activation in this batch. Parent owns
+D22 installation and cutover-tool deletion; Nietzsche PR248 owns older ACP fixture
+closure. This checkpoint does not declare the global L0 surface complete.
+
+## Passive-awareness caller closure — Cicero
+
+Issue84 requires an unmentioned observer's next independently admitted turn to
+include bounded source pointers while preserving NoWakeDecision. Removed the
+orphan PassiveChannelAwareness JSON cursor, InputDrain instance, OwnedTurn frame
+witness/veto, channel scope rebasing and both membership callers. Natural turns
+now use MessageBus.awareness_prompt, reading only existing sealed Initials/Addressed
+checkpoint declarations with stable incarnation lookup and the admission floor.
+No new table, cursor, index, reader repair, wake, ACK or native proof. Archived
+display and selected OptionalAwarenessProjection remain with their current owners.
+Exclusive old tests deleted; retained relationship tests live in
+tests/test_relationship_store.py. Exact acceptance is in
+evidence/passive-awareness-deletion/HANDOFF.md; parent owns activation.

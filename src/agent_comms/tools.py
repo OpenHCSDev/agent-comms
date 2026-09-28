@@ -314,19 +314,6 @@ def _archive(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     return {"archived": name}
 
 
-def _delete(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    result = comms.threads.delete(str(arguments["name"]))
-    return {
-        "deleted": result.name,
-        "messages_removed": result.messages_removed,
-        "markers_removed": result.markers_removed,
-        "activity_events_removed": result.activity_events_removed,
-        "runtime_removed": result.runtime_removed,
-        "ledger_references_removed": result.ledger_references_removed,
-        "detached_children": list(result.detached_children),
-    }
-
-
 def _executing_thread() -> str:
     import os
 
@@ -439,7 +426,7 @@ def _collaborations(comms: Comms, arguments: Mapping[str, object]) -> JsonObject
     projection = comms.relationships.contact_projection(owner)
     result: JsonObject = {
         "collaborations": [asdict(edge) for edge in projection.explicit]
-    }  # Legacy explicit declarations remain independently editable.
+    }  # Explicit collaboration links remain independently editable.
     if any(entry.goal_contacts for entry in projection.visible):
         result["visible_collaborators"] = [
             {
@@ -806,7 +793,7 @@ TOOLS = (
     ToolDeclaration(
         "comms_goal_history",
         "Goal history",
-        "Read recorded goal revisions and clearly labeled legacy baselines or observation gaps.",
+        "Read recorded goal revisions and recorded provenance and observation gaps.",
         (
             ToolParameter(
                 "goal_id",
@@ -954,23 +941,6 @@ TOOLS = (
         context="thread",
         action_label="Archive stopped thread",
         action_order=30,
-    ),
-    ToolDeclaration(
-        "comms_delete",
-        "Delete Comms Thread",
-        "Delete a stopped thread and its owned wire state; detach and preserve its children.",
-        (
-            ToolParameter(
-                "name",
-                "string",
-                "Stopped thread name",
-                context_value="subject",
-            ),
-        ),
-        _delete,
-        context="thread",
-        action_label="Delete stopped thread",
-        action_order=40,
     ),
     ToolDeclaration(
         "comms_dismiss",

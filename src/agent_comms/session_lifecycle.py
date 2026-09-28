@@ -74,9 +74,7 @@ class SessionLifecycle:
             )
         )
         methods: list[Any] = []
-        if (capabilities.get("auth") or {}).get("terminal") and backend.rpc_args_for(
-            self.agent_bin, []
-        ) is not None:
+        if (capabilities.get("auth") or {}).get("terminal"):
             methods = [
                 TerminalAuthMethod(
                     type="terminal",
@@ -96,9 +94,7 @@ class SessionLifecycle:
             protocol_version=protocol_version,
             agent_capabilities=AgentCapabilities(
                 load_session=True,
-                prompt_capabilities=PromptCapabilities(
-                    image=backend.rpc_args_for(self.agent_bin, self.agent_args) is not None
-                ),
+                prompt_capabilities=PromptCapabilities(image=True),
             ),
             agent_info=Implementation(name="agent-comms", title="Agent Comms", version="0.1.0"),
             auth_methods=methods,
@@ -135,7 +131,7 @@ class SessionLifecycle:
             start_at_latest=True,
             model=backend.configured_model(self.agent_args),
             thinking_level=backend.configured_thinking_level(self.agent_args),
-            auto_title_pending=backend.rpc_args_for(self.agent_bin, self.agent_args) is not None,
+            auto_title_pending=True,
         )
 
     def validated_thread(self, cwd: str, session_id: str) -> Thread:
@@ -150,13 +146,8 @@ class SessionLifecycle:
             )
         return thread
 
-    async def bind_owned(
-        self, thread: Thread, session_id: str, *, fresh: bool, private: bool
-    ) -> None:
+    async def bind_owned(self, thread: Thread, session_id: str) -> None:
         self.bindings[session_id] = thread.name
-        self.effects.inputs.initialize_session_delivery(
-            session_id, thread, fresh=fresh, private=private
-        )
         self.titles[session_id] = thread.name
         self.worktrees[session_id] = thread.worktree
         if self.runtime_enabled:
@@ -166,9 +157,9 @@ class SessionLifecycle:
         self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> NewSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
-        private = self.effects._private_session_mode()
+        self.effects._private_nk_marker()
         thread = self.declare_thread(cwd, os.getpid())
-        await self.bind_owned(thread, thread.name, fresh=True, private=private)
+        await self.bind_owned(thread, thread.name)
         self.effects.inputs.ensure_live_drain(thread.name)
         options = await self.config.session_options(thread.name, thread.name)
         return NewSessionResponse(
@@ -181,7 +172,7 @@ class SessionLifecycle:
         self, cwd: str, session_id: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> LoadSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
-        private = self.effects._private_session_mode()
+        self.effects._private_nk_marker()
         thread = self.validated_thread(cwd, session_id)
         if not (
             self.bindings.get(session_id) == thread.name
@@ -192,7 +183,7 @@ class SessionLifecycle:
         if thread.pid != os.getpid():
             return await self.attach_owner(thread, session_id)
         self.comms.threads.heartbeat(thread.name)
-        await self.bind_owned(thread, session_id, fresh=False, private=private)
+        await self.bind_owned(thread, session_id)
         await self.transcript.replay(session_id, thread.name)
         await self.effects.inputs.replay_unknown_inputs(session_id)
         options = await self.config.session_options(session_id, thread.name)
@@ -263,7 +254,6 @@ class SessionLifecycle:
             if info is not None and info.context_used is not None and info.context_size
             else None
         )
-        native = backend.rpc_args_for(self.agent_bin, self.agent_args) is not None
         return {
             "agentComms": {
                 "thread": thread_name,
@@ -279,10 +269,10 @@ class SessionLifecycle:
                 "model": thread.model,
                 "thinkingLevel": thread.thinking_level,
                 "worktree": thread.worktree,
-                "autoTitle": native,
+                "autoTitle": True,
                 "title": thread.title or thread.name,
-                "promptQueue": native,
-                "imagePrompts": native,
+                "promptQueue": True,
+                "imagePrompts": True,
             }
         }
 

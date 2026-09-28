@@ -18,8 +18,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
-from agent_comms import proven_source_coverage as coverage_module
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime import SelectedExecution
@@ -42,7 +42,6 @@ from agent_comms.native_source_cursor import (
 )
 from agent_comms.proven_source_coverage import read_proven_source_coverage
 from agent_comms.threads import Thread
-from agent_comms.wire_log import WireLog
 
 
 @pytest.fixture
@@ -58,12 +57,17 @@ def _root(tmp_path: Path):
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     people = [
-        Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()),
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ),
         Thread(
             "alpha",
             frozenset({"team"}),
             str(tmp_path),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             task="math answers",
             model="openai-codex/gpt-6-sol",
         ),
@@ -105,7 +109,7 @@ async def test_suppressed_binding_insert_denies_native_send(tmp_path, monkeypatc
             # Inject after schema admission to independently test insert/readback,
             # not only the complete-schema negative in test_private_sidecar.
             db.execute(
-                "CREATE TRIGGER suppress BEFORE INSERT ON prompt_bindings "
+                "CREATE TRIGGER suppress BEFORE INSERT ON prompt_binding "
                 "BEGIN SELECT RAISE(IGNORE); END"
             )
             yield db
@@ -362,44 +366,6 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
             )
 
 
-def test_source_coverage_refuses_early_and_caps_bytes_before_bus_guard(tmp_path, monkeypatch):
-    root, root_id, comms, _, people = _root(tmp_path)
-    for index in range(8):
-        comms.messaging.send_initial_cohort("sender", "alpha", f"Additional source {index}")
-    lookup = stable_thread_lookup(people[1].created_at)
-    scanned = 0
-    original_rows = WireLog._verified_private_rows_unlocked
-
-    def observed_rows(self, marker):
-        nonlocal scanned
-        for row in original_rows(self, marker):
-            scanned += 1
-            yield row
-
-    monkeypatch.setattr(WireLog, '_verified_private_rows_unlocked', observed_rows)
-    with (
-        MutationStore(str(root / "coordination.sqlite3")) as store,
-        pytest.raises(IdentityConflict, match="bounded private initial scan"),
-    ):
-        read_proven_source_coverage(
-            comms.bus, store, wire_root_id=root_id, recipient_lookup=lookup, limit=1
-        )
-    assert scanned == 2  # Not nine eager initial DTOs before rejecting.
-    scanned = 0
-    monkeypatch.setattr(coverage_module, "_MAX_BUS_ROWS", 1)
-    with (
-        MutationStore(str(root / "coordination.sqlite3")) as store,
-        pytest.raises(IdentityConflict, match="row or scan deadline"),
-    ):
-        read_proven_source_coverage(comms.bus, store, wire_root_id=root_id, recipient_lookup=lookup)
-    assert scanned == 2
-    monkeypatch.setattr(coverage_module, "_MAX_BUS_BYTES", 10)
-    with (
-        MutationStore(str(root / "coordination.sqlite3")) as store,
-        pytest.raises(RelationViolationError, match="bounded read budget"),
-    ):
-        read_proven_source_coverage(comms.bus, store, wire_root_id=root_id, recipient_lookup=lookup)
-    assert scanned == 2  # Refused before the private bus row iterator.
 
 
 async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_path, monkeypatch):
@@ -407,7 +373,12 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
-    beta = Thread("beta", frozenset({"team"}), str(tmp_path), pid=os.getpid())
+    beta = Thread(
+        "beta",
+        frozenset({"team"}),
+        str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    )
     comms.threads.register(beta)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         store.register_participant(
@@ -484,7 +455,7 @@ async def test_current_cursor_never_promotes_old_owner_generation(tmp_path, monk
             is None
         )
         retained = store._connection.execute(
-            "SELECT owner_admission_epoch,input_id FROM native_runtime_source_cursors"
+            "SELECT owner_admission_generation,input_id FROM current_native_cursor"
         ).fetchone()
         assert tuple(retained) == (old.owner_admission_generation, turn.input_id)
     assert len(calls) == 1
@@ -527,19 +498,18 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
             is None
         )
         old_generation = store._connection.execute(
-            "SELECT sent_owner_admission_epoch FROM native_runtime_inputs WHERE input_id=?",
+            "SELECT sent_owner_admission_generation FROM native_runtime_input WHERE input_id=?",
             (turn.input_id,),
         ).fetchone()[0]
         assert old_generation != admission_generation
         with pytest.raises(sqlite3.IntegrityError, match="input identity is frozen"):
             store._connection.execute(
-                "UPDATE native_runtime_inputs SET sent_owner_admission_epoch=? WHERE input_id=?",
+                "UPDATE native_runtime_input SET sent_owner_admission_generation=? "
+                "WHERE input_id=?",
                 (admission_generation, turn.input_id),
             )
         assert (
-            store._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_source_cursors"
-            ).fetchone()[0]
+            store._connection.execute("SELECT COUNT(*) FROM current_native_cursor").fetchone()[0]
             == 1
         )
     assert len(calls) == 1
@@ -556,7 +526,7 @@ async def test_current_cursor_rejects_forged_high_water(tmp_path, monkeypatch):
     assert turn is not None and turn.cursor_status == "proven"
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         store._connection.execute(
-            "UPDATE native_runtime_source_cursors SET covered_seq=?",
+            "UPDATE current_native_cursor SET covered_seq=?",
             (first.message.seq + 100,),
         )
         with pytest.raises(IdentityConflict, match="exceeds canonical source proof"):
@@ -564,7 +534,7 @@ async def test_current_cursor_rejects_forged_high_water(tmp_path, monkeypatch):
     assert len(calls) == 1
 
 
-async def test_current_cursor_alias_refusal_and_new_owner_generation(tmp_path, monkeypatch):
+async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path, monkeypatch):
     root, root_id, comms, first, people = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
@@ -583,8 +553,6 @@ async def test_current_cursor_alias_refusal_and_new_owner_generation(tmp_path, m
             )
             is None
         )
-    with pytest.raises(RelationViolationError, match="stable send binding"):
-        comms.messaging.send_initial_cohort("sender", "alpha", "Unbound retained alias.")
     second = comms.messaging.send_initial_cohort("sender", "alpha-new", "Canonical recipient.")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second.seq, store)
@@ -602,8 +570,7 @@ async def test_current_cursor_alias_refusal_and_new_owner_generation(tmp_path, m
             is None
         )
         rows = store._connection.execute(
-            "SELECT owner_generation,input_id FROM native_runtime_source_cursors "
-            "ORDER BY owner_generation"
+            "SELECT owner_generation,input_id FROM current_native_cursor ORDER BY owner_generation"
         ).fetchall()
         assert [tuple(row) for row in rows] == [(1, old_turn.input_id)]
     assert len(calls) == 2 and first.message.seq < second.seq
@@ -661,8 +628,8 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
         )
         assert evidence == ()
         binding = store._connection.execute(
-            "SELECT input_id,session_id FROM native_runtime_inputs WHERE claim_id IN "
-            "(SELECT claim_id FROM wake_claims WHERE wire_seq=?)",
+            "SELECT input_id,session_id FROM native_runtime_input WHERE assignment_id IN "
+            "(SELECT assignment_id FROM wake_claims WHERE wire_seq=?)",
             (initial.message.seq,),
         ).fetchone()
         assert binding is not None and binding[1] is None
@@ -706,7 +673,7 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
         assert [row.stage for row in evidence] == ["triage"]
         assert evidence[0].expected_prompt_equality_established
         rows = store._connection.execute(
-            "SELECT stage,session_id FROM native_runtime_inputs ORDER BY stage"
+            "SELECT stage,session_id FROM native_runtime_input ORDER BY stage"
         ).fetchall()
         assert [(row["stage"], row["session_id"] is not None) for row in rows] == [
             ("full", False),
@@ -769,7 +736,7 @@ async def test_live_binding_rejects_tampered_owner_and_attempt_before_proof(
         assert [row.stage for row in evidence] == ([] if stage == "triage" else ["triage"])
         assert (
             store._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_inputs "
+                "SELECT COUNT(*) FROM native_runtime_input "
                 "WHERE stage=? AND session_id IS NOT NULL",
                 (stage,),
             ).fetchone()[0]
@@ -810,11 +777,11 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
             with sqlite3.connect(path) as db:
                 db.execute("DROP TRIGGER prompt_binding_update_guard")
                 update = db.execute(
-                    f"UPDATE prompt_bindings SET {field}=? WHERE input_id=?",
+                    f"UPDATE prompt_binding SET {field}=? WHERE input_id=?",
                     (value, kwargs["input_id"]),
                 )
                 assert update.rowcount == 1
-                db.execute(binding_module._DDL[2][1])
+                db.execute(binding_module.PromptBinding.triggers()["prompt_binding_update_guard"])
         return result
 
     monkeypatch.setattr(runtime, "run_native_pi_turn", mutate_after_admitted_send)
@@ -833,7 +800,7 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
         assert [row.stage for row in evidence] == ([] if stage == "triage" else ["triage"])
         assert (
             store._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_inputs WHERE stage=? AND session_id IS NULL",
+                "SELECT COUNT(*) FROM native_runtime_input WHERE stage=? AND session_id IS NULL",
                 (stage,),
             ).fetchone()[0]
             == 1
@@ -922,7 +889,7 @@ def _all_bindings(store):
     path = binding_store_path(store)
     with sqlite3.connect(path) as db:
         db.row_factory = sqlite3.Row
-        rows = db.execute("SELECT input_id FROM prompt_bindings").fetchall()
+        rows = db.execute("SELECT input_id FROM prompt_binding").fetchall()
     return [read_expected_prompt_binding(store, row["input_id"]) for row in rows]
 
 

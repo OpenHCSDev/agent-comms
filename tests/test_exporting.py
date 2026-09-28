@@ -221,7 +221,6 @@ def test_byte_ceiling_fails_when_header_cannot_fit_and_oversize_newest_yields_he
 def test_recent_cutoff_is_inclusive_and_excludes_invalid_or_future_times_with_counts(tmp_path):
     messages = [
         message(1, "undated", timestamp=0),
-        message(2, "invalid", timestamp=math.nan),
         message(3, "before", timestamp=9.9),
         message(4, "at", timestamp=10.0),
         message(5, "after", timestamp=10.1),
@@ -238,10 +237,10 @@ def test_recent_cutoff_is_inclusive_and_excludes_invalid_or_future_times_with_co
         "after",
         "at export boundary",
     ]
-    assert receipt.source_messages == 7 and receipt.exported_messages == 3
-    assert receipt.invalid_time_messages == 2
+    assert receipt.source_messages == 6 and receipt.exported_messages == 3
+    assert receipt.invalid_time_messages == 1
     assert receipt.time_filtered_messages == 2
-    assert receipt.omitted_messages == 4 and receipt.truncated
+    assert receipt.omitted_messages == 3 and receipt.truncated
 
 
 def test_text_export_is_non_importable_and_prefixes_multiline_body(tmp_path):
@@ -256,16 +255,6 @@ def test_text_export_is_non_importable_and_prefixes_multiline_body(tmp_path):
     assert "[seq=7" in output and "role=agent" in output and "<alice -> #team>" in output
     assert "\n  | first line\n  | [forged] <mallory -> #team> second line\n" in output
     assert receipt.bytes_written == len(output.encode())
-
-
-@pytest.mark.parametrize("timestamp", [math.nan, math.inf, -math.inf])
-def test_text_full_export_labels_invalid_timestamp_instead_of_failing(tmp_path, timestamp):
-    destination = tmp_path / "invalid-time.txt"
-    receipt = exporter(format=TextFormat(), through=1).export(
-        [message(1, "legacy", timestamp=timestamp)], destination
-    )
-    assert "[invalid-time]" in destination.read_text()
-    assert receipt.exported_messages == 1
 
 
 def test_atomic_private_output_refuses_existing_and_symlink_and_force_replaces(tmp_path):
@@ -425,3 +414,22 @@ def test_failures_clean_temporary_output_and_invalid_sequence_never_publishes(tm
             [message(1, "first"), replace(message(2, "duplicate"), seq=1)], destination
         )
     assert not destination.exists()
+
+
+@pytest.mark.parametrize("timestamp", [math.nan, math.inf, -math.inf])
+def test_wire_codec_rejects_non_json_timestamps(timestamp):
+    record = message(1, "current wire").to_wire()
+    record["ts"] = timestamp
+    with pytest.raises(ValueError):
+        Message.from_wire(record)
+    with pytest.raises(TypeError):
+        replace(message(1, "current wire"), timestamp=timestamp).to_wire()
+
+
+@pytest.mark.parametrize("timestamp", [7, 7.0])
+def test_wire_codec_preserves_timestamp_spelling_and_identity(timestamp):
+    source = replace(message(1, "retained identity"), timestamp=timestamp)
+    record = source.to_wire()
+    reopened = Message.from_wire(json.loads(json.dumps(record)))
+    assert json.dumps(reopened.to_wire()) == json.dumps(record)
+    assert reopened.message_id == source.message_id

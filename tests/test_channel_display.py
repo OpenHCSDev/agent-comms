@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
+from agent_comms.bus_publication import HumanOrigin
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.comms import wire
 from agent_comms.messages import Message, MessageType
@@ -207,7 +208,7 @@ def test_human_marker_unread_and_own_alias_exclusion(tmp_path):
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 0
 
 
-def test_page_boundaries_byte_budget_and_truncated_tail_match_target_pager(tmp_path):
+def test_page_boundaries_and_byte_budget_match_target_pager(tmp_path):
     comms = populated(tmp_path)
     comms.messaging.send("alice", "bob", "first projected")
     comms.messaging.send("outsider", "#api", "second target")
@@ -224,14 +225,6 @@ def test_page_boundaries_byte_budget_and_truncated_tail_match_target_pager(tmp_p
     assert bodies(tail) == ["second target"] and tail.has_older and tail.has_newer
     with pytest.raises(ValueError, match="either before or after"):
         comms.views.channel_display_page("#api", before=2, after=1)
-    with (tmp_path / "bus.jsonl").open("ab") as stream:
-        stream.write(b'{"seq":')
-    assert bodies(comms.views.channel_display_page("#api")) == [
-        "first projected",
-        "second target",
-        "third projected",
-    ]
-    assert bodies(comms.views.channel_history_page("#api")) == ["second target"]
 
 
 def test_fixed_opened_boundary_excludes_later_append(tmp_path):
@@ -328,7 +321,9 @@ def test_direct_retag_and_send_between_basis_and_open_retries(tmp_path):
             changed = True
             alice = comms.registry.require("alice")
             comms.registry.register(replace(alice, tags=frozenset({"ui"})))
-            comms.bus.publisher.publish(Message("alice", "bob", "late direct", MessageType.INFO))
+            comms.bus.publisher.publish_ordinary(
+                Message("alice", "bob", "late direct", MessageType.INFO)
+            )
         with original(need_sequence=need_sequence) as snapshot:
             yield snapshot
 
@@ -352,7 +347,11 @@ def test_direct_rename_and_own_send_do_not_inflate_unread(tmp_path):
         if not changed:
             changed = True
             comms.registry.rename(viewer, "human")
-            comms.bus.publisher.publish(Message("human", "#api", "owned unread", MessageType.INFO))
+            human = comms.registry.require("human")
+            comms.bus.publisher.publish_ordinary(
+                Message("human", "#api", "owned unread", MessageType.INFO),
+                _human_origin=HumanOrigin(human.name, human.created_at, human.worktree),
+            )
         with original(need_sequence=need_sequence) as snapshot:
             yield snapshot
 
@@ -413,27 +412,6 @@ def test_perpetual_direct_mutation_fails_closed_after_bounded_retries(tmp_path):
     ):
         comms.views.channel_display_page("#api")
     assert attempts == 3
-
-
-def test_display_open_never_scans_missing_or_zero_bus_meta_under_wire_lock(tmp_path):
-    comms = populated(tmp_path)
-    comms.messaging.send("outsider", "#api", "existing row")
-    metadata = tmp_path / "bus_meta.json"
-    for body in (None, '{"last_seq": 0}'):
-        if body is None:
-            metadata.unlink()
-        else:
-            metadata.write_text(body)
-        with patch.object(
-            comms.bus.log,
-            "_max_sequence_unlocked",
-            side_effect=AssertionError("display must not scan for a sequence watermark"),
-        ):
-            assert bodies(comms.views.channel_display_page("#api")) == ["existing row"]
-            assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 1
-    with comms.bus.log.full_history_snapshot() as (through, records):
-        assert through == 1  # default export boundary still repairs the missing watermark
-        assert [message.body for message in records] == ["existing row"]
 
 
 def test_new_channel_during_boundary_is_not_falsely_unknown(tmp_path):

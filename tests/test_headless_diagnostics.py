@@ -7,6 +7,7 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.diagnostics import record_terminal_failure
 from agent_comms.threads import Thread
@@ -46,10 +47,24 @@ def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
 async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    owner = CommsAgent(comms, agent_bin="pi", auto_wake=False)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    owner = CommsAgent(
+        comms,
+        agent_bin="pi",
+        auto_wake=False,
+        private_nk_native_package=tmp_path,
+        private_nk_wire_root_id=root_id,
+    )
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path))).session_id
-    comms.threads.register(Thread(name="sender", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            name="sender",
+            tags=frozenset(),
+            worktree=str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     incoming = comms.messaging.send_message("sender", "#comms", "Private input")
     original_send = comms.messaging.send
     observed = []
@@ -68,7 +83,7 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
             diagnostic={"wait_ms": 5000},
         )
 
-    monkeypatch.setattr(comms.messaging, 'send', publish)
+    monkeypatch.setattr(comms.messaging, "send", publish)
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     await owner.turns.run_agent_turn(
         session, session, "Private input", origins=(incoming,), reply_targets=("#comms",)

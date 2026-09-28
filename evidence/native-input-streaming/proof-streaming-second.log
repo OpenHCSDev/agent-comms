@@ -1,0 +1,11 @@
+{"journalBytes":268929984,"generations":1097728,"peakRSS":256720896,"recoveryEmissions":0}
+✔ retained proof larger than retired cap streams with no claim/body mirror or replay (3754.873096ms)
+✔ malformed, incomplete, changed or inconsistent historical proof never becomes acceptance (6.166188ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4627.931741

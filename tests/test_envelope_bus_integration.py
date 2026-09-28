@@ -39,7 +39,6 @@ pytestmark = pytest.mark.skipif(
 def marked(tmp_path: Path) -> Comms:
     comms = Comms(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
-    assert comms.messaging.initialize_private_claim_protocol() == root_id
     marker = comms.root / "bus_meta.json"  # existing private-root marker, not claim authority
     assert json.loads(marker.read_text())["claim_envelopes_version"] == 1
     assert json.loads(marker.read_text())["wire_root_id"] == root_id
@@ -53,47 +52,8 @@ def _sample_line(*, complete: bool = True) -> bytes:
     return json.dumps(row).encode() + (b"\n" if complete else b"")
 
 
-def test_marker_requires_fresh_private_root_and_claim_protocol(tmp_path: Path) -> None:
-    ordinary = Comms(tmp_path / "ordinary")
-    with pytest.raises(RelationViolationError, match="marker"):
-        ordinary.messaging.initialize_private_claim_protocol()
-    comms = marked(tmp_path)
-    assert (
-        comms.messaging.initialize_private_claim_protocol()
-        == (json.loads((comms.root / "bus_meta.json").read_text())["wire_root_id"])
-    )
-    assert comms.bus.log.full_history() == []
 
 
-def test_visible_claim_protocol_flag_after_directory_fsync_error_is_resynced(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    comms = Comms(tmp_path / "wire", private_initial_writes=True, private_claim_writes=True)
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    real_fsync = os.fsync
-    failed = False
-
-    def fsync(descriptor: int) -> None:
-        nonlocal failed
-        target = os.readlink(f"/proc/self/fd/{descriptor}")
-        marker = comms.root / "bus_meta.json"
-        if (
-            not failed
-            and target == str(comms.root)
-            and json.loads(marker.read_text()).get("claim_envelopes_version") == 1
-        ):
-            failed = True
-            raise OSError("directory fsync failed after visible protocol flag")
-        real_fsync(descriptor)
-
-    with monkeypatch.context() as patch:
-        patch.setattr(store_files.os, "fsync", fsync)
-        with pytest.raises(OSError, match="directory fsync failed"):
-            comms.messaging.initialize_private_claim_protocol()
-    assert failed
-    assert json.loads((comms.root / "bus_meta.json").read_text())["claim_envelopes_version"] == 1
-    assert comms.bus.log.full_history() == []  # bus lock re-fsyncs marker directory
-    assert comms.messaging.initialize_private_claim_protocol() == root_id
 
 
 def test_complete_visible_after_failed_fsync_must_be_resynced_before_read(
@@ -101,7 +61,12 @@ def test_complete_visible_after_failed_fsync_must_be_resynced_before_read(
 ) -> None:
     comms = marked(tmp_path)
     path = comms.bus.log.path
-    path.write_bytes(_sample_line())  # model a full visible row after failed writer fsync
+    for name in ("author", "reader"):
+        comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
+    comms.messaging.send_message("author", "reader", "one")
+    # Rewrite the actual canonical row without fsync, modeling the failed writer.
+    path.write_bytes(path.read_bytes())
+    path.chmod(0o600)
     real_fsync = os.fsync
     calls: list[str] = []
     fail = True
@@ -164,7 +129,6 @@ def _participants(tmp_path: Path) -> tuple[Comms, Path]:
     for name in ("alice", "bob", "observer"):
         comms.threads.register(Thread(name, frozenset({"team"}), str(worktree)))
     comms.messaging.initialize_private_initial_protocol()
-    comms.messaging.initialize_private_claim_protocol()
     return comms, worktree
 
 
@@ -203,14 +167,6 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
     assert comms.bus.inbox("bob")[0].claim_transition == sent.claim_transition
     fresh = Comms(comms.root)
     assert fresh.views.full_history() == [sent]
-    marker_before = (comms.root / "bus_meta.json").read_bytes()
-    with pytest.raises(RelationViolationError, match="Legacy append"):
-        fresh.bus.publisher.publish(
-            Message("alice", "bob", "old writer cannot append", MessageType.INFO)
-        )
-    with pytest.raises(RelationViolationError, match="Private bus protocol blocks legacy deletion"):
-        fresh.bus.remove_thread("alice")
-    assert (comms.root / "bus_meta.json").read_bytes() == marker_before
 
 
 def test_whole_set_rejects_conflict_without_partial_ownership(tmp_path: Path) -> None:
@@ -413,21 +369,16 @@ def test_same_tick_new_owner_cannot_share_live_claim_release_authority(tmp_path:
     assert str(worktree / "a.py") not in comms.bus.log.claim_projection()
 
 
-def test_legacy_colliding_creation_id_blocks_claim_write_before_append(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_saved_colliding_creation_id_blocks_claim_write_before_append(tmp_path: Path) -> None:
     comms, worktree = _participants(tmp_path)
     claimed = comms.messaging.send_message(
         "alice", "bob", "Claim a", claims=[ExistingFileClaim(Path("a.py"))]
     )
-    actual_threads = comms.registry.all_threads
-
-    def old_registry_snapshot() -> dict[str, Thread]:
-        threads = dict(actual_threads())
+    with comms.registry.store.editing() as edit:
+        threads = edit.document.threads
         threads["bob"] = replace(threads["bob"], created_at=threads["alice"].created_at)
-        return threads
-
-    monkeypatch.setattr(comms.registry, "all_threads", old_registry_snapshot)
+        edit.commit()
+    comms = Comms(comms.root)
     with pytest.raises(RelationViolationError, match="creation identities collide"):
         comms.messaging.send_message(
             "bob", "alice", "Cannot release under duplicate ID", releases=["a.py"]

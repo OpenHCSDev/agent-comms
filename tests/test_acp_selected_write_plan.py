@@ -17,6 +17,7 @@ import pytest
 from agent_comms import cohort_foreground, coordinated_runtime
 from agent_comms.acp import CommsAgent
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_foreground import _accept_visible_initials
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
@@ -27,6 +28,7 @@ from agent_comms.coordination_store import IdentityConflict, MutationStore
 from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.selected_write_plan import SelectedWritePlans
 from agent_comms.threads import Thread
 from test_coordinated_runtime import _fake_model
@@ -71,13 +73,12 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
                     name,
                     frozenset({"team"}),
                     str(work),
-                    pid=os.getpid(),
+                    process_identity=ProcessIdentity.capture(os.getpid()),
                     created_at=incarnation,
                     model="test/fake",
                 )
             )
         root_id = comms.messaging.initialize_private_initial_protocol()
-        comms.messaging.initialize_private_claim_protocol()
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             install_private_response_schema(store)
@@ -111,7 +112,9 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         prior_seq = 0
         if scenario == "older_claims":
             for index in range(100):
-                prior_seq = comms.messaging.send_message("sender", "#team", f"@beta earlier {index}").seq
+                prior_seq = comms.messaging.send_message(
+                    "sender", "#team", f"@beta earlier {index}"
+                ).seq
         bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
         if prior_seq:
             with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -253,19 +256,26 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         package.mkdir(mode=0o700)
         comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
         sender_pid = os.getpid()
-        comms.threads.register(Thread("sender", frozenset(), str(work), pid=sender_pid, created_at=61001.0))
+        comms.threads.register(
+            Thread(
+                "sender",
+                frozenset(),
+                str(work),
+                process_identity=ProcessIdentity.capture(sender_pid),
+                created_at=61001.0,
+            )
+        )
         comms.threads.register(
             Thread(
                 "alpha",
                 frozenset({"team"}),
                 str(work),
-                pid=sender_pid,
+                process_identity=ProcessIdentity.capture(sender_pid),
                 created_at=61002.0,
                 model="test/fake",
             )
         )
         root_id = comms.messaging.initialize_private_initial_protocol()
-        comms.messaging.initialize_private_claim_protocol()
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             install_private_response_schema(store)
@@ -303,7 +313,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
                     "beta",
                     frozenset({"team"}),
                     str(work),
-                    pid=process.pid,
+                    process_identity=ProcessIdentity.capture(process.pid),
                     created_at=61003.0,
                     model="test/fake",
                 )
@@ -374,7 +384,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
                 )
                 assert (
                     store._connection.execute(
-                        "SELECT COUNT(*) FROM native_runtime_inputs"
+                        f"SELECT COUNT(*) FROM {NativeRuntimeInput.declared_name}"
                     ).fetchone()[0]
                     == 1
                 )

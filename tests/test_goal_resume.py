@@ -4,7 +4,9 @@ import os
 
 import pytest
 
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -41,7 +43,7 @@ def test_same_id_resume_from_paused(comms, monkeypatch):
 
     assert result["id"] == started["id"]
     assert result["text"] == started["text"]
-    assert result["status"] == "active"
+    assert FieldCodec.decode(Goal, result).state.active
     assert result["progress"] == "user resumed"
     assert comms.registry.require("owner").goal.id == started["id"]
 
@@ -49,7 +51,14 @@ def test_same_id_resume_from_paused(comms, monkeypatch):
 def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path):
     monkeypatch.delenv("PI_AGENT_ID", raising=False)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
-    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "owner",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     goal = invoke_tool(comms, "comms_set_goal", {"text": "finish this"})["goal"]
     comms.agents.begin_turn("owner", "same-assistant-turn")
 
@@ -71,7 +80,14 @@ def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path
 def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkeypatch, tmp_path):
     monkeypatch.delenv("PI_AGENT_ID", raising=False)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
-    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "owner",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     first = invoke_tool(comms, "comms_set_goal", {"text": "first"})["goal"]
     comms.agents.begin_turn("owner", "same-assistant-turn")
     invoke_tool(

@@ -10,79 +10,18 @@ session journal's durable user-message digest matches the binding.
 
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination import WakeAssignment
-from .coordination_cohort import _assert_schema as assert_cohort_schema
 from .coordination_store import IdentityConflict, MutationStore
 from .native_pi import _INPUT_ID, NativePiUnavailable, read_tracked_input_digest
+from .native_runtime_input import NativeRuntimeInput
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
 from .threads import Thread
-
-_DDL = (
-    (
-        "prompt_binding_meta",
-        """CREATE TABLE prompt_binding_meta (
-            singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-            version INTEGER NOT NULL CHECK (version = 1),
-            ddl_digest TEXT NOT NULL CHECK (length(ddl_digest) = 64)
-        ) STRICT""",
-    ),
-    (
-        "prompt_bindings",
-        """CREATE TABLE prompt_bindings (
-            input_id TEXT PRIMARY KEY CHECK (
-                length(input_id) = 32 AND input_id NOT GLOB '*[^0-9a-f]*'),
-            binding_version INTEGER NOT NULL CHECK (binding_version = 1),
-            stage TEXT NOT NULL CHECK (stage IN ('triage','full')),
-            claim_id TEXT NOT NULL,
-            execution_id TEXT,
-            attempt_ordinal INTEGER,
-            owner_lookup TEXT NOT NULL CHECK (length(owner_lookup) = 32),
-            owner_thread TEXT NOT NULL CHECK (owner_thread <> ''),
-            owner_generation INTEGER NOT NULL CHECK (owner_generation > 0),
-            wire_root_id TEXT NOT NULL CHECK (
-                length(wire_root_id) = 32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'),
-            source_seq INTEGER NOT NULL CHECK (source_seq > 0),
-            message_id TEXT NOT NULL CHECK (message_id <> ''),
-            expected_prompt_digest TEXT NOT NULL CHECK (
-                length(expected_prompt_digest) = 64
-                AND expected_prompt_digest NOT GLOB '*[^0-9a-f]*'),
-            bound_at_ms INTEGER NOT NULL CHECK (bound_at_ms > 0),
-            CHECK ((stage='triage' AND execution_id IS NULL AND attempt_ordinal IS NULL)
-                OR (stage='full' AND execution_id IS NOT NULL AND attempt_ordinal > 0))
-        ) STRICT, WITHOUT ROWID""",
-    ),
-    (
-        "prompt_binding_update_guard",
-        """CREATE TRIGGER prompt_binding_update_guard
-        BEFORE UPDATE ON prompt_bindings
-        BEGIN SELECT RAISE(ABORT,'a prelaunch prompt binding is immutable'); END""",
-    ),
-    (
-        "prompt_binding_delete_guard",
-        """CREATE TRIGGER prompt_binding_delete_guard
-        BEFORE DELETE ON prompt_bindings
-        BEGIN SELECT RAISE(ABORT,'a prelaunch prompt binding cannot be deleted'); END""",
-    ),
-    (
-        "prompt_binding_meta_update_guard",
-        """CREATE TRIGGER prompt_binding_meta_update_guard
-        BEFORE UPDATE ON prompt_binding_meta
-        BEGIN SELECT RAISE(ABORT,'prompt binding schema is frozen'); END""",
-    ),
-    (
-        "prompt_binding_meta_delete_guard",
-        """CREATE TRIGGER prompt_binding_meta_delete_guard
-        BEFORE DELETE ON prompt_binding_meta
-        BEGIN SELECT RAISE(ABORT,'prompt binding schema is frozen'); END""",
-    ),
-)
-_DDL_DIGEST = hashlib.sha256(json.dumps(_DDL, separators=(",", ":")).encode()).hexdigest()
+from .typed_table import Column, TypedRow, TypedTable
 
 _BINDING_PATH = "native_prompt_bindings.sqlite3"
 
@@ -95,20 +34,50 @@ def binding_store_path(store: MutationStore) -> Path:
 
 
 @dataclass(frozen=True, slots=True)
-class PromptBinding:
-    input_id: str
+class PromptBinding(TypedTable):
+    input_id: str = field(
+        metadata={
+            "sql": Column(
+                primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"
+            )
+        }
+    )
     stage: str
-    assignment_id: str = field(metadata={"wire_name": "claim_id"})
+    assignment_id: str
     execution_id: str | None
     attempt_ordinal: int | None
     owner_lookup: str
     owner_thread: str
-    owner_generation: int
+    owner_generation: int = field(metadata={"sql": Column(check="owner_generation>0")})
     wire_root_id: str
     source_seq: int
     message_id: str
     expected_prompt_digest: str
-    bound_at_ms: int
+    bound_at_ms: int = field(metadata={"sql": Column(check="bound_at_ms>0")})
+
+    without_rowid = True
+    checks = (
+        "(stage='triage' AND execution_id IS NULL AND attempt_ordinal IS NULL) OR "
+        "(stage='full' AND execution_id IS NOT NULL AND attempt_ordinal>0)",
+        "length(owner_lookup)=32 AND owner_thread<>'' AND length(wire_root_id)=32 "
+        "AND wire_root_id NOT GLOB '*[^0-9a-f]*' AND source_seq>0 AND message_id<>'' "
+        "AND length(expected_prompt_digest)=64 AND expected_prompt_digest NOT GLOB '*[^0-9a-f]*'",
+    )
+
+    @classmethod
+    def triggers(cls) -> dict[str, str]:
+        return {
+            f"{cls.declared_name}_{operation.lower()}_guard": f"CREATE TRIGGER {cls.declared_name}_"
+            f"{operation.lower()}_guard "
+            f"BEFORE {operation} ON {cls.declared_name} "
+            "BEGIN SELECT RAISE(ABORT,'prelaunch binding is immutable'); END"
+            for operation in ("UPDATE", "DELETE")
+        }
+
+
+@dataclass(frozen=True)
+class _BindingRoot(TypedRow):
+    wire_root_id: str
 
 
 def install_prompt_binding_schema(store: MutationStore) -> None:
@@ -118,7 +87,7 @@ def install_prompt_binding_schema(store: MutationStore) -> None:
 
 def _ensure_binding_schema(store: MutationStore) -> None:
     """Serialized snapshot installation; never repair an uncertain commit."""
-    create_sidecar_file(binding_store_path(store), _DDL, _DDL_DIGEST)
+    create_sidecar_file(binding_store_path(store), PromptBinding)
 
 
 def bind_expected_prompt(
@@ -172,68 +141,41 @@ def bind_expected_prompt(
         assert_native_runtime_schema(db)
         assert_cohort_schema(db)
         _require_owner(store, assignment.recipient_lookup, owner, generation)
-        reserved = db.execute(
-            "SELECT stage,claim_id,execution_id,attempt_ordinal,owner_lookup,owner_thread,"
-            "owner_generation FROM native_runtime_inputs WHERE input_id=?",
-            (input_id,),
-        ).fetchone()
+        reserved = NativeRuntimeInput.one(db, input_id=input_id)
         if reserved is None:
             raise IdentityConflict("prompt binding requires an already reserved input")
         if (
-            reserved["stage"] != stage
-            or reserved["claim_id"] != assignment.assignment_id
-            or reserved["execution_id"] != execution_id
-            or reserved["attempt_ordinal"] != attempt_ordinal
-            or reserved["owner_lookup"] != assignment.recipient_lookup
-            or reserved["owner_thread"] != owner.name
-            or reserved["owner_generation"] != generation
+            reserved.stage != stage
+            or reserved.assignment_id != assignment.assignment_id
+            or reserved.execution_id != execution_id
+            or reserved.attempt_ordinal != attempt_ordinal
+            or reserved.owner_lookup != assignment.recipient_lookup
+            or reserved.owner_thread != owner.name
+            or reserved.owner_generation != generation
         ):
             raise IdentityConflict("prompt binding identity differs from its reservation")
-        root_row = db.execute(
-            "SELECT r.wire_root_id FROM claim_batch_members m "
-            "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
-            "AND r.wire_seq=m.wire_seq AND r.message_id=? AND r.sealed=1 "
-            "WHERE m.claim_id=? AND m.recipient_lookup=?",
-            (assignment.message_id, assignment.assignment_id, assignment.recipient_lookup),
-        ).fetchone()
-        if root_row is None:
-            raise IdentityConflict("prompt binding requires a sealed claim receipt")
-        wire_root_id = str(root_row["wire_root_id"])
+        wire_root_id = _binding_wire_root(store, assignment)
         path = binding_store_path(store)
-        with sidecar_connection(path, _DDL, _DDL_DIGEST) as sidecar:
-            existing = sidecar.execute(
-                "SELECT 1 FROM prompt_bindings WHERE input_id=?", (input_id,)
-            ).fetchone()
-            if existing is not None:
+        with sidecar_connection(path, PromptBinding) as sidecar:
+            if PromptBinding.one(sidecar, input_id=input_id) is not None:
                 raise IdentityConflict("this input already has a prelaunch prompt binding")
-            expected = (
-                input_id,
-                1,
-                stage,
-                assignment.assignment_id,
-                execution_id,
-                attempt_ordinal,
-                assignment.recipient_lookup,
-                owner.name,
-                generation,
-                wire_root_id,
-                assignment.wire_seq,
-                assignment.message_id,
-                digest,
-                store._now(0),
+            expected = PromptBinding(
+                input_id=input_id,
+                stage=stage,
+                assignment_id=assignment.assignment_id,
+                execution_id=execution_id,
+                attempt_ordinal=attempt_ordinal,
+                owner_lookup=assignment.recipient_lookup,
+                owner_thread=owner.name,
+                owner_generation=generation,
+                wire_root_id=wire_root_id,
+                source_seq=assignment.wire_seq,
+                message_id=assignment.message_id,
+                expected_prompt_digest=digest,
+                bound_at_ms=store._now(0),
             )
-            inserted = sidecar.execute(
-                "INSERT INTO prompt_bindings"
-                "(input_id,binding_version,stage,claim_id,execution_id,attempt_ordinal,"
-                "owner_lookup,owner_thread,owner_generation,wire_root_id,source_seq,"
-                "message_id,expected_prompt_digest,bound_at_ms) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                expected,
-            )
-            actual = sidecar.execute(
-                "SELECT * FROM prompt_bindings WHERE input_id=?", (input_id,)
-            ).fetchone()
-            if inserted.rowcount != 1 or actual is None or tuple(actual) != expected:
+            inserted = expected.insert(sidecar)
+            if inserted.rowcount != 1 or PromptBinding.one(sidecar, input_id=input_id) != expected:
                 raise IdentityConflict("prelaunch binding insert did not preserve exact identity")
     return digest
 
@@ -241,17 +183,18 @@ def bind_expected_prompt(
 def _binding_wire_root(store: MutationStore, assignment: WakeAssignment) -> str:
     """Resolve the trusted wire root for a sealed claim from the cohort receipt."""
     with store._read_transaction():
-        row = store._connection.execute(
-            "SELECT r.wire_root_id FROM claim_batch_members m "
-            "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
-            "AND r.wire_seq=m.wire_seq AND r.message_id=? AND r.sealed=1 "
-            "WHERE m.claim_id=? AND m.recipient_lookup=?",
-            (assignment.message_id, assignment.assignment_id, assignment.recipient_lookup),
-        ).fetchone()
-    if row is None:
+        rows = _BindingRoot.read(
+            store._connection.execute(
+                "SELECT r.wire_root_id FROM claim_batch_members m "
+                "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
+                "AND r.wire_seq=m.wire_seq AND r.message_id=? AND r.sealed=1 "
+                "WHERE m.claim_id=? AND m.recipient_lookup=?",
+                (assignment.message_id, assignment.assignment_id, assignment.recipient_lookup),
+            )
+        )
+    if len(rows) != 1:
         raise IdentityConflict("prompt binding requires a sealed claim receipt")
-    resolved = str(row["wire_root_id"])
-    return resolved
+    return rows[0].wire_root_id
 
 
 def read_expected_prompt_binding(
@@ -263,27 +206,8 @@ def read_expected_prompt_binding(
     path = binding_store_path(store)
     if not path.exists() and not path.is_symlink():
         return None
-    with sidecar_connection(path, _DDL, _DDL_DIGEST, blocking=blocking) as db:
-        binding = db.execute(
-            "SELECT * FROM prompt_bindings WHERE input_id=?", (input_id,)
-        ).fetchone()
-    if binding is None:
-        return None
-    return PromptBinding(
-        binding["input_id"],
-        binding["stage"],
-        binding["claim_id"],
-        binding["execution_id"],
-        binding["attempt_ordinal"],
-        binding["owner_lookup"],
-        binding["owner_thread"],
-        binding["owner_generation"],
-        binding["wire_root_id"],
-        binding["source_seq"],
-        binding["message_id"],
-        binding["expected_prompt_digest"],
-        binding["bound_at_ms"],
-    )
+    with sidecar_connection(path, PromptBinding, blocking=blocking) as db:
+        return PromptBinding.one(db, input_id=input_id)
 
 
 def expected_prompt_matches_journal(session_file: Path, binding: PromptBinding) -> bool:

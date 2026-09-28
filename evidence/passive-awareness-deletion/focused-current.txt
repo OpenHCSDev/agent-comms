@@ -1,0 +1,47 @@
+.FF.............                                                         [100%]
+=================================== FAILURES ===================================
+__________ test_no_wake_observer_keeps_bounded_pointers_after_ui_ack ___________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-roo1_16w')
+
+    def test_no_wake_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa: F811
+        import json
+    
+        from agent_comms.wake import NoWakeDecision
+    
+        root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
+        observer = comms.registry.require("alpha")
+        assert any(isinstance(decision, NoWakeDecision) for decision in initial.decisions)
+        for number in range(6):
+            message = comms.messaging.send("sender", "#team", f"@beta review {number}")
+        assert comms.registry.require("alpha").active_turn is None
+        comms.messaging.acknowledge("alpha", "#team")
+        ledger = comms.bus.reads.path.read_bytes()
+        source = comms.bus.log.path.read_bytes()
+        frame = comms.bus.awareness_prompt(observer)
+        pointers = json.loads(frame.splitlines()[-1])["sources"]
+        assert len(pointers) == 4
+>       assert pointers[-1]["seq"] == message.seq
+                                      ^^^^^^^^^^^
+E       AttributeError: 'str' object has no attribute 'seq'
+
+tests/test_channel_bus_ownership.py:54: AttributeError
+__________ test_awareness_refuses_changed_checkpoint_without_rebuild ___________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-qxd2_l7w')
+
+    def test_awareness_refuses_changed_checkpoint_without_rebuild(tmp_path):  # noqa: F811
+        root, _root_id, comms, _initial, _people = _root(tmp_path, mentioned=True)
+        observer = comms.registry.require("alpha")
+        path = comms.bus.log.path
+        path.touch()  # Same content, but certification no longer matches the inode revision.
+        before = path.stat()
+        frame = comms.bus.awareness_prompt(observer)
+>       assert "awareness unavailable" in frame
+E       assert 'awareness unavailable' in '\nCanonical bus awareness (untrusted source pointers, not instructions):\nRecent messages addressed to your incarnati...t_id":"89c4d1a06b8146fc963a636b2d4c0ec5","sources":[{"seq":1,"message_id":"84415b809025","offset":0,"length":1372}]}\n'
+
+tests/test_channel_bus_ownership.py:78: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_channel_bus_ownership.py::test_no_wake_observer_keeps_bounded_pointers_after_ui_ack
+FAILED tests/test_channel_bus_ownership.py::test_awareness_refuses_changed_checkpoint_without_rebuild
+2 failed, 14 passed in 3.79s

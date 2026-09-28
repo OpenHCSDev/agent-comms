@@ -16,31 +16,34 @@ try:
 except ImportError:  # unsupported OS: start() fails closed
     fcntl = None  # type: ignore[assignment]
 import json
-import multiprocessing
 import os
 import socket
 import sqlite3
 import stat
 import struct
 import sys
-import threading
-from collections.abc import Callable
 from contextlib import closing, suppress
-from multiprocessing.connection import Connection
-from multiprocessing.process import BaseProcess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .coordination import COORDINATION_SCHEMA_VERSION, COORDINATION_SNAPSHOT_VERSION
+from .child_process import BoundedRun, ParentLifeline
+from .coordination import (
+    COORDINATION_SCHEMA_VERSION,
+    COORDINATION_SNAPSHOT_VERSION,
+    ExecutionRecord,
+    OwnerGenerations,
+    SchemaMeta,
+)
 from .field_codec import FieldCodec
 from .recovery_projection import RecoveryRequest, read_recovery_projection
+from .typed_table import SQLiteJournalMode, SQLiteUserVersion
 
 _MAX_REQUEST = 1024
 _MAX_REPLY = 4096
 _MAX_OWNER_EXECUTIONS = 256
 _MAX_REGISTERED_OWNERS = 256
 _READ_TIMEOUT = 1.0
-_KILL_GRACE = 2.0
 _MAX_CLIENTS = 8
 _ERROR = b'{"schema":1,"availability":"unavailable","reason":"gateway_unavailable"}\n'
 
@@ -133,49 +136,58 @@ def _snapshot(root: Path, database: Path, requested: str) -> bytes:
     ) as db:
         db.execute("PRAGMA query_only=ON")
         db.execute("PRAGMA busy_timeout=250")
-        if db.execute("PRAGMA journal_mode").fetchone()[0] != "delete":
+        if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode")) != [
+            SQLiteJournalMode("delete")
+        ]:
             raise GatewayUnavailableError("unsupported coordinator journal")
         db.execute("BEGIN")
         try:
-            if db.execute("PRAGMA user_version").fetchone()[0] != COORDINATION_SCHEMA_VERSION:
+            if SQLiteUserVersion.read(db.execute("PRAGMA user_version")) != [
+                SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)
+            ]:
                 raise GatewayUnavailableError("unsupported coordinator schema")
-            meta = db.execute(
-                "SELECT schema_version,snapshot_version FROM schema_meta WHERE singleton=1"
-            ).fetchone()
-            if meta != (COORDINATION_SCHEMA_VERSION, COORDINATION_SNAPSHOT_VERSION):
+            if SchemaMeta.one(db, singleton=1) != SchemaMeta(
+                singleton=1,
+                schema_version=COORDINATION_SCHEMA_VERSION,
+                snapshot_version=COORDINATION_SNAPSHOT_VERSION,
+            ):
                 raise GatewayUnavailableError("unsupported coordinator snapshot")
-            # owner_thread has no v2 index: cap the entire registered-owner
+            # owner_thread has no index: cap the entire registered-owner
             # cardinality before the exact-match join can scan it.
-            owners = db.execute(
-                "SELECT owner_lookup FROM owner_generations LIMIT ?",
-                (_MAX_REGISTERED_OWNERS + 1,),
-            ).fetchall()
+            owners = OwnerGenerations.read(
+                db.execute(
+                    "SELECT * FROM owner_generations LIMIT ?",
+                    (_MAX_REGISTERED_OWNERS + 1,),
+                )
+            )
             if len(owners) > _MAX_REGISTERED_OWNERS:
                 raise GatewayUnavailableError("registered owner scan exceeds budget")
             # Exact current canonical name only. Aliases, claims of lookup, and
             # registration of a human participant are not accepted.
-            matches = db.execute(
-                "SELECT g.owner_lookup,g.owner_thread FROM owner_generations g "
-                "JOIN participants p ON p.participant_lookup=g.owner_lookup "
-                "WHERE g.owner_thread=? AND p.committed=1 LIMIT 2",
-                (requested,),
-            ).fetchall()
+            matches = OwnerGenerations.read(
+                db.execute(
+                    "SELECT g.* FROM owner_generations g "
+                    "JOIN participants p ON p.participant_lookup=g.owner_lookup "
+                    "WHERE g.owner_thread=? AND p.committed=1 LIMIT 2",
+                    (requested,),
+                )
+            )
             if len(matches) != 1:
                 raise GatewayUnavailableError("unknown or ambiguous owner")
-            owner_lookup, owner_thread = matches[0]
-            if not isinstance(owner_lookup, str) or owner_thread != requested:
+            owner = matches[0]
+            if owner.owner_thread != requested:
                 raise GatewayUnavailableError("invalid canonical owner")
-            # Index execution_owner_status_idx has owner_lookup as its first
-            # column. Bound even the frozen reader's latest-execution scan.
-            count = db.execute(
-                "SELECT execution_id FROM executions INDEXED BY execution_owner_status_idx "
-                "WHERE owner_lookup=? LIMIT ?",
-                (owner_lookup, _MAX_OWNER_EXECUTIONS + 1),
-            ).fetchall()
+            # The declared owner/status index bounds the frozen reader's scan.
+            count = ExecutionRecord.read(
+                db.execute(
+                    "SELECT * FROM executions WHERE owner_lookup=? LIMIT ?",
+                    (owner.owner_lookup, _MAX_OWNER_EXECUTIONS + 1),
+                )
+            )
             if len(count) > _MAX_OWNER_EXECUTIONS:
                 raise GatewayUnavailableError("owner projection exceeds bounded scan")
             result = read_recovery_projection(
-                database, owner_lookup=owner_lookup, owner_thread=owner_thread
+                database, owner_lookup=owner.owner_lookup, owner_thread=owner.owner_thread
             )
             encoded = (json.dumps(FieldCodec.encode(result), separators=(",", ":")) + "\n").encode()
             if len(encoded) > _MAX_REPLY:
@@ -185,105 +197,23 @@ def _snapshot(root: Path, database: Path, requested: str) -> bytes:
             db.execute("ROLLBACK")
 
 
-def _snapshot_process_entry(
-    output: Connection,
-    parent_life: Connection,
-    root: Path,
-    database: Path,
-    requested: str,
-    snapshot: Callable[[Path, Path, str], bytes],
-) -> None:
-    """One isolated read. Never send an exception, path, or unbounded payload."""
+@dataclass(frozen=True)
+class SnapshotInvocation:
+    root: str
+    requested: str
 
-    def parent_watchdog() -> None:
-        # Closing the parent's pipe, including abrupt parent death, terminates
-        # this process even if SQLite is blocked in another thread.
+    def run(self) -> bytes:
+        root = Path(self.root)
         try:
-            parent_life.recv_bytes(1)
-        except (EOFError, OSError):
-            os._exit(1)
-        os._exit(1)  # no parent command exists on this one-way lifeline
-
-    threading.Thread(target=parent_watchdog, daemon=True).start()
-    try:
-        response = snapshot(root, database, requested)
-        if (
-            not isinstance(response, bytes)
-            or len(response) > _MAX_REPLY
-            or not response.endswith(b"\n")
-        ):
-            response = _ERROR
-    except BaseException:
-        response = _ERROR
-    try:
-        output.send_bytes(response)
-    except (BrokenPipeError, OSError):
-        pass
-    finally:
-        output.close()
-        parent_life.close()
-
-
-async def _readable(fd: int, deadline: float) -> None:
-    """Await a POSIX pipe/process sentinel without blocking an event-loop thread."""
-    loop = asyncio.get_running_loop()
-    ready: asyncio.Future[None] = loop.create_future()
-
-    def signal() -> None:
-        if not ready.done():
-            ready.set_result(None)
-
-    loop.add_reader(fd, signal)
-    try:
-        await asyncio.wait_for(ready, timeout=max(0, deadline - loop.time()))
-    finally:
-        loop.remove_reader(fd)
-
-
-async def _read_child_reply(input_pipe: Connection, deadline: float) -> bytes:
-    raw = bytearray()
-    fd = input_pipe.fileno()
-    while True:
-        await _readable(fd, deadline)
-        chunk = os.read(fd, max(1, _MAX_REPLY + 5 - len(raw)))
-        if not chunk:
-            break
-        raw.extend(chunk)
-        if len(raw) > _MAX_REPLY + 4:
-            raise GatewayUnavailableError("snapshot child reply exceeds bound")
-    if len(raw) < 4:
-        raise GatewayUnavailableError("snapshot child omitted reply")
-    length = struct.unpack("!i", raw[:4])[0]
-    if length <= 0 or length > _MAX_REPLY or len(raw) != length + 4:
-        raise GatewayUnavailableError("snapshot child reply is malformed")
-    response = bytes(raw[4:])
-    if not response.endswith(b"\n"):
-        raise GatewayUnavailableError("snapshot child reply is unterminated")
-    value = json.loads(response.decode("utf-8", errors="strict"))
-    if not isinstance(value, dict) or value.get("schema") != 1:
-        raise GatewayUnavailableError("snapshot child reply is invalid")
-    return response
-
-
-async def _reap_child(process: BaseProcess, deadline: float) -> None:
-    if process.exitcode is None:
-        await _readable(process.sentinel, deadline)
-    # Sentinel readiness can race the waitpid observation by one scheduler
-    # tick; make a short bounded reap attempt before declaring an orphan.
-    process.join(timeout=0.05)
-    if process.exitcode is None:
-        raise GatewayUnavailableError("snapshot child could not be reaped")
+            return _snapshot(root, root / "coordination.sqlite3", self.requested)
+        except Exception:
+            return _ERROR
 
 
 class RecoveryGateway:
     """Explicitly started local service; production integration is a separate gate."""
 
-    def __init__(
-        self,
-        trusted_root: Path,
-        *,
-        _snapshot_function: Callable[[Path, Path, str], bytes] = _snapshot,
-    ):
+    def __init__(self, trusted_root: Path):
         self.root = Path(trusted_root).expanduser().absolute()
         self.database = self.root / "coordination.sqlite3"
         self.directory = self.root / ".recovery-viewer"
@@ -294,20 +224,16 @@ class RecoveryGateway:
         self._clients = asyncio.Semaphore(_MAX_CLIENTS)
         self._worker_slots = asyncio.Semaphore(_MAX_CLIENTS)
         self._workers: set[asyncio.Task[bytes]] = set()
-        self._processes: set[BaseProcess] = set()
         self._handlers: set[asyncio.Task[None]] = set()
         self._closing = False
         self._orphaned = False
-        # A private service-only injection allows real-lock child tests; never
-        # sourced from a request or exposed as a production listener option.
-        self._snapshot_function = _snapshot_function
 
     def _prepare_directory(self) -> None:
         if fcntl is None or os.getuid() != os.geteuid():
             raise GatewayUnavailableError("gateway platform or privileges unsupported")
         _validate_paths(self.root, self.database)
         if len(os.fsencode(self.path)) >= 100:
-            raise GatewayUnavailableError("socket path is too long; no /tmp fallback")
+            raise GatewayUnavailableError("socket path is too long for this endpoint")
         with suppress(FileExistsError):
             self.directory.mkdir(mode=0o700)
         _owned(self.directory, stat.S_IFDIR, 0o700)
@@ -396,51 +322,34 @@ class RecoveryGateway:
             raise
 
     async def _run_snapshot_process(self, requested: str) -> bytes:
-        """Kill and reap the *SQLite process* on timeout or cancellation."""
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + _READ_TIMEOUT
-        context = multiprocessing.get_context("spawn")
-        receive, send = context.Pipe(duplex=False)
-        life_child, life_parent = context.Pipe(duplex=False)
-        process = context.Process(
-            target=_snapshot_process_entry,
-            args=(send, life_child, self.root, self.database, requested, self._snapshot_function),
-            daemon=True,
-        )
-        try:
-            process.start()
-        except BaseException as error:
-            receive.close()
-            send.close()
-            life_child.close()
-            life_parent.close()
-            raise GatewayUnavailableError("snapshot child could not start") from error
-        send.close()
-        life_child.close()
-        self._processes.add(process)
-        try:
-            response = await _read_child_reply(receive, deadline)
-            await _reap_child(process, deadline)
-            if process.exitcode != 0:
-                raise GatewayUnavailableError("snapshot child failed")
-            return response
-        finally:
-            receive.close()
-            life_parent.close()
-            if process.exitcode is None:
-                with suppress(OSError):
-                    process.kill()
-                try:
-                    await _reap_child(process, loop.time() + _KILL_GRACE)
-                except (OSError, TimeoutError, GatewayUnavailableError):
-                    # Never free a worker slot or single-instance lock while a
-                    # child might still own SQLite read locks. Supervisor exit
-                    # is the final recovery boundary for an unkillable child.
-                    self._orphaned = True
-                    self._closing = True
-            if process.exitcode is not None:
-                process.close()
-                self._processes.discard(process)
+        """A12 owns deadline, parent loss, process group retirement and reap."""
+        invocation = SnapshotInvocation(str(self.root), requested)
+        with ParentLifeline() as life:
+            try:
+                result = await BoundedRun.run(
+                    (
+                        sys.executable,
+                        "-m",
+                        "agent_comms.recovery_gateway",
+                        json.dumps(FieldCodec.encode(invocation)),
+                    ),
+                    timeout=_READ_TIMEOUT,
+                    env=life.environment,
+                    pass_fds=(life.read_fd,),
+                )
+            except (RuntimeError, TimeoutError):
+                # A12 could not attest retirement. Keep the reader admission
+                # and single-instance lock until this gateway process exits.
+                self._orphaned = self._closing = True
+                raise
+        response = result.stdout
+        if (
+            not result.outcome.successful
+            or not response.endswith(b"\n")
+            or len(response) > _MAX_REPLY
+        ):
+            raise GatewayUnavailableError("snapshot child failed or exceeded reply bound")
+        return response
 
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         handler = asyncio.current_task()
@@ -521,13 +430,8 @@ class RecoveryGateway:
                 _done, pending = await asyncio.wait(active, timeout=2 * _READ_TIMEOUT)
                 if pending:
                     raise GatewayUnavailableError("gateway still has active snapshot work")
-        for process in tuple(self._processes):
-            if process.exitcode is not None:
-                process.join(timeout=0)
-                process.close()
-                self._processes.discard(process)
-        if self._processes:
-            raise GatewayUnavailableError("gateway still owns an unreaped snapshot child")
+        if self._orphaned:
+            raise GatewayUnavailableError("snapshot retirement was not attested")
         self._orphaned = False
         self._worker_slots = asyncio.Semaphore(_MAX_CLIENTS)
         if self._socket_identity is not None:
@@ -544,3 +448,10 @@ class RecoveryGateway:
             fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
             os.close(self._lock_fd)
             self._lock_fd = None
+
+
+if __name__ == "__main__":
+    ParentLifeline.guard()
+    invocation = FieldCodec.decode(SnapshotInvocation, json.loads(sys.argv[1]))
+    sys.stdout.buffer.write(invocation.run())
+    sys.stdout.buffer.flush()

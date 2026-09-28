@@ -2,25 +2,22 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, fields
 from pathlib import Path
-
-from .native_entries import TranscriptProjection
-from .native_transcript import NativeTranscript
-from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript, TranscriptCodec
-from .registration import Registration
 
 from .channel_targets import is_channel_target
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .messages import Message
 from .messaging import Messaging
+from .native_entries import TranscriptProjection
+from .native_transcript import NativeTranscript
+from .registration import Registration
 from .routing import TurnRouting
 from .threads import Thread
+from .transcript_events import NoticeTranscript, TranscriptCodec, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes
 
 _LOG = logging.getLogger(__name__)
@@ -329,12 +326,10 @@ class Transcripts:
                 report["skipped"] += 1
                 continue
             routing = TurnRouting(tuple(origins), None)
-            binding = (
-                hashlib.sha256(sent_text.encode("utf-8")).hexdigest(),
-                json.dumps(routing.to_wire(), sort_keys=True),
-            )
             if native_id in existing:
-                report["already_bound" if existing[native_id] == binding else "conflicts"] += 1
+                binding = existing[native_id]
+                matched = binding.matches(sent_text) and binding.routing == routing
+                report["already_bound" if matched else "conflicts"] += 1
                 continue
             report["eligible"] += 1
             if not dry_run:

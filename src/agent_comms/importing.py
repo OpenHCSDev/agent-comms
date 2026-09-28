@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar
 from uuid import uuid4
 
+from .typed_table import SQLiteSchemaObject, TypedRow
+
 
 def object_value(value: object) -> Mapping[str, object]:
     if not isinstance(value, dict):
@@ -29,6 +31,30 @@ def objects(value: object) -> Iterator[Mapping[str, object]]:
 
 def text(value: object) -> str:
     return value if isinstance(value, str) else ""
+
+
+@dataclass(frozen=True)
+class OpenCodeSession(TypedRow):
+    id: str
+    directory: str
+    title: str
+    revert: str | None
+
+
+@dataclass(frozen=True)
+class OpenCodeMessage(TypedRow):
+    id: str
+    data: str
+
+
+@dataclass(frozen=True)
+class OpenCodePart(TypedRow):
+    data: str
+
+
+@dataclass(frozen=True)
+class OpenCodeLinkedHistory(TypedRow):
+    present: bool
 
 
 class ImportFormat(StrEnum):
@@ -324,43 +350,55 @@ class OpenCodeImporter(ImportAdapter, format=ImportFormat.OPENCODE):
         with sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True) as db:
             db.row_factory = sqlite3.Row
             db.execute("BEGIN")
-            info = db.execute(
-                "SELECT id,directory,title,revert FROM session WHERE id=?", (session_id,)
-            ).fetchone()
-            if info is None:
+            sessions = OpenCodeSession.read(
+                db.execute(
+                    "SELECT id,directory,title,revert FROM session WHERE id=?", (session_id,)
+                )
+            )
+            if not sessions:
                 raise ValueError(f"OpenCode session {session_id!r} was not found.")
+            (info,) = sessions
             tables = {
-                row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                row.name
+                for row in SQLiteSchemaObject.read(
+                    db.execute("SELECT name,sql FROM sqlite_master WHERE type='table'")
+                )
             }
-            if (
-                "session_message" in tables
-                and db.execute(
-                    "SELECT 1 FROM session_message WHERE session_id=? LIMIT 1", (session_id,)
-                ).fetchone()
-            ):
+            if "session_message" in tables and OpenCodeLinkedHistory.read(
+                db.execute(
+                    "SELECT EXISTS(SELECT 1 FROM session_message WHERE session_id=?) AS present",
+                    (session_id,),
+                )
+            ) == [OpenCodeLinkedHistory(True)]:
                 raise ValueError(
                     "This OpenCode database uses linked history; "
                     "import an opencode export JSON instead."
                 )
-            revert = object_value(json.loads(info["revert"]) if info["revert"] else {})
-            for row in db.execute(
-                "SELECT id,data FROM message WHERE session_id=? ORDER BY time_created,id",
-                (session_id,),
-            ):
-                if row["id"] == revert.get("messageID"):
-                    break
-                message = {**object_value(json.loads(row["data"])), "id": row["id"]}
-                parts = tuple(
-                    object_value(json.loads(part[0]))
-                    for part in db.execute(
-                        "SELECT data FROM part WHERE message_id=? ORDER BY time_created,id",
-                        (row["id"],),
-                    )
+            revert = object_value(json.loads(info.revert) if info.revert else {})
+            rows = OpenCodeMessage.iterate(
+                db.execute(
+                    "SELECT id,data FROM message WHERE session_id=? ORDER BY time_created,id",
+                    (session_id,),
                 )
-                self._message(message, parts, buffer)
-            return buffer.snapshot(
-                ImportFormat.OPENCODE, info["id"], info["directory"], info["title"]
             )
+            try:
+                for row in rows:
+                    if row.id == revert.get("messageID"):
+                        break
+                    message = {**object_value(json.loads(row.data)), "id": row.id}
+                    parts = tuple(
+                        object_value(json.loads(part.data))
+                        for part in OpenCodePart.read(
+                            db.execute(
+                                "SELECT data FROM part WHERE message_id=? ORDER BY time_created,id",
+                                (row.id,),
+                            )
+                        )
+                    )
+                    self._message(message, parts, buffer)
+            finally:
+                rows.close()
+            return buffer.snapshot(ImportFormat.OPENCODE, info.id, info.directory, info.title)
 
 
 _CODEX_REVERSE_BLOCK = 64 * 1024

@@ -1,0 +1,11 @@
+
+==================================== ERRORS ====================================
+____________ ERROR collecting tests/test_selected_owner_followup.py ____________
+tests/test_selected_owner_followup.py:67: in <module>
+    @pytest.mark.parametrize("change", ["clear", "missing_key", "foreign_key", "cancel"])
+     ^^^^^^
+E   NameError: name 'pytest' is not defined
+=========================== short test summary info ============================
+ERROR tests/test_selected_owner_followup.py - NameError: name 'pytest' is not...
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.71s

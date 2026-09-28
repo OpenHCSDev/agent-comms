@@ -5,7 +5,17 @@ from dataclasses import dataclass, field, replace
 
 import pytest
 
-from agent_comms.typed_table import Column, ForeignKey, Index, TypedRow, TypedTable
+from agent_comms.messages import MessageType
+from agent_comms.typed_table import (
+    Column,
+    ExactStorage,
+    ForeignKey,
+    Index,
+    IntegerStorage,
+    SqlStorage,
+    TypedRow,
+    TypedTable,
+)
 
 
 @dataclass(frozen=True)
@@ -49,6 +59,10 @@ def test_declared_table_family(tmp_path):
             replace(child, key="bad", parent="missing").insert(db)
         with pytest.raises(ValueError):
             replace(parent, key="bool", count=True).insert(db)
+        replace(child, weight=3.25).upsert(db)
+        assert TableChildRow.one(db, key="c").weight == 3.25
+        child.upsert(db)
+        assert TableChildRow.one(db, key="c") == child
         TableChildRow.update(db, where="key=?", parameters=("c",), enabled=False)
         with pytest.raises(ValueError):
             TableChildRow.update(db, where="key=?", parameters=("c",), missing=1)
@@ -69,8 +83,22 @@ def test_declared_table_family(tmp_path):
 def test_new_row_declaration_needs_no_other_edit():
     @dataclass(frozen=True)
     class AddedTableRow(TypedTable):
-        label: str = field(metadata={"sql": Column(primary_key=True, index=True)})
+        label: str = field(metadata={"sql": Column(unique=True, index=True)})
         child: TableChildRow
+        event: MessageType = MessageType.INFO
+        representation: type[SqlStorage] = IntegerStorage
+        exact: int = field(default=7, metadata={"sql": Column(storage=ExactStorage)})
+        ordinal: int | None = field(
+            default=None,
+            compare=False,
+            metadata={"sql": Column(primary_key=True, auto_increment=True)},
+        )
+        label_size: int | None = field(
+            default=None,
+            init=False,
+            compare=False,
+            metadata={"sql": Column(generated="length(label)")},
+        )
 
     @dataclass(frozen=True)
     class Projection(TypedRow):
@@ -82,6 +110,17 @@ def test_new_row_declaration_needs_no_other_edit():
         value = AddedTableRow("new", TableChildRow("a", "b", True, (), 1.25))
         value.insert(db)
         assert AddedTableRow.select(db) == [value]
+        stored = AddedTableRow.one(db, label="new")
+        assert stored.ordinal == 1 and stored.label_size == 3
+        assert stored.representation is IntegerStorage and stored.event is MessageType.INFO
+        with pytest.raises(ValueError, match="Generated columns"):
+            AddedTableRow.update(db, where="label=?", parameters=("new",), label_size=4)
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute("UPDATE added_table SET event='invented'")
+        db.execute("UPDATE added_table SET exact='7'")
+        with pytest.raises(ValueError):
+            AddedTableRow.one(db, label="new")
+        AddedTableRow.update(db, where="label=?", parameters=("new",), exact=7)
         assert Projection.read(db.execute("SELECT 1 AS enabled, 'new' AS label")) == [
             Projection("new", True)
         ]
@@ -93,3 +132,20 @@ def test_new_row_declaration_needs_no_other_edit():
             Projection.read(db.execute("SELECT 'a' AS label, 'b' AS label"))
         with pytest.raises(TypeError):
             AddedTableRow.update(db, where="1", child={"kind": "table_child"})
+
+
+def test_streamed_query_decodes_only_consumed_rows_and_releases_cursor():
+    @dataclass(frozen=True)
+    class StreamProjection(TypedRow):
+        enabled: bool
+
+    with sqlite3.connect(":memory:") as db:
+        cursor = db.execute("SELECT 1 AS enabled UNION ALL SELECT 2 AS enabled")
+        rows = StreamProjection.iterate(cursor)
+        assert next(rows) == StreamProjection(True)
+        rows.close()
+        with pytest.raises(sqlite3.ProgrammingError, match="closed cursor"):
+            cursor.fetchone()
+        rows = StreamProjection.iterate(db.execute("SELECT 2 AS enabled"))
+        with pytest.raises(ValueError):
+            next(rows)

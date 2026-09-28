@@ -1,0 +1,19 @@
+...............F..............................                           [100%]
+=================================== FAILURES ===================================
+_______________ test_invalid_retry_view_and_exact_receipt_domain _______________
+
+active_db = PosixPath('/home/ts/wt/comms-refactor2-s12-20260928/.artifacts/pytest/pytest-of-ts/pytest-40/test_invalid_retry_view_and_ex0/coordination.sqlite3')
+
+    def test_invalid_retry_view_and_exact_receipt_domain(active_db: Path):
+        # The generated v2 retry view always yields 0/1 under its frozen schema.
+        # A malformed stored view must not turn 2 into a truthy retry decision.
+        import agent_comms.recovery_projection as projection
+    
+>       assert not projection._sqlite_integer(2, minimum=0, maximum=1)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'agent_comms.recovery_projection' has no attribute '_sqlite_integer'
+
+tests/test_recovery_projection.py:357: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_recovery_projection.py::test_invalid_retry_view_and_exact_receipt_domain
+1 failed, 45 passed in 7.39s

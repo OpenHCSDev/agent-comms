@@ -4,25 +4,33 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 from dataclasses import replace
 
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.child_process import DetachedProcess, ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativeWitness
-from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 
 
 @pytest.fixture
 async def owner(tmp_path, monkeypatch):
     comms = Comms(tmp_path)
-    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "owner",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     session = tmp_path / "saved.jsonl"
     session.write_text("saved history\n")
     comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
@@ -197,11 +205,17 @@ async def test_relevant_source_and_owner_fences_remain(owner, change):
         comms.threads.register(Thread("peer", frozenset(), str(comms.root)))
         comms.messaging.send("peer", "owner", "correction")
         assert capture(owner) != source
+    elif change == "owner":
+        foreign = DetachedProcess.launch((sys.executable, "-c", "import time; time.sleep(30)"))
+        try:
+            comms.registry.register(
+                replace(current, process_identity=foreign.identity, active_turn=None)
+            )
+            with pytest.raises((RelationViolationError, ValueError)):
+                capture(owner)
+        finally:
+            foreign.stop_sync()
     else:
-        comms.registry.register(
-            replace(current, pid=12345, active_turn=None)
-            if change == "owner"
-            else replace(current, active_turn=None)
-        )
+        comms.registry.register(replace(current, active_turn=None))
         with pytest.raises((RelationViolationError, ValueError)):
             capture(owner)

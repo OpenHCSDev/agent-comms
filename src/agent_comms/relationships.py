@@ -221,14 +221,17 @@ class RelationshipDocument:
         if action == "remove":
             if existing is None:
                 return self, None
-            return replace(
-                self,
-                collaborations=tuple(
-                    edge
-                    for edge in self.collaborations
-                    if edge.pair_identity != existing.pair_identity
+            return (
+                replace(
+                    self,
+                    collaborations=tuple(
+                        edge
+                        for edge in self.collaborations
+                        if edge.pair_identity != existing.pair_identity
+                    ),
                 ),
-            ), None
+                None,
+            )
         if second is None:
             raise UnregisteredThreadError(f"Thread {peer!r} is not registered.")
         if not second.role.executable:
@@ -328,15 +331,17 @@ class ThreadRelationships:
             if goal is None or not goal.state.active or not owner.role.executable:
                 continue
             source = goal.mention_source
+            # Missing historical evidence grants no contact or current-name binding.
+            if source is None:
+                continue
             if (
-                source is None
-                or source.goal_id != goal.id
+                source.goal_id != goal.id
                 or source.text_digest != hashlib.sha256(goal.text.encode("utf-8")).hexdigest()
                 or source.owner_created_at != owner.created_at
                 or registry.aliases.get(source.owner_name, source.owner_name) != owner.name
                 or source.text_revision > goal.revision
             ):
-                continue  # Legacy/unbound goals cannot attest a peer incarnation.
+                continue
             for binding in source.bindings:
                 if binding.resolution != "resolved":
                     diagnostics.append(

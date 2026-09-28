@@ -2,30 +2,22 @@
 
 from __future__ import annotations
 
-import logging
 import time
 from collections.abc import Sequence
-from contextlib import suppress
 from dataclasses import replace
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from .active_route import guard_legacy_root_write
+from .active_route import guard_original_root_write
 from .catalog_store import ChannelCatalog
-from .registration import Registration
-
-if TYPE_CHECKING:
-    pass
 from .channel_targets import Tag
 from .channels import Channel, SavedView
 from .display_order import ChannelSort, ThreadSort
 from .message_bus import MessageBus
 from .messages import MembershipChange, Message, MessageType
+from .registration import Registration
 from .store_files import _store_lock
 from .threads import Thread
-
-_LOG = logging.getLogger(__name__)
 
 
 class TagAction(Enum):
@@ -72,36 +64,12 @@ class ChannelManagement:
                 document.create_tag(tag.name, threads)
         return tag
 
-    def _rebase_passive_channel_scope(self, name: str) -> None:
-        """Membership changes cut off former scope without claiming input delivery."""
-        from .passive_channel_awareness import PassiveChannelAwareness
-
-        awareness = PassiveChannelAwareness(self.root)
-        # Even checking for an optional ledger can fail after the membership
-        # commit. A failed probe skips the advisory; owner reads stay strict.
-        try:
-            if not awareness.store.path.exists():
-                return
-        except (OSError, TypeError, ValueError):
-            return
-        owner = self.registry.require(name)
-        snapshot = self.registry.snapshot()
-        # The membership write already committed. Advisory storage is
-        # optional; a stale scope row suppresses its next-turn frame.
-        with suppress(OSError, TypeError, ValueError):
-            awareness.scope_changed(
-                owner,
-                admission=snapshot.admission_generations[owner.name],
-                high_water=self.bus.log.latest_sequence(),
-                channels=self.catalog.read().targets_for(owner.tags),
-            )
-
     def update_tags(
         self, name: str, *, add: frozenset[str] = frozenset(), remove: frozenset[str] = frozenset()
     ) -> Thread:
         for tag in add | remove:
             Tag(tag)
-        with guard_legacy_root_write(self.root), _store_lock(self._wire_lock_path):
+        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             self._require_available_new_tags(add)
             thread = self.registry.require(name)
             previous_channels = self.catalog.read().views(self.registry.all_threads())
@@ -130,8 +98,6 @@ class ChannelManagement:
                                 membership=change,
                             )
                         )
-            if thread.tags != updated.tags:
-                self._rebase_passive_channel_scope(updated.name)
             return updated
 
     def set_saved_view(self, view: SavedView) -> SavedView:

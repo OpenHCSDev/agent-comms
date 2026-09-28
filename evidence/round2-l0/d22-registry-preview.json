@@ -1,0 +1,32 @@
+[
+  {
+    "source": "/home/ts/.agent-comms",
+    "staged": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/d22-registry-preview-saved-0",
+    "threads": 104,
+    "goals": 20,
+    "history_entries": 456,
+    "paused_without_attribution": []
+  },
+  {
+    "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+    "staged": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/d22-registry-preview-saved-1",
+    "threads": 104,
+    "goals": 20,
+    "history_entries": 0,
+    "paused_without_attribution": [
+      "0a314919764e40a9816cc1ccf825d8b0:3",
+      "7005cfd7d8bb4f01bbb8c4275e3bdff5:3",
+      "a9bc5d395801457490130365181863c5:2",
+      "b0e7d9ec27884fbd8d94454fed299c3d:7",
+      "e0d8e26f828c401a9d3ae168e4f7c8ea:3"
+    ]
+  },
+  {
+    "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w",
+    "staged": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/d22-registry-preview-saved-2",
+    "threads": 7,
+    "goals": 1,
+    "history_entries": 0,
+    "paused_without_attribution": []
+  }
+]

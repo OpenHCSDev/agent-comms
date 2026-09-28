@@ -69,7 +69,7 @@ def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
     comms.messaging.send("peer", "#team", "Channel input")
     comms.messaging.send("owner", "peer", "Output")
     comms.messaging.acknowledge("owner")
-    marker = (comms.root / "read_markers.json").read_bytes()
+    pending = comms.bus.pending_count("owner")
     snapshot = comms.relationships.snapshot("owner")
     groups = {group.key: group for group in snapshot.groups}
     assert [row.target for row in groups["inbound"].entries] == ["peer", "#team"]
@@ -77,7 +77,7 @@ def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
     assert groups["parent"].entries[0].target == "origin"
     assert groups["children"].entries[0].target == "child"
     assert groups["collaborating"].entries == ()
-    assert (comms.root / "read_markers.json").read_bytes() == marker
+    assert comms.bus.pending_count("owner") == pending
     assert not snapshot.history_limited
     assert "Current delivery scope" in snapshot.incoming_basis
 
@@ -174,7 +174,7 @@ def test_deleted_peer_survives_unrelated_edit_and_explicit_remove(tmp_path):
     comms = setup_wire(tmp_path)
     original = comms.relationships.edit("owner", "add", "peer", "Unfinished review notes")
     comms.owners.stop("peer")
-    comms.threads.delete("peer")
+    comms.registry.remove("peer")
 
     missing = collaboration_rows(comms)[0]
     assert missing.target == "peer", "Deleted identity must remain copyable"
@@ -200,7 +200,7 @@ def test_surviving_peer_can_end_unavailable_collaboration(tmp_path):
     comms = setup_wire(tmp_path)
     comms.relationships.edit("owner", "add", "peer", "Work to remember")
     comms.owners.stop("owner")
-    comms.threads.delete("owner")
+    comms.registry.remove("owner")
     row = collaboration_rows(comms, "peer")[0]
     assert (row.target, row.available, row.detail) == ("owner", False, "Work to remember")
     comms.relationships.edit("peer", "remove", "owner")
@@ -213,8 +213,10 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
     old_peer = comms.registry.require("peer")
     original = comms.relationships.edit("owner", "add", "peer", "Old incarnation's task")
     comms.owners.stop("peer")
-    comms.threads.delete("peer")
-    comms.threads.register(Thread("peer", frozenset(), str(tmp_path), created_at=old_peer.created_at + 1))
+    comms.registry.remove("peer")
+    comms.threads.register(
+        Thread("peer", frozenset(), str(tmp_path), created_at=old_peer.created_at + 1)
+    )
 
     row = collaboration_rows(comms)[0]
     assert row.target == "peer" and row.person is None and not row.available
@@ -237,7 +239,7 @@ def test_deleted_owner_edges_are_not_purged_or_inherited_by_new_owner(tmp_path):
     comms = setup_wire(tmp_path)
     original = comms.relationships.edit("owner", "add", "peer", "Retained historical declaration")
     comms.owners.stop("owner")
-    comms.threads.delete("owner")
+    comms.registry.remove("owner")
     comms.relationships.edit("origin", "add", "peer", "Independent work")
     comms.threads.register(
         Thread("owner", frozenset(), str(tmp_path), created_at=original.owner_created + 1)
@@ -263,7 +265,7 @@ def test_live_alias_resolves_but_deleted_alias_does_not_erase_note(tmp_path, mon
     comms.threads.rename_self("reviewer")
     assert collaboration_rows(comms)[0].target == "reviewer"
     comms.owners.stop("reviewer")
-    comms.threads.delete("reviewer")
+    comms.registry.remove("reviewer")
     comms.relationships.edit("owner", "add", "child")
     row = next(row for row in collaboration_rows(comms) if not row.available)
     assert row.target == "peer" and row.detail == "Review before rename"

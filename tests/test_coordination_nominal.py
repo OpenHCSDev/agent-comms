@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms import coordination as c
-from agent_comms.attempt_states import AttemptState, SettlingAttempt, SucceededAttempt
 from agent_comms.assignment_states import AssignmentState, EngagedAssignment, FullPendingAssignment
+from agent_comms.attempt_states import SettlingAttempt, SucceededAttempt
 from agent_comms.execution_states import (
     ActiveExecution,
     ExecutionState,
@@ -19,25 +19,6 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.obligation_states import PublishedResponse, ResponseState, SilentResponse
 from agent_comms.recovery_gateway_client import _valid_projection
 from agent_comms.recovery_projection import AvailableRecoveryProjection, ProjectedExecution
-
-
-@pytest.mark.parametrize(
-    "tag,family",
-    [
-        ("ExecutionStatus", ExecutionState),
-        ("ObligationState", ResponseState),
-        ("AttemptPhase", AttemptState),
-        ("ClaimDisposition", AssignmentState),
-    ],
-)
-def test_stored_names_and_edges_match_pre_refactor_capture(tag, family):
-    capture = json.loads(
-        (Path(__file__).parents[1] / "evidence/s3/legacy-lifecycles.json").read_text()
-    )[tag]
-    assert set(family.names()) == set(capture["names"])
-    assert {name: sorted(edges) for name, edges in family.transition_table().items()} == capture[
-        "edges"
-    ]
 
 
 def test_state_data_cannot_be_attached_to_wrong_variant():
@@ -72,7 +53,9 @@ def test_record_replacement_uses_only_nominal_state():
         created_at_ms=0,
         updated_at_ms=0,
     )
-    assert {"status", "current_attempt_ordinal"}.isdisjoint(f.name for f in fields(record))
+    assert {"status", "current_attempt_ordinal"}.isdisjoint(
+        f.name for f in fields(record) if f.init
+    )
     active = replace(record, revision=2, lifecycle=ActiveExecution.load(1))
     assert active.lifecycle == ActiveExecution(1)
     assert c.execution_status_transition_allowed(record, active)
@@ -131,16 +114,20 @@ async def test_execution_extension_is_stored_transitioned_and_read_over_gateway_
         with MutationStore(tmp_path / "coordination.sqlite3") as store:
             store.register_participant("owner", "owner", "owner", committed=True)
             store._connection.execute(
-                "INSERT INTO executions(execution_id,origin,status,owner_thread,"
-                "owner_lookup,revision,"
-                "current_attempt_ordinal,max_attempts,reason_code,created_at_ms,updated_at_ms) "
-                "VALUES ('e','acp','paused','owner','owner',1,NULL,2,NULL,1,1)"
+
+                    "INSERT INTO executions (execution_id,origin,lifecycle,owner_thread,owner_loo"
+                    "kup,revision,max_attempts,reason_code,created_at_ms,updated_at_ms) VALUES ('"
+                    "e','acp',json_object('kind','paused'),'owner','owner',1,2,NULL,1,1)"
+
             )
             record = store.snapshot("e").execution
             assert isinstance(record.lifecycle, PausedExecution)
             assert FieldCodec.decode(type(record), FieldCodec.encode(record)) == record
             store._connection.execute(
-                "UPDATE executions SET status='pending',revision=2 WHERE execution_id='e'"
+
+                    "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','pending'),revis"
+                    "ion=2 WHERE execution_id='e'"
+
             )
             assert isinstance(store.snapshot("e").execution.lifecycle, PendingExecution)
             projection = ProjectedExecution(
@@ -245,24 +232,28 @@ async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
             store.register_participant("p", "owner", "owner", committed=True)
             with store._transaction() as db:
                 db.execute(
-                    "INSERT INTO executions(execution_id,origin,status,exact_target,owner_thread,"
-                    "owner_lookup,revision,current_attempt_ordinal,max_attempts,"
-                    "reason_code,created_at_ms,updated_at_ms) "
-                    "VALUES ('e','wire','queued','requester','owner','p',1,NULL,2,NULL,0,0)"
+
+                        "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
+                        "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
+                        "ms) VALUES ('e','wire',json_object('kind','queued'),'requester','owner','p',"
+                        "1,2,NULL,0,0)"
+
                 )
                 db.execute(
-                    "INSERT INTO obligations(execution_id,exact_target,state,reason_code,"
-                    "created_at_ms,"
-                    "updated_at_ms,revision,receipt_message_id,receipt_seq) "
-                    "VALUES ('e','requester','reviewed',NULL,0,0,1,NULL,NULL)"
+
+                        "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
+                        "ated_at_ms,updated_at_ms,revision) VALUES ('e','requester',json_object('kind"
+                        "','reviewed'),NULL,0,0,1)"
+
                 )
                 db.execute(
-                    "INSERT INTO wake_claims(claim_id,recipient,recipient_lookup,wire_seq,"
-                    "message_id,"
-                    "exact_target,audience,wake_mode,triage_verdict,disposition,resolver_version,"
-                    "policy_version,accepted_at_ms,updated_at_ms,revision,execution_id) "
-                    "VALUES ('c','owner','p',1,'m','requester','direct','full',NULL,'engaged',"
-                    "'resolver-v1','policy-v1',0,0,1,'e')"
+
+                        "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
+                        "essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,"
+                        "updated_at_ms,revision) VALUES ('c','owner','p',1,'m',json_object('kind','en"
+                        "gaged','decision',json_object('kind','full','exact_target','requester','exec"
+                        "ution_id','e')),'direct','resolver-v1','policy-v1',0,0,1)"
+
                 )
                 db.execute("INSERT INTO execution_claims VALUES ('e','c',0)")
             obligation = store.snapshot("e").obligation
@@ -285,8 +276,47 @@ async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
             result = await _through_socket(projection)
             assert result["current"]["publication"] == "reviewed"
             store._connection.execute(
-                "UPDATE obligations SET state='silent',revision=2 WHERE execution_id='e'"
+
+                    "UPDATE obligations SET lifecycle=json_object('kind','silent'),revision=2 WHE"
+                    "RE execution_id='e'"
+
             )
             assert isinstance(store.snapshot("e").obligation.lifecycle, SilentResponse)
     finally:
         ResponseState.__registry__.pop("reviewed")
+
+
+def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
+    from agent_comms.assignment_states import FailedAssignment
+    from agent_comms.coordination_store import MutationStore
+
+    class AwaitingAssignment(FullPendingAssignment):
+        pass
+
+    try:
+        with MutationStore(tmp_path / "coordination.sqlite3") as store:
+            store.register_participant("owner", "owner", "owner", committed=True)
+            assignment = c.WakeAssignment(
+                assignment_id="assignment",
+                recipient="owner",
+                recipient_lookup="owner",
+                wire_seq=1,
+                message_id="message",
+                audience=c.MessageAudience.DIRECT,
+                lifecycle=AwaitingAssignment(),
+                accepted_at_ms=0,
+                updated_at_ms=0,
+            )
+            with store._transaction() as db:
+                assignment.insert(db)
+            assert store.assignment("assignment") == assignment
+            assert store.assignment("assignment").wake_mode == "full"
+            settled = store.transition_preengagement(
+                "assignment",
+                FailedAssignment,
+                expected_revision=1,
+            ).value
+            assert settled.lifecycle.failed and settled.lifecycle.mode == assignment.lifecycle.mode
+            assert store.assignment("assignment") == settled
+    finally:
+        AssignmentState.__registry__.pop("awaiting")

@@ -27,7 +27,7 @@ def test_explicit_fresh_session_has_durable_prewrite_inode(tmp_path: Path) -> No
         1,
         0o600,
     )
-    assert _read_private_file(enrollment.path) == [
+    assert list(_read_private_file(enrollment.path)) == [
         {
             "type": "session",
             "version": 3,
@@ -51,7 +51,7 @@ def test_explicit_selected_bootstrap_is_prewrite_durable_and_attested(tmp_path: 
     fresh = create_fresh_private_session(
         tmp_path / "native-sessions" / "a", worktree=tmp_path, selected_thinking_level="high"
     )
-    rows = _read_private_file(fresh.path)
+    rows = list(_read_private_file(fresh.path))
     assert len(rows) == 3
     assert rows[0]["id"] == fresh.session_id
     assert rows[0]["agentCommsSelectedFresh"] == {"schema": 1, "thinkingLevel": "high"}
@@ -173,10 +173,10 @@ def test_optional_reviewed_copied_pi_reads_selected_bootstrap_level(tmp_path: Pa
     )
     module = (Path(package) / "dist/core/session-manager.js").as_uri()
     script = (
-        f"import {{SessionManager}} from {json.dumps(module)};"
+        f"import {{SessionManager,sessionEntryToContextMessages}} from {json.dumps(module)};"
         "const s=SessionManager.open(process.env.FRESH_FILE);"
         "console.log(JSON.stringify({id:s.getSessionId(),file:s.getSessionFile(),"
-        "leaf:s.getLeafId(),context:s.buildSessionContext()}));"
+        "leaf:s.getLeafId(),context:{...s.entryStore.contextSettings(),messages:s.buildContextEntries().flatMap(sessionEntryToContextMessages).toArray()}}));"
     )
     result = subprocess.run(
         ["node", "--input-type=module", "-e", script],
@@ -205,10 +205,10 @@ def test_optional_reviewed_copied_pi_reads_selected_bootstrap_level(tmp_path: Pa
     }
     fresh.verify_prewrite()  # Native read cannot append to bootstrap.
     append_script = (
-        f"import {{SessionManager}} from {json.dumps(module)};"
+        f"import {{SessionManager,sessionEntryToContextMessages}} from {json.dumps(module)};"
         "const s=SessionManager.open(process.env.FRESH_FILE);"
         "const id=s.appendMessage({role:'user',content:'offline fixture',timestamp:1790460000000});"
-        "console.log(JSON.stringify({id,leaf:s.getLeafId(),context:s.buildSessionContext()}));"
+        "console.log(JSON.stringify({id,leaf:s.getLeafId(),context:{...s.entryStore.contextSettings(),messages:s.buildContextEntries().flatMap(sessionEntryToContextMessages).toArray()}}));"
     )
     appended = subprocess.run(
         ["node", "--input-type=module", "-e", append_script],
@@ -229,7 +229,7 @@ def test_optional_reviewed_copied_pi_reads_selected_bootstrap_level(tmp_path: Pa
     assert new["context"]["thinkingLevel"] == "high"
     assert new["context"]["model"] == parsed["context"]["model"]
     assert len(new["context"]["messages"]) == 1
-    assert _read_private_file(fresh.path)[-1]["parentId"] == fresh.bootstrap_leaf_id
+    assert list(_read_private_file(fresh.path))[-1]["parentId"] == fresh.bootstrap_leaf_id
     fresh.verify_saved_identity()
     with pytest.raises(NativePiUnavailable, match="earlier input"):
         fresh.verify_prewrite()
@@ -243,7 +243,7 @@ def test_optional_reviewed_copied_pi_preserves_explicit_fresh_inode(tmp_path: Pa
     fresh = create_fresh_private_session(tmp_path / "native-sessions" / "a", worktree=tmp_path)
     module = (Path(package) / "dist/core/session-manager.js").as_uri()
     script = (
-        f"import {{SessionManager}} from {json.dumps(module)};"
+        f"import {{SessionManager,sessionEntryToContextMessages}} from {json.dumps(module)};"
         "const s=SessionManager.open(process.env.FRESH_FILE);"
         "if(s.getSessionId()!==process.env.FRESH_ID)throw Error('rebound session');"
         "s.appendMessage({role:'user',content:'provider-free fixture',timestamp:Date.now()});"
@@ -317,8 +317,12 @@ def _private_source() -> dict:
             "ownerPid": os.getpid(),
             "admissionGeneration": 2,
         },
-        "selected": {"provider": "openrouter", "modelId": "z-ai/glm-5.3-flash"},
-        "settings": {"keepRecentTokens": 2000},
+        "selected": {
+            "provider": "openrouter",
+            "modelId": "z-ai/glm-5.3-flash",
+            "contextWindow": 1000,
+        },
+        "settings": {"reserveTokens": 100, "keepRecentTokens": 2000},
     }
 
 

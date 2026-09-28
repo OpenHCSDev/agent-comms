@@ -1,0 +1,574 @@
+..............FFFFFF........FF......FF................                   [100%]
+=================================== FAILURES ===================================
+________________ test_real_pi_compacts_exact_saved_session[400] ________________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-4/test_real_pi_compacts_exact_sa0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f14664578b0>
+status = 400
+
+    @pytest.mark.parametrize("status", [400, 503, 200])
+    async def test_real_pi_compacts_exact_saved_session(tmp_path, monkeypatch, status):
+        provider = LoopbackProvider(status=status)
+        server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
+        try:
+            port = server.sockets[0].getsockname()[1]
+            provider.port = port
+            session = tmp_path / "existing.jsonl"
+            before = saved_session(session)
+            # The project and user profiles both demand retries. --no-approve and
+            # the fsynced private PI_CODING_AGENT_DIR must override both.
+            project_settings = tmp_path / ".pi"
+            project_settings.mkdir()
+            (project_settings / "settings.json").write_text(
+                '{"retry":{"enabled":true,"maxRetries":9,"provider":{"maxRetries":9}}}'
+            )
+            inherited = tmp_path / "inherited-agent"
+            inherited.mkdir()
+            (inherited / "settings.json").write_text(
+                '{"retry":{"enabled":true,"maxRetries":9,"provider":{"maxRetries":9}}}'
+            )
+            fake_auth = '{"openrouter":{"type":"api_key","key":"local-fixture"}}'
+            (inherited / "auth.json").write_text(fake_auth)
+            (inherited / "auth.json").chmod(0o600)
+            monkeypatch.setenv("PI_CODING_AGENT_DIR", str(inherited))
+            exe = wrapper(tmp_path, monkeypatch, port)
+            # Explicit fake model and loopback URL; the inherited local fixture
+            # credential is copied into the private profile without changing it.
+            result = await compact.ManualCompaction(
+                exe,
+                ["--print", "--provider", "openrouter", "--model", "fake-compact"],
+                str(session),
+                str(tmp_path),
+                timeout_seconds=15,
+            ).run()
+            if status in {400, 503}:
+                # A failed provider response is an uncertain paid attempt. Pi must
+                # not replay it even when inherited settings request retries.
+>               assert provider.posts == 1, (result, provider.paths)
+E               AssertionError: ({'ok': False, 'error': 'Compaction transport or session check failed.'}, [])
+E               assert 0 == 1
+E                +  where 0 = <test_manual_compaction.LoopbackProvider object at 0x7f1466dd8980>.posts
+
+tests/test_manual_compaction.py:344: AssertionError
+________________ test_real_pi_compacts_exact_saved_session[503] ________________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-4/test_real_pi_compacts_exact_sa1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f14665fe350>
+status = 503
+
+    @pytest.mark.parametrize("status", [400, 503, 200])
+    async def test_real_pi_compacts_exact_saved_session(tmp_path, monkeypatch, status):
+        provider = LoopbackProvider(status=status)
+        server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
+        try:
+            port = server.sockets[0].getsockname()[1]
+            provider.port = port
+            session = tmp_path / "existing.jsonl"
+            before = saved_session(session)
+            # The project and user profiles both demand retries. --no-approve and
+            # the fsynced private PI_CODING_AGENT_DIR must override both.
+            project_settings = tmp_path / ".pi"
+            project_settings.mkdir()
+            (project_settings / "settings.json").write_text(
+                '{"retry":{"enabled":true,"maxRetries":9,"provider":{"maxRetries":9}}}'
+            )
+            inherited = tmp_path / "inherited-agent"
+            inherited.mkdir()
+            (inherited / "settings.json").write_text(
+                '{"retry":{"enabled":true,"maxRetries":9,"provider":{"maxRetries":9}}}'
+            )
+            fake_auth = '{"openrouter":{"type":"api_key","key":"local-fixture"}}'
+            (inherited / "auth.json").write_text(fake_auth)
+            (inherited / "auth.json").chmod(0o600)
+            monkeypatch.setenv("PI_CODING_AGENT_DIR", str(inherited))
+            exe = wrapper(tmp_path, monkeypatch, port)
+            # Explicit fake model and loopback URL; the inherited local fixture
+            # credential is copied into the private profile without changing it.
+            result = await compact.ManualCompaction(
+                exe,
+                ["--print", "--provider", "openrouter", "--model", "fake-compact"],
+                str(session),
+                str(tmp_path),
+                timeout_seconds=15,
+            ).run()
+            if status in {400, 503}:
+                # A failed provider response is an uncertain paid attempt. Pi must
+                # not replay it even when inherited settings request retries.
+>               assert provider.posts == 1, (result, provider.paths)
+E               AssertionError: ({'ok': False, 'error': 'Compaction transport or session check failed.'}, [])
+E               assert 0 == 1
+E                +  where 0 = <test_manual_compaction.LoopbackProvider object at 0x7f1466af7890>.posts
+
+tests/test_manual_compaction.py:344: AssertionError
+________________ test_real_pi_compacts_exact_saved_session[200] ________________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-4/test_real_pi_compacts_exact_sa2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f14664c07d0>
+status = 200
+
+    @pytest.mark.parametrize("status", [400, 503, 200])
+    async def test_real_pi_compacts_exact_saved_session(tmp_path, monkeypatch, status):
+        provider = LoopbackProvider(status=status)
+        server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
+        try:
+            port = server.sockets[0].getsockname()[1]
+            provider.port = port
+            session = tmp_path / "existing.jsonl"
+            before = saved_session(session)
+            # The project and user profiles both demand retries. --no-approve and
+            # the fsynced private PI_CODING_AGENT_DIR must override both.
+            project_settings = tmp_path / ".pi"
+            project_settings.mkdir()
+            (project_settings / "settings.json").write_text(
+                '{"retry":{"enabled":true,"maxRetries":9,"provider":{"maxRetries":9}}}'
+            )
+            inherited = tmp_path / "inherited-agent"
+            inherited.mkdir()
+            (inherited / "settings.json").write_text(
+                '{"retry":{"enabled":true,"maxRetries":9,"provider":{"maxRetries":9}}}'
+            )
+            fake_auth = '{"openrouter":{"type":"api_key","key":"local-fixture"}}'
+            (inherited / "auth.json").write_text(fake_auth)
+            (inherited / "auth.json").chmod(0o600)
+            monkeypatch.setenv("PI_CODING_AGENT_DIR", str(inherited))
+            exe = wrapper(tmp_path, monkeypatch, port)
+            # Explicit fake model and loopback URL; the inherited local fixture
+            # credential is copied into the private profile without changing it.
+            result = await compact.ManualCompaction(
+                exe,
+                ["--print", "--provider", "openrouter", "--model", "fake-compact"],
+                str(session),
+                str(tmp_path),
+                timeout_seconds=15,
+            ).run()
+            if status in {400, 503}:
+                # A failed provider response is an uncertain paid attempt. Pi must
+                # not replay it even when inherited settings request retries.
+                assert provider.posts == 1, (result, provider.paths)
+            else:
+>               assert provider.posts >= 1, (result, provider.paths)
+E               AssertionError: ({'ok': False, 'error': 'Compaction transport or session check failed.'}, [])
+E               assert 0 >= 1
+E                +  where 0 = <test_manual_compaction.LoopbackProvider object at 0x7f1467667c50>.posts
+
+tests/test_manual_compaction.py:346: AssertionError
+____ test_success_requires_saved_session_file_and_parent_sync[session_file] ____
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-4/test_success_requires_saved_se0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1465b43000>
+denied = 'session_file'
+
+    @pytest.mark.parametrize("denied", ["session_file", "parent_directory"])
+    async def test_success_requires_saved_session_file_and_parent_sync(tmp_path, monkeypatch, denied):
+        """One model response is not a success receipt if Pi's row cannot be synced."""
+        provider = LoopbackProvider(status=200)
+        server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
+        try:
+            provider.port = server.sockets[0].getsockname()[1]
+            session = tmp_path / "existing.jsonl"
+            before = saved_session(session)
+            exe = wrapper(tmp_path, monkeypatch, provider.port)
+            if denied == "session_file":
+                original = os.fsync
+                identity = (session.stat().st_dev, session.stat().st_ino)
+    
+                def refuse_session_sync(fd):
+                    opened = os.fstat(fd)
+                    if (opened.st_dev, opened.st_ino) == identity:
+                        raise OSError("injected session sync denial")
+                    return original(fd)
+    
+                monkeypatch.setattr(compact.os, "fsync", refuse_session_sync)
+            else:
+                original_parent = compact._fsync
+    
+                def refuse_parent_sync(path):
+                    if Path(path) == session.parent:
+                        raise OSError("injected parent sync denial")
+                    return original_parent(path)
+    
+                monkeypatch.setattr(compact, "_fsync", refuse_parent_sync)
+            result = await compact.ManualCompaction(
+                exe,
+                ["--provider", "openrouter", "--model", "fake-compact"],
+                str(session),
+                str(tmp_path),
+                timeout_seconds=15,
+            ).run()
+>           assert result == {
+                "ok": False,
+                "error": "Saved compaction durability is uncertain; not retried.",
+            }
+E           AssertionError: assert {'ok': False,...heck failed.'} == {'ok': False,...not retried.'}
+E             
+E             Omitting 1 identical items, use -vv to show
+E             Differing items:
+E             {'error': 'Compaction transport or session check failed.'} != {'error': 'Saved compaction durability is uncertain; not retried.'}
+E             Use -v to get more diff
+
+tests/test_manual_compaction.py:409: AssertionError
+__ test_success_requires_saved_session_file_and_parent_sync[parent_directory] __
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-4/test_success_requires_saved_se1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1465b42740>
+denied = 'parent_directory'
+
+    @pytest.mark.parametrize("denied", ["session_file", "parent_directory"])
+    async def test_success_requires_saved_session_file_and_parent_sync(tmp_path, monkeypatch, denied):
+        """One model response is not a success receipt if Pi's row cannot be synced."""
+        provider = LoopbackProvider(status=200)
+        server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
+        try:
+            provider.port = server.sockets[0].getsockname()[1]
+            session = tmp_path / "existing.jsonl"
+            before = saved_session(session)
+            exe = wrapper(tmp_path, monkeypatch, provider.port)
+            if denied == "session_file":
+                original = os.fsync
+                identity = (session.stat().st_dev, session.stat().st_ino)
+    
+                def refuse_session_sync(fd):
+                    opened = os.fstat(fd)
+                    if (opened.st_dev, opened.st_ino) == identity:
+                        raise OSError("injected session sync denial")
+                    return original(fd)
+    
+                monkeypatch.setattr(compact.os, "fsync", refuse_session_sync)
+            else:
+                original_parent = compact._fsync
+    
+                def refuse_parent_sync(path):
+                    if Path(path) == session.parent:
+                        raise OSError("injected parent sync denial")
+                    return original_parent(path)
+    
+                monkeypatch.setattr(compact, "_fsync", refuse_parent_sync)
+            result = await compact.ManualCompaction(
+                exe,
+                ["--provider", "openrouter", "--model", "fake-compact"],
+                str(session),
+                str(tmp_path),
+                timeout_seconds=15,
+            ).run()
+>           assert result == {
+                "ok": False,
+                "error": "Saved compaction durability is uncertain; not retried.",
+            }
+E           AssertionError: assert {'ok': False,...heck failed.'} == {'ok': False,...not retried.'}
+E             
+E             Omitting 1 identical items, use -vv to show
+E             Differing items:
+E             {'error': 'Compaction transport or session check failed.'} != {'error': 'Saved compaction durability is uncertain; not retried.'}
+E             Use -v to get more diff
+
+tests/test_manual_compaction.py:409: AssertionError
+_______________ test_split_turn_can_compact_with_local_provider ________________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-4/test_split_turn_can_compact_wi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f146794b000>
+
+    async def test_split_turn_can_compact_with_local_provider(tmp_path, monkeypatch):
+        provider = LoopbackProvider(status=200)
+        server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
+        try:
+            session = tmp_path / "existing.jsonl"
+            before = saved_session(session, split=True)
+            exe = wrapper(tmp_path, monkeypatch, server.sockets[0].getsockname()[1])
+            result = await compact.ManualCompaction(
+                exe,
+                ["--provider", "openrouter", "--model", "fake-compact"],
+                str(session),
+                str(tmp_path),
+                timeout_seconds=15,
+            ).run()
+>           assert result["ok"] is True, result
+E           AssertionError: {'ok': False, 'error': 'Compaction transport or session check failed.'}
+E           assert False is True
+
+tests/test_manual_compaction.py:434: AssertionError
+_ test_uncertain_loopback_post_timeout_or_cancel_never_retries_or_leaks_child[False] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-4/test_uncertain_loopback_post_t0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f146794aa50>
+cancel = False
+
+    @pytest.mark.parametrize("cancel", [False, True])
+    async def test_uncertain_loopback_post_timeout_or_cancel_never_retries_or_leaks_child(
+        tmp_path,
+        monkeypatch,
+        cancel,
+    ):
+        provider = LoopbackProvider(status=0)
+        server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
+        try:
+            session = tmp_path / "existing.jsonl"
+            saved_session(session)
+            exe = wrapper(tmp_path, monkeypatch, server.sockets[0].getsockname()[1])
+            task = asyncio.create_task(
+                compact.ManualCompaction(
+                    exe,
+                    ["--provider", "openrouter", "--model", "fake-compact"],
+                    str(session),
+                    str(tmp_path),
+                    timeout_seconds=3 if not cancel else 10,
+                ).run()
+            )
+            async with asyncio.timeout(5):
+                while provider.posts != 1:
+>                   await asyncio.sleep(0.01)
+
+tests/test_manual_compaction.py:537: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+delay = 0.01, result = None
+
+    async def sleep(delay, result=None):
+        """Coroutine that completes after a given time (in seconds)."""
+        if delay <= 0:
+            await __sleep0()
+            return result
+    
+        if math.isnan(delay):
+            raise ValueError("Invalid delay: NaN (not a number)")
+    
+        loop = events.get_running_loop()
+        future = loop.create_future()
+        h = loop.call_later(delay,
+                            futures._set_result_unless_cancelled,
+                            future, result)
+        try:
+>           return await future
+                   ^^^^^^^^^^^^
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:702: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-4/test_uncertain_loopback_post_t0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f146794aa50>
+cancel = False
+
+    @pytest.mark.parametrize("cancel", [False, True])
+    async def test_uncertain_loopback_post_timeout_or_cancel_never_retries_or_leaks_child(
+        tmp_path,
+        monkeypatch,
+        cancel,
+    ):
+        provider = LoopbackProvider(status=0)
+        server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
+        try:
+            session = tmp_path / "existing.jsonl"
+            saved_session(session)
+            exe = wrapper(tmp_path, monkeypatch, server.sockets[0].getsockname()[1])
+            task = asyncio.create_task(
+                compact.ManualCompaction(
+                    exe,
+                    ["--provider", "openrouter", "--model", "fake-compact"],
+                    str(session),
+                    str(tmp_path),
+                    timeout_seconds=3 if not cancel else 10,
+                ).run()
+            )
+>           async with asyncio.timeout(5):
+                       ^^^^^^^^^^^^^^^^^^
+
+tests/test_manual_compaction.py:535: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f146773d140>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+_ test_uncertain_loopback_post_timeout_or_cancel_never_retries_or_leaks_child[True] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-4/test_uncertain_loopback_post_t1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f146660a040>
+cancel = True
+
+    @pytest.mark.parametrize("cancel", [False, True])
+    async def test_uncertain_loopback_post_timeout_or_cancel_never_retries_or_leaks_child(
+        tmp_path,
+        monkeypatch,
+        cancel,
+    ):
+        provider = LoopbackProvider(status=0)
+        server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
+        try:
+            session = tmp_path / "existing.jsonl"
+            saved_session(session)
+            exe = wrapper(tmp_path, monkeypatch, server.sockets[0].getsockname()[1])
+            task = asyncio.create_task(
+                compact.ManualCompaction(
+                    exe,
+                    ["--provider", "openrouter", "--model", "fake-compact"],
+                    str(session),
+                    str(tmp_path),
+                    timeout_seconds=3 if not cancel else 10,
+                ).run()
+            )
+            async with asyncio.timeout(5):
+                while provider.posts != 1:
+>                   await asyncio.sleep(0.01)
+
+tests/test_manual_compaction.py:537: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+delay = 0.01, result = None
+
+    async def sleep(delay, result=None):
+        """Coroutine that completes after a given time (in seconds)."""
+        if delay <= 0:
+            await __sleep0()
+            return result
+    
+        if math.isnan(delay):
+            raise ValueError("Invalid delay: NaN (not a number)")
+    
+        loop = events.get_running_loop()
+        future = loop.create_future()
+        h = loop.call_later(delay,
+                            futures._set_result_unless_cancelled,
+                            future, result)
+        try:
+>           return await future
+                   ^^^^^^^^^^^^
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:702: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-4/test_uncertain_loopback_post_t1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f146660a040>
+cancel = True
+
+    @pytest.mark.parametrize("cancel", [False, True])
+    async def test_uncertain_loopback_post_timeout_or_cancel_never_retries_or_leaks_child(
+        tmp_path,
+        monkeypatch,
+        cancel,
+    ):
+        provider = LoopbackProvider(status=0)
+        server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
+        try:
+            session = tmp_path / "existing.jsonl"
+            saved_session(session)
+            exe = wrapper(tmp_path, monkeypatch, server.sockets[0].getsockname()[1])
+            task = asyncio.create_task(
+                compact.ManualCompaction(
+                    exe,
+                    ["--provider", "openrouter", "--model", "fake-compact"],
+                    str(session),
+                    str(tmp_path),
+                    timeout_seconds=3 if not cancel else 10,
+                ).run()
+            )
+>           async with asyncio.timeout(5):
+                       ^^^^^^^^^^^^^^^^^^
+
+tests/test_manual_compaction.py:535: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f1465b92940>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+___________ test_unsupported_platform_refuses_before_policy_or_child ___________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f14674e83d0>
+
+    async def test_unsupported_platform_refuses_before_policy_or_child(monkeypatch):
+        def forbidden(*args, **kwargs):
+            raise AssertionError("No private profile or subprocess on unsupported platform")
+    
+>       monkeypatch.setattr(compact, "_supported_platform", lambda: False)
+E       AttributeError: <module 'agent_comms.manual_compaction' from '/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/manual_compaction.py'> has no attribute '_supported_platform'
+
+tests/test_manual_compaction_fail_closed.py:138: AttributeError
+____________ test_broken_stdin_close_does_not_skip_signal_and_reap _____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1467760130>
+
+    async def test_broken_stdin_close_does_not_skip_signal_and_reap(monkeypatch):
+        calls = []
+    
+        class BrokenStdin:
+            def is_closing(self):
+                return False
+    
+            def close(self):
+                calls.append("close")
+                raise BrokenPipeError("the child closed its read end")
+    
+        class Child:
+            stdin = BrokenStdin()
+            pid = 1_000_000_000
+            returncode = 0
+    
+            async def wait(self):
+                calls.append("wait")
+                return 0
+    
+>       monkeypatch.setattr(compact, "_signal_group", lambda pid, sig: calls.append((pid, sig)))
+E       AttributeError: <module 'agent_comms.manual_compaction' from '/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/manual_compaction.py'> has no attribute '_signal_group'
+
+tests/test_manual_compaction_fail_closed.py:167: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_manual_compaction.py::test_real_pi_compacts_exact_saved_session[400]
+FAILED tests/test_manual_compaction.py::test_real_pi_compacts_exact_saved_session[503]
+FAILED tests/test_manual_compaction.py::test_real_pi_compacts_exact_saved_session[200]
+FAILED tests/test_manual_compaction.py::test_success_requires_saved_session_file_and_parent_sync[session_file]
+FAILED tests/test_manual_compaction.py::test_success_requires_saved_session_file_and_parent_sync[parent_directory]
+FAILED tests/test_manual_compaction.py::test_split_turn_can_compact_with_local_provider
+FAILED tests/test_manual_compaction.py::test_uncertain_loopback_post_timeout_or_cancel_never_retries_or_leaks_child[False]
+FAILED tests/test_manual_compaction.py::test_uncertain_loopback_post_timeout_or_cancel_never_retries_or_leaks_child[True]
+FAILED tests/test_manual_compaction_fail_closed.py::test_unsupported_platform_refuses_before_policy_or_child
+FAILED tests/test_manual_compaction_fail_closed.py::test_broken_stdin_close_does_not_skip_signal_and_reap
+10 failed, 44 passed in 34.86s

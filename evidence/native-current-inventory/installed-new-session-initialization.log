@@ -1,0 +1,17 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-native-current-inventory-20260928/evidence/native-current-inventory/verify-installed.py", line 63, in <module>
+    if __name__=='__main__': asyncio.run(verify())
+                             ~~~~~~~~~~~^^^^^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-native-current-inventory-20260928/evidence/native-current-inventory/verify-installed.py", line 52, in verify
+    assert session.read_bytes()==before
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
