@@ -31,6 +31,11 @@ row=db.execute('SELECT status FROM selected_summary_attempts WHERE operation_id=
                (r['operationId'],)).fetchone()
 assert row==('reserved',),row
 Path(received).write_text(json.dumps(r))
+if mode in ('progress','duplicate-progress'):
+    for sequence in range(1, 6):
+        print(json.dumps(dict(type='agent_comms_compaction_progress',id=r['id'],
+              operationId=r['operationId'],sequence=sequence if mode=='progress' else 1)),flush=True)
+        time.sleep(.035)
 if mode=='hang':
     time.sleep(30)
 if mode=='source':
@@ -169,8 +174,8 @@ async def test_uncertain_result_retires_child_and_retains_unknown(tmp_path, mode
 
 async def test_timeout_does_not_retry_summary(tmp_path):
     async with selected(tmp_path, "hang") as (run, persistent, journal, file, received):
-        with pytest.raises(SelectedChildUnknown, match="timed out after 0.15 seconds"):
-            await run(timeout_seconds=0.15)
+        with pytest.raises(SelectedChildUnknown, match="made no progress for 0.15 seconds"):
+            await run(idle_timeout_seconds=0.15)
         assert persistent.proc is None and received.exists()
         assert len(journal.unresolved_selected_summary(str(file))) == 1
 
@@ -288,7 +293,7 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
                 source,
                 tokens_before=fixture["tokensBefore"],
                 expected_launcher="native-fixture",
-                timeout_seconds=5,
+                idle_timeout_seconds=5,
             )
             if provider_error:
                 with pytest.raises(
@@ -338,3 +343,18 @@ async def test_limit_decline_is_durable_and_never_admits_original(tmp_path):
         with pytest.raises(CompactionJournalError, match="never replay"):
             await run()
         assert received.read_bytes() == before
+
+
+async def test_observable_progress_extends_idle_deadline_without_total_limit(tmp_path):
+    async with selected(tmp_path, "progress") as (run, persistent, journal, file, _):
+        result = await run(idle_timeout_seconds=.08)
+        assert result.summary.text == "native summary"
+        assert persistent.proc.returncode is None
+
+
+async def test_repeated_progress_does_not_hide_stalled_provider(tmp_path):
+    async with selected(tmp_path, "duplicate-progress") as (run, persistent, journal, file, _):
+        with pytest.raises(SelectedChildUnknown, match="made no progress"):
+            await run(idle_timeout_seconds=.06)
+        assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
+        assert persistent.proc is None
