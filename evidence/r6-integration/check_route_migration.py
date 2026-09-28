@@ -26,11 +26,11 @@ def migrate(root):
     TranscriptRoutes(root)._ensure_database(create=True)
 
 
-def run(base, candidate):
+def run(base, candidate, sources=()):
     from agent_comms.store_files import _store_lock
     from agent_comms.transcript_routes import TranscriptRoutes
 
-    roots = (
+    roots = tuple(map(Path, sources)) or (
         Path("/home/ts/.agent-comms"),
         Path("/var/tmp/agent-comms-live-20260927-wzjtqhza"),
         Path("/var/tmp/agent-comms-live-20260927-6_d_vdul"),
@@ -96,4 +96,4 @@ if __name__ == "__main__":
     if sys.argv[1] == "migrate":
         migrate(Path(sys.argv[2]))
     else:
-        run(Path(sys.argv[1]), Path(sys.argv[2]))
+        run(Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3:])
