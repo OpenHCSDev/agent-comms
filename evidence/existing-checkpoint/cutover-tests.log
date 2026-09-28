@@ -1,0 +1,106 @@
+....F                                                                    [100%]
+=================================== FAILURES ===================================
+_____ test_stage_stopped_owner_into_fresh_private_root_without_old_replay ______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-131/test_stage_stopped_owner_into_0')
+
+    def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path):
+        legacy = Comms(tmp_path / "legacy")
+        saved = tmp_path / "saved-session.jsonl"
+        saved.write_text('{"type":"session"}\n')
+        saved.chmod(0o600)
+        process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        receiver_process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        try:
+            legacy.register(
+                Thread(
+                    "sender", frozenset({"team"}), str(tmp_path), pid=process.pid,
+                    session_file=str(saved), model="openai-codex/gpt-6-sol",
+                    goal=Goal("wait for receiver", "stage-goal"),
+                )
+            )
+            legacy.register(Thread("receiver", frozenset(), str(tmp_path), pid=receiver_process.pid,
+                                   session_file=str(saved)))
+            legacy.send("sender", "receiver", "old pending message")
+            before_wait = legacy.registry.snapshot()
+            GoalWaits(legacy.root / "goal_waits.json").record(
+                GoalWait(
+                    "stage-goal", "old-wait", 0, legacy.message_high_water(),
+                    (GoalWaitTarget("receiver", before_wait.threads["receiver"].created_at),),
+                    owner_created_at=before_wait.threads["sender"].created_at,
+                    target_turn_generations=(None,),
+                )
+            )
+            assert legacy.goal_execution("sender").state is GoalExecutionState.STANDBY
+            InputDispositions(legacy.root).record(
+                "stage:unknown", seq=None, owner="sender", admission=1,
+                target="sender", text="uncertain old input",
+            )
+            snapshot = legacy.registry.snapshot()
+            thread = snapshot.threads["sender"]
+            info = saved.stat()
+            witness = OwnerWitness(
+                "sender", process.pid, thread.created_at,
+                snapshot.admission_generations["sender"],
+                supervised_cutover._process_start_ticks(process.pid),
+                saved, info.st_dev, info.st_ino, tmp_path, "pi", "",
+            )
+            receiver = snapshot.threads["receiver"]
+            receiver_witness = OwnerWitness(
+                "receiver", receiver_process.pid, receiver.created_at,
+                snapshot.admission_generations["receiver"],
+                supervised_cutover._process_start_ticks(receiver_process.pid),
+                saved, info.st_dev, info.st_ino, tmp_path, "pi", "",
+            )
+            inventory = LegacyInventory(
+                legacy.root, (witness, receiver_witness), (), (), (("receiver", 1),), 1
+            )
+            process.terminate()
+            process.wait(timeout=5)
+            receiver_process.terminate()
+            receiver_process.wait(timeout=5)
+            legacy.registry.unregister("sender")
+            legacy.registry.unregister("receiver")
+            archive = archive_stopped_root(legacy, tmp_path / "archive" / "snapshot")
+            private = Comms(tmp_path / "private")
+            incomplete = Comms(tmp_path / "incomplete-private")
+            with pytest.raises(RelationViolationError, match="every exact target staged"):
+                stage_private_participants(
+                    legacy, incomplete, archive, inventory, ["sender"]
+                )
+            assert not (incomplete.root / "bus_meta.json").exists()
+            root_id, selected = stage_private_participants(
+                legacy, private, archive, inventory, ["sender", "receiver"]
+            )
+            assert private.bus._private_marker_unlocked()["claim_envelopes_version"] == 1
+            assert (private.root / "private_bus_checkpoint.sqlite3").is_file()
+            assert json.loads((private.root / "bus_meta.json").read_text())["checkpoint_version"] == 1
+            staged = private.registry.require("sender")
+            assert selected == (witness, receiver_witness)
+            assert staged.pid == 0 and staged.session_file == str(saved)
+            assert staged.created_at == thread.created_at
+            assert private.registry.status("sender") == StoppedThreadStatus()
+            with MutationStore(str(private.root / "coordination.sqlite3")) as store:
+                sender = store.participant(stable_thread_lookup(staged.created_at))
+                assert sender.display_name == "sender"
+                assert store.participant(
+                    stable_thread_lookup(private.registry.require("receiver").created_at)
+                ).display_name == "receiver"
+            with sqlite3.connect(private.root / "coordination.sqlite3") as db:
+                assert db.execute("SELECT count(*) FROM cohort_schema_meta").fetchone()[0] == 1
+                assert db.execute("SELECT count(*) FROM response_schema_meta").fetchone()[0] == 1
+                assert db.execute("SELECT count(*) FROM native_runtime_schema_meta").fetchone()[0] == 1
+            assert private.goal_execution("sender").state is GoalExecutionState.STANDBY
+            migrated_wait = GoalWaits(private.root / "goal_waits.json").read()["stage-goal"]
+            assert migrated_wait.after_seq == 0
+            assert migrated_wait.target_turn_generations == (None,)
+>           assert not (private.root / "bus.jsonl").exists()
+E           AssertionError: assert not True
+E            +  where True = exists()
+E            +    where exists = (PosixPath('/tmp/pytest-of-ts/pytest-131/test_stage_stopped_owner_into_0/private') / 'bus.jsonl').exists
+E            +      where PosixPath('/tmp/pytest-of-ts/pytest-131/test_stage_stopped_owner_into_0/private') = <agent_comms.operations.Comms object at 0x7f7c45e6c170>.root
+
+tests/test_supervised_cutover.py:235: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_supervised_cutover.py::test_stage_stopped_owner_into_fresh_private_root_without_old_replay
+1 failed, 4 passed in 0.25s

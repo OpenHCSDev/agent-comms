@@ -1,0 +1,46 @@
+{
+  "findings": [],
+  "plans": [],
+  "finding_payload_mode": "counts_only",
+  "finding_count": 1,
+  "finding_counts": {
+    "by_pattern": [
+      {
+        "pattern_id": 1,
+        "count": 1,
+        "pattern_name": "Nominal Boundary Over Sentinel Simulation"
+      }
+    ],
+    "by_detector": [
+      {
+        "detector_id": "semantic_mirror_without_descent",
+        "count": 1
+      }
+    ]
+  },
+  "scan_status": {
+    "mode": "exact_compact_global",
+    "analyzed_detector_count": 79,
+    "omitted_detector_count": 0,
+    "complete": true,
+    "reason": "all_context_detectors_use_compact_global_projections"
+  },
+  "timing": {
+    "parse_seconds": 18.045,
+    "analysis_seconds": 0.961,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 0.0,
+    "analysis_cache_status": "disabled",
+    "total_seconds": 19.006
+  },
+  "active_finding_surface": "raw_findings",
+  "payload_timing": {
+    "observation_graph_seconds": 0.0,
+    "semantic_descent_graph_seconds": 0.0,
+    "source_snapshot_seconds": 0.0,
+    "source_index_payload_seconds": 0.0,
+    "semantic_refactor_gate_seconds": 0.0,
+    "finding_recipe_plan_seconds": 0.0,
+    "total_seconds": 0.002
+  }
+}

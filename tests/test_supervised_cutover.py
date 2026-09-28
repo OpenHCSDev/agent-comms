@@ -211,6 +211,8 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
             legacy, private, archive, inventory, ["sender", "receiver"]
         )
         assert private.bus._private_marker_unlocked()["claim_envelopes_version"] == 1
+        assert (private.root / "private_bus_checkpoint.sqlite3").is_file()
+        assert json.loads((private.root / "bus_meta.json").read_text())["checkpoint_version"] == 1
         staged = private.registry.require("sender")
         assert selected == (witness, receiver_witness)
         assert staged.pid == 0 and staged.session_file == str(saved)
@@ -230,7 +232,7 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
         migrated_wait = GoalWaits(private.root / "goal_waits.json").read()["stage-goal"]
         assert migrated_wait.after_seq == 0
         assert migrated_wait.target_turn_generations == (None,)
-        assert not (private.root / "bus.jsonl").exists()
+        assert (private.root / "bus.jsonl").read_bytes() == b""
         assert archive.pending_messages == archive.unknown_inputs == 1
         private.registry.register(replace(staged, pid=os.getpid()), RunningThreadStatus())
         private.registry.register(
