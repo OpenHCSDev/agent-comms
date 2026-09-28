@@ -1,0 +1,18 @@
+{
+  "runtime": "runtime-r1-pi-payloads-20260928",
+  "source_seq": 59,
+  "reply_seq": 60,
+  "elapsed": 18.09418749809265,
+  "native_tools": [
+    {
+      "name": "read",
+      "error": false
+    },
+    {
+      "name": "bash",
+      "error": false
+    }
+  ],
+  "verified_success": true,
+  "current_bus_seq": 60
+}
