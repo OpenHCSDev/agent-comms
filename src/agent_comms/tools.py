@@ -16,6 +16,7 @@ from .declarations import (
     ViewPredicate,
     is_channel_target,
 )
+from .field_codec import FieldCodec
 from .goal_actions import (
     ActiveGoalAction,
     EditGoalAction,
@@ -480,7 +481,7 @@ def _thread_tags(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 def _channels(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     return {
         "channels": [view.to_wire() for view in comms.channel_views()],
-        "views": [view.to_wire() for view in comms.saved_views().values()],
+        "views": [FieldCodec.encode(view) for view in comms.saved_views().values()],
         "order": comms.channel_catalog.list_order.value,
     }
 
@@ -503,13 +504,18 @@ def _set_channel_metadata(comms: Comms, arguments: Mapping[str, object]) -> Json
 
 
 def _set_view(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    return comms.set_saved_view(
-        SavedView(
-            str(arguments["name"]),
-            ViewKind(str(arguments["kind"])),
-            ViewPredicate(ViewMatch(str(arguments["match"])), _tag_set(arguments["tags"])),
+    return FieldCodec.encode(
+        comms.set_saved_view(
+            SavedView(
+                str(arguments["name"]),
+                FieldCodec.decode(ViewKind, arguments["kind"]),
+                ViewPredicate(
+                    FieldCodec.decode(type[ViewMatch], arguments["match"]),
+                    _tag_set(arguments["tags"]),
+                ),
+            )
         )
-    ).to_wire()
+    )
 
 
 def _delete_view(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
@@ -705,7 +711,7 @@ TOOLS = (
                 "match",
                 "string",
                 "Tag predicate",
-                choices=tuple(match.value for match in ViewMatch),
+                choices=ViewMatch.names(),
             ),
             ToolParameter("tags", "string", "One or more comma-separated tags"),
         ),
