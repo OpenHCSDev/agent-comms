@@ -27,10 +27,11 @@ from agent_comms.coordination_store import (
     MutationStore,
     PublicationActivationBlocked,
 )
-from agent_comms.declarations import Thread, ThreadStatus
+from agent_comms.declarations import Thread
 from agent_comms.native_pi import NativeContextProof, NativeTurnResult
 from agent_comms.operations import Comms
 from agent_comms.private_sidecar import native_request_digest
+from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux",
@@ -153,7 +154,7 @@ async def test_foreground_registers_own_pid_and_seals_one_selected_direct(
         def ready(thread: Thread) -> None:
             assert thread.pid == os.getpid()
             assert comms.registry.require("beta").pid == os.getpid()
-            assert comms.registry.status("beta") is ThreadStatus.RUNNING
+            assert comms.registry.status("beta") == RunningThreadStatus()
             comms.send_initial_cohort("sender", "beta", "Compute 17+25")
 
         result = await foreground.run_foreground_once(
@@ -169,7 +170,7 @@ async def test_foreground_registers_own_pid_and_seals_one_selected_direct(
         )
         assert result is not None and result.response_message_id
         assert result.exact_target == "sender" and len(calls) == 1
-        assert comms.registry.status("beta") is ThreadStatus.STOPPED
+        assert comms.registry.status("beta") == StoppedThreadStatus()
         assert comms.dm_history("sender", "beta")[-1].body == "42"
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
@@ -429,8 +430,8 @@ async def test_foreground_two_recipients_one_no_wake_and_no_model(
                 ).fetchone()[0]
                 == 1
             )
-        assert comms.registry.status("alpha") is ThreadStatus.STOPPED
-        assert comms.registry.status("beta") is ThreadStatus.STOPPED
+        assert comms.registry.status("alpha") == StoppedThreadStatus()
+        assert comms.registry.status("beta") == StoppedThreadStatus()
 
 
 async def test_foreground_refuses_takeover_and_cosmetic_subprocess_pid(
@@ -494,7 +495,7 @@ except Exception as error:
                 ]
                 == 0
             )
-        assert comms.registry.status("beta") is ThreadStatus.RUNNING
+        assert comms.registry.status("beta") == RunningThreadStatus()
 
 
 def test_actual_foreground_command_owns_its_recipient_process(tmp_path: Path) -> None:
@@ -574,7 +575,7 @@ raise SystemExit(f.main(sys.argv[1:]))
             out, err = child.communicate(timeout=12)
             assert child.returncode == 0, (out, err)
             assert json.loads(out.strip())["response_message_id"]
-            assert comms.registry.status("beta") is ThreadStatus.STOPPED
+            assert comms.registry.status("beta") == StoppedThreadStatus()
             assert comms.dm_history("sender", "beta")[-1].body == "42"
         finally:
             if child.poll() is None:
@@ -719,7 +720,7 @@ async def test_failed_model_reservation_is_not_polled_or_replayed(
                 ]
                 == 1
             )
-        assert comms.registry.status("beta") is ThreadStatus.STOPPED
+        assert comms.registry.status("beta") == StoppedThreadStatus()
         with pytest.raises(IdentityConflict, match="no takeover"):
             await foreground.run_foreground_once(
                 root,

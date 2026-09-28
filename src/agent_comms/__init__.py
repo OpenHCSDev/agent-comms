@@ -32,7 +32,6 @@ from .declarations import (
     ThreadPresentation,
     ThreadRole,
     ThreadSort,
-    ThreadStatus,
     ThreadView,
     TurnRouting,
     UnregisteredThreadError,
@@ -82,6 +81,7 @@ from .response_policy import (
     InformationalPolicy,
     MentionedOnlyPolicy,
 )
+from .thread_status import ThreadStatus
 from .tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
 
 __all__ = [

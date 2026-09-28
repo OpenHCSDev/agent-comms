@@ -27,11 +27,12 @@ from .cohort_schema import install_private_cohort_schema
 from .coordinated_runtime_schema import install_native_runtime_schema
 from .coordination_response import install_private_response_schema
 from .coordination_store import MutationStore
-from .declarations import RelationViolationError, Thread, ThreadStatus, _store_lock
+from .declarations import RelationViolationError, Thread, _store_lock
 from .goal_waits import GoalWaits
 from .input_disposition import InputDispositions
 from .native_prompt_binding import install_prompt_binding_schema
 from .operations import Comms
+from .thread_status import StoppedThreadStatus
 
 if TYPE_CHECKING:
     from .active_route import ActiveRoute
@@ -467,7 +468,7 @@ def stage_private_participants(
             thread is None
             or witness is None
             or not thread.role.executable
-            or snapshot.statuses[name] is not ThreadStatus.STOPPED
+            or not snapshot.statuses[name].stopped
             or (thread.pid, thread.created_at, thread.session_file, thread.worktree)
             != (
                 witness.pid,
@@ -545,7 +546,7 @@ def stage_private_participants(
         for wait in migrated_waits:
             new_waits.record(wait)
         for thread in participants:
-            private.registry.register(thread, ThreadStatus.STOPPED)
+            private.registry.register(thread, StoppedThreadStatus())
     # A staged owner must be ready for the first private USER row before the
     # default route is published. The foreground-only setup path normally
     # installs these schemas, but a saved-session cutover does not use it.

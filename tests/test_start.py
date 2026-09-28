@@ -78,7 +78,7 @@ def test_failed_launch_keeps_thread_stopped(tmp_path, monkeypatch):
     monkeypatch.setattr(comms, "_launch_owner_unlocked", fail)
     with pytest.raises(OSError, match="Cannot launch"):
         comms.start("worker")
-    assert comms.registry.status("worker").value == "stopped"
+    assert comms.registry.status("worker").declared_name == "stopped"
 
 
 def test_attachment_does_not_implicitly_start_a_stopped_or_archived_thread(tmp_path, monkeypatch):

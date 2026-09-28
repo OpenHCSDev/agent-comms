@@ -10,7 +10,6 @@ import pytest
 from agent_comms import Thread, wire
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
-from agent_comms.declarations import ThreadStatus
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
@@ -21,6 +20,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_waits import GoalWaits
 from agent_comms.operations import Comms
+from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 
 
 def _thread(comms, name, worktree):
@@ -211,7 +211,7 @@ def test_progress_write_precedes_wait_clear_on_crash_and_stays_in_standby(tmp_pa
     assert reopened.registry.require("owner").goal.id == goal.id
     assert reopened.goal_execution("owner").state.value == "standby"
     assert reopened.goal_wait("owner") is not None
-    assert reopened.registry.status("owner") is ThreadStatus.RUNNING
+    assert reopened.registry.status("owner") == RunningThreadStatus()
     monkeypatch.setattr(GoalWaits, "clear", original_clear)
     assert reopened.recover_closed_goal_wait("owner") == ("owner",)
     assert reopened.goal_execution("owner").state.value == "runnable"
@@ -297,7 +297,7 @@ def test_stopped_dependency_cannot_be_declared_live(tmp_path):
     _thread(comms, "child", tmp_path)
     comms.begin_turn("child", "work")
     child = comms.registry.require("child")
-    comms.registry.register(replace(child, active_turn=None), ThreadStatus.STOPPED)
+    comms.registry.register(replace(child, active_turn=None), StoppedThreadStatus())
     goal = comms.update_goal("owner", SetGoalAction(text="Review"))
     assert goal is not None
     with pytest.raises(ValueError, match="No declared dependency has an active turn"):
@@ -369,7 +369,7 @@ def test_terminal_fence_survives_rename_not_stop_or_metadata_edit(tmp_path):
     fence = _finish(comms, "child", "child-turn")
     assert fence is not None
     child = comms.registry.require("child")
-    comms.registry.register(replace(child, title="New title"), ThreadStatus.RUNNING)
+    comms.registry.register(replace(child, title="New title"), RunningThreadStatus())
     comms.registry.rename("child", "renamed-child")
     assert (
         comms.release_waits_after_terminal_turn(
@@ -383,7 +383,7 @@ def test_terminal_fence_survives_rename_not_stop_or_metadata_edit(tmp_path):
     stale = _finish(another, "child", "child-turn")
     child = another.registry.require("child")
     another.registry.unregister("child")
-    another.registry.register(replace(child, active_turn=None), ThreadStatus.RUNNING)
+    another.registry.register(replace(child, active_turn=None), RunningThreadStatus())
     assert another.release_waits_after_terminal_turn(stale) == ()
     assert another.registry.require("owner").goal.state.active
 

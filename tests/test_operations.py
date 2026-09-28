@@ -230,7 +230,7 @@ class TestThreadOps:
     def test_heartbeat_marks_running(self, wired):
         wired.stop("fixer")
         wired.heartbeat("fixer")
-        assert wired.registry.status("fixer").value == "running"
+        assert wired.registry.status("fixer").declared_name == "running"
 
     def test_attach_session_preserves_declaration_and_updates_runtime(self, wired, tmp_path):
         wired.stop("fixer")
@@ -243,7 +243,7 @@ class TestThreadOps:
         assert attached.task == "fix auth"
         assert attached.pid == 123
         assert attached.session_file == str(session_file.resolve())
-        assert wired.registry.status("fixer").value == "running"
+        assert wired.registry.status("fixer").declared_name == "running"
 
     def test_release_only_allows_the_calling_thread(self, wired, monkeypatch):
         monkeypatch.setenv("PI_AGENT_ID", "fixer")
@@ -252,7 +252,7 @@ class TestThreadOps:
             wired.release("PR111")
 
         wired.release("fixer")
-        assert wired.registry.status("fixer").value == "stopped"
+        assert wired.registry.status("fixer").declared_name == "stopped"
 
     @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
     def test_reserved_worker_acquire_requires_launch_reservation(self, wired, monkeypatch):
@@ -357,7 +357,7 @@ class TestThreadOps:
         wired.stop("signal-test")
 
         assert signals == [(200, __import__("signal").SIGTERM)]
-        assert wired.registry.status("signal-test").value == "stopped"
+        assert wired.registry.status("signal-test").declared_name == "stopped"
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_waits_for_owner_socket_without_holding_wire_lock(self, wired, monkeypatch):
@@ -393,7 +393,7 @@ class TestThreadOps:
 
         wired.stop("starting")
         assert signals == [(987654, __import__("signal").SIGTERM)]
-        assert wired.registry.status("starting").value == "stopped"
+        assert wired.registry.status("starting").declared_name == "stopped"
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_accepts_session_metadata_from_same_owner(self, wired, monkeypatch, tmp_path):
@@ -418,7 +418,7 @@ class TestThreadOps:
 
         wired.stop("starting")
         assert signals == [(987654, signal.SIGTERM)]
-        assert wired.registry.status("starting").value == "stopped"
+        assert wired.registry.status("starting").declared_name == "stopped"
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_rejects_fresh_registration_with_reused_pid(self, wired, monkeypatch):
@@ -551,7 +551,7 @@ class TestThreadOps:
         assert len(waits) == 2
         assert wired.registry.require("owner") == original
         assert wired.registry.snapshot().owner_generations["owner"] > before
-        assert wired.registry.status("owner").value == "stopped"
+        assert wired.registry.status("owner").declared_name == "stopped"
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_accepts_attested_release_after_unrelated_epoch_change(self, wired, monkeypatch):
@@ -574,7 +574,7 @@ class TestThreadOps:
 
         monkeypatch.setattr("agent_comms.operations.Comms._wait_for_owner_exit", self_release)
         wired.stop("owner")
-        assert wired.registry.status("owner").value == "stopped"
+        assert wired.registry.status("owner").declared_name == "stopped"
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_does_not_signal_replaced_pid_after_socket_wait(self, wired, monkeypatch):
@@ -873,7 +873,7 @@ class TestThreadOps:
             # waitid supplies the direct parent's authoritative exit witness.
             monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
             wired.stop("child")
-            assert wired.registry.status("child").value == "stopped"
+            assert wired.registry.status("child").declared_name == "stopped"
             assert process.wait(timeout=5) == -signal.SIGTERM
         finally:
             if process.poll() is None:
@@ -900,7 +900,7 @@ class TestThreadOps:
 
         wired.stop("dead-process")
 
-        assert wired.registry.status("dead-process").value == "stopped"
+        assert wired.registry.status("dead-process").declared_name == "stopped"
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX ps process lookup")
     def test_process_liveness_without_linux_proc(self, wired, monkeypatch):
@@ -982,7 +982,7 @@ class TestThreadOps:
             wired.archive("fixer")
         wired.stop("fixer")
         wired.archive("fixer")
-        assert wired.registry.status("fixer").value == "archived"
+        assert wired.registry.status("fixer").declared_name == "archived"
         assert not any(row["name"] == "fixer" for row in wired.who())
         assert "fixer" not in wired.registry.active_threads()
         assert [message.body for message in wired.dm_history("PR111", "fixer")] == [
@@ -1150,7 +1150,7 @@ class TestThreadOps:
         assert "PR111" not in wired.registry
         assert wired.registry.require("fixer") == replace(child, parent=None)
         assert wired.registry.require("grandchild").parent == "fixer"
-        assert wired.registry.status("fixer").value == "running"
+        assert wired.registry.status("fixer").declared_name == "running"
         assert wired.registry.last_seen("fixer") == last_seen
         assert wired.activity_of("fixer").state is ActivityState.THINKING
         assert session.read_text() == "persisted child transcript\n"
@@ -1190,7 +1190,7 @@ class TestThreadOps:
             with pytest.raises(RelationViolationError, match="Private registry guard"):
                 wired.registry.status("fixer")
         else:
-            assert wired.registry.status("fixer").value == "stopped"
+            assert wired.registry.status("fixer").declared_name == "stopped"
             assert wired.registry.aliases_for("fixer") == aliases
         assert path.read_bytes() == before_bus
         assert sequence_path.read_bytes() == before_meta
@@ -1254,7 +1254,7 @@ class TestThreadOps:
         try:
             wired.stop("live-process")
             assert process.wait(timeout=5) == -__import__("signal").SIGTERM
-            assert wired.registry.status("live-process").value == "stopped"
+            assert wired.registry.status("live-process").declared_name == "stopped"
         finally:
             if process.poll() is None:
                 process.kill()
@@ -1429,7 +1429,7 @@ class TestPollAndWire:
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
         thread = comms.adopt_current()
         assert thread.name == "me"
-        assert comms.registry.status("me").value == "running"
+        assert comms.registry.status("me").declared_name == "running"
 
     def test_wire_defaults_to_agent_comms_dir(self, monkeypatch, tmp_path):
         monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)

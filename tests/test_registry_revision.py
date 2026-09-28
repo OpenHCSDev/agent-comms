@@ -6,8 +6,9 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms import Thread
-from agent_comms.declarations import ThreadStatus, _atomic_write_text
+from agent_comms.declarations import _atomic_write_text
 from agent_comms.registration import Registration
+from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 
 
 def test_repeated_reads_parse_once_and_observe_external_changes(tmp_path):
@@ -19,11 +20,11 @@ def test_repeated_reads_parse_once_and_observe_external_changes(tmp_path):
     with patch("agent_comms.declarations.json.loads", wraps=json.loads) as loads:
         for _ in range(20):
             assert reader.require("worker") is original
-            assert reader.status("worker") is ThreadStatus.RUNNING
+            assert reader.status("worker") == RunningThreadStatus()
             assert reader.all_threads()["worker"] is original
         assert loads.call_count == 0
         writer.unregister("worker")
-        assert reader.status("worker") is ThreadStatus.STOPPED
+        assert reader.status("worker") == StoppedThreadStatus()
     # External atomic replacement invalidates both identities and status.
     contents = path.read_text().replace('"worker"', '"renamed"')
     _atomic_write_text(path, contents)

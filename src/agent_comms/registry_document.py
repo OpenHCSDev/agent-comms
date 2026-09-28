@@ -14,13 +14,18 @@ from .declarations import (
     RegistrySnapshot,
     RelationViolationError,
     Thread,
-    ThreadStatus,
     TurnLeaseFence,
     TurnRouting,
     UnregisteredThreadError,
 )
 from .field_codec import FieldCodec
 from .thread_identity import GenerationCounter
+from .thread_status import (
+    ArchivedThreadStatus,
+    RunningThreadStatus,
+    StoppedThreadStatus,
+    ThreadStatus,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,8 +60,7 @@ class RegistrationChange:
             or previous.worktree != thread.worktree
             or previous.role != thread.role
             or (
-                self.previous_status is not None
-                and self.previous_status.active != self.status.active
+                self.previous_status is not None and self.previous_status.changes_owner(self.status)
             )
         )
 
@@ -144,7 +148,9 @@ class RegistryDocument:
         document.aliases.update(raw.get("aliases", {}))
         for name, data in raw.get("threads", {}).items():
             document.threads[name] = Thread.from_registry(name, data, root)
-            document.statuses[name] = ThreadStatus(data.get("status", "running"))
+            document.statuses[name] = ThreadStatus.decode(
+                data.get("status", RunningThreadStatus.declared_name)
+            )()
             document.last_seen[name] = data.get("last_seen", 0.0)
             if has_generations and name not in document.owners.generations:
                 raise RelationViolationError("missing private registry owner epoch")
@@ -164,7 +170,7 @@ class RegistryDocument:
             "threads": {
                 name: {
                     **t.to_wire(),
-                    "status": self.statuses.get(name, ThreadStatus.RUNNING).value,
+                    "status": self.statuses.get(name, RunningThreadStatus()).declared_name,
                     "last_seen": self.last_seen.get(name, 0.0),
                 }
                 for name, t in self.threads.items()
@@ -184,8 +190,7 @@ class RegistryDocument:
             raise RelationViolationError(
                 f"Thread name {thread.name!r} is a permanent alias and cannot be reused."
             )
-        if not self.statuses.get(thread.name, ThreadStatus.RUNNING).mutable:
-            raise RelationViolationError(f"Thread {thread.name!r} is being permanently deleted.")
+        self.statuses.get(thread.name, RunningThreadStatus()).require_mutable(thread.name)
         previous = self.threads.get(thread.name)
         previous_status = self.statuses.get(thread.name)
         if previous:
@@ -239,7 +244,7 @@ class RegistryDocument:
             or new_owner
             or previous.pid != thread.pid
             or previous.role != thread.role
-            or (previous_status is not None and previous_status.active != status.active)
+            or (previous_status is not None and previous_status.changes_owner(status))
         ):
             self.admissions.advance(thread.name)
             self.owners.advance(thread.name)
@@ -286,11 +291,7 @@ class RegistryDocument:
         }
         for thread in additions:
             self.threads[thread.name] = thread
-            self.statuses[thread.name] = (
-                ThreadStatus.ARCHIVED
-                if source.statuses[thread.name] is ThreadStatus.ARCHIVED
-                else ThreadStatus.STOPPED
-            )
+            self.statuses[thread.name] = source.statuses[thread.name].restored()
             self.last_seen[thread.name] = source.last_seen.get(thread.name, 0.0)
             self.admissions.advance(thread.name)
             self.owners.advance(thread.name)
@@ -348,7 +349,7 @@ class RegistryDocument:
             or self.admissions.generations.get(expected.name) != expected_admission_generation
         ):
             raise RelationViolationError("Idle owner changed before restart fence.")
-        self.statuses[expected.name] = ThreadStatus.STOPPED
+        self.statuses[expected.name] = StoppedThreadStatus()
         self.admissions.advance(expected.name)
         self.owners.advance(expected.name)
         return self.admissions.generations[expected.name]
@@ -359,7 +360,7 @@ class RegistryDocument:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         if self.statuses[name].active:
             self.owners.advance(name)
-        self.statuses[name] = ThreadStatus.STOPPED
+        self.statuses[name] = StoppedThreadStatus()
         self.threads[name] = replace(self.threads[name], active_turn=None)
         self.admissions.advance(name)
 
@@ -369,17 +370,14 @@ class RegistryDocument:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         if self.statuses[name].active:
             self.owners.advance(name)
-        self.statuses[name] = ThreadStatus.ARCHIVED
+        self.statuses[name] = ArchivedThreadStatus()
         self.admissions.advance(name)
 
     def begin_delete(self, name: str) -> None:
         name = self.aliases.get(name, name)
         if name not in self.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-        status = self.statuses.get(name)
-        if status is None or status.active:
-            raise RelationViolationError("Stop a running thread before permanently deleting it.")
-        self.statuses[name] = ThreadStatus.DELETING
+        self.statuses[name] = self.statuses[name].for_deletion()
         self.admissions.advance(name)
 
     def remove(self, name: str) -> tuple[str, ...]:
@@ -405,12 +403,12 @@ class RegistryDocument:
         name = self.aliases.get(name, name)
         if name not in self.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-        if not self.statuses.get(name, ThreadStatus.RUNNING).mutable:
-            raise RelationViolationError(f"Thread {name!r} is being permanently deleted.")
-        if not self.statuses[name].active:
+        previous = self.statuses[name]
+        resumed = previous.after_heartbeat(name)
+        if previous.changes_owner(resumed):
             self.admissions.advance(name)
             self.owners.advance(name)
-        self.statuses[name] = ThreadStatus.RUNNING
+        self.statuses[name] = resumed
         self.last_seen[name] = time.time()
 
     def claim_turn(

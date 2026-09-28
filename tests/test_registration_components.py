@@ -9,11 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.declarations import Thread, ThreadStatus
+from agent_comms.declarations import Thread
 from agent_comms.locked_store import LockedStore
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore
+from agent_comms.thread_status import RunningThreadStatus
 
 
 def owner(path):
@@ -23,7 +24,7 @@ def owner(path):
 def test_document_owns_lifecycle_without_registration_or_io(tmp_path):
     document = RegistryDocument()
     document.apply_registration(
-        document.prepare_registration(owner(tmp_path), ThreadStatus.RUNNING, new_owner=False)
+        document.prepare_registration(owner(tmp_path), RunningThreadStatus(), new_owner=False)
     )
     before = document.snapshot().owner_identity("owner")
     claimed, generation = document.claim_turn(document.threads["owner"], "turn", None)
@@ -100,7 +101,7 @@ def test_lifecycle_document_survives_fresh_process_restart(tmp_path):
 import json, os, sys
 from dataclasses import replace
 from pathlib import Path
-from agent_comms.declarations import Thread, ThreadStatus
+from agent_comms.declarations import Thread
 from agent_comms.registration import Registration
 import time
 time.time = lambda: 1000.0

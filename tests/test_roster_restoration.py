@@ -6,8 +6,9 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import Thread
-from agent_comms.declarations import ActiveTurn, RelationViolationError, ThreadSort, ThreadStatus
+from agent_comms.declarations import ActiveTurn, RelationViolationError, ThreadSort
 from agent_comms.operations import Comms
+from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 
 
 def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity(tmp_path):
@@ -42,7 +43,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     assert after.owner_generations["live"] == before.owner_generations["live"]
     assert after.admission_generations["live"] == before.admission_generations["live"]
     assert after.threads["missing"] == replace(missing, pid=0, active_turn=None)
-    assert after.statuses["missing"] is ThreadStatus.STOPPED
+    assert after.statuses["missing"] == StoppedThreadStatus()
     assert after.aliases["former-name"] == "missing"
     assert current.bus._path.read_bytes() == bus
     assert old.bus._path.read_bytes() == old_bus
@@ -79,9 +80,9 @@ def test_restore_keeps_archived_status(tmp_path):
     old = Comms(tmp_path / "old")
     new = Comms(tmp_path / "new")
     thread = Thread("archived", frozenset(), str(tmp_path))
-    old.registry.register(thread, ThreadStatus.ARCHIVED)
+    old.registry.register(thread, ArchivedThreadStatus())
     new.registry.restore_stopped(old.registry.snapshot(), (thread.name,))
-    assert new.registry.status(thread.name) is ThreadStatus.ARCHIVED
+    assert new.registry.status(thread.name) == ArchivedThreadStatus()
     assert new.registry.require(thread.name).pid == 0
 
 
@@ -142,7 +143,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
         bus_before = current.bus._path.read_bytes() if message else None
         current.restore_stopped(source, (missing.name,))
         snapshot = current.registry.snapshot()
-        assert snapshot.statuses[missing.name] is ThreadStatus.STOPPED
+        assert snapshot.statuses[missing.name] == StoppedThreadStatus()
         assert snapshot.threads[missing.name].pid == 0
         assert snapshot.threads[live.name] == live
         assert store.participant(stable_thread_lookup(live.created_at)) == live_before

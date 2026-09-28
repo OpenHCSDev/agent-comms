@@ -13,7 +13,6 @@ from .declarations import (
     RegistrySnapshot,
     RelationViolationError,
     Thread,
-    ThreadStatus,
     TurnLeaseFence,
     TurnRouting,
     UnregisteredThreadError,
@@ -23,6 +22,7 @@ from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .owner_compaction_gate import OwnerCompactionAttestation
 from .registry_store import RegistryStore
+from .thread_status import RunningThreadStatus, ThreadStatus
 
 
 class Registration:
@@ -35,7 +35,7 @@ class Registration:
     def register(
         self,
         thread: Thread,
-        status: ThreadStatus = ThreadStatus.RUNNING,
+        status: ThreadStatus = RunningThreadStatus(),
         *,
         new_owner: bool = False,
     ) -> None:

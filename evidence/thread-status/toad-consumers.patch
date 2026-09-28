@@ -1,0 +1,99 @@
+--- a/src/toad/widgets/comms_sidebar.py
++++ b/src/toad/widgets/comms_sidebar.py
+@@ -34,7 +34,7 @@
+ 
+ from agent_comms import (
+     context_tool_catalog,
+-    ChannelView, CoordinationSnapshot, ThreadStatus, ThreadView,
++    ChannelView, CoordinationSnapshot, ThreadView,
+     OBSERVATION_INTERVAL, WireRevision,
+ )
+ from agent_comms.operations import wire
+@@ -862,7 +862,7 @@
+ 
+     @staticmethod
+     def _person_kind(person: ThreadView) -> str:
+-        if person.status in {ThreadStatus.ARCHIVED, ThreadStatus.STOPPED}:
++        if not person.status.active:
+             # A stopped/archived executor has no runnable native owner. Its
+             # wire DM stays viewable without implicitly starting it on click.
+             return "dm"
+@@ -1348,11 +1348,11 @@
+ 
+         declared_actions = context_tool_catalog("thread")
+         person = (self._last_snapshot or self._snapshot()).all_people.get(name)
+-        if person is not None and person.status is ThreadStatus.ARCHIVED:
+-            declared_actions = [item for item in declared_actions
+-                                if item["name"] not in {"comms_start", "comms_stop", "comms_archive"}]
+-        elif person is not None and person.status.active and person.thread.pid > 0:
+-            declared_actions = [item for item in declared_actions if item["name"] != "comms_start"]
++        if person is not None:
++            declared_actions = [
++                item for item in declared_actions
++                if person.status.allows_control(item["name"], owner_pid=person.thread.pid)
++            ]
+         actions: dict[str, Callable[[], None]] = {
+             str(declaration["name"]): partial(post, str(declaration["name"]))
+             for declaration in declared_actions
+--- a/tests/right_comms_pilot.py
++++ b/tests/right_comms_pilot.py
+@@ -16,7 +16,8 @@
+ from toad.widgets.thread_comms import RelationshipSort, ThreadCommsSidebar
+ from toad.widgets.thread_comms_source import WireRelationshipSource
+ 
+-from agent_comms import Activity, ActivityState, Comms, Thread, ThreadSort, ThreadStatus, ThreadView
++from agent_comms.thread_status import RunningThreadStatus
++from agent_comms import Activity, ActivityState, Comms, Thread, ThreadSort, ThreadView
+ 
+ 
+ @dataclass(frozen=True)
+@@ -57,7 +58,7 @@
+         self.people = {
+             name: ThreadView(Thread(name, frozenset(), self.root, created_at=index + 1,
+                                     session_file=f"{root}/{name}.jsonl"),
+-                             ThreadStatus.RUNNING,
++                             RunningThreadStatus(),
+                              Activity(name, ActivityState.THINKING if index % 2
+                                       else ActivityState.IDLE,
+                                       "Reviewing sidebar changes" if index % 2 else "",
+--- a/tests/channel_visibility_pilot.py
++++ b/tests/channel_visibility_pilot.py
+@@ -5,7 +5,8 @@
+ import tempfile
+ from pathlib import Path
+ 
+-from agent_comms import Thread, ThreadStatus, wire
++from agent_comms.thread_status import ArchivedThreadStatus
++from agent_comms import Thread, wire
+ from runtime_fixture import ToadApp
+ from toad.screens.comms import CommsScreen
+ from toad.widgets.comms_menu import ContextMenuItem
+@@ -79,7 +80,7 @@
+             archived.action_open_selected()
+             await pilot.pause()
+             assert isinstance(app.screen, CommsScreen) and app.screen.kind == "dm"
+-            assert comms.registry.status("archived") is ThreadStatus.ARCHIVED
++            assert comms.registry.status("archived") == ArchivedThreadStatus()
+             assert not comms.registry.status("stopped").active
+             await app.switch_mode("session-1")
+             await pilot.pause()
+--- a/tests/main_menu_transfer_pilot.py
++++ b/tests/main_menu_transfer_pilot.py
+@@ -6,7 +6,7 @@
+ import tempfile
+ from pathlib import Path
+ 
+-from agent_comms import Thread, ThreadStatus
++from agent_comms import Thread
+ from runtime_fixture import ToadApp
+ from textual.widgets import Input, Select, Static
+ 
+@@ -89,7 +89,7 @@
+             dialog.action_submit()
+             await wait_for(pilot, lambda: comms.registry.name_reserved("imported"))
+             thread = comms.registry.require("imported")
+-            assert comms.registry.status(thread.name) is ThreadStatus.STOPPED
++            assert comms.registry.status(thread.name).stopped
+             assert "Imported history" in Path(thread.session_file).read_text()
+             assert app._exception is None
+         await asyncio.get_running_loop().shutdown_default_executor()

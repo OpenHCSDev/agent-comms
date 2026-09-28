@@ -20,7 +20,6 @@ from agent_comms import (
     RuntimeInfoStore,
     SharedLedger,
     Thread,
-    ThreadStatus,
     UnregisteredThreadError,
     current_thread,
 )
@@ -32,6 +31,7 @@ from agent_comms.coordination import (
 )
 from agent_comms.operations import Comms
 from agent_comms.private_registry_guard import PrivateRegistryGuard
+from agent_comms.thread_status import DeletingThreadStatus, RunningThreadStatus, StoppedThreadStatus
 
 
 def test_windows_snapshot_replace_retries_transient_sharing_failure(
@@ -259,12 +259,12 @@ class TestRegistration:
     def test_status_transitions(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
-        assert registry.status("a") is ThreadStatus.RUNNING
+        assert registry.status("a") == RunningThreadStatus()
         registry.unregister("a")
-        assert registry.status("a") is ThreadStatus.STOPPED
+        assert registry.status("a") == StoppedThreadStatus()
         # Unregistering a stopped (but known) thread is idempotent.
         registry.unregister("a")
-        assert registry.status("a") is ThreadStatus.STOPPED
+        assert registry.status("a") == StoppedThreadStatus()
         # Only unknown references fail closed.
         with pytest.raises(UnregisteredThreadError):
             registry.unregister("ghost")
@@ -276,7 +276,7 @@ class TestRegistration:
         registry.unregister("a")
         registry.heartbeat("a")  # legacy lifecycle allows this; a turn CAS must not.
         assert registry.require("a") == expected
-        assert registry.status("a") is ThreadStatus.RUNNING
+        assert registry.status("a") == RunningThreadStatus()
         assert registry.live_owner_with_generation("a")[1] > epoch
         with pytest.raises(RelationViolationError, match="stopped or changed"):
             registry.claim_live_turn_with_generation(
@@ -390,7 +390,7 @@ class TestRegistration:
         comms.registry.unregister("a")
         with pytest.raises(RelationViolationError, match="stopped or unavailable"):
             comms.begin_turn("a", "revived")
-        assert comms.registry.status("a") is ThreadStatus.STOPPED
+        assert comms.registry.status("a") == StoppedThreadStatus()
         assert comms.registry.require("a").active_turn is None
 
     def test_begin_turn_migrates_unmarked_legacy_registry_without_reviving_stop(
@@ -640,7 +640,7 @@ class TestRegistration:
         registry.register(thread)
         registry.unregister("a")
         registry.begin_delete("a")
-        assert registry.status("a") is ThreadStatus.DELETING
+        assert registry.status("a") == DeletingThreadStatus()
         with pytest.raises(RelationViolationError, match="permanently deleted"):
             registry.heartbeat("a")
         with pytest.raises(RelationViolationError, match="permanently deleted"):
@@ -683,7 +683,7 @@ class TestRegistration:
         thread = reloaded.require("a")
         assert thread.parent == "p" and thread.task == "t" and thread.pid == 9
         assert thread.tags == frozenset({"x", "y"})
-        assert reloaded.status("a") is ThreadStatus.STOPPED
+        assert reloaded.status("a") == StoppedThreadStatus()
 
     def test_peers_excludes_self(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")

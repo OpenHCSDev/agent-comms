@@ -44,6 +44,7 @@ from .goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
 from .goal_waits import GoalInputReview, GoalWait, GoalWaits
 from .registration import Registration
 from .thread_identity import OwnerIdentity
+from .thread_status import StoppedThreadStatus
 
 if TYPE_CHECKING:
     from .agent_events import GoalChanged
@@ -83,7 +84,6 @@ from .declarations import (
     Thread,
     ThreadRole,
     ThreadSort,
-    ThreadStatus,
     ThreadView,
     TurnLeaseFence,
     TurnRouting,
@@ -2255,7 +2255,7 @@ class Comms:
                 session_path.parent.chmod(0o700)
             _atomic_write_text(session_path, snapshot.pi_session(project))
             try:
-                self.registry.register(thread, ThreadStatus.STOPPED)
+                self.registry.register(thread, StoppedThreadStatus())
                 self.bus.mark_delivered_through(name, self.message_high_water())
             except Exception:
                 if name in self.registry:
@@ -2975,7 +2975,7 @@ class Comms:
         return [
             {
                 **t.to_wire(),
-                "status": snapshot.statuses[name].value,
+                "status": snapshot.statuses[name].declared_name,
                 "is_fork": t.is_fork,
                 "pending": pending[name],
                 "goal_pause": (
@@ -2994,7 +2994,11 @@ class Comms:
 
     def thread_detail(self, name: str, *, include_pending: bool = True) -> Mapping[str, object]:
         t = self.registry.require(name)
-        detail = {**t.to_wire(), "status": self.registry.status(name).value, "is_fork": t.is_fork}
+        detail = {
+            **t.to_wire(),
+            "status": self.registry.status(name).declared_name,
+            "is_fork": t.is_fork,
+        }
         execution = self.goal_execution(name)
         detail["goal_execution"] = asdict(execution) if execution else None
         if include_pending:
@@ -3220,7 +3224,7 @@ class Comms:
                 if (
                     fresh is None
                     or (canonical, fresh.pid, fresh.created_at) != original_owner
-                    or not current.statuses.get(canonical, ThreadStatus.STOPPED).visible
+                    or not current.statuses[canonical].visible
                 ):
                     raise RelationViolationError(f"Owner changed while starting {name!r}.")
                 if current.admission_generations.get(canonical) != original_epoch:
@@ -3340,7 +3344,7 @@ class Comms:
                             fresh.threads[thread.name].created_at,
                         )
                         != (thread.name, thread.pid, thread.created_at)
-                        or not fresh.statuses.get(thread.name, ThreadStatus.STOPPED).active
+                        or not fresh.statuses[thread.name].active
                     )
                     for thread, _epoch in captured
                 ):
@@ -3394,7 +3398,7 @@ class Comms:
                             existing is None
                             or (existing.pid, existing.created_at)
                             != (thread.pid, thread.created_at)
-                            or stop_snapshot.statuses.get(thread.name) is not ThreadStatus.STOPPED
+                            or not stop_snapshot.statuses[thread.name].stopped
                             or stop_snapshot.admission_generations.get(thread.name)
                             != stop_epochs[thread.name]
                         ):
@@ -3426,7 +3430,7 @@ class Comms:
                         final_owner is None
                         or (final_owner.pid, final_owner.created_at)
                         != (thread.pid, thread.created_at)
-                        or final.statuses.get(thread.name) is not ThreadStatus.STOPPED
+                        or not final.statuses[thread.name].stopped
                         or final.admission_generations.get(thread.name) != stop_epochs[thread.name]
                         or self._process_alive(thread.pid)
                     ):
@@ -3615,7 +3619,7 @@ class Comms:
                 if (
                     current_thread is None
                     or (canonical, current_thread.pid, current_thread.created_at) != original_owner
-                    or not current.statuses.get(canonical, ThreadStatus.STOPPED).active
+                    or not current.statuses[canonical].active
                 ):
                     raise RelationViolationError(
                         f"Owner changed while stopping {name!r}; refusing a stale signal."
@@ -3694,7 +3698,7 @@ class Comms:
             or (current.name, current.pid, current.created_at)
             != (thread.name, thread.pid, thread.created_at)
             or snapshot.admission_generations.get(thread.name) != epoch
-            or not snapshot.statuses.get(thread.name, ThreadStatus.STOPPED).active
+            or not snapshot.statuses[thread.name].active
         ):
             raise RelationViolationError(
                 f"Owner changed while stopping {thread.name!r}; refusing a stale signal."
@@ -3733,8 +3737,8 @@ class Comms:
     def _released_same_owner(self, snapshot: RegistrySnapshot, thread: Thread, epoch: int) -> bool:
         current = snapshot.threads.get(thread.name)
         if (
-            snapshot.statuses.get(thread.name) is not ThreadStatus.STOPPED
-            or current is None
+            current is None
+            or not snapshot.statuses[thread.name].stopped
             or current.active_turn is not None
             or (current.name, current.pid, current.created_at)
             != (thread.name, thread.pid, thread.created_at)
@@ -3750,10 +3754,7 @@ class Comms:
     def _finish_stopped_owner(self, thread: Thread, epoch: int) -> None:
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
-            status = snapshot.statuses.get(thread.name)
-            if status is ThreadStatus.STOPPED and self._released_same_owner(
-                snapshot, thread, epoch
-            ):
+            if self._released_same_owner(snapshot, thread, epoch):
                 return  # An exact, durably attested release of the signaled owner.
             self._require_same_stop_owner(thread, epoch)
             self.registry.unregister(thread.name)
