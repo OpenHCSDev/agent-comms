@@ -42,8 +42,6 @@ def history(tmp_path):
             )
         elif seq == 235:
             message = replace(message, target="#all")
-        elif seq == 239:
-            message = replace(message, target="broadcast")
         raw = (json.dumps(message.to_wire()) + "\n").encode()
         rows.append((message, raw))
     old.bus.log.path.write_bytes(b"".join(raw for _, raw in rows))
@@ -63,8 +61,8 @@ def history(tmp_path):
 def selected(kind, message):
     if kind == "any":
         return True
-    if kind in ("all", "broadcast"):
-        return message.target in {"#all", "broadcast"}
+    if kind == "all":
+        return message.target == "#all"
     if kind == "none":
         return message.target == "#none"
     if kind in ("dm", "dm-alias"):
@@ -95,13 +93,12 @@ def reader(live, kind):
         "any": "#any",
         "all": "#all",
         "none": "#none",
-        "broadcast": "broadcast",
     }[kind]
     return lambda **kwargs: live.views.channel_history_page(target, **kwargs)
 
 
 @pytest.mark.parametrize(
-    "kind", ["channel", "any-mode", "any", "all", "broadcast", "none", "dm", "dm-alias"]
+    "kind", ["channel", "any-mode", "any", "all", "none", "dm", "dm-alias"]
 )
 @pytest.mark.parametrize(
     "before,after", [(None, None), (180, None), (1, None), (None, 0), (None, 190)]
@@ -186,7 +183,7 @@ def test_sparse_page_decodes_only_index_candidates_after_cold_validation(history
 
 
 @pytest.mark.parametrize(
-    "kind", ["channel", "any-mode", "any", "all", "broadcast", "none", "dm", "dm-alias"]
+    "kind", ["channel", "any-mode", "any", "all", "none", "dm", "dm-alias"]
 )
 def test_complete_forward_and_reverse_traversal_preserves_membership(history, kind):
     live, source, rows = history
