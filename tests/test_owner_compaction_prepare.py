@@ -438,7 +438,6 @@ def test_large_history_cli_prepare_commit_reopen_under_memory_budget(
 ):
     """No external calls or retained user data; exercise the production chain."""
     package = Path(PACKAGE).resolve()
-    launcher = os.environ["AC_NATIVE_STACK_BIN"]
     assert "PYTEST_XDIST_WORKER" not in os.environ, "Run capacity acceptance serially with -n0"
     minimum = history_mib * 1024**2
     assert shutil.disk_usage(tmp_path).free > minimum * 3, "Insufficient owned disk fixture space"
@@ -527,7 +526,7 @@ def test_large_history_cli_prepare_commit_reopen_under_memory_budget(
             monkeypatch.setenv("AC_CAPACITY_PHASE", "strict-reopen")
             assert (
                 validate_native_reopen(
-                    launcher, str(session), expected_session_id=fixture["session_id"]
+                    package, str(session), expected_session_id=fixture["session_id"]
                 )
                 == fixture["session_id"]
             )
