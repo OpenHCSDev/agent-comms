@@ -117,7 +117,7 @@ class TestEndToEndLifecycle:
         # This test manually drives the participant below. Stop the persistent
         # fork owner first; the runtime suite exercises its automatic delivery.
         cli(root, "stop", "--name", "kid")
-        assert comms.registry.status("kid").value == "stopped"
+        assert comms.registry.status("kid").declared_name == "stopped"
         assert not socket_path(root, detail["pid"]).exists()
 
         # 3. Child registers itself the way a real pi process would.

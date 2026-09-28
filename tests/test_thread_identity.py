@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.declarations import RelationViolationError, Thread, ThreadStatus
+from agent_comms.declarations import RelationViolationError, Thread
 from agent_comms.field_codec import FieldCodec
 from agent_comms.operations import Comms
 from agent_comms.read_basis import Conversation
@@ -16,6 +16,7 @@ from agent_comms.thread_identity import (
     ThreadIncarnation,
     TurnIdentity,
 )
+from agent_comms.thread_status import IdleThreadStatus
 
 
 def registry_with_owner(tmp_path):
@@ -83,7 +84,7 @@ def test_delete_and_rebind_changes_identity_and_keeps_counter_tombstone(tmp_path
 
 def test_same_process_idle_presence_does_not_rotate_identity(tmp_path):
     registry = registry_with_owner(tmp_path)
-    registry.register(registry.require("owner"), status=ThreadStatus.IDLE)
+    registry.register(registry.require("owner"), status=IdleThreadStatus())
     before = registry.snapshot()
     registry.heartbeat("owner")
     assert registry.snapshot().owner_identity("owner") == before.owner_identity("owner")

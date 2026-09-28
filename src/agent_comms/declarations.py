@@ -71,6 +71,7 @@ from .response_policy import (
     ResponsePolicy,
 )
 from .thread_identity import OwnerIdentity, ThreadIncarnation, TurnIdentity
+from .thread_status import ThreadStatus
 
 if TYPE_CHECKING:
     from .coordination import PublicationIntent
@@ -477,47 +478,6 @@ def _append_jsonl(path: Path, record: Mapping) -> None:
         output.write(json.dumps(record).encode() + b"\n")
         output.flush()
         os.fsync(output.fileno())
-
-
-class ThreadStatus(Enum):
-    RUNNING = "running"
-    IDLE = "idle"
-    STOPPED = "stopped"
-    ARCHIVED = "archived"
-    DELETING = "deleting"
-
-    @property
-    def visible(self) -> bool:
-        return self not in {self.ARCHIVED, self.DELETING}
-
-    @property
-    def active(self) -> bool:
-        return self in {self.RUNNING, self.IDLE}
-
-    @property
-    def running(self) -> bool:
-        return self is self.RUNNING
-
-    @property
-    def stopped(self) -> bool:
-        return self is self.STOPPED
-
-    @property
-    def mutable(self) -> bool:
-        return self is not self.DELETING
-
-    def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
-        """Whether an executable thread belongs to the requested viewer projection."""
-        return (
-            self.active
-            or (self is self.STOPPED and show_stopped)
-            or (self is self.ARCHIVED and show_archived)
-        )
-
-    def presentation(self, title: str, activity: Activity) -> ThreadPresentation:
-        if self.active:
-            return activity.state.presentation(title, activity.detail)
-        return ThreadPresentation(title, "○", self.value.title())
 
 
 class ActivityState(Enum):
@@ -1576,7 +1536,7 @@ class ThreadView:
     def to_wire(self) -> dict[str, object]:
         return {
             **self.thread.to_wire(),
-            "status": self.status.value,
+            "status": self.status.declared_name,
             "is_fork": self.thread.is_fork,
             "resumable": bool(self.thread.session_file),
             "last_seen": self.last_seen,

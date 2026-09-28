@@ -10,7 +10,8 @@ import pytest
 
 from agent_comms import Thread, wire
 from agent_comms.cli import main
-from agent_comms.declarations import ActiveTurn, RelationViolationError, ThreadStatus
+from agent_comms.declarations import ActiveTurn, RelationViolationError
+from agent_comms.thread_status import StoppedThreadStatus
 
 
 def setup_owners(tmp_path, monkeypatch):
@@ -54,7 +55,7 @@ def test_bulk_restart_preserves_state_and_does_not_revive_stopped(tmp_path, monk
     assert [receipt.thread for receipt in results] == stopped
     assert results[0].previous_pid == old.pid
     assert comms.registry.require("one") == replace(old, pid=old.pid + 1000)
-    assert comms.registry.status("stopped").value == "stopped"
+    assert comms.registry.status("stopped").declared_name == "stopped"
 
 
 def test_restart_requires_exact_queued_owner_incarnation(tmp_path, monkeypatch):
@@ -105,7 +106,7 @@ def test_guarded_restart_fences_post_signal_wake_before_exit(tmp_path, monkeypat
     def wait_after_signal(pid, timeout):
         # Simulate the old process receiving a wake immediately after signal
         # and before owner exit; it must fail the persisted admission gate.
-        assert comms.registry.status("one") is ThreadStatus.STOPPED
+        assert comms.registry.status("one") == StoppedThreadStatus()
         with monkeypatch.context() as patch:
             patch.setattr("agent_comms.declarations.os.getpid", lambda: original.pid)
             with pytest.raises(RelationViolationError, match="stopped or unavailable"):
@@ -147,7 +148,7 @@ def test_explicit_start_cannot_reopen_stopped_live_restart_fence(tmp_path, monke
     )
     with pytest.raises(RelationViolationError, match="Cannot reactivate a stopped incarnation"):
         comms.start("one")
-    assert comms.registry.status("one") is ThreadStatus.STOPPED
+    assert comms.registry.status("one") == StoppedThreadStatus()
     assert comms.registry.require("one").pid == original.pid
     assert stopped == []
 
@@ -168,7 +169,7 @@ def test_start_racing_fence_after_proof_cannot_reopen_admission(tmp_path, monkey
     monkeypatch.setattr(comms, "_is_local_participant", proof_and_fence)
     with pytest.raises(RelationViolationError):
         comms.start("one")
-    assert comms.registry.status("one") is ThreadStatus.STOPPED
+    assert comms.registry.status("one") == StoppedThreadStatus()
     assert comms.registry.require("one").active_turn is None
     assert stopped == []
 

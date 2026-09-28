@@ -29,9 +29,10 @@ from agent_comms.coordination_store import (
     MutationStore,
     PublicationActivationBlocked,
 )
-from agent_comms.declarations import Message, MessageType, RelationViolationError, Thread, ThreadStatus
+from agent_comms.declarations import Message, MessageType, RelationViolationError, Thread
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, private_nk_launch
+from agent_comms.thread_status import StoppedThreadStatus
 from test_native_prompt_binding import _root
 from test_native_prompt_binding import tmp_path as private_root_fixture
 
@@ -239,7 +240,7 @@ def test_rotate_stopped_private_route_without_replaying_old_inputs(
     old = operations.Comms(old_root)
     old.registry.register(
         Thread("owner", frozenset(), str(tmp_path), pid=0),
-        ThreadStatus.STOPPED,
+        StoppedThreadStatus(),
     )
     old_id = old.initialize_private_initial_protocol()
     old.send_user_message("owner", "pending old message", worktree=str(tmp_path))

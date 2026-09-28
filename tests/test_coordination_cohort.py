@@ -31,7 +31,6 @@ from agent_comms.declarations import (
     RelationViolationError,
     Thread,
     ThreadRole,
-    ThreadStatus,
 )
 from agent_comms.exporting import (
     ChannelScope,
@@ -39,6 +38,7 @@ from agent_comms.exporting import (
     JsonlFormat,
 )
 from agent_comms.operations import Comms
+from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.wake_policy import BoundedTriageWake, FullWake
 
 pytestmark = pytest.mark.skipif(
@@ -370,7 +370,7 @@ def test_existing_bus_cannot_acquire_private_marker(tmp_path: Path) -> None:
 def test_archived_direct_recipient_has_no_eligible_wake(tmp_path: Path) -> None:
     comms, _store, _root_id, _lookups = _root(tmp_path)
     comms.registry.archive("Alice")
-    assert comms.registry.status("Alice") is ThreadStatus.ARCHIVED
+    assert comms.registry.status("Alice") == ArchivedThreadStatus()
     with pytest.raises(RelationViolationError, match="visible executable"):
         comms.send_initial_cohort("sender", "Alice", "must not wake")
     assert comms.bus.latest_sequence() == 0

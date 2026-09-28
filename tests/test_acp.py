@@ -410,7 +410,7 @@ class TestHandlers:
         names = list(agent._comms.registry.all_threads())
         assert names == ["proj", "proj-2"]
         assert response.session_id == "proj-2"
-        assert agent._comms.registry.status("proj").value == "stopped"
+        assert agent._comms.registry.status("proj").declared_name == "stopped"
 
     async def test_same_leaf_different_cwd_disambiguates(self, tmp_path):
         agent = self._agent(tmp_path)
@@ -459,7 +459,7 @@ class TestHandlers:
         )
         first._comms.attach_session("proj", str(session_file), pid=os.getpid())
         await first.shutdown()
-        assert first._comms.registry.status("proj").value == "stopped"
+        assert first._comms.registry.status("proj").declared_name == "stopped"
 
         second = self._agent(tmp_path)
 
@@ -475,7 +475,7 @@ class TestHandlers:
         loaded = await second.load_session(
             cwd="/wt/proj", session_id=response.session_id, mcp_servers=[]
         )
-        assert second._comms.registry.status("proj").value == "running"
+        assert second._comms.registry.status("proj").declared_name == "running"
         assert second._comms.registry.require("proj").pid == os.getpid()
         assert loaded.field_meta["agentComms"]["thread"] == "proj"
         assert [update.session_update for update in client.updates] == [

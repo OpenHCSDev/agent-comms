@@ -6,8 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import ImportFormat, ImportLimits, ThreadStatus, wire
+from agent_comms import ImportFormat, ImportLimits, wire
 from agent_comms.cli import main
+from agent_comms.thread_status import StoppedThreadStatus
 
 
 def opencode_export(path, project):
@@ -62,7 +63,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, l
         directory.chmod(0o755)
     receipt = comms.import_thread(source, ImportFormat.OPENCODE, name="imported")
     thread = comms.registry.require("imported")
-    assert thread.pid == 0 and comms.registry.status(thread.name) is ThreadStatus.STOPPED
+    assert thread.pid == 0 and comms.registry.status(thread.name) == StoppedThreadStatus()
     assert receipt.source_id == "ses_test" and receipt.imported_messages == 4
     assert source.read_bytes() == before
     if os.name == "posix":

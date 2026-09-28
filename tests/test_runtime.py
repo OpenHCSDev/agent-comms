@@ -471,7 +471,7 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
         # completed local turn is not proof that any channel was addressed.
         assert all(m.sender != "child" for m in comms.channel_history("#all"))
         assert comms.registry.require("child").pid == child.pid
-        assert comms.registry.status("child").value == "running"
+        assert comms.registry.status("child").declared_name == "running"
         assert comms.activity_of("child").state.value == "idle"
         for agent in (first, second):
             response = await agent.load_session(str(tmp_path), "child")
@@ -507,7 +507,7 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
         assert comms.registry.require("child").pid == child.pid
         await first.shutdown()
         assert comms._process_alive(child.pid)
-        assert comms.registry.status("child").value == "running"
+        assert comms.registry.status("child").declared_name == "running"
         comms.rename_managed_thread("child", "renamed child", owner_pid=child.pid)
         response = await second.prompt("child", [{"type": "text", "text": "after rename"}])
         assert response.stop_reason == "end_turn"

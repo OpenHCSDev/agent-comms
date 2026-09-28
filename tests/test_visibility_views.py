@@ -1,6 +1,7 @@
 """Viewer-only presence flags reveal archived threads without reviving owners."""
 
-from agent_comms import Thread, ThreadRole, ThreadStatus, wire
+from agent_comms import Thread, ThreadRole, wire
+from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 
 
 def test_stopped_and_archived_are_explicit_view_filters(tmp_path):
@@ -29,9 +30,9 @@ def test_stopped_and_archived_are_explicit_view_filters(tmp_path):
     archived_only = comms.viewer_snapshot(str(tmp_path), show_stopped=False, show_archived=True)
     assert names(archived_only) == set(members(archived_only)) == {"active", "archived"}
     archived = next(view for view in archived_only.threads if view.thread.name == "archived")
-    assert archived.status is ThreadStatus.ARCHIVED
-    assert comms.registry.status("stopped") is ThreadStatus.STOPPED
-    assert comms.registry.status("archived") is ThreadStatus.ARCHIVED
+    assert archived.status == ArchivedThreadStatus()
+    assert comms.registry.status("stopped") == StoppedThreadStatus()
+    assert comms.registry.status("archived") == ArchivedThreadStatus()
     assert {view.thread.name for view in comms.thread_views()} == {"active", "stopped"}
     channel = next(view for view in comms.channel_views() if view.channel.name == "#team")
     assert set(channel.members) == {"active", "stopped"}
