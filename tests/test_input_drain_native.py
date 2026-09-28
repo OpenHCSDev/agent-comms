@@ -1,0 +1,144 @@
+"""Offline native selected summary, real ACP queue, strict reopen and original/followup once."""
+
+import asyncio
+import json
+import os
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from agent_comms.acp import CommsAgent
+from agent_comms.compaction_journal import CompactionJournal
+from agent_comms.declarations import Thread
+from agent_comms.operations import wire
+from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+from test_selected_owner_compaction_integration import owner_fixture
+
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("PI_COMPACTION_TEST_PACKAGE"), reason="Prepared native bundle required"
+)
+
+
+@pytest.mark.parametrize("foreign", [False, True])
+async def test_actual_acp_queued_during_summary_runs_once_after_original(
+    tmp_path, monkeypatch, foreign
+):
+    async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
+        persistent,
+        registry,
+        inputs,
+        file,
+        launcher,
+        info,
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", info.model)
+        comms = wire(tmp_path / "acp-wire")
+        project = tmp_path / "proj"
+        project.mkdir()
+        agent = CommsAgent(
+            comms, agent_bin=launcher, agent_args=[], runtime_enabled=True, auto_wake=False
+        )
+        updates = []
+
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+
+        agent.on_connect(Client())
+        await agent.new_session(cwd=str(project), mcp_servers=[])
+        agent.inputs.drain_tasks["proj"].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+        comms.registry.register(
+            replace(
+                comms.registry.require("proj"), session_file=file, model=info.model, pid=os.getpid()
+            )
+        )
+        comms.set_agent_info(
+            "proj", model=info.model, context_used=info.context_used, context_size=info.context_size
+        )
+        agent._persistent_backends["proj"] = persistent
+        selected_exchange = SelectedSummarySlot.run_selected_summary
+        accepted = []
+        operations = []
+
+        async def summary_with_queue(slot, *args, **kwargs):
+            # Source was captured; selected summary has not finished or committed.
+            response = await agent.prompt(
+                "proj",
+                [{"type": "text", "text": "Fresh followup"}],
+                agentComms={"delivery": "queue", "deferDisplay": True},
+            )
+            receipt = response.field_meta["agentComms"]["inputDisposition"]
+            assert receipt["status"] == "accepted_not_started"
+            key = "acp:" + receipt["inputId"]
+            accepted.append(key)
+            row = agent.inputs.dispositions.get(key)
+            assert row["native_id"] is None and row["status"] == "unknown"
+            if foreign:
+                for name in ("foreign", "another"):
+                    comms.register(Thread(name, frozenset(), str(project)))
+                comms.send("foreign", "another", "unrelated ingress")
+                agent.inputs.dispositions.record(
+                    "acp:foreign",
+                    seq=None,
+                    owner="foreign",
+                    admission=1,
+                    target="foreign",
+                    text="foreign input",
+                )
+            result = await selected_exchange(slot, *args, **kwargs)
+            operations.append(result.operation_id)
+            return result
+
+        monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", summary_with_queue)
+        spawn = asyncio.create_subprocess_exec
+
+        async def offline_spawn(program, *args, **kwargs):
+            if program == launcher:
+                kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
+                return await spawn(
+                    "node",
+                    str(
+                        Path(__file__).resolve().parents[1]
+                        / "stack/test-native-selected-owner-host.mjs"
+                    ),
+                    *args,
+                    **kwargs,
+                )
+            return await spawn(program, *args, **kwargs)
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+        try:
+            async with asyncio.timeout(35):
+                await agent.prompt("proj", [{"type": "text", "text": "Original after summary"}])
+            rows = agent.inputs.dispositions._read()
+            own = [row for row in rows.values() if row["owner"] == "proj"]
+            assert len(own) == 2
+            assert all(row["status"] == "started" for row in own), own
+            assert len({row["native_id"] for row in own}) == 2
+            journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+            assert len(operations) == 1
+            assert journal.selected_summary(operations[0]).status == "linked"
+            assert not journal.blocking_selected_summary(file)
+            entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
+            compact = [i for i, row in enumerate(entries) if row["type"] == "compaction"]
+            assert len(compact) == 1
+            original = next(row for row in own if row["key"] != accepted[0])
+            followup = rows[accepted[0]]
+            positions = []
+            for row in (original, followup):
+                starts = [
+                    i
+                    for i, event in enumerate(entries)
+                    if event["type"] == "message"
+                    and event["message"].get("inputId") == row["native_id"]
+                ]
+                assert len(starts) == 1
+                positions.append(starts[0])
+            assert compact[0] < positions[0] < positions[1]
+            assert not agent.inputs.queued_inputs.get("proj")
+            if foreign:
+                assert rows["acp:foreign"]["status"] == "unknown"
+        finally:
+            await agent.shutdown()

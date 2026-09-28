@@ -9,6 +9,7 @@ from agent_comms import agent_events as ae
 from agent_comms import wire
 from agent_comms.acp import CommsAgent
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_drain import InputDrain
 
 
 @pytest.mark.parametrize("revocation", ["goal", "stop", "reopen"])
@@ -18,7 +19,7 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     await agent.new_session(str(tmp_path / "worker"))
     comms.update_tags("worker", add=frozenset({"team"}))
     message = comms.send_user_message("#team", "Durable request", worktree=str(tmp_path))
@@ -54,7 +55,7 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
             await agent.load_session(str(tmp_path / "worker"), "worker")
             await agent._drain_inbox("worker")
         if revocation != "reopen":
-            CommsAgent._schedule_wake(agent, "worker")
+            InputDrain.schedule_wake(agent.inputs, "worker")
             await asyncio.wait_for(agent._wake_tasks["worker"], 2)
         assert not agent._pending_turns.get("worker")
         updates = []
@@ -151,6 +152,7 @@ async def test_channel_hard_exit_never_replays_unknown(crash_at, monkeypatch):
 import asyncio, os, sys
 from pathlib import Path
 from agent_comms import wire
+from agent_comms.input_drain import InputDrain
 from agent_comms.acp import CommsAgent
 
 async def run():
@@ -220,7 +222,7 @@ async def test_channel_batch_never_credits_omitted_or_duplicate_sequences(
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     await agent.new_session(str(tmp_path / "worker"))
     comms.update_tags("worker", add=frozenset({"team"}))
     messages = tuple(

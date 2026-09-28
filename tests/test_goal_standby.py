@@ -13,6 +13,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.declarations import GoalWaitTarget, _store_lock
 from agent_comms.goal_attempts import GoalAttemptStore, StaleAttempt
 from agent_comms.goal_waits import GoalWait, GoalWaits
+from agent_comms.input_drain import InputDrain
 from agent_comms.operations import wire
 from agent_comms.tools import TOOLS
 
@@ -109,11 +110,11 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
             comms.registry.rename("child", "renamed-child")
             message = comms.send_message("renamed-child", "parent", "Implementation ready")
             if wake == "revoked":
-                monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+                monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
             await agent._drain_inbox("parent")
             if wake == "revoked":
                 comms.update_goal("parent", "paused", goal_id=goal.id, owner_action=True)
-                CommsAgent._schedule_wake(agent, "parent")
+                InputDrain.schedule_wake(agent.inputs, "parent")
             await asyncio.wait_for(agent._wake_tasks["parent"], timeout=2)
             assert agent._dispositions.status(f"bus:{message.seq}") == (
                 "unknown" if wake == "revoked" else "started"

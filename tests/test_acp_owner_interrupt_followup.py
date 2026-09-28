@@ -30,7 +30,7 @@ from test_goal_direct_interrupt import _owner
 )
 async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatch, standby, change):
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch, standby=standby)
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     before_goal = comms.registry.require(session).goal
     before_wait = comms.goal_wait(session)
     message = comms.send_message("outsider", session, "Question while goal is parked")
@@ -150,7 +150,7 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
 @pytest.mark.parametrize("standby", [False, True])
 async def test_real_fake_pi_receives_owner_input_during_parked_goal(tmp_path, monkeypatch, standby):
     comms, agent, session, _ = await _owner(tmp_path, monkeypatch, standby=standby)
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     session_file = tmp_path / "pi-session.jsonl"
     session_file.touch()
     received = tmp_path / "received.jsonl"
