@@ -11,8 +11,8 @@ import pytest
 from agent_comms import owner_compaction_runtime
 from agent_comms.owner_compaction_prepare import NativePreparation, NativeWitness
 from agent_comms.owner_compaction_provider import NativeSummary
-from agent_comms.owner_compaction_settings import PiCompactionSettings
 from agent_comms.owner_compaction_runtime import compact_owner_once
+from agent_comms.owner_compaction_settings import PiCompactionSettings
 
 
 @pytest.mark.asyncio

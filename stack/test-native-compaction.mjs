@@ -1,7 +1,7 @@
 // Credential-free proof that a long history cannot become one oversized summary request.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 
@@ -93,14 +93,16 @@ try {
 }
 assert.equal(attempted, false);
 
-const entries = [
-  { type: 'message', id: 'u', parentId: null, timestamp: '2026-01-01T00:00:00.000Z',
-    message: { role: 'user', content: `PREFIX ${'🙂漢字'.repeat(60000)}`, timestamp: 1 } },
-  { type: 'message', id: 'a', parentId: 'u', timestamp: '2026-01-01T00:00:01.000Z',
-    message: { role: 'assistant', content: [{ type: 'text', text: `kept ${'x'.repeat(120000)}` }],
-      provider: 'openrouter', model: 'fake', stopReason: 'stop', timestamp: 2, usage } },
-];
-const preparation = prepareCompaction(entries, { reserveTokens: 16384, keepRecentTokens: 20000 }, model);
+const {SessionManager}=await import(pathToFileURL(resolve(packageDir,'dist/core/session-manager.js')).href);
+const artifacts=resolve(import.meta.dirname,'../.artifacts');mkdirSync(artifacts,{recursive:true});
+const root=mkdtempSync(resolve(artifacts,'native-split-'));
+const manager=SessionManager.create(root,root);
+try {
+manager.appendMessage({role:'user',content:`PREFIX ${'🙂漢字'.repeat(60000)}`,timestamp:1});
+for(let index=0;index<3;index++)manager.appendMessage({role:'assistant',content:[{type:'text',text:`kept ${'x'.repeat(40000)}`}],
+    provider:'openrouter',model:'fake',stopReason:'stop',timestamp:2+index,usage});
+const model={provider:'openrouter',id:'fake',contextWindow:128000,maxTokens:8192,reasoning:false};
+const preparation=prepareCompaction(manager.entryStore,{reserveTokens:16384,keepRecentTokens:20000},model);
 assert.equal(preparation.isSplitTurn, true);
 const splitRequests = [];
 const splitProgress = [];
@@ -127,3 +129,5 @@ assert.ok(splitProgress.every((item, index) => item.sourceBytesTotal === splitPr
 assert.equal(splitProgress.at(-1).sourceBytesDone, splitProgress[0].sourceBytesTotal);
 assert.equal(splitProgress.at(-1).summaryPhase, 'synthesis');
 console.log(`bounded native compaction: ${ascii.length + unicode.length + splitRequests.length} local chunk requests`);
+
+} finally {manager.entryStore.close();rmSync(root,{recursive:true,force:true});}
