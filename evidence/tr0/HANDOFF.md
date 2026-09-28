@@ -1,17 +1,27 @@
-# TR0 shared ratchet — working source
+# TR0 shared ratchet — ready for source integration
 
-Base parent229 `58bfad3`; own `refactor/tr0-packaged-ratchet-20260928`.
-Moved tools/debt_ratchet.py into agent_comms.debt_ratchet and deleted the script.
-Console command agent-comms-ratchet requires --root, --base and --head.
-The existing Measure family now derives members through DeclaredFamily; there is
-no parallel roster. Changed-file union and move/deletion accounting are retained.
-Core workflow invokes the installed command. Newest owner override wins over old
-required-CI docs: manual workflow only, no branch protection or merge gates touched.
+PR254, refactor/tr0-packaged-ratchet-20260928. Reconciled merged core229/main
+c8b0d226 without production conflicts. Parent controls final install/pin.
 
-Built and installed the wheel into an owned isolated environment using prepared
-runtime dependencies (no editable source). Eleven actual Git/console tests pass,
-including both Comms and Toad source roots and exclusion of unrelated source.
-Paired Toad collector is in /home/ts/wt/toad-tr0-test-collection-20260928; discovered
-264 tests and its first real mounted pilot passes, including isolated network
-namespace with loopback. Full Toad triage/paired pinned acceptance follows there.
-No live runtime/provider calls or extra agents.
+Completed original R0/TR0 package/caller deletion:
+- tools/debt_ratchet.py moved into installed agent_comms.debt_ratchet; old script gone.
+- agent-comms-ratchet requires --root/--base/--head; changed-file union, source-root
+  exclusion and move/deletion accounting retained.
+- Existing DeclaredFamily owns Measure discovery. Comparison+FieldCodec own report
+  projection; no copied roster/report mirror. Packaged move adds zero syntactic debt.
+- Core workflow calls the installed console. Workflows are manual only; CI deferred,
+  no branch protection/required-check changes. Canonical docs record this override.
+
+Acceptance: 11 installed actual-Git/console cases passed on e320080 + current229
+source; merged-main reconciliation changed no ratchet source. Receipts retained in
+ratchet-integrated-tests.log and ratchet-final-tests.log. own-ratchet-final.json
+records zero deltas for the package move. Config warning in integrated test run is
+only disabled pytest-asyncio plugin, not a missing executed test.
+
+Paired Toad117 owns committed pin/lock, installed collector and UI suite triage.
+Installed real Toad→ACP→owner→Pi loopback queue/reattach/channel acceptance passed
+there against e320080 and prepared native-session-entry-store package. No paid
+provider, live deployment/restart, editable shared package, or new native copy.
+
+No remaining blocker for254. Toad's broader discovered UI failures are explicitly
+owned followup in117 evidence/tr0/HANDOFF.md, not a full-suite/CI merge gate.
