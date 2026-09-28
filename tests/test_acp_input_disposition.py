@@ -1,576 +1,281 @@
-"""ACP direct inputs remain visible and cannot cross a changed authority."""
+"""Current ACP owner inputs through native RPC pipes and the actual owner socket.
+
+The local executable is an explicit protocol fixture, not a provider or native
+package acceptance claim. No input store, queue or socket result is mocked.
+"""
 
 import asyncio
+import json
 import os
 import subprocess
 import sys
-import tempfile
-from pathlib import Path
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
+from acp.schema import TextContentBlock
 
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
-from agent_comms.comms import wire
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goal_attempts import GoalAttemptStore
-from agent_comms.goal_generation import ReadyGeneration
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.comms import Comms
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_drain import InputDrain
-from agent_comms.messages import Message, MessageType
-from agent_comms.routing import ScheduledTurn
 from agent_comms.runtime import RuntimeProxy, socket_path
-from agent_comms.threads import Thread
+from delivery_owner_fixture import canonical_delivery_owner
+from test_coordinated_runtime import tmp_path as private_root_fixture
+
+tmp_path = private_root_fixture
 
 
-def test_each_direct_sequence_gets_its_own_native_turn():
-    first = ScheduledTurn.incoming(
-        Message(sender="peer", target="project", body="alpha", type=MessageType.INFO, seq=1)
-    )
-    second = ScheduledTurn.incoming(
-        Message(sender="peer", target="project", body="beta", type=MessageType.INFO, seq=2)
-    )
-    batch, remaining = ScheduledTurn.take_batch([first, second])
-    assert batch == [first]
-    assert remaining == [second]
+class Updates:
+    def __init__(self):
+        self.rows = []
 
-
-@pytest.mark.asyncio
-async def test_preflight_failure_keeps_its_reason_visible(tmp_path, monkeypatch):
-    comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    updates = []
-
-    class Client:
-        async def session_update(self, session_id, update):
-            updates.append(update)
-
-    async def events(*args, **kwargs):
-        yield ae.Done(
-            ok=False,
-            text="Pi native input-ID capability preflight failed.",
-            reason_code="pi_input_id_unavailable",
+    async def session_update(self, *, session_id, update):
+        self.rows.append(
+            update
+            if isinstance(update, dict)
+            else update.model_dump(by_alias=True, exclude_none=True)
         )
 
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    agent.on_connect(Client())
-    await agent.new_session(str(tmp_path / "project"))
-    try:
-        await agent.inputs.run_owned_input("project", "project", "testing", display_text="testing")
-        texts = [
-            update.content.text
-            for update in updates
-            if getattr(update, "content", None) is not None and update.content.text
-        ]
-        assert "[agent error] Pi native input-ID capability preflight failed." in texts
-        assert (
-            InputDispositions(comms.root / InputDispositions.filename)
-            .read()
-            .unknown(frozenset({"project"}))
-        )
-    finally:
-        await agent.shutdown()
+
+async def wait_for(predicate):
+    async with asyncio.timeout(5):
+        while not predicate():
+            await asyncio.sleep(0.01)
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
-@pytest.mark.asyncio
-async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeypatch):
-    comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-    updates = []
-
-    class Client:
-        async def session_update(self, session_id, update):
-            updates.append(update)
-
-    agent.on_connect(Client())
-    await agent.new_session(str(tmp_path / "project"))
-    comms.threads.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
-
-    async def events(*args, **kwargs):
-        yield ae.InputStarted(id=None)
-        comms.messaging.send("peer", "project", "late direct")
-        assert await agent.inputs.drain_inbox("project") == 1
-        assert agent.inputs.forwarded_inputs["project"] == {"bus-1"}
-        goal = comms.goals.update_goal("project", SetGoalAction(text="Long-term architecture work"))
-        assert goal is not None
-        yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
-        command = kwargs["steering_queue"].get_nowait()
-        with kwargs["send_boundary"](command["_input_id"], "a" * 32, command["message"]) as allowed:
-            assert allowed is None
-        proxy = RuntimeProxy(agent, "project", socket_path(comms.root, os.getpid()))
-        try:
-            pending = await proxy.request("input_dispositions")
-            assert [row["inputId"] for row in pending["inputs"]] == ["bus:1"]
-            updates.clear()
-            yield ae.InputRefused(id="bus-1")
-            # Inspect before the turn finishes: refusal removes this input from
-            # awaiting authority, even though the steering lookup remains.
-            assert "project" in agent.turns.active_turns
-            assert agent.inputs.steering_input_keys["project"] == {"bus-1": "bus:1"}
-            refused = await proxy.request("input_dispositions")
-            assert refused["inputs"] == []
-            assert refused["historicalCount"] == 1
-            assert any(
-                update.model_dump(by_alias=True)
-                .get("_meta", {})
-                .get("agentComms", {})
-                .get("inputDeliveryChanged")
-                for update in updates
-            )
-            before = agent.inputs.dispositions.read().rows.get("bus:1")
-            cleared = await proxy.request("dismiss_historical_inputs")
-            assert cleared["dismissedHistoricalCount"] == 1
-            assert agent.inputs.dispositions.read().rows.get("bus:1") == replace(
-                before, notice_dismissed=True
-            )
-        finally:
-            await proxy.close()
-        yield ae.StreamSettled()
-        yield ae.Done(ok=True, text="Goal set")
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    try:
-        await agent.turns.run_agent_turn("project", "project", "Set a goal")
-        goal = comms.registry.require("project").goal
-        assert goal is not None and goal.state.declared_name == "active"
-        assert (
-            GoalAttemptStore(comms.root / "goal-private").snapshot(goal.id).lifecycle
-            == ReadyGeneration()
-        )
-        assert (
-            InputDispositions(comms.root / InputDispositions.filename)
-            .read()
-            .rows["bus:1"]
-            .declared_name
-            == "unknown"
-        )
-        assert not any(
-            "[agent error]" in getattr(update.content, "text", "")
-            for update in updates
-            if getattr(update, "content", None)
-        )
-    finally:
-        await agent.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_direct_cannot_launch_text_backend_without_native_start_proof(tmp_path, monkeypatch):
-    comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="/bin/echo", runtime_enabled=True)
-    await agent.new_session(str(tmp_path / "project"))
-    agent.inputs.drain_tasks["project"].cancel()
-    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
-    comms.threads.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
-
-    async def unexpected_backend(*args, **kwargs):
-        raise AssertionError("Text backend launched for a direct without native proof")
-        yield {}
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", unexpected_backend)
-    try:
-        comms.messaging.send("peer", "project", "do not run unproved")
-        assert await agent.inputs.drain_inbox("project") == 1
-        assert not agent.inputs.pending_turns.get("project")
-        assert not agent.inputs.wake_tasks.get("project")
-        assert (
-            InputDispositions(comms.root / InputDispositions.filename)
-            .read()
-            .rows["bus:1"]
-            .declared_name
-            == "unknown"
-        )
-    finally:
-        await agent.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_two_queued_directs_need_two_distinct_native_starts(tmp_path, monkeypatch):
-    comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    await agent.new_session(str(tmp_path / "project"))
-    agent.inputs.drain_tasks["project"].cancel()
-    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
-    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
-    comms.threads.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
-    comms.messaging.send("peer", "project", "alpha")
-    comms.messaging.send("peer", "project", "beta")
-    assert await agent.inputs.drain_inbox("project") == 2
-    assert len(agent.inputs.pending_turns["project"]) == 2
-    receipts = []
-
-    async def events(*args, **kwargs):
-        native_id = f"{len(receipts) + 1:032x}"
-        with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
-            assert allowed
-        assert kwargs["native_start"](None, native_id, args[2])
-        receipts.append(native_id)
-        yield ae.InputStarted(id=None)
-        yield ae.Done(ok=True, text="done")
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    try:
-        InputDrain.schedule_wake(agent.inputs, "project")
-        await asyncio.wait_for(agent.inputs.wake_tasks["project"], timeout=3)
-        assert receipts == [f"{1:032x}", f"{2:032x}"]
-        assert (
-            InputDispositions(comms.root / InputDispositions.filename)
-            .read()
-            .rows["bus:1"]
-            .declared_name
-            == "started"
-        )
-        assert (
-            InputDispositions(comms.root / InputDispositions.filename)
-            .read()
-            .rows["bus:2"]
-            .declared_name
-            == "started"
-        )
-    finally:
-        await agent.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_ui_ack_does_not_hide_unknown_or_authorize_goal_superseded_direct(
-    tmp_path, monkeypatch
-):
-    from acp import RequestError
-
-    comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    await agent.new_session(str(tmp_path / "project"))
-    agent.inputs.drain_tasks["project"].cancel()
-    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
-    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
-    comms.threads.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
-    comms.messaging.send("peer", "project", "review this")
-    comms.messaging.acknowledge("project")  # Human/UI read is not model start.
-
-    try:
-        assert await agent.inputs.drain_inbox("project") == 1
-        rows = (
-            InputDispositions(comms.root / InputDispositions.filename)
-            .read()
-            .unknown(frozenset({"project"}))
-        )
-        assert [(row.sequence, row.declared_name) for row in rows] == [(1, "unknown")]
-        assert len(agent.inputs.pending_turns["project"]) == 1
-        comms.goals.update_goal("project", SetGoalAction(text="new goal"))
-
-        backend_calls = []
-
-        async def events(*args, **kwargs):
-            backend_calls.append(args)
-            yield ae.Done(ok=False, text="not sent")
-
-        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        pending = agent.inputs.pending_turns.pop("project")
-        with pytest.raises(RequestError):
-            await agent.turns.run_agent_turn(
-                "project", "project", pending[0].prompt, origins=(pending[0].origin,)
-            )
-        assert backend_calls == []
-        assert (
-            InputDispositions(comms.root / InputDispositions.filename)
-            .read()
-            .unknown(frozenset({"project"}))[0]
-            .sequence
-            == 1
-        )
-    finally:
-        await agent.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_project_change_after_queue_denies_stale_project_send(tmp_path, monkeypatch):
-    comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    await agent.new_session(str(tmp_path / "project"))
-    agent.inputs.drain_tasks["project"].cancel()
-    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
-    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
-    comms.threads.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
-    comms.messaging.send("peer", "project", "use the intended project")
-    await agent.inputs.drain_inbox("project")
-    pending = agent.inputs.pending_turns.pop("project")[0]
-    other_project = tmp_path / "other-project"
-    other_project.mkdir()
-    before = comms.registry.snapshot().admission_generations["project"]
-    authorized = []
-
-    async def events(*args, **kwargs):
-        comms.threads.set_project("project", str(other_project))
-        with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
-            authorized.append(allowed)
-        yield ae.Done(ok=False, text="not sent")
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    try:
-        await agent.turns.run_agent_turn(
-            "project", "project", pending.prompt, origins=(pending.origin,)
-        )
-        assert authorized == [False]
-        assert comms.registry.snapshot().admission_generations["project"] == before
-        assert (
-            InputDispositions(comms.root / InputDispositions.filename)
-            .read()
-            .rows["bus:1"]
-            .declared_name
-            == "unknown"
-        )
-    finally:
-        await agent.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_late_subscriber_receives_persisted_unknown(tmp_path):
-    comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    await agent.new_session(str(tmp_path / "project"))
-    agent.inputs.drain_tasks["project"].cancel()
-    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
-    agent.inputs.schedule_wake = lambda _session: None
-    comms.threads.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
-    comms.messaging.send("peer", "project", "do the task")
-    updates = []
-
-    class LateClient:
-        async def session_update(self, session_id, update):
-            updates.append(
-                update.model_dump(by_alias=True, exclude_none=True)
-                if hasattr(update, "model_dump")
-                else update
-            )
-
-    client = CommsAgent(comms, agent_bin="/bin/echo")
-    client.on_connect(LateClient())
-    proxy = None
-
-    def assert_unknown_replayed():
-        dispositions = [
-            update.get("_meta", {}).get("agentComms", {}).get("inputDisposition", {})
-            for update in updates
-        ]
-        assert any(
-            row.get("sequence") == 1
-            and row.get("target") == "project"
-            and row.get("status") == "unknown"
-            for row in dispositions
-        )
-
-    try:
-        await agent.inputs.drain_inbox("project")
-        # The projection runs on every platform; POSIX also checks the real
-        # late socket subscribe route that invokes it.
-        await agent.inputs.replay_unknown_inputs("project", client=LateClient())
-        assert_unknown_replayed()
-        if os.name != "nt":
-            updates.clear()
-            proxy = RuntimeProxy(client, "project", socket_path(comms.root, os.getpid()))
-            await proxy.subscribe()
-            assert_unknown_replayed()
-    finally:
-        if proxy is not None:
-            await proxy.close()
-        await agent.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_stop_before_wake_leaves_direct_unknown_without_backend_send(tmp_path, monkeypatch):
-    comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    await agent.new_session(str(tmp_path / "project"))
-    agent.inputs.drain_tasks["project"].cancel()
-    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
-    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
-    comms.threads.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
-    comms.messaging.send("peer", "project", "do not run after stop")
-    await agent.inputs.drain_inbox("project")
-    assert len(agent.inputs.pending_turns["project"]) == 1
-    comms.owners.stop("project")
-
-    async def unexpected_backend(*args, **kwargs):
-        raise AssertionError("Stopped owner launched a backend")
-        yield {}
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", unexpected_backend)
-    try:
-        InputDrain.schedule_wake(agent.inputs, "project")
-        await asyncio.wait_for(agent.inputs.wake_tasks["project"], timeout=2)
-        assert not agent.inputs.pending_turns.get("project")
-        assert (
-            InputDispositions(comms.root / InputDispositions.filename)
-            .read()
-            .unknown(frozenset({"project"}))[0]
-            .sequence
-            == 1
-        )
-    finally:
-        await agent.shutdown()
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="POSIX fake Pi executable")
-async def test_started_then_ack_only_direct_survives_reopen_without_replay(tmp_path, monkeypatch):
-    stub = tmp_path / "pi-direct-stub"
-    session_file = tmp_path / "pi-session.jsonl"
-    session_file.touch()
-    stub.write_text(f"#!{sys.executable}\n" + f"session_file = {str(session_file)!r}\n" + """
-import json, sys
+def rpc_process(root, *, capability=True, second_start=False):
+    """A real child ACKs commands and emits only the explicitly selected starts."""
+    session = root / "session.jsonl"
+    session.touch()
+    received = root / "received.jsonl"
+    release = root / "release"
+    child = root / "native-rpc-fixture"
+    child.write_text(
+        f"#!{sys.executable}\n"
+        + f"session={str(session)!r}\nreceived={str(received)!r}\nrelease={str(release)!r}\n"
+        + f"capability={capability!r}\nsecond_start={second_start!r}\n"
+        + """import json, sys, time
 from pathlib import Path
-launches = Path(session_file + '.launches')
-launches.write_text(launches.read_text() + 'x' if launches.exists() else 'x')
-send = lambda event: print(json.dumps(event), flush=True)
-state = json.loads(sys.stdin.readline())
-send({"type":"response", "command":"get_state", "id":state["id"],
-      "success":True, "data":{"nativeInputProofCapability":"pi-native-input-v1-live-only",
-      "sessionFile":session_file}})
-prompt = json.loads(sys.stdin.readline())
-send({"type":"response", "command":"prompt", "id":prompt["id"], "success":True})
-send({"type":"message_start", "message":{"role":"user", "content":prompt["message"],
-      "inputId":prompt["inputId"]}})
-steer = json.loads(sys.stdin.readline())
-assert steer["type"] == "prompt" and steer["streamingBehavior"] == "steer"
-send({"type":"response", "command":"prompt", "id":steer["id"], "success":True})
-send({"type":"message_end", "message":{"role":"assistant", "stopReason":"stop"}})
-send({"type":"agent_settled"})
-# Exit after ACK-only steering: there is deliberately no second input start.
-# A persistent owner correctly refuses to settle this pending input and does
-# not request final stats. Waiting for those requests deadlocks the fixture.
-""")
-    stub.chmod(0o755)
-    with tempfile.TemporaryDirectory(dir="/var/tmp") as wire_dir:
-        comms = wire(Path(wire_dir))
-        agent = CommsAgent(comms, agent_bin=str(stub), agent_args=[], runtime_enabled=True)
-        await agent.new_session(str(tmp_path / "project"))
-        agent.inputs.drain_tasks["project"].cancel()
-        await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
-        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
-        comms.threads.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
-        comms.messaging.send("peer", "project", "first direct")
-        await agent.inputs.drain_inbox("project")
-        first = agent.inputs.pending_turns.pop("project")[0]
-
-        async def wait_for_inbox():
-            async with asyncio.timeout(3):
-                while "project" not in agent.inputs.backend_inboxes:
-                    await asyncio.sleep(0.01)
-
-        try:
-            turn = asyncio.create_task(
-                agent.turns.run_agent_turn(
-                    "project", "project", first.prompt, origins=(first.origin,)
-                )
-            )
-            await wait_for_inbox()
-            comms.messaging.send("peer", "project", "second direct")
-            await agent.inputs.drain_inbox("project")
-            await asyncio.wait_for(turn, timeout=5)
-
-            reopened = InputDispositions(comms.root / InputDispositions.filename)
-            assert reopened.read().rows["bus:1"].declared_name == "started"
-            assert reopened.read().rows["bus:2"].declared_name == "unknown"
-            assert comms.registry.require("project").session_file == str(session_file)
-            second_agent = CommsAgent(wire(comms.root), agent_bin="/bin/echo")
-            second_agent.sessions.bindings["project"] = "project"
-            boundary = second_agent.inputs.delivery_cursors.initialize(
-                frozenset({"project"}),
-                "project",
-                high_water=second_agent._comms.bus.log.latest_sequence(),
-                fresh=False,
-            )
-            second_agent.inputs.inbox_cursors["project"] = boundary.cursor
-            second_agent.inputs.legacy_through["project"] = boundary.legacy_through
-
-            class SilentClient:
-                async def session_update(self, **kwargs):
-                    pass
-
-            second_agent.on_connect(SilentClient())
-            assert await second_agent.inputs.drain_inbox("project") == 0
-            assert not second_agent.inputs.pending_turns.get("project")
-            assert Path(str(session_file) + ".launches").read_text() == "x"
-            assert reopened.read().rows["bus:1"].declared_name == "started"
-            assert reopened.read().rows["bus:2"].declared_name == "unknown"
-        finally:
-            await agent.shutdown()
-
-
-@pytest.mark.skipif(os.name == "nt", reason="real crash test needs /var/tmp and POSIX sockets")
-def test_hard_exit_after_direct_record_never_replays_on_reopen():
-    child_code = """
-import asyncio, os, sys
-from pathlib import Path
-from agent_comms.threads import Thread
-from agent_comms.input_drain import InputDrain
-from agent_comms.acp import CommsAgent
-from agent_comms.input_disposition import InputDispositions
-from agent_comms.comms import wire
-
-async def run():
-    comms = wire(Path(sys.argv[1]))
-    agent = CommsAgent(comms, agent_bin='/bin/echo', runtime_enabled=True)
-    await agent.new_session(sys.argv[2])
-    agent.inputs.drain_tasks['project'].cancel()
-    await asyncio.gather(agent.inputs.drain_tasks['project'], return_exceptions=True)
-    agent.inputs.schedule_wake = lambda _session: None
-    comms.threads.register(Thread(name='peer', tags=frozenset(), worktree=sys.argv[2]))
-    comms.messaging.send('peer', 'project', 'survive hard exit')
-    await agent.inputs.drain_inbox('project')
-    assert InputDispositions(comms.root / InputDispositions.filename).read().rows['bus:1'].declared_name == 'unknown'
-    os._exit(0)
-asyncio.run(run())
+Path(session + '.launches').open('a').write('x')
+def send(event):
+    print(json.dumps(event), flush=True)
+count = 0
+for line in sys.stdin:
+    command = json.loads(line)
+    kind = command['type']
+    data = {}
+    if kind == 'get_state':
+        data = {'sessionFile':session}
+        if capability:
+            data['nativeInputProofCapability'] = 'pi-native-input-v1-live-only'
+    send({'type':'response', 'command':kind, 'id':command.get('id'), 'success':True, 'data':data})
+    if kind == 'prompt':
+        with open(received, 'a') as out:
+            out.write(json.dumps(command) + '\\n')
+        count += 1
+        if count == 1:
+            send({'type':'message_start', 'message':{'role':'user',
+                 'content':command['message'], 'inputId':command['inputId']}})
+        if count == 2:
+            while not Path(release).exists():
+                time.sleep(.01)
+            if second_start:
+                send({'type':'message_start', 'message':{'role':'user',
+                     'content':command['message'], 'inputId':command['inputId']}})
+            send({'type':'message_end', 'message':{'role':'assistant','stopReason':'stop'}})
+            send({'type':'agent_settled'})
+            if not second_start:
+                break
 """
-    with tempfile.TemporaryDirectory(dir="/var/tmp") as wire_dir:
-        project = str(Path(wire_dir) / "project")
-        environment = os.environ.copy()
-        for name in (
-            "PI_AGENT_ID",
-            "PI_PARENT_ID",
-            "PI_TASK",
-            "PI_WORKTREE",
-            "AGENT_COMMS_THREAD",
-            "AGENT_COMMS_MANAGED",
-            "AGENT_COMMS_ROOT",
-        ):
-            environment.pop(name, None)
-        environment["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
-        child = subprocess.run(
-            [sys.executable, "-c", child_code, wire_dir, project],
-            env=environment,
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        assert child.returncode == 0, child.stderr
-        reopened = wire(Path(wire_dir))
-        assert (
-            InputDispositions(reopened.root / InputDispositions.filename)
-            .read()
-            .rows["bus:1"]
-            .declared_name
-            == "unknown"
-        )
-        owner = CommsAgent(reopened, agent_bin="/bin/echo")
-        owner.sessions.bindings["project"] = "project"
-        boundary = owner.inputs.delivery_cursors.initialize(
-            frozenset({"project"}),
-            "project",
-            high_water=reopened.bus.log.latest_sequence(),
-            fresh=False,
-        )
-        owner.inputs.inbox_cursors["project"] = boundary.cursor
-        owner.inputs.legacy_through["project"] = boundary.legacy_through
-        assert owner.inputs.inbox_cursors["project"] == 1
+    )
+    child.chmod(0o700)
+    return child, session, received, release
 
-        class SilentClient:
-            async def session_update(self, **kwargs):
-                pass
 
-        owner.on_connect(SilentClient())
-        assert asyncio.run(owner.inputs.drain_inbox("project")) == 0
-        assert not owner.inputs.pending_turns.get("project")
+@pytest.mark.usefixtures("native_rpc_fixture")
+async def test_native_preflight_failure_is_visible_and_cannot_mark_started(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    child, _session, received, _release = rpc_process(tmp_path, capability=False)
+    async with canonical_delivery_owner(tmp_path, direct=True) as (comms, owner, _message, _root):
+        owner.inputs.auto_wake = False
+        owner.turns.agent_bin, owner.turns.agent_args = str(child), []
+        updates = Updates()
+        owner.on_connect(updates)
+        await asyncio.wait_for(
+            owner.prompt("beta", [TextContentBlock(type="text", text="test")]), 6
+        )
+        rows = owner.inputs.dispositions.read().unknown(frozenset({"beta"}))
+        assert len(rows) == 1 and rows[0].native_id is None
+        assert not received.exists()
+        text = "\n".join(row.get("content", {}).get("text", "") for row in updates.rows)
+        assert "[agent error]" in text and "preflight" in text
+        assert not owner.inputs.pending_turns and not owner.turns.active_turns
+        assert Comms(comms.root).goals.unresolved_inputs("beta") == [row.public() for row in rows]
+
+
+@pytest.mark.usefixtures("native_rpc_fixture")
+@pytest.mark.parametrize("second_start", [False, True])
+async def test_late_owner_socket_observes_unknown_until_exact_native_start(
+    tmp_path, monkeypatch, second_start
+):
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    child, session_file, received, release = rpc_process(tmp_path, second_start=second_start)
+    async with canonical_delivery_owner(tmp_path, direct=True) as (comms, owner, _message, root_id):
+        owner.inputs.auto_wake = False
+        owner.turns.agent_bin, owner.turns.agent_args = str(child), []
+        started = asyncio.Event()
+        original_emit = owner._emit_event
+
+        async def observe(session_id, event, client=None, **kwargs):
+            await original_emit(session_id, event, client, **kwargs)
+            if isinstance(event, ae.InputStarted) and event.id is None:
+                started.set()
+
+        monkeypatch.setattr(owner, "_emit_event", observe)
+        turn = asyncio.create_task(
+            owner.prompt("beta", [TextContentBlock(type="text", text="first")])
+        )
+        attachment = CommsAgent(comms, runtime_enabled=False)
+        updates = Updates()
+        attachment.on_connect(updates)
+        proxy = RuntimeProxy(attachment, "beta", socket_path(comms.root, os.getpid()))
+        try:
+            await asyncio.wait_for(started.wait(), 5)
+            accepted = await proxy.request(
+                "prompt",
+                prompt=[{"type": "text", "text": "followup"}],
+                meta={"agentComms": {"delivery": "steer"}},
+            )
+            public_id = accepted["_meta"]["agentComms"]["inputDisposition"]["inputId"]
+            key = f"acp:{public_id}"
+            await wait_for(
+                lambda: received.exists() and len(received.read_text().splitlines()) == 2
+            )
+            await proxy.subscribe()
+            pending = await proxy.request("input_dispositions")
+            assert [row["inputId"] for row in pending["inputs"]] == [public_id]
+            assert any(
+                row.get("_meta", {})
+                .get("agentComms", {})
+                .get("inputDisposition", {})
+                .get("inputId")
+                == public_id
+                for row in updates.rows
+            )
+            unknown = owner.inputs.dispositions.read().rows[key]
+            assert unknown.unresolved and unknown.native_id is not None  # ACK is not STARTED.
+            release.touch()
+            await asyncio.wait_for(turn, 6)
+            final = InputDispositions(owner.inputs.dispositions.path).read().rows
+            assert len(final) == 2
+            assert final[key].unresolved is (not second_start)
+            assert len({row.native_id for row in final.values()}) == 2
+            commands = [json.loads(line) for line in received.read_text().splitlines()]
+            assert commands[1]["message"] == "User follow-up:\nfollowup"
+            assert commands[0]["inputId"] != commands[1]["inputId"]
+            overview = await proxy.request("input_dispositions", include_history=True)
+            assert overview["inputs"] == []
+            assert overview["historicalCount"] == (0 if second_start else 1)
+            cleared = await proxy.request("dismiss_historical_inputs")
+            assert cleared["dismissedHistoricalCount"] == (0 if second_start else 1)
+            reopened = InputDispositions(owner.inputs.dispositions.path).read().rows
+            assert {k: replace(v, notice_dismissed=False) for k, v in reopened.items()} == final
+            # A new owner projection never reconstructs a runnable queue from UNKNOWN.
+            other = CommsAgent(
+                Comms(comms.root),
+                auto_wake=False,
+                private_nk_native_package=tmp_path,
+                private_nk_wire_root_id=root_id,
+            )
+            other.sessions.bindings["beta"] = "beta"
+            try:
+                assert await other.inputs.drain_inbox("beta") == 0
+                assert not other.inputs.pending_turns and not other.inputs.wake_tasks
+                assert Path(str(session_file) + ".launches").read_text() == "x"
+                assert other.inputs.dispositions.read().rows == reopened
+            finally:
+                # No owned bindings were acquired by this inspection-only instance.
+                other.sessions.bindings.clear()
+                await other.shutdown()
+        finally:
+            release.touch()
+            turn.cancel()
+            await asyncio.gather(turn, return_exceptions=True)
+            await proxy.close()
+            await attachment.shutdown()
+
+
+def test_hard_exit_after_owner_acceptance_preserves_unknown_without_replay(tmp_path):
+    code = """import asyncio, os, sys
+from pathlib import Path
+from delivery_owner_fixture import canonical_delivery_owner
+async def main():
+    async with canonical_delivery_owner(Path(sys.argv[1]), direct=True) as (_, owner, _, _):
+        async def die(*args, **kwargs):
+            os._exit(17)
+        owner.inputs.emit_input_disposition = die
+        await owner.inputs.run_owned_input('beta', 'beta', 'Retain exact crash input')
+asyncio.run(main())
+"""
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = os.pathsep.join(
+        (str(Path(__file__).parents[1] / "src"), str(Path(__file__).parent))
+    )
+    child = subprocess.run(
+        [sys.executable, "-c", code, str(tmp_path)],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert child.returncode == 17, child.stderr
+    comms = Comms(tmp_path / "wire")
+    ledger = InputDispositions(comms.root / InputDispositions.filename)
+    before = ledger.path.read_bytes()
+    rows = ledger.read().unknown(frozenset({"beta"}))
+    assert len(rows) == 1 and rows[0].source_text == "Retain exact crash input"
+    assert rows[0].native_id is None and rows[0].sent_text is None
+    thread = comms.registry.require("beta")
+    comms.registry.register(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
+
+    async def inspect():
+        owner = CommsAgent(
+            comms,
+            auto_wake=False,
+            private_nk_native_package=tmp_path,
+            private_nk_wire_root_id=comms.bus.log.read_metadata_unlocked().wire_root_id,
+        )
+        owner.sessions.bindings["beta"] = "beta"
+        try:
+            assert await owner.inputs.drain_inbox("beta") == 0
+            assert not owner.inputs.pending_turns and not owner.inputs.wake_tasks
+            assert owner.inputs.awaiting_input_keys("beta") == frozenset()
+        finally:
+            await owner.shutdown()
+
+    asyncio.run(inspect())
+    assert ledger.path.read_bytes() == before
+
+
+@pytest.mark.refactor_guard
+def test_disposition_fixtures_cannot_reintroduce_retired_delivery_engine():
+    import ast
+
+    for name in (
+        "test_acp_input_disposition.py",
+        "test_acp_channel_disposition.py",
+        "delivery_owner_fixture.py",
+    ):
+        tree = ast.parse(Path(__file__).with_name(name).read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute):
+                assert node.attr not in {"delivery_cursors", "inbox_cursors", "legacy_through"}
+            if isinstance(node, ast.ImportFrom):
+                assert not {alias.name for alias in node.names} & {
+                    "AcpDeliveryCursors",
+                    "DeliveryCursor",
+                    "DeliveryDocument",
+                    "wire",
+                }
