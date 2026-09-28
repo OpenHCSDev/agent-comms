@@ -131,7 +131,7 @@ async def test_settle_turn_releases_fence_after_publication_even_on_error(
 ):
     comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
     owner = CommsAgent(comms, agent_bin="unused")
-    claim = comms.agents.begin_turn("bot", "turn")
+    lease = comms.agents.begin_turn("bot", "turn")
     owner.turns.active_turns["session"] = "turn"
     effects = []
 
@@ -151,9 +151,9 @@ async def test_settle_turn_releases_fence_after_publication_even_on_error(
     monkeypatch.setattr(comms.goals, 'release_waits_after_terminal_turn', release)
     if publication_fails:
         with pytest.raises(RuntimeError, match="client closed"):
-            await owner.turns.settle_turn("session", "bot", "turn", claim)
+            await owner.turns.settle_turn("session", "bot", "turn", lease)
     else:
-        await owner.turns.settle_turn("session", "bot", "turn", claim)
+        await owner.turns.settle_turn("session", "bot", "turn", lease)
     assert effects == ["publish", "release"]
 
 
@@ -162,15 +162,15 @@ async def test_stream_settlement_defers_waiters_and_preserves_replacement_turn(
 ):
     comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
     owner = CommsAgent(comms, agent_bin="unused")
-    claim = comms.agents.begin_turn("bot", "turn")
+    lease = comms.agents.begin_turn("bot", "turn")
     owner.turns.active_turns["session"] = "turn"
     released = []
     monkeypatch.setattr(comms.goals, 'release_waits_after_terminal_turn', released.append)
-    fence = owner.turns.finish_turn_stream("session", "bot", "turn", claim)
+    fence = owner.turns.finish_turn_stream("session", "bot", "turn", lease)
     assert released == []
     owner.turns.active_turns["session"] = "replacement"
     await owner.turns.settle_turn(
-        "session", "bot", "turn", claim, stream_settled=True, terminal_fence=fence
+        "session", "bot", "turn", lease, stream_settled=True, terminal_fence=fence
     )
     assert released == [fence]
     assert owner.turns.active_turns["session"] == "replacement"

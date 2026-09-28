@@ -296,7 +296,7 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
     with store(db_path) as db:
         db.register_participant("owner", "Owner", "thread", committed=True)
 
-        def claim(
+        def assignment(
             index: int,
             mode: WakePolicy,
             disposition: AssignmentState,
@@ -322,7 +322,7 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
             (5, FullWake(), FailedAssignment, None),
         ):
             with pytest.raises(IdentityConflict):
-                db.accept_assignment(claim(index, mode, disposition, verdict))
+                db.accept_assignment(assignment(index, mode, disposition, verdict))
             assert db._connection.execute("SELECT count(*) FROM wake_claims").fetchone()[0] == 0
         for index, mode, disposition in (
             (6, PassiveWake(), PassiveAssignment),
@@ -330,7 +330,7 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
             (8, FullWake(), FullPendingAssignment),
             (9, FullWake(), FullPendingAssignment),
         ):
-            initial = claim(index, mode, disposition)
+            initial = assignment(index, mode, disposition)
             assert isinstance(db.accept_assignment(initial), Applied)
             assert db.assignment(initial.assignment_id).revision == 1
         ignored = db.transition_preengagement(
@@ -342,7 +342,7 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
         failed = db.transition_preengagement("claim-9", FailedAssignment, expected_revision=1)
         assert ignored.value.revision == deferred.value.revision == failed.value.revision == 2
         assert isinstance(
-            db.accept_assignment(claim(7, BoundedTriageWake(), TriagePendingAssignment)),
+            db.accept_assignment(assignment(7, BoundedTriageWake(), TriagePendingAssignment)),
             AlreadyApplied,
         )
         assert type(db.assignment("claim-7").lifecycle) is IgnoredAssignment

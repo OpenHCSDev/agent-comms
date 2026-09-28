@@ -56,7 +56,7 @@ def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp
     assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] >= 1
 
 
-def test_turn_claim_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path):
+def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path):
     import os
 
     comms = prepared(tmp_path)

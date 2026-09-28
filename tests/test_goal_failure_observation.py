@@ -56,20 +56,20 @@ def bound(tmp_path):
     )
     store.create_goal(goal.id)
     permit = store.claim_launch(store.reserve(goal.id, 1))
-    claim = TurnLeaseFence(TurnIdentity(owner.incarnation, 7), "a" * 32, 3)
+    lease = TurnLeaseFence(TurnIdentity(owner.incarnation, 7), "a" * 32, 3)
     observation = FailedTurnObservation.from_terminal(
         permit.reservation,
         owner=owner,
         goal=goal,
-        claim=claim,
-        turn_id=claim.turn_id,
+        lease=lease,
+        turn_id=lease.turn_id,
         admission=3,
         current_owner=owner,
         current_admission=3,
         reason=FailureReason.FINAL_STOP_MISSING,
     )
     assert observation is not None
-    return store, owner, claim, observation
+    return store, owner, lease, observation
 
 
 def rows(store, table):
@@ -120,14 +120,14 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
         {"identity": TurnIdentity(ThreadIncarnation("owner", 10.0), 8)},
     ],
 )
-def test_mismatched_turn_claim_is_not_bound(bound, mutation):
-    store, owner, claim, observation = bound
+def test_mismatched_turn_lease_is_not_bound(bound, mutation):
+    store, owner, lease, observation = bound
     rejected = FailedTurnObservation.from_terminal(
         observation.reservation,
         owner=owner,
         goal=owner.goal,
-        claim=replace(claim, **mutation),
-        turn_id=claim.turn_id,
+        lease=replace(lease, **mutation),
+        turn_id=lease.turn_id,
         admission=3,
         current_owner=owner,
         current_admission=3,
