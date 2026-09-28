@@ -1,0 +1,1013 @@
+.........................F............F...F.........F.F.FFF..F.......... [ 98%]
+.                                                                        [100%]
+=================================== FAILURES ===================================
+_____________ test_selected_wake_binding_survives_claim_projection _____________
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = agent_comms.envelope_claim_transitions.WakeAdmission | None
+data = {'wire_root_id': 'cccccccccccccccccccccccccccccccc', 'source_seq': 7, 'source_message_id': 'source-7', 'wake_claim_id': 'cohort-v1:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd', ...}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+>                   return cls.decode(alternative, data)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/agent_comms/field_codec.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/field_codec.py:133: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:238: in _decode
+    return target(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = WakeAdmission(wire_root_id='cccccccccccccccccccccccccccccccc', source_seq=7, source_message_id='source-7', wake_assign...ffffffffffff', owner_admission_generation=2, turn_id='turn-7', participant_generation=1, attempt_ordinal=1, version=99)
+
+    def __post_init__(self) -> None:
+        for label, value, size in (
+            ("Wire root", self.wire_root_id, 32),
+            ("Recipient lookup", self.recipient_lookup, 32),
+            ("Operation ID", self.operation_id, 32),
+        ):
+            if (
+                type(value) is not str
+                or len(value) != size
+                or any(character not in "0123456789abcdef" for character in value)
+            ):
+                raise ClaimTransitionError(f"{label} must be lowercase hex.")
+        if (
+            type(self.source_seq) is not int
+            or self.source_seq <= 0
+            or type(self.wake_revision) is not int
+            or self.wake_revision <= 0
+            or type(self.version) is not int
+            or self.version != 1
+            or type(self.owner_admission_generation) is not int
+            or self.owner_admission_generation <= 0
+            or type(self.participant_generation) is not int
+            or self.participant_generation <= 0
+            or type(self.attempt_ordinal) is not int
+            or self.attempt_ordinal <= 0
+        ):
+>           raise ClaimTransitionError("Wake admission version or revision is invalid.")
+E           agent_comms.envelope_claim_transitions.ClaimTransitionError: Wake admission version or revision is invalid.
+
+src/agent_comms/envelope_claim_transitions.py:164: ClaimTransitionError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-342/test_selected_wake_binding_sur0')
+
+    def test_selected_wake_binding_survives_claim_projection(tmp_path):
+        _, resource, _ = resources(tmp_path)
+        admission = WakeAdmission(
+            wire_root_id="c" * 32,
+            source_seq=7,
+            source_message_id="source-7",
+            wake_assignment_id="cohort-v1:" + "d" * 64,
+            wake_revision=3,
+            recipient_lookup="e" * 32,
+            execution_id="execution-7",
+            operation_id="f" * 32,
+            owner_admission_generation=2,
+            turn_id="turn-7",
+            participant_generation=1,
+            attempt_ordinal=1,
+        )
+        claimed = ClaimTransition("owner", "epoch-1", 8, "msg-8", (resource,), (), G1, admission)
+        raw = FieldCodec.encode(claimed)
+        decoded = FieldCodec.decode(ClaimTransition, raw)
+        assert decoded == claimed
+        assert apply_transition(ClaimProjection(), decoded)[resource].admission == admission
+    
+        message = Message("owner", "peer", "Claim file", MessageType.INFO, seq=8, timestamp=1.0)
+        bound = replace(
+            message,
+            claim_transition=replace(claimed, message_id=message.message_id),
+        )
+        assert Message.from_wire(bound.to_wire()) == bound
+    
+        invalid = raw.copy()
+        invalid["admission"]["version"] = 99
+        with pytest.raises(ClaimTransitionError):
+>           FieldCodec.decode(ClaimTransition, invalid)
+
+tests/test_envelope_claim_transitions.py:60: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/field_codec.py:133: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:240: in _decode
+    field.name: cls.decode(hints[field.name], data[key])
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:133: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = agent_comms.envelope_claim_transitions.WakeAdmission | None
+data = {'wire_root_id': 'cccccccccccccccccccccccccccccccc', 'source_seq': 7, 'source_message_id': 'source-7', 'wake_claim_id': 'cohort-v1:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd', ...}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+>           raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+E           ValueError: Value does not match agent_comms.envelope_claim_transitions.WakeAdmission | None: Wake admission version or revision is invalid.
+
+src/agent_comms/field_codec.py:192: ValueError
+____________ test_malformed_complete_row_is_not_an_ordinary_message ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-342/test_malformed_complete_row_is0')
+
+    def test_malformed_complete_row_is_not_an_ordinary_message(tmp_path: Path) -> None:
+        comms = marked(tmp_path)
+        comms.bus.log.path.write_bytes(b'{"seq":1,"seq":2}\n')
+        with pytest.raises(RelationViolationError, match="Malformed"):
+>           comms.bus.log.full_history()
+
+tests/test_envelope_bus_integration.py:120: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/wire_log.py:58: in full_history
+    with self.locked():
+         ^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:54: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+src/agent_comms/wire_log.py:638: in verify_before_read_unlocked
+    verify_private_bus_checkpoint_unlocked(self, private_marker)
+src/agent_comms/private_bus_checkpoint.py:425: in verify_private_bus_checkpoint_unlocked
+    for _ in bus._verified_private_rows_unlocked(marker, on_row=collect):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:196: in _verified_private_rows_unlocked
+    record = json.loads(line, object_pairs_hook=unique_wire_object)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/__init__.py:365: in loads
+    return cls(**kw).decode(s)
+           ^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/decoder.py:345: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/decoder.py:361: in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pairs = [('seq', 1), ('seq', 2)]
+
+    def unique_wire_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        """Reject ambiguous JSON objects, including nested receipt keys."""
+        result: dict[str, object] = {}
+        for key, value in pairs:
+            if key in result:
+>               raise ValueError("Duplicate bus object key.")
+E               ValueError: Duplicate bus object key.
+
+src/agent_comms/bus_publication.py:52: ValueError
+____ test_durable_raw_alias_claim_cannot_enter_guarded_public_or_projection ____
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = agent_comms.envelope_claim_transitions.ClaimTransition | None
+data = {'owner': 'bob', 'incarnation': '1790631612.5395079', 'seq': 2, 'message_id': '48fd68160583', ...}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+>                   return cls.decode(alternative, data)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/agent_comms/field_codec.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/field_codec.py:133: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:238: in _decode
+    return target(
+src/agent_comms/envelope_claim_transitions.py:221: in __post_init__
+    _resource(resource)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '/tmp/pytest-of-ts/pytest-342/test_durable_raw_alias_claim_c0/project//a.py'
+
+    def _resource(value: object) -> str:
+        path = _text(value, "Resource")
+        requested = Path(path)
+        if (
+            str(requested) != path
+            or not requested.is_absolute()
+            or requested.resolve(strict=False) != requested
+        ):
+>           raise ClaimTransitionError("Resource must already be a canonical absolute path.")
+E           agent_comms.envelope_claim_transitions.ClaimTransitionError: Resource must already be a canonical absolute path.
+
+src/agent_comms/envelope_claim_transitions.py:116: ClaimTransitionError
+
+The above exception was the direct cause of the following exception:
+
+self = <agent_comms.wire_log.WireLog object at 0x7f958be804b0>
+metadata = WireMetadata(last_seq=2, admission_after_seq=0, access=WritableAccess(), writer_protocol_version=1, wire_root_id='a6af...fde3c4d32c4af7dba1537b8b2b523c01288ddf3070', tail='86315ccc8a63f62c0fac3901072f5b5f2219b614b10ce7a479071c492a03f97f')))
+row = {'seq': 2, 'id': '48fd68160583', 'from': 'bob', 'to': 'alice', ...}
+
+    def _append_private_unlocked(self, metadata: WireMetadata, row: Mapping[str, object]) -> None:
+        """Durably reserve a sequence, append one row, then sync its parent.
+    
+        A failed append or bus parent sync leaves the outcome UNKNOWN.
+        """
+        metadata.access.require_append()
+        encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
+        if len(encoded) > 8 * 1024 * 1024:
+            raise RelationViolationError("Private bus row exceeds the byte limit.")
+        metadata.last_seq = row["seq"]  # type: ignore[assignment]
+        self.write_metadata_unlocked(metadata)
+        descriptor = os.open(
+            self.path, os.O_APPEND | os.O_CREAT | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600
+        )
+        try:
+            info = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus append target is not owner-only.")
+            with os.fdopen(descriptor, "ab", closefd=False) as output:
+                output.write(encoded)
+                output.flush()
+                os.fsync(output.fileno())
+        finally:
+            os.close(descriptor)
+        directory_fd = os.open(self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+        from .private_bus_checkpoint import (
+            append_private_bus_checkpoint_unlocked,
+            certificate_enabled,
+        )
+    
+        if certificate_enabled(self.path):
+            private = row.get(PRIVATE_WIRE_FIELD)
+            initial = (
+                validate_initial_record(row, metadata.root_id)
+                if isinstance(private, dict) and "initial" in private
+                else None
+            )
+            receipt = private.get("response") if isinstance(private, dict) else None
+            public = {key: value for key, value in row.items() if key != PRIVATE_WIRE_FIELD}
+            try:
+                append_private_bus_checkpoint_unlocked(
+>                   self, metadata, encoded, Message.from_wire(public), receipt, initial
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^^
+                )
+
+src/agent_comms/wire_log.py:339: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messages.py:148: in from_wire
+    return FieldCodec.decode(cls, {"ts": 0.0, **public})
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:133: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:240: in _decode
+    field.name: cls.decode(hints[field.name], data[key])
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:133: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = agent_comms.envelope_claim_transitions.ClaimTransition | None
+data = {'owner': 'bob', 'incarnation': '1790631612.5395079', 'seq': 2, 'message_id': '48fd68160583', ...}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+>           raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+E           ValueError: Value does not match agent_comms.envelope_claim_transitions.ClaimTransition | None: Resource must already be a canonical absolute path.
+
+src/agent_comms/field_codec.py:192: ValueError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-342/test_durable_raw_alias_claim_c0')
+
+    def test_durable_raw_alias_claim_cannot_enter_guarded_public_or_projection(
+        tmp_path: Path,
+    ) -> None:
+        """An old/noncanonical claim row must never acquire a second identity."""
+        comms, worktree = _participants(tmp_path)
+        first = comms.messaging.send_message(
+            "alice", "bob", "Canonical claim", claims=[ExistingFileClaim(Path("a.py"))]
+        )
+        alias = str(worktree) + "//a.py"
+        assert os.path.samefile(str(worktree / "a.py"), alias)
+        second = Message("bob", "alice", "Invalid raw alias", MessageType.INFO, seq=first.seq + 1)
+        record = second.to_wire()
+        record["claim_transition"] = {
+            "owner": "bob",
+            "incarnation": str(comms.registry.require("bob").created_at),
+            "seq": second.seq,
+            "message_id": second.message_id,
+            "claims": [alias],
+            "releases": [],
+            "generation": "b" * 32,
+        }
+        with store_files._store_lock(comms.bus.log.path):
+            metadata = comms.bus.log._private_marker_unlocked()
+>           comms.bus.log._append_private_unlocked(metadata, record)
+
+tests/test_envelope_bus_integration.py:231: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f958be804b0>
+metadata = WireMetadata(last_seq=2, admission_after_seq=0, access=WritableAccess(), writer_protocol_version=1, wire_root_id='a6af...fde3c4d32c4af7dba1537b8b2b523c01288ddf3070', tail='86315ccc8a63f62c0fac3901072f5b5f2219b614b10ce7a479071c492a03f97f')))
+row = {'seq': 2, 'id': '48fd68160583', 'from': 'bob', 'to': 'alice', ...}
+
+    def _append_private_unlocked(self, metadata: WireMetadata, row: Mapping[str, object]) -> None:
+        """Durably reserve a sequence, append one row, then sync its parent.
+    
+        A failed append or bus parent sync leaves the outcome UNKNOWN.
+        """
+        metadata.access.require_append()
+        encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
+        if len(encoded) > 8 * 1024 * 1024:
+            raise RelationViolationError("Private bus row exceeds the byte limit.")
+        metadata.last_seq = row["seq"]  # type: ignore[assignment]
+        self.write_metadata_unlocked(metadata)
+        descriptor = os.open(
+            self.path, os.O_APPEND | os.O_CREAT | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600
+        )
+        try:
+            info = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus append target is not owner-only.")
+            with os.fdopen(descriptor, "ab", closefd=False) as output:
+                output.write(encoded)
+                output.flush()
+                os.fsync(output.fileno())
+        finally:
+            os.close(descriptor)
+        directory_fd = os.open(self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+        from .private_bus_checkpoint import (
+            append_private_bus_checkpoint_unlocked,
+            certificate_enabled,
+        )
+    
+        if certificate_enabled(self.path):
+            private = row.get(PRIVATE_WIRE_FIELD)
+            initial = (
+                validate_initial_record(row, metadata.root_id)
+                if isinstance(private, dict) and "initial" in private
+                else None
+            )
+            receipt = private.get("response") if isinstance(private, dict) else None
+            public = {key: value for key, value in row.items() if key != PRIVATE_WIRE_FIELD}
+            try:
+                append_private_bus_checkpoint_unlocked(
+                    self, metadata, encoded, Message.from_wire(public), receipt, initial
+                )
+            except Exception as error:
+                # The bus may already contain this fsynced row. Never retry an
+                # uncertain input or report publication as definitely absent.
+>               raise RelationViolationError(
+                    "Private bus checkpoint publication outcome UNKNOWN."
+                ) from error
+E               agent_comms.errors.RelationViolationError: Private bus checkpoint publication outcome UNKNOWN.
+
+src/agent_comms/wire_log.py:344: RelationViolationError
+_____ test_failed_fsync_complete_visible_row_is_unknown_not_replayed[bus] ______
+
+descriptor = 15
+
+    def fsync(descriptor: int) -> None:
+        nonlocal failed
+        target = os.readlink(f"/proc/self/fd/{descriptor}")
+        bus = comms.bus.log.path
+        trigger = (
+            target == str(bus)
+            if fail_at == "bus"
+            else (target == str(bus.parent) and bus.exists() and bus.stat().st_size > 0)
+        )
+        if trigger and not failed:
+            failed = True
+>           raise OSError("injected claim-row fsync failure")
+E           OSError: injected claim-row fsync failure
+
+tests/test_envelope_bus_integration.py:463: OSError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-342/test_failed_fsync_complete_vis0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f958c026f90>
+fail_at = 'bus'
+
+    @pytest.mark.parametrize("fail_at", ["bus", "directory"])
+    def test_failed_fsync_complete_visible_row_is_unknown_not_replayed(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fail_at: str
+    ) -> None:
+        comms, _ = _participants(tmp_path)
+        real_fsync = os.fsync
+        failed = False
+    
+        def fsync(descriptor: int) -> None:
+            nonlocal failed
+            target = os.readlink(f"/proc/self/fd/{descriptor}")
+            bus = comms.bus.log.path
+            trigger = (
+                target == str(bus)
+                if fail_at == "bus"
+                else (target == str(bus.parent) and bus.exists() and bus.stat().st_size > 0)
+            )
+            if trigger and not failed:
+                failed = True
+                raise OSError("injected claim-row fsync failure")
+            real_fsync(descriptor)
+    
+        monkeypatch.setattr(store_files.os, "fsync", fsync)
+        with pytest.raises(ClaimEnvelopeUnknownError, match="UNKNOWN"):
+>           comms.messaging.send_message(
+                "alice", "bob", "Maybe claimed", claims=[ExistingFileClaim(Path("a.py"))]
+            )
+
+tests/test_envelope_bus_integration.py:468: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:73: in send_message
+    committed = self.bus.publisher.publish_claim_envelope(
+src/agent_comms/publisher.py:234: in publish_claim_envelope
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:54: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f958fe26f30>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        private_marker = self.read_metadata_unlocked()
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            from .private_bus_checkpoint import certificate_enabled
+    
+            if descriptor is None and (
+                certificate_enabled(self.path) or private_marker.checkpoint_seal is not None
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or private_marker.checkpoint_seal is not None:
+                        private_marker = self._private_marker_unlocked()
+                        if private_marker.checkpoint_seal is None:
+                            raise RelationViolationError(
+                                "Private checkpoint lacks durable marker binding."
+                            )
+                        directory_fd = os.open(
+                            self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                        )
+                        try:
+                            os.fsync(directory_fd)
+                        finally:
+                            os.close(directory_fd)
+                        verify_private_bus_checkpoint_unlocked(self, private_marker)
+                        return
+                    while line := stream.readline(8 * 1024 * 1024 + 1):
+                        if len(line) > 8 * 1024 * 1024 or not line.endswith(b"\n"):
+                            raise RelationViolationError("Incomplete or oversized claim bus row.")
+                        try:
+                            row = json.loads(line, object_pairs_hook=unique_wire_object)
+                        except (ValueError, UnicodeError) as error:
+                            raise RelationViolationError("Malformed claim bus row.") from error
+                        if not isinstance(row, dict):
+                            raise RelationViolationError("Claim bus row must be an object.")
+                        if "claim_transition" in row:
+                            try:
+                                public = Message.from_wire(row).to_wire()
+                            except (KeyError, TypeError, ValueError, AttributeError) as error:
+                                raise RelationViolationError("Malformed claim envelope.") from error
+                            if {
+                                key: value
+                                for key, value in row.items()
+                                if key != PRIVATE_WIRE_FIELD
+                            } != public:
+                                raise RelationViolationError("Noncanonical claim envelope.")
+            directory_fd = os.open(self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError as error:
+>           raise RelationViolationError("Claim bus durability is UNKNOWN.") from error
+E           agent_comms.errors.RelationViolationError: Claim bus durability is UNKNOWN.
+
+src/agent_comms/wire_log.py:666: RelationViolationError
+_ test_fsynced_existing_bus_row_survives_single_uncommitted_marker_rename_loss _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-342/test_fsynced_existing_bus_row_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f958c024bb0>
+
+    def test_fsynced_existing_bus_row_survives_single_uncommitted_marker_rename_loss(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Only a marker rename rolls back; the existing bus inode's append survives."""
+        comms, worktree = _participants(tmp_path)
+        (worktree / "c.py").write_text("third")
+        first = comms.messaging.send_message(
+            "alice", "bob", "Alice owns a", claims=[ExistingFileClaim(Path("a.py"))]
+        )
+        marker = comms.root / "bus_meta.json"
+        bus = comms.bus.log.path
+        old_marker = marker.read_bytes()
+        old_size = bus.stat().st_size
+        real_fsync = os.fsync
+        bus_fsynced = False
+        failed = False
+    
+        def fail_final_directory_fsync(descriptor: int) -> None:
+            nonlocal bus_fsynced, failed
+            target = os.readlink(f"/proc/self/fd/{descriptor}")
+            if target == str(bus) and bus.stat().st_size > old_size:
+                bus_fsynced = True
+            if target == str(comms.root) and bus_fsynced and not failed:
+                failed = True
+                raise OSError("directory fsync after existing-inode append")
+            real_fsync(descriptor)
+    
+        with monkeypatch.context() as patch:
+            patch.setattr(store_files.os, "fsync", fail_final_directory_fsync)
+            with pytest.raises(ClaimEnvelopeUnknownError, match="UNKNOWN"):
+                comms.messaging.send_message(
+                    "bob", "alice", "Bob owns b", claims=[ExistingFileClaim(Path("b.py"))]
+                )
+        assert bus_fsynced and failed
+        assert bus.stat().st_size > old_size
+        assert len(comms.views.full_history()) == 2
+        # Model an ordinary crash reverting ONLY the unsynced atomic marker rename.
+        # The existing bus inode and its appended row were already fsynced.
+        marker.write_bytes(old_marker)
+        with marker.open("rb") as stream:
+            real_fsync(stream.fileno())
+        directory_fd = os.open(comms.root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            real_fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    
+        reopened = Comms(comms.root, private_claim_writes=True)
+>       committed = reopened.views.full_history()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_envelope_bus_integration.py:532: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/history_views.py:687: in full_history
+    return self._complete_history(self.full_history_page)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/history_views.py:235: in _complete_history
+    page = page_reader(limit=1000)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/history_views.py:697: in full_history_page
+    return self._integrated_display_page(
+src/agent_comms/history_views.py:300: in _integrated_display_page
+    return live_page(before=before, after=after, limit=limit, max_bytes=max_bytes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/message_bus.py:790: in full_history_page
+    return self.display_page(
+src/agent_comms/message_bus.py:596: in display_page
+    return self._history_page(
+src/agent_comms/message_bus.py:615: in _history_page
+    with self.log.locked():
+         ^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:54: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+src/agent_comms/wire_log.py:638: in verify_before_read_unlocked
+    verify_private_bus_checkpoint_unlocked(self, private_marker)
+src/agent_comms/private_bus_checkpoint.py:374: in verify_private_bus_checkpoint_unlocked
+    recovered = marker.seal.recover(bus, marker, db, path, saved, info)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/checkpoint_seals.py:94: in recover
+    self.check_final(saved, path)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = FinalSeal(version=1, db_revision=(39, 363519, 28672, 1790631613025124845, 1790631613025124845), witness=PrefixSeal(roo...db0941e588d9eb385b25d81433cb1030d4d4b3caf73', tail='9ea7774b9a00f08a7b7ec400bd26ef728deacfdbabdbf4151e9b1cee4d821432'))
+saved = PrefixWitness(root_id='a396a295406a4b3e95195096ced09c59', revision=(39, 363517, 845, 1790631613028935164, 179063161302...334efb5b99dd4a43cfd184', tail='05c54281e8862b40483bcf5f51da4c4f1a605444c9928c60c861e6dd9aa23601', latest_initial_seq=0)
+db_path = PosixPath('/tmp/pytest-of-ts/pytest-342/test_fsynced_existing_bus_row_0/wire/private_bus_checkpoint.sqlite3')
+
+    def check_final(self, saved: PrefixWitness, db_path: Path) -> None:
+        if self.witness != saved.seal() or self.db_revision != file_revision(db_path.stat()):
+>           raise RelationViolationError("Private bus checkpoint index seal changed or is pending.")
+E           agent_comms.errors.RelationViolationError: Private bus checkpoint index seal changed or is pending.
+
+src/agent_comms/checkpoint_seals.py:83: RelationViolationError
+_________ test_invalid_claim_record_cannot_be_exposed_as_plain_message _________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-342/test_invalid_claim_record_cann0')
+
+    def test_invalid_claim_record_cannot_be_exposed_as_plain_message(tmp_path: Path) -> None:
+        comms, _ = _participants(tmp_path)
+        public = Message("alice", "bob", "attempt", MessageType.INFO, seq=1).to_wire()
+        public["claim_transition"] = {"claims": ["/tmp/a.py"]}
+        comms.bus.log.path.write_bytes(json.dumps(public).encode() + b"\n")
+>       with pytest.raises(RelationViolationError, match="Malformed claim"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'Malformed claim'
+E         Actual message: 'Malformed public bus row blocks publication.'
+
+tests/test_envelope_bus_integration.py:591: AssertionError
+_ test_claim_bearing_visible_failed_fsync_all_reader_routes_block_then_resync __
+
+descriptor = 15
+
+    def fail_fsync(descriptor: int) -> None:
+        nonlocal fsyncs
+        target = os.readlink(f"/proc/self/fd/{descriptor}")
+        if target == str(bus):
+            fsyncs += 1
+            if phase != "allow":
+>               raise OSError("claim row visible but not durable")
+E               OSError: claim row visible but not durable
+
+tests/test_envelope_bus_integration.py:626: OSError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-342/test_claim_bearing_visible_fai0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f95912cdd30>
+
+    def test_claim_bearing_visible_failed_fsync_all_reader_routes_block_then_resync(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        comms, worktree = _participants(tmp_path)
+        bus = comms.bus.log.path
+        real_fsync = os.fsync
+        phase = "writer"
+        fsyncs = 0
+    
+        def fail_fsync(descriptor: int) -> None:
+            nonlocal fsyncs
+            target = os.readlink(f"/proc/self/fd/{descriptor}")
+            if target == str(bus):
+                fsyncs += 1
+                if phase != "allow":
+                    raise OSError("claim row visible but not durable")
+            real_fsync(descriptor)
+    
+        monkeypatch.setattr(store_files.os, "fsync", fail_fsync)
+        with pytest.raises(ClaimEnvelopeUnknownError, match="UNKNOWN"):
+>           comms.messaging.send_message(
+                "alice", "bob", "Uncertain claimed envelope", claims=[ExistingFileClaim(Path("a.py"))]
+            )
+
+tests/test_envelope_bus_integration.py:631: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:73: in send_message
+    committed = self.bus.publisher.publish_claim_envelope(
+src/agent_comms/publisher.py:234: in publish_claim_envelope
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:54: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f9591288780>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        private_marker = self.read_metadata_unlocked()
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            from .private_bus_checkpoint import certificate_enabled
+    
+            if descriptor is None and (
+                certificate_enabled(self.path) or private_marker.checkpoint_seal is not None
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or private_marker.checkpoint_seal is not None:
+                        private_marker = self._private_marker_unlocked()
+                        if private_marker.checkpoint_seal is None:
+                            raise RelationViolationError(
+                                "Private checkpoint lacks durable marker binding."
+                            )
+                        directory_fd = os.open(
+                            self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                        )
+                        try:
+                            os.fsync(directory_fd)
+                        finally:
+                            os.close(directory_fd)
+                        verify_private_bus_checkpoint_unlocked(self, private_marker)
+                        return
+                    while line := stream.readline(8 * 1024 * 1024 + 1):
+                        if len(line) > 8 * 1024 * 1024 or not line.endswith(b"\n"):
+                            raise RelationViolationError("Incomplete or oversized claim bus row.")
+                        try:
+                            row = json.loads(line, object_pairs_hook=unique_wire_object)
+                        except (ValueError, UnicodeError) as error:
+                            raise RelationViolationError("Malformed claim bus row.") from error
+                        if not isinstance(row, dict):
+                            raise RelationViolationError("Claim bus row must be an object.")
+                        if "claim_transition" in row:
+                            try:
+                                public = Message.from_wire(row).to_wire()
+                            except (KeyError, TypeError, ValueError, AttributeError) as error:
+                                raise RelationViolationError("Malformed claim envelope.") from error
+                            if {
+                                key: value
+                                for key, value in row.items()
+                                if key != PRIVATE_WIRE_FIELD
+                            } != public:
+                                raise RelationViolationError("Noncanonical claim envelope.")
+            directory_fd = os.open(self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError as error:
+>           raise RelationViolationError("Claim bus durability is UNKNOWN.") from error
+E           agent_comms.errors.RelationViolationError: Claim bus durability is UNKNOWN.
+
+src/agent_comms/wire_log.py:666: RelationViolationError
+____________ test_claim_bearing_json_valid_no_newline_never_exposed ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-342/test_claim_bearing_json_valid_0')
+
+    def test_claim_bearing_json_valid_no_newline_never_exposed(tmp_path: Path) -> None:
+        comms, _ = _participants(tmp_path)
+        committed = comms.messaging.send_message(
+            "alice", "bob", "Original claim", claims=[ExistingFileClaim(Path("a.py"))]
+        )
+        bus = comms.bus.log.path
+        assert bus.read_bytes().endswith(b"\n")
+        bus.write_bytes(bus.read_bytes()[:-1])  # crash left an incomplete but JSON-valid tail
+        denied = (
+            lambda: comms.bus.log.message_by_id(committed.message_id),
+            lambda: _ordinary_locked_iterator(comms),
+            lambda: _ordinary_snapshot(comms),
+            lambda: comms.views.full_history(),
+            lambda: comms.bus.log.total_messages(),
+            lambda: comms.bus.log.latest_sequence(),
+            lambda: comms.bus.log.claim_projection(),
+            lambda: _private_verified_rows(comms),
+        )
+        for read in denied:
+>           with pytest.raises(RelationViolationError, match="Incomplete"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'Incomplete'
+E             Actual message: 'Private bus checkpoint root/inode/size changed.'
+
+tests/test_envelope_bus_integration.py:684: AssertionError
+_ test_sigkill_across_claim_send_recovers_one_row_or_none[after_bus_append_before_fsync] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-342/test_sigkill_across_claim_send1')
+phase = 'after_bus_append_before_fsync'
+
+    @pytest.mark.parametrize("phase", ["before_bus_append", "after_bus_append_before_fsync"])
+    def test_sigkill_across_claim_send_recovers_one_row_or_none(tmp_path: Path, phase: str) -> None:
+        comms, _ = _participants(tmp_path)
+        code = """
+    import os, signal, sys
+    from pathlib import Path
+    sys.path.insert(0, sys.argv[2])
+    from agent_comms import store_files
+    from agent_comms.comms import Comms
+    root = Path(sys.argv[1])
+    phase = sys.argv[3]
+    bus = root / 'bus.jsonl'
+    real_fsync = os.fsync
+    
+    def kill_at_boundary(fd):
+        name = os.readlink(f'/proc/self/fd/{fd}')
+        if phase == 'before_bus_append' and '.bus_meta.json.' in name or (phase == 'after_bus_append_before_fsync' and name == str(bus)):
+            os.kill(os.getpid(), signal.SIGKILL)
+        real_fsync(fd)
+    store_files.os.fsync = kill_at_boundary
+    from agent_comms.envelope_claim_transitions import ExistingFileClaim
+    Comms(root, private_claim_writes=True).messaging.send_message(
+        'alice', 'bob', 'Interrupted claim', claims=[ExistingFileClaim(Path('a.py'))]
+    )
+    """
+        source = str(Path(__file__).resolve().parents[1] / "src")
+        env = os.environ.copy()
+        for key in (
+            "PI_AGENT_ID",
+            "PI_PARENT_ID",
+            "PI_AGENT_TAGS",
+            "AGENT_COMMS_THREAD",
+            "AGENT_COMMS_TAGS",
+        ):
+            env.pop(key, None)
+        child = subprocess.run(
+            [sys.executable, "-c", code, str(comms.root), source, phase],
+            env=env,
+            capture_output=True,
+            check=False,
+            timeout=8,
+        )
+        assert child.returncode == -signal.SIGKILL, child.stderr.decode(errors="replace")
+        rows = comms.views.full_history()  # guarded reader fsyncs a complete visible row
+        if phase == "before_bus_append":
+            assert rows == []
+            comms.messaging.send_message(
+                "bob", "alice", "First durable claim", claims=[ExistingFileClaim(Path("a.py"))]
+            )
+        else:
+>           assert len(rows) == 1 and rows[0].claim_transition is not None
+E           assert (0 == 1)
+E            +  where 0 = len([])
+
+tests/test_envelope_bus_integration.py:770: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_envelope_claim_transitions.py::test_selected_wake_binding_survives_claim_projection
+FAILED tests/test_envelope_bus_integration.py::test_malformed_complete_row_is_not_an_ordinary_message
+FAILED tests/test_envelope_bus_integration.py::test_durable_raw_alias_claim_cannot_enter_guarded_public_or_projection
+FAILED tests/test_envelope_bus_integration.py::test_failed_fsync_complete_visible_row_is_unknown_not_replayed[bus]
+FAILED tests/test_envelope_bus_integration.py::test_fsynced_existing_bus_row_survives_single_uncommitted_marker_rename_loss
+FAILED tests/test_envelope_bus_integration.py::test_invalid_claim_record_cannot_be_exposed_as_plain_message
+FAILED tests/test_envelope_bus_integration.py::test_claim_bearing_visible_failed_fsync_all_reader_routes_block_then_resync
+FAILED tests/test_envelope_bus_integration.py::test_claim_bearing_json_valid_no_newline_never_exposed
+FAILED tests/test_envelope_bus_integration.py::test_sigkill_across_claim_send_recovers_one_row_or_none[after_bus_append_before_fsync]
+9 failed, 64 passed in 5.00s

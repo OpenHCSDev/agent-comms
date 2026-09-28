@@ -103,7 +103,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
         isinstance(f, InputDeliveryChangedUpdate) for f in decode_updates(response.field_meta)
     )
     assert exact in agent.inputs.queued_inputs["beta"]
-    assert agent.inputs.dispositions.read().rows["acp:" + exact].declared_name == "unknown"
+    assert agent.inputs.dispositions.read().rows["acp:" + exact].declared_name == "reserved"
     state = next(
         f
         for f in decode_updates(agent.sessions.metadata("beta", session_id="beta"))

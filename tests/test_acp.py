@@ -579,7 +579,7 @@ class TestAgentTurn:
         (failed,) = facts(update.field_meta, InputFailedUpdate)
         assert failed.text == "lost prompt"
         assert failed.failure.description == "Pi preflight ended before attestation"
-        assert agent.inputs.dispositions.read().rows[key].declared_name == "unknown"
+        assert agent.inputs.dispositions.read().rows[key].declared_name == "reserved"
         agent.inputs.dispositions.bind(
             key, admission=1, turn_id="turn", native_id="a" * 32, text="lost prompt"
         )

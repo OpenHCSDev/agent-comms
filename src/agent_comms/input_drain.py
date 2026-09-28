@@ -604,7 +604,9 @@ class InputDrain(FutureInputQueue):
             if isinstance(pending, str):
                 self.pending_turns.setdefault(session_id, []).append(ScheduledTurn(pending))
         self.forwarded_inputs.pop(session_id, None)
-        self.turn_original_input_keys.pop(session_id, None)
+        with _store_lock(self.comms._wire_lock_path):
+            for key in self.turn_original_input_keys.pop(session_id, ()):
+                self.dispositions.finish_unbound(key)
         self.turn_input_text.pop(session_id, None)
         self.steering_input_keys.pop(session_id, None)
         self.steering_goal_ids.pop(session_id, None)

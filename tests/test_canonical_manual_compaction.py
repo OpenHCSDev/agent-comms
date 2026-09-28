@@ -7,13 +7,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_comms.backend import _session_revision
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.compaction_states import ManualCommittedSummary
+from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDocument
 from agent_comms.owner_compaction_manual import compact_manual_owner
+from selected_summary_cases import admission_identity, manual_source
 from test_selected_owner_compaction_integration import owner_fixture
 
 pytestmark = pytest.mark.skipif(
@@ -76,11 +77,17 @@ async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
         operation = journal.reserve_selected_summary(
             file,
             {
-                "source": {
-                    "ownerName": owner.name,
-                    "ingressKey": "acp:original",
-                    "reservedRevision": json.loads(json.dumps(_session_revision(file))),
-                },
+                "source": FieldCodec.encode(
+                    admission_identity(
+                        file,
+                        text=inputs.read().rows["acp:original"].source_text,
+                        key="acp:original",
+                        turn=owner.active_turn.id,
+                        owner=owner.name,
+                        incarnation=owner.incarnation,
+                        admission=owner.active_turn.admission_generation,
+                    ).source
+                ),
                 "selected": {
                     "provider": "openai",
                     "modelId": "gpt-4.1-mini",
@@ -103,7 +110,7 @@ async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
         assert result["ok"] is True
         assert journal.selected_summary(operation).state.declared_name == "retired_refusal"
         assert inputs.path.read_bytes() == before_inputs
-        assert inputs.read().rows["acp:original"].unattempted
+        assert inputs.read().rows["acp:original"].accepts_reservation
         assert native_input_admitted(tmp_path, file)
         rows = [json.loads(line) for line in Path(file).read_text().splitlines()]
         assert sum(row["type"] == "compaction" for row in rows) == 1
@@ -135,10 +142,7 @@ async def test_manual_does_not_retire_or_repeat_uncertain_provider(
         operation = journal.reserve_selected_summary(
             file,
             {
-                "source": {
-                    "ownerName": "owner",
-                    "reservedRevision": json.loads(json.dumps(_session_revision(file))),
-                },
+                "source": manual_source(file, incarnation=registry.require("owner").incarnation),
                 "selected": {
                     "provider": "openai",
                     "modelId": "gpt-4.1-mini",

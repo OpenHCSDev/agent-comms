@@ -150,6 +150,25 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
     assert sent.claim_transition.message_id == sent.message_id
     assert sent.claim_transition.seq == sent.seq
     assert comms.bus.log.latest_sequence() == sent.seq
+    # Durable claim history keeps its external shape, including absent admission.
+    stored = json.loads(comms.bus.log.path.read_text().splitlines()[0])
+    assert stored["claim_transition"] == {
+        "owner": "alice",
+        "incarnation": sent.claim_transition.incarnation,
+        "seq": sent.seq,
+        "message_id": sent.message_id,
+        "claims": list(sent.claim_transition.claims),
+        "releases": [],
+        "generation": sent.claim_transition.generation,
+    }
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.routing import TurnRouting
+
+    routing = TurnRouting((sent,), None)
+    assert FieldCodec.encode(routing)["requests"] == [sent.to_wire()]
+    comms.transcripts.routes.record("session", ("entry",), routing)
+    with Comms(comms.root).transcripts.routes.for_session("session") as routes:
+        assert routes.get("entry") == routing
     assert comms.views.full_history() == [sent]
     projection = comms.bus.log.claim_projection()
     assert projection.get(str(worktree / "a.py")).owner == "alice"
@@ -548,7 +567,7 @@ def test_fsynced_existing_bus_row_survives_single_uncommitted_marker_rename_loss
     assert reopened.bus.log.claim_projection()[str(worktree / "c.py")].owner == "observer"
 
 
-def test_oversize_transition_cannot_brick_a_successfully_published_root(
+def test_large_transition_reopens_and_exports_without_a_second_parser_limit(
     tmp_path: Path,
 ) -> None:
     comms, worktree = _participants(tmp_path)
@@ -561,21 +580,15 @@ def test_oversize_transition_cannot_brick_a_successfully_published_root(
         resource = directory / f"{number}.py"
         resource.write_text("ordinary file")
         resources.append(str(resource.relative_to(worktree)))
-    with pytest.raises(RelationViolationError, match="malformed"):
-        comms.messaging.send_message(
-            "alice",
-            "bob",
-            "Oversize claim",
-            claims=[ExistingFileClaim(Path(path)) for path in resources],
-        )
-    assert comms.views.full_history() == []
-    assert dict(comms.bus.log.claim_projection()) == {}
     committed = comms.messaging.send_message(
-        "alice", "bob", "Safe claim", claims=[ExistingFileClaim(Path("a.py"))]
+        "alice", "bob", "Large claim",
+        claims=[ExistingFileClaim(Path(path)) for path in resources],
     )
+    assert len(json.dumps(committed.to_wire()["claim_transition"])) > 16_384
+    assert len(Comms(comms.root).bus.log.claim_projection()) == len(resources)
     assert comms.views.full_history() == [committed]
     assert comms.bus.log.message_by_id(committed.message_id) == committed
-    assert comms.bus.log.claim_projection()[str(worktree / "a.py")].owner == "alice"
+    assert all(owner.owner == "alice" for owner in comms.bus.log.claim_projection().values())
     destination = tmp_path / "safe-export.jsonl"
     receipt = comms.views.export_wire(
         destination,

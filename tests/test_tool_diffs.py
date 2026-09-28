@@ -10,10 +10,11 @@ from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_payloads import PiToolResult
 from agent_comms.threads import Thread
 from agent_comms.tool_results import ToolDiff, tool_result_content
-from agent_comms.transcript_events import ToolEndTranscript, TranscriptCodec, TranscriptEvent
+from agent_comms.transcript_events import ToolEndTranscript, TranscriptEvent
 
 PATCH = "--- src/example.py\n+++ src/example.py\n@@ -40,2 +40,2 @@\n context\n-old = 1\n+new = 2\n"
 
@@ -121,7 +122,7 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
     comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
     page = comms.transcripts.thread_transcript_page("worker", max_messages=1)
     assert len(page.events) == 1
-    saved = TranscriptCodec.decode(TranscriptEvent, TranscriptCodec.encode(page.events[0]))
+    saved = FieldCodec.decode(TranscriptEvent, FieldCodec.encode(page.events[0]))
     assert saved.diff == live.diff
 
     class Client:

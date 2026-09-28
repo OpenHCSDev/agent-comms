@@ -61,7 +61,7 @@ class ACPFailure(DeliveryFailure):
     def input_disposition(self) -> str:
         if self.input_state is not None:
             return (
-                self.input_state.declared_name.replace("_", " ").capitalize()
+                self.input_state.public_status.replace("_", " ").capitalize()
                 + " — input not retried"
             )
         return (
@@ -99,7 +99,18 @@ class ACPFailure(DeliveryFailure):
         if isinstance(data, dict):
             status = data.get("inputStatus")
             if isinstance(status, str):
-                state = InputAttempt.decode(status)
+                try:
+                    state = InputAttempt.decode(status)
+                except ValueError:
+                    # A redacted public status has no provenance. Resolve only
+                    # when its declaration is unique; unknown cannot distinguish
+                    # a reserved input from a bound uncertain input.
+                    matches = [
+                        member for member in InputAttempt.members_with(InputAttempt)
+                        if member.public_status == status
+                    ]
+                    if len(matches) == 1:
+                        state = matches[0]
         return owner(code, detail, failure, state)
 
 

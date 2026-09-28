@@ -3022,7 +3022,7 @@
  import { killTrackedDetachedChildren } from "../../utils/shell.js";
  import { theme } from "../interactive/theme/theme.js";
  import { toJsonEvent } from "../json-event.js";
-@@ -361,6 +361,18 @@
+@@ -385,6 +385,18 @@
      let unsubscribeBackpressure;
      const output = (obj) => {
          writeRawStdout(serializeJsonLine(obj));
@@ -3041,7 +3041,7 @@
      };
      const success = (id, command, data) => {
          if (data === undefined) {
-@@ -753,7 +765,7 @@
+@@ -777,7 +789,7 @@
                      sessionId: session.sessionId,
                      sessionName: session.sessionName,
                      autoCompactionEnabled: session.autoCompactionEnabled,
@@ -3050,7 +3050,7 @@
                      pendingMessageCount: session.pendingMessageCount,
                      nativeInputProofCapability: session.sessionManager.nativeInputProofAvailable() ? "pi-native-input-v1-live-only" : null,
                  };
-@@ -902,15 +914,15 @@
+@@ -926,15 +938,15 @@
              }
              case "get_entries": {
                  const sessionManager = session.sessionManager;
@@ -3072,7 +3072,7 @@
              }
              case "get_tree": {
                  const sessionManager = session.sessionManager;
-@@ -932,7 +944,7 @@
+@@ -956,7 +968,7 @@
              // Messages
              // =================================================================
              case "get_messages": {

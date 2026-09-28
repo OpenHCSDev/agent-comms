@@ -23,7 +23,6 @@ from .native_runtime_input import CurrentNativeCursor
 from .pi_payloads import McpLiveReceipt
 from .routing import MessageRoute
 from .thread_identity import OwnerIdentity, ThreadIncarnation
-from .transcript_events import TranscriptCodec
 from .transcripts import TranscriptCursor, TranscriptPage
 
 
@@ -73,7 +72,7 @@ class UpdateBatch:
 
 
 def encode_updates(*updates: AgentCommsUpdate) -> dict:
-    return {"agentComms": TranscriptCodec.encode(UpdateBatch(updates))}
+    return {"agentComms": FieldCodec.encode(UpdateBatch(updates))}
 
 
 def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:
@@ -87,7 +86,7 @@ def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:
     extension = metadata["agentComms"]
     if not isinstance(extension, dict):
         raise ValueError("Comms metadata must be an object")
-    return TranscriptCodec.decode(UpdateBatch, extension).updates
+    return FieldCodec.decode(UpdateBatch, extension).updates
 
 
 @dataclass(frozen=True)

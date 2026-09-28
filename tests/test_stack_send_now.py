@@ -407,7 +407,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 await asyncio.wait_for(task, 10)
                 assert len(requests) == 1 and not started.is_set()
                 assert any(
-                    row.declared_name == "unknown"
+                    row.unresolved
                     for row in owner.inputs.dispositions.read().rows.values()
                 )
                 return

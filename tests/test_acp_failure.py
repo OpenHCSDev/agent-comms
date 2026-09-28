@@ -41,6 +41,16 @@ def test_disposition_derives_from_shared_input_owner(state):
     assert failure.input_state is state
     assert (
         failure.input_disposition
-        == state.declared_name.replace("_", " ").capitalize() + " — input not retried"
+        == state.public_status.replace("_", " ").capitalize() + " — input not retried"
     )
     assert decode_updates(encode_updates(RequestFailedUpdate(failure)))[0].failure == failure
+
+
+def test_public_not_sent_and_ambiguous_unknown_do_not_invent_binding():
+    from agent_comms.input_attempt import NotSentInput
+    failure = ACPFailure.from_error(-32603, "Preflight failed", {"inputStatus": "not_sent"})
+    assert failure.input_state is NotSentInput
+    assert failure.input_disposition == "Not sent — input not retried"
+    unknown = ACPFailure.from_error(-32603, "Outcome uncertain", {"inputStatus": "unknown"})
+    assert unknown.input_state is None
+    assert unknown.input_disposition == "UNKNOWN — input not retried"

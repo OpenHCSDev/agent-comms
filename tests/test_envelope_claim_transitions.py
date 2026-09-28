@@ -1,8 +1,7 @@
-"""Pure default-off claim projection: this does not test bus fsync or delivery."""
+"""Pure claim projection; durable replay is tested at the bus boundary."""
 
-import json
 import os
-from dataclasses import asdict, replace
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -17,7 +16,6 @@ from agent_comms.envelope_claim_transitions import (
     ExistingFileClaim,
     WakeAdmission,
     apply_transition,
-    parse_complete_transition_line,
     project_verified_transitions,
 )
 from agent_comms.field_codec import FieldCodec
@@ -44,8 +42,8 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
         attempt_ordinal=1,
     )
     claimed = ClaimTransition("owner", "epoch-1", 8, "msg-8", (resource,), (), G1, admission)
-    raw = (json.dumps(FieldCodec.encode(claimed), separators=(",", ":")) + "\n").encode()
-    decoded = parse_complete_transition_line(raw)
+    raw = FieldCodec.encode(claimed)
+    decoded = FieldCodec.decode(ClaimTransition, raw)
     assert decoded == claimed
     assert apply_transition(ClaimProjection(), decoded)[resource].admission == admission
 
@@ -56,14 +54,14 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
     )
     assert Message.from_wire(bound.to_wire()) == bound
 
-    invalid = json.loads(raw)
+    invalid = raw.copy()
     invalid["admission"]["version"] = 99
-    with pytest.raises(ClaimTransitionError):
-        parse_complete_transition_line((json.dumps(invalid) + "\n").encode())
-    null_admission = json.loads(raw)
+    with pytest.raises(ValueError, match="Wake admission version or revision"):
+        FieldCodec.decode(ClaimTransition, invalid)
+    null_admission = raw.copy()
     null_admission["admission"] = None
-    with pytest.raises(ClaimTransitionError, match="Wake admission"):
-        parse_complete_transition_line((json.dumps(null_admission) + "\n").encode())
+    with pytest.raises(ValueError, match="Null field"):
+        FieldCodec.decode(ClaimTransition, null_admission)
 
 
 def transition(
@@ -72,12 +70,6 @@ def transition(
     return ClaimTransition(
         owner, incarnation, seq, f"msg-{seq}", tuple(claims), tuple(releases), generation
     )
-
-
-def legacy_wire_row(value):
-    row = asdict(value)
-    del row["admission"]
-    return row
 
 
 def resources(tmp_path):
@@ -247,39 +239,6 @@ def test_only_exact_typed_nonempty_sequenced_envelopes(tmp_path):
             candidate()
 
 
-def test_parser_rejects_partial_duplicate_and_malformed_unverified_lines(tmp_path):
-    _, a, _ = resources(tmp_path)
-    row = legacy_wire_row(transition(1, claims=(a,), generation=G1))
-    complete = (json.dumps(row, separators=(",", ":")) + "\n").encode()
-    assert parse_complete_transition_line(complete) == transition(1, claims=(a,), generation=G1)
-    cases = (
-        complete.rstrip(b"\n"),
-        b"{}\n",
-        b'{"seq":1,"seq":2}\n',
-        complete.replace(b'"seq":1', b'"seq":true'),
-        complete.replace(b'"claims":[', b'"claims":"'),
-        b"not json\n",
-        b"\xff\n",
-    )
-    for raw in cases:
-        with pytest.raises(ClaimTransitionError):
-            parse_complete_transition_line(raw)
-    release = transition(2, releases=(ClaimRelease(a, G1),))
-    release_line = json.dumps(legacy_wire_row(release), separators=(",", ":")).encode()
-    nested_duplicate = (
-        release_line.replace(
-            b'"generation":"' + G1.encode() + b'"',
-            b'"generation":"' + G1.encode() + b'","generation":"' + G1.encode() + b'"',
-        )
-        + b"\n"
-    )
-    with pytest.raises(ClaimTransitionError, match="Duplicate"):
-        parse_complete_transition_line(nested_duplicate)
-    # Parsing a complete line is only syntax: an un-fsynced visible row must
-    # NOT be handed to project_verified_transitions by a future bus reader.
-    assert not hasattr(parse_complete_transition_line, "proves_fsync")
-
-
 def test_path_aliases_are_rejected_as_duplicate_normalized_resources(tmp_path):
     worktree, a, _ = resources(tmp_path)
     duplicate = (
@@ -301,16 +260,16 @@ def test_raw_path_aliases_cannot_acquire_or_release_same_file(tmp_path):
             transition(2, owner="competitor", claims=(alias,), generation=G2)
         with pytest.raises(ClaimTransitionError, match="canonical absolute"):
             ClaimRelease(alias, G1)
-        claiming_row = legacy_wire_row(
+        claiming_row = FieldCodec.encode(
             transition(2, owner="competitor", claims=(a,), generation=G2)
         )
         claiming_row["claims"] = [alias]
         with pytest.raises(ClaimTransitionError, match="canonical absolute"):
-            parse_complete_transition_line((json.dumps(claiming_row) + "\n").encode())
-        releasing_row = legacy_wire_row(transition(2, releases=(ClaimRelease(a, G1),)))
+            FieldCodec.decode(ClaimTransition, claiming_row)
+        releasing_row = FieldCodec.encode(transition(2, releases=(ClaimRelease(a, G1),)))
         releasing_row["releases"][0]["resource"] = alias
         with pytest.raises(ClaimTransitionError, match="canonical absolute"):
-            parse_complete_transition_line((json.dumps(releasing_row) + "\n").encode())
+            FieldCodec.decode(ClaimTransition, releasing_row)
         assert list(held) == [a] and held[a].owner == "owner" and held.last_seq == 1
     with pytest.raises(ClaimConflict) as loser:
         apply_transition(held, transition(2, owner="competitor", claims=(a,), generation=G2))
