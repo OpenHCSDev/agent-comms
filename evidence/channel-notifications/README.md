@@ -14,7 +14,7 @@ Activity log. It now reports checking/responding through AgentActivity and uses
 that same owner's finish_turn to release/clear activity. Toad consumes ordinary
 thread status plus per-message notification results.
 
-Actual live source-path probe65 observed Pending→Checking→Responding→Responded
+Actual live source-path probe69 observed Pending→Checking→Responding→Responded
 for the Comms UX owner, and Checking→Checked/no-response for PR95. Receipt in
 live_channel_observation.json. This alone does not prove mounted installed UI.
 

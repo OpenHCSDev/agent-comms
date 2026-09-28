@@ -227,7 +227,8 @@ class EngagedAssignment(BoundAssignment):
             return MessageNotification(
                 recipient,
                 "Paused",
-                "A response was selected, but no matching active turn is running.",
+                "A response was selected, but no matching active turn is running. "
+                "Outcome is unconfirmed; do not automatically retry.",
             )
         return super().notification(recipient, owner_active=owner_active)
 
@@ -279,6 +280,13 @@ class DeferredAssignment(InterruptedAssignment):
                 "Checking relevance before deciding whether to respond.",
                 priority=0,
                 busy=True,
+            )
+        if triage_inflight:
+            return MessageNotification(
+                recipient,
+                "Outcome uncertain",
+                "The check was attempted but no decision was confirmed. "
+                "Do not automatically retry.",
             )
         return super().notification(recipient, owner_active=owner_active)
 
