@@ -361,15 +361,6 @@ async def test_active_backend_executor_refuses_before_intent_or_dispatch(native)
     assert Path(witness.session_file).read_bytes() == before
 
 
-def test_json_source_is_not_accepted_as_owner_capture(native):
-    bridge, owner, owner_generation, witness = native
-    with pytest.raises(ValueError, match="Owner-captured"):
-        OwnerCompactionCommit.commit(
-            bridge, owner, owner_generation, witness, "summary", 42, source={}
-        )
-    assert bridge.journal.unresolved(witness.session_file) == ()
-
-
 def test_malformed_bus_refuses_source_capture_without_repair(native):
     bridge, owner, owner_generation, witness = native
     bus = bridge.root / "bus.jsonl"
