@@ -165,7 +165,8 @@ UNKNOWN/reset proof remain open.
   all response mutation callers use declared rows, old SQL roster/mappers deleted.
 - **Page index closed:** bus_page_index.sqlite3 uses BusPageSource/BusPageRow;
   A13 typed streaming preserves bounded history and closes cursor resources.
-  Runtime quiet reset required. passive_channel_awareness adopts that iterator.
+  Runtime quiet reset required. The later L0 caller closure deletes passive_channel_awareness;
+  natural-turn pointers use the existing sealed checkpoint declarations.
 - **Current release contract:** VerifiedOwnerLoss consumes typed release evidence
   with full process identity after parent229/b4cb42a integration. No raw receipt
   fallback; UNKNOWN preserved and only new input eligible after explicit recovery.

@@ -440,7 +440,7 @@ class HistoryViews:
         Fetching is not paint proof. A UI may use the basis only after proving
         that the corresponding inbound tail was contiguous and visibly painted.
         """
-        if not isinstance(peer, str) or is_channel_target(peer) or BuiltinChannel.is_alias(peer):
+        if not isinstance(peer, str) or is_channel_target(peer):
             raise ValueError("A DM page requires a registered peer.")
         viewer = self.messaging.user_identity(worktree).name
         marker_path = self.bus.reads.path

@@ -98,3 +98,17 @@ Fresh native tool/cursor and ACP compaction checks pass using the pinned Pi pack
 and a local deterministic provider. No live activation in this batch. Parent owns
 D22 installation and cutover-tool deletion; Nietzsche PR248 owns older ACP fixture
 closure. This checkpoint does not declare the global L0 surface complete.
+
+## Passive-awareness caller closure — Cicero
+
+Issue84 requires an unmentioned observer's next independently admitted turn to
+include bounded source pointers while preserving NoWakeDecision. Removed the
+orphan PassiveChannelAwareness JSON cursor, InputDrain instance, OwnedTurn frame
+witness/veto, channel scope rebasing and both membership callers. Natural turns
+now use MessageBus.awareness_prompt, reading only existing sealed Initials/Addressed
+checkpoint declarations with stable incarnation lookup and the admission floor.
+No new table, cursor, index, reader repair, wake, ACK or native proof. Archived
+display and selected OptionalAwarenessProjection remain with their current owners.
+Exclusive old tests deleted; retained relationship tests live in
+tests/test_relationship_store.py. Exact acceptance is in
+evidence/passive-awareness-deletion/HANDOFF.md; parent owns activation.
