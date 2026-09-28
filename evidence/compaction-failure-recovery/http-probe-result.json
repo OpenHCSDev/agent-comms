@@ -1,0 +1,22 @@
+{
+  "passed": false,
+  "configured_transport": "sse",
+  "live_transport_changed": false,
+  "test_owner_stopped": true,
+  "result": "Provider upstream connection refused; no expected reply",
+  "original_session_active_during_probe": true,
+  "cleanup": [
+    {
+      "name": "fork.jsonl",
+      "bytes": 39256778
+    },
+    {
+      "name": "fork.jsonl.input-proof",
+      "bytes": 2448
+    },
+    {
+      "name": "pi-config/auth.json",
+      "symlink_removed": true
+    }
+  ]
+}
