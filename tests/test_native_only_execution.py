@@ -126,7 +126,7 @@ async def test_actual_pinned_native_launch_preflight_without_prompt(tmp_path, mo
 
 
 async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, monkeypatch):
-    from agent_comms.acp import CommsAgent
+    from agent_comms.acp import CommsClient
     from agent_comms.comms import Comms
     from agent_comms.runtime import socket_path
     from agent_comms.threads import Thread
@@ -170,14 +170,16 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
             timeout=20,
         ) as child:
             async with asyncio.timeout(12):
-                while not socket_path(comms.root, "headless").exists():
+                while not socket_path(comms.root, child.pid).exists():
                     if child.returncode is not None:
                         raise AssertionError((await child.stderr.read()).decode())
                     await asyncio.sleep(0.05)
             registered = comms.registry.require("headless")
             assert registered.pid == child.pid
             assert registered.worktree == str(project)
-            client = CommsAgent(comms)
+            client = CommsClient(
+                comms, private_nk_wire_root_id=root_id, private_nk_native_package=Path(package)
+            )
             try:
                 loaded = await client.load_session(str(project), "headless")
                 assert loaded.field_meta["agentComms"]["imagePrompts"]
