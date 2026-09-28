@@ -1,0 +1,9 @@
+{
+  "bounded_observation": true,
+  "outer_exit": 124,
+  "inner_exit_zero": true,
+  "native_history_label": true,
+  "traceback": false,
+  "import_error": false,
+  "inputs_sent": false
+}
