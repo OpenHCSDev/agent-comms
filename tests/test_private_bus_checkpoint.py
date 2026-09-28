@@ -14,6 +14,7 @@ import pytest
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.comms import Comms
 from agent_comms.coordination import PublicationIntent, canonical_publication_key
+from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import Message, MessageType
@@ -46,7 +47,11 @@ def _root(tmp_path: Path) -> tuple[Comms, str]:
 def _page(comms: Comms, lookup: str, after: int = 0, limit: int = 100):
     with _store_lock(comms.bus.log.path):
         return certified_initial_page_unlocked(
-            comms.bus.log, comms.bus.log._private_marker_unlocked(), lookup, after=after, limit=limit
+            comms.bus.log,
+            comms.bus.log._private_marker_unlocked(),
+            lookup,
+            after=after,
+            limit=limit,
         )
 
 
@@ -110,7 +115,13 @@ def test_claim_and_keyed_response_append_share_certificate(tmp_path: Path) -> No
     resource = tmp_path / "owned.py"
     resource.write_text("owned\n")
     initial = comms.messaging.send_initial_cohort("sender", "Alice", "task")
-    claim = comms.messaging.send_message("sender", "Alice", "claim", MessageType.HANDOFF, claims=["owned.py"])
+    claim = comms.messaging.send_message(
+        "sender",
+        "Alice",
+        "claim",
+        MessageType.HANDOFF,
+        claims=[ExistingFileClaim(Path("owned.py"))],
+    )
     assert claim.claim_transition is not None
     assert comms.bus.log.claim_projection()[str(resource)].owner == "sender"
     response_bus = MessageBus(comms.bus.log.path, comms.registry, private_response_writes=True)

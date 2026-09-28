@@ -142,7 +142,12 @@ class NativeContextProof:
         return proof
 
     @classmethod
-    def read_evidence(cls, session_file: Path, input_id: str, *, request_generation=None):
+    def read_evidence(
+        cls, session_file: Path, input_id: str, *, request_generation: int | None = None
+    ) -> NativeContextProof:
+        """Corroborate live recorded events; parsed bytes alone grant no authority."""
+        if type(input_id) is not str or _INPUT_ID.fullmatch(input_id) is None:
+            raise ValueError("A native context lookup requires a 128-bit input ID")
         session_file = Path(session_file).absolute()
         header, entries = NativeEntry.read_evidence(session_file)
         tracked = NativeEntry.tracked_users(entries)
@@ -405,17 +410,6 @@ def read_tracked_input_digest(session_file: Path, input_id: str) -> str:
     return users[input_id].message.input_digest
 
 
-def _read_native_context_evidence(
-    session_file: Path, input_id: str, *, request_generation: int | None = None
-) -> NativeContextProof:
-    """Corroboration of live recorded events; parsed bytes alone grant no authority."""
-    if type(input_id) is not str or _INPUT_ID.fullmatch(input_id) is None:
-        raise ValueError("A native context lookup requires a 128-bit input ID")
-    return NativeContextProof.read_evidence(
-        session_file, input_id, request_generation=request_generation
-    )
-
-
 def _verify_context(
     session_file: Path,
     input_id: str,
@@ -436,7 +430,7 @@ def _verify_context(
         or _DIGEST.fullmatch(context_event.llm_context_digest) is None
     ):
         raise NativePiUnavailable("Native Pi input/context events disagree")
-    proof = _read_native_context_evidence(session_file, input_id)
+    proof = NativeContextProof.read_evidence(session_file, input_id)
     if (
         proof.session_id != session_id
         or proof.session_entry_id != input_event.session_entry_id

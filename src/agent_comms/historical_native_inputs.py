@@ -14,7 +14,7 @@ from pathlib import Path
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _assert_schema as assert_cohort_schema
 from .coordination_store import IdentityConflict, MutationStore
-from .native_pi import NativeContextProof, NativePiUnavailable, _read_native_context_evidence
+from .native_pi import NativeContextProof, NativePiUnavailable
 from .native_prompt_binding import expected_prompt_matches_journal, read_expected_prompt_binding
 
 
@@ -113,7 +113,7 @@ def read_historical_native_inputs(
             # Journal alone cannot promote an unrecorded or uncertain input.
             # The immutable SQL row is already present from the live event;
             # this check only corroborates its message-bearing context facts.
-            observed = _read_native_context_evidence(
+            observed = NativeContextProof.read_evidence(
                 session_file, row["input_id"], request_generation=row["request_generation"]
             )
         except (OSError, ValueError, NativePiUnavailable) as error:

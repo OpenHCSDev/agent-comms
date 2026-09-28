@@ -1554,7 +1554,7 @@ class RecoveryMonitorCapability:
         to replay. An unfinished journal or unresolved publication is refused.
         """
         from .native_entries import MessageEntry, NativeEntry
-        from .native_pi import _read_native_context_evidence
+        from .native_pi import NativeContextProof
         from .native_prompt_binding import (
             expected_prompt_matches_journal,
             read_expected_prompt_binding,
@@ -1599,7 +1599,7 @@ class RecoveryMonitorCapability:
                 or not expected_prompt_matches_journal(session_file, binding)
             ):
                 raise RecoveryBlocked("native failure lacks its bound original input")
-            proof = _read_native_context_evidence(session_file, reserved["input_id"])
+            proof = NativeContextProof.read_evidence(session_file, reserved["input_id"])
             _header, entries = NativeEntry.read_evidence(session_file)
             user_index = next(
                 index for index, entry in enumerate(entries) if entry.id == proof.session_entry_id

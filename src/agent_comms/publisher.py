@@ -29,7 +29,6 @@ from .envelope_claim_transitions import (
     _claim_transition_wire,
     _release_resource,
     apply_transition,
-    normalize_claim_file,
 )
 from .errors import (
     ClaimEnvelopeUnknownError,
@@ -231,7 +230,7 @@ class Publisher:
         *,
         worktree: Path,
         incarnation: str,
-        claims: Sequence[str | Path | FileClaimPath] = (),
+        claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path] = (),
         _locked_registry_snapshot: RegistrySnapshot | None = None,
         _bus_locked: bool = False,
@@ -284,7 +283,7 @@ class Publisher:
                 snapshot=_locked_registry_snapshot,
             )
             owner_incarnation = str(incarnation)
-            requested = tuple(sorted(normalize_claim_file(worktree, path) for path in claims))
+            requested = tuple(sorted(path.normalized(worktree) for path in claims))
             release_paths = tuple(sorted(_release_resource(worktree, path) for path in releases))
             release_records: list[ClaimRelease] = []
             for resource in release_paths:

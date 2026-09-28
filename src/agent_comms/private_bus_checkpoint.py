@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, file_revision
+from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .wire_metadata import WireMetadata
 
@@ -126,12 +127,6 @@ class PrefixCertificate:
         )
 
 
-def _failure(message: str) -> Exception:
-    from .errors import RelationViolationError
-
-    return RelationViolationError(message)
-
-
 def _path(bus_path: Path) -> Path:
     return bus_path.with_name("private_bus_checkpoint.sqlite3")
 
@@ -154,8 +149,6 @@ def _directory_sync(path: Path) -> None:
 
 
 def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
-    from .errors import RelationViolationError
-
     if path.is_symlink() or not path.exists():
         raise RelationViolationError("Private bus checkpoint is missing or redirected.")
     info = path.lstat()
@@ -178,14 +171,14 @@ def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
 def _saved(db: sqlite3.Connection) -> PrefixWitness:
     tables = {item[0] for item in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if tables != {"certificate", "response_keys", "initials", "addressed"}:
-        raise _failure("Private bus checkpoint schema is unavailable.")
+        raise RelationViolationError("Private bus checkpoint schema is unavailable.")
     row = db.execute("SELECT * FROM certificate WHERE singleton=1").fetchone()
     if row is None:
-        raise _failure("Private bus checkpoint schema is unavailable.")
+        raise RelationViolationError("Private bus checkpoint schema is unavailable.")
     try:
         return FieldCodec.decode(PrefixCertificate, dict(row)).witness()
     except (TypeError, ValueError) as error:
-        raise _failure("Private bus checkpoint identity is malformed.") from error
+        raise RelationViolationError("Private bus checkpoint identity is malformed.") from error
 
 
 def _index_row(
@@ -197,7 +190,9 @@ def _index_row(
     initial: CommittedInitial | None,
 ) -> None:
     if receipt is None and initial is None and message.claim_transition is None:
-        raise _failure("Unattested public initial cannot enter a certified private root.")
+        raise RelationViolationError(
+            "Unattested public initial cannot enter a certified private root."
+        )
     if receipt is not None:
         db.execute("INSERT INTO response_keys(key) VALUES (?)", (receipt["publication_key"],))
     if initial is not None:
@@ -228,13 +223,15 @@ def install_private_bus_checkpoint(bus: WireLog) -> PrefixWitness:
     with bus.locked():
         marker = bus._private_marker_unlocked()
         if not marker.claims:
-            raise _failure("Checkpoint installation needs a claim-enabled private root.")
+            raise RelationViolationError(
+                "Checkpoint installation needs a claim-enabled private root."
+            )
         path = _path(bus.path)
         if path.exists() or path.is_symlink() or marker.checkpoint_seal is not None:
-            raise _failure("Private bus checkpoint is already installed.")
+            raise RelationViolationError("Private bus checkpoint is already installed.")
         if not bus.path.exists():
             if marker.last_seq != 0:
-                raise _failure("Private bus is missing its reserved publication.")
+                raise RelationViolationError("Private bus is missing its reserved publication.")
             fd = os.open(
                 bus.path,
                 os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
@@ -275,11 +272,15 @@ def install_private_bus_checkpoint(bus: WireLog) -> PrefixWitness:
                         for _ in bus._verified_private_rows_unlocked(marker, on_row=collect):
                             pass
                         if through_seq != marker.last_seq:
-                            raise _failure("Private bus has an unsettled publication sequence.")
+                            raise RelationViolationError(
+                                "Private bus has an unsettled publication sequence."
+                            )
                         if file_revision(os.fstat(stream.fileno())) != file_revision(
                             info
                         ) or file_revision(bus.path.stat()) != file_revision(info):
-                            raise _failure("Private bus changed during checkpoint installation.")
+                            raise RelationViolationError(
+                                "Private bus changed during checkpoint installation."
+                            )
                         PrefixCertificate.capture(
                             marker.root_id, info, through_seq, digest, _tail(stream, info.st_size)
                         ).insert(db)
@@ -325,22 +326,24 @@ def _recover_pending_unlocked(
             count += 1
             size += len(raw)
             if count > 100_000 or size > 128 * 1024 * 1024:
-                raise _failure("Private bus pending recovery exceeds cold bound.")
+                raise RelationViolationError("Private bus pending recovery exceeds cold bound.")
             digest = _chain(digest, raw)
             if offset + len(raw) == prior.revision[2]:
                 prior_seen = True
                 prior_seq = message.seq
                 if digest.hex() != prior.digest or prior_seq != prior.through_seq:
-                    raise _failure("Private bus checkpoint old prefix changed during recovery.")
+                    raise RelationViolationError(
+                        "Private bus checkpoint old prefix changed during recovery."
+                    )
             last_seq = message.seq
             _index_row(db, offset, raw, message, receipt, initial)
 
         for _ in bus._verified_private_rows_unlocked(marker, on_row=collect):
             pass
         if not prior_seen or (prior.revision[2] == 0 and prior.digest != _SEED.hex()):
-            raise _failure("Private bus checkpoint old prefix is unavailable.")
+            raise RelationViolationError("Private bus checkpoint old prefix is unavailable.")
         if file_revision(bus.path.stat()) != file_revision(info):
-            raise _failure("Private bus changed during pending recovery.")
+            raise RelationViolationError("Private bus changed during pending recovery.")
         with bus.path.open("rb") as stream:
             expected = PrefixWitness(
                 marker.root_id,
@@ -350,7 +353,9 @@ def _recover_pending_unlocked(
                 _tail(stream, info.st_size),
             )
         if expected.seal() != seal.expected or last_seq > marker.last_seq:
-            raise _failure("Private bus checkpoint pending suffix differs from intent.")
+            raise RelationViolationError(
+                "Private bus checkpoint pending suffix differs from intent."
+            )
         PrefixCertificate.capture(expected.root_id, info, last_seq, digest, expected.tail).update(
             db
         )
@@ -375,14 +380,16 @@ def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -
                 or (saved.device, saved.inode) != (info.st_dev, info.st_ino)
                 or info.st_size < saved.offset
             ):
-                raise _failure("Private bus checkpoint root/inode/size changed.")
+                raise RelationViolationError("Private bus checkpoint root/inode/size changed.")
             recovered = marker.seal.recover(bus, marker, db, path, saved, info)
             if recovered is not None:
                 return recovered
             if _tail(stream, saved.offset) != saved.tail:
-                raise _failure("Private bus checkpoint prefix tail changed.")
+                raise RelationViolationError("Private bus checkpoint prefix tail changed.")
             if saved.through_seq > marker.last_seq:
-                raise _failure("Private bus checkpoint exceeds the durable sequence marker.")
+                raise RelationViolationError(
+                    "Private bus checkpoint exceeds the durable sequence marker."
+                )
             if file_revision(info) == saved.revision:
                 return saved
             # Changed revision: a suffix alone cannot rule out an earlier in-place edit.
@@ -405,20 +412,26 @@ def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -
             ) -> None:
                 nonlocal digest, observed_prefix, prefix_seq, suffix_bytes
                 if receipt is None and initial is None and message.claim_transition is None:
-                    raise _failure("Unattested public initial blocks certified prefix.")
+                    raise RelationViolationError(
+                        "Unattested public initial blocks certified prefix."
+                    )
                 digest = _chain(digest, raw)
                 end = offset + len(raw)
                 if end == saved.offset:
                     observed_prefix = True
                     prefix_seq = message.seq
                     if digest.hex() != saved.digest or prefix_seq != saved.through_seq:
-                        raise _failure("Private bus checkpoint certified prefix changed.")
+                        raise RelationViolationError(
+                            "Private bus checkpoint certified prefix changed."
+                        )
                 elif end > saved.offset:
                     if not observed_prefix or offset < saved.offset:
-                        raise _failure("Private bus checkpoint offset is not a row boundary.")
+                        raise RelationViolationError(
+                            "Private bus checkpoint offset is not a row boundary."
+                        )
                     suffix_bytes += len(raw)
                     if suffix_bytes > 16 * 1024 * 1024 or len(additions) >= 10_000:
-                        raise _failure(
+                        raise RelationViolationError(
                             "Private bus checkpoint crash suffix exceeds recovery bound."
                         )
                     additions.append((offset, raw, message, receipt, initial))
@@ -426,11 +439,11 @@ def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -
             for _ in bus._verified_private_rows_unlocked(marker, on_row=collect):
                 pass
             if not observed_prefix or (saved.offset == 0 and saved.digest != _SEED.hex()):
-                raise _failure("Private bus checkpoint prefix is unavailable.")
+                raise RelationViolationError("Private bus checkpoint prefix is unavailable.")
             if file_revision(os.fstat(stream.fileno())) != file_revision(info) or file_revision(
                 bus.path.stat()
             ) != file_revision(info):
-                raise _failure("Private bus changed during checkpoint validation.")
+                raise RelationViolationError("Private bus changed during checkpoint validation.")
             # Full parser above checked all cross-prefix response key duplicates.
             last_seq = additions[-1][2].seq if additions else saved.through_seq
             expected = PrefixWitness(
@@ -453,7 +466,9 @@ def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -
             bus.write_metadata_unlocked(marker)
             return _saved(db)
     except (sqlite3.Error, OSError) as error:
-        raise _failure("Private bus checkpoint verification is unavailable.") from error
+        raise RelationViolationError(
+            "Private bus checkpoint verification is unavailable."
+        ) from error
 
 
 def append_private_bus_checkpoint_unlocked(
@@ -477,11 +492,11 @@ def append_private_bus_checkpoint_unlocked(
                 or offset != saved.offset
                 or message.seq <= saved.through_seq
             ):
-                raise _failure("Private bus checkpoint append lost its prefix fence.")
+                raise RelationViolationError("Private bus checkpoint append lost its prefix fence.")
             marker.seal.check_final(saved, path)
             stream.seek(offset)
             if stream.read(len(raw)) != raw or _tail(stream, offset) != saved.tail:
-                raise _failure("Private bus checkpoint append bytes differ.")
+                raise RelationViolationError("Private bus checkpoint append bytes differ.")
             digest = _chain(bytes.fromhex(saved.digest), raw)
             expected = PrefixWitness(
                 saved.root_id,
@@ -502,7 +517,7 @@ def append_private_bus_checkpoint_unlocked(
             bus.write_metadata_unlocked(marker)
             return _saved(db)
     except (sqlite3.Error, OSError) as error:
-        raise _failure("Private bus checkpoint append outcome UNKNOWN.") from error
+        raise RelationViolationError("Private bus checkpoint append outcome UNKNOWN.") from error
 
 
 def certified_initial_page_unlocked(
@@ -523,7 +538,6 @@ def certified_initial_page_unlocked(
     is advisory only.
     """
     from .bus_publication import PRIVATE_WIRE_FIELD, unique_wire_object, validate_initial_record
-    from .errors import RelationViolationError
 
     if (
         type(lookup) is not str
@@ -556,30 +570,30 @@ def certified_initial_page_unlocked(
                 or latest_initial_seq < 0
                 or latest_initial_seq > witness.through_seq
             ):
-                raise _failure("Certified initial high-water is invalid.")
+                raise RelationViolationError("Certified initial high-water is invalid.")
             initials = []
             for row in rows[:limit]:
                 stream.seek(row["offset"])
                 raw = stream.read(row["length"])
                 if len(raw) != row["length"] or not raw.endswith(b"\n"):
-                    raise _failure("Certified initial row changed.")
+                    raise RelationViolationError("Certified initial row changed.")
                 record = json.loads(raw, object_pairs_hook=unique_wire_object)
                 if not isinstance(record, dict) or PRIVATE_WIRE_FIELD not in record:
-                    raise _failure("Certified initial row is unavailable.")
+                    raise RelationViolationError("Certified initial row is unavailable.")
                 initial = validate_initial_record(record, witness.root_id)
                 if (
                     initial.message.seq != row["seq"]
                     or initial.message.message_id != row["message_id"]
                     or not any(r.recipient_lookup == lookup for r in initial.audience.recipients)
                 ):
-                    raise _failure("Certified initial lookup differs from bus row.")
+                    raise RelationViolationError("Certified initial lookup differs from bus row.")
                 initials.append(initial)
             if (
                 file_revision(_path(bus.path).stat()) != marker.seal.db_revision
                 or bus._private_marker_unlocked().seal != marker.seal
                 or file_revision(bus.path.stat()) != witness.revision
             ):
-                raise _failure("Certified page changed during its read fence.")
+                raise RelationViolationError("Certified page changed during its read fence.")
             return (
                 replace(witness, latest_initial_seq=latest_initial_seq),
                 tuple(initials),
@@ -588,4 +602,4 @@ def certified_initial_page_unlocked(
     except RelationViolationError:
         raise
     except (sqlite3.Error, OSError, ValueError, TypeError) as error:
-        raise _failure("Certified initial page is unavailable.") from error
+        raise RelationViolationError("Certified initial page is unavailable.") from error

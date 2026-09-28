@@ -30,14 +30,14 @@ from .cohort_schema import install_private_cohort_schema
 from .comms import Comms
 from .coordinated_runtime import (
     CoordinatedTurn,
-    SelectedExistingFileWrite,
     SelectedExecution,
+    SelectedExistingFileWrite,
 )
 from .coordinated_runtime_schema import install_native_runtime_schema
 from .coordination_cohort import accept_initial_cohort, sealed_cohort_sequences
 from .coordination_response import install_private_response_schema
 from .coordination_store import IdentityConflict, MutationStore, PublicationActivationBlocked
-from .envelope_claim_transitions import normalize_existing_file
+from .envelope_claim_transitions import ExistingFileClaim
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .native_pi import _private_session_dir, _trusted_package
@@ -158,7 +158,7 @@ async def run_foreground_once(
             marker = comms.bus.log._private_marker_unlocked()
         if not marker.claims:
             raise PublicationActivationBlocked("selected file write needs a private claim protocol")
-        normalize_existing_file(worktree, selected_existing_file_write.resource)
+        selected_existing_file_write.resource.normalized(worktree)
     thread = Thread(name, tags, str(worktree), pid=os.getpid())
     # The registry name reservation and registration must be ONE wire-locked
     # operation; `claim_thread` silently chooses a suffix on a collision.
@@ -284,7 +284,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         selected_write = (
             SelectedExistingFileWrite(
-                args.selected_write_resource,
+                ExistingFileClaim(args.selected_write_resource),
                 _read_selected_write_source(args.selected_write_source),
             )
             if args.selected_write_resource is not None

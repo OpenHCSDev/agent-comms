@@ -15,6 +15,7 @@ from .registration import Registration
 if TYPE_CHECKING:
     pass
 from .channel_targets import BuiltinChannel
+from .envelope_claim_transitions import FileClaimPath
 from .errors import RelationViolationError, UnregisteredThreadError
 from .message_bus import MessageBus
 from .messages import Message, MessageType
@@ -40,7 +41,7 @@ class Messaging:
         type: MessageType = MessageType.INFO,
         *,
         notice: bool = False,
-        claims: Sequence[str | Path] = (),
+        claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path] = (),
     ) -> str:
         """Declare a message and route it through the bus."""
@@ -56,7 +57,7 @@ class Messaging:
         type: MessageType = MessageType.INFO,
         *,
         notice: bool = False,
-        claims: Sequence[str | Path] = (),
+        claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path] = (),
     ) -> Message:
         """Return one committed envelope, including optional guarded claims."""

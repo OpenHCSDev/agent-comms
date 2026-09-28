@@ -20,10 +20,9 @@ from .coordination_store import IdentityConflict, MutationStore
 from .envelope_claim_transitions import (
     ClaimConflict,
     ClaimOwner,
+    ExistingFileClaim,
     FileClaimPath,
     WakeAdmission,
-    normalize_claim_file,
-    normalize_existing_file,
 )
 from .errors import RelationViolationError
 from .messages import Message, MessageType
@@ -164,7 +163,7 @@ def publish_selected_resource_claim(
     store: MutationStore,
     admission: WakeAdmission,
     owner_name: str,
-    resource_path: str | Path | FileClaimPath,
+    resource_path: FileClaimPath,
 ) -> ClaimOwner:
     """Bind one existing file claim to a live selected wake in a durable bus row.
 
@@ -179,7 +178,7 @@ def publish_selected_resource_claim(
         owner,
         initial,
     ):
-        resource = normalize_claim_file(Path(owner.worktree), resource_path)
+        resource = resource_path.normalized(Path(owner.worktree))
         projection, _ = bus.log._claim_projection_unlocked(metadata)
         existing = projection.get(resource)
         if existing is not None:
@@ -394,7 +393,7 @@ def write_selected_claimed_file(
         # verification and irreversible file mutation.
         with MutationStore(str(store.path), lock_timeout=0) as scoped, scoped._transaction():
             _verify_selected_wake_state(initial, owner, generation, scoped, admission)
-            normalized = normalize_existing_file(Path(owner.worktree), claimed.resource)
+            normalized = ExistingFileClaim(Path(claimed.resource)).normalized(Path(owner.worktree))
             projection, _ = bus.log._claim_projection_unlocked(marker)
             if claimed.admission != admission or projection.get(normalized) != claimed:
                 raise IdentityConflict("Selected write has no current exact resource claim")

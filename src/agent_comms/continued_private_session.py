@@ -18,7 +18,7 @@ from .backend import _session_revision
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .input_disposition import InputDispositions
 from .native_entries import NativeEntry
-from .native_pi import NativeContextProof, _read_native_context_evidence
+from .native_pi import NativeContextProof
 from .pi_payloads import TextContent
 from .private_sidecar import native_request_digest
 
@@ -82,7 +82,7 @@ def verify_continued_private_session(
                 raise ValueError("Continued private user differs from recorded native start")
         elif native_id in recorded:
             proof = recorded[native_id]
-            if proof.session_entry_id != entry.id or proof != _read_native_context_evidence(
+            if proof.session_entry_id != entry.id or proof != NativeContextProof.read_evidence(
                 session, native_id, request_generation=proof.request_generation
             ):
                 raise ValueError("Continued private user differs from live-recorded context")

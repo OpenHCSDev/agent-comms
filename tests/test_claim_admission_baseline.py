@@ -19,6 +19,7 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
 from agent_comms.coordination_store import MutationStore
+from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
@@ -54,7 +55,9 @@ def test_selected_wake_and_file_claims_have_no_common_admission_receipt() -> Non
                 coordinator.register_participant(
                     stable_thread_lookup(people[name]), name, name, committed=True
                 )
-            message = comms.messaging.send_initial_cohort("sender", "#team", "Please investigate @Alice")
+            message = comms.messaging.send_initial_cohort(
+                "sender", "#team", "Please investigate @Alice"
+            )
             receipt = accept_initial_cohort(comms.bus, root_id, message.seq, coordinator).value
             assert receipt.member_count == 2
             assert receipt.assignment_count == 1
@@ -65,7 +68,10 @@ def test_selected_wake_and_file_claims_have_no_common_admission_receipt() -> Non
             # They neither consult nor reference the sealed N/K receipt. A
             # future native edit admission must join these two authorities.
             committed = comms.messaging.send_message(
-                "Bob", "#team", "Independent file claim", claims=["module.py"]
+                "Bob",
+                "#team",
+                "Independent file claim",
+                claims=[ExistingFileClaim(Path("module.py"))],
             )
             assert committed.claim_transition is not None
             assert not hasattr(committed.claim_transition, "wake_claim_id")

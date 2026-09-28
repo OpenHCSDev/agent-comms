@@ -9,8 +9,6 @@ fsync before any reader observes it. Parsed rows alone are NOT durable proof.
 
 from __future__ import annotations
 
-from .field_codec import FieldCodec
-
 import json
 import stat
 from abc import ABC, abstractmethod
@@ -20,6 +18,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
 
 
 class ClaimTransitionError(ValueError):
@@ -38,17 +37,19 @@ class ClaimConflict(ClaimTransitionError):  # noqa: N818 - domain-specific losin
 class FileClaimPath(ABC):
     """A caller's file operation owns which physical paths may be claimed."""
 
-    resource: str | Path
+    resource: Path
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.resource, Path):
+            raise TypeError("File claim requires a parsed path")
 
     def normalized(self, root: Path) -> str:
-        if not isinstance(self.resource, (str, Path)) or not str(self.resource):
-            raise ClaimTransitionError("Resource must be a nonempty path.")
         base = Path(root).absolute()
         try:
             physical_root = base.resolve(strict=True)
             if physical_root != base or not base.is_dir():
                 raise ClaimTransitionError("Worktree must be a physical existing directory.")
-            requested = Path(self.resource)
+            requested = self.resource
             if ".." in requested.parts:
                 raise ClaimTransitionError("Parent traversal is not a resource identifier.")
             candidate = requested if requested.is_absolute() else base / requested
@@ -91,16 +92,6 @@ class WritableFileClaim(FileClaimPath):
         except FileNotFoundError:
             return
         self.validate_regular(info)
-
-
-def normalize_claim_file(root: Path, resource: str | Path | FileClaimPath) -> str:
-    path = resource if isinstance(resource, FileClaimPath) else ExistingFileClaim(resource)
-    return path.normalized(root)
-
-
-def normalize_existing_file(root: Path, resource: str | Path) -> str:
-    """Compatibility entry for operations requiring an existing regular file."""
-    return ExistingFileClaim(resource).normalized(root)
 
 
 def _text(value: object, label: str) -> str:
