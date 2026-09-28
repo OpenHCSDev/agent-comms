@@ -58,6 +58,14 @@ class MessageWireCodec(FieldCodec):
             return value
         return super().encode(value)
 
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        if target is float and type(data) in (int, float):
+            return data  # Preserve the original numeric spelling and non-finite timestamps.
+        if target is ClaimTransition:
+            return _claim_transition_from_wire(data)
+        return super()._decode(target, data)
+
 
 @dataclass(frozen=True, slots=True)
 class Message:
@@ -88,9 +96,6 @@ class Message:
     )
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "sender_role", ThreadRole(self.sender_role))
-        if self.membership is not None:
-            object.__setattr__(self, "membership", MembershipChange(self.membership))
         if not self.sender:
             raise RelationViolationError("Message sender cannot be empty.")
         if not self.target:
@@ -150,8 +155,10 @@ class Message:
         ).hexdigest()[:12]
         return digest
 
-    def to_display_wire(self) -> dict:
-        return self.to_wire()
+    @property
+    def display_metadata(self) -> dict:
+        """Live messages carry no historical provenance decoration."""
+        return {}
 
     def to_wire(self) -> dict:
         result = MessageWireCodec.encode(self)
@@ -162,23 +169,13 @@ class Message:
 
     @classmethod
     def from_wire(cls, data: Mapping) -> Message:
-        return cls(
-            sender=data["from"],
-            target=data["to"],
-            body=data["text"],
-            type=MessageType(data["type"]),
-            timestamp=data.get("ts", 0.0),
-            seq=int(data.get("seq", 0)),
-            sender_role=ThreadRole(data.get("sender_role", ThreadRole.AGENT.value)),
-            membership=MembershipChange(data["membership"]) if data.get("membership") else None,
-            notice=bool(data.get("notice", False)),
-            mentions=tuple(ThreadMention.from_wire(item) for item in data.get("mentions", ())),
-            claim_transition=(
-                _claim_transition_from_wire(data["claim_transition"])
-                if "claim_transition" in data
-                else None
-            ),
-        )
+        from .bus_publication import PRIVATE_WIRE_FIELD
+
+        # ID is derived; private authority is independently validated by the bus.
+        public = {
+            key: value for key, value in data.items() if key not in ("id", PRIVATE_WIRE_FIELD)
+        }
+        return MessageWireCodec.decode(cls, {"ts": 0.0, **public})
 
     @property
     def response_policy(self) -> ResponsePolicy:

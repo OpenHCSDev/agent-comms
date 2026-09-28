@@ -17,7 +17,7 @@ from typing import BinaryIO, ClassVar
 
 from .bus_publication import reject_private_wire_fields
 from .channel_targets import BuiltinChannel
-from .channels import ChannelCatalog
+from .catalog_store import ChannelCatalog
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
@@ -129,11 +129,11 @@ class ChannelScope(WireExportScope):
             )
 
     def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
-        if catalog.is_view_target(self.channel):
+        if catalog.read().is_view_target(self.channel):
             raise RelationViolationError(
                 f"Saved view {self.channel!r} has no authoritative wire history."
             )
-        targets = catalog.history_targets(self.channel)
+        targets = catalog.read().history_targets(self.channel)
         if targets is None:
             raise RelationViolationError(
                 f"View {self.channel!r} is an aggregate, not an exportable conversation."

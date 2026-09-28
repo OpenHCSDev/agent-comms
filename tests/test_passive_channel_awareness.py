@@ -82,7 +82,9 @@ async def test_tag_commit_survives_optional_advisory_stat_failure(
         current = comms.registry.require(owner)
         assert (
             agent.inputs.passive_awareness.frame(
-                current, comms.registry.snapshot(), comms.channels.catalog.targets_for(current.tags)
+                current,
+                comms.registry.snapshot(),
+                comms.channels.catalog.read().targets_for(current.tags),
             )
             == ""
         )
@@ -106,7 +108,9 @@ async def test_tag_commit_survives_optional_advisory_write_failure(tmp_path, mon
         current = comms.registry.require(owner)
         assert (
             agent.inputs.passive_awareness.frame(
-                current, comms.registry.snapshot(), comms.channels.catalog.targets_for(current.tags)
+                current,
+                comms.registry.snapshot(),
+                comms.channels.catalog.read().targets_for(current.tags),
             )
             == ""
         )
@@ -258,7 +262,9 @@ async def test_oversized_warm_index_row_does_not_starve_short_notice(
         await agent.inputs.drain_inbox(owner)  # Build a validated, warm page index.
         current = comms.registry.require(owner)
         frame = agent.inputs.passive_awareness.frame(
-            current, comms.registry.snapshot(), comms.channels.catalog.targets_for(current.tags)
+            current,
+            comms.registry.snapshot(),
+            comms.channels.catalog.read().targets_for(current.tags),
         )
         assert "RECENT SHORT NOTICE" in frame
         assert '"oversized_channel_rows_omitted":1' in frame
@@ -277,7 +283,7 @@ async def test_previously_selected_source_becoming_oversized_still_fails_closed(
         comms.messaging.send("speaker", "#comms", "ORIGINAL short content")
         await agent.inputs.drain_inbox(owner)
         current = comms.registry.require(owner)
-        channels = comms.channels.catalog.targets_for(current.tags)
+        channels = comms.channels.catalog.read().targets_for(current.tags)
         assert "ORIGINAL short content" in agent.inputs.passive_awareness.frame(
             current, comms.registry.snapshot(), channels
         )
@@ -322,13 +328,13 @@ async def test_advisory_projection_requires_warm_index_and_never_scans_bus(tmp_p
         await agent.inputs.drain_inbox(owner)  # Ordinary ACP delivery, not a native input.
         current = comms.registry.require(owner)
         snapshot = comms.registry.snapshot()
-        channels = comms.channels.catalog.targets_for(current.tags)
+        channels = comms.channels.catalog.read().targets_for(current.tags)
 
         def no_rebuild(*_args, **_kwargs):
             raise AssertionError("advisory wake tried to scan/rebuild bus")
 
         monkeypatch.setattr(BusPageIndex, "sync", no_rebuild)
-        monkeypatch.setattr(comms.bus.log, 'full_history', no_rebuild)
+        monkeypatch.setattr(comms.bus.log, "full_history", no_rebuild)
         assert "warm index only" in agent.inputs.passive_awareness.frame(
             current, snapshot, channels
         )
@@ -382,7 +388,7 @@ async def test_overwritten_source_and_owner_replacement_fail_closed_after_captur
         new_owner = comms.registry.require(owner)
         snapshot = comms.registry.snapshot()
         assert not agent.inputs.passive_awareness.frame(
-            new_owner, snapshot, comms.channels.catalog.targets_for(new_owner.tags)
+            new_owner, snapshot, comms.channels.catalog.read().targets_for(new_owner.tags)
         )
     finally:
         await agent.shutdown()
@@ -454,7 +460,7 @@ async def test_owner_rename_preserves_exact_incarnation_and_channel_scope(tmp_pa
         current = comms.registry.require(renamed)
         snapshot = comms.registry.snapshot()
         assert "Notice survives canonical rename" in agent.inputs.passive_awareness.frame(
-            current, snapshot, comms.channels.catalog.targets_for(current.tags)
+            current, snapshot, comms.channels.catalog.read().targets_for(current.tags)
         )
     finally:
         await agent.shutdown()
@@ -474,7 +480,7 @@ async def test_failed_witness_publication_suppresses_frame_and_keeps_old_documen
         await agent.inputs.drain_inbox(owner)
         current = comms.registry.require(owner)
         snapshot = comms.registry.snapshot()
-        channels = comms.channels.catalog.targets_for(current.tags)
+        channels = comms.channels.catalog.read().targets_for(current.tags)
         awareness = agent.inputs.passive_awareness
         before = awareness.store.path.read_bytes()
         real_sync, real_replace = os.fsync, locked_store._replace_snapshot
@@ -522,7 +528,7 @@ async def test_source_recheck_retains_shared_store_lock_through_exact_bus_read(
         await agent.inputs.drain_inbox(owner)
         current = comms.registry.require(owner)
         snapshot = comms.registry.snapshot()
-        channels = comms.channels.catalog.targets_for(current.tags)
+        channels = comms.channels.catalog.read().targets_for(current.tags)
         awareness = agent.inputs.passive_awareness
         modes = []
 
@@ -575,7 +581,7 @@ async def test_index_exit_failure_cannot_return_unpublished_frame(tmp_path, monk
                 awareness.frame(
                     current,
                     comms.registry.snapshot(),
-                    comms.channels.catalog.targets_for(current.tags),
+                    comms.channels.catalog.read().targets_for(current.tags),
                 )
                 == ""
             )

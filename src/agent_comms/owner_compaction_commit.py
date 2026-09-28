@@ -20,7 +20,7 @@ from pathlib import Path
 
 from .backend import _session_revision
 from .bus_publication import unique_wire_object
-from .channels import ChannelCatalog
+from .catalog_store import ChannelCatalog
 from .compaction_journal import (
     CompactionJournal,
     CompactionJournalError,
@@ -224,7 +224,7 @@ class OwnerCompactionCommit:
         delivery = DeliveryScope(
             owner.name,
             snapshot.aliases,
-            ChannelCatalog(self.root / "channels.json", self.registry).targets_for(owner.tags),
+            ChannelCatalog(self.root / ChannelCatalog.filename).read().targets_for(owner.tags),
         )
         rows = self.inputs._compaction_rows_unlocked(owner, pending_input_key, self.future_queue)
         return CompactionSource(

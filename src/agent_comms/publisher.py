@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     from .coordination import PublicationIntent
     from .registration import Registration
 
-from .channels import ChannelCatalog
+from .catalog_store import ChannelCatalog
 from .wire_log import WireLog
 
 
@@ -90,7 +90,8 @@ class Publisher:
         if not exists(message.sender):
             raise UnregisteredThreadError(f"Sender {message.sender!r} is not a registered thread.")
         if BuiltinChannel.aggregate_target(message.target) or (
-            is_channel_target(message.target) and self._channels.is_view_target(message.target)
+            is_channel_target(message.target)
+            and self._channels.read().is_view_target(message.target)
         ):
             raise RelationViolationError(
                 f"View {message.target!r} is a projection, not a routable target."
@@ -359,8 +360,7 @@ class Publisher:
                 raise RelationViolationError("Private bus sequence is exhausted.")
             source_paths = (
                 self._registry.store.path,
-                self._channels.path,
-                self._channels.saved_views_path,
+                *self._channels.source_paths(),
             )
             before_revisions = tuple(file_revision(path) for path in source_paths)
             snapshot = self._registry.snapshot()
@@ -385,12 +385,14 @@ class Publisher:
                 or _human_origin.worktree != sender_thread.worktree
             ):
                 raise RelationViolationError("Local USER origin differs from registered identity.")
-            if BuiltinChannel.aggregate_target(message.target) or self._channels.is_view_target(
+            catalog = self._channels.read()
+            if BuiltinChannel.aggregate_target(message.target) or catalog.is_view_target(
                 message.target
             ):
                 raise RelationViolationError("A saved/aggregate view is not routable.")
             target = BuiltinChannel.canonical(message.target)
-            tags, explicit_channels = self._channels.read()
+            tags = catalog.tags
+            explicit_channels = {name: catalog.resolve(name) for name in catalog.audiences}
             if not is_channel_target(target):
                 if snapshot.aliases.get(target, target) != target:
                     raise RelationViolationError(
@@ -468,8 +470,7 @@ class Publisher:
                 repr(
                     (
                         file_revision(self._registry.store.path),
-                        file_revision(self._channels.path),
-                        file_revision(self._channels.saved_views_path),
+                        self._channels.revision(),
                         sorted(
                             (name, thread.created_at, sorted(thread.tags))
                             for name, thread in snapshot.threads.items()

@@ -100,18 +100,26 @@ def test_catalog_restore_preserves_current_preferences_and_historical_channels(t
     old.channels.set_channel_pinned("#nra", True)
     old.channels.set_channel_pinned("#all", True)
     new.channels.set_channel_sort("#comms", ThreadSort.LAST_ACTIVITY)
-    before = new.channels.catalog.resolve("#comms")
+    before = new.channels.catalog.read().resolve("#comms")
     old_files = {p: p.read_bytes() for p in old.root.glob("*.json")}
 
-    new.channels.catalog.restore_missing(old.channels.catalog)
-    assert new.channels.catalog.resolve("#comms") == before
-    assert not new.channels.catalog.resolve("#all").pinned
+    with new.channels.catalog.editing() as document:
+        document.restore_missing(
+            old.channels.catalog.read(), old.registry.all_threads(), existing=True
+        )
+    assert new.channels.catalog.read().resolve("#comms") == before
+    assert not new.channels.catalog.read().resolve("#all").pinned
     for name in ("#nra", "#openhcs"):
-        assert new.channels.catalog.resolve(name) == old.channels.catalog.resolve(name)
+        assert new.channels.catalog.read().resolve(name) == old.channels.catalog.read().resolve(
+            name
+        )
     assert old_files == {p: p.read_bytes() for p in old.root.glob("*.json")}
-    new.channels.catalog.restore_missing(old.channels.catalog)
-    assert new.channels.catalog.resolve("#comms") == before
-    assert new.channels.catalog.resolve("#nra").any_mode
+    with new.channels.catalog.editing() as document:
+        document.restore_missing(
+            old.channels.catalog.read(), old.registry.all_threads(), existing=True
+        )
+    assert new.channels.catalog.read().resolve("#comms") == before
+    assert new.channels.catalog.read().resolve("#nra").any_mode
 
 
 @pytest.mark.parametrize("repair_existing", [False, True])
@@ -138,7 +146,9 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
         if repair_existing:
             current.registry.restore_stopped(source, (missing.name,))
         message = (
-            current.messaging.send_user_message("#comms", "@live Reply once", worktree=str(tmp_path))
+            current.messaging.send_user_message(
+                "#comms", "@live Reply once", worktree=str(tmp_path)
+            )
             if repair_existing
             else None
         )
