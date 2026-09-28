@@ -28,7 +28,7 @@ def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
     wired.messaging.send("fixer", "PR111", "reverse direct")
     wired.messaging.send("PR111", "#all", "global")
     wired.messaging.send("fixer", "#base", "tagged")
-    wired.messaging.send("third", "broadcast", "legacy broadcast")
+    wired.messaging.send("third", "#all", "global from third")
     assert _listed(wired) == _expected(wired)
     assert wired.messaging.acknowledge("fixer", "PR111") == 1
     assert _listed(wired) == _expected(wired)
@@ -163,7 +163,7 @@ def test_route_projection_detects_rewrite_before_append(wired):
 
 def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired):
     wired.threads.register(Thread(name="broadcast", tags=frozenset(), worktree="/tmp/broadcast"))
-    wired.messaging.send("PR111", "broadcast", "channel alias also names a real thread")
+    wired.messaging.send("PR111", "broadcast", "direct message to the named thread")
     wired.messaging.send("fixer", "broadcast", "second sender")
     wired.messaging.send("PR111", "fixer", "old direct")
     wired.registry.rename("PR111", "renamed")

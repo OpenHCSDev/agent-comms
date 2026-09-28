@@ -95,7 +95,7 @@ class FrozenAudience:
             _bounded_text(getattr(self, name), name)
         _bounded_text(self.sender_name, "sender_name", thread_name=True)
         if not BuiltinChannel.exact_stored_target(self.exact_target):
-            raise ValueError("aggregate views and broadcast aliases are not exact stored targets")
+            raise ValueError("aggregate views are not exact stored targets")
         if type(self.recipients) is not tuple or len(self.recipients) > MAX_RECIPIENTS:
             raise ValueError("recipients must be a bounded immutable tuple")
         if any(type(item) is not FrozenRecipient for item in self.recipients):

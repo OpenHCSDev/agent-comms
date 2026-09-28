@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from .audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
-from .channel_targets import BuiltinChannel, is_channel_target
+from .channel_targets import is_channel_target
 from .coordination import MessageAudience
 from .messages import Message
 from .wake_policy import BoundedTriageWake, FullWake, PassiveWake, WakePolicy
@@ -64,11 +64,7 @@ class WakeDecision:
 
 
 def _require_stored(message: Message) -> None:
-    if (
-        not isinstance(message, Message)
-        or message.seq <= 0
-        or BuiltinChannel.is_alias(message.target)
-    ):
+    if not isinstance(message, Message) or message.seq <= 0:
         raise ValueError("Wake and response routes require a stored canonical Message.")
 
 

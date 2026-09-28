@@ -25,7 +25,7 @@ class TestMessaging:
             wired.messaging.send("ghost", "fixer", "hello")
 
     def test_broadcast_reaches_all_peers(self, wired):
-        wired.messaging.broadcast("PR111", "green")
+        wired.messaging.send("PR111", "#all", "green")
         assert wired.bus.pending_count("fixer") == 1
 
     def test_ack_clears_inbox(self, wired):

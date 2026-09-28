@@ -13,7 +13,7 @@ from dataclasses import astuple, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .channel_targets import BuiltinChannel, is_channel_target
+from .channel_targets import is_channel_target
 from .field_codec import FieldCodec
 from .thread_identity import ThreadIncarnation
 
@@ -289,11 +289,7 @@ class ChannelDisplayScope(MessageDisplayScope):
             return False
         return (
             message.sender in self.participant_names
-            or (
-                not is_channel_target(message.target)
-                and not BuiltinChannel.is_alias(message.target)
-                and message.target in self.participant_names
-            )
+            or (not is_channel_target(message.target) and message.target in self.participant_names)
             or any(mention.thread in self.participant_names for mention in message.mentions)
         )
 

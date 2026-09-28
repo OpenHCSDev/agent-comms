@@ -335,7 +335,7 @@ class MessageBus:
         counts = self.pending_counts(name)
         if target is None or BuiltinChannel.aggregate_target(target):
             return sum(counts.values())
-        if is_channel_target(target) or BuiltinChannel.is_alias(target):
+        if is_channel_target(target):
             targets = self._channels.read().history_targets(target)
             return sum(
                 count for scope, count in counts.items() if targets is None or scope in targets
@@ -347,7 +347,7 @@ class MessageBus:
     ) -> Callable[[Message], bool]:
         if target is None:
             return lambda message: True
-        if is_channel_target(target) or BuiltinChannel.is_alias(target):
+        if is_channel_target(target):
             targets = self._channels.read().history_targets(target)
             return lambda message: targets is None or message.target in targets
         peer = self._registry.require(target).name
@@ -486,7 +486,7 @@ class MessageBus:
 
     def channel_history(self, target: str) -> Sequence[Message]:
         """Full history of one channel (``#all`` or a tag channel)."""
-        if not (is_channel_target(target) or BuiltinChannel.is_alias(target)):
+        if not (is_channel_target(target)):
             raise ValueError(f"{target!r} is not a channel target.")
         targets = self._channels.read().history_targets(target)
         return [msg for msg in self.log.full_history() if targets is None or msg.target in targets]
@@ -532,7 +532,7 @@ class MessageBus:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         """Return one bounded page from a channel in ascending order."""
-        if not (is_channel_target(target) or BuiltinChannel.is_alias(target)):
+        if not (is_channel_target(target)):
             raise ValueError(f"{target!r} is not a channel target.")
         targets = self._channels.read().history_targets(target)
         return self.display_page(
