@@ -51,6 +51,11 @@ if mode=='wrong': d['operationId']='f'*32
 if mode=='decline':
     d=dict(version=1,status='declined',operationId=r['operationId'],reason='split_turn')
 if mode=='unknown': d=dict(version=1,status='unknown',operationId=r['operationId'])
+if mode in ('provider-error', 'invalid-error', 'oversize-error'):
+    d=dict(version=1,status='unknown',operationId=r['operationId'],
+           reason='402: insufficient credits on configured model')
+    if mode=='invalid-error': d['reason']='bad\x1bdetail'
+    if mode=='oversize-error': d['reason']='x'*1025
 response=dict(id=r['id'],type='response',command=r['type'],success=True,data=d)
 raw=json.dumps(response)
 if mode=='duplicate': raw=raw[:-1]+',"success":true}'
@@ -161,9 +166,28 @@ async def test_uncertain_result_retires_child_and_retains_unknown(tmp_path, mode
 
 async def test_timeout_does_not_retry_summary(tmp_path):
     async with selected(tmp_path, "hang") as (run, persistent, journal, file, received):
-        with pytest.raises(SelectedChildUnknown, match="transport uncertain"):
+        with pytest.raises(SelectedChildUnknown, match="timed out after 0.15 seconds"):
             await run(timeout_seconds=0.15)
         assert persistent.proc is None and received.exists()
+        assert len(journal.unresolved_selected_summary(str(file))) == 1
+
+
+@pytest.mark.parametrize(
+    ("mode", "detail"),
+    [
+        ("provider-error", "402: insufficient credits on configured model"),
+        ("invalid-error", "Invalid selected summary failure detail"),
+        ("oversize-error", "Invalid selected summary failure detail"),
+    ],
+)
+async def test_failure_detail_survives_without_authorizing_replay(tmp_path, mode, detail):
+    async with selected(tmp_path, mode) as (run, persistent, journal, file, received):
+        with pytest.raises(SelectedChildUnknown, match=detail):
+            await run()
+        assert persistent.proc is None
+        operation = json.loads(received.read_text())["operationId"]
+        assert journal.selected_summary(operation).status == "unknown"
+        assert not native_input_admitted(journal.path.parent, str(file))
         assert len(journal.unresolved_selected_summary(str(file))) == 1
 
 
@@ -215,8 +239,13 @@ async def test_reader_keeps_partial_record_on_cancel_and_enforces_bound():
 
 
 @pytest.mark.skipif(not os.environ.get("PI_NATIVE_PACKAGE_DIR"), reason="Owned copied Pi fixture")
-async def test_python_to_actual_native_rpc_retains_summary_without_native_write(tmp_path):
+@pytest.mark.parametrize("provider_error", [False, True])
+async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
+    tmp_path, provider_error
+):
     env = dict(os.environ, PR95_RPC_FIXTURE="1", TMPDIR=str(tmp_path))
+    if provider_error:
+        env["PR95_PROVIDER_ERROR"] = "1"
     script = (
         Path(__file__).resolve().parents[1] / "stack/test-native-selected-compaction-summary.mjs"
     )
@@ -249,7 +278,7 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
             file = Path(fixture["sessionFile"])
             before = file.read_bytes()
             journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-            result = await SelectedSummarySlot("owner", persistent.session_id).run_selected_summary(
+            exchange = SelectedSummarySlot("owner", persistent.session_id).run_selected_summary(
                 persistent,
                 journal,
                 fixture["witness"],
@@ -258,6 +287,18 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
                 expected_launcher="native-fixture",
                 timeout_seconds=5,
             )
+            if provider_error:
+                with pytest.raises(
+                    SelectedChildUnknown, match="402: insufficient credits on configured model"
+                ):
+                    await exchange
+                assert file.read_bytes() == before
+                assert len(journal.unresolved_selected_summary(str(file))) == 1
+                assert journal.unresolved_selected_summary(str(file))[0].status == "unknown"
+                assert not native_input_admitted(journal.path.parent, str(file))
+                assert persistent.proc is None
+                return
+            result = await exchange
             assert "Synthetic summary" in result.summary.text
             assert result.summary.details == dict(readFiles=[], modifiedFiles=[])
             assert result.summary.usage["output"] > 0

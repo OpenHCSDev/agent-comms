@@ -50,7 +50,10 @@ function acValidSummaryCancel(value) {
         value.type === "agent_comms_cancel_summary" && value.version === 1 && acSummaryId(value.operationId);
 }
 const acSummaryDecline = (operationId, reason) => ({ version: 1, status: "declined", operationId, reason });
-const acSummaryUnknown = operationId => ({ version: 1, status: "unknown", operationId });
+// Failure detail is diagnostic only: it never changes UNKNOWN or grants replay.
+const acSummaryUnknown = (operationId, reason) => ({ version: 1, status: "unknown", operationId,
+    ...(reason === undefined ? {} : { reason: reason.replace(/[\u0000-\u001f\u007f]/g, " ")
+        .trim().slice(0, 1024).toWellFormed() }) });
 const acSummaryHooks = ["session_before_compact", "before_provider_headers", "before_provider_request",
     "after_provider_response"];
 function acSummaryCompatible(session, binding) {
@@ -235,8 +238,13 @@ async function acExecuteSummary(slot, session, request, preparation, binding) {
                     await new Promise(() => {});
                 }
             }
-            if (overBudget || !sawStart || terminal?.type !== "done" || terminal.reason !== "stop")
-                throw new Error("Incomplete or oversized selected stream");
+            if (overBudget)
+                throw new Error("Selected summary stream exceeded its output limit or contained unsupported events");
+            if (terminal?.type === "error")
+                throw new Error(typeof terminal.error?.errorMessage === "string" && terminal.error.errorMessage.trim()
+                    ? terminal.error.errorMessage : `Selected summary provider stopped: ${terminal.reason}`);
+            if (!sawStart || terminal?.type !== "done" || terminal.reason !== "stop")
+                throw new Error("Selected summary stream ended without a complete response");
             const value = terminal.message;
             if (!value || value.stopReason !== "stop" || !acSummaryValidUsage(value.usage) ||
                 !Array.isArray(value.content) || value.content.some(block => block.type === "toolCall"))
@@ -266,8 +274,11 @@ async function acExecuteSummary(slot, session, request, preparation, binding) {
             throw new Error("Summary completion invalid or state changed");
         return { version: 1, status: "summarized", operationId: request.operationId,
             witness: request.witness, selected: request.selected, settings: request.settings, result };
-    } catch {
-        return slot.started ? acSummaryUnknown(request.operationId) :
+    } catch (error) {
+        const reason = slot.timedOut
+            ? `Selected summary exceeded its ${acSummaryLimits.deadlineMs / 1000} second deadline`
+            : error instanceof Error && error.message ? error.message : "Selected summary failed without error detail";
+        return slot.started ? acSummaryUnknown(request.operationId, reason) :
             acSummaryDecline(request.operationId, slot.controller.signal.aborted ? "cancelled" : "unsupported");
     } finally {
         slot.controller.abort();
