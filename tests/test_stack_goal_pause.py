@@ -207,18 +207,19 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                         len(attempts()) >= (1 if model_origin else 2)
                         or (
                             comms.registry.require("project").goal is not None
-                            and comms.registry.require("project").goal.status == "blocked"
+                            and comms.registry.require("project").goal.state.declared_name
+                            == "blocked"
                         )
                     )
                 )
                 state = comms.registry.require("project").goal
                 if empty_response:
-                    assert state.status == "blocked", state.progress
+                    assert state.state.declared_name == "blocked", state.progress
                     assert len(attempts()) == 1 and attempts()[0][1] == "failed"
                     await asyncio.sleep(0.4)
                     assert len(requests) == 1
                     return
-                assert state.status == "active", state.progress
+                assert state.state.declared_name == "active", state.progress
                 rows = attempts()
                 if model_origin:
                     assert rows[0][1] == "claimed"
@@ -240,7 +241,10 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                     assert native_user_starts() == 2
                 await view.slash_command("/goal pause")
                 paused = wire(root / "wire").registry.require("project").goal
-                assert paused.status == "paused" and comms.goal_pause("project").source == "owner"
+                assert (
+                    paused.state.declared_name == "paused"
+                    and comms.goal_pause("project").source.declared_name == "owner"
+                )
                 from agent_comms.tools import TOOLS
 
                 monkeypatch.setenv("PI_AGENT_ID", "project")

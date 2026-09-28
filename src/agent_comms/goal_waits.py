@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, fields, replace
-from typing import Any, ClassVar
+from dataclasses import dataclass, replace
+from typing import ClassVar
 
 from .declarations import (
     Goal,
@@ -98,22 +98,6 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
     def empty(self) -> dict[str, GoalWait]:
         return {}
 
-    def _decode(self, data: Any) -> dict[str, GoalWait]:
-        # The legacy reader ignored extra wait-row keys (but not extra target
-        # keys). Derive that projection from the record, then use the shared
-        # codec for every field, nested target, tuple and default.
-        names = {field.name for field in fields(GoalWait)}
-        # slots=True replaces the class on Python 3.11; use its final identity.
-        return super(GoalWaits, self)._decode(  # noqa: UP008
-            {
-                key: {name: value for name, value in row.items() if name in names}
-                for key, row in data.items()
-            }
-        )
-
-    def snapshot(self) -> dict[str, GoalWait]:
-        return self.read()
-
     def record(self, wait: GoalWait) -> None:
         self.update(lambda rows: {**rows, wait.goal_id: wait})
 
@@ -133,7 +117,7 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
 
     @staticmethod
     def for_goal(goal: Goal | None, rows: dict[str, GoalWait]) -> GoalWait | None:
-        if goal is None or not goal.active:
+        if goal is None or not goal.state.active:
             return None
         return rows.get(goal.id)
 
@@ -174,7 +158,7 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
             seen.add(name)
             thread = snapshot.threads[name]
             goal = thread.goal
-            wait = rows.get(goal.id) if goal is not None and goal.active else None
+            wait = rows.get(goal.id) if goal is not None and goal.state.active else None
             if wait is not None and (
                 goal is None
                 or wait.owner_created_at not in (None, thread.created_at)
@@ -200,7 +184,9 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
                     continue
                 peer_goal = peer.goal
                 peer_wait = (
-                    rows.get(peer_goal.id) if peer_goal is not None and peer_goal.active else None
+                    rows.get(peer_goal.id)
+                    if peer_goal is not None and peer_goal.state.active
+                    else None
                 )
                 if peer_wait is not None and (
                     peer_goal is None

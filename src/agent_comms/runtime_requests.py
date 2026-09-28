@@ -11,8 +11,8 @@ import asyncio
 import json
 import os
 from abc import abstractmethod
-from dataclasses import MISSING, asdict, dataclass, field, fields
-from typing import TYPE_CHECKING, Any, ClassVar, Self, get_type_hints
+from dataclasses import asdict, dataclass, field
+from typing import TYPE_CHECKING, Any, Self
 
 from .command import Command
 from .declared_family import DeclaredFamily
@@ -43,45 +43,11 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
     def from_wire(cls, payload: object) -> Self:
         if not isinstance(payload, dict):
             raise ValueError("Expected a runtime request object.")
-        member = cls.decode(payload["action"])
-        # Older owners ignored extension keys. Keep that compatibility at this
-        # boundary, projecting only fields owned by the selected declaration.
-        keys = {f.metadata.get("wire_name", f.name) for f in fields(member)}
-        try:
-            return member.from_payload(
-                {
-                    "kind": member.declared_name,
-                    **{key: value for key, value in payload.items() if key in keys},
-                }
-            )
-        except (TypeError, ValueError) as error:
-            raise ValueError(member.invalid_payload_message(payload, error)) from error
-
-    @classmethod
-    def invalid_payload_message(cls, payload: dict[str, Any], error: Exception) -> str:
-        return str(error)
-
-    @classmethod
-    def accepts_declared_fields(cls, payload: dict[str, Any]) -> bool:
-        """Error diagnostics project this owner's fields, never a second schema.
-
-        Called only after A2 rejected a request, to preserve the legacy domain
-        error wording. Inherited envelope fields keep their own diagnostics.
-        """
-        hints = get_type_hints(cls)
-        for declared in fields(cls):
-            if declared.name not in cls.__annotations__:
-                continue
-            key = declared.metadata.get("wire_name", declared.name)
-            if key not in payload:
-                if declared.default is MISSING and declared.default_factory is MISSING:
-                    return False
-                continue
-            try:
-                FieldCodec.decode(hints[declared.name], payload[key])
-            except (TypeError, ValueError):
-                return False
-        return True
+        if "kind" in payload:
+            raise ValueError("Unknown runtime request field: kind")
+        values = dict(payload)
+        values["kind"] = values.pop("action", None)
+        return cls.from_payload(values)
 
     def to_wire(self) -> dict[str, Any]:
         payload = FieldCodec.encode(self)
@@ -226,14 +192,6 @@ class CompactRuntimeRequest(ResultRuntimeRequest):
 class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
     include_history: bool = False
 
-    @classmethod
-    def invalid_payload_message(cls, payload: dict[str, Any], error: Exception) -> str:
-        return (
-            "include_history must be a boolean."
-            if not InputDispositionsRuntimeRequest.accepts_declared_fields(payload)
-            else str(error)
-        )
-
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
         return ctx.server.agent._comms.input_delivery(
             ctx.name,
@@ -256,17 +214,9 @@ class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
 class GoalHistoryRuntimeRequest(ResultRuntimeRequest):
     goal_id: str | None = None
 
-    @classmethod
-    def invalid_payload_message(cls, payload: dict[str, Any], error: Exception) -> str:
-        return (
-            "Goal identity must be a string."
-            if not GoalHistoryRuntimeRequest.accepts_declared_fields(payload)
-            else str(error)
-        )
-
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
         history = ctx.server.agent._comms.goal_history(ctx.name, goal_id=self.goal_id)
-        return {"history": [asdict(row) for row in history]}
+        return {"history": [row.to_wire() for row in history]}
 
 
 class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
@@ -277,7 +227,7 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
         await self.change(ctx)
         goal, execution = ctx.server.agent._comms.goal_snapshot(ctx.name)
         return {
-            "goal": asdict(goal) if goal is not None else None,
+            "goal": goal.to_wire() if goal is not None else None,
             "goalExecution": asdict(execution) if execution is not None else None,
         }
 
@@ -292,13 +242,6 @@ class GoalSnapshotRuntimeRequest(GoalSnapshotResultRuntimeRequest):
 class GoalRevisionRuntimeRequest(ResultRuntimeRequest):
     goal_id: str
     expected_revision: int
-    revision_purpose: ClassVar[str] = "updating"
-
-    @classmethod
-    def invalid_payload_message(cls, payload: dict[str, Any], error: Exception) -> str:
-        if not GoalRevisionRuntimeRequest.accepts_declared_fields(payload):
-            return f"A goal identity and revision are required for {cls.revision_purpose}."
-        return super().invalid_payload_message(payload, error)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -308,12 +251,6 @@ class GoalTextRuntimeRequest(ResultRuntimeRequest):
     def __post_init__(self) -> None:
         if not self.text.strip():
             raise ValueError("A goal requires text.")
-
-    @classmethod
-    def invalid_payload_message(cls, payload: dict[str, Any], error: Exception) -> str:
-        if not GoalTextRuntimeRequest.accepts_declared_fields(payload):
-            error = ValueError("A goal requires text.")
-        return super().invalid_payload_message(payload, error)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -338,17 +275,15 @@ class UpdateGoalRuntimeRequest(GoalRevisionRuntimeRequest, GoalSnapshotResultRun
 
 @dataclass(frozen=True, kw_only=True)
 class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
-    revision_purpose = "retry"
-
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
         goal = await ctx.server.agent.turns.retry_goal(
             ctx.session_id, self.goal_id, self.expected_revision
         )
-        return {"goal": asdict(goal)}
+        return {"goal": goal.to_wire()}
 
 
 @dataclass(frozen=True, kw_only=True)
 class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
         goal = await ctx.server.agent.turns.set_goal(ctx.session_id, self.text)
-        return {"goal": asdict(goal)}
+        return {"goal": goal.to_wire()}

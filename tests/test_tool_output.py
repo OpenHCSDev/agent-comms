@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import Thread
+from agent_comms.goal_actions import SetGoalAction
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.tool_output import MAX_INLINE_OUTPUT_BYTES, materialize_oversized_output
 from agent_comms.tools import invoke_tool
@@ -122,7 +123,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
 ):
     comms = inbox_comms
     monkeypatch.setenv("PI_AGENT_ID", "b")
-    goal = comms.update_goal("b", "set", text="Wait for a after reviewing its replies")
+    goal = comms.update_goal("b", SetGoalAction(text="Wait for a after reviewing its replies"))
     messages = [
         comms.send_message("a", "b", body) for body in (large_body, "Previously reviewed reply")
     ]
@@ -217,7 +218,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     # no active turn. Give "a" a live in-process turn for this fixture only.
     comms.register(replace(comms.registry.require("a"), pid=os.getpid()))
     comms.begin_turn("a", "a-review-in-flight")
-    goal = comms.update_goal("b", "set", text="Review a and wait for its next reply")
+    goal = comms.update_goal("b", SetGoalAction(text="Review a and wait for its next reply"))
     dispositions = InputDispositions(comms.root)
     for index in range(930):
         dispositions.record(
@@ -311,7 +312,9 @@ async def test_pending_dependency_becomes_reviewable_after_owner_admission(tmp_p
     comms.register(Thread("a", frozenset(), str(tmp_path), pid=os.getpid()))
     comms.begin_turn("a", "a-admission-in-flight")
     goal = comms.update_goal(
-        "b", "set", text="Review dependency and wait", owner_store=owner.turns.open_goal_store()
+        "b",
+        SetGoalAction(text="Review dependency and wait"),
+        owner_store=owner.turns.open_goal_store(),
     )
     args = {"thread": "b", "ack": False, "goal_id": goal.id, "wait_for": ["a"]}
     report = {"goal_id": goal.id, "status": "standby", "progress": "Wait", "wait_for": ["a"]}

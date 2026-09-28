@@ -12,6 +12,7 @@ import pytest
 
 from agent_comms import wire
 from agent_comms.acp import CommsAgent
+from agent_comms.goal_actions import BlockedGoalAction, GoalPrecondition, SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.runtime import RuntimeProxy, socket_path
 
@@ -144,13 +145,17 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
         session = (await owner.new_session(str(root / "project"))).session_id
         store = owner.turns.open_goal_store()
         goal = comms.update_goal(
-            session, "set", text="Finish the blocked objective", owner_store=store
+            session, SetGoalAction(text="Finish the blocked objective"), owner_store=store
         )
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
         store.record_failed(reservation, "Earlier goal attempt failed")
         blocked = comms.update_goal(
-            session, "blocked", goal_id=goal.id, block_reason="Owner retry decision required"
+            session,
+            BlockedGoalAction(
+                expect=GoalPrecondition(goal_id=goal.id),
+                block_reason="Owner retry decision required",
+            ),
         )
         owner.inputs.dispositions.record(
             "acp:old-unknown",
@@ -199,7 +204,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
                 goal_id=goal.id,
                 expected_revision=current.revision,
             )
-            assert comms.registry.require(session).goal.status == "paused"
+            assert comms.registry.require(session).goal.state.declared_name == "paused"
             finish_goal.set()
             await asyncio.wait_for(asyncio.shield(owner.inputs.wake_tasks[session]), 10)
             final = GoalAttemptStore(store.root).snapshot(goal.id)

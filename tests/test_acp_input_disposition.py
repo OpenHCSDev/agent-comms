@@ -13,6 +13,7 @@ from agent_comms import Message, MessageType, Thread
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.declarations import ScheduledTurn
+from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_drain import InputDrain
@@ -86,7 +87,7 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
         comms.send("peer", "project", "late direct")
         assert await agent.inputs.drain_inbox("project") == 1
         assert agent.inputs.forwarded_inputs["project"] == {"bus-1"}
-        goal = comms.update_goal("project", "set", text="Long-term architecture work")
+        goal = comms.update_goal("project", SetGoalAction(text="Long-term architecture work"))
         assert goal is not None
         yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
         command = kwargs["steering_queue"].get_nowait()
@@ -125,7 +126,7 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
     try:
         await agent.turns.run_agent_turn("project", "project", "Set a goal")
         goal = comms.registry.require("project").goal
-        assert goal is not None and goal.status == "active"
+        assert goal is not None and goal.state.declared_name == "active"
         assert GoalAttemptStore(comms.root / "goal-private").snapshot(goal.id).state == "ready"
         assert InputDispositions(comms.root).status("bus:1") == "unknown"
         assert not any(
@@ -217,7 +218,7 @@ async def test_ui_ack_does_not_hide_unknown_or_authorize_goal_superseded_direct(
         rows = InputDispositions(comms.root).unknown(frozenset({"project"}))
         assert [(row["sequence"], row["status"]) for row in rows] == [(1, "unknown")]
         assert len(agent.inputs.pending_turns["project"]) == 1
-        comms.update_goal("project", "set", text="new goal")
+        comms.update_goal("project", SetGoalAction(text="new goal"))
 
         backend_calls = []
 

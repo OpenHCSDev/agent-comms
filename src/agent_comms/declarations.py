@@ -49,7 +49,7 @@ from .bus_publication import (
     validate_initial_record,
 )
 from .bus_route_counts import BusRouteCounts
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, projected
 from .goal_presentation import (
     ExecutionPresentation,
     StandbyExecutionPresentation,
@@ -60,9 +60,7 @@ from .goal_states import (
     BlockedGoal,
     CompletedGoal,
     GoalState,
-    GoalStateProjection,
     PausedGoal,
-    PauseSource,
 )
 from .read_basis import DisplayBasis
 from .response_policy import (
@@ -961,16 +959,6 @@ def channel_tag(target: str) -> str:
 # own parent. Every Thread in the system derives its semantics from this type.
 
 
-# Legacy public enum is a derived boundary projection, not another source roster.
-GoalPauseSource = StrEnum(  # type: ignore[misc]  # declaration-derived compatibility enum
-    "GoalPauseSource",
-    {
-        member.declared_name.upper(): member.declared_name
-        for member in PauseSource.members_with(PauseSource)
-    },
-)
-
-
 class GoalExecutionState(StrEnum):
     view: ExecutionPresentation
 
@@ -1072,73 +1060,60 @@ class GoalMentionSource:
             or not math.isfinite(self.owner_created_at)
         ):
             raise ValueError("Invalid goal mention source.")
-        bindings = tuple(
-            row if isinstance(row, GoalMentionBinding) else GoalMentionBinding(**row)
-            for row in self.bindings
-        )
-        object.__setattr__(self, "bindings", bindings)
 
 
-@dataclass(frozen=True, init=False)
-class Goal(GoalStateProjection):
-    """Typed current state with the legacy dataclass field projection.
-
-    ``status``, ``block_reason`` and ``pause_source`` are read-only projections,
-    never independent writable state. Keeping them as dataclass fields preserves
-    existing asdict/replace callers at runtime and model boundaries. The private
-    state is deliberately not a serialized field or a competing stored value.
-    """
+@dataclass(frozen=True)
+class Goal:
+    """A goal has one typed lifecycle; flat saved fields exist only at the wire boundary."""
 
     text: str
     id: str
-    status: str
-    progress: str
-    revision: int
-    reported_turn: str | None
-    mention_source: GoalMentionSource | None
-    block_reason: str | None
-    pause_source: str | None
+    progress: str = ""
+    revision: int = 0
+    reported_turn: str | None = None
+    mention_source: GoalMentionSource | None = None
+    state: GoalState = field(default_factory=ActiveGoal, metadata={"wire_exclude": True})
 
-    def __init__(
-        self,
-        text: str,
-        id: str,
-        status: str = "active",
-        progress: str = "",
-        revision: int = 0,
-        reported_turn: str | None = None,
-        mention_source: GoalMentionSource | None = None,
-        block_reason: str | None = None,
-        pause_source: str | None = None,
-        *,
-        state: GoalState | None = None,
-    ) -> None:
-        object.__setattr__(
-            self, "_state", state or GoalState.from_legacy(status, block_reason, pause_source)
-        )
-        object.__setattr__(self, "text", text)
-        object.__setattr__(self, "id", id)
-        object.__setattr__(self, "progress", progress)
-        object.__setattr__(self, "revision", revision)
-        object.__setattr__(self, "reported_turn", reported_turn)
-        object.__setattr__(self, "mention_source", mention_source)
-        self.__post_init__()
+    @projected(view="wire", name="status")
+    def wire_status(self) -> str:
+        return self.state.declared_name
+
+    @projected(view="wire", name="block_reason")
+    def wire_block_reason(self) -> str | None:
+        return self.state.reason
+
+    @projected(view="wire", name="pause_source")
+    def wire_pause_source(self) -> str | None:
+        source = self.state.pause_source
+        return source.declared_name if source is not None else None
+
+    def to_wire(self) -> dict[str, object]:
+        return FieldCodec.project(self, "wire")
+
+    @classmethod
+    def from_wire(cls, data: Mapping) -> Goal:
+        values = dict(data)
+        if "state" in values:
+            raise ValueError("Unexpected goal wire field: state")
+        values["state"] = GoalState.decode(
+            values.pop("status", ActiveGoal.declared_name)
+        ).wire_payload(values.pop("block_reason", None), values.pop("pause_source", None))
+        return FieldCodec.decode(cls, values)
 
     @classmethod
     def from_registry(cls, data: Mapping, root: Path) -> Goal:
-        from .field_codec import FieldCodec
         from .goal_pauses import GoalPauseEvents
 
         values = dict(data)
         if (
             "pause_source" not in values
-            and GoalState.decode(values.get("status", "active")) is PausedGoal
+            and GoalState.decode(values.get("status", ActiveGoal.declared_name)) is PausedGoal
         ):
-            events = GoalPauseEvents(root / GoalPauseEvents.filename).snapshot()
+            events = GoalPauseEvents(root / GoalPauseEvents.filename).read()
             event = events.get(f"{values['id']}:{values.get('revision', 0)}")
             if event is not None:
-                values["pause_source"] = str(event.source)
-        return FieldCodec.decode(cls, values)
+                values["pause_source"] = event.source.declared_name
+        return cls.from_wire(values)
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:
@@ -1147,32 +1122,10 @@ class Goal(GoalStateProjection):
             raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
         if self.reported_turn is not None and not isinstance(self.reported_turn, str):
             raise ValueError("Goal reported turn must be a string or null.")
-        source = self.mention_source
-        if isinstance(source, dict):
-            source = GoalMentionSource(**source)
-            object.__setattr__(self, "mention_source", source)
-        # Older registry writers can change the Goal without updating this
-        # optional projection. Preserve their current-state authority; readers
-        # suppress stale mention bindings rather than rejecting the whole goal.
-        if source is not None and not isinstance(source, GoalMentionSource):
-            raise ValueError("Invalid goal mention source.")
-
-    @property
-    def active(self) -> bool:
-        return self.state.active
-
-    @property
-    def toggle_action(self) -> str:
-        action = self.state.toggle
-        return action.declared_name if action else ""
-
-    @property
-    def toggle_label(self) -> str:
-        return self.state.toggle_label
 
     @property
     def summary(self) -> str:
-        return f"Goal · {self.status}: {self.text}"
+        return f"Goal · {self.state.declared_name}: {self.text}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -1577,6 +1530,7 @@ class Thread:
             **values,
             "tags": sorted(self.tags),
             "active_turn": self.active_turn.to_wire() if self.active_turn else None,
+            "goal": self.goal.to_wire() if self.goal else None,
         }
 
 
@@ -2050,7 +2004,7 @@ class ScheduledTurn:
         rechecks the unattempted disposition row before any native start.
         """
         return self.direct_interrupt_goal_id is None or (
-            goal is not None and goal.active and goal.id == self.direct_interrupt_goal_id
+            goal is not None and goal.state.active and goal.id == self.direct_interrupt_goal_id
         )
 
     @property

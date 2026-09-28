@@ -99,7 +99,7 @@ async def test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation(tmp_p
         snapshot = await proxy.request("input_dispositions")
         assert snapshot["historicalCount"] == 5
         assert snapshot["historicalInputs"] == []
-        with pytest.raises(RuntimeError, match="boolean"):
+        with pytest.raises(RuntimeError, match="Expected.*bool"):
             await proxy.request("input_dispositions", include_history="yes")
         cleared = await proxy.request("dismiss_historical_inputs")
         assert cleared["historicalCount"] == 0 and cleared["inputs"] == []

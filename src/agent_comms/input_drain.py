@@ -416,7 +416,7 @@ class InputDrain(FutureInputQueue):
                         incoming = replace(
                             incoming, goal_id=wait.goal_id, goal_wait_id=wait.wait_id
                         )
-                    elif direct and current.goal is not None and current.goal.active:
+                    elif direct and current.goal is not None and current.goal.state.active:
                         # A NEW direct DM may interrupt the goal without being
                         # a declared dependency reply or a goal continuation.
                         incoming = replace(
@@ -441,7 +441,7 @@ class InputDrain(FutureInputQueue):
                         and status.running
                         and (
                             current.goal is None
-                            or not current.goal.active
+                            or not current.goal.state.active
                             or dependency_wait is not None
                             or incoming.direct_interrupt_goal_id is not None
                         )
@@ -551,7 +551,7 @@ class InputDrain(FutureInputQueue):
                         continue
                     goal = owner.goal
                     old_pending = pending
-                    if goal is not None and goal.active:
+                    if goal is not None and goal.state.active:
                         pending = [
                             turn
                             for turn in pending
@@ -690,7 +690,9 @@ class InputDrain(FutureInputQueue):
             admission = snapshot.admission_generations[owner]
             admitted_goal = snapshot.threads[owner].goal
             self.steering_goal_ids.setdefault(session_id, {})[input_id] = (
-                admitted_goal.id if admitted_goal is not None and admitted_goal.active else None
+                admitted_goal.id
+                if admitted_goal is not None and admitted_goal.state.active
+                else None
             )
             self.dispositions.record(
                 key,
@@ -897,7 +899,9 @@ class InputDrain(FutureInputQueue):
             canonical = snapshot.aliases.get(thread_name, thread_name)
             admitted_goal = snapshot.threads[canonical].goal
             original_goal_id = (
-                admitted_goal.id if admitted_goal is not None and admitted_goal.active else None
+                admitted_goal.id
+                if admitted_goal is not None and admitted_goal.state.active
+                else None
             )
             self.dispositions.record(
                 key,

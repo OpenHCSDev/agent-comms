@@ -103,7 +103,7 @@ def render_selected_wake_frame(
                 if owner.goal is None
                 else {
                     "text": owner.goal.text,
-                    "status": owner.goal.status,
+                    "status": owner.goal.state.declared_name,
                     "progress": owner.goal.progress,
                 }
             ),

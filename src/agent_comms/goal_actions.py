@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass, fields, replace
-from typing import TYPE_CHECKING, Any, ClassVar
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
 from .command import Command
@@ -63,7 +63,7 @@ class GoalPrecondition:
         if self.goal_id is not None and (goal is None or goal.id != self.goal_id):
             raise ValueError("This goal was replaced or cleared; refresh its state.")
         if self.expected_status is not None and (
-            goal is None or goal.status != self.expected_status
+            goal is None or goal.state.declared_name != self.expected_status
         ):
             pause = goal.state.pause_source if goal is not None else None
             raise ValueError(
@@ -104,29 +104,6 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
     def model_choices(cls) -> tuple[str, ...]:
         return tuple(member.declared_name for member in cls.members_with(ModelInvocable))
 
-    @classmethod
-    def from_legacy(cls, action: str, options: dict[str, Any]) -> tuple[GoalAction, type, Any]:
-        """Compatibility ingress for existing callers; semantic dispatch ends here."""
-        options = dict(options)
-        owner = options.pop("owner_action", False)
-        model = options.pop("model_report", False)
-        actor = OwnerInvocable if owner else ModelInvocable if model else RuntimeInvocable
-        owner_store = options.pop("owner_store", None)
-        expect = GoalPrecondition(
-            **{f.name: options.pop(f.name) for f in fields(GoalPrecondition) if f.name in options}
-        )
-        member = cls.decode(action)
-        names = {f.name for f in fields(member)}
-        # Legacy callers supply optional empty arguments for other commands.
-        options = {k: v for k, v in options.items() if k in names or v not in (None, (), [], "")}
-        command = member.from_payload(
-            {
-                "kind": action,
-                **{k: list(v) if isinstance(v, tuple) else v for k, v in options.items()},
-            }
-        )
-        return replace(command, expect=expect), actor, owner_store
-
     def check_grant(self, ctx: GoalActionContext) -> None:
         if ctx.owner_store is not None:
             raise ValueError("Owner goal authority requires goal creation or explicit resume.")
@@ -155,7 +132,7 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
         if goal is not None and goal.state.pause_source is not None:
             # Audit only; current pause authority is already durable in Goal.
             GoalPauseEvents(ctx.comms.root / GoalPauseEvents.filename).record(
-                GoalPauseEvent(goal.id, goal.revision, goal.state.pause_source.declared_name)
+                GoalPauseEvent(goal.id, goal.revision, goal.state.pause_source)
             )
         return goal
 
@@ -180,7 +157,7 @@ class TransitionGoalAction(GoalAction):
         self.before_transition(ctx)
         return replace(
             goal,
-            state=state,  # type: ignore[call-arg]  # Goal compatibility constructor
+            state=state,
             revision=goal.revision + 1,
             progress=goal.progress if self.progress is None else self.progress,
             reported_turn=ctx.report_turn if ctx.model_report else goal.reported_turn,
@@ -224,7 +201,7 @@ class ActiveGoalAction(
                 )
                 blocked = replace(
                     goal,
-                    state=BlockedGoal(refusal),  # type: ignore[call-arg]
+                    state=BlockedGoal(refusal),
                     progress=goal.progress,
                     revision=goal.revision + 1,
                 )
@@ -271,10 +248,12 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         if not set(reviewed_keys) <= review.eligible_keys:
             raise ValueError("Review only direct inputs from these declared dependencies.")
         pending = ctx.comms.bus._history_page(
-            lambda message: message.target in aliases
-            and message.sender in senders
-            and (message.seq > cursor or message.seq in unresolved)
-            and message.seq not in reviewed_sequences | prior_reviews,
+            lambda message: (
+                message.target in aliases
+                and message.sender in senders
+                and (message.seq > cursor or message.seq in unresolved)
+                and message.seq not in reviewed_sequences | prior_reviews
+            ),
             before=None,
             after=None,
             limit=1,
@@ -308,7 +287,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         closed = GoalWaits.closed_wait_group(
             thread.name,
             wait_targets,
-            GoalWaits(ctx.comms.root / GoalWaits.filename).snapshot(),
+            GoalWaits(ctx.comms.root / GoalWaits.filename).read(),
             snapshot,
             ctx.comms._process_alive,
         )
@@ -483,4 +462,4 @@ class RetryGoalAction(GoalAction, OwnerInvocable):
             generation = store.snapshot(goal.id)
             assert generation is not None
         generation.lifecycle.authorize_retry(store, generation, uuid4().hex)
-        return replace(goal, state=ActiveGoal(), revision=goal.revision + 1)  # type: ignore[call-arg]
+        return replace(goal, state=ActiveGoal(), revision=goal.revision + 1)

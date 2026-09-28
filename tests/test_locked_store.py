@@ -12,9 +12,10 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import locked_store
-from agent_comms.declarations import Goal, GoalPauseSource, GoalWaitTarget, _store_lock
+from agent_comms.declarations import Goal, GoalWaitTarget, _store_lock
 from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
 from agent_comms.goal_pauses import GoalPauseEvent, GoalPauseEvents
+from agent_comms.goal_states import OwnerPause, PausedGoal, RuntimePause
 from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.locked_store import LockedStore
 
@@ -50,7 +51,7 @@ def _hold_lock(path, shared, ready, release):
 
 def _read(path, started, done):
     started.set()
-    GoalWaits(path).snapshot()
+    GoalWaits(path).read()
     done.set()
 
 
@@ -65,7 +66,7 @@ def _record_under_wire(path, ready):
     with _store_lock(path.parent / "wire"):
         store = GoalWaits(path)
         store.record(wait())
-        assert store.snapshot() == {"goal": wait()}
+        assert store.read() == {"goal": wait()}
         assert store.clear("goal", wait_id="wait")
     ready.set()
 
@@ -103,14 +104,14 @@ def test_abstract_parent_and_real_adopter(tmp_path):
 
 def test_golden_current_legacy_and_noop(tmp_path):
     store = GoalWaits(tmp_path / "goal_waits.json")
-    assert store.snapshot() == {}
+    assert store.read() == {}
     assert not store.path.exists()
     assert not store.clear("absent")
     assert not store.path.exists()
     store.record(wait())
     assert store.path.read_text() == GOLDEN
     assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
-    assert store.snapshot() == {"goal": wait()}
+    assert store.read() == {"goal": wait()}
     before = store.path.stat()
     assert not store.clear("goal", wait_id="stale")
     assert store.path.stat() == before
@@ -118,7 +119,7 @@ def test_golden_current_legacy_and_noop(tmp_path):
         '{"goal": {"goal_id": "goal", "wait_id": "legacy", "revision": 1, '
         '"after_seq": 0, "targets": [{"name": "worker", "created_at": 123}]}}'
     )
-    assert store.snapshot() == {
+    assert store.read() == {
         "goal": GoalWait("goal", "legacy", 1, 0, (GoalWaitTarget("worker", 123),))
     }
     assert store.clear("goal", wait_id="legacy")
@@ -133,21 +134,24 @@ def test_mode_preserved_and_new_inode_published(tmp_path):
     store.record(replace(wait(), revision=3))
     assert store.path.stat().st_ino != inode
     assert stat.S_IMODE(store.path.stat().st_mode) == 0o640
-    assert store.snapshot()["goal"].revision == 3
+    assert store.read()["goal"].revision == 3
     assert sorted(path.name for path in tmp_path.iterdir()) == [
         ".goal_waits.json.lock",
         "goal_waits.json",
     ]
 
 
-def test_legacy_unknown_row_fields_are_ignored(tmp_path):
+def test_unknown_wait_fields_are_rejected_without_rewriting_saved_data(tmp_path):
     store = GoalWaits(tmp_path / "goal_waits.json")
     data = json.loads(GOLDEN)
     data["goal"]["future_field"] = {"not_authoritative_here": True}
     store.path.write_text(json.dumps(data))
-    assert store.snapshot() == {"goal": wait()}
-    store.record(wait())
-    assert store.path.read_text() == GOLDEN
+    before = store.path.read_bytes()
+    with pytest.raises(ValueError, match="Unknown fields"):
+        store.read()
+    with pytest.raises(ValueError, match="Unknown fields"):
+        store.record(wait())
+    assert store.path.read_bytes() == before
 
 
 @pytest.mark.parametrize("existing", [False, True])
@@ -258,7 +262,7 @@ def test_concurrent_writers_keep_all_rows(tmp_path):
     path, start = tmp_path / "goal_waits.json", event()
     with process(_record, path, start, "first"), process(_record, path, start, "second"):
         start.set()
-    assert set(GoalWaits(path).snapshot()) == {
+    assert set(GoalWaits(path).read()) == {
         f"{prefix}-{index}" for prefix in ("first", "second") for index in range(12)
     }
 
@@ -272,19 +276,20 @@ def test_wire_nesting_does_not_reacquire_goal_lock(tmp_path):
 def test_pause_store_golden_and_shared_algorithm(tmp_path):
     store = GoalPauseEvents(tmp_path / "goal_pause_events.json")
     assert GoalPauseEvents.update is LockedStore.update
-    assert store.snapshot() == {}
+    assert store.read() == {}
     with _store_lock(tmp_path / "wire"):
-        store.record(GoalPauseEvent("goal", 3, GoalPauseSource.OWNER))
-        store.record(GoalPauseEvent("goal", 4, GoalPauseSource.RUNTIME))
-        rows = store.snapshot()
+        store.record(GoalPauseEvent("goal", 3, OwnerPause()))
+        store.record(GoalPauseEvent("goal", 4, RuntimePause()))
+        rows = store.read()
     assert store.path.read_text() == (
         '{"goal:3": {"goal_id": "goal", "revision": 3, "source": "owner"}, '
         '"goal:4": {"goal_id": "goal", "revision": 4, "source": "runtime"}}'
     )
-    assert rows["goal:3"].source == GoalPauseSource.OWNER
-    assert GoalPauseEvents.for_goal(Goal("Work", "goal", "paused", revision=3), rows)
+    assert rows["goal:3"].source == OwnerPause()
+    assert GoalPauseEvents.for_goal(Goal("Work", "goal", revision=3, state=PausedGoal()))
     assert (
-        GoalPauseEvents.for_goal(Goal("Work", "goal", "paused", revision=5), rows).source == "owner"
+        GoalPauseEvents.for_goal(Goal("Work", "goal", revision=5, state=PausedGoal())).source
+        == OwnerPause()
     )
 
 

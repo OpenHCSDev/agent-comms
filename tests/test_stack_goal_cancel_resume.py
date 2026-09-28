@@ -175,7 +175,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             release.set()
             paused = comms.registry.require(session).goal
             failed = GoalAttemptStore(store.root).snapshot(goal_id)
-            assert paused.status == "paused"
+            assert paused.state.declared_name == "paused"
             assert failed.state == "blocked" and failed.attempt_id == claimed.attempt_id
             # Resume cannot silently authorize replay of the cancelled attempt.
             with pytest.raises(RuntimeError, match="Retry"):
@@ -186,7 +186,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
                     expected_revision=paused.revision,
                 )
             blocked = comms.registry.require(session).goal
-            assert blocked.status == "blocked"
+            assert blocked.state.declared_name == "blocked"
             assert store.snapshot(goal_id) == failed
             assert len(requests) == 1
             retried = await proxy.request(

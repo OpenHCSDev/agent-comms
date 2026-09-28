@@ -248,31 +248,34 @@ async def test_mounted_goal_continues_without_progress_tool(
                         len(attempts()) >= 2
                         or (
                             comms.registry.require("project").goal is not None
-                            and comms.registry.require("project").goal.status == "blocked"
+                            and comms.registry.require("project").goal.state.declared_name
+                            == "blocked"
                         )
                     )
                 )
                 state = comms.registry.require("project").goal
                 if empty_response:
-                    assert state.status == "blocked", state.progress
+                    assert state.state.declared_name == "blocked", state.progress
                     assert len(attempts()) == 1 and attempts()[0][1] == "failed"
                     await asyncio.sleep(0.4)
                     assert len(requests) == 1
                     return
-                assert state.status == "active", state.progress
+                assert state.state.declared_name == "active", state.progress
                 rows = attempts()
                 assert rows[0][1] == "succeeded" and rows[0][2].startswith("native-terminal:")
                 assert rows[1][0] == 2
                 if not live:
                     if queue_during_compact:
                         await until(
-                            lambda: len(ordinary_requests) >= 3
-                            and not view.queued_prompts
-                            and sum(
-                                json.loads(line).get("message", {}).get("inputId") is not None
-                                for line in session.read_text().splitlines()
+                            lambda: (
+                                len(ordinary_requests) >= 3
+                                and not view.queued_prompts
+                                and sum(
+                                    json.loads(line).get("message", {}).get("inputId") is not None
+                                    for line in session.read_text().splitlines()
+                                )
+                                == 3
                             )
-                            == 3
                         )
                     else:
                         await until(lambda: len(ordinary_requests) == (3 if compact_tools else 2))

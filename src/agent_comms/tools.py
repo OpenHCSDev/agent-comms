@@ -16,8 +16,15 @@ from .declarations import (
     ViewPredicate,
     is_channel_target,
 )
-from .goal_actions import GoalAction, GoalPrecondition, ModelInvocable
-from .goal_states import ActiveGoal
+from .goal_actions import (
+    ActiveGoalAction,
+    EditGoalAction,
+    GoalAction,
+    GoalPrecondition,
+    ModelInvocable,
+    SetGoalAction,
+)
+from .goal_states import ActiveGoal, PausedGoal
 from .operations import Comms, ForkSpec, TagAction
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
@@ -331,13 +338,9 @@ def _executing_thread() -> str:
 
 
 def _set_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    goal = comms.update_goal(
-        _executing_thread(),
-        "set",
-        text=str(arguments["text"]),
-    )
+    goal = comms.update_goal(_executing_thread(), SetGoalAction(text=str(arguments["text"])))
     return {
-        "goal": asdict(goal) if goal else None,
+        "goal": goal.to_wire() if goal else None,
         "instruction": (
             "Persistent goal activated. Work toward it and report progress with comms_goal."
         ),
@@ -365,7 +368,7 @@ def _goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     comms.update_goal(name, command, actor=ModelInvocable)
     goal, execution = comms.goal_snapshot(name)
     return {
-        "goal": asdict(goal) if goal else None,
+        "goal": goal.to_wire() if goal else None,
         "goal_execution": asdict(execution) if execution else None,
     }
 
@@ -374,7 +377,7 @@ def _resume_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     name = _executing_thread()
     goal_id = str(arguments["goal_id"])
     current = comms.registry.require(name).goal
-    if current is None or current.id != goal_id or current.status != "paused":
+    if current is None or current.id != goal_id or not isinstance(current.state, PausedGoal):
         # A blocked goal may have an unresolved paid attempt. Only the
         # authenticated human-recovery path can decide that disposition.
         raise ValueError("This goal cannot be resumed; refresh its state.")
@@ -388,15 +391,16 @@ def _resume_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     progress = str(arguments["progress"])
     goal = comms.update_goal(
         name,
-        "active",
-        goal_id=goal_id,
-        expected_status=current.status,
-        expected_goal=current,
-        progress=progress,
+        ActiveGoalAction(
+            expect=GoalPrecondition(
+                expected_goal=current, expected_status=current.state.declared_name, goal_id=goal_id
+            ),
+            progress=progress,
+        ),
     )
-    if goal is None or not goal.active or goal.progress != progress:
+    if goal is None or not goal.state.active or goal.progress != progress:
         raise ValueError("Goal changed during resume; refresh its state.")
-    return {"goal": asdict(goal)}
+    return {"goal": goal.to_wire()}
 
 
 def _edit_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
@@ -407,18 +411,18 @@ def _edit_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
         raise ValueError("This goal was replaced or cleared; refresh its state.")
     goal = comms.update_goal(
         name,
-        "edit",
-        text=str(arguments["text"]),
-        goal_id=goal_id,
-        expected_goal=current,
+        EditGoalAction(
+            expect=GoalPrecondition(expected_goal=current, goal_id=goal_id),
+            text=str(arguments["text"]),
+        ),
     )
-    return {"goal": asdict(goal) if goal else None}
+    return {"goal": goal.to_wire() if goal else None}
 
 
 def _goal_history(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     requested = str(arguments["goal_id"]).strip()
     entries = comms.goal_history(_executing_thread(), goal_id=requested or None)
-    return {"history": [asdict(entry) for entry in entries]}
+    return {"history": [entry.to_wire() for entry in entries]}
 
 
 def _collaboration(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:

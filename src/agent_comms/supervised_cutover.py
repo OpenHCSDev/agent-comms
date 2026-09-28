@@ -491,13 +491,13 @@ def stage_private_participants(
         ):
             raise RelationViolationError(f"Cutover owner {name!r} lost its saved session")
         participants.append(replace(thread, pid=0, active_turn=None))
-    old_waits = GoalWaits(legacy.root / "goal_waits.json").snapshot()
+    old_waits = GoalWaits(legacy.root / "goal_waits.json").read()
     migrated_waits = []
     seen_goals: set[str] = set()
     selected_owners = {participant.name: participant for participant in participants}
     for thread in participants:
         goal = thread.goal
-        if goal is None or not goal.active:
+        if goal is None or not goal.state.active:
             continue
         if goal.id in seen_goals:
             raise RelationViolationError("Cutover active goal identities collide")
