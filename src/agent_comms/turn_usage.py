@@ -17,10 +17,6 @@ class UsageAccount:
     response_index: int = 0
     compaction_recorded: bool = False
 
-    @staticmethod
-    def positive_tokens(usage: PiUsage | None) -> int | None:
-        return usage.positive_tokens if usage is not None else None
-
     def invalidate(self) -> None:
         self.used = self.confirmed = None
         self.provisional = False

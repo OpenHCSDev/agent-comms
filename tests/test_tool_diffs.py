@@ -40,6 +40,7 @@ def result(patch=PATCH):
         ("bash", result(), True, None),
         ("edit", {"details": {"patch": 123}}, True, None),
         ("edit", None, True, None),
+        ("edit", {"details": ["extension-defined", 3]}, True, None),
     ],
 )
 def test_native_edit_evidence(name, native, ok, expected):

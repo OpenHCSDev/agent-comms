@@ -376,13 +376,9 @@ def _startup_metadata(before: bytes, after: bytes) -> bool:
         return False
 
 
-def _count(value: Any) -> int | None:
-    return value if type(value) is int and value >= 0 else None
-
-
-def _public_pi_compaction_error(value: Any) -> str:
+def _public_pi_compaction_error(value: str | None) -> str:
     """Classify a Pi failure without copying provider text or prompt data to ACP."""
-    raw = value if isinstance(value, str) else ""
+    raw = value or ""
     lower = raw.lower()
     if "generation hit the token cap" in lower or "summary is incomplete" in lower:
         return "Compaction summary hit the model output limit."
@@ -620,8 +616,7 @@ class ManualCompaction:
             ("tokensBefore", data.tokens_before),
             ("estimatedTokensAfter", data.estimated_tokens_after),
         ):
-            count = _count(count)
-            if count is not None:
+            if count is not None and count >= 0:
                 self.result[key] = count
 
     async def _close(self) -> None:

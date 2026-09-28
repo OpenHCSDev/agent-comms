@@ -385,7 +385,7 @@ class UnknownData(PiResponseData):
 class PiToolResult(PiPayload):
     content: tuple[PiContent, ...] = ()
     # Extension-defined details are deliberately opaque; no second tool schema.
-    details: dict[str, Any] | None = None
+    details: Any = None
 
     def text(self, limit=4000):
         text = "".join(part.text for part in self.content)

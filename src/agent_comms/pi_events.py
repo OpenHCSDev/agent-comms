@@ -320,11 +320,7 @@ class ExtensionUiRequest(PiEvent):
             return
         session.request_id = self.id
         session.method = self.method
-        if (
-            type(session.request_id) is not str
-            or not session.request_id
-            or len(session.request_id) > 128
-        ):
+        if session.request_id is None or not session.request_id or len(session.request_id) > 128:
             session.record_failure(
                 failures.ExtensionUiFailed("Pi extension UI request lacked a bounded ID.")
             )
@@ -436,7 +432,11 @@ class MessageEnd(PiEvent):
                     yield events.Error(text=session.error_message)
             else:
                 session.error_message = None
-                session.tokens = session.usage.positive_tokens(session.message.usage)
+                session.tokens = (
+                    session.message.usage.positive_tokens
+                    if session.message.usage is not None
+                    else None
+                )
                 if session.tokens is not None and (not session.session_identity_uncertain):
                     session.usage.used = session.tokens
                     session.usage.confirmed = session.tokens
@@ -555,9 +555,10 @@ class MessageUpdate(PiEvent):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.message = self.message
         if session.message is None or session.message.assistant:
-            session.tokens = session.usage.positive_tokens(
-                session.message.usage if session.message is not None else None
-            ) or session.usage.positive_tokens(self.usage)
+            message_usage = session.message.usage if session.message is not None else None
+            session.tokens = (
+                message_usage.positive_tokens if message_usage is not None else None
+            ) or (self.usage.positive_tokens if self.usage is not None else None)
             if session.tokens is not None and (not session.session_identity_uncertain):
                 session.usage.used = session.tokens
                 session.usage.provisional = True
@@ -691,8 +692,6 @@ class ToolExecutionEnd(PiEvent):
         session.tool_id = self.tool_call_id or session.name
         session.active_tools.discard(session.tool_id)
         session.last_model_progress = session.loop.time()
-        if not session.active_tools:
-            pass
         yield events.ToolEnd(
             id=session.tool_id,
             name=session.name,

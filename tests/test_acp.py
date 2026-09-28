@@ -2063,7 +2063,10 @@ class TestAgentTurnForwarding:
         # Turn finished -> idle again.
         assert wired.agents.activity_of("proj").state.value == "idle"
         # The full trail was recorded: thinking -> working -> thinking -> idle.
-        states = [e.state.value for e in wired.agents.activity._load() if e.thread == "proj"]
+        rows = [
+            json.loads(line) for line in (wired.root / "activity.jsonl").read_text().splitlines()
+        ]
+        states = [row["state"] for row in rows if row["thread"] == "proj"]
         assert states == ["thinking", "working", "thinking", "idle"]
 
 

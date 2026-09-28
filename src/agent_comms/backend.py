@@ -123,7 +123,7 @@ def _pi_mcp_live_receipt(payload: pi.ExtensionUiRequest, input_id: str) -> dict[
     if payload.method != "setStatus" or payload.status_key != "pi-mcp/live-v1":
         return None
     text = payload.status_text
-    if not isinstance(text, str) or len(text) > 8192:
+    if text is None or len(text) > 8192:
         return None
     try:
         data = json.loads(text, object_pairs_hook=_unique_json_pairs)
@@ -1187,7 +1187,7 @@ class TurnSession:
             and (self.persistent_session is not None)
         ):
             self.response_id = self.payload.id
-            if isinstance(self.response_id, str) and self.response_id in {
+            if self.response_id is not None and self.response_id in {
                 self.stats.state_id,
                 self.stats.usage_id,
             }:

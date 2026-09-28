@@ -22,7 +22,7 @@ class ToolDiff:
         if name != "edit" or not ok or result is None:
             return None
         details = result.details
-        if details is None:
+        if not isinstance(details, dict):
             return None
         patch = details.get("patch")
         if isinstance(patch, str) and patch.strip():
