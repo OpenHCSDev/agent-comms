@@ -26,5 +26,12 @@ The original build failed because shifted RPC patch line offsets generated an
 uncommitted .orig backup, changing the committed package tree. RPC hunk positions
 are corrected by the helper's three-line shift; unchanged canonical preparation
 then passed all individual hashes and the whole-tree verifier. Original failed
-build evidence is retained. Manifest derivation scratch is disposable and will
-be removed after validation. Main code and package preparation are otherwise unchanged.
+build evidence is retained. The 194MB manifest derivation scratch was removed after validation. Main code and package preparation are otherwise unchanged.
+
+Final validation: 18 Python protocol cases and 7 actual cold CLI/RPC cases passed.
+The first native test attempt returned the correct decisions but failed its final
+unchanged-source assertion because the fixture omitted saved model/thinking entries;
+Pi appended those startup records. The corrected fixture includes both declarations
+and proves byte-for-byte saved-session preservation. Raw failed-attempt evidence is
+retained locally; the concise failure receipt is published. No provider requests
+occurred. New package manifest SHA prefix c6897fc58beb5b0a.

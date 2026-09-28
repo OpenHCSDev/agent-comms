@@ -91,7 +91,26 @@ async def test_cold_selected_session_decides_without_client_usage(
     session_id = str(uuid4())
     timestamp = "2026-09-28T00:00:00.000Z"
     rows = [dict(type="session", version=3, id=session_id, timestamp=timestamp, cwd=str(tmp_path))]
-    parent = None
+    rows.extend(
+        [
+            dict(
+                type="model_change",
+                id="model",
+                parentId=None,
+                timestamp=timestamp,
+                provider="fixture",
+                modelId="fixture",
+            ),
+            dict(
+                type="thinking_level_change",
+                id="thinking",
+                parentId="model",
+                timestamp=timestamp,
+                thinkingLevel="off",
+            ),
+        ]
+    )
+    parent = "thinking"
     for index in range(10):
         user_id, assistant_id = f"u{index}", f"a{index}"
         for entry_id, message in (
@@ -121,7 +140,13 @@ async def test_cold_selected_session_decides_without_client_usage(
             ),
         ):
             rows.append(
-                dict(type="message", id=entry_id, parentId=parent, timestamp=timestamp, message=message)
+                dict(
+                    type="message",
+                    id=entry_id,
+                    parentId=parent,
+                    timestamp=timestamp,
+                    message=message,
+                )
             )
             parent = entry_id
     if compacted:
@@ -158,9 +183,20 @@ async def test_cold_selected_session_decides_without_client_usage(
             "--import",
             str(package / "dist/agent-comms-project-bootstrap.mjs"),
             str(package / "dist/cli.js"),
-            "--mode", "rpc", "--provider", "fixture", "--model", "fixture",
-            "--offline", "--no-extensions", "--no-skills", "--no-prompt-templates",
-            "--no-context-files", "--no-tools", "--session", str(session),
+            "--mode",
+            "rpc",
+            "--provider",
+            "fixture",
+            "--model",
+            "fixture",
+            "--offline",
+            "--no-extensions",
+            "--no-skills",
+            "--no-prompt-templates",
+            "--no-context-files",
+            "--no-tools",
+            "--session",
+            str(session),
             cwd=tmp_path,
             env=env,
             stdin=asyncio.subprocess.PIPE,
