@@ -1,0 +1,23 @@
+{
+  "base_revision": "8ce552bdd342878840a00e6f6daf986c0027134f",
+  "head_revision": "0095c8714e7513ffd5131c9801728326d3f9a229",
+  "paths": [
+    "src/agent_comms/optional_awareness_projection.py",
+    "src/agent_comms/typed_table.py"
+  ],
+  "base": {
+    "TypeIdentity": 12,
+    "LongBooleanChain": 6,
+    "StringSubscript": 47
+  },
+  "head": {
+    "TypeIdentity": 12,
+    "LongBooleanChain": 5,
+    "StringSubscript": 0
+  },
+  "delta": {
+    "TypeIdentity": 0,
+    "LongBooleanChain": -1,
+    "StringSubscript": -47
+  }
+}
