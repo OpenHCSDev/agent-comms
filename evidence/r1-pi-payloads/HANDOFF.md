@@ -6,6 +6,8 @@
 - Branch: `codex/refactor-r1-pi-payloads-20260928`
 - Production/test source: `d13c848f5720e230da39d62a96cfd218ba1a6a0f`.
 - Reconciled main194 `d092997b1fd07cfb487808fa8ca8f37d611d29cd`, including R2/192 and R5/195. Merge was clean. R5's deleted ActivityLog._load had one remaining ACP test caller: it now checks the actual saved activity trail, without restoring the method.
+- Draft PR: https://github.com/OpenHCSDev/agent-comms/pull/196
+- Parent reports all88 existing saved sessions latest/prior bounded pages and source Toad tool-diff pilot passed. Parent is correcting its obsolete transcript race fixture; no production Toad change identified. Parent plans one fresh configured-provider queue/compaction check before activation.
 - Source blockers: none. Parent's mounted Toad/history checks and live installation remain parent-owned. No provider calls, new models/helpers, installs, live writes or restarts were performed.
 
 ## Ownership and deletion closure
