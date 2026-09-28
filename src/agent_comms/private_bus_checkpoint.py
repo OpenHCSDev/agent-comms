@@ -19,22 +19,50 @@ import stat
 import tempfile
 from collections.abc import Mapping
 from contextlib import closing
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
+
+from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, file_revision
+from .field_codec import FieldCodec
+from .wire_metadata import WireMetadata
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedInitial
     from .messages import Message
     from .wire_log import WireLog
 
-_VERSION = 1
 _SEED = hashlib.sha256(b"agent-comms:private-bus-prefix:v1\0").digest()
 _TAIL_BYTES = 4096
 
 
-@dataclass(frozen=True, slots=True)
-class PrefixWitness:
+@dataclass(frozen=True)
+class PrefixWitness(PrefixSeal):
+    # The high-water is a derived page fact, not a persistent seal field.
+    latest_initial_seq: int = field(default=0, compare=False, metadata={"seal_exclude": True})
+
+    @property
+    def device(self) -> int:
+        return self.revision[0]
+
+    @property
+    def inode(self) -> int:
+        return self.revision[1]
+
+    @property
+    def offset(self) -> int:
+        return self.revision[2]
+
+    def seal(self) -> PrefixSeal:
+        return FieldCodec.decode(PrefixSeal, FieldCodec.project(self, "seal"))
+
+
+@dataclass(frozen=True)
+class PrefixCertificate:
+    """The existing SQLite row, decoded once at its persistence boundary."""
+
+    singleton: Literal[1] = field(metadata={"sqlite_constraint": "PRIMARY KEY CHECK(singleton=1)"})
+    version: Literal[1]
     root_id: str
     device: int
     inode: int
@@ -42,86 +70,60 @@ class PrefixWitness:
     through_seq: int
     digest: str
     tail: str
-    revision: tuple[int, int, int, int, int]
-    # Derived only by certified_initial_page_unlocked from the sealed index;
-    # absent on a bare bus witness and not part of the persistent wire seal.
-    latest_initial_seq: int = field(default=0, compare=False)
+    mtime_ns: int
+    ctime_ns: int
 
-
-def _witness_record(witness: PrefixWitness) -> dict[str, object]:
-    return {
-        "root_id": witness.root_id,
-        "revision": list(witness.revision),
-        "through_seq": witness.through_seq,
-        "digest": witness.digest,
-        "tail": witness.tail,
-    }
-
-
-def _valid_witness_record(value: object) -> bool:
-    return (
-        type(value) is dict
-        and set(value) == {"root_id", "revision", "through_seq", "digest", "tail"}
-        and type(value["root_id"]) is str
-        and len(value["root_id"]) == 32
-        and type(value["revision"]) is list
-        and len(value["revision"]) == 5
-        and all(type(item) is int and item >= 0 for item in value["revision"])
-        and type(value["through_seq"]) is int
-        and value["through_seq"] >= 0
-        and all(
-            type(value[name]) is str
-            and len(value[name]) == 64
-            and all(character in "0123456789abcdef" for character in value[name])
-            for name in ("digest", "tail")
+    def witness(self) -> PrefixWitness:
+        return PrefixWitness(
+            self.root_id,
+            (self.device, self.inode, self.offset, self.mtime_ns, self.ctime_ns),
+            self.through_seq,
+            self.digest,
+            self.tail,
         )
-    )
 
+    @classmethod
+    def capture(
+        cls, root_id: str, info: os.stat_result, seq: int, digest: bytes, tail: str
+    ) -> PrefixCertificate:
+        return cls(
+            1,
+            1,
+            root_id,
+            info.st_dev,
+            info.st_ino,
+            info.st_size,
+            seq,
+            digest.hex(),
+            tail,
+            info.st_mtime_ns,
+            info.st_ctime_ns,
+        )
 
-def _final_seal(witness: PrefixWitness, db_path: Path) -> dict[str, object]:
-    return {
-        "version": _VERSION,
-        "state": "final",
-        "db_revision": list(_revision(db_path.stat())),
-        "witness": _witness_record(witness),
-    }
+    @classmethod
+    def create_table(cls, db: sqlite3.Connection) -> None:
+        kinds = FieldCodec._types(cls)
+        columns = [
+            f"{item.name} {'TEXT' if kinds[item.name] is str else 'INTEGER'} "
+            + item.metadata.get("sqlite_constraint", "NOT NULL")
+            for item in fields(cls)
+        ]
+        db.execute(f"CREATE TABLE certificate({','.join(columns)})")
 
+    def insert(self, db: sqlite3.Connection) -> None:
+        values = FieldCodec.encode(self)
+        db.execute(
+            f"INSERT INTO certificate ({','.join(values)}) "
+            f"VALUES ({','.join('?' for _ in values)})",
+            tuple(values.values()),
+        )
 
-def _pending_seal(
-    prior: PrefixWitness, expected: PrefixWitness, db_path: Path
-) -> dict[str, object]:
-    return {
-        "version": _VERSION,
-        "state": "pending",
-        "db_revision": list(_revision(db_path.stat())),
-        "prior": _witness_record(prior),
-        "expected": _witness_record(expected),
-    }
-
-
-def _write_seal(
-    bus: WireLog, marker: dict[str, int | str | object], seal: dict[str, object]
-) -> None:
-    from .store_files import _atomic_write_text
-
-    marker["checkpoint_seal"] = seal
-    _atomic_write_text(
-        bus.path.parent / "bus_meta.json", json.dumps(marker, indent=2), fsync_parent=True
-    )
-
-
-def _check_final_seal(marker: Mapping[str, object], saved: PrefixWitness, db_path: Path) -> None:
-    seal = marker.get("checkpoint_seal")
-    if (
-        marker.get("checkpoint_version") != _VERSION
-        or type(seal) is not dict
-        or set(seal) != {"version", "state", "db_revision", "witness"}
-        or seal["version"] != _VERSION
-        or seal["state"] != "final"
-        or seal["witness"] != _witness_record(saved)
-        or seal["db_revision"] != list(_revision(db_path.stat()))
-    ):
-        raise _failure("Private bus checkpoint index seal changed or is pending.")
+    def update(self, db: sqlite3.Connection) -> None:
+        values = FieldCodec.encode(self)
+        db.execute(
+            f"UPDATE certificate SET {','.join(f'{name}=?' for name in values)} WHERE singleton=1",
+            tuple(values.values()),
+        )
 
 
 def _failure(message: str) -> Exception:
@@ -132,10 +134,6 @@ def _failure(message: str) -> Exception:
 
 def _path(bus_path: Path) -> Path:
     return bus_path.with_name("private_bus_checkpoint.sqlite3")
-
-
-def _revision(info: os.stat_result) -> tuple[int, int, int, int, int]:
-    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
 
 
 def _tail(stream, offset: int) -> str:
@@ -182,67 +180,12 @@ def _saved(db: sqlite3.Connection) -> PrefixWitness:
     if tables != {"certificate", "response_keys", "initials", "addressed"}:
         raise _failure("Private bus checkpoint schema is unavailable.")
     row = db.execute("SELECT * FROM certificate WHERE singleton=1").fetchone()
-    if row is None or len(row) != 11 or row["version"] != _VERSION:
+    if row is None:
         raise _failure("Private bus checkpoint schema is unavailable.")
-    fields = (
-        "root_id",
-        "device",
-        "inode",
-        "offset",
-        "through_seq",
-        "digest",
-        "tail",
-        "mtime_ns",
-        "ctime_ns",
-    )
-    if any(row[key] is None for key in fields):
-        raise _failure("Private bus checkpoint is incomplete.")
-    digest, tail = row["digest"], row["tail"]
-    if (
-        type(row["root_id"]) is not str
-        or len(row["root_id"]) != 32
-        or any(c not in "0123456789abcdef" for c in row["root_id"])
-        or any(
-            type(row[k]) is not int or row[k] < 0
-            for k in ("device", "inode", "offset", "through_seq", "mtime_ns", "ctime_ns")
-        )
-        or type(digest) is not str
-        or len(digest) != 64
-        or type(tail) is not str
-        or len(tail) != 64
-        or any(c not in "0123456789abcdef" for c in digest + tail)
-    ):
-        raise _failure("Private bus checkpoint identity is malformed.")
-    return PrefixWitness(
-        row["root_id"],
-        row["device"],
-        row["inode"],
-        row["offset"],
-        row["through_seq"],
-        digest,
-        tail,
-        (row["device"], row["inode"], row["offset"], row["mtime_ns"], row["ctime_ns"]),
-    )
-
-
-def _set_certificate(
-    db: sqlite3.Connection, root_id: str, info: os.stat_result, seq: int, digest: bytes, tail: str
-) -> None:
-    db.execute(
-        "UPDATE certificate SET root_id=?,device=?,inode=?,offset=?,through_seq=?,"
-        "digest=?,tail=?,mtime_ns=?,ctime_ns=? WHERE singleton=1",
-        (
-            root_id,
-            info.st_dev,
-            info.st_ino,
-            info.st_size,
-            seq,
-            digest.hex(),
-            tail,
-            info.st_mtime_ns,
-            info.st_ctime_ns,
-        ),
-    )
+    try:
+        return FieldCodec.decode(PrefixCertificate, dict(row)).witness()
+    except (TypeError, ValueError) as error:
+        raise _failure("Private bus checkpoint identity is malformed.") from error
 
 
 def _index_row(
@@ -278,20 +221,19 @@ def install_private_bus_checkpoint(bus: WireLog) -> PrefixWitness:
     sidecar; after publication an uncertain marker write retains the sidecar and
     existing read barrier denies access rather than trusting an unsealed index.
     """
-    from .store_files import _atomic_write_text
     from .wire_log import WireLog
 
     if type(bus) is not WireLog or bus.path.name != "bus.jsonl":
         raise TypeError("Canonical private WireLog required")
     with bus.locked():
         marker = bus._private_marker_unlocked()
-        if marker.get("claim_envelopes_version") != 1:
+        if not marker.claims:
             raise _failure("Checkpoint installation needs a claim-enabled private root.")
         path = _path(bus.path)
-        if path.exists() or path.is_symlink() or "checkpoint_version" in marker:
+        if path.exists() or path.is_symlink() or marker.checkpoint_seal is not None:
             raise _failure("Private bus checkpoint is already installed.")
         if not bus.path.exists():
-            if marker["last_seq"] != 0:
+            if marker.last_seq != 0:
                 raise _failure("Private bus is missing its reserved publication.")
             fd = os.open(
                 bus.path,
@@ -310,12 +252,8 @@ def install_private_bus_checkpoint(bus: WireLog) -> PrefixWitness:
             fd = os.open(staged, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
             os.close(fd)
             with closing(_connect(staged)) as db:
+                PrefixCertificate.create_table(db)
                 db.executescript(
-                    "CREATE TABLE certificate(singleton INTEGER PRIMARY KEY CHECK(singleton=1),"
-                    "version INTEGER NOT NULL,root_id TEXT NOT NULL,device INTEGER NOT NULL,"
-                    "inode INTEGER NOT NULL,offset INTEGER NOT NULL,through_seq INTEGER NOT NULL,"
-                    "digest TEXT NOT NULL,tail TEXT NOT NULL,mtime_ns INTEGER NOT NULL,"
-                    "ctime_ns INTEGER NOT NULL);"
                     "CREATE TABLE response_keys(key TEXT PRIMARY KEY);"
                     "CREATE TABLE initials(seq INTEGER PRIMARY KEY,message_id TEXT NOT NULL,"
                     "offset INTEGER NOT NULL,length INTEGER NOT NULL);"
@@ -336,39 +274,22 @@ def install_private_bus_checkpoint(bus: WireLog) -> PrefixWitness:
                     with db:
                         for _ in bus._verified_private_rows_unlocked(marker, on_row=collect):
                             pass
-                        if through_seq != marker["last_seq"]:
+                        if through_seq != marker.last_seq:
                             raise _failure("Private bus has an unsettled publication sequence.")
-                        if _revision(os.fstat(stream.fileno())) != _revision(info) or _revision(
-                            bus.path.stat()
-                        ) != _revision(info):
+                        if file_revision(os.fstat(stream.fileno())) != file_revision(
+                            info
+                        ) or file_revision(bus.path.stat()) != file_revision(info):
                             raise _failure("Private bus changed during checkpoint installation.")
-                        db.execute(
-                            "INSERT INTO certificate VALUES(1,?,?,?,?,?,?,?,?,?,?)",
-                            (
-                                _VERSION,
-                                marker["wire_root_id"],
-                                info.st_dev,
-                                info.st_ino,
-                                info.st_size,
-                                through_seq,
-                                digest.hex(),
-                                _tail(stream, info.st_size),
-                                info.st_mtime_ns,
-                                info.st_ctime_ns,
-                            ),
-                        )
+                        PrefixCertificate.capture(
+                            marker.root_id, info, through_seq, digest, _tail(stream, info.st_size)
+                        ).insert(db)
             _directory_sync(staged)
             with closing(_connect(staged, readonly=True)) as db:
                 witness = _saved(db)
             os.replace(staged, path)
             _directory_sync(path)
-            marker["checkpoint_version"] = _VERSION
-            marker["checkpoint_seal"] = _final_seal(witness, path)
-            _atomic_write_text(
-                bus.path.parent / "bus_meta.json",
-                json.dumps(marker, indent=2),
-                fsync_parent=True,
-            )
+            marker.seal_with(FinalSeal.capture(witness, path))
+            bus.write_metadata_unlocked(marker)
             return witness
 
 
@@ -379,29 +300,16 @@ def certificate_enabled(bus_path: Path) -> bool:
 
 def _recover_pending_unlocked(
     bus: WireLog,
-    marker: dict[str, int | str | object],
+    marker: WireMetadata,
     db: sqlite3.Connection,
     db_path: Path,
-    saved: PrefixWitness,
     info: os.stat_result,
+    seal: PendingSeal,
 ) -> PrefixWitness:
     """Repair only a durable writer intent after a COMPLETE canonical bus scan."""
-    seal = marker.get("checkpoint_seal")
-    if (
-        type(seal) is not dict
-        or set(seal) != {"version", "state", "db_revision", "prior", "expected"}
-        or seal["version"] != _VERSION
-        or seal["state"] != "pending"
-        or not _valid_witness_record(seal["prior"])
-        or not _valid_witness_record(seal["expected"])
-        or _witness_record(saved) not in (seal["prior"], seal["expected"])
-        or seal["expected"].get("revision") != list(_revision(info))
-        or seal["prior"].get("root_id") != marker["wire_root_id"]
-    ):
-        raise _failure("Private bus checkpoint pending intent is inconsistent.")
-    prior = seal["prior"]
+    prior = seal.prior
     digest = _SEED
-    prior_seen = prior["revision"][2] == 0
+    prior_seen = prior.revision[2] == 0
     prior_seq = 0
     last_seq = 0
     count = 0
@@ -419,42 +327,40 @@ def _recover_pending_unlocked(
             if count > 100_000 or size > 128 * 1024 * 1024:
                 raise _failure("Private bus pending recovery exceeds cold bound.")
             digest = _chain(digest, raw)
-            if offset + len(raw) == prior["revision"][2]:
+            if offset + len(raw) == prior.revision[2]:
                 prior_seen = True
                 prior_seq = message.seq
-                if digest.hex() != prior["digest"] or prior_seq != prior["through_seq"]:
+                if digest.hex() != prior.digest or prior_seq != prior.through_seq:
                     raise _failure("Private bus checkpoint old prefix changed during recovery.")
             last_seq = message.seq
             _index_row(db, offset, raw, message, receipt, initial)
 
         for _ in bus._verified_private_rows_unlocked(marker, on_row=collect):
             pass
-        if not prior_seen or (prior["revision"][2] == 0 and prior["digest"] != _SEED.hex()):
+        if not prior_seen or (prior.revision[2] == 0 and prior.digest != _SEED.hex()):
             raise _failure("Private bus checkpoint old prefix is unavailable.")
-        if _revision(bus.path.stat()) != _revision(info):
+        if file_revision(bus.path.stat()) != file_revision(info):
             raise _failure("Private bus changed during pending recovery.")
         with bus.path.open("rb") as stream:
             expected = PrefixWitness(
-                str(marker["wire_root_id"]),
-                info.st_dev,
-                info.st_ino,
-                info.st_size,
+                marker.root_id,
+                file_revision(info),
                 last_seq,
                 digest.hex(),
                 _tail(stream, info.st_size),
-                _revision(info),
             )
-        if _witness_record(expected) != seal["expected"] or last_seq > marker["last_seq"]:
+        if expected.seal() != seal.expected or last_seq > marker.last_seq:
             raise _failure("Private bus checkpoint pending suffix differs from intent.")
-        _set_certificate(db, expected.root_id, info, last_seq, digest, expected.tail)
+        PrefixCertificate.capture(expected.root_id, info, last_seq, digest, expected.tail).update(
+            db
+        )
     _directory_sync(db_path)
-    _write_seal(bus, marker, _final_seal(expected, db_path))
+    marker.seal_with(FinalSeal.capture(expected, db_path))
+    bus.write_metadata_unlocked(marker)
     return expected
 
 
-def verify_private_bus_checkpoint_unlocked(
-    bus: WireLog, marker: Mapping[str, int | str]
-) -> PrefixWitness:
+def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -> PrefixWitness:
     """Check an exact revision or cold-validate every old byte on a changed revision.
 
     Caller holds the bus lock and has fsynced the bus inode and directory.
@@ -465,21 +371,19 @@ def verify_private_bus_checkpoint_unlocked(
             saved = _saved(db)
             info = os.fstat(stream.fileno())
             if (
-                marker.get("checkpoint_version") != _VERSION
-                or saved.root_id != marker["wire_root_id"]
+                saved.root_id != marker.root_id
                 or (saved.device, saved.inode) != (info.st_dev, info.st_ino)
                 or info.st_size < saved.offset
             ):
                 raise _failure("Private bus checkpoint root/inode/size changed.")
-            seal = marker.get("checkpoint_seal")
-            if type(seal) is dict and seal.get("state") == "pending":
-                return _recover_pending_unlocked(bus, marker, db, path, saved, info)
-            _check_final_seal(marker, saved, path)
+            recovered = marker.seal.recover(bus, marker, db, path, saved, info)
+            if recovered is not None:
+                return recovered
             if _tail(stream, saved.offset) != saved.tail:
                 raise _failure("Private bus checkpoint prefix tail changed.")
-            if saved.through_seq > marker["last_seq"]:
+            if saved.through_seq > marker.last_seq:
                 raise _failure("Private bus checkpoint exceeds the durable sequence marker.")
-            if _revision(info) == saved.revision:
+            if file_revision(info) == saved.revision:
                 return saved
             # Changed revision: a suffix alone cannot rule out an earlier in-place edit.
             # Validate complete canonical history, compare digest at the saved offset,
@@ -523,29 +427,30 @@ def verify_private_bus_checkpoint_unlocked(
                 pass
             if not observed_prefix or (saved.offset == 0 and saved.digest != _SEED.hex()):
                 raise _failure("Private bus checkpoint prefix is unavailable.")
-            if _revision(os.fstat(stream.fileno())) != _revision(info) or _revision(
+            if file_revision(os.fstat(stream.fileno())) != file_revision(info) or file_revision(
                 bus.path.stat()
-            ) != _revision(info):
+            ) != file_revision(info):
                 raise _failure("Private bus changed during checkpoint validation.")
             # Full parser above checked all cross-prefix response key duplicates.
             last_seq = additions[-1][2].seq if additions else saved.through_seq
             expected = PrefixWitness(
                 saved.root_id,
-                info.st_dev,
-                info.st_ino,
-                info.st_size,
+                file_revision(info),
                 last_seq,
                 digest.hex(),
                 _tail(stream, info.st_size),
-                _revision(info),
             )
-            _write_seal(bus, marker, _pending_seal(saved, expected, path))
+            marker.seal_with(PendingSeal.capture(saved, expected, path))
+            bus.write_metadata_unlocked(marker)
             with db:
                 for offset, raw, message, receipt, initial in additions:
                     _index_row(db, offset, raw, message, receipt, initial)
-                _set_certificate(db, saved.root_id, info, last_seq, digest, expected.tail)
+                PrefixCertificate.capture(
+                    saved.root_id, info, last_seq, digest, expected.tail
+                ).update(db)
             _directory_sync(path)
-            _write_seal(bus, marker, _final_seal(expected, path))
+            marker.seal_with(FinalSeal.capture(expected, path))
+            bus.write_metadata_unlocked(marker)
             return _saved(db)
     except (sqlite3.Error, OSError) as error:
         raise _failure("Private bus checkpoint verification is unavailable.") from error
@@ -553,7 +458,7 @@ def verify_private_bus_checkpoint_unlocked(
 
 def append_private_bus_checkpoint_unlocked(
     bus: WireLog,
-    marker: Mapping[str, int | str],
+    marker: WireMetadata,
     raw: bytes,
     message: Message,
     receipt: Mapping[str, object] | None,
@@ -567,34 +472,34 @@ def append_private_bus_checkpoint_unlocked(
             info = os.fstat(stream.fileno())
             offset = info.st_size - len(raw)
             if (
-                marker.get("checkpoint_version") != _VERSION
-                or saved.root_id != marker["wire_root_id"]
+                saved.root_id != marker.root_id
                 or (saved.device, saved.inode) != (info.st_dev, info.st_ino)
                 or offset != saved.offset
                 or message.seq <= saved.through_seq
             ):
                 raise _failure("Private bus checkpoint append lost its prefix fence.")
-            _check_final_seal(marker, saved, path)
+            marker.seal.check_final(saved, path)
             stream.seek(offset)
             if stream.read(len(raw)) != raw or _tail(stream, offset) != saved.tail:
                 raise _failure("Private bus checkpoint append bytes differ.")
             digest = _chain(bytes.fromhex(saved.digest), raw)
             expected = PrefixWitness(
                 saved.root_id,
-                info.st_dev,
-                info.st_ino,
-                info.st_size,
+                file_revision(info),
                 message.seq,
                 digest.hex(),
                 _tail(stream, info.st_size),
-                _revision(info),
             )
-            _write_seal(bus, marker, _pending_seal(saved, expected, path))
+            marker.seal_with(PendingSeal.capture(saved, expected, path))
+            bus.write_metadata_unlocked(marker)
             with db:
                 _index_row(db, offset, raw, message, receipt, initial)
-                _set_certificate(db, saved.root_id, info, message.seq, digest, expected.tail)
+                PrefixCertificate.capture(
+                    saved.root_id, info, message.seq, digest, expected.tail
+                ).update(db)
             _directory_sync(path)
-            _write_seal(bus, marker, _final_seal(expected, path))
+            marker.seal_with(FinalSeal.capture(expected, path))
+            bus.write_metadata_unlocked(marker)
             return _saved(db)
     except (sqlite3.Error, OSError) as error:
         raise _failure("Private bus checkpoint append outcome UNKNOWN.") from error
@@ -602,7 +507,7 @@ def append_private_bus_checkpoint_unlocked(
 
 def certified_initial_page_unlocked(
     bus: WireLog,
-    marker: Mapping[str, int | str],
+    marker: WireMetadata,
     lookup: str,
     *,
     after: int = 0,
@@ -670,11 +575,9 @@ def certified_initial_page_unlocked(
                     raise _failure("Certified initial lookup differs from bus row.")
                 initials.append(initial)
             if (
-                _revision(_path(bus.path).stat())
-                != tuple(marker["checkpoint_seal"]["db_revision"])
-                or bus._private_marker_unlocked().get("checkpoint_seal")
-                != marker["checkpoint_seal"]
-                or _revision(bus.path.stat()) != witness.revision
+                file_revision(_path(bus.path).stat()) != marker.seal.db_revision
+                or bus._private_marker_unlocked().seal != marker.seal
+                or file_revision(bus.path.stat()) != witness.revision
             ):
                 raise _failure("Certified page changed during its read fence.")
             return (

@@ -1,0 +1,6 @@
+command: ['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-m', 'pytest', '-q', '-o', 'addopts=', 'tests/test_checkpoint_seals.py', 'tests/test_envelope_bus_integration.py', 'tests/test_supervised_cutover.py', 'tests/test_private_human_ingress.py', 'tests/test_cohort_foreground.py']
+........................................................................ [ 83%]
+..............                                                           [100%]
+86 passed in 6.46s
+
+exit: 0

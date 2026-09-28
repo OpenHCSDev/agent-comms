@@ -12,6 +12,7 @@ import os
 import stat
 import threading
 import uuid
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
@@ -22,14 +23,60 @@ from .bus_publication import unique_wire_object
 from .errors import RelationViolationError
 
 if TYPE_CHECKING:
+    from .owner_lifecycle import OwnerLifecycle
     from .supervised_cutover import ArchiveReceipt
 
 
 @dataclass(frozen=True, slots=True)
-class ActiveRoute:
+class CommsRoute(ABC):
+    """A resolved selection, not a service or permission to mutate its root."""
+
     root: Path
+
+    def observe_root(self) -> Path:
+        return self.root.resolve()
+
+    @abstractmethod
+    def bind_owners(self, owners: OwnerLifecycle) -> None:
+        """Configure launch authority when a caller actually constructs a service."""
+
+
+@dataclass(frozen=True, slots=True)
+class LocalRoute(CommsRoute):
+    """Explicit/environment roots and the unconfigured historical default."""
+
+    def bind_owners(self, owners: OwnerLifecycle) -> None:
+        pass
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveRoute(CommsRoute):
     wire_root_id: str
     native_package: Path
+
+    def observe_root(self) -> Path:
+        from .wire_log import WireLog
+
+        # The writer atomically replaces this marker. Reuse its owner/mode,
+        # ancestry and protocol decoder, without taking the mutation/durability
+        # barrier or interpreting registry/history merely to observe identity.
+        marker = WireLog(self.root / "bus.jsonl")._private_marker_unlocked()
+        if marker.root_id != self.wire_root_id:
+            raise RelationViolationError("private route root ID changed")
+        return super(ActiveRoute, self).observe_root()
+
+    def bind_owners(self, owners: OwnerLifecycle) -> None:
+        # Actual service binding retains the bus-locked durable verification.
+        owners.pin_private_nk_launch(self.root, self.wire_root_id, self.native_package)
+
+
+def resolve_comms_route(root: Path | str | None = None) -> CommsRoute:
+    """Resolve one current selection without creating stores or reading registry."""
+    if root is not None:
+        return LocalRoute(Path(root).expanduser())
+    if "AGENT_COMMS_ROOT" in os.environ:
+        return LocalRoute(Path(os.environ["AGENT_COMMS_ROOT"]).expanduser())
+    return read_active_route() or LocalRoute(Path.home() / ".agent-comms")
 
 
 class RoutePublicationUnknownError(RelationViolationError):
@@ -315,8 +362,8 @@ def rotate_active_route(
     with new.bus.log.locked():
         marker = new.bus.log._private_marker_unlocked()
         if (
-            marker.get("claim_envelopes_version") != 1
-            or marker["last_seq"] != 0
+            not marker.claims
+            or marker.last_seq != 0
             or (new.bus.log.path.exists() and new.bus.log.path.stat().st_size != 0)
         ):
             raise RelationViolationError("replacement route requires an empty claim-ready bus")
@@ -328,14 +375,14 @@ def rotate_active_route(
         old = Comms(expected.root)
         with old.bus.log.locked():
             marker = old.bus.log._private_marker_unlocked()
-            if marker["wire_root_id"] != expected.wire_root_id:
+            if marker.root_id != expected.wire_root_id:
                 raise RelationViolationError("old private route identity changed")
         _require_unchanged_archive_source(old, archive)
         with new.bus.log.locked():
             marker = new.bus.log._private_marker_unlocked()
             if (
-                marker.get("claim_envelopes_version") != 1
-                or marker["last_seq"] != 0
+                not marker.claims
+                or marker.last_seq != 0
                 or (new.bus.log.path.exists() and new.bus.log.path.stat().st_size != 0)
             ):
                 raise RelationViolationError("replacement route changed before publication")
@@ -378,7 +425,7 @@ def withdraw_active_route(
         comms = Comms(expected.root)
         with comms.bus.log.locked():
             marker = comms.bus.log._private_marker_unlocked()
-        if marker["wire_root_id"] != expected.wire_root_id:
+        if marker.root_id != expected.wire_root_id:
             raise RelationViolationError("active comms route root ID changed")
         receipt = archive_stopped_root(comms, archive_destination)
         if read_active_route(path) != expected:

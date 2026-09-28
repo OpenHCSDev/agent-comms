@@ -119,3 +119,13 @@ certificate. Behavioral and installed readiness are distinct from scan results.
 Focused lint and whitespace checks passed. Local acceptance is complete; parent
 owns the installed/live boundary and urgent DM/activity work. CI remains deferred.
 Owned caches and package alias are cleaned; branch, scripts and receipts remain.
+
+## Integration update: main 0c63715
+
+Merged current main including squashed214 feedback and217 PF2. All four conflicts
+were inherited feedback files, not PF3 changes; kept exact main versions of
+assignment_states.py, history_views.py, presentation.py and the installed UI probe.
+Remaining diff against main contains only PF3 source/tests/evidence.
+`main-conflict-seam.log`: 20 passed, exit0 (message notifications and typed native
+evidence boundary). No broad reruns, provider calls or live changes. Raw inherited
+PF2 failure logs retain their original whitespace.

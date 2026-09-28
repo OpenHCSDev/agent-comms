@@ -95,7 +95,7 @@ def reserve_foreground_owner(
     comms = Comms(root)
     with comms.bus.log.locked():
         marker = comms.bus.log._private_marker_unlocked()
-    if marker["wire_root_id"] != wire_root_id:
+    if marker.root_id != wire_root_id:
         raise RelationViolationError("Private wire root changed before owner reservation")
     owner = Thread(name, tags, str(worktree), pid=os.getpid(), task=task)
     # Ordinary Comms.register intentionally supports replacing idle owners. That
