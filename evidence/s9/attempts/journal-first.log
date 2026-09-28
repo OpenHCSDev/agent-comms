@@ -1,0 +1,46 @@
+E
+==================================== ERRORS ====================================
+________ ERROR at setup of test_effective_extra_and_delete_are_verified ________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-6/test_effective_extra_and_delet0')
+
+    @pytest.fixture
+    def journal(tmp_path):
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+>       return CompactionJournal(tmp_path / "journal.sqlite3"), str(session)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_journal.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.compaction_journal.CompactionJournal object at 0x7eff1bd9ecf0>
+path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-6/test_effective_extra_and_delet0/journal.sqlite3')
+
+    def __init__(self, path: Path):
+        self.path = path
+        if os.name != "posix":
+            raise NotImplementedError("Compaction journal bridge requires POSIX")
+        # Claim a private file before SQLite opens it; never truncate existing
+        # history. Registry serialization covers normal callers; SQLite also
+        # protects uniqueness against independent connections.
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            if path.is_symlink() or not path.is_file():
+                raise CompactionJournalError("Journal must be a regular private file") from None
+        else:
+            os.close(fd)
+        with self._transaction() as db:
+            tables = TypedTable.members_with(JournalTable)
+            expected = {
+>               name: sql for table in tables for name, sql in table.schema_objects().items()
+                                                               ^^^^^^^^^^^^^^^^^^^^
+            }
+E           AttributeError: type object 'CompactionOperation' has no attribute 'schema_objects'
+
+src/agent_comms/compaction_journal.py:245: AttributeError
+=========================== short test summary info ============================
+ERROR tests/test_compaction_journal.py::test_effective_extra_and_delete_are_verified
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 error in 0.12s
