@@ -59,3 +59,10 @@ NoWake receipt handling, pointer included in actual turn.task, no backend creati
 No mocked event stream, paid provider, installed/live edit, restart or message.
 This proves preparation and durable reads, not a completed live native/model turn.
 Ruff and diff whitespace checks pass. CI deferred; Nietzsche owns full merged suite.
+
+Merged published parentfa293f2 into6658eefa without conflicts. Integrated actual
+checks:17passed4.64s, including natural OwnedTurn preparation and unchanged archive
+identity/no-delivery. Passive batch source75added486deleted; tests271added902deleted.
+R0 compares this production batch0502f28a against5a4dd50. Parent separately owns
+broadcast alias removal (different MessageBus methods) and has integrated manual
+deletion; retain both on merge.
