@@ -1,60 +1,67 @@
-# Original S2/S7 tracked native turn ownership
+# Original S2/S7 tracked turn ownership — ready for parent integration
 
-Read original S2-pi RPC boundary/turn state machine and S7 residual procedures
-from plans/nominal_refactor/files.zip, plus round2/00-RULES. S2 assigns event
-identity to PiEvent, command correlation to PiRpcChannel/PendingRequests and
-per-turn state to TurnSession. S7 explicitly names run_native_pi_turn and
-requires components owning their state rather than forwarding to shared locals.
+Implementation bd475eb7, caller correction93ee5daf, merged currentmain4510dddf
+in74b5c848. Parent owns installation. Native package remains5fde.
 
-TrackedTurnSession specializes existing TurnSession and uses existing MroDispatch
+## Owners and deletion
+
+Read original S2/S7 in plans/nominal_refactor/files.zip and round2 rules.
+TrackedTurnSession specializes TurnSession and uses existing MroDispatch
 handler declarations for Response/InputCommitted/ContextCommitted/MessageUpdate/
 MessageEnd/ToolExecutionStart/ToolExecutionEnd/AgentSettled. Deltas and assistant
-messages dispatch through their existing nominal payload classes. One strict
-receive loop, no new registry or event-name table. Correlation consumes the
-original PiCommand through canonical PendingRequests exactly once. Latest native
-context witness replaces the formerly accumulated context list.
+messages dispatch through their existing nominal payload classes. The tracked
+session owns witnesses, output, tools and child cleanup. It uses strict shared
+PiRpcChannel framing and canonical PendingRequests correlation; no second
+registry, raw decoder or event-name table. Latest context witness replaces the
+formerly accumulated list. Ordinary ACP streaming behavior is unchanged.
 
-NativePiRpcLaunch now owns tracked construction and private environment policy.
-The two procedural entrypoints are deleted; production and test callers use the
-class operations directly, with no aliases or re-exports. NativeContextProof and
-its merged283 row decoder are untouched. NativeToolMode/OwnerToolSocket operations
-remain the tool authority; Dalton owns their implementation.
+NativePiRpcLaunch owns tracked construction and private environment policy.
+run_native_pi_turn and prepare_native_pi_rpc_launch are deleted, including all
+production/test callers; there are no aliases or retained procedural closures.
+The only test references to those names are the explicit deletion guard.
+Merged283 proof decoder is untouched. Dalton's merged287 tool implementation
+is integrated through its existing public operations, without parallel owners.
 
-Actual pinned native acceptance:9pass28.07s including2,098,094-byte RPC record,
-mid-frame cancel/EOF with no replay, configured-provider reopen, provider failure,
-and retained exact RPC rejection details. No paid provider call. Earlier failed
-canonical Sol harness receipt stays failed; the subsequent real probe passed and
-parent separately verified live155/156. This refactor changes no stored schema or
-native package and has no live deployment by this sidecar.
+Exact one-shot input/send fence, selected session startup fences, native proof
+validation, original input identity, UNKNOWN/no replay, cancellation and package
+trust remain required. No schema changes, native package mutation, paid call,
+message152 replay or live deployment occurred in this sidecar task.
 
-Binding/tool refusals: initial shard124pass1skip and three stale pre-current source
-fixtures failed before their intended assertions. Migrated those three fixtures
-through existing manual_source/FieldCodec; all3 pass with unchanged assertions.
-Remaining caller/selected-preflight checks and installed candidate acceptance are
-being completed. Tests tied to moved implementation import locations use the new
-owner; no old implementation import is restored.
+## Verification
 
-## Installed acceptance and remaining baseline debt
+- Source actual pinned native/localHTTP:9pass28.07s.
+- Initial noneditable wheel:9pass30.83s.
+- Final combined74b5c848 noneditable wheel:9pass28.79s. Actual2,098,094-byte
+  record, cancel-large, EOF-large, configured loading/retained reopening,
+  provider429/length, successful output and exact prompt rejection details.
+- Combined tools/dispatch/deletion:72pass5.35s after merging latest main.
+- Binding/refusal initial124pass1skip; three obsolete source fixtures fixed
+  using current typed helper and3pass. Four additional same-session/renamed
+  reservation cases pass2.07s. Selected preflight6pass.
+- Remaining caller batch111pass1skip20fail178.65s. All20 failures reproduced
+  identically on unchangedmain451cc423:19 obsolete inputDisposition expectations
+  plus1 obsolete expectation that foreground stop creates no coordination DB.
+- An earlier caller batch was interrupted for diagnosis:81pass10fail, never
+  called green. Nine failures reproduced on unchangedmain451cc423:7 obsolete
+  ACP cursor expectations,1 old error wording,1 incomplete package fixture.
+  Our tenth failure was a migrated maintenance patch target, corrected and
+  passing in the final111pass batch.
 
-Noneditable wheel built from bd475eb7 installed under the owned
-.artifacts/tracked-turn-installed. All9 actual native cases pass30.83s:
-2,098,094-byte record, normal output, provider429/length, configured loading,
-retained configured reopening, exact prompt refusal, cancel-large and EOF-large.
-No live deployment, provider credit, schema or package change.
+There are29 baseline failures, NOT a green whole suite. The baseline comparison
+logs are preserved; no assertions were weakened or compatibility APIs restored.
+Parent can track those existing projection/fixture cases with their owners.
+Production lint and undefined-name checks over all edited files pass.
 
-Caller check was explicitly interrupted to inspect failures (81pass10fail),
-never reported as a green suite. Nine failures reproduce on unchanged
-main451cc423 in an isolated source copy: seven obsolete ACP cursor expectations,
-one old error message expectation, one incomplete foreground package fixture.
-The tenth was our migrated maintenance patch target and is corrected.
-Current typed reservation helper and all4 direct refusal/renamed-session cases
-pass after fixing that helper's path reference. Separate selected preflight6pass.
+## Accounting and retained evidence
 
-Source accounting versus451cc423:536added/442deleted, net+94. The increase is
-explicit state construction, declared event handlers and lifecycle methods;
-there are no nested execution closures, new generic registry, retained old APIs
-or compatibility alias. NativePiRpcLaunch.tracked is84lines and execute is62;
-the complete run owns cleanup in50lines, with behavior on class handlers.
-Tests at final caller patch:297added/219deleted (net+78), chiefly migrated caller
-imports/patch targets plus the deletion guard and current source fixtures.
-Production lint and undefined-name checks over every changed file pass.
+Compared with original451cc423, this change's source536added/442deleted (net+94),
+tests297added/219deleted (net+78). Increase is explicit construction and declared
+state/handlers; it is not deletion claimed from moving a procedure. Launch
+factory84lines, execute62, complete50; no execution closure remains.
+
+Final wheel: .artifacts/tracked-merged-wheel/agent_comms-0.1.0-py3-none-any.whl
+Installed candidate: .artifacts/tracked-merged-installed
+Final actual native log: installed-merged-native.log
+The canonical Sol first harness receipt remains FAILED; the separate corrected
+probe remains PASSED. Neither was rerun or rewritten. Parent's155/156 live proof
+is separate from these provider-free localHTTP checks.
