@@ -6,13 +6,12 @@ const acNativeSummaryResult = AssistantMessageEventStream.prototype.result;
 // migrations and in-memory overrides. No detached reader guesses that state.
 function acValidCompactionSettingsRequest(command) {
     const text = value => typeof value === "string" && value.length > 0 && value.length <= 4096;
-    return acExactObject(command, ["id", "type", "version", "sessionId", "sessionFile", "selected", "contextTokens"]) &&
+    return acExactObject(command, ["id", "type", "version", "sessionId", "sessionFile", "selected"]) &&
         command.type === "agent_comms_compaction_settings" && command.version === 1 && text(command.id) &&
         text(command.sessionId) && text(command.sessionFile) &&
         acExactObject(command.selected, ["provider", "modelId", "contextWindow"]) &&
         text(command.selected.provider) && text(command.selected.modelId) &&
-        Number.isSafeInteger(command.selected.contextWindow) && command.selected.contextWindow > 0 &&
-        Number.isSafeInteger(command.contextTokens) && command.contextTokens >= 0;
+        Number.isSafeInteger(command.selected.contextWindow) && command.selected.contextWindow > 0;
 }
 function acSelectedCompactionSettings(command, session, conflict) {
     if (conflict || session.isCompacting || !session.isIdle || session.isStreaming || session.isRetrying ||
@@ -29,11 +28,15 @@ function acSelectedCompactionSettings(command, session, conflict) {
         settings.reserveTokens < 0 || settings.reserveTokens > 10000000 ||
         !Number.isSafeInteger(settings.keepRecentTokens) || settings.keepRecentTokens <= 0 ||
         settings.keepRecentTokens > 10000000) throw Error("Invalid effective compaction settings");
+    // Cold restored history can require compaction before any runtime usage has
+    // been published. The selected session owns both stored admission and usage.
+    const requiresCompaction = session.storedContext.requiresCompaction();
+    const tokens = requiresCompaction ? undefined : session.getContextUsage()?.tokens;
     return {version: 1, sessionId: session.sessionId, sessionFile: session.sessionFile,
-        selected: command.selected, contextTokens: command.contextTokens,
+        selected: command.selected,
         decision: {enabled: settings.enabled, reserveTokens: settings.reserveTokens,
             keepRecentTokens: settings.keepRecentTokens,
-            trigger: session.storedContext.requiresCompaction() || shouldCompact(command.contextTokens, model.contextWindow, settings)}};
+            trigger: requiresCompaction || (tokens != null && shouldCompact(tokens, model.contextWindow, settings))}};
 }
 function acValidSummaryRequest(value) {
     const fields = ["id", "type", "version", "operationId", "witness", "selected", "settings"];
