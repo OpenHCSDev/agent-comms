@@ -4,22 +4,28 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
-Latest installed pair: core451cc423 (280 wake visibility,283 proof decoding,
-284 canonical native framing, plus277/276/278), Toadb472e487 (128 attention,
-127 T4 and50 browser), Textualc9743801 (8 editor lifetime), native5fde.
-The immutable runtime-native-framing-20260928 is live. Four idle owners restarted;
+Latest installed pair: core4510dddf (289 registry race,287 nominal tools,
+280 wake visibility,283 proof decoding,284 framing), Toadb4bdae1 (132 paired tool
+callers,128 attention,127 T4 and50 browser), Textualc9743801, native5fde.
+The immutable runtime-registry-tools-20260928 is live. Four idle owners restarted;
 no store reset, session loss or input replay. Restart the user's Toad to load the
 new imports. Combined local checks38 passed; installed native wake/restart and
 feedback checks18 passed; actual native WebSocket1011 and mounted UI passed.
 The existing failed return152 remains uncertain and is not retried. NEW live
 diagnostic155 received exact reply156 LIVE_BUS_CONFIG_OK from nra-architecture
 through the actual bus/restarted owner/configured provider, then returned idle.
-Latest pair passes six installed native config/rejection checks and the full
+The preceding pair passed six installed native config/rejection checks and the full
 installed native queue/reattach/DM/channel/stopped-owner UI pilot.
 New shipping batch:11 installed real drain/schema tests,2 mounted warning/recovery
 pilots with the merged framework,2 installed proof/reopen cases, then9 installed
 native cases including a2.1MB record, cancellation and EOF. All pass. All runtime
 stores and durable histories remain intact; executed activation operators deleted.
+Latest shipping batch:39 installed core checks, actual native send/inbox calls,
+installed current Toad context-menu/command-family pilots, and four fresh live
+ACP initialize/load attachments pass. Initial candidate caught a missed current
+Toad import;132 migrates it without aliases. First attachment harness hit its
+own asyncio line limit; reuse of the existing complete-record reader fixes the
+harness, and all four attachments pass. Failed outputs are retained honestly.
 
 ## Current shipping batch
 
@@ -125,14 +131,20 @@ stores and durable histories remain intact; executed activation operators delete
   persisted once. Five current registry polls failed; these are recorded failures,
   not successful reads. The full-version timing comparison is not an A8-only
   causal claim. Disposable benchmark environments and roots were removed.
-- [ ] Boyle: fix the real marker inode retirement race found by285, in289.
+- [x] Boyle: fix the real marker inode retirement race found by285, in289.
   Actual concurrent canonical publication reproduced a retired inode with nlink0;
   the fix gives marker reading/publication one canonical lock and validates the
   opened inode. Installed1500 publications/44395 reads passed, as did actual
-  permission/hardlink/symlink rejection. Full S7 rerun underway. Not installed yet.
-- [ ] Dalton: finish nominal tool request/behavior/catalog ownership in tools.py,
-  PR287;
-  remove central handler roster, parameter-kind dispatch and repeated raw decoding.
+  permission/hardlink/symlink rejection. Full S7 rerun:1200 measured sends,
+  7646 polls, zero failures. Merged and installed in the current runtime.
+- [x] Dalton/parent: nominal tool request/behavior/catalog ownership in287,
+  with current Toad caller closure132. Central handler roster, parameter-kind
+  dispatch and repeated raw decoding deleted; production core net113 fewer lines.
+  Paired installed native tools and actual current Toad menu/commands pass.
+- [ ] Boyle: original S3/S7 coordination row/store/schema ownership and complete
+  caller migration; parent has made no coordination production edits.
+- [ ] Dalton: original S1/S2/S3/S4 acceptance gaps and obsolete typed-source
+  fixtures. Wegener's29 reproduced baseline failures handed over for closure.
 - [ ] Wegener: finish tracked native turn lifecycle ownership in288 using existing
   PiEvent/dispatch authorities, deleting manual duplicated event handling.
 - [ ] Parent: remaining source/acceptance reconciliation. A bounded package NRA

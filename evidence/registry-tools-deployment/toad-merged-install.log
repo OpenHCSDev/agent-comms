@@ -1,0 +1,11 @@
+Using Python 3.14.2 environment at: /home/ts/.local/share/agent-comms/runtime-registry-tools-20260928
+   Updating https://github.com/OpenHCSDev/toad (b4bdae1657a819dd943ed1fbd5a2b684c2683019)
+    Updated https://github.com/OpenHCSDev/toad (b4bdae1657a819dd943ed1fbd5a2b684c2683019)
+Resolved 1 package in 909ms
+   Building batrachian-toad @ git+https://github.com/OpenHCSDev/toad@b4bdae1657a819dd943ed1fbd5a2b684c2683019
+      Built batrachian-toad @ git+https://github.com/OpenHCSDev/toad@b4bdae1657a819dd943ed1fbd5a2b684c2683019
+Prepared 1 package in 496ms
+Uninstalled 1 package in 7ms
+Installed 1 package in 8ms
+ - batrachian-toad==0.6.20 (from file:///home/ts/wt/toad-nominal-tool-callers-20260928)
+ + batrachian-toad==0.6.20 (from git+https://github.com/OpenHCSDev/toad@b4bdae1657a819dd943ed1fbd5a2b684c2683019)
