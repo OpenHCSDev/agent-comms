@@ -1138,8 +1138,8 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         async def observe(event):
             await durable_attempt.dispatch(event)
             attempt = durable_attempt.store.snapshot("e").attempt
-            durable_phases.append(attempt.phase.value)
-            assert not attempt.backend_done and not attempt.process_dead
+            durable_phases.append(attempt.lifecycle.declared_name)
+            assert not attempt.lifecycle.backend_done and not attempt.lifecycle.process_dead
 
         request = dict(
             observe_event=observe,
@@ -1156,7 +1156,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             assert "prompt_accepted" in durable_phases
             assert "model_running" in durable_phases
             durable_attempt.finish()
-            assert durable_attempt.store.snapshot("e").attempt.backend_done
+            assert durable_attempt.store.snapshot("e").attempt.lifecycle.backend_done
             assert result.text == "X"
             assert result.context.input_id == INPUT_ID
             assert result.context.request_generation == 1

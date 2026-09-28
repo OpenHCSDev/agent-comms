@@ -1,4 +1,4 @@
-"""Compatibility graphs and state data ownership, independent of the new implementation."""
+"""Stored lifecycle names, graph/data ownership, and current codec paths."""
 
 import json
 from dataclasses import fields, replace
@@ -7,9 +7,14 @@ from pathlib import Path
 import pytest
 
 from agent_comms import coordination as c
-from agent_comms.attempt_states import AttemptState, SucceededAttempt
+from agent_comms.attempt_states import AttemptState, SettlingAttempt, SucceededAttempt
 from agent_comms.claim_states import ClaimState, EngagedClaim, FullPendingClaim
-from agent_comms.execution_states import ActiveExecution, ExecutionState, PendingExecution
+from agent_comms.execution_states import (
+    ActiveExecution,
+    ExecutionState,
+    PendingExecution,
+    QueuedExecution,
+)
 from agent_comms.field_codec import FieldCodec
 from agent_comms.obligation_states import PublishedResponse, ResponseState, SilentResponse
 from agent_comms.recovery_gateway_client import _valid_projection
@@ -19,16 +24,16 @@ from agent_comms.recovery_projection import AvailableRecoveryProjection, Project
 @pytest.mark.parametrize(
     "tag,family",
     [
-        (c.ExecutionStatus, ExecutionState),
-        (c.ObligationState, ResponseState),
-        (c.AttemptPhase, AttemptState),
-        (c.ClaimDisposition, ClaimState),
+        ("ExecutionStatus", ExecutionState),
+        ("ObligationState", ResponseState),
+        ("AttemptPhase", AttemptState),
+        ("ClaimDisposition", ClaimState),
     ],
 )
 def test_stored_names_and_edges_match_pre_refactor_capture(tag, family):
     capture = json.loads(
         (Path(__file__).parents[1] / "evidence/s3/legacy-lifecycles.json").read_text()
-    )[tag.__name__]
+    )[tag]
     assert set(family.names()) == set(capture["names"])
     assert {name: sorted(edges) for name, edges in family.transition_table().items()} == capture[
         "edges"
@@ -54,7 +59,7 @@ def test_state_data_cannot_be_attached_to_wrong_variant():
         SucceededAttempt.load(None, False, True)
 
 
-def test_record_keeps_only_nominal_state_and_legacy_replace_decodes_at_boundary():
+def test_record_replacement_uses_only_nominal_state():
     record = c.ExecutionRecord(
         execution_id="e",
         origin=c.ExecutionOrigin.ACP,
@@ -68,7 +73,7 @@ def test_record_keeps_only_nominal_state_and_legacy_replace_decodes_at_boundary(
         updated_at_ms=0,
     )
     assert {"status", "current_attempt_ordinal"}.isdisjoint(f.name for f in fields(record))
-    active = replace(record, status=c.ExecutionStatus.ACTIVE, current_attempt_ordinal=1, revision=2)
+    active = replace(record, revision=2, lifecycle=ActiveExecution.load(1))
     assert active.lifecycle == ActiveExecution(1)
     assert c.execution_status_transition_allowed(record, active)
     assert replace(active, revision=3).lifecycle == active.lifecycle
@@ -94,15 +99,15 @@ def test_response_extension_decodes_transitions_and_projects_without_catalog_edi
     try:
         state = FieldCodec.decode(ResponseState, {"kind": "reviewed"})
         assert state.may_become(SilentResponse())
-        tag = c.ObligationState("reviewed")
-        assert tag.declaration.publication() == "reviewed"
+        tag = ResponseState.decode("reviewed")
+        assert tag.publication() == "reviewed"
         projection = ProjectedExecution(
-            c.ExecutionStatus.PENDING,
+            PendingExecution,
             c.ExecutionOrigin.WIRE,
             False,
             None,
             False,
-            tag.declaration.publication(),
+            tag.publication(),
         )
         assert _valid_projection(
             AvailableRecoveryProjection("owner", 0, projection, None, None).to_primitive(), "owner"
@@ -137,7 +142,9 @@ async def test_execution_extension_is_stored_transitioned_and_read_over_gateway_
                 "UPDATE executions SET status='pending',revision=2 WHERE execution_id='e'"
             )
             assert isinstance(store.snapshot("e").execution.lifecycle, PendingExecution)
-            projection = ProjectedExecution(record.status, record.origin, False, None, False, None)
+            projection = ProjectedExecution(
+                type(record.lifecycle), record.origin, False, None, False, None
+            )
             result = await _through_socket(
                 AvailableRecoveryProjection("owner", 1, projection, None, None)
             )
@@ -186,12 +193,12 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path):
         for raw, expected in samples:
             await progress.dispatch(PiEvent.from_wire(raw))
             attempt = store.snapshot("e").attempt
-            assert attempt.phase.value == expected
-            assert not attempt.backend_done and not attempt.process_dead
+            assert attempt.lifecycle.declared_name == expected
+            assert not attempt.lifecycle.backend_done and not attempt.lifecycle.process_dead
         final = progress.finish()
         assert final.revision > started.fence.revision
-        assert store.snapshot("e").attempt.backend_done
-        assert store.snapshot("e").attempt.phase == c.AttemptPhase.SETTLING
+        assert store.snapshot("e").attempt.lifecycle.backend_done
+        assert isinstance(store.snapshot("e").attempt.lifecycle, SettlingAttempt)
         store.settle_nonpublication(
             final, expected_pointer_revision=started.snapshot.pointer_revision, success=True
         )
@@ -264,7 +271,7 @@ async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
                 "owner",
                 0,
                 ProjectedExecution(
-                    c.ExecutionStatus.QUEUED,
+                    QueuedExecution,
                     c.ExecutionOrigin.WIRE,
                     False,
                     None,

@@ -51,7 +51,7 @@ def render_selected_wake_frame(
         and isinstance(decision, WakeDecision)
         and decision.recipient == claim.recipient_lookup
         and decision.audience is claim.audience
-        and decision.wake_mode is claim.wake_mode
+        and decision.wake_mode == claim.lifecycle.mode
     ]
     if len(selected) != 1:
         raise IdentityConflict("wake frame requires one selected N/K recipient")
@@ -67,7 +67,7 @@ def render_selected_wake_frame(
             or obligation is None
             or not obligation.lifecycle.pending
             or obligation.exact_target != target
-            or claim.execution_id != obligation.execution_id
+            or claim.lifecycle.execution_id != obligation.execution_id
         ):
             raise IdentityConflict("full wake frame requires the current response obligation")
         expectation = claim.lifecycle.mode.full_expectation()
@@ -87,7 +87,7 @@ def render_selected_wake_frame(
             "sender": initial.message.sender,
             "target": initial.message.target,
             "audience": selected[0].audience.value,
-            "wake_mode": claim.wake_mode.value,
+            "wake_mode": claim.lifecycle.mode.declared_name,
         },
         ensure_ascii=True,
         separators=(",", ":"),

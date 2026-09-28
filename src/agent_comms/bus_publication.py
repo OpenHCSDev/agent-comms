@@ -88,7 +88,7 @@ def _decision_wire(decision: WakeDecision | NoWakeDecision) -> dict[str, str]:
         return {
             "recipient_lookup": decision.recipient,
             "audience": decision.audience.value,
-            "wake_mode": decision.wake_mode.value,
+            "wake_mode": decision.wake_mode.declared_name,
         }
     raise TypeError("Only typed, pure full-cohort decisions may be committed.")
 
