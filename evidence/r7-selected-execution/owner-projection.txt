@@ -1,0 +1,11 @@
+........................................................................ [ 77%]
+.........F...........                                                    [100%]
+=================================== FAILURES ===================================
+_________________ test_no_owner_process_start_or_gateway_calls _________________
+tests/test_recovery_projection.py:497: in test_no_owner_process_start_or_gateway_calls
+    monkeypatch.setattr(Comms, "ensure_owner", prohibited)
+E   AttributeError: <class 'agent_comms.comms.Comms'> has no attribute 'ensure_owner'
+=========================== short test summary info ============================
+FAILED tests/test_recovery_projection.py::test_no_owner_process_start_or_gateway_calls
+1 failed, 92 passed in 23.03s
+exit=1

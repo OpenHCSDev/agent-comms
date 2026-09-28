@@ -1,0 +1,21 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______________ test_native_full_four_tools_publish_and_release ________________
+tests/test_selected_execution_native.py:135: in test_native_full_four_tools_publish_and_release
+    outcome = await asyncio.wait_for(execution.run(), 40)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+src/agent_comms/coordinated_runtime.py:401: in run
+    self._open()
+src/agent_comms/coordinated_runtime.py:452: in _open
+    _trusted_package(self.native_package)  # fail BEFORE any claim is reserved
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:189: in _trusted_package
+    raise NativePiUnavailable("Pinned disposable native Pi package is required")
+E   agent_comms.native_pi.NativePiUnavailable: Pinned disposable native Pi package is required
+=========================== short test summary info ============================
+FAILED tests/test_selected_execution_native.py::test_native_full_four_tools_publish_and_release
+1 failed in 0.80s
+exit=1

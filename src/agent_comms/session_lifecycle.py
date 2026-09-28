@@ -64,7 +64,6 @@ class SessionLifecycle:
             else getattr(client_capabilities, "field_meta", None) or {}
         )
         self.transcript.snapshots = meta.get("agentComms", {}).get("transcriptSnapshots") is True
-        self.transcript.diffs = meta.get("agentComms", {}).get("transcriptDiffs") is True
         capabilities = (
             client_capabilities
             if isinstance(client_capabilities, dict)

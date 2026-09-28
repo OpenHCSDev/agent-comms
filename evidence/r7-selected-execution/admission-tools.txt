@@ -1,0 +1,24 @@
+F.....................................s..............................    [100%]
+=================================== FAILURES ===================================
+_____________ test_selected_wake_binding_survives_claim_projection _____________
+src/agent_comms/envelope_claim_transitions.py:375: in parse_complete_transition_line
+    admission = FieldCodec.decode(WakeAdmission, value)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:222: in _decode
+    raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+E   ValueError: Unknown fields for WakeAdmission: ['wake_assignment_id']
+
+The above exception was the direct cause of the following exception:
+tests/test_envelope_claim_transitions.py:46: in test_selected_wake_binding_survives_claim_projection
+    decoded = parse_complete_transition_line(raw)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/envelope_claim_transitions.py:377: in parse_complete_transition_line
+    raise ClaimTransitionError("Wake admission has invalid fields.") from error
+E   agent_comms.envelope_claim_transitions.ClaimTransitionError: Wake admission has invalid fields.
+=========================== short test summary info ============================
+FAILED tests/test_envelope_claim_transitions.py::test_selected_wake_binding_survives_claim_projection
+1 failed, 67 passed, 1 skipped in 16.71s
+exit=1

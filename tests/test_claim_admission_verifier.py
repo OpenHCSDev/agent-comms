@@ -18,11 +18,11 @@ from agent_comms.claim_admission import (
     verify_selected_wake,
     write_selected_claimed_file,
 )
-from agent_comms.claim_states import FullPendingClaim
+from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.coordinated_runtime import _engage
-from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
+from agent_comms.coordination import ExecutionOrigin
+from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
 from agent_comms.coordination_store import IdentityConflict, MutationStore, prepare_fence_token
 from agent_comms.envelope_claim_transitions import WakeAdmission
 from agent_comms.errors import ClaimEnvelopeUnknownError, RelationViolationError
@@ -68,15 +68,24 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             accept_initial_cohort(comms.bus, root_id, message.seq, store)
             alice_lookup = stable_thread_lookup(comms.registry.require("Alice").created_at)
             bob_lookup = stable_thread_lookup(comms.registry.require("Bob").created_at)
-            assert sealed_cohort_claims(store, bob_lookup) == ()
-            claim = sealed_cohort_claims(store, alice_lookup)[0]
-            assert type(claim.lifecycle) is FullPendingClaim
+            assert sealed_cohort_assignments(store, bob_lookup) == ()
+            claim = sealed_cohort_assignments(store, alice_lookup)[0]
+            assert type(claim.lifecycle) is FullPendingAssignment
             owner, admission_generation = comms.registry.live_owner_with_admission("Alice")
-            owner, admission_generation = comms.registry.claim_live_turn_with_admission(
+            owner, admission_generation = comms.registry.lease_live_turn_with_admission(
                 owner, "selected-turn", expected_generation=admission_generation
             )
             person = store.participant(alice_lookup)
-            execution_id = _engage(store, claim, initial, owner, person.generation)
+            execution_id = "verifier-execution"
+            store.create_execution(
+                execution_id,
+                ExecutionOrigin.WIRE,
+                alice_lookup,
+                owner.name,
+                1,
+                assignment_ids=(claim.assignment_id,),
+                exact_target="#team",
+            )
             snapshot = store.snapshot(execution_id)
             snapshot = store.mark_pending(
                 execution_id, expected_revision=snapshot.execution.revision
@@ -85,24 +94,24 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 execution_id,
                 1,
                 owner.name,
-                person.generation,
+                person.participant_generation,
                 prepare_fence_token(),
                 expected_execution_revision=snapshot.execution.revision,
                 expected_pointer_revision=snapshot.pointer_revision,
             )
-            engaged = store.claim(claim.claim_id)
+            engaged = store.assignment(claim.assignment_id)
             admission = WakeAdmission(
                 wire_root_id=root_id,
                 source_seq=message.seq,
                 source_message_id=message.message_id,
-                wake_claim_id=claim.claim_id,
+                wake_assignment_id=claim.assignment_id,
                 wake_revision=engaged.revision,
                 recipient_lookup=alice_lookup,
                 execution_id=execution_id,
                 operation_id="f" * 32,
                 owner_admission_generation=admission_generation,
                 turn_id=owner.active_turn.id,
-                participant_generation=person.generation,
+                participant_generation=person.participant_generation,
                 attempt_ordinal=1,
             )
             verify_selected_wake(comms, store, admission, owner.name)
@@ -118,7 +127,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 raise OSError("lost acknowledgement after durable append")
 
             with monkeypatch.context() as patch:
-                patch.setattr(comms.bus.log, '_append_private_unlocked', append_then_lose_receipt)
+                patch.setattr(comms.bus.log, "_append_private_unlocked", append_then_lose_receipt)
                 with pytest.raises(ClaimEnvelopeUnknownError):
                     publish_selected_resource_claim(comms, store, admission, owner.name, resource)
             selected_owner = Comms(root).bus.log.claim_projection()[str(resource)]
@@ -163,7 +172,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             # old absolute stat/open followed the parent symlink despite
             # final-component O_NOFOLLOW.
             with monkeypatch.context() as patch:
-                patch.setattr(comms.bus.log, '_claim_projection_unlocked', swap_after_projection)
+                patch.setattr(comms.bus.log, "_claim_projection_unlocked", swap_after_projection)
                 with pytest.raises(IdentityConflict, match="directory or file changed"):
                     write_selected_claimed_file(
                         comms, store, admission, "Alice", selected_owner, b"escaped\n"

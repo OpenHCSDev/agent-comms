@@ -1,15 +1,15 @@
 """Typed ACP replay boundary for existing saved-history projections.
 
-Snapshot clients retain the existing full TranscriptPage representation. Legacy
-text clients consume this declaration family; unsupported saved event kinds
-remain silent, as before, without contaminating the live A10 event stream.
+Snapshot clients receive typed saved presentation facts. Standard ACP text
+clients receive each fact's declared replay update; silent presentation facts
+do not enter the live event stream.
 """
 
 from __future__ import annotations
 
 import asyncio
 from abc import abstractmethod
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from acp.schema import AgentMessageChunk, TextContentBlock, UserMessageChunk
@@ -18,27 +18,13 @@ from .comms import Comms
 from .declared_family import DeclaredFamily
 from .routing import MessageRoute
 from .runtime import RuntimeServer
-from .transcripts import TranscriptEvent
+from .transcript_events import TranscriptCodec
 
 
 @dataclass(frozen=True, kw_only=True)
 class TranscriptUpdate(DeclaredFamily, affix="TranscriptUpdate"):
     @abstractmethod
     async def publish(self, session_id: str, client: Any) -> None: ...
-
-    @classmethod
-    def owner_for(cls, kind: str) -> type[TranscriptUpdate]:
-        try:
-            return cls.decode(kind)
-        except ValueError:
-            return IgnoredTranscriptUpdate
-
-    @classmethod
-    def from_transcript(cls, event: TranscriptEvent) -> TranscriptUpdate:
-        # Comms owns decoding the saved record; project its typed fields.
-        member = cls.owner_for(event.kind)
-        values = {"text": event.text, "route": event.routing.reply if event.routing else None}
-        return member(**{f.name: values[f.name] for f in fields(member) if f.name in values})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -67,8 +53,6 @@ class AgentTextTranscriptUpdate(TranscriptUpdate):
     text: str = ""
     route: MessageRoute | None = None
 
-
-class AgentTextPublication:
     async def publish(self, session_id: str, client: Any) -> None:
         if self.text:
             await client.session_update(
@@ -81,21 +65,6 @@ class AgentTextPublication:
                     },
                 ),
             )
-
-
-@dataclass(frozen=True, kw_only=True)
-class AssistantTranscriptUpdate(AgentTextPublication, AgentTextTranscriptUpdate):
-    pass
-
-
-@dataclass(frozen=True, kw_only=True)
-class NoticeTranscriptUpdate(AgentTextPublication, AgentTextTranscriptUpdate):
-    pass
-
-
-@dataclass(frozen=True, kw_only=True)
-class SentTranscriptUpdate(AgentTextPublication, AgentTextTranscriptUpdate):
-    pass
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -129,7 +98,6 @@ class TranscriptReplay:
     def __init__(self, comms: Comms, runtime: RuntimeServer):
         self.comms, self.runtime = comms, runtime
         self.snapshots = False
-        self.diffs = False
 
     async def replay(
         self,
@@ -138,7 +106,6 @@ class TranscriptReplay:
         client: Any = None,
         *,
         snapshots: bool | None = None,
-        diffs: bool | None = None,
     ) -> None:
         use_snapshots = (
             (self.snapshots if client is None else getattr(client, "transcript_snapshots", False))
@@ -148,11 +115,6 @@ class TranscriptReplay:
         destination = client or self.runtime
         if use_snapshots:
             page = await asyncio.to_thread(self.comms.transcripts.thread_transcript_page, name)
-            include_diff = (
-                (self.diffs if client is None else getattr(client, "transcript_diffs", False))
-                if diffs is None
-                else diffs is True
-            )
             await destination.session_update(
                 session_id=session_id,
                 update=AgentMessageChunk(
@@ -160,9 +122,7 @@ class TranscriptReplay:
                     content=TextContentBlock(type="text", text=""),
                     field_meta={
                         "agentComms": {
-                            "transcript": [
-                                event.to_wire(include_diff=include_diff) for event in page.events
-                            ],
+                            "transcript": [TranscriptCodec.encode(event) for event in page.events],
                             "transcriptPage": page.metadata(),
                         }
                     },
@@ -171,4 +131,4 @@ class TranscriptReplay:
             return
         events = await asyncio.to_thread(self.comms.transcripts.thread_transcript, name)
         for event in events:
-            await TranscriptUpdate.from_transcript(event).publish(session_id, destination)
+            await event.replay_update().publish(session_id, destination)

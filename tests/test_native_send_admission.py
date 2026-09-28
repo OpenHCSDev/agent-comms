@@ -15,7 +15,7 @@ import pytest
 
 from agent_comms import native_pi, native_prompt_send
 from agent_comms.bus_publication import stable_thread_lookup
-from agent_comms.coordinated_runtime import run_one_sealed_claim
+from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_store import MutationStore, StaleFence
 from test_coordinated_runtime import _fake_model, _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
@@ -44,9 +44,9 @@ async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, di
 
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", race)
     with pytest.raises(StaleFence):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
-        )
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+        ).run()
     assert calls == []
 
 
@@ -137,9 +137,9 @@ async def test_actual_raw_writes_hold_owner_exclusions(tmp_path, monkeypatch, di
 
     monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
     with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
-        )
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+        ).run()
     if revoke:
         assert observed == []
         assert not received.exists() or not received.read_text()
@@ -248,12 +248,12 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         patch.setattr(native_pi.os, "killpg", cancel_during_cleanup)
         start = time.monotonic()
         task = asyncio.create_task(
-            run_one_sealed_claim(
-                root,
+            SelectedExecution(
+                root=root,
                 wire_root_id=root_id,
                 owner_name=owner.name,
                 native_package=directory,
-            )
+            ).run()
         )
         error = asyncio.CancelledError if "cancel" in mode else native_pi.NativePiUnavailable
         with pytest.raises(error):
@@ -273,9 +273,9 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         assert _held(root) == []
         if mode not in {"lifecycle", "preflight-drain"}:
             assert (
-                await run_one_sealed_claim(
-                    root, wire_root_id=root_id, owner_name=owner.name, native_package=directory
-                )
+                await SelectedExecution(
+                    root=root, wire_root_id=root_id, owner_name=owner.name, native_package=directory
+                ).run()
                 is None
             )
             assert len(children) == 1  # reserved/uncertain input is never replayed
@@ -387,9 +387,9 @@ async def test_short_admission_contention_sends_once_after_release(
     # The child intentionally exits after reading the prompt; this tests raw
     # admission only, not a native context or successful model response.
     with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
-        )
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+        ).run()
     if revoke:
         assert not received.exists() or not received.read_text()
         assert admissions == []

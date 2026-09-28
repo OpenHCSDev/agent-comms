@@ -53,7 +53,7 @@ def nominal_broker_stub(monkeypatch):
                 (input_id,),
             ).fetchone()
         assert row is not None
-        assert row["claim_id"] == admission.wake_claim_id
+        assert row["claim_id"] == admission.wake_assignment_id
         assert row["owner_thread"] == owner
         assert row["owner_lookup"] == admission.recipient_lookup
         assert row["attempt_ordinal"] == admission.attempt_ordinal == 1
@@ -104,14 +104,14 @@ async def test_operator_plan_and_tool_intent_are_exclusive(
     path.write_text("before")
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     with pytest.raises(IdentityConflict, match="cannot share an operator file plan"):
-        await runtime.run_one_sealed_claim(
-            root,
+        await runtime.SelectedExecution(
+            root=root,
             wire_root_id=root_id,
             owner_name="beta",
             native_package=private_root,
             selected_tool_intent=intent_type(),
             selected_existing_file_write=SelectedExistingFileWrite(path, b"after"),
-        )
+        ).run()
     assert path.read_text() == "before"
 
 
@@ -130,9 +130,9 @@ async def test_default_full_has_normal_coding_tools_and_cooperative_claim_instru
 
     monkeypatch.setattr(runtime, "run_native_pi_turn", observed)
     assert (
-        await runtime.run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=private_root
-        )
+        await runtime.SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=private_root
+        ).run()
     ).response_message_id
     assert len(calls) == 1
     assert "normal read, bash, edit and write tools." in calls[0][1]
@@ -157,13 +157,13 @@ async def test_real_owner_selected_tool_writes_existing_file_once(private_root, 
         return replace(result, selected_tool_call_id="call_1")
 
     monkeypatch.setattr(runtime, "run_native_pi_turn", selected_model)
-    result = await runtime.run_one_sealed_claim(
-        root,
+    result = await runtime.SelectedExecution(
+        root=root,
         wire_root_id=root_id,
         owner_name="beta",
         native_package=private_root,
         selected_tool_intent=SelectedToolIntent(),
-    )
+    ).run()
     assert result is not None and result.response_message_id
     assert len(calls) == 1
     assert path.read_text(encoding="utf-8") == "after"
@@ -195,13 +195,13 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
         return result
 
     monkeypatch.setattr(runtime, "run_native_pi_turn", observed)
-    result = await runtime.run_one_sealed_claim(
-        root,
+    result = await runtime.SelectedExecution(
+        root=root,
         wire_root_id=root_id,
         owner_name="beta",
         native_package=private_root,
         selected_tool_intent=intent_type(),
-    )
+    ).run()
     assert result is not None and result.response_message_id
     assert len(calls) == len(kwargs_seen) == len(bound) == 1
     admission, owner, session_dir, input_id = bound[0]
@@ -223,21 +223,21 @@ async def test_wrong_intent_or_observer_cannot_create_tool_mode(
     root, root_id, _comms, _initial, _ = _root(private_root, mentioned=True)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     with pytest.raises(TypeError, match="nominal owner intent"):
-        await runtime.run_one_sealed_claim(
-            root,
+        await runtime.SelectedExecution(
+            root=root,
             wire_root_id=root_id,
             owner_name="beta",
             native_package=private_root,
             selected_tool_intent=object(),
-        )
+        ).run()
     assert (
-        await runtime.run_one_sealed_claim(
-            root,
+        await runtime.SelectedExecution(
+            root=root,
             wire_root_id=root_id,
             owner_name="alpha",
             native_package=private_root,
             selected_tool_intent=intent_type(),
-        )
+        ).run()
         is None
     )
     assert not bound
@@ -256,13 +256,13 @@ async def test_opted_in_triage_remains_no_tools(private_root, monkeypatch, nomin
         return await fake(*args, **kwargs)
 
     monkeypatch.setattr(runtime, "run_native_pi_turn", observed)
-    await runtime.run_one_sealed_claim(
-        root,
+    await runtime.SelectedExecution(
+        root=root,
         wire_root_id=root_id,
         owner_name="alpha",
         native_package=private_root,
         selected_tool_intent=intent_type(),
-    )
+    ).run()
     assert len(calls) == len(kwargs_seen) == 1
     assert "selected_tool_mode" not in kwargs_seen[0]
     assert "selected_claimed_write" not in calls[0][1]
@@ -293,21 +293,21 @@ async def test_selected_full_failure_never_reissues_or_forges_response(
 
     monkeypatch.setattr(runtime, "run_native_pi_turn", failed)
     with pytest.raises((NativePiUnavailable, StaleFence, IdentityConflict, RelationViolationError)):
-        await runtime.run_one_sealed_claim(
-            root,
+        await runtime.SelectedExecution(
+            root=root,
             wire_root_id=root_id,
             owner_name="beta",
             native_package=private_root,
             selected_tool_intent=intent_type(),
-        )
+        ).run()
     assert (
-        await runtime.run_one_sealed_claim(
-            root,
+        await runtime.SelectedExecution(
+            root=root,
             wire_root_id=root_id,
             owner_name="beta",
             native_package=private_root,
             selected_tool_intent=intent_type(),
-        )
+        ).run()
         is None
     )
     assert len(calls) == len(bound) == 1

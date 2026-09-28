@@ -25,7 +25,7 @@ from .messages import MessageType
 from .mro_dispatch import MroDispatch, handles
 from .pi_payloads import PiUsage
 from .routing import MessageRoute
-from .transcript_updates import SentTranscriptUpdate
+from .transcript_updates import AgentTextTranscriptUpdate
 from .turn_lease import FinishedTurnFence
 
 if TYPE_CHECKING:
@@ -54,7 +54,7 @@ class TurnEventPublication(MroDispatch):
         if sent is not None:
             await execution.runner.effects._emit_event(
                 execution.session_id,
-                SentTranscriptUpdate(
+                AgentTextTranscriptUpdate(
                     text=sent.body, route=MessageRoute(sent.sender, (sent.target,))
                 ),
             )

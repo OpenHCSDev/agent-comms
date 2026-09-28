@@ -6,7 +6,13 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
-from .claim_states import ClaimState, CompletedClaim, DeferredClaim, EngagedClaim, FailedClaim
+from .assignment_states import (
+    AssignmentState,
+    CompletedAssignment,
+    DeferredAssignment,
+    EngagedAssignment,
+    FailedAssignment,
+)
 from .coordination_errors import IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
@@ -37,7 +43,7 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
 
     @classmethod
     @abstractmethod
-    def claim_state(cls) -> type[ClaimState]: ...
+    def assignment_state(cls) -> type[AssignmentState]: ...
 
     def validate_budget(self, maximum: int) -> None:
         ordinal = self.current_attempt_ordinal
@@ -64,8 +70,8 @@ class UnstartedExecution(ExecutionState):
         return cls()
 
     @classmethod
-    def claim_state(cls) -> type[ClaimState]:
-        return EngagedClaim
+    def assignment_state(cls) -> type[AssignmentState]:
+        return EngagedAssignment
 
 
 class QueuedExecution(UnstartedExecution):
@@ -115,8 +121,8 @@ class ActiveExecution(AttemptExecution):
         return DeferredExecution, CompletedExecution, FailedExecution
 
     @classmethod
-    def claim_state(cls) -> type[ClaimState]:
-        return EngagedClaim
+    def assignment_state(cls) -> type[AssignmentState]:
+        return EngagedAssignment
 
     def accepts_attempt(self, phase):
         return not phase.terminal
@@ -136,8 +142,8 @@ class CompletedExecution(AttemptExecution):
     completed = True
 
     @classmethod
-    def claim_state(cls) -> type[ClaimState]:
-        return CompletedClaim
+    def assignment_state(cls) -> type[AssignmentState]:
+        return CompletedAssignment
 
     @classmethod
     def successors(cls):
@@ -166,8 +172,8 @@ class DeferredExecution(InterruptedExecution):
     retry = True
 
     @classmethod
-    def claim_state(cls) -> type[ClaimState]:
-        return DeferredClaim
+    def assignment_state(cls) -> type[AssignmentState]:
+        return DeferredAssignment
 
     @classmethod
     def successors(cls):
@@ -188,8 +194,8 @@ class FailedExecution(InterruptedExecution):
     failed = True
 
     @classmethod
-    def claim_state(cls) -> type[ClaimState]:
-        return FailedClaim
+    def assignment_state(cls) -> type[AssignmentState]:
+        return FailedAssignment
 
     @classmethod
     def successors(cls):

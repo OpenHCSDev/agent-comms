@@ -13,7 +13,7 @@ import hashlib
 import os
 import sqlite3
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .bus_publication import stable_thread_lookup
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -127,11 +127,11 @@ class CurrentNativeCursor:
     recipient_lookup: str
     owner_thread: str
     owner_generation: int
-    owner_admission_epoch: int
+    owner_admission_generation: int = field(metadata={"wire_name": "owner_admission_epoch"})
     covered_seq: int
     injected_seq: int
     input_id: str | None
-    claim_id: str | None
+    assignment_id: str | None = field(metadata={"wire_name": "claim_id"})
     stage: str | None
     session_id: str | None
     request_generation: int | None
@@ -156,13 +156,13 @@ def _prefix_evidence(
     )
 
 
-def _same_epoch_prefix(
+def _same_generation_prefix(
     db: sqlite3.Connection,
     evidence: tuple[HistoricalNativeInput, ...],
     lookup: str,
     owner_name: str,
     generation: int,
-    epoch: int,
+    admission_generation: int,
 ) -> bool:
     """Reject an old native proof even in a legacy persisted cursor prefix."""
     for item in evidence:
@@ -176,9 +176,9 @@ def _same_epoch_prefix(
             lookup,
             owner_name,
             generation,
-            epoch,
+            admission_generation,
             item.stage,
-            item.claim_id,
+            item.assignment_id,
             item.context.session_id,
             item.context.request_generation,
         ):
@@ -223,7 +223,7 @@ def advance_current_native_cursor(
     *,
     wire_root_id: str,
     owner: Thread,
-    owner_admission_epoch: int,
+    owner_admission_generation: int,
     owner_generation: int,
     committed_input_id: str | None,
 ) -> CurrentNativeCursor | None:
@@ -239,8 +239,8 @@ def advance_current_native_cursor(
         type(bus) is not MessageBus
         or type(store) is not MutationStore
         or type(owner) is not Thread
-        or type(owner_admission_epoch) is not int
-        or owner_admission_epoch <= 0
+        or type(owner_admission_generation) is not int
+        or owner_admission_generation <= 0
         or type(owner_generation) is not int
         or owner_generation <= 0
         or (committed_input_id is not None and type(committed_input_id) is not str)
@@ -266,7 +266,7 @@ def advance_current_native_cursor(
             or actual is None
             or status is None
             or not status.active
-            or registry.admission_generations.get(owner.name) != owner_admission_epoch
+            or registry.admission_generations.get(owner.name) != owner_admission_generation
             or actual.pid != os.getpid()
             or actual.goal != owner.goal
             or (
@@ -292,13 +292,13 @@ def advance_current_native_cursor(
         if (
             not person.committed
             or person.owner_thread != owner.name
-            or person.generation != owner_generation
+            or person.participant_generation != owner_generation
         ):
             raise StaleFence("current cursor recipient generation changed")
         old = db.execute(
             "SELECT * FROM native_runtime_source_cursors WHERE wire_root_id=? "
             "AND recipient_lookup=? AND owner_generation=? AND owner_admission_epoch=?",
-            (wire_root_id, lookup, owner_generation, owner_admission_epoch),
+            (wire_root_id, lookup, owner_generation, owner_admission_generation),
         ).fetchone()
         prior = _cursor_from_row(old) if old is not None else None
         if prior is None and coverage.covered_seq == 0:
@@ -314,13 +314,13 @@ def advance_current_native_cursor(
         # historical selected input as a bridge across a new admission epoch.
         # Every selected source in this covered prefix must belong to this
         # live owner generation and admission epoch, including triage+FULL.
-        if not _same_epoch_prefix(
+        if not _same_generation_prefix(
             db,
             prefix_evidence,
             lookup,
             owner.name,
             owner_generation,
-            owner_admission_epoch,
+            owner_admission_generation,
         ):
             return prior  # Do not borrow historical native acceptance.
         if proof is None:
@@ -354,18 +354,18 @@ def advance_current_native_cursor(
             ).fetchone()
             if (
                 reserved is not None
-                and reserved["sent_owner_admission_epoch"] != owner_admission_epoch
+                and reserved["sent_owner_admission_epoch"] != owner_admission_generation
             ):
                 if prior is None or injected_seq > prior.injected_seq:
                     return prior  # An old native input cannot seed a new admission.
                 raise IdentityConflict("current cursor input admission differs")
             if reserved is None or tuple(reserved) != (
                 proof.stage,
-                proof.claim_id,
+                proof.assignment_id,
                 lookup,
                 owner.name,
                 owner_generation,
-                owner_admission_epoch,
+                owner_admission_generation,
                 proof.context.session_id,
                 proof.context.request_generation,
             ):
@@ -375,11 +375,11 @@ def advance_current_native_cursor(
             lookup,
             owner.name,
             owner_generation,
-            owner_admission_epoch,
+            owner_admission_generation,
             coverage.covered_seq,
             injected_seq,
             proof.input_id if proof else None,
-            proof.claim_id if proof else None,
+            proof.assignment_id if proof else None,
             proof.stage if proof else None,
             proof.context.session_id if proof else None,
             proof.context.request_generation if proof else None,
@@ -400,14 +400,14 @@ def advance_current_native_cursor(
                     coverage.covered_seq,
                     injected_seq,
                     proof.input_id if proof else None,
-                    proof.claim_id if proof else None,
+                    proof.assignment_id if proof else None,
                     proof.stage if proof else None,
                     proof.context.session_id if proof else None,
                     proof.context.request_generation if proof else None,
                     wire_root_id,
                     lookup,
                     owner_generation,
-                    owner_admission_epoch,
+                    owner_admission_generation,
                     prior.covered_seq,
                     prior.injected_seq,
                 ),
@@ -436,14 +436,14 @@ def read_current_native_cursor(
         marker = bus.log._private_marker_unlocked()
         actual = registry.threads.get(owner_name)
         status = registry.statuses.get(owner_name)
-        epoch = registry.admission_generations.get(owner_name)
+        admission_generation = registry.admission_generations.get(owner_name)
         if (
             marker["wire_root_id"] != wire_root_id
             or actual is None
             or status is None
             or not status.active
             or actual.pid != os.getpid()
-            or epoch is None
+            or admission_generation is None
         ):
             raise StaleFence("current native cursor has no matching live owner")
         lookup = stable_thread_lookup(actual.created_at)
@@ -455,7 +455,7 @@ def read_current_native_cursor(
             row = store._connection.execute(
                 "SELECT * FROM native_runtime_source_cursors WHERE wire_root_id=? "
                 "AND recipient_lookup=? AND owner_generation=? AND owner_admission_epoch=?",
-                (wire_root_id, lookup, person.generation, epoch),
+                (wire_root_id, lookup, person.participant_generation, admission_generation),
             ).fetchone()
             if row is not None and row["input_id"] is not None:
                 input_row = store._connection.execute(
@@ -464,13 +464,16 @@ def read_current_native_cursor(
                     "FROM native_runtime_inputs WHERE input_id=?",
                     (row["input_id"],),
                 ).fetchone()
-                if input_row is None or input_row["sent_owner_admission_epoch"] != epoch:
+                if (
+                    input_row is None
+                    or input_row["sent_owner_admission_epoch"] != admission_generation
+                ):
                     raise IdentityConflict("current cursor input admission differs")
                 if tuple(input_row) != (
-                    epoch,
+                    admission_generation,
                     lookup,
                     owner_name,
-                    person.generation,
+                    person.participant_generation,
                     row["claim_id"],
                     row["stage"],
                     row["session_id"],
@@ -478,7 +481,7 @@ def read_current_native_cursor(
                 ):
                     raise IdentityConflict("current cursor proof differs from journal")
         cursor = _cursor_from_row(row) if row is not None else None
-        generation = person.generation
+        generation = person.participant_generation
     if cursor is not None:
         source_witness = _source_witness(bus)
         if cursor.owner_thread != owner_name or cursor.owner_generation != generation:
@@ -501,8 +504,13 @@ def read_current_native_cursor(
         )
         with store._read_transaction():
             assert_native_runtime_schema(store._connection)
-            if not _same_epoch_prefix(
-                store._connection, prefix_evidence, lookup, owner_name, generation, epoch
+            if not _same_generation_prefix(
+                store._connection,
+                prefix_evidence,
+                lookup,
+                owner_name,
+                generation,
+                admission_generation,
             ):
                 raise IdentityConflict("current cursor borrows historical owner source proof")
         proof = _last_source_proof(store, wire_root_id, lookup, cursor.injected_seq)
@@ -510,7 +518,7 @@ def read_current_native_cursor(
             proof is not None
             and (
                 cursor.input_id != proof.input_id
-                or cursor.claim_id != proof.claim_id
+                or cursor.assignment_id != proof.assignment_id
                 or cursor.stage != proof.stage
                 or cursor.session_id != proof.context.session_id
                 or cursor.request_generation != proof.context.request_generation
@@ -548,7 +556,7 @@ def read_current_native_cursor(
                 actual.goal,
             )
             or current.pid != os.getpid()
-            or registry.admission_generations.get(owner_name) != epoch
+            or registry.admission_generations.get(owner_name) != admission_generation
         ):
             raise StaleFence("current native cursor owner changed while reading")
         # The canonical pages and earlier SQL proof view ran outside this
@@ -562,13 +570,13 @@ def read_current_native_cursor(
             if (
                 not fresh.committed
                 or fresh.owner_thread != owner_name
-                or fresh.generation != generation
+                or fresh.participant_generation != generation
             ):
                 raise StaleFence("current native cursor participant generation changed")
             fresh_row = store._connection.execute(
                 "SELECT * FROM native_runtime_source_cursors WHERE wire_root_id=? "
                 "AND recipient_lookup=? AND owner_generation=? AND owner_admission_epoch=?",
-                (wire_root_id, lookup, generation, epoch),
+                (wire_root_id, lookup, generation, admission_generation),
             ).fetchone()
             if (fresh_row is None) != (cursor is None) or (
                 fresh_row is not None and _cursor_from_row(fresh_row) != cursor

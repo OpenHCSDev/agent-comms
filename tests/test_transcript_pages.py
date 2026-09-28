@@ -32,7 +32,9 @@ def test_pages_reach_beginning_and_return_to_tail_without_duplicates(tmp_path):
     seen = [event.text for event in page.events]
     assert seen == [f"Record {i}" for i in range(95, 105)]
     while page.has_older:
-        page = comms.transcripts.thread_transcript_page("worker", before=page.before, max_messages=10)
+        page = comms.transcripts.thread_transcript_page(
+            "worker", before=page.before, max_messages=10
+        )
         seen[:0] = [event.text for event in page.events]
     assert seen == [f"Record {i}" for i in range(105)]
     assert page.before.offset == 0
@@ -83,7 +85,9 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
     parent_path = tmp_path / "parent.jsonl"
     transcript(parent_path, 3)
     comms = wire(tmp_path / "wire")
-    comms.threads.register(Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_path)))
+    comms.threads.register(
+        Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_path))
+    )
     comms.threads.register(
         Thread("child", frozenset(), str(tmp_path), parent="parent", task="Inspect the renderer")
     )
@@ -97,7 +101,7 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
         "Forked from @parent. This thread started with:",
         "Inspect the renderer",
     ]
-    assert [event.kind for event in page.events[-2:]] == ["notice", "user"]
+    assert [event.declared_name for event in page.events[-2:]] == ["notice", "user"]
     assert [event.text for event in comms.transcripts.thread_transcript("child")][-2:] == [
         "Forked from @parent. This thread started with:",
         "Inspect the renderer",
@@ -106,26 +110,32 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
     child_path = tmp_path / "child.jsonl"
     transcript(child_path, 1)
     comms.threads.attach_session("child", str(child_path))
-    assert [event.text for event in comms.transcripts.thread_transcript_page("child").events] == ["Record 0"]
+    assert [event.text for event in comms.transcripts.thread_transcript_page("child").events] == [
+        "Record 0"
+    ]
 
 
 def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     parent_path = tmp_path / "parent.jsonl"
     transcript(parent_path, 35)
     comms = wire(tmp_path / "wire")
-    comms.threads.register(Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_path)))
-    comms.threads.register(Thread("child", frozenset(), str(tmp_path), parent="parent", task="Child task"))
+    comms.threads.register(
+        Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_path))
+    )
+    comms.threads.register(
+        Thread("child", frozenset(), str(tmp_path), parent="parent", task="Child task")
+    )
     page = comms.transcripts.thread_transcript_page("child", max_messages=5)
     through = page.after
     own_path = tmp_path / "child.jsonl"
     transcript(own_path, 1)
     comms.threads.attach_session("child", str(own_path))
-    seen = [event.text for event in page.events if event.kind == "assistant"]
+    seen = [event.text for event in page.events if event.declared_name == "assistant"]
     while page.has_older:
         page = comms.transcripts.thread_transcript_page(
             "child", before=page.before, through=through, max_messages=5
         )
-        seen[:0] = [event.text for event in page.events if event.kind == "assistant"]
+        seen[:0] = [event.text for event in page.events if event.declared_name == "assistant"]
     assert seen == [f"Record {i}" for i in range(35)]
     assert comms.transcripts.thread_transcript_page("child").after.session_file == str(own_path)
     unrelated = tmp_path / "unrelated.jsonl"

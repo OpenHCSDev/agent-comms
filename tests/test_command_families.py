@@ -78,7 +78,7 @@ def test_one_cli_declaration_adds_parser_decode_and_real_dispatch(tmp_path, caps
 @pytest.mark.parametrize(
     "parameters",
     [
-        {"action": "subscribe", "transcriptSnapshots": True, "transcriptDiffs": False},
+        {"action": "subscribe", "transcriptSnapshots": True},
         {
             "action": "prompt",
             "prompt": [{"type": "text", "text": "hello"}],
@@ -183,7 +183,6 @@ def test_subscribe_packet_keeps_external_camel_case_fields():
         "action": "subscribe",
         "thread": "a",
         "transcriptSnapshots": True,
-        "transcriptDiffs": False,
     }
 
 

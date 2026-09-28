@@ -102,7 +102,7 @@ class SelectedSummarySlot:
         expected_launcher: str,
         tokens_before: int,
         fresh_session: FreshPrivateSession | None = None,
-        admission_epoch: int | None = None,
+        admission_generation: int | None = None,
         timeout_seconds: float = 90.0,
     ) -> SelectedSummaryResult:
         """Reserve durably, exchange once, and leave settlement to the owner.
@@ -152,7 +152,10 @@ class SelectedSummarySlot:
             ):
                 raise SelectedChildUnknown("Selected idle Pi child is unavailable or stale")
             operation = journal.reserve_selected_summary(
-                session_file, source, fresh_session=fresh_session, admission_epoch=admission_epoch
+                session_file,
+                source,
+                fresh_session=fresh_session,
+                admission_generation=admission_generation,
             )
             request = replace(request, operation_id=operation)
             # The durable reservation blocks new inputs even after process

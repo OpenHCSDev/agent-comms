@@ -21,7 +21,7 @@ from .coordination import (
     COORDINATION_SCHEMA_VERSION,
     COORDINATION_SNAPSHOT_VERSION,
     CoordinationError,
-    WakeClaim,
+    WakeAssignment,
 )
 from .coordination_cohort import _assert_schema, _receipt_matches
 from .errors import RelationViolationError
@@ -56,7 +56,7 @@ class OptionalAwarenessProjection:
     after_seq: int
     through_seq: int
     expected_participant_generation: int
-    expected_admission_epoch: int
+    expected_admission_generation: int
     max_rows: int = 100
     max_text_bytes: int = 16 * 1024
 
@@ -69,8 +69,8 @@ class OptionalAwarenessProjection:
             or self.through_seq <= self.after_seq
             or type(self.expected_participant_generation) is not int
             or self.expected_participant_generation < 1
-            or type(self.expected_admission_epoch) is not int
-            or self.expected_admission_epoch < 1
+            or type(self.expected_admission_generation) is not int
+            or self.expected_admission_generation < 1
             or type(self.max_rows) is not int
             or not 1 <= self.max_rows <= 100
             or type(self.max_text_bytes) is not int
@@ -79,7 +79,7 @@ class OptionalAwarenessProjection:
             raise ValueError("optional awareness requires a bounded trusted source window")
 
     def __call__(
-        self, initial: CommittedInitial, claim: WakeClaim, owner: Thread
+        self, initial: CommittedInitial, assignment: WakeAssignment, owner: Thread
     ) -> OptionalAwarenessResult:
         """Return complete SQL-backed rows, or omit the entire supplement.
 
@@ -88,7 +88,7 @@ class OptionalAwarenessProjection:
         exhausts the optional path without changing original delivery.
         """
         try:
-            return self._build(initial, claim, owner)
+            return self._build(initial, assignment, owner)
         except (
             CoordinationError,
             ProjectionUnavailableError,
@@ -101,11 +101,11 @@ class OptionalAwarenessProjection:
             return OptionalAwarenessResult("", False, omission_reason=type(error).__name__)
 
     def _build(
-        self, initial: CommittedInitial, claim: WakeClaim, owner: Thread
+        self, initial: CommittedInitial, assignment: WakeAssignment, owner: Thread
     ) -> OptionalAwarenessResult:
         if (
             type(initial) is not CommittedInitial
-            or type(claim) is not WakeClaim
+            or type(assignment) is not WakeAssignment
             or type(owner) is not Thread
         ):
             raise ValueError("optional awareness requires verified typed source identities")
@@ -113,11 +113,11 @@ class OptionalAwarenessProjection:
             owner.pid != os.getpid()
             or not owner.role.executable
             or owner.active_turn is None
-            or owner.active_turn.admission_generation != self.expected_admission_epoch
-            or claim.recipient != owner.name
-            or claim.recipient_lookup != stable_thread_lookup(owner.created_at)
-            or claim.wire_seq != initial.message.seq
-            or claim.message_id != initial.message.message_id
+            or owner.active_turn.admission_generation != self.expected_admission_generation
+            or assignment.recipient != owner.name
+            or assignment.recipient_lookup != stable_thread_lookup(owner.created_at)
+            or assignment.wire_seq != initial.message.seq
+            or assignment.message_id != initial.message.message_id
             or initial.message.seq <= self.after_seq
             or initial.message.seq > self.through_seq
         ):
@@ -126,7 +126,7 @@ class OptionalAwarenessProjection:
         # Each selected row must now carry immutable same-transaction owner
         # generation provenance. Legacy rows lacking it omit the whole read.
         root_id = initial.wire_root_id
-        lookup = claim.recipient_lookup
+        lookup = assignment.recipient_lookup
         page = self.index.page(
             root_id=root_id,
             recipient_lookup=lookup,
@@ -146,7 +146,7 @@ class OptionalAwarenessProjection:
             db.execute("PRAGMA foreign_keys=ON")
             db.execute("PRAGMA busy_timeout=50")
             db.execute("BEGIN")
-            self._verify_schema_and_owner(db, initial, claim, owner)
+            self._verify_schema_and_owner(db, initial, assignment, owner)
             decisions = self._selected_decisions(db, root_id, lookup, owner.name, page.through_seq)
             candidates = tuple(
                 (row.source_seq, row.message_id, row.wake_mode, row.target) for row in page.entries
@@ -163,7 +163,7 @@ class OptionalAwarenessProjection:
                 for row in decisions
                 if row["accepted_generation"] == self.expected_participant_generation
             ]
-            if not any(row["claim_id"] == claim.claim_id for row in selected):
+            if not any(row["claim_id"] == assignment.assignment_id for row in selected):
                 raise ProjectionUnavailableError("current selected claim has no owner generation")
             current_obligations = [
                 row
@@ -218,7 +218,8 @@ class OptionalAwarenessProjection:
                 actual is None
                 or status is None
                 or not status.active
-                or snapshot.admission_generations.get(owner.name) != self.expected_admission_epoch
+                or snapshot.admission_generations.get(owner.name)
+                != self.expected_admission_generation
                 or (
                     actual.name,
                     actual.created_at,
@@ -255,7 +256,11 @@ class OptionalAwarenessProjection:
         _require_no_private_owner_rename(self.index.bus.log.path.parent)
 
     def _verify_schema_and_owner(
-        self, db: sqlite3.Connection, initial: CommittedInitial, claim: WakeClaim, owner: Thread
+        self,
+        db: sqlite3.Connection,
+        initial: CommittedInitial,
+        assignment: WakeAssignment,
+        owner: Thread,
     ) -> None:
         version = db.execute("PRAGMA user_version").fetchone()[0]
         meta = db.execute(
@@ -282,7 +287,7 @@ class OptionalAwarenessProjection:
             "SELECT p.committed,g.owner_thread,g.generation FROM participants p "
             "JOIN owner_generations g ON g.owner_lookup=p.participant_lookup "
             "WHERE p.participant_lookup=?",
-            (claim.recipient_lookup,),
+            (assignment.recipient_lookup,),
         ).fetchone()
         if (
             person is None
@@ -292,7 +297,7 @@ class OptionalAwarenessProjection:
         ):
             raise ProjectionUnavailableError("selected participant owner changed")
         receipt = _receipt_matches(db, initial)
-        if not any(current == claim for current in receipt.claims):
+        if not any(current == assignment for current in receipt.assignments):
             raise ProjectionUnavailableError("current selected claim lost its sealed receipt")
 
     def _selected_decisions(

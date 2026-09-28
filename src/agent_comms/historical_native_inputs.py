@@ -8,7 +8,7 @@ grants no response, recovery, model replay, edit, or current-owner authority.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -23,7 +23,7 @@ class HistoricalNativeInput:
     wire_root_id: str
     source_seq: int
     source_message_id: str
-    claim_id: str
+    assignment_id: str = field(metadata={"wire_name": "claim_id"})
     stage: str
     input_id: str
     owner_lookup: str
@@ -127,7 +127,7 @@ def read_historical_native_inputs(
             if (
                 binding.wire_root_id != wire_root_id
                 or binding.stage != row["stage"]
-                or binding.claim_id != row["claim_id"]
+                or binding.assignment_id != row["claim_id"]
                 or binding.execution_id != row["execution_id"]
                 or binding.attempt_ordinal != row["attempt_ordinal"]
                 or binding.owner_lookup != row["owner_lookup"]

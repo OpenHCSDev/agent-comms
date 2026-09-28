@@ -1,0 +1,1 @@
+{'foreground_pid': 2954954, 'parse_pid': 2954995, 'parse_seconds': 0.6468554960010806, 'foreground_heartbeats_during_parse': 127, 'max_parse_loop_gap_ms': 5.15861500025494, 'textual_timer_heartbeats_during_parse': 126, 'max_textual_timer_gap_ms': 20.09638999879826, 'exact_fragments': 1217, 'stale_cancelled_detached_and_scroll_intent': 'passed'}

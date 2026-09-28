@@ -5,86 +5,25 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from collections.abc import Generator, Iterator, Mapping, Sequence
-from dataclasses import asdict, dataclass, fields, replace
+from collections.abc import Sequence
+from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
 
-from .pi_payloads import PiToolResult
+from .native_entries import TranscriptProjection
+from .native_transcript import NativeTranscript
+from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript, TranscriptCodec
 from .registration import Registration
 
-if TYPE_CHECKING:
-    pass
 from .channel_targets import is_channel_target
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .messages import Message
 from .messaging import Messaging
-from .routing import MessageRoute, TurnRouting
+from .routing import TurnRouting
 from .threads import Thread
-from .tool_results import ToolDiff
-from .transcript_routes import InputDisplay, TranscriptRoutes
+from .transcript_routes import TranscriptRoutes
 
 _LOG = logging.getLogger(__name__)
-
-
-def _reverse_lines(path: Path, *, max_bytes: int | None = None) -> Iterator[bytes]:
-    """Read JSONL newest-first without allocating the file or oversized lines."""
-    try:
-        with path.open("rb") as stream:
-            position = stream.seek(0, 2)
-            floor = max(0, position - max_bytes) if max_bytes is not None else 0
-            pending = b""
-            oversized = False
-            while position > floor:
-                count = min(65536, position - floor)
-                position -= count
-                stream.seek(position)
-                parts = (stream.read(count) + pending).split(b"\n")
-                pending = parts.pop(0)
-                for line in reversed(parts):
-                    if oversized:
-                        oversized = False
-                        continue
-                    if line:
-                        yield line
-                if len(pending) > 256 * 1024:
-                    pending = b""
-                    oversized = True
-            if floor == 0 and pending and not oversized:
-                yield pending
-    except OSError:
-        return
-
-
-@dataclass(frozen=True, slots=True)
-class TranscriptEvent:
-    """One normalized event from a thread's persisted Pi transcript."""
-
-    kind: str
-    text: str = ""
-    tool_call_id: str = ""
-    tool_name: str = ""
-    raw_input: object | None = None
-    ok: bool = True
-    routing: TurnRouting | None = None
-    diff: ToolDiff | None = None
-
-    @classmethod
-    def from_wire(cls, data: Mapping) -> TranscriptEvent:
-        return cls(
-            **{
-                **data,
-                "routing": TurnRouting.from_wire(data["routing"]) if data.get("routing") else None,
-                "diff": ToolDiff(**data["diff"]) if data.get("diff") else None,
-            }
-        )
-
-    def to_wire(self, *, include_diff: bool = True) -> dict[str, object]:
-        data = {**asdict(self), "routing": self.routing.to_wire() if self.routing else None}
-        if self.diff is None or not include_diff:
-            data.pop("diff", None)
-        return data
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,30 +42,10 @@ class TranscriptPage:
 
     def metadata(self) -> dict[str, object]:
         return {
-            item.name: asdict(value) if isinstance(value, TranscriptCursor) else value
-            for item in fields(self)
-            if item.name != "events"
-            for value in (getattr(self, item.name),)
+            field.name: TranscriptCodec.encode(getattr(self, field.name))
+            for field in fields(self)
+            if field.name != "events"
         }
-
-
-def _reverse_records(path: Path, before: int) -> Generator[tuple[int, int, bytes], None, None]:
-    """Seek backwards in chunks; never parse or allocate the preceding history."""
-    with path.open("rb") as stream:
-        position = before
-        end = before
-        pending = b""
-        while position:
-            count = min(position, 65536)
-            position -= count
-            stream.seek(position)
-            pending = stream.read(count) + pending
-            while (boundary := pending.rfind(b"\n", 0, len(pending) - 1)) >= 0:
-                start = position + boundary + 1
-                yield start, end, pending[boundary + 1 :]
-                pending, end = pending[: boundary + 1], start
-        if pending:
-            yield 0, end, pending
 
 
 class Transcripts:
@@ -135,7 +54,7 @@ class Transcripts:
         self.registry = registry
         self.bus = bus
         self.messaging = messaging
-        self.routes = TranscriptRoutes(root / "transcript_routes.json")
+        self.routes = TranscriptRoutes(root)
 
     def thread_transcript(
         self,
@@ -156,20 +75,13 @@ class Transcripts:
 
         records: list[list[TranscriptEvent]] = []
         with self.routes.for_session(session_file) as routes:
-            for raw_line in _reverse_lines(path, max_bytes=max_bytes) if session_file else ():
-                try:
-                    payload = json.loads(raw_line)
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    continue
-                message = payload.get("message")
-                events = self._transcript_record_events(
-                    payload,
-                    routes.get(payload.get("id", "")),
-                    (
-                        routes.input_display(message.get("inputId"))
-                        if isinstance(message, Mapping)
-                        else None
-                    ),
+            for entry in NativeTranscript(path).tail(max_bytes=max_bytes) if session_file else ():
+                events = entry.events(
+                    TranscriptProjection(
+                        routes.get(entry.id),
+                        routes.input_display(entry.input_id),
+                        self.messaging.sent_tool_message,
+                    )
                 )
                 if events:
                     records.append(events)
@@ -182,8 +94,7 @@ class Transcripts:
         if truncated:
             events.insert(
                 0,
-                TranscriptEvent(
-                    "notice",
+                NoticeTranscript(
                     "Earlier transcript content was omitted from this bounded view.",
                 ),
             )
@@ -218,8 +129,8 @@ class Transcripts:
         if not thread.parent:
             return ()
         return (
-            TranscriptEvent("notice", f"Forked from @{thread.parent}. This thread started with:"),
-            *((TranscriptEvent("user", thread.task),) if thread.task else ()),
+            NoticeTranscript(f"Forked from @{thread.parent}. This thread started with:"),
+            *((UserTranscript(thread.task),) if thread.task else ()),
         )
 
     def thread_transcript_page(
@@ -254,7 +165,7 @@ class Transcripts:
                 raise ValueError("Historical source detached; refresh history")
             thread = source.registry().require(name)
             session_file, inherited = thread.session_file or "", False
-            routes_owner = TranscriptRoutes(Path(source.root) / "transcript_routes.json")
+            routes_owner = TranscriptRoutes(Path(source.root))
         cursor = before or after
         if cursor and (cursor.session_file != session_file or cursor.offset < 0):
             raise ValueError("Transcript changed; reload the latest page.")
@@ -273,60 +184,46 @@ class Transcripts:
         routes = routes_owner.for_session(session_file)
         used = 0
 
-        def forward() -> Generator[tuple[int, int, bytes], None, None]:
-            with path.open("rb") as stream:
-                stream.seek(start)
-                while True:
-                    offset = stream.tell()
-                    if offset >= size:
-                        return
-                    raw = stream.readline()
-                    if not raw:
-                        return
-                    yield offset, stream.tell(), raw
-
         with routes:
             if size:
-                iterator = forward() if after else _reverse_records(path, start)
+                reader = NativeTranscript(path)
+                iterator = reader.forward(start, size) if after else reader.reverse(start)
                 try:
-                    for record_start, record_end, raw in iterator:
-                        try:
-                            value = json.loads(raw)
-                        except (ValueError, UnicodeDecodeError):
-                            # A writer may have left an incomplete last line. Retry it
-                            # after the next append rather than losing its cursor.
-                            if after and record_end == size and not raw.endswith(b"\n"):
-                                break
-                            events: tuple[TranscriptEvent, ...] = ()
-                        else:
-                            events = (
-                                tuple(
-                                    self._transcript_record_events(
-                                        value,
-                                        routes.get(value.get("id", "")),
-                                        (
-                                            routes.input_display(value["message"].get("inputId"))
-                                            if isinstance(value.get("message"), Mapping)
-                                            else None
-                                        ),
+                    for record in iterator:
+                        if (
+                            after
+                            and record.end == size
+                            and not record.complete
+                            and record.entry is None
+                        ):
+                            break  # Retry an incomplete writer tail after its next append.
+                        entry = record.entry
+                        events = (
+                            tuple(
+                                entry.events(
+                                    TranscriptProjection(
+                                        routes.get(entry.id),
+                                        routes.input_display(entry.input_id),
+                                        self.messaging.sent_tool_message,
                                     )
                                 )
-                                if isinstance(value, dict)
-                                else ()
                             )
+                            if entry is not None
+                            else ()
+                        )
                         if (
                             events
                             and records
-                            and (len(records) >= max_messages or used + len(raw) > max_bytes)
+                            and (len(records) >= max_messages or used + record.size > max_bytes)
                         ):
                             break
                         if after:
-                            end = record_end
+                            end = record.end
                         else:
-                            start = record_start
+                            start = record.start
                         if events:
                             records.append(events)
-                            used += len(raw)
+                            used += record.size
                 finally:
                     iterator.close()
         if not after:
@@ -342,170 +239,11 @@ class Transcripts:
             end < size,
         )
 
-    def _transcript_record_events(
-        self,
-        payload: Mapping[str, object],
-        routing: TurnRouting | None = None,
-        input_display: InputDisplay | None = None,
-    ) -> list[TranscriptEvent]:
-        if payload.get("type") == "compaction":
-            summary = str(payload.get("summary") or "").strip()
-            if summary:
-                return [TranscriptEvent("notice", f"## Context compacted\n\n{summary}")]
-            return []
-        message = payload.get("message")
-        if payload.get("type") != "message" or not isinstance(message, Mapping):
-            return []
-        return self._transcript_message_events(message, routing, input_display)
-
-    def _transcript_message_events(
-        self,
-        message: Mapping[str, object],
-        routing: TurnRouting | None = None,
-        input_display: InputDisplay | None = None,
-    ) -> list[TranscriptEvent]:
-        role = message.get("role")
-        if (
-            role == "user"
-            and input_display is not None
-            and input_display.sent_text_digest is not None
-        ):
-            raw_content = message.get("content")
-            raw_text = (
-                raw_content
-                if isinstance(raw_content, str)
-                else (
-                    "\n".join(
-                        str(part.get("text") or "")
-                        for part in raw_content
-                        if isinstance(part, dict) and part.get("type") == "text"
-                    )
-                    if isinstance(raw_content, list)
-                    else None
-                )
-            )
-            if raw_text is not None and input_display.matches(raw_text):
-                # Exact per-input provenance wins over old turn-wide annotations,
-                # including explicitly bound human/internal inputs (no route).
-                routing = input_display.routing
-            else:
-                routing = None
-                input_display = None
-        if role == "user" and routing is not None and routing.requests:
-            return [
-                TranscriptEvent("user", request.body, routing=TurnRouting((request,), None))
-                for request in routing.requests
-            ]
-        if role == "assistant" and message.get("stopReason") in {"error", "aborted"}:
-            failure = str(message.get("errorMessage") or "").strip()
-            if failure:
-                return [TranscriptEvent("notice", f"[agent error] {failure}")]
-        content = message.get("content")
-        if isinstance(content, str):
-            parts: Sequence[object] = ({"type": "text", "text": content},)
-        elif isinstance(content, list):
-            parts = content
-        else:
-            return []
-
-        context_events: list[TranscriptEvent] = []
-        if role == "user" and input_display is not None:
-            raw_text = "\n".join(
-                str(part.get("text") or "")
-                for part in parts
-                if isinstance(part, dict) and part.get("type") == "text"
-            )
-            if raw_text and raw_text != input_display.text:
-                context_events.append(TranscriptEvent("context", raw_text))
-            if input_display.text is None:
-                return context_events
-            # The owner records the user's original text before adding model-only
-            # instructions. Preserve attachments while replacing just that text.
-            parts = (
-                {"type": "text", "text": input_display.text},
-                *(part for part in parts if isinstance(part, dict) and part.get("type") != "text"),
-            )
-
-        events: list[TranscriptEvent] = context_events
-        for part in parts:
-            if not isinstance(part, dict):
-                continue
-            kind = part.get("type")
-            if role == "user" and kind == "text":
-                events.append(TranscriptEvent("user", str(part.get("text") or "")))
-            elif role == "user" and kind == "image":
-                events.append(
-                    TranscriptEvent("user", f"[Image attachment: {part.get('mimeType', 'image')}]")
-                )
-            elif role == "assistant" and kind == "thinking":
-                events.append(TranscriptEvent("thinking", str(part.get("thinking") or "")))
-            elif role == "assistant" and kind == "text":
-                text = str(part.get("text") or "")
-                if events and events[-1].kind == "assistant":
-                    events[-1] = replace(events[-1], text=events[-1].text + text)
-                else:
-                    events.append(TranscriptEvent("assistant", text))
-            elif role == "assistant" and kind == "toolCall":
-                events.append(
-                    TranscriptEvent(
-                        "tool_start",
-                        tool_call_id=str(part.get("id") or ""),
-                        tool_name=str(part.get("name") or "tool"),
-                        raw_input=part.get("arguments"),
-                    )
-                )
-            elif role == "toolResult":
-                output = "\n".join(
-                    str(item.get("text") or "")
-                    for item in parts
-                    if isinstance(item, dict) and item.get("type") == "text"
-                )
-                result = [
-                    TranscriptEvent(
-                        "tool_end",
-                        text=output,
-                        tool_call_id=str(message.get("toolCallId") or ""),
-                        tool_name=str(message.get("toolName") or "tool"),
-                        ok=not bool(message.get("isError")),
-                        diff=ToolDiff.from_result(
-                            str(message.get("toolName") or "tool"),
-                            PiToolResult.from_wire(message),
-                            not bool(message.get("isError")),
-                        ),
-                    )
-                ]
-                sent = self.messaging.sent_tool_message(
-                    str(message.get("toolName") or ""), output, not bool(message.get("isError"))
-                )
-                if sent is not None:
-                    result.append(
-                        TranscriptEvent(
-                            "sent",
-                            sent.body,
-                            routing=TurnRouting(reply=MessageRoute(sent.sender, (sent.target,))),
-                        )
-                    )
-                return result
-        return [replace(event, routing=routing) for event in events]
-
     def transcript_checkpoint(self, name: str) -> TranscriptCursor:
         session_file = self.registry.require(name).session_file or ""
         path = Path(session_file)
         return TranscriptCursor(
             session_file, path.stat().st_size if session_file and path.is_file() else 0
-        )
-
-    def record_input_display(
-        self,
-        native_id: str,
-        display_text: str | None,
-        *,
-        sent_text: str | None = None,
-        routing: TurnRouting | None = None,
-    ) -> None:
-        """Bind UI text to the private native input ID, never a prompt prefix."""
-        self.routes.record_input_display(
-            native_id, display_text, sent_text=sent_text, routing=routing
         )
 
     def record_turn_routing(
@@ -515,24 +253,18 @@ class Transcripts:
         if not session_file or not Path(session_file).is_file():
             return
         ids: list[str] = []
+        reader = NativeTranscript(Path(session_file))
         if session_file == checkpoint.session_file:
-            with Path(session_file).open("rb") as stream:
-                stream.seek(checkpoint.offset)
-                for raw in stream:
-                    record = json.loads(raw)
-                    if record.get("type") == "message" and isinstance(record.get("id"), str):
-                        ids.append(record["id"])
+            for record in reader.forward(checkpoint.offset, Path(session_file).stat().st_size):
+                entry = record.entry
+                if entry is not None and entry.is_message and entry.id is not None:
+                    ids.append(entry.id)
         else:
-            # A first turn or fork may create a new Pi file. Only annotate the
-            # completed final assistant entry, never inherited entries by guess.
-            for raw in _reverse_lines(Path(session_file)):
-                record = json.loads(raw)
-                if (
-                    record.get("type") == "message"
-                    and record.get("message", {}).get("role") == "assistant"
-                ):
-                    if isinstance(record.get("id"), str):
-                        ids.append(record["id"])
+            # A new/forked file annotates only the last assistant entry.
+            for entry in reader.tail():
+                if entry.assistant_message:
+                    if entry.id is not None:
+                        ids.append(entry.id)
                     break
         self.routes.record(session_file, tuple(ids), routing)
 
@@ -607,7 +339,7 @@ class Transcripts:
             report["eligible"] += 1
             if not dry_run:
                 try:
-                    self.record_input_display(
+                    self.routes.record_input_display(
                         native_id, source, sent_text=sent_text, routing=routing
                     )
                 except RelationViolationError:

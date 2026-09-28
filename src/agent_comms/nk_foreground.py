@@ -19,12 +19,12 @@ import re
 import select
 import sys
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .comms import Comms
-from .coordinated_runtime import CoordinatedTurn, run_one_sealed_claim
+from .coordinated_runtime import CoordinatedTurn, SelectedExecution
 from .coordination_store import PublicationActivationBlocked
 from .errors import RelationViolationError
 from .native_pi import _private_session_dir, _trusted_package
@@ -45,28 +45,21 @@ class ForegroundOwner:
     native_package: Path
     _started: bool = field(default=False, init=False, repr=False)
 
-    async def run_go(
-        self,
-        line: str,
-        *,
-        executor: Callable[..., Awaitable[CoordinatedTurn | None]] = run_one_sealed_claim,
-    ) -> CoordinatedTurn | None:
+    async def run_go(self, line: str) -> CoordinatedTurn | None:
         match = _GO.fullmatch(line)
         if match is None:
             raise ValueError("Expected one GO <nonnegative sequence> command")
         if self._started:
             raise PublicationActivationBlocked("Foreground owner accepts exactly one GO")
         self._started = True  # Before the first await: even an uncertain attempt is spent.
-        # The executor is injectable only by an in-process offline test. The CLI
-        # always uses the pinned native executor; it never imports a fixture.
-        return await executor(
-            self.root,
+        return await SelectedExecution(
+            root=self.root,
             wire_root_id=self.wire_root_id,
             owner_name=self.name,
             native_package=self.native_package,
             opt_in=True,
             after_seq=int(match.group(1)),
-        )
+        ).run()
 
 
 def reserve_foreground_owner(

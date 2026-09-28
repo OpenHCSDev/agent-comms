@@ -12,7 +12,7 @@ from agent_comms.comms import wire
 from agent_comms.pi_payloads import PiToolResult
 from agent_comms.threads import Thread
 from agent_comms.tool_results import ToolDiff, tool_result_content
-from agent_comms.transcripts import TranscriptEvent
+from agent_comms.transcript_events import TranscriptEvent, TranscriptCodec, ToolEndTranscript
 
 PATCH = "--- src/example.py\n+++ src/example.py\n@@ -40,2 +40,2 @@\n context\n-old = 1\n+new = 2\n"
 
@@ -120,12 +120,11 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path):
     comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
     page = comms.transcripts.thread_transcript_page("worker", max_messages=1)
     assert len(page.events) == 1
-    saved = TranscriptEvent.from_wire(page.events[0].to_wire())
+    saved = TranscriptCodec.decode(TranscriptEvent, TranscriptCodec.encode(page.events[0]))
     assert saved.diff == live.diff
 
     class Client:
         transcript_snapshots = False
-        transcript_diffs = False
 
         def __init__(self):
             self.updates = []
@@ -143,28 +142,19 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path):
     assert resource["uri"].endswith("edit%2F1")
     await agent.sessions.transcript.replay("worker", "worker", client)
     assert client.updates[-1]["content"] == live_content
-    # A newer owner must not send extra TranscriptEvent fields to an old UI.
     client.transcript_snapshots = True
     await agent.sessions.transcript.replay("worker", "worker", client)
     snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
-    assert "diff" not in snapshot[0]
-    client.transcript_diffs = True
-    await agent.sessions.transcript.replay("worker", "worker", client)
-    snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
-    assert TranscriptEvent.from_wire(snapshot[0]).diff == live.diff
+    assert TranscriptCodec.decode(TranscriptEvent, snapshot[0]).diff == live.diff
     client.transcript_snapshots = False
-    client.transcript_diffs = False
     await agent.sessions.transcript.replay("worker", "worker", client, snapshots=True)
     snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
-    assert "diff" not in snapshot[0]
-    await agent.sessions.transcript.replay("worker", "worker", client, snapshots=True, diffs=True)
-    snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
-    assert TranscriptEvent.from_wire(snapshot[0]).diff == live.diff
+    assert TranscriptCodec.decode(TranscriptEvent, snapshot[0]).diff == live.diff
 
 
-def test_older_transcript_wire_payload_has_no_diff():
-    event = TranscriptEvent.from_wire({"kind": "tool_end", "text": "old saved output"})
+def test_plain_tool_result_keeps_text_content():
+    event = ToolEndTranscript(tool_call_id="plain", tool_name="read", text="saved output")
     assert event.diff is None
-    assert tool_result_content("old", event.text, event.diff) == [
-        {"type": "content", "content": {"type": "text", "text": "old saved output"}}
+    assert tool_result_content("plain", event.text, event.diff) == [
+        {"type": "content", "content": {"type": "text", "text": "saved output"}}
     ]
