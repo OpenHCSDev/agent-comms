@@ -158,7 +158,7 @@ class CompactionEnd(PiEvent):
     will_retry: bool | None = field(default=None, metadata={"wire_name": "willRetry"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .backend import PROMPT_START_TIMEOUT_SECONDS, _terminate_process, compaction_summary
+        from .backend import PROMPT_START_TIMEOUT_SECONDS, compaction_summary
 
         session.last_model_progress = session.now
         session.result = self.result
@@ -199,7 +199,7 @@ class CompactionEnd(PiEvent):
             yield session.turn_state(
                 "failed", "prestart_compaction_failed", 0, event_phase="compaction"
             )
-            await _terminate_process(session.proc)
+            await session.proc.stop()
             session.finished = True
             return
         if self.will_retry:
@@ -329,7 +329,7 @@ class ExtensionUiRequest(PiEvent):
     default_value: str | None = field(default=None, metadata={"wire_name": "defaultValue"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .backend import _pi_mcp_live_receipt, _terminate_process
+        from .backend import _pi_mcp_live_receipt
 
         if self.method == "setStatus":
             if (
@@ -358,7 +358,7 @@ class ExtensionUiRequest(PiEvent):
             session.record_failure(
                 failures.ExtensionUiFailed("Pi extension UI request lacked a bounded ID.")
             )
-            await _terminate_process(session.proc)
+            await session.proc.stop()
             session.finished = True
             return
         if session.method not in {"confirm", "select", "input", "editor"}:
@@ -392,7 +392,7 @@ class ExtensionUiRequest(PiEvent):
                     "Pi extension UI response could not reach the requesting child."
                 )
             )
-            await _terminate_process(session.proc)
+            await session.proc.stop()
             session.finished = True
             return
         session.skip = True

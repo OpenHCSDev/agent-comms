@@ -206,16 +206,26 @@ async def test_real_local_rpc_failure_reaps_child_and_releases_slot(tmp_path, mo
 
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
     processes = []
-    spawn = asyncio.create_subprocess_exec
+    from agent_comms.child_process import AttachedChild
+
+    spawn = AttachedChild.start
 
     async def local_rpc(*_argv, **kwargs):
         # Actual pipes/reader/child cleanup, no native provider or credentials used.
-        process = await spawn(sys.executable, "-u", "-c", """
+        process = await spawn(
+            (
+                sys.executable,
+                "-u",
+                "-c",
+                """
 import json, sys
 request = json.loads(sys.stdin.readline())
 print(json.dumps({"type":"response", "id":request["id"],
                   "command":"get_state", "success":False}), flush=True)
-""", **kwargs)
+""",
+            ),
+            **kwargs,
+        )
         processes.append(process)
         return process
 
@@ -227,7 +237,7 @@ print(json.dumps({"type":"response", "id":request["id"],
 
     monkeypatch.setattr(runtime, "_trusted_package", lambda path: path)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda path: Path("/bin/true"))
-    monkeypatch.setattr(native_pi.asyncio, "create_subprocess_exec", local_rpc)
+    monkeypatch.setattr(AttachedChild, "start", local_rpc)
     monkeypatch.setattr(DurableTurn, "fail_unknown", after_reap)
     with pytest.raises(NativePiUnavailable, match="capability is unavailable"):
         await runtime.SelectedExecution(
@@ -243,7 +253,9 @@ print(json.dumps({"type":"response", "id":request["id"],
         assert snapshot.replay.facts & ReplayFact.UNKNOWN_EFFECTS
         assert not snapshot.replay.replay_safe
     assert comms.registry.require("beta").active_turn is None
-    source = comms.messaging.send_initial_cohort("sender", "beta", "Independent after local failure")
+    source = comms.messaging.send_initial_cohort(
+        "sender", "beta", "Independent after local failure"
+    )
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, source.seq, store)
     fake, calls = _fake_model()

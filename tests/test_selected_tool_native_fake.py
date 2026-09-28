@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import sys
 from pathlib import Path
 
@@ -10,6 +9,7 @@ import pytest
 
 from agent_comms import native_pi as native
 from agent_comms import selected_tool_broker as broker
+from agent_comms.child_process import AttachedChild
 from agent_comms.selected_tool_broker import (
     SelectedToolMode,
     consume_selected_slot,
@@ -69,15 +69,15 @@ if ok or variant == 'forged_terminal':
           'content':[{'type':'text','text':'Done'}]}})
 send({'type':'agent_settled'})
 """)
-    orig = asyncio.create_subprocess_exec
+    orig = AttachedChild.start
 
     async def launch(*_argv: str, **kwargs: object):
         return await orig(
-            sys.executable, "-u", str(fake), str(tmp_path / "sessions"), variant, **kwargs
+            (sys.executable, "-u", str(fake), str(tmp_path / "sessions"), variant), **kwargs
         )
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", launch)
+    monkeypatch.setattr(AttachedChild, "start", launch)
     observed: list[str] = []
 
     def owner_action(request) -> None:
