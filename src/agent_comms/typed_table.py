@@ -43,6 +43,10 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
     def accepts(cls, annotation: object) -> bool: ...
 
     @classmethod
+    def constraints(cls, column: str) -> tuple[str, ...]:
+        return ()
+
+    @classmethod
     def encode(cls, value: object) -> object:
         return FieldCodec.encode(value)
 
@@ -93,6 +97,10 @@ class BooleanStorage(SqlStorage):
     @classmethod
     def accepts(cls, annotation: object) -> bool:
         return annotation is bool
+
+    @classmethod
+    def constraints(cls, column: str) -> tuple[str, ...]:
+        return (f"{_identifier(column)} IN (0, 1)",)
 
     @classmethod
     def encode(cls, value: object) -> int:
@@ -267,8 +275,8 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
                 target, name = column.references
                 target._column_list((name,))
                 sql += f" REFERENCES {_identifier(target.declared_name)} ({_identifier(name)})"
-            if item.storage is BooleanStorage:
-                sql += f" CHECK ({_identifier(item.name)} IN (0, 1))"
+            for constraint in item.storage.constraints(item.name):
+                sql += f" CHECK ({constraint})"
             if column.check:
                 sql += f" CHECK ({column.check})"
             definitions.append(sql)
