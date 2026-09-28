@@ -35,12 +35,14 @@ from uuid import uuid4
 from .active_route import guard_legacy_root_write
 from .candidate_maintenance import schedule_private_candidate_after_commit
 from .channels import ChannelCatalog
+from .field_codec import FieldCodec
 from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
 from .goal_actions import required_block_reason as _required_block_reason
 from .goal_history import GoalHistoryEntry
 from .goal_pauses import GoalPauseEvent, GoalPauseEvents
 from .goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
 from .goal_waits import GoalInputReview, GoalWait, GoalWaits
+from .thread_identity import OwnerIdentity
 
 if TYPE_CHECKING:
     from .agent_events import GoalChanged
@@ -82,7 +84,7 @@ from .declarations import (
     ThreadSort,
     ThreadStatus,
     ThreadView,
-    TurnClaimFence,
+    TurnLeaseFence,
     TurnRouting,
     UnregisteredThreadError,
     WireRevision,
@@ -111,13 +113,13 @@ OBSERVATION_INTERVAL = 0.05
 _LOG = logging.getLogger(__name__)
 
 
-def _owner_launch_proof(name: str, pid: int, epoch: int) -> bytes:
+def _owner_launch_proof(owner: OwnerIdentity, pid: int) -> bytes:
     """Fixed-size pipe proof bound to the complete name and owner incarnation.
 
     A valid thread name has no protocol length limit. Passing its plaintext
     under the wire lock could fill the pipe before the child can acquire it.
     """
-    identity = json.dumps((name, pid, epoch), ensure_ascii=True, separators=(",", ":"))
+    identity = json.dumps((FieldCodec.encode(owner), pid), ensure_ascii=True, separators=(",", ":"))
     return hashlib.sha256(identity.encode("utf-8")).digest()
 
 
@@ -610,6 +612,7 @@ class Comms:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         """Bounded DM history for any client adapter."""
+
         def matches(message, snapshot):
             def names(name):
                 return snapshot.aliases.get(name, name)
@@ -658,8 +661,11 @@ class Comms:
         if not historical:
             page = live_page(before=before, after=after, limit=limit, max_bytes=max_bytes)
             if page.messages or after is not None:
-                return replace(page, has_older=page.has_older or bool(self.bus.history_sources()),
-                               history_revision=history_revision)
+                return replace(
+                    page,
+                    has_older=page.has_older or bool(self.bus.history_sources()),
+                    history_revision=history_revision,
+                )
         history = self.bus.historical_page(
             matches,
             before=before if historical and before is not None else None,
@@ -690,8 +696,10 @@ class Comms:
                 has_newer=history.has_newer or bool(latest.messages),
             )
         if historical and after is not None:
-            return replace(live_page(after=0, limit=limit, max_bytes=max_bytes),
-                           history_revision=history_revision)
+            return replace(
+                live_page(after=0, limit=limit, max_bytes=max_bytes),
+                history_revision=history_revision,
+            )
         return replace(history if historical else page, history_revision=history_revision)
 
     def dm_display_page(
@@ -879,13 +887,10 @@ class Comms:
                     root_identity=(root_info.st_dev, root_info.st_ino),
                     worktree=str(Path(worktree).resolve()),
                     requested_peer=peer,
-                    viewer=viewer_name,
-                    viewer_created_at=viewer_thread.created_at,
+                    viewer_identity=viewer_thread.incarnation,
                     viewer_names=viewer_names,
-                    peer=peer_name,
-                    peer_created_at=peer_thread.created_at,
+                    peer_identity=peer_thread.incarnation,
                     peer_names=peer_names,
-                    registry_revision=revision,
                     marker_revision=marker_revision,
                     bus_identity=bus_identity,
                     newest_seq=page.newest_seq,
@@ -1143,7 +1148,7 @@ class Comms:
 
     def begin_turn(
         self, name: str, turn_id: str, detail: str = "", routing: TurnRouting | None = None
-    ) -> TurnClaimFence:
+    ) -> TurnLeaseFence:
         with _store_lock(self._wire_lock_path):
             claimed, _ = self.registry.claim_local_turn(name, turn_id, routing=routing)
             try:
@@ -1154,12 +1159,13 @@ class Comms:
             assert claimed.active_turn is not None
             admission = claimed.active_turn.admission_generation
             assert type(admission) is int
-            return TurnClaimFence(
-                claimed.name, claimed.created_at, turn_id, claimed.turn_generation, admission
+            assert claimed.turn_identity is not None
+            return TurnLeaseFence(
+                identity=claimed.turn_identity, turn_id=turn_id, admission_generation=admission
             )
 
     def finish_turn(
-        self, name: str, turn_id: str, *, expected: TurnClaimFence | None = None
+        self, name: str, turn_id: str, *, expected: TurnLeaseFence | None = None
     ) -> FinishedTurnFence | None:
         """Persist exact terminal identity; ID-only legacy release cannot attest a fence."""
         with _store_lock(self._wire_lock_path):
@@ -2712,9 +2718,11 @@ class Comms:
         eligible = set()
         if sequences:
             selected = self.bus._history_page(
-                lambda message: message.seq in sequences
-                and message.target in owners
-                and message.sender in senders,
+                lambda message: (
+                    message.seq in sequences
+                    and message.target in owners
+                    and message.sender in senders
+                ),
                 before=None,
                 after=min(sequences) - 1,
                 limit=len(sequences),
@@ -2779,9 +2787,11 @@ class Comms:
             )
             try:
                 reply = self.bus._history_page(
-                    lambda message: message.target in owner_aliases
-                    and message.starts_turn_for(canonical, aliases=snapshot.aliases)
-                    and wait.matches(message, snapshot),
+                    lambda message: (
+                        message.target in owner_aliases
+                        and message.starts_turn_for(canonical, aliases=snapshot.aliases)
+                        and wait.matches(message, snapshot)
+                    ),
                     before=None,
                     after=wait.after_seq,
                     limit=1,
@@ -3127,10 +3137,10 @@ class Comms:
                 finally:
                     with suppress(OSError, ValueError):
                         os.close(int(reservation))
-                epoch = self.registry.snapshot().owner_epochs.get(thread.name)
-                if epoch is None:
+                snapshot = self.registry.snapshot()
+                if thread.name not in snapshot.owner_generations:
                     raise RelationViolationError("Owner startup reservation has no incarnation.")
-                expected = _owner_launch_proof(thread.name, owner_pid, epoch)
+                expected = _owner_launch_proof(snapshot.owner_identity(thread.name), owner_pid)
                 if (
                     evidence != expected
                     or thread.pid != owner_pid
@@ -3362,7 +3372,9 @@ class Comms:
                     # a turn while SIGTERM is pending: claim_local_turn rejects
                     # STOPPED. Never undo this fence on an uncertain signal.
                     stop_epochs = {
-                        thread.name: self.registry.fence_idle_owner(thread, expected_epoch=epoch)
+                        thread.name: self.registry.fence_idle_owner(
+                            thread, expected_admission_generation=epoch
+                        )
                         for thread, epoch in captured
                     }
                 for thread, _epoch in captured:
@@ -3526,8 +3538,8 @@ class Comms:
         try:
             self.registry.register(owned, new_owner=True)
             if write_fd >= 0:
-                epoch = self.registry.snapshot().owner_epochs[thread.name]
-                proof = _owner_launch_proof(thread.name, process.pid, epoch)
+                owner_identity = self.registry.snapshot().owner_identity(thread.name)
+                proof = _owner_launch_proof(owner_identity, process.pid)
                 if os.write(write_fd, proof) != len(proof):
                     raise RelationViolationError("Owner startup reservation was not fully sent.")
         except BaseException:

@@ -95,6 +95,13 @@ class AlreadyApplied(Generic[T]):
 
 @dataclass(frozen=True, slots=True)
 class ParticipantSnapshot:
+    """Durable coordinator assignment, independent of process admission.
+
+    This generation begins at registration and advances on explicit coordinator
+    reassignment/retry, even if the registry process has not changed. It must
+    never be substituted for a ThreadRegistry owner or admission generation.
+    """
+
     lookup: str
     display_name: str
     committed: bool
@@ -102,6 +109,10 @@ class ParticipantSnapshot:
     owner_thread: str
     generation: int
     pointer: CurrentExecutionPointer
+
+    @property
+    def participant_generation(self) -> int:
+        return self.generation
 
 
 @dataclass(frozen=True, slots=True)

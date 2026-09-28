@@ -38,7 +38,7 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
     # its exact mark already COMMITted (reconcile rather than infer rollback).
     with publication_identity_fence(agent._comms.root, nonblocking=True):
         try:
-            owner, epoch = agent._comms.registry.live_owner_with_epoch(thread_name)
+            owner, epoch = agent._comms.registry.live_owner_with_generation(thread_name)
         except (RelationViolationError, UnregisteredThreadError):
             return 0
         if (
@@ -62,7 +62,9 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
             # Recheck under the handoff fence; an owner epoch may change even
             # without a session rebind. No old row crosses that boundary.
             try:
-                current, current_epoch = agent._comms.registry.live_owner_with_epoch(thread_name)
+                current, current_epoch = agent._comms.registry.live_owner_with_generation(
+                    thread_name
+                )
             except (RelationViolationError, UnregisteredThreadError):
                 break
             if (
@@ -106,7 +108,9 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
                 # socket transport, does not mark this exact row observed.
                 break
             try:
-                current, current_epoch = agent._comms.registry.live_owner_with_epoch(thread_name)
+                current, current_epoch = agent._comms.registry.live_owner_with_generation(
+                    thread_name
+                )
             except (RelationViolationError, UnregisteredThreadError):
                 break
             if (

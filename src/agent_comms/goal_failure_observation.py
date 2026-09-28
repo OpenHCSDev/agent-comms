@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from .declarations import Goal, Thread, ThreadStatus, TurnClaimFence
+from .declarations import Goal, Thread, ThreadStatus, TurnLeaseFence
 from .diagnostics import FailureReason
 from .field_codec import FieldCodec
 from .goal_pauses import GoalPauseEvent
@@ -44,7 +44,7 @@ class FailedTurnObservation:
         *,
         owner: Thread,
         goal: Goal,
-        claim: TurnClaimFence,
+        claim: TurnLeaseFence,
         turn_id: str,
         admission: int,
         current_owner: Thread | None,
@@ -72,8 +72,7 @@ class FailedTurnObservation:
             or current_admission != admission
             or owner.goal != goal
             or reservation.goal_id != goal.id
-            or claim.name != owner.name
-            or claim.created_at != owner.created_at
+            or claim.identity.incarnation != owner.incarnation
             or claim.turn_id != turn_id
             or claim.admission_generation != admission
             or type(admission) is not int

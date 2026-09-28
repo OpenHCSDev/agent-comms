@@ -294,7 +294,7 @@ def _require_owner(store: MutationStore, lookup: str, owner: Thread, generation:
     if (
         not participant.committed
         or participant.owner_thread != owner.name
-        or participant.generation != generation
+        or participant.participant_generation != generation
         or stable_thread_lookup(owner.created_at) != lookup
         or owner.pid != os.getpid()
         or not owner.role.executable
@@ -1042,14 +1042,14 @@ async def run_one_sealed_claim(
             _assert_response_schema(store._connection)
             assert_native_runtime_schema(store._connection)
         try:
-            owner, owner_epoch = comms.registry.live_owner_with_admission(owner_name)
+            owner, owner_admission_generation = comms.registry.live_owner_with_admission(owner_name)
         except (RelationViolationError, ValueError) as error:
             raise StaleFence("recipient registry identity stopped or changed") from error
-        _require_registry_owner(comms, owner, owner_epoch)
+        _require_registry_owner(comms, owner, owner_admission_generation)
         lookup = stable_thread_lookup(owner.created_at)
         person = store.participant(lookup)
         with store._read_transaction():
-            _require_owner(store, lookup, owner, person.generation)
+            _require_owner(store, lookup, owner, person.participant_generation)
         # A saturated page of already settled claims is not proof that there is
         # no later selected work. Scan a bounded number of sealed pages, then
         # require an explicit cursor rather than reporting a false empty inbox.
@@ -1100,18 +1100,20 @@ async def run_one_sealed_claim(
             raise StaleFence("selected owner already has a current turn")
         owned_turn_id = secrets.token_hex(16)
         try:
-            owner, owner_epoch = comms.registry.claim_live_turn_with_admission(
+            owner, owner_admission_generation = comms.registry.claim_live_turn_with_admission(
                 owner,
                 owned_turn_id,
-                expected_generation=owner_epoch,
+                expected_generation=owner_admission_generation,
             )
         except RelationViolationError as error:
             owned_turn_id = None
             raise StaleFence("selected owner stopped or busy before native turn") from error
-        _require_registry_owner(comms, owner, owner_epoch)
+        _require_registry_owner(comms, owner, owner_admission_generation)
         if owner.active_turn is None or owner.active_turn.owner_pid != owner.pid:
             raise StaleFence("selected recipient has no live owner-turn identity")
-        initial = _require_selected(store, bus, wire_root_id, pending, owner, person.generation)
+        initial = _require_selected(
+            store, bus, wire_root_id, pending, owner, person.participant_generation
+        )
         owner_witness = LiveResponseOwner(
             owner.name,
             lookup,
@@ -1119,7 +1121,7 @@ async def run_one_sealed_claim(
             owner.created_at,
             owner.worktree,
             owner.active_turn,
-            owner_epoch,
+            owner_admission_generation,
         )
         session_dir = root / "native-sessions" / lookup
         if not fresh_private_enrollment:
@@ -1145,10 +1147,10 @@ async def run_one_sealed_claim(
                     actual != owner
                     or status is None
                     or not status.active
-                    or registry.admission_generations.get(owner.name) != owner_epoch
+                    or registry.admission_generations.get(owner.name) != owner_admission_generation
                 ):
                     raise StaleFence("fresh-session owner changed before enrollment")
-                _require_owner(store, lookup, owner, person.generation)
+                _require_owner(store, lookup, owner, person.participant_generation)
                 from .maintenance_barrier import MaintenanceBarrier
 
                 MaintenanceBarrier(bus._registry._path).assert_open_unlocked()
@@ -1162,8 +1164,8 @@ async def run_one_sealed_claim(
                     owner_name=owner.name,
                     owner_created_at=float(owner.created_at).hex(),
                     owner_lookup=lookup,
-                    owner_generation=person.generation,
-                    admission_epoch=owner_epoch,
+                    owner_generation=person.participant_generation,
+                    admission_epoch=owner_admission_generation,
                 )
             session_file = fresh_session.path
         triage_session = session_file
@@ -1176,7 +1178,7 @@ async def run_one_sealed_claim(
             triage_prompt = _triage_prompt(initial, pending, owner)
             if len(triage_prompt.encode("utf-8")) > _MAX_PROMPT_BYTES:
                 raise IdentityConflict("triage prompt exceeds the bounded model context")
-            input_id, token = _reserve_triage(store, pending, owner, person.generation)
+            input_id, token = _reserve_triage(store, pending, owner, person.participant_generation)
             # Prelaunch binding: exact expected prompt bytes before Pi starts.
             triage_digest = bind_expected_prompt(
                 store,
@@ -1184,7 +1186,7 @@ async def run_one_sealed_claim(
                 stage="triage",
                 claim=pending,
                 owner=owner,
-                generation=person.generation,
+                generation=person.participant_generation,
                 prompt=triage_prompt,
             )
             result = await run_native_pi_turn(
@@ -1203,8 +1205,8 @@ async def run_one_sealed_claim(
                     store,
                     bus,
                     owner=owner,
-                    epoch=owner_epoch,
-                    generation=person.generation,
+                    epoch=owner_admission_generation,
+                    generation=person.participant_generation,
                     input_id=input_id,
                     prompt=triage_prompt,
                     claim=pending,
@@ -1224,13 +1226,20 @@ async def run_one_sealed_claim(
                 claim=pending,
                 stage="triage",
                 owner=owner,
-                generation=person.generation,
+                generation=person.participant_generation,
                 fence=None,
             )
-            _require_registry_owner(comms, owner, owner_epoch)
+            _require_registry_owner(comms, owner, owner_admission_generation)
             decision = _parse_triage(result.text)
             _record_triage(
-                store, pending, owner, person.generation, input_id, token, result, decision
+                store,
+                pending,
+                owner,
+                person.participant_generation,
+                input_id,
+                token,
+                result,
+                decision,
             )
             if decision == "IGNORE":
                 cursor_status = _current_cursor_status(
@@ -1238,8 +1247,8 @@ async def run_one_sealed_claim(
                     store,
                     wire_root_id=wire_root_id,
                     owner=owner,
-                    epoch=owner_epoch,
-                    generation=person.generation,
+                    epoch=owner_admission_generation,
+                    generation=person.participant_generation,
                     input_id=input_id,
                 )
                 return CoordinatedTurn(
@@ -1256,8 +1265,8 @@ async def run_one_sealed_claim(
         else:
             if pending.lifecycle.mode.triage:
                 raise IdentityConflict("pending claim wake decision is not executable")
-        _require_registry_owner(comms, owner, owner_epoch)
-        execution_id = _engage(store, pending, initial, owner, person.generation)
+        _require_registry_owner(comms, owner, owner_admission_generation)
+        execution_id = _engage(store, pending, initial, owner, person.participant_generation)
         snapshot = store.snapshot(execution_id)
         if snapshot.execution.lifecycle.queued:
             snapshot = store.mark_pending(
@@ -1268,7 +1277,7 @@ async def run_one_sealed_claim(
             execution_id,
             1,
             owner.name,
-            person.generation,
+            person.participant_generation,
             token,
             expected_execution_revision=snapshot.execution.revision,
             expected_pointer_revision=snapshot.pointer_revision,
@@ -1281,7 +1290,7 @@ async def run_one_sealed_claim(
             raise IdentityConflict("full wake lost its selected claim")
         selected_operation_id: str | None = None
         if selected_write_plan_loader is not None:
-            planned = selected_write_plan_loader(pending, owner, owner_epoch)
+            planned = selected_write_plan_loader(pending, owner, owner_admission_generation)
             if planned is not None:
                 if (
                     selected_existing_file_write is not None
@@ -1348,8 +1357,8 @@ async def run_one_sealed_claim(
             optional_awareness_builder = _production_optional_awareness(
                 WakeCandidateIndex(bus),
                 through_seq=initial.message.seq,
-                generation=person.generation,
-                admission_epoch=owner_epoch,
+                generation=person.participant_generation,
+                admission_epoch=owner_admission_generation,
             )
         if optional_awareness_builder is not None:
             optional_awareness = await _bounded_optional_awareness(
@@ -1360,14 +1369,16 @@ async def run_one_sealed_claim(
                 _MAX_PROMPT_BYTES - base_bytes,
             )
         prompt = frame + optional_awareness + original_suffix
-        input_id = _reserve_full(store, pending, execution_id, owner, person.generation, fence)
+        input_id = _reserve_full(
+            store, pending, execution_id, owner, person.participant_generation, fence
+        )
         full_digest = bind_expected_prompt(
             store,
             input_id=input_id,
             stage="full",
             claim=pending,
             owner=owner,
-            generation=person.generation,
+            generation=person.participant_generation,
             prompt=prompt,
             execution_id=execution_id,
             attempt_ordinal=fence.attempt_ordinal,
@@ -1391,9 +1402,9 @@ async def run_one_sealed_claim(
                 recipient_lookup=lookup,
                 execution_id=execution_id,
                 operation_id=secrets.token_hex(16),
-                owner_admission_generation=owner_epoch,
+                owner_admission_generation=owner_admission_generation,
                 turn_id=turn.id,
-                participant_generation=person.generation,
+                participant_generation=person.participant_generation,
                 attempt_ordinal=fence.attempt_ordinal,
             )
             bound_tool_mode = (
@@ -1432,8 +1443,8 @@ async def run_one_sealed_claim(
                 store,
                 bus,
                 owner=owner,
-                epoch=owner_epoch,
-                generation=person.generation,
+                epoch=owner_admission_generation,
+                generation=person.participant_generation,
                 input_id=input_id,
                 prompt=prompt,
                 claim=pending,
@@ -1454,10 +1465,10 @@ async def run_one_sealed_claim(
             claim=pending,
             stage="full",
             owner=owner,
-            generation=person.generation,
+            generation=person.participant_generation,
             fence=fence,
         )
-        _require_registry_owner(comms, owner, owner_epoch)
+        _require_registry_owner(comms, owner, owner_admission_generation)
         if not result.text:
             raise IdentityConflict("successful model produced no publishable response")
         if selected_existing_file_write is not None:
@@ -1479,9 +1490,9 @@ async def run_one_sealed_claim(
                 recipient_lookup=lookup,
                 execution_id=execution_id,
                 operation_id=selected_operation_id or secrets.token_hex(16),
-                owner_admission_generation=owner_epoch,
+                owner_admission_generation=owner_admission_generation,
                 turn_id=turn.id,
-                participant_generation=person.generation,
+                participant_generation=person.participant_generation,
                 attempt_ordinal=fence.attempt_ordinal,
             )
             claimed = publish_selected_resource_claim(
@@ -1493,9 +1504,9 @@ async def run_one_sealed_claim(
             if selected_operation_id is not None:
                 assert selected_write_plan_applied is not None
                 selected_write_plan_applied(pending, owner, selected_operation_id)
-        _record_full(store, pending, owner, person.generation, fence, input_id, result)
+        _record_full(store, pending, owner, person.participant_generation, fence, input_id, result)
         fence = progress.finish()
-        _require_registry_owner(comms, owner, owner_epoch)
+        _require_registry_owner(comms, owner, owner_admission_generation)
         prepare_fenced_response(
             store, bus, fence, result.text, owner_pid=os.getpid(), owner_witness=owner_witness
         )
@@ -1509,8 +1520,8 @@ async def run_one_sealed_claim(
             store,
             wire_root_id=wire_root_id,
             owner=owner,
-            epoch=owner_epoch,
-            generation=person.generation,
+            epoch=owner_admission_generation,
+            generation=person.participant_generation,
             input_id=input_id,
         )
         return CoordinatedTurn(
@@ -1526,7 +1537,7 @@ async def run_one_sealed_claim(
         # The native adapter observed agent_settled, verified its input proof,
         # and reaped its own child before raising this nominal final outcome.
         # Retire only this failed attempt; future messages remain serviceable.
-        _require_registry_owner(comms, owner, owner_epoch)
+        _require_registry_owner(comms, owner, owner_admission_generation)
         _verify_live_turn(
             store,
             NativeTurnResult("", error.context),
@@ -1537,7 +1548,7 @@ async def run_one_sealed_claim(
             claim=pending,
             stage="full" if fence is not None else "triage",
             owner=owner,
-            generation=person.generation,
+            generation=person.participant_generation,
             fence=fence,
         )
         if fence is not None:
@@ -1562,7 +1573,7 @@ async def run_one_sealed_claim(
     except NativePiUnavailable as error:
         if input_id is not None:
             try:
-                _require_registry_owner(comms, owner, owner_epoch)
+                _require_registry_owner(comms, owner, owner_admission_generation)
             except StaleFence:
                 # The original failure remains the result. A revoked owner
                 # cannot publish a notice under its successor's identity.

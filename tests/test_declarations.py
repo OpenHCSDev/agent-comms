@@ -369,10 +369,13 @@ class TestThreadRegistry:
         else:
             assert registry.finish_claimed_turn("a", "claimed")
         registry.register(claimed)
-        assert registry.require("a") == claimed
+        assert registry.require("a").active_turn.admission_generation is None
         with pytest.raises(RelationViolationError, match="unavailable"):
             registry.live_owner_with_epoch("a")
-        assert registry.snapshot().owner_epochs["a"] > claimed_epoch
+        if revocation == "stop":
+            assert registry.snapshot().owner_generations["a"] > claimed_epoch
+        else:
+            assert registry.snapshot().owner_generations["a"] == claimed_epoch
         assert "turn_epochs" not in claimed.to_wire()
 
     def test_comms_begin_turn_cannot_revive_stopped_owner(self, tmp_path: Path) -> None:
@@ -618,7 +621,9 @@ class TestThreadRegistry:
         data["owner_epochs"] = {"a": True}
         data["owner_epoch_counter"] = epoch
         path.write_text(json.dumps(data))
-        with pytest.raises(RelationViolationError, match="invalid private registry owner epochs"):
+        with pytest.raises(
+            RelationViolationError, match="invalid private registry owner generations"
+        ):
             registry.live_owner_with_epoch("a")
 
     def test_deleting_thread_cannot_be_revived(self, tmp_path: Path):
