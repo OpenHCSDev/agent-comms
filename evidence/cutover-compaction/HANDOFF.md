@@ -12,7 +12,7 @@ renamed at this one-shot boundary only. Inode evidence is NOT rebound; copied se
 must not inherit native proof or fresh enrollment capability. No journal transition,
 provider dispatch, reconciliation, returned terminal ACK or admission token is minted.
 
-Actual retained journal already converted and reopened: 97 raw UNKNOWN rows and one
+Historical retained journal fixture converted and reopened: 97 raw UNKNOWN rows and one
 refused summary, no operations/publications/enrollments. Explicit SQLite state-family acceptance passed (2 tests): every current operation,
 summary and publication family member; preserved enrollment and raw UNKNOWN identity;
 current native_input_admitted barriers; duplicate unresolved ID refuses replay;
@@ -37,3 +37,13 @@ See GOAL-PRIVATE.md for the parent-owned reset/evidence disposition.
 
 This PR adds a temporary converter and its boundary acceptance rather than changing
 runtime source. Remove the tool after the real D22 installation succeeds.
+
+## Live correction received at 19:12 UTC
+
+Parent evidence `~/wt/comms-live-unread-pin-20260928/evidence/refusal-retirement/result.json`
+records the exact CAS retirement of the previous `limit_exceeded` refusal. Current
+live state is 97 raw UNKNOWN rows plus one `retired_refusal`; original UNKNOWN
+unchanged and send admitted. Zero provider calls, submitted inputs or owner restarts.
+The earlier retained-barrier receipt is historical. Conversion preserves the
+current retired state using its existing declaration; family acceptance already
+covers RetiredRefusalSummary without replay or inventing an admission token.

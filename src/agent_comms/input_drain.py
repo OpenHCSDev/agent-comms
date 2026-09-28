@@ -24,7 +24,6 @@ from .image_inputs import ImageInput
 from .input_attempt import InputAttempt
 from .input_disposition import FutureInputQueue, InputDispositions
 from .input_effects import InputEffects
-from .passive_channel_awareness import PassiveChannelAwareness
 from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .selected_summary_admission import SelectedSummaryAdmission
@@ -88,7 +87,6 @@ class InputDrain(FutureInputQueue):
         self.selected_summary_admissions: dict[str, SelectedSummaryAdmission] = {}
         self.turn_input_text: dict[str, str] = {}
         self.dispositions = InputDispositions(comms.root / InputDispositions.filename)
-        self.passive_awareness = PassiveChannelAwareness(comms.root)
         self.auto_wake = auto_wake
         self.pending_turns: dict[str, list[ScheduledTurn]] = {}
         self.drain_locks: dict[str, asyncio.Lock] = {}

@@ -586,3 +586,36 @@ def certified_initial_page_unlocked(
         raise
     except (sqlite3.Error, OSError, ValueError, TypeError) as error:
         raise RelationViolationError("Certified initial page is unavailable.") from error
+
+
+def addressed_source_pointers_unlocked(
+    bus: WireLog, marker: WireMetadata, lookup: str, *, limit: int = 4
+) -> tuple[Initials, ...]:
+    """Latest source pointers for natural-turn awareness, never delivery evidence.
+
+    Caller holds the bus lock. Read only the current sealed index: no payload
+    decode, historical scan, index repair, recovery, or native cursor advancement.
+    Frozen audience membership includes unmentioned NoWake observers.
+    """
+    path = _path(bus.path)
+    with closing(_connect(path, readonly=True)) as db:
+        saved = _saved(db)
+        marker.seal.check_final(saved, path)
+        if (
+            saved.root_id != marker.root_id
+            or saved.through_seq != marker.last_seq
+            or file_revision(bus.path.stat()) != saved.revision
+        ):
+            raise RelationViolationError("Current source pointers require an unchanged checkpoint.")
+        rows = Initials.read(
+            db.execute(
+                "SELECT i.seq,i.message_id,i.offset,i.length FROM addressed a "
+                "JOIN initials i ON i.seq=a.seq "
+                "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq DESC LIMIT ?",
+                (lookup, marker.admission_after_seq, limit),
+            )
+        )
+        marker.seal.check_final(saved, path)
+        if file_revision(bus.path.stat()) != saved.revision:
+            raise RelationViolationError("Source changed during awareness read.")
+        return tuple(reversed(rows))
