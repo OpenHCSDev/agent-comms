@@ -102,7 +102,12 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
     assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
     assert store.snapshot(goal.id).number == 2
     with sqlite3.connect(store.path) as database:
-        assert database.execute(f"SELECT count(*) FROM {GoalHumanDecision.declared_name}").fetchone()[0] == 1
+        assert (
+            database.execute(f"SELECT count(*) FROM {GoalHumanDecision.declared_name}").fetchone()[
+                0
+            ]
+            == 1
+        )
 
 
 def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path):
@@ -126,7 +131,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     assert review["reviewed_inputs"] == [key]
     comms.goals.update_goal("owner", replace(action, reviewed_inputs=(key,)))
     row = store.read().rows[key]
-    assert row.unresolved and row.native_id is None and row.reviewed_for_goal(goal.id)
+    assert row.accepts_reservation and row.reviewed_for_goal(goal.id)
     assert not (tmp_path / "acp_delivery_cursors.json").exists()
     # A later native-started reply is already handled, regardless of display reads.
     second = comms.messaging.send_message("peer", "owner", "Native reply")
@@ -168,6 +173,9 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    from goal_owner_fixture import activate_empty_source
+
+    activate_empty_source(owner)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     try:

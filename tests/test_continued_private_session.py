@@ -88,7 +88,7 @@ def test_continued_private_uncertain_or_mismatched_history_never_reserves(contin
     rows = saved["rows"]
     entries = [json.loads(line) for line in session.read_text().splitlines()]
     if damage == "unknown":
-        rows["acp:old"]["status"] = "unknown"
+        rows["acp:old"]["kind"] = "bound_unknown"
     if damage == "unbound":
         rows["acp:old"]["native_id"] = None
     if damage == "foreign":
@@ -195,9 +195,9 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
                 session_file=None if damage == "unsettled" else str(session),
                 session_entry_id=None if damage == "unsettled" else "user",
                 request_generation=None if damage == "unsettled" else 1,
-                llm_context_digest=None
-                if damage == "unsettled"
-                else ("d" if damage == "context" else "b") * 64,
+                llm_context_digest=(
+                    None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                ),
                 verdict="ignore",
             ).insert(db)
     source["source"]["reservedRevision"] = json.loads(json.dumps(_session_revision(str(session))))
