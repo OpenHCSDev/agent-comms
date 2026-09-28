@@ -1,3 +1,14 @@
+## Cold compaction fix live — 2026-09-28
+
+Core266/267 merged and installed at78adae3654bb2da0536ea60e2320a6c840f19a86,
+Toad117 at e6c5227a and Textual16ede007. Durable native package905f9f6facb3070a
+is selected by the existing active route. All five local launchers use the new
+runtime; all four idle owners restarted with unchanged models/thinking/sessions.
+Fresh installed ACP initialize/load succeeds for all four, without sending input.
+Existing Toad must be reopened. Large-history cold manual/automatic acceptance
+and installed automatic input receipt are linked in evidence/cold-native-compaction.
+Original failed input is not replayed. This does not complete T2/T3/T5/T6/T4.
+
 ## Cold compaction installed acceptance passed — 2026-09-28
 
 PR266 incorporates paired267. Actual copied 137MB UX history passes both cold manual
