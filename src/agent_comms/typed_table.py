@@ -330,6 +330,11 @@ class SQLiteForeignKeys(TypedRow):
     foreign_keys: bool
 
 
+@dataclass(frozen=True)
+class SQLiteJournalMode(TypedRow):
+    journal_mode: str
+
+
 class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
     """The row declaration owns its table; no separate table/schema registry.
 

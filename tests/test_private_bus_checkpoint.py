@@ -240,11 +240,11 @@ def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> N
             if fault == "schema":
                 db.execute("DROP TABLE addressed")
             elif fault == "ahead":
-                db.execute("UPDATE certificate SET offset=offset+10")
+                db.execute("UPDATE prefix_certificate SET offset=offset+10")
             elif fault == "root":
-                db.execute("UPDATE certificate SET root_id=?", ("0" * 32,))
+                db.execute("UPDATE prefix_certificate SET root_id=?", ("0" * 32,))
             else:
-                db.execute("UPDATE certificate SET tail=?", ("0" * 64,))
+                db.execute("UPDATE prefix_certificate SET tail=?", ("0" * 64,))
     with pytest.raises(RelationViolationError):
         _page(comms, stable_thread_lookup(17002.0))
     if fault not in {"schema", "ahead", "root", "tail", "corrupt", "missing"}:
@@ -368,12 +368,12 @@ def test_pending_checkpoint_does_not_repair_corrupt_sql_schema(tmp_path: Path, m
 
 
 def test_failed_marker_binding_does_not_promote_checkpoint(tmp_path: Path, monkeypatch) -> None:
-    from agent_comms import store_files
+    from agent_comms import wire_log
 
     comms, _ = _root(tmp_path)
     with monkeypatch.context() as patch:
         patch.setattr(
-            store_files,
+            wire_log,
             "_atomic_write_text",
             lambda *args, **kwargs: (_ for _ in ()).throw(OSError("marker sync failed")),
         )

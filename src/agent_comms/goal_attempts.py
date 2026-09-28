@@ -48,7 +48,7 @@ from .goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
-from .typed_table import Column, SQLiteSchemaObject, TypedRow, TypedTable
+from .typed_table import Column, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
 
 
 class GoalAttemptError(RuntimeError):
@@ -157,11 +157,6 @@ class GoalProviderUsage(GoalLedgerTable, TypedTable):
 class GoalAttemptSchema(GoalLedgerTable, TypedTable):
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
     version: Literal[6]
-
-
-@dataclass(frozen=True)
-class _JournalMode(TypedRow):
-    journal_mode: str
 
 
 def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
@@ -277,8 +272,8 @@ class GoalAttemptStore:
             conn = sqlite3.connect(self.path, timeout=5, isolation_level=None)
             conn.execute("PRAGMA foreign_keys=ON")
             conn.execute("PRAGMA synchronous=EXTRA")
-            modes = _JournalMode.read(conn.execute("PRAGMA journal_mode"))
-            if modes != [_JournalMode("delete")]:
+            modes = SQLiteJournalMode.read(conn.execute("PRAGMA journal_mode"))
+            if modes != [SQLiteJournalMode("delete")]:
                 conn.close()
                 raise StorageUncertainError("Unexpected SQLite journal mode.")
             return conn

@@ -178,3 +178,9 @@ UNKNOWN/reset proof remain open.
   reservation/attempt state drives storage; passive evidence excludes capability
   tokens.72 bounded local checks pass. Durable carryover contract in HANDOFF;
   no regrant/replay on reopen, parent owns one-shot conversion.
+
+- **Checkpoint/candidate closure:** private_bus_checkpoint.py and
+  wake_candidate_index.py now use declared rows and strict A13 boundaries.
+  Old candidate v1 upgrade and converter-only test deleted. Source seals/floor
+  and bounded WAL maintenance preserved; reset classifications in HANDOFF.
+  Core coordinator/cohort and recovery readers remain open; S12 not complete.

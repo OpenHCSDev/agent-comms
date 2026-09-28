@@ -295,3 +295,42 @@ optional JSON awareness ledger; current parent has no initialize caller. Observe
 43passed2failed in combined diagnostic, first failures are missing ledger. No
 production fallback or invented awareness has been added. Parent channel owner
 should close that old caller/test boundary deliberately.
+
+## Certified checkpoint and candidate index closure
+
+PrefixCertificate now owns its SQLite schema via A13 (version2, physical
+`prefix_certificate`); ResponseKeys, Initials, Addressed own the other sealed
+source tables. Deleted the local DDL/insert/update generator, table-name roster
+and all raw readers. Existing writer-owned pending/final seal fsync ordering,
+complete canonical prefix verification, exact source IDs and bounded pages stay
+in place. Typed schemas/reads reject corruption; retained validated history below
+parent floor still reaches _index_row without a duplicate rejection.
+
+Existing Candidate is now its table owner (physical `candidate`), with derived
+selected/passive indexes; CandidateCheckpoint(version3, `candidate_checkpoint`)
+and CandidateResponseKey(`candidate_response_key`) own the remaining projection.
+Deleted tuple row alias, positional writes, raw checkpoint/page decoders and
+allow_v1_rebuild runtime upgrade. An incompatible/partial schema is refused
+without modifying saved rows even on rebuild=True; parent resets disposable
+old format outside src. Current-format explicit rebuild still replays a bounded
+source batch, never runs in send/wake and never grants source/native authority.
+
+Reset classification: wake_candidates.sqlite3 (+ SQLite WAL/SHM after quiet
+close) is disposable. private_bus_checkpoint.sqlite3 is a derived source index
+whose inode/content is sealed in durable WireMetadata: parent must remove/reset
+checkpoint_version/checkpoint_seal together with that sidecar, then certify the
+current canonical preserved bus using install_private_bus_checkpoint. Preserve
+last_seq, root ID, admission_after_seq and access exactly; never merely delete
+the sealed sidecar while leaving its old marker binding, nor seed native proof.
+Archived snapshots require the same current source schema/marker consistency.
+
+84 focused behavior checks passed, then18 cursor/consumer/guard checks passed.
+Tests include real on-disk rebuild/reopen, duplicate response keys across batches,
+WAL readers during writer commits, corrupt/missing index denial, fsync uncertainty,
+complete native-source page barriers. Four large scale cases excluded from the
+consumer run to keep bounded; no installed provider activation claim. Updated
+current marker fixtures to required floor/access and actual WireLog fsync seam.
+
+SQLiteJournalMode moved from owned goal ledger into A13 for reuse by candidate
+and cohort connections; S9's JournalMode/JournalSchemaObject can adopt shared
+SQLiteJournalMode/SQLiteSchemaObject at its coordinated crossing (not edited here).
