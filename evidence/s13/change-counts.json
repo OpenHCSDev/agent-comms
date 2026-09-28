@@ -1,0 +1,20 @@
+{
+  "counting": "Cumulative S13 edits only, first-parent nonmerge commits; excludes dependency235/doc/evidence changes; not net-diff counts",
+  "commits": [
+    "62adf9a82666d49490018396e5814dccd28a46ad",
+    "604a84a6395ed4208ccfcfa9fe13a784bce7430d",
+    "15acd2860c9a7e46dc70857928fd6fcd64437f0d",
+    "a19b40084020207a236f0e6118d2bf2ff227caa2",
+    "1a4daf7eeac8b203ec50a9b033b6e67979c07ca3",
+    "272c55f23d261641f1352412328658f5cbf26136",
+    "0b3280e5355f7e9cee92d689d8596718ae64e2ab"
+  ],
+  "source": {
+    "added": 1729,
+    "deleted": 1158
+  },
+  "test": {
+    "added": 796,
+    "deleted": 1685
+  }
+}

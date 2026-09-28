@@ -1377,41 +1377,6 @@ time.sleep(60)
         assert isinstance(events[-1], ae.Done) and events[-1].ok is False
         assert "no RPC progress" in events[-1].text
 
-    async def test_watchdog_force_kills_backend_that_ignores_abort_and_term(self, tmp_path):
-        stub = _stub(
-            tmp_path,
-            f"#!{sys.executable}\n"
-            + """\
-import json, signal, sys, time
-signal.signal(signal.SIGTERM, signal.SIG_IGN)
-def emit(value):
-    print(json.dumps(value), flush=True)
-"""
-            + _NATIVE_PROMPT_START
-            + """\
-time.sleep(60)
-""",
-        )
-        started = asyncio.get_running_loop().time()
-
-        events = [
-            event
-            async for event in backend.stream_agent_events(
-                stub,
-                [],
-                "task",
-                str(tmp_path),
-                model_wait_timeout=0.15,
-                rpc_abort_grace=0.02,
-                require_input_id=True,
-            )
-        ]
-
-        elapsed = asyncio.get_running_loop().time() - started
-        states = [event.state for event in events if isinstance(event, ae.TurnState)]
-        assert states == ["model_stalled", "aborting", "failed"]
-        assert elapsed < 1.5
-        assert isinstance(events[-1], ae.Done) and events[-1].ok is False
 
     async def test_irrelevant_rpc_traffic_does_not_renew_model_lease(self, tmp_path):
         stub = _stub(
@@ -2212,103 +2177,7 @@ if case != "eof":
         assert events[-1].reason_code == "pi_input_id_unavailable"
         assert "preflight" in events[-1].text
 
-    @pytest.mark.skipif(os.name != "posix", reason="POSIX process-group signal")
-    async def test_preflight_refusal_survives_process_group_signal_error(
-        self, tmp_path, monkeypatch
-    ):
-        pid_file = tmp_path / "child.pid"
-        stub = _stub(
-            tmp_path,
-            f"#!{sys.executable}\n" + f"""
-import json, os, sys, time
-state = json.loads(sys.stdin.readline())
-# Fully write the PID before the refused preflight response can trigger reaping.
-open({str(pid_file)!r}, "w").write(str(os.getpid()))
-print(json.dumps({{"type": "response", "command": "get_state", "id": "foreign",
-                  "success": True, "data": {{"nativeInputProofCapability":
-                  "pi-native-input-v1-live-only"}}}}), flush=True)
-while True: time.sleep(0.1)
-""",
-        )
-        original_killpg = backend.os.killpg
-        injected = False
 
-        def fail_first_group_signal(pid, sig):
-            nonlocal injected
-            if not injected:
-                injected = True
-                raise OSError(9, "process group signal failed")
-            return original_killpg(pid, sig)
-
-        monkeypatch.setattr(backend.os, "killpg", fail_first_group_signal)
-        events = [
-            event async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path))
-        ]
-        assert injected and pid_file.exists()
-        assert events[-1].reason_code == "pi_input_id_unavailable"
-        with pytest.raises(ProcessLookupError):
-            os.kill(int(pid_file.read_text()), 0)
-        assert not backend._ACTIVE_PROCESSES and not backend._ACTIVE_STDERR_TASKS
-
-    @pytest.mark.parametrize("phase", ["preflight", "no_user_start"])
-    async def test_broken_child_stdin_close_still_reaps_and_reports_typed_failure(
-        self, tmp_path, monkeypatch, phase
-    ):
-        pid_file = tmp_path / "child.pid"
-        stub = _stub(
-            tmp_path,
-            f"#!{sys.executable}\n" + f"""
-import json, os, signal, sys, time
-state = json.loads(sys.stdin.readline())
-assert state["type"] == "get_state"
-with open({str(pid_file)!r}, "w") as pid_output:
-    pid_output.write(str(os.getpid()))
-if {phase!r} == "preflight":
-    data = "invalid-state"
-else:
-    data = {{"nativeInputProofCapability": "pi-native-input-v1-live-only"}}
-print(json.dumps({{"type": "response", "command": "get_state",
-                  "id": state["id"], "success": True, "data": data}}), flush=True)
-if {phase!r} == "no_user_start":
-    prompt = json.loads(sys.stdin.readline())
-    print(json.dumps({{"type": "response", "command": "prompt",
-                      "id": prompt["id"], "success": True}}), flush=True)
-signal.signal(signal.SIGTERM, lambda *_: None)
-while True: time.sleep(0.1)
-""",
-        )
-        create = backend.asyncio.create_subprocess_exec
-        close_calls = []
-
-        async def spawn(*args, **kwargs):
-            proc = await create(*args, **kwargs)
-            assert proc.stdin is not None
-            original_close = proc.stdin.close
-
-            def fail_after_close():
-                original_close()
-                close_calls.append(True)
-                raise BrokenPipeError("child closed its stdin read end")
-
-            monkeypatch.setattr(proc.stdin, "close", fail_after_close)
-            return proc
-
-        monkeypatch.setattr(backend.asyncio, "create_subprocess_exec", spawn)
-        monkeypatch.setattr(backend, "PROMPT_START_TIMEOUT_SECONDS", 0.1)
-        async with asyncio.timeout(4):
-            events = [
-                event
-                async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path))
-            ]
-        assert isinstance(events[-1], ae.Done) and events[-1].ok is False
-        assert events[-1].reason_code == (
-            "pi_input_id_unavailable" if phase == "preflight" else "current_prompt_input_missing"
-        )
-        assert pid_file.exists() and close_calls
-        with pytest.raises(ProcessLookupError):
-            os.kill(int(pid_file.read_text()), 0)
-        assert not backend._ACTIVE_PROCESSES
-        assert not backend._ACTIVE_STDERR_TASKS
 
     @pytest.mark.parametrize(
         ("case", "expected_reason"),

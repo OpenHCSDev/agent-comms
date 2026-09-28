@@ -1,6 +1,6 @@
 # S13: Child-process supervision
 
-**Head audited:** `agent-comms` `main` at `0c63715`; re-verify at yours. **Rules:** [00-RULES.md](00-RULES.md). **Builds** [A12 `ChildProcess`](02-SHARED-ABSTRACTIONS.md#a12-childprocess); **uses** A1, A2.
+**Head re-audited:** main through #231 (`3996e82`), then #230 typed-table foundation. #232 implements this surface with #235 typed registry as a dependency. **Rules:** [00-RULES.md](00-RULES.md). **Builds** [A12 `ChildProcess`](02-SHARED-ABSTRACTIONS.md#a12-childprocess); **uses** A1, A2.
 **Step 1:** build A12 as a new module. **Step 2:** migrate S13's files.
 
 ---
@@ -11,7 +11,7 @@ Child processes are started, stopped and identified in eleven modules at four le
 
 1. **Race-free, Linux only:** `selected_pi_child_deadline.py` runs its child as PID 1 in a PID namespace and kills it through a `pidfd`; `owner_compaction_process.py` arms an independent `pidfd` watchdog for a hard deadline.
 2. **Process group, then graceful and forced stop:** `native_pi.py`, `manual_compaction.py`, `backend.py`'s pi child, `recovery_gateway.py`, each with its own grace constant (a `1.0` literal, `GRACE`, `_KILL_GRACE`).
-3. **The direct child only:** `backend.py`'s two discovery children and five one-shot `subprocess.run(timeout=…)` calls, which leave anything the child spawned running.
+3. **The direct child only:** the audited backend has two discovery subprocesses and the persistent/turn Pi child; no five `subprocess.run` calls remain at the audited head. Discovery becomes a bounded A12 exchange so descendants are retired too.
 4. **Bare PID, for the processes that most need identity:** `owner_lifecycle.py` launches long-lived detached owners, records only `pid=process.pid`, and later probes and signals them by that PID alone (`_process_alive`, `_signal_local_owner`, which uses `killpg` when the PID leads a group). After an owner dies and its PID is reused, a stop or restart signals an unrelated process, or its whole group.
 
 ---
@@ -67,3 +67,30 @@ A12 is merged; every spawn, stop and liveness call in S13's files goes through i
 ## Dispatch
 
 > **`refactor-s13`:** Complete S13 per `docs/refactor/round2/S13-child-supervision.md`. Read `00-RULES.md` first. Land A12 first as a new module, lifting the existing `pidfd`, namespace and watchdog code rather than rewriting it; S9 and S10 are waiting on it. Then migrate your three files completely. No bare-PID path survives anywhere.
+
+
+## Current implementation and cutover contract (#232)
+
+S13 owns Thread.process_identity (explicit parent agreement), a single optional
+ProcessIdentity replacing stored pid. Numeric Thread.pid is a derived projection.
+Copernicus owns thread_management/registry_document adoption in #235. A12 stable
+API and actual receipts: [S13 handoff](../../../evidence/s13/HANDOFF.md).
+
+The Linux and Windows implementations now share graceful/forced retirement.
+Linux behavior runs as actual local OS children; Windows behavior runs under
+Windows CPython in Wine using unchanged A12/A1/A2 source isolated from package
+imports. Existing active_route.py imports fcntl unconditionally, so full-package
+Windows acceptance is still blocked separately. Darwin libproc implementation
+requires an actual Darwin run; Linux tests do not establish Darwin readiness.
+
+owner_lifecycle and recovery_gateway use A12. Parent-loss watchdog semantics are
+owned by A12 ParentLifeline; actual SQLite lock release is tested. The old owner
+reservation pipe/proof and per-module stop algorithms/tests are deleted. Owner
+release receipts now contain typed Thread and admission witnesses, with no
+second PID or JSON-string Thread authority. Source accepts only the new format.
+
+Cutover preserves names, created_at, session provenance, aliases, goals and
+history. Clear pre-A12 process bindings and runtime release receipts, then
+relaunch under parent-owned quiet activation. S10/S9 must delete their lifted
+supervisors when adopting A12; full caller closure and quiet activation are
+required before declaring this surface complete.
