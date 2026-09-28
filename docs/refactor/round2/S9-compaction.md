@@ -8,7 +8,7 @@
 K1/K2/K3/K6 implemented in source; K4 manual adopted A12, direct-parent authority
 child pending shared A12 seam; K5 fresh startup metadata pending S10 declaration.
 A13 uses its original owner. Full receipt and dependency/deletion map:
-[evidence/s9/HANDOFF.md](../../../../evidence/s9/HANDOFF.md).
+[evidence/s9/HANDOFF.md](../../../evidence/s9/HANDOFF.md).
 S9 is not complete or install-ready: its permanent guards still identify these
 remaining mechanisms. Parent owns quiet journal reset and actual activation.
 

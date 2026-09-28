@@ -1,15 +1,18 @@
-# S9 implementation in progress
+## S9 K1–K6 (implementation remains active)
 
-Source batch: one PiCompactionSettings declaration, extracted package JavaScript,
-A2 helper results/admission identity, typed native summary metadata through commit.
-Deleted unreferenced selected_source_snapshot and the test-only selected slot exchange.
-Manual compaction writes only enabled:false; pinned Pi owns its token defaults.
+Full current handoff: evidence/s9/HANDOFF.md.
 
-Evidence: first-typed.log 82 passed/9 opt-in skips; reopen-current.log 10 passed.
-Native-typed.log 57 passed/1 failed: failed assertion expected the deleted internal
-constructor type check; its compatibility-only test has been deleted. No provider
-calls; tests use the pinned local native package and synthetic sessions.
+Implemented: one settings declaration; four packaged JS programs via A14/A12;
+five A13 journal tables and direct typed lifecycle readers/writers; typed native
+outcomes/admission metadata; manual AttachedChild adoption. Replaced parsers,
+column mirrors, schema migration and unreferenced snapshot/fake transport deleted.
 
-K3 journal declaration migration is in progress. K4/A14 will adopt A12 from PR232;
-A13 foundation PR230 merged into this branch, no second table implementation.
-This draft does not claim S9 complete or deployed. Parent owns reset/activation.
+Evidence: 107 passed/2 opt-in skips journal/boundary; 7 actual local native boundary
+cases; 42 manual/reopen/A14 cases; packaged wheel and read-only real96-row saved
+journal refusal/unchanged checks. Batches overlap. No provider/live changes.
+
+Still open (draft, not install-ready): A12 direct-parent inherited-authority API,
+then delete compaction child supervisor/launcher/watchdog; S10 strict startup
+metadata declarations, then remove fresh-session keysets. Shared A12 repeated
+cancellation cleanup fix also pending with232/234. Three S9 guard failures name
+exactly these remaining mechanisms; no exceptions. Parent owns quiet reset/install.
