@@ -95,6 +95,10 @@ class InputAttempt(DeclaredFamily, affix="Input"):
             self.admission == admission and self.unresolved and self.key != pending_key
         )
 
+    def finish_unbound(self) -> InputAttempt | None:
+        """Only an unbound attempt may become a known not-sent notice."""
+        return None
+
     @property
     def order(self) -> tuple[bool, int]:
         return self.sequence is None, self.sequence or 0
@@ -131,6 +135,13 @@ class InputAttempt(DeclaredFamily, affix="Input"):
 class UnknownInput(InputAttempt):
     unresolved = True
 
+    def finish_unbound(self) -> InputAttempt | None:
+        if self.native_id is not None or self.turn_id is not None or self.sent_text is not None:
+            return None
+        from dataclasses import fields
+
+        return NotSentInput(**{item.name: getattr(self, item.name) for item in fields(self)})
+
     def bind(
         self, *, admission: int, turn_id: str, native_id: str, text: str
     ) -> InputAttempt | None:
@@ -149,11 +160,30 @@ class UnknownInput(InputAttempt):
         return StartedInput(**{item.name: getattr(self, item.name) for item in fields(self)})
 
 
-class StartedInput(InputAttempt):
-    unresolved = False
+class TerminalInput(InputAttempt):
+    @property
+    @abstractmethod
+    def unresolved(self) -> bool: ...
 
     def bind(self, *, admission: int, turn_id: str, native_id: str, text: str) -> None:
         return None
 
     def started(self, *, turn_id: str, native_id: str, text: str) -> None:
         return None
+
+
+class StartedInput(TerminalInput):
+    unresolved = False
+
+
+class NotSentInput(TerminalInput):
+    """The turn ended before native binding; retained for explicit user retry."""
+
+    unresolved = True
+
+    @property
+    def unattempted(self) -> bool:
+        return False
+
+    def unsettled_for(self, owner: Thread, pending_key: str | None) -> bool:
+        return False

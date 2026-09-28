@@ -40,7 +40,7 @@ from .owner_compaction_settings import PiCompactionSettings
 from .pi_summary_payloads import SummaryFiles, SummaryUsage
 from .registration import Registration
 from .routing import DeliveryScope
-from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
+from .selected_summary_admission import SelectedAdmissionIdentity, SelectedAdmissionSource, SelectedSummaryAdmission
 from .session_fence import idle_session_writer_fence
 from .store_files import _store_lock
 from .threads import Thread
@@ -277,6 +277,7 @@ class OwnerCompactionCommit:
         )
         if prepared is None:
             return None
+        self.reconcile_interrupted_summaries(owner, owner_generation, prepared.witness)
         source = self.capture_source(
             owner,
             owner_generation,
@@ -285,6 +286,38 @@ class OwnerCompactionCommit:
             settings_paths=settings_paths,
         )
         return prepared, source
+
+    def reconcile_interrupted_summaries(
+        self, owner: Thread, owner_generation: int, witness: NativeWitness
+    ) -> None:
+        """Retire an interrupted summary only when no original input or write occurred.
+
+        The provider outcome remains UNKNOWN. A later explicit input may request
+        a new summary; neither this method nor the retired row replays anything.
+        """
+        with self._boundary(owner, owner_generation, witness, settled=False):
+            for attempt in self.journal.selected_summaries(witness.session_file):
+                if not attempt.state.reconcile_unchanged_source:
+                    continue
+                source = FieldCodec.decode(
+                    SelectedAdmissionSource, json.loads(attempt.source_json)["source"]
+                )
+                row = self.inputs._read_unlocked().rows.get(source.ingress_key)
+                if (
+                    source.owner_name != owner.name
+                    or source.owner_created_at != float(owner.created_at).hex()
+                    or source.turn_id == owner.active_turn.id
+                    or source.reserved_revision != _session_revision(witness.session_file)
+                    or row is None
+                    or row.owner != owner.name
+                    or row.admission != source.admission_generation
+                    or row.native_id is not None or row.turn_id is not None or row.sent_text is not None
+                    or hashlib.sha256(row.source_text.encode()).hexdigest() != source.original_sha256
+                ):
+                    raise CompactionJournalError(
+                        "Interrupted summary needs exact unchanged-session and unsent-input evidence"
+                    )
+                self.journal.retire_unchanged_summary(attempt)
 
     def _call(
         self, fd: int, request: dict, timeout: float, retained_fds: tuple[int, ...] = ()

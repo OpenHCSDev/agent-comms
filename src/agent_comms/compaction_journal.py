@@ -726,6 +726,23 @@ class CompactionJournal:
                 db, where="operation_id=?", parameters=(attempt.operation_id,), state=target
             )
 
+    def retire_unchanged_summary(self, attempt: SelectedSummaryAttempt) -> None:
+        """Bridge holds the native writer and exact owner/source/input fences."""
+        target = attempt.state.retire_unchanged_source()
+        with self._transaction() as db:
+            if SelectedSummaryAttempt.one(db, operation_id=attempt.operation_id) != attempt:
+                raise CompactionJournalError("Selected summary changed during reconciliation")
+            # Any commit intent is a different uncertainty domain. Even a
+            # terminal commit must be reconciled by its native commit owner.
+            if CompactionOperation.select(
+                db, where="session_file=? AND json_extract(intent_json, '$.selectedSummaryOperationId')=?",
+                parameters=(attempt.session_file, attempt.operation_id),
+            ):
+                raise CompactionJournalError("Native commit intent prevents summary retirement")
+            SelectedSummaryAttempt.update(
+                db, where="operation_id=?", parameters=(attempt.operation_id,), state=target
+            )
+
     def selected_summaries(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:
         """Inspect every recorded result without exposing model or input content."""
         canonical = str(Path(session_file).resolve(strict=True))
@@ -742,6 +759,16 @@ class CompactionJournal:
                 raise CompactionJournalError("Selected summary uncertainty transition forbidden")
             SelectedSummaryAttempt.update(
                 db, where="operation_id=?", parameters=(operation_id,), state=UnknownSummary()
+            )
+
+    def fail_selected_summary(self, operation_id: str, reason: str) -> None:
+        """Record the selected child's correlated no-write failure, never a send ACK."""
+        with self._transaction() as db:
+            row = SelectedSummaryAttempt.one(db, operation_id=operation_id)
+            if row is None:
+                raise CompactionJournalError("Unknown selected summary")
+            SelectedSummaryAttempt.update(
+                db, where="operation_id=?", parameters=(operation_id,), state=row.state.fail(reason)
             )
 
     def decline_selected_summary_prestart(
