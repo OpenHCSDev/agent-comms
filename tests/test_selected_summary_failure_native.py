@@ -24,8 +24,8 @@ from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_summary_payloads import SelectedModel
 from agent_comms.selected_pi_summary_rpc import (
     SelectedChildUnknown,
-    SelectedSummarySlot,
     SelectedSummaryFailed,
+    SelectedSummarySlot,
 )
 
 
