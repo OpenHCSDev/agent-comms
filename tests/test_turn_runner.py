@@ -211,7 +211,7 @@ async def test_compaction_fault_reaches_acp_client_without_original_send(
         "text": "Original stays unknown",
         "reason": str(failure),
     }
-    assert owner.inputs.dispositions.status(attempts[0]) == "unknown"
+    assert owner.inputs.dispositions.read().rows[attempts[0]].declared_name == "unknown"
     assert not owner.turns.turn_tasks and not owner.turns.active_turns
     assert not owner.inputs.backend_inboxes
 

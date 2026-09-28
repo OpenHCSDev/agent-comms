@@ -1,5 +1,6 @@
 """Provider-free durable pre-send selected-summary operation IDs and input gate."""
 
+
 import json
 import os
 import sqlite3
@@ -9,6 +10,8 @@ import threading
 from pathlib import Path
 
 import pytest
+
+from agent_comms.input_disposition import InputDispositions
 
 from agent_comms.compaction_journal import (
     CompactionJournal,
@@ -230,12 +233,20 @@ def test_private_raw_prewrite_parent_fsync_unknown_never_writes_or_retries(reser
 
 def test_link_requires_exact_committed_native_intent_binding(reserved):
     journal, session, source = reserved
-    wrong = journal.begin(session, {"selectedSummaryOperationId": "0" * 32})
+    wrong = journal.begin(
+        session,
+        {"selectedSummaryOperationId": "0" * 32},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     journal.resolve(wrong, CommittedOperation(), {"fixture": "metadata"})
     operation_id = journal.reserve_selected_summary(session, source)
     with pytest.raises(CompactionJournalError, match="Exact committed"):
         journal.link_selected_summary_commit(operation_id, wrong)
-    commit_id = journal.begin(session, {"selectedSummaryOperationId": operation_id})
+    commit_id = journal.begin(
+        session,
+        {"selectedSummaryOperationId": operation_id},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     with pytest.raises(CompactionJournalError, match="Exact committed"):
         journal.link_selected_summary_commit(operation_id, commit_id)
     journal.resolve(commit_id, CommittedOperation(), {"fixture": "metadata"})
@@ -245,7 +256,11 @@ def test_link_requires_exact_committed_native_intent_binding(reserved):
     assert journal.blocking_selected_summary(session) == (journal.selected_summary(operation_id),)
     assert not native_input_admitted(journal.path.parent, session)
     with pytest.raises(CompactionJournalError, match="unrelated native commit"):
-        journal.begin(session, {})
+        journal.begin(
+            session,
+            {},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
     with pytest.raises(CompactionJournalError, match="never replay"):
         journal.reserve_selected_summary(session, source, operation_id=operation_id)
     with pytest.raises(CompactionJournalError, match="transition|Exact committed"):
@@ -281,7 +296,11 @@ def test_predecessor_multiple_terminal_rows_migrate_without_wire_wide_denial(res
     with pytest.raises(CompactionJournalError, match="never replay"):
         migrated.reserve_selected_summary(session, source)
     with pytest.raises(CompactionJournalError, match="unrelated native commit"):
-        migrated.begin(session, {"selectedSummaryOperationId": first})
+        migrated.begin(
+            session,
+            {"selectedSummaryOperationId": first},
+            inputs=InputDispositions(migrated.path.parent / InputDispositions.filename).read(),
+        )
     assert {row.operation_id for row in migrated.blocking_selected_summary(session)} == {
         "a" * 32,
         "b" * 32,
@@ -354,15 +373,27 @@ def test_competing_native_begin_refused_unless_exact_reserved_operation_bound(re
     operation_id = journal.reserve_selected_summary(session, source)
     for intent in ({}, {"selectedSummaryOperationId": "f" * 32}):
         with pytest.raises(CompactionJournalError, match="unrelated native commit"):
-            journal.begin(session, intent)
+            journal.begin(
+                session,
+                intent,
+                inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+            )
     assert journal.unresolved(session) == ()
-    commit_id = journal.begin(session, {"selectedSummaryOperationId": operation_id})
+    commit_id = journal.begin(
+        session,
+        {"selectedSummaryOperationId": operation_id},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     assert journal.get(commit_id).state.declared_name == "intent"
     assert not native_input_admitted(journal.path.parent, session)
     journal.resolve(commit_id, AbortedNoWriteOperation(), {"status": "aborted-no-write"})
     journal.mark_selected_summary_unknown(operation_id)
     with pytest.raises(CompactionJournalError, match="unrelated native commit"):
-        journal.begin(session, {"selectedSummaryOperationId": operation_id})
+        journal.begin(
+            session,
+            {"selectedSummaryOperationId": operation_id},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
 
 
 @pytest.mark.parametrize("reason", ["split_turn", "unsupported"])
@@ -388,7 +419,11 @@ def test_terminal_postcommit_fsync_unknown_blocks_across_reopen(reserved, monkey
     journal, session, source = reserved
     operation_id = journal.reserve_selected_summary(session, source, operation_id="a" * 32)
     if terminal == "linked":
-        commit_id = journal.begin(session, {"selectedSummaryOperationId": operation_id})
+        commit_id = journal.begin(
+            session,
+            {"selectedSummaryOperationId": operation_id},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
         journal.resolve(commit_id, CommittedOperation(), {"fixture": "metadata"})
     original_fsync = os.fsync
 
@@ -428,7 +463,11 @@ def test_terminal_postcommit_fsync_unknown_blocks_across_reopen(reserved, monkey
     with pytest.raises(CompactionJournalError, match="never replay"):
         reopened.reserve_selected_summary(session, source)
     with pytest.raises(CompactionJournalError, match="unrelated native commit"):
-        reopened.begin(session, {})
+        reopened.begin(
+            session,
+            {},
+            inputs=InputDispositions(reopened.path.parent / InputDispositions.filename).read(),
+        )
 
 
 @pytest.mark.parametrize(
@@ -447,7 +486,11 @@ def test_uncertain_or_changed_source_decline_is_not_a_clean_skip(reserved, reaso
 
 def test_native_unknown_refuses_summary_reservation(reserved):
     journal, session, source = reserved
-    journal.begin(session, {"witness": "native"})
+    journal.begin(
+        session,
+        {"witness": "native"},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     with pytest.raises(CompactionJournalError, match="Unresolved native"):
         journal.reserve_selected_summary(session, source)
     assert journal.unresolved_selected_summary(session) == ()

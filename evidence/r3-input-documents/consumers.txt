@@ -1,0 +1,72 @@
+........................................F............................... [ 94%]
+..ss                                                                     [100%]
+=================================== FAILURES ===================================
+__________ test_hard_exit_after_direct_record_never_replays_on_reopen __________
+
+    @pytest.mark.skipif(os.name == "nt", reason="real crash test needs /var/tmp and POSIX sockets")
+    def test_hard_exit_after_direct_record_never_replays_on_reopen():
+        child_code = """
+    import asyncio, os, sys
+    from pathlib import Path
+    from agent_comms.threads import Thread
+    from agent_comms.input_drain import InputDrain
+    from agent_comms.acp import CommsAgent
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.comms import wire
+    
+    async def run():
+        comms = wire(Path(sys.argv[1]))
+        agent = CommsAgent(comms, agent_bin='/bin/echo', runtime_enabled=True)
+        await agent.new_session(sys.argv[2])
+        agent.inputs.drain_tasks['project'].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks['project'], return_exceptions=True)
+        agent.inputs.schedule_wake = lambda _session: None
+        comms.threads.register(Thread(name='peer', tags=frozenset(), worktree=sys.argv[2]))
+        comms.messaging.send('peer', 'project', 'survive hard exit')
+        await agent.inputs.drain_inbox('project')
+        assert InputDispositions(comms.root / InputDispositions.filename).read().rows['bus:1'].declared_name == 'unknown'
+        os._exit(0)
+    asyncio.run(run())
+    """
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as wire_dir:
+            project = str(Path(wire_dir) / "project")
+            environment = os.environ.copy()
+            for name in (
+                "PI_AGENT_ID",
+                "PI_PARENT_ID",
+                "PI_TASK",
+                "PI_WORKTREE",
+                "AGENT_COMMS_THREAD",
+                "AGENT_COMMS_MANAGED",
+                "AGENT_COMMS_ROOT",
+            ):
+                environment.pop(name, None)
+            environment["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
+            child = subprocess.run(
+                [sys.executable, "-c", child_code, wire_dir, project],
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            assert child.returncode == 0, child.stderr
+            reopened = wire(Path(wire_dir))
+            assert InputDispositions(reopened.root / InputDispositions.filename).read().rows["bus:1"].declared_name == "unknown"
+            owner = CommsAgent(reopened, agent_bin="/bin/echo")
+            owner.sessions.bindings["project"] = "project"
+>           owner.inputs.inbox_cursors["project"], owner.inputs.legacy_through["project"] = (
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                owner.inputs.delivery_cursors.initialize(
+                    frozenset({"project"}),
+                    "project",
+                    high_water=reopened.bus.log.latest_sequence(),
+                    fresh=False,
+                )
+            )
+E           TypeError: cannot unpack non-iterable DeliveryCursor object
+
+tests/test_acp_input_disposition.py:502: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_acp_input_disposition.py::test_hard_exit_after_direct_record_never_replays_on_reopen
+1 failed, 73 passed, 2 skipped in 25.71s

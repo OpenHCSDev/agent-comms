@@ -1,23 +1,16 @@
-"""Durable ACP input attempts and its transport cursor.
-
-An UNKNOWN row is never a request to retry. It records that a model input
-may have reached Pi. Only Pi's matching native user start can change it.
-"""
+"""Typed durable ACP attempts and transport cursors; never replay authority."""
 
 from __future__ import annotations
 
-import json
-import re
 from abc import ABC, abstractmethod
-from pathlib import Path
-from typing import Any
+from dataclasses import dataclass, field, replace
+from typing import ClassVar, Literal
 
 from .errors import RelationViolationError
+from .input_attempt import GoalInputDecision, InputAttempt, UnknownInput
+from .locked_store import LockedStore
 from .messages import Message
-from .store_files import _atomic_write_text, _store_lock
 from .threads import Thread
-
-_NATIVE_ID = re.compile(r"[0-9a-f]{32}\Z")
 
 
 class FutureInputQueue(ABC):
@@ -26,202 +19,150 @@ class FutureInputQueue(ABC):
     @abstractmethod
     def future_inputs(
         self, owner: Thread, pending_input_key: str | None
-    ) -> dict[str, dict[str, Any]]: ...
+    ) -> dict[str, InputAttempt]: ...
 
 
-class InputDispositions:
-    def __init__(self, root: Path) -> None:
-        self.path = root / "input_dispositions.json"
+@dataclass(frozen=True, slots=True)
+class InputDocument:
+    rows: dict[str, InputAttempt] = field(default_factory=dict, metadata={"wire_required": True})
+    version: Literal[1] = field(default=1, metadata={"wire_required": True})
 
-    @staticmethod
-    def bus_key(message: Message, owner: Thread) -> str:
-        """A channel sequence has one attempt per stable recipient incarnation."""
-        return message.response_policy.disposition_key(message, owner)
-
-    def _read(self) -> dict[str, dict[str, Any]]:
-        try:
-            value = json.loads(self.path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            return {}
-        if type(value) is not dict or value.get("version") != 1:
-            raise RelationViolationError("Invalid ACP input disposition ledger")
-        rows = value.get("rows")
-        if type(rows) is not dict or any(
-            type(key) is not str
-            or not key
-            or type(row) is not dict
-            or row.get("key") != key
-            or row.get("status") not in {"unknown", "started"}
-            or type(row.get("owner")) is not str
-            or type(row.get("admission")) is not int
-            or type(row.get("target")) is not str
-            or type(row.get("source_text")) is not str
-            or type(row.get("notice_dismissed", False)) is not bool
-            or (row.get("sequence") is not None and type(row.get("sequence")) is not int)
-            or (row.get("turn_id") is not None and type(row.get("turn_id")) is not str)
-            or (
-                row.get("native_id") is not None
-                and (
-                    type(row.get("native_id")) is not str
-                    or _NATIVE_ID.fullmatch(row["native_id"]) is None
-                )
-            )
-            or (row.get("sent_text") is not None and type(row.get("sent_text")) is not str)
-            for key, row in rows.items()
-        ):
-            raise RelationViolationError("Invalid ACP input disposition rows")
-        return rows
-
-    def _write(self, rows: dict[str, dict[str, Any]]) -> None:
-        _atomic_write_text(
-            self.path, json.dumps({"version": 1, "rows": rows}, sort_keys=True), fsync_parent=True
-        )
-
-    def record(
-        self,
-        key: str,
-        *,
-        seq: int | None,
-        owner: str,
-        admission: int,
-        target: str,
-        text: str,
-    ) -> bool:
-        """Persist UNKNOWN before cursor advance or any Pi prompt write."""
-        if (
-            type(text) is not str
-            or not key
-            or not owner
-            or not target
-            or not text
-            or admission <= 0
-        ):
-            raise ValueError("Invalid ACP input identity")
-        if seq is not None and (
-            seq <= 0 or (key != f"bus:{seq}" and not key.startswith(f"bus:{seq}:owner:"))
-        ):
-            raise ValueError("Bus input key and sequence disagree")
-        with _store_lock(self.path):
-            rows = self._read()
-            if key in rows:
-                return False
-            rows[key] = {
-                "key": key,
-                "sequence": seq,
-                "owner": owner,
-                "admission": admission,
-                "target": target,
-                "source_text": text,
-                "turn_id": None,
-                "native_id": None,
-                "sent_text": None,
-                "status": "unknown",
-            }
-            self._write(rows)
-            return True
+    def __post_init__(self) -> None:
+        if any(key != row.key for key, row in self.rows.items()):
+            raise ValueError("Input document key differs from its attempt")
 
     def compaction_rows(
         self, owner: Thread, pending_input_key: str | None, queue: FutureInputQueue | None = None
-    ) -> dict[str, dict[str, Any]]:
-        """Fence the current owner's source, exempting exact live future acceptances.
-
-        Call with the wire lock held. Queue receipts are minted only after
-        record() fsyncs and are withdrawn on clear/promotion/shutdown. Their
-        exact rows must still be unattempted. Foreign owners cannot correct
-        this original; their ingress is outside this source snapshot.
-        """
-        with _store_lock(self.path):
-            return self._compaction_rows_unlocked(owner, pending_input_key, queue)
-
-    def _compaction_rows_unlocked(
-        self, owner: Thread, pending_input_key: str | None, queue: FutureInputQueue | None
-    ) -> dict[str, dict[str, Any]]:
-        """Caller retains both the wire and disposition locks through native CAS."""
+    ) -> dict[str, InputAttempt]:
+        """Caller holds wire; native CAS additionally retains document lock."""
         assert owner.active_turn is not None
-        admission = owner.active_turn.admission_generation
-        rows = self._read()
-        pending = rows.get(pending_input_key) if pending_input_key else None
-        if pending_input_key is not None and (
-            not pending_input_key.startswith("acp:")
-            or pending is None
-            or pending["sequence"] is not None
-            or pending["target"] != owner.name
-            or pending["owner"] != owner.name
-            or pending["admission"] != admission
-            or pending["status"] != "unknown"
-            or pending["turn_id"] is not None
-            or pending["native_id"] is not None
-            or pending["sent_text"] is not None
-        ):
+        pending = self.rows.get(pending_input_key) if pending_input_key else None
+        if pending_input_key is not None and (pending is None or not pending.pending_for(owner)):
             raise RelationViolationError("Original owner input already attempted")
         future = queue.future_inputs(owner, pending_input_key) if queue is not None else {}
-        if any(rows.get(key) != receipt for key, receipt in future.items()):
+        if any(self.rows.get(key) != receipt for key, receipt in future.items()):
             raise RelationViolationError("Queued owner input changed after acceptance")
         relevant = {}
-        for key, row in rows.items():
-            if row["owner"] != owner.name:
+        for key, row in self.rows.items():
+            if row.owner != owner.name:
                 continue
-            if (
-                key != pending_input_key
-                and key in future
-                and (
-                    row == future[key]
-                    and row["admission"] == admission
-                    and row["status"] == "unknown"
-                    and row["sequence"] is None
-                    and row["target"] == owner.name
-                    and row["turn_id"] is None
-                    and row["native_id"] is None
-                    and row["sent_text"] is None
-                )
-            ):
+            if key != pending_input_key and key in future and row.pending_for(owner):
                 continue
-            if admission is None or (
-                row["admission"] == admission
-                and row["status"] == "unknown"
-                and key != pending_input_key
-            ):
+            if row.unsettled_for(owner, pending_input_key):
                 raise RelationViolationError("Unsettled owner input; compaction not dispatched")
             relevant[key] = row
         return relevant
 
+    def source_texts(self, keys: tuple[str, ...]) -> tuple[str, ...] | None:
+        if any(key not in self.rows for key in keys):
+            return None
+        return tuple(self.rows[key].source_text for key in keys)
+
+    def all_started(self, keys) -> bool:
+        return all((row := self.rows.get(key)) is not None and not row.unresolved for key in keys)
+
+    def unknown(self, owners: frozenset[str]) -> tuple[InputAttempt, ...]:
+        return tuple(
+            sorted(
+                (row for row in self.rows.values() if row.owner in owners and row.unresolved),
+                key=lambda row: row.order,
+            )
+        )
+
+    def bound_bus_inputs(self) -> tuple[InputAttempt, ...]:
+        return tuple(
+            row
+            for row in self.rows.values()
+            if row.sequence is not None and row.native_id is not None and row.sent_text is not None
+        )
+
+    def delivery_overview(
+        self,
+        owners: frozenset[str],
+        legacy_through: int,
+        *,
+        include_history: bool = False,
+        awaiting_keys: frozenset[str] | None = None,
+    ) -> dict:
+        current, historical = [], []
+        dismissed = historical_count = 0
+        for row in self.unknown(owners):
+            if row.earlier(legacy_through, awaiting_keys):
+                dismissed += int(row.notice_dismissed)
+                historical_count += int(not row.notice_dismissed)
+                if include_history:
+                    historical.append({**row.public(), "noticeDismissed": row.notice_dismissed})
+            else:
+                current.append(row.public())
+        return {
+            "inputs": current,
+            "historicalCount": historical_count,
+            "dismissedHistoricalCount": dismissed,
+            "historicalInputs": historical,
+            **({"currentScope": "owner_queue"} if awaiting_keys is not None else {}),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class InputDispositions(LockedStore[InputDocument]):
+    filename: ClassVar[str] = "input_dispositions.json"
+    json_sort_keys = True
+
+    @property
+    def record_type(self) -> type[InputDocument]:
+        return InputDocument
+
+    def empty(self) -> InputDocument:
+        return InputDocument()
+
+    @staticmethod
+    def bus_key(message: Message, owner: Thread) -> str:
+        return message.response_policy.disposition_key(message, owner)
+
+    def record(
+        self, key: str, *, seq: int | None, owner: str, admission: int, target: str, text: str
+    ) -> bool:
+        """Return acceptance only after UNKNOWN and its directory are fsynced."""
+        row = UnknownInput(key, seq, owner, admission, target, text)
+        recorded = False
+
+        def change(document: InputDocument) -> InputDocument:
+            nonlocal recorded
+            if key in document.rows:
+                return document
+            recorded = True
+            return replace(document, rows={**document.rows, key: row})
+
+        self.update(change)
+        return recorded
+
+    def _transition(self, key: str, change) -> bool:
+        changed = False
+
+        def update(document: InputDocument) -> InputDocument:
+            nonlocal changed
+            row = document.rows.get(key)
+            next_row = change(row) if row is not None else None
+            if next_row is None:
+                return document
+            changed = True
+            return replace(document, rows={**document.rows, key: next_row})
+
+        self.update(update)
+        return changed
+
     def bind(self, key: str, *, admission: int, turn_id: str, native_id: str, text: str) -> bool:
-        """Bind a single UNKNOWN attempt to Pi's private ID before its send."""
-        if not turn_id or _NATIVE_ID.fullmatch(native_id) is None:
-            raise ValueError("Invalid native input attempt")
-        with _store_lock(self.path):
-            rows = self._read()
-            row = rows.get(key)
-            if (
-                row is None
-                or row["status"] != "unknown"
-                or row["admission"] != admission
-                or row["native_id"] is not None
-            ):
-                return False
-            row["turn_id"] = turn_id
-            row["native_id"] = native_id
-            row["sent_text"] = text
-            self._write(rows)
-            return True
+        return self._transition(
+            key,
+            lambda row: row.bind(
+                admission=admission, turn_id=turn_id, native_id=native_id, text=text
+            ),
+        )
 
     def started(self, key: str, *, turn_id: str, native_id: str, text: str) -> bool:
-        """CAS UNKNOWN to STARTED only for the bound native user start."""
-        with _store_lock(self.path):
-            rows = self._read()
-            row = rows.get(key)
-            if row is None or any(
-                (
-                    row["status"] != "unknown",
-                    row["turn_id"] != turn_id,
-                    row["native_id"] != native_id,
-                    row["sent_text"] != text,
-                )
-            ):
-                return False
-            row["status"] = "started"
-            self._write(rows)
-            return True
+        return self._transition(
+            key, lambda row: row.started(turn_id=turn_id, native_id=native_id, text=text)
+        )
 
     def review_for_goal(
         self,
@@ -232,136 +173,27 @@ class InputDispositions:
         goal_revision: int,
         turn_id: str,
     ) -> None:
-        """Record an explicit wait decision, without claiming native start or replay."""
-        with _store_lock(self.path):
-            rows = self._read()
+        decision = GoalInputDecision(goal_revision, turn_id)
+
+        def review(document: InputDocument) -> InputDocument:
             if any(
-                key not in rows
-                or rows[key]["owner"] not in owners
-                or rows[key]["status"] != "unknown"
+                key not in document.rows
+                or document.rows[key].owner not in owners
+                or not document.rows[key].unresolved
                 for key in keys
             ):
                 raise ValueError("Reviewed inputs changed; inspect them again.")
-            for key in keys:
-                rows[key].setdefault("goal_reviews", {})[goal_id] = {
-                    "goal_revision": goal_revision,
-                    "turn_id": turn_id,
-                }
-            if keys:
-                self._write(rows)
-
-    @staticmethod
-    def reviewed_for_goal(row: dict[str, Any], goal_id: str) -> bool:
-        return goal_id in row.get("goal_reviews", {})
-
-    def status(self, key: str) -> str | None:
-        with _store_lock(self.path):
-            row = self._read().get(key)
-            return row["status"] if row is not None else None
-
-    def get(self, key: str) -> dict[str, Any] | None:
-        with _store_lock(self.path):
-            row = self._read().get(key)
-            return dict(row) if row is not None else None
-
-    def source_texts(self, keys: tuple[str, ...]) -> tuple[str, ...] | None:
-        """Read exact admitted texts, in caller order, from one ledger snapshot.
-
-        A missing input prevents batch validation. Reading these texts never
-        authorizes delivery or changes UNKNOWN to STARTED.
-        """
-        with _store_lock(self.path):
-            rows = self._read()
-            if any(key not in rows for key in keys):
-                return None
-            return tuple(rows[key]["source_text"] for key in keys)
-
-    @staticmethod
-    def public(row: dict[str, Any]) -> dict[str, Any]:
-        """Public delivery projection; native receipt authority stays private."""
-        return {
-            "inputId": row["key"].removeprefix("acp:"),
-            "sequence": row["sequence"],
-            "target": row["target"],
-            "text": row["source_text"],
-            "status": row["status"],
-            **(
-                {"reviewedForGoals": sorted(row["goal_reviews"])} if row.get("goal_reviews") else {}
-            ),
-        }
-
-    @staticmethod
-    def _historical(row: dict[str, Any], legacy_through: int) -> bool:
-        return (
-            row["sequence"] is not None
-            and row["sequence"] <= legacy_through
-            and row["native_id"] is None
-        )
-
-    @classmethod
-    def _earlier(
-        cls, row: dict[str, Any], legacy_through: int, awaiting_keys: frozenset[str] | None
-    ) -> bool:
-        # Missing owner context preserves the legacy projection. Only the live
-        # owner can identify which durable inputs its existing queues still await.
-        return (
-            row["key"] not in awaiting_keys
-            if awaiting_keys is not None
-            else cls._historical(row, legacy_through)
-        )
-
-    @classmethod
-    def _delivery_overview(
-        cls,
-        rows: dict[str, dict[str, Any]],
-        owners: frozenset[str],
-        legacy_through: int,
-        *,
-        include_history: bool = False,
-        awaiting_keys: frozenset[str] | None = None,
-    ) -> dict[str, Any]:
-        current = []
-        historical = []
-        dismissed = 0
-        historical_count = 0
-        ordered = sorted(
-            (row for row in rows.values() if row["owner"] in owners and row["status"] == "unknown"),
-            key=lambda row: (row["sequence"] is None, row["sequence"] or 0),
-        )
-        for row in ordered:
-            if cls._earlier(row, legacy_through, awaiting_keys):
-                notice_dismissed = row.get("notice_dismissed", False)
-                dismissed += int(notice_dismissed)
-                historical_count += int(not notice_dismissed)
-                if include_history:
-                    historical.append({**cls.public(row), "noticeDismissed": notice_dismissed})
-            else:
-                current.append(cls.public(row))
-        return {
-            "inputs": current,
-            "historicalCount": historical_count,
-            "dismissedHistoricalCount": dismissed,
-            "historicalInputs": historical,
-            **({"currentScope": "owner_queue"} if awaiting_keys is not None else {}),
-        }
-
-    def delivery_overview(
-        self,
-        owners: frozenset[str],
-        legacy_through: int,
-        *,
-        include_history: bool = False,
-        awaiting_keys: frozenset[str] | None = None,
-    ) -> dict[str, Any]:
-        """Project earlier notices separately; their bodies are opt-in."""
-        with _store_lock(self.path):
-            return self._delivery_overview(
-                self._read(),
-                owners,
-                legacy_through,
-                include_history=include_history,
-                awaiting_keys=awaiting_keys,
+            if not keys:
+                return document
+            return replace(
+                document,
+                rows={
+                    **document.rows,
+                    **{key: document.rows[key].review(goal_id, decision) for key in keys},
+                },
             )
+
+        self.update(review)
 
     def dismiss_historical(
         self,
@@ -369,124 +201,88 @@ class InputDispositions:
         legacy_through: int,
         *,
         awaiting_keys: frozenset[str] | None = None,
-    ) -> dict[str, Any]:
-        """Dismiss earlier notices, leaving delivery and goal authority intact."""
-        with _store_lock(self.path):
-            rows = self._read()
-            changed = False
-            for row in rows.values():
-                if (
-                    row["owner"] in owners
-                    and row["status"] == "unknown"
-                    and self._earlier(row, legacy_through, awaiting_keys)
-                    and not row.get("notice_dismissed", False)
-                ):
-                    row["notice_dismissed"] = True
-                    changed = True
-            if changed:
-                self._write(rows)
-            return self._delivery_overview(
-                rows, owners, legacy_through, awaiting_keys=awaiting_keys
-            )
+    ) -> dict:
+        def dismiss(document: InputDocument) -> InputDocument:
+            changed = {
+                row.key: replace(row, notice_dismissed=True)
+                for row in document.unknown(owners)
+                if row.earlier(legacy_through, awaiting_keys) and not row.notice_dismissed
+            }
+            return replace(document, rows={**document.rows, **changed}) if changed else document
 
-    def unknown(self, owners: frozenset[str]) -> list[dict[str, Any]]:
-        with _store_lock(self.path):
-            rows = (
-                dict(row)
-                for row in self._read().values()
-                if row["owner"] in owners and row["status"] == "unknown"
-            )
-            return sorted(rows, key=lambda row: (row["sequence"] is None, row["sequence"] or 0))
-
-    def bound_bus_inputs(self) -> list[dict[str, Any]]:
-        """Snapshot receipt-bound bus inputs for explicit presentation repair only."""
-        with _store_lock(self.path):
-            return [
-                dict(row)
-                for row in self._read().values()
-                if row["sequence"] is not None
-                and row["native_id"] is not None
-                and row["sent_text"] is not None
-            ]
-
-
-class AcpDeliveryCursors:
-    """ACP scheduling position, independent of human/UI read markers."""
-
-    def __init__(self, root: Path) -> None:
-        self.path = root / "acp_delivery_cursors.json"
-
-    def _read(self) -> dict[str, dict[str, int]]:
-        try:
-            value = json.loads(self.path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            return {}
-        if type(value) is not dict or value.get("version") != 1:
-            raise RelationViolationError("Invalid ACP delivery cursor ledger")
-        rows = value.get("rows")
-        if type(rows) is not dict or any(
-            type(name) is not str
-            or not name
-            or type(row) is not dict
-            or type(row.get("cursor")) is not int
-            or type(row.get("legacy_through")) is not int
-            or row["cursor"] < 0
-            or row["legacy_through"] < 0
-            for name, row in rows.items()
-        ):
-            raise RelationViolationError("Invalid ACP delivery cursor rows")
-        return rows
-
-    def _write(self, rows: dict[str, dict[str, int]]) -> None:
-        _atomic_write_text(
-            self.path, json.dumps({"version": 1, "rows": rows}, sort_keys=True), fsync_parent=True
+        return self.update(dismiss).delivery_overview(
+            owners, legacy_through, awaiting_keys=awaiting_keys
         )
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryCursor:
+    cursor: int = 0
+    legacy_through: int = 0
+
+    def __post_init__(self) -> None:
+        if self.cursor < 0 or self.legacy_through < 0:
+            raise ValueError("Invalid ACP delivery cursor")
+
+    def advance(self, through: int) -> DeliveryCursor:
+        if through < 0:
+            raise ValueError("Invalid ACP delivery cursor")
+        return replace(self, cursor=through) if through > self.cursor else self
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryDocument:
+    rows: dict[str, DeliveryCursor] = field(default_factory=dict, metadata={"wire_required": True})
+    version: Literal[1] = field(default=1, metadata={"wire_required": True})
+
+    def __post_init__(self) -> None:
+        if any(not name for name in self.rows):
+            raise ValueError("Empty ACP delivery cursor owner")
+
+    def owner_key(self, aliases: frozenset[str]) -> str | None:
+        matches = self.rows.keys() & aliases
+        if len(matches) > 1:
+            raise RelationViolationError("Ambiguous ACP delivery cursor after rename")
+        return next(iter(matches), None)
+
+    def boundary(self, aliases: frozenset[str]) -> DeliveryCursor:
+        key = self.owner_key(aliases)
+        return self.rows[key] if key is not None else DeliveryCursor()
+
+
+@dataclass(frozen=True, slots=True)
+class AcpDeliveryCursors(LockedStore[DeliveryDocument]):
+    filename: ClassVar[str] = "acp_delivery_cursors.json"
+    json_sort_keys = True
+
+    @property
+    def record_type(self) -> type[DeliveryDocument]:
+        return DeliveryDocument
+
+    def empty(self) -> DeliveryDocument:
+        return DeliveryDocument()
 
     def initialize(
         self, aliases: frozenset[str], owner: str, *, high_water: int, fresh: bool
-    ) -> tuple[int, int]:
-        with _store_lock(self.path):
-            rows = self._read()
-            matches = [name for name in rows if name in aliases]
-            if len(matches) > 1:
-                raise RelationViolationError("Ambiguous ACP delivery cursor after rename")
-            if matches:
-                row = rows[matches[0]]
-            else:
-                if high_water < 0:
-                    raise ValueError("Invalid bus high water")
-                row = {
-                    "cursor": high_water if fresh else 0,
-                    "legacy_through": 0 if fresh else high_water,
-                }
-                rows[owner] = row
-                self._write(rows)
-            return row["cursor"], row["legacy_through"]
+    ) -> DeliveryCursor:
+        def initialize(document: DeliveryDocument) -> DeliveryDocument:
+            if document.owner_key(aliases) is not None:
+                return document
+            row = DeliveryCursor(high_water if fresh else 0, 0 if fresh else high_water)
+            return replace(document, rows={**document.rows, owner: row})
+
+        return self.update(initialize).boundary(aliases | {owner})
 
     def advance(self, aliases: frozenset[str], through: int) -> None:
-        if through < 0:
-            raise ValueError("Invalid ACP delivery cursor")
-        with _store_lock(self.path):
-            rows = self._read()
-            matches = [name for name in rows if name in aliases]
-            if len(matches) != 1:
+
+        def advance(document: DeliveryDocument) -> DeliveryDocument:
+            key = document.owner_key(aliases)
+            if key is None:
                 raise RelationViolationError("Missing or ambiguous ACP delivery cursor")
-            row = rows[matches[0]]
-            if through > row["cursor"]:
-                row["cursor"] = through
-                self._write(rows)
+            previous = document.rows[key]
+            row = previous.advance(through)
+            return (
+                document if row is previous else replace(document, rows={**document.rows, key: row})
+            )
 
-    def cursor(self, aliases: frozenset[str]) -> int:
-        """Read the scheduling boundary without creating or advancing it."""
-        return self._boundary(aliases, "cursor")
-
-    def legacy_through(self, aliases: frozenset[str]) -> int:
-        """Read the durable migration boundary without inventing one for fresh owners."""
-        return self._boundary(aliases, "legacy_through")
-
-    def _boundary(self, aliases: frozenset[str], field: str) -> int:
-        with _store_lock(self.path):
-            rows = [row for name, row in self._read().items() if name in aliases]
-            if len(rows) > 1:
-                raise RelationViolationError("Ambiguous ACP delivery cursor after rename")
-            return rows[0][field] if rows else 0
+        self.update(advance)
