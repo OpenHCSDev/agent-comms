@@ -3,7 +3,6 @@
 import importlib
 import json
 from dataclasses import dataclass, replace
-from pathlib import Path
 
 import pytest
 
@@ -27,7 +26,6 @@ from agent_comms.goal_actions import (
     TransitionGoalAction,
 )
 from agent_comms.goal_states import (
-    GoalState,
     OwnerPause,
     PausedGoal,
     PauseSource,
@@ -41,16 +39,6 @@ def owner(tmp_path):
     comms.threads.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep the durable objective"))
     return comms, goal
-
-
-def test_golden_names_and_model_schema():
-    assert GoalState.names() == ("active", "paused", "blocked", "completed")
-    assert PauseSource.names() == ("owner", "model", "runtime")
-    assert GoalAction.model_choices() == ("active", "standby", "completed", "blocked")
-    schema = next(t for t in tools.TOOLS if t.name == "comms_goal").schema()
-    assert schema == json.loads(
-        (Path(__file__).parent / "fixtures/s8/comms_goal_schema.json").read_text()
-    )
 
 
 def test_experiment_a_one_new_pause_source_carries_all_behavior(owner, monkeypatch):

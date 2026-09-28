@@ -99,15 +99,11 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     def order(self) -> tuple[bool, int]:
         return self.sequence is None, self.sequence or 0
 
-    def earlier(self, legacy_through: int, awaiting_keys: frozenset[str] | None) -> bool:
-        # Only a live owner can identify its actual process-local queues.
-        return (
-            self.key not in awaiting_keys
-            if awaiting_keys is not None
-            else self.sequence is not None
-            and self.sequence <= legacy_through
-            and self.native_id is None
-        )
+    def historical_notice(self, awaiting_keys: frozenset[str] | None) -> bool:
+        """Only current owner queue facts can retire an unresolved notice."""
+        if awaiting_keys is None:
+            return self.notice_dismissed
+        return self.key not in awaiting_keys
 
     def reviewed_for_goal(self, goal_id: str) -> bool:
         return goal_id in self.goal_reviews
