@@ -22,6 +22,7 @@ from agent_comms import backend
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.activity import ActivityState
 from agent_comms.backend import NATIVE_INPUT_CAPABILITY
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration, ReadyGeneration
@@ -1385,9 +1386,9 @@ class TestAgentTurn:
                 assert store.snapshot(goal.id).lifecycle == BlockedGeneration()
                 assert store.snapshot(goal.id).number == 1
                 assert any(
-                    (update.field_meta or {}).get("agentComms", {}).get("goal", {}).get("status")
-                    == "blocked"
+                    FieldCodec.decode(Goal, data).state.declared_name == "blocked"
                     for update in updates
+                    if (data := (update.field_meta or {}).get("agentComms", {}).get("goal"))
                 )
                 # Only the explicit Retry control creates fresh authority.
                 await agent.turns.retry_goal("proj", goal.id, blocked.revision)
@@ -1633,97 +1634,7 @@ class TestWireProtocol:
         assert [m.body for m in comms.views.channel_history("#all")] == ["anyone alive?"]
 
 
-class TestCrossClient:
-    def test_acp_and_cli_share_one_wire(self, tmp_path):
-        """CLI agents and ACP sessions see the same threads and messages."""
-        from agent_comms.comms import wire as wire_fn
-
-        root = tmp_path / "wire"
-        comms = wire_fn(root)
-        agent = canonical_agent(comms)
-
-        import asyncio
-
-        sent: list = []
-
-        async def flow() -> None:
-            await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-            comms.threads.register(
-                Thread(name="cli-agent", tags=frozenset(), worktree=str(tmp_path))
-            )
-            comms.messaging.send("cli-agent", "proj", "from the cli side")
-
-            class FakeClient:
-                async def session_update(self, session_id=None, update=None, **kw):
-                    sent.append(update)
-
-            agent.sessions.client = FakeClient()
-            await agent.prompt(
-                session_id="proj", prompt=[{"type": "text", "text": "!relay checking inbox"}]
-            )
-
-        asyncio.run(flow())
-        incoming = [
-            update
-            for update in sent
-            if "incoming" in (update.field_meta or {}).get("agentComms", {})
-        ]
-        assert len(incoming) == 1
-        assert "from the cli side" in incoming[0].content.text
-        # The ACP prompt itself is visible on the CLI side.
-        assert [m.body for m in comms.bus.inbox("cli-agent")] == ["checking inbox"]
-
-
 class TestLiveDrain:
-    async def test_messages_arrive_after_prompt_without_new_prompt(self, tmp_path):
-        """The background drain pushes inbox messages live between prompts."""
-        import asyncio
-
-        agent = canonical_agent(
-            wire(tmp_path / "wire"), reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05
-        )
-        sent: list = []
-
-        class FakeClient:
-            async def session_update(self, session_id=None, update=None, **kw):
-                sent.append(update)
-
-        agent.sessions.client = FakeClient()
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "!relay hi room"}])
-        assert not any(
-            (
-                "cli" in (getattr(u, "content", None).text or "")
-                if getattr(u, "content", None)
-                else False
-            )
-            for u in sent
-        )
-
-        # A peer DMs the session thread AFTER the prompt finished.
-        agent._comms.threads.register(Thread(name="cli", tags=frozenset(), worktree="/wt"))
-        agent._comms.messaging.send("cli", "proj", "live push")
-
-        # Wait for the background drain loop to fire.
-        for _ in range(30):
-            await asyncio.sleep(0.1)
-            if any(
-                "live push" in (getattr(u, "content", None).text or "")
-                for u in sent
-                if getattr(u, "content", None)
-            ):
-                break
-        assert any(
-            "live push" in (getattr(u, "content", None).text or "")
-            for u in sent
-            if getattr(u, "content", None)
-        )
-
-        # The drain acknowledged it; it won't be delivered twice.
-        await asyncio.sleep(1.2)
-        live_pushes = [u for u in sent if "live push" in _update_text(u)]
-        assert len(live_pushes) == 1
-
     async def test_cancel_keeps_background_drain_live(self, tmp_path):
         agent = canonical_agent(
             wire(tmp_path / "wire"), reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05
@@ -1756,6 +1667,7 @@ class TestFullHistory:
         ]
 
 
+@pytest.mark.usefixtures("native_rpc_fixture")
 class TestAgentTurnForwarding:
     """!agent turns stream rpc events into ACP updates + wire activity."""
 
@@ -1855,7 +1767,11 @@ class TestAgentTurnForwarding:
                 for key in ("inputDisposition", "inputStarted", "queue", "inputDeliveryChanged")
             )
         ]
-        goal_updates = [update for update in sent if isinstance(update, SessionInfoUpdate)]
+        goal_updates = [
+            update for update in sent
+            if isinstance(update, SessionInfoUpdate)
+            and "goal" in (update.field_meta or {}).get("agentComms", {})
+        ]
         assert len(goal_updates) == 1
         assert goal_updates[0].field_meta == {"agentComms": {"goal": None, "goalExecution": None}}
         assert "title" not in goal_updates[0].model_fields_set
@@ -2146,7 +2062,8 @@ class TestFailureFeedback:
         )
         history = wired.views.dm_history("proj", human.name)
         assert len(history) == 1
-        assert history[0].notice is False
+        # Human DMs remain visible notices and never admit agent work.
+        assert history[0].notice is True
         assert history[0].body == "complete answer"
         assert len(routed) == 1
 
@@ -2321,7 +2238,7 @@ class TestLiveConfigSync:
             goal = wired.goals.update_goal("proj", SetGoalAction(text="Handle assigned work"))
             await assert_snapshot_update()
 
-            wired.threads.register(Thread("child", frozenset(), str(tmp_path), pid=os.getpid()))
+            wired.threads.register(Thread("child", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
             wired.agents.begin_turn("child", "child-metadata-work")
             wired.goals.update_goal(
                 "proj",

@@ -34,6 +34,7 @@ from .selected_summary_admission import SelectedSummaryAdmission
 from .session_lifecycle import SessionLifecycle
 from .store_files import _store_lock, file_revision
 from .threads import Thread
+from .wake import derive_exact_reply_target
 from .wire_watch import open_wire_watcher
 
 AGENT_PREFIX = "!agent "
@@ -404,7 +405,9 @@ class InputDrain(FutureInputQueue):
                             "\n\n".join(turn.prompt for turn in pending),
                             reply_targets=tuple(
                                 dict.fromkeys(
-                                    turn.reply_target for turn in pending if turn.reply_target
+                                    target
+                                    for turn in pending
+                                    if (target := derive_exact_reply_target(turn.origin))
                                 )
                             ),
                             origins=tuple(

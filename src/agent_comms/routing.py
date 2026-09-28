@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from .channel_targets import is_channel_target
 from .messages import Message
+from .wake import derive_exact_reply_target
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
@@ -93,7 +94,8 @@ class ScheduledTurn:
             (
                 index
                 for index, turn in enumerate(pending)
-                if turn.reply_target != pending[0].reply_target
+                if derive_exact_reply_target(turn.origin)
+                != derive_exact_reply_target(pending[0].origin)
                 or (turn.origin and turn.origin.response_policy.separate_turn)
             ),
             len(pending),
