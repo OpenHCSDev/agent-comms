@@ -18,7 +18,6 @@ import asyncio
 import getpass
 import json
 import os
-import re
 import secrets
 import tempfile
 import unicodedata
@@ -31,10 +30,12 @@ from typing import Any
 from . import agent_events as events
 from . import pi_commands as commands
 from . import pi_events as pi
+from . import pi_payloads
 from . import turn_failure as failures
 from . import turn_phase as phases
 from .child_process import AttachedChild, BoundedRun, TimedOutOutcome
 from .diagnostics import FailureReason
+from .field_codec import FieldCodec
 from .image_inputs import ImageInput
 from .maintenance_barrier import MaintenanceBarrier
 from .native_pi import CAPABILITY as NATIVE_INPUT_CAPABILITY
@@ -80,19 +81,6 @@ RPC_ABORT_GRACE_SECONDS = 2.0
 CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS = NATIVE_STARTUP_POLICY.readiness_seconds
 PROMPT_START_TIMEOUT_SECONDS = 180.0
 _IDENTITY_FAILURE_TEXT = "Pi session identity changed during this turn."
-_MCP_LIVE_STATES = frozenset(
-    {
-        "ready",
-        "error",
-        "disabled",
-        "trust_required",
-        "unsupported_env",
-        "denied",
-        "stale_restart_required",
-        "connecting",
-        "approved",
-    }
-)
 
 
 def _unique_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -104,7 +92,9 @@ def _unique_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def _pi_mcp_live_receipt(payload: pi.ExtensionUiRequest, input_id: str) -> dict[str, Any] | None:
+def _pi_mcp_live_receipt(
+    payload: pi.ExtensionUiRequest, input_id: str
+) -> pi_payloads.McpLiveReceipt | None:
     """Project only a bounded package claim from the same Pi child and native input.
 
     This is observed live status, never MCP approval or call authorization. A
@@ -120,54 +110,11 @@ def _pi_mcp_live_receipt(payload: pi.ExtensionUiRequest, input_id: str) -> dict[
         data = json.loads(text, object_pairs_hook=_unique_json_pairs)
     except (ValueError, TypeError):
         return None
-    if (
-        not isinstance(data, dict)
-        or set(data) != {"version", "source", "inputId", "state", "lifetime", "servers"}
-        or type(data["version"]) is not int
-        or data["version"] != 1
-        or (
-            data["source"] != "pi-mcp-client"
-            or data["state"] != "running"
-            or data["lifetime"] != "turn"
-            or data["inputId"] != input_id
-            or not isinstance(data["servers"], list)
-            or len(data["servers"]) > 32
-        )
-    ):
+    try:
+        receipt = FieldCodec.decode(pi_payloads.McpLiveReceipt, data)
+    except (TypeError, ValueError):
         return None
-    seen: set[str] = set()
-    for row in data["servers"]:
-        if not isinstance(row, dict) or set(row) != {
-            "id",
-            "scope",
-            "state",
-            "calls",
-            "tools",
-            "resources",
-            "prompts",
-        }:
-            return None
-        if (
-            not isinstance(row["id"], str)
-            or not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", row["id"])
-            or row["id"] in seen
-            or type(row["scope"]) is not str
-            or (
-                row["scope"] not in {"user", "project"}
-                or type(row["state"]) is not str
-                or row["state"] not in _MCP_LIVE_STATES
-                or type(row["calls"]) is not str
-                or row["calls"] not in {"automatic", "confirm", "unavailable"}
-            )
-        ):
-            return None
-        seen.add(row["id"])
-        if (row["state"] == "ready") != (row["calls"] != "unavailable"):
-            return None
-        for key in ("tools", "resources", "prompts"):
-            if type(row[key]) is not int or not 0 <= row[key] <= 10_000:
-                return None
-    return data
+    return receipt if receipt.input_id == input_id else None
 
 
 _FileRevision = tuple[int, int, int, int, int]

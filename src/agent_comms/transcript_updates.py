@@ -1,22 +1,26 @@
 """Typed ACP replay boundary for existing saved-history projections.
 
-Snapshot clients receive typed saved presentation facts. Standard ACP text
-clients receive each fact's declared replay update; silent presentation facts
-do not enter the live event stream.
+Saved presentation facts cross the paired ACP boundary as typed snapshots.
+Silent presentation facts do not enter the live event stream.
 """
 
 from __future__ import annotations
 
 import asyncio
 from abc import abstractmethod
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Any
 
 from acp.schema import AgentMessageChunk, TextContentBlock, UserMessageChunk
 
+from .acp_extension import (
+    TextRouteUpdate,
+    TranscriptSnapshotUpdate,
+    TurnStartedUpdate,
+    encode_updates,
+)
 from .comms import Comms
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
 from .routing import MessageRoute
 from .runtime import RuntimeServer
 
@@ -60,9 +64,7 @@ class AgentTextTranscriptUpdate(TranscriptUpdate):
                 update=AgentMessageChunk(
                     session_update="agent_message_chunk",
                     content=TextContentBlock(type="text", text=self.text),
-                    field_meta={
-                        "agentComms": {"route": asdict(self.route) if self.route else None}
-                    },
+                    field_meta=encode_updates(TextRouteUpdate(self.route)),
                 ),
             )
 
@@ -75,21 +77,18 @@ class StartedTranscriptUpdate(TranscriptUpdate):
     activity_detail: str | None = None
 
     async def publish(self, session_id: str, client: Any) -> None:
-        lifecycle = {
-            "turnStarted": True,
-            "turnId": self.turn_id,
-            **({"startedAt": self.started_at} if self.started_at is not None else {}),
-            **({"activity": self.activity} if self.activity is not None else {}),
-            **(
-                {"activityDetail": self.activity_detail} if self.activity_detail is not None else {}
-            ),
-        }
+        if self.turn_id is None:
+            return
         await client.session_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta={"agentComms": lifecycle},
+                field_meta=encode_updates(
+                    TurnStartedUpdate(
+                        self.turn_id, self.started_at, self.activity, self.activity_detail
+                    )
+                ),
             ),
         )
 
@@ -97,38 +96,15 @@ class StartedTranscriptUpdate(TranscriptUpdate):
 class TranscriptReplay:
     def __init__(self, comms: Comms, runtime: RuntimeServer):
         self.comms, self.runtime = comms, runtime
-        self.snapshots = False
 
-    async def replay(
-        self,
-        session_id: str,
-        name: str,
-        client: Any = None,
-        *,
-        snapshots: bool | None = None,
-    ) -> None:
-        use_snapshots = (
-            (self.snapshots if client is None else getattr(client, "transcript_snapshots", False))
-            if snapshots is None
-            else snapshots is True
-        )
+    async def replay(self, session_id: str, name: str, client: Any = None) -> None:
         destination = client or self.runtime
-        if use_snapshots:
-            page = await asyncio.to_thread(self.comms.transcripts.thread_transcript_page, name)
-            await destination.session_update(
-                session_id=session_id,
-                update=AgentMessageChunk(
-                    session_update="agent_message_chunk",
-                    content=TextContentBlock(type="text", text=""),
-                    field_meta={
-                        "agentComms": {
-                            "transcript": [FieldCodec.encode(event) for event in page.events],
-                            "transcriptPage": page.metadata(),
-                        }
-                    },
-                ),
-            )
-            return
-        events = await asyncio.to_thread(self.comms.transcripts.thread_transcript, name)
-        for event in events:
-            await event.replay_update().publish(session_id, destination)
+        page = await asyncio.to_thread(self.comms.transcripts.thread_transcript_page, name)
+        await destination.session_update(
+            session_id=session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=""),
+                field_meta=encode_updates(TranscriptSnapshotUpdate(page)),
+            ),
+        )
