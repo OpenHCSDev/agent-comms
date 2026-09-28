@@ -10,12 +10,12 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms import (
+    AnyOfMatch,
     Message,
     MessageType,
     SavedView,
     Thread,
     ViewKind,
-    ViewMatch,
     ViewPredicate,
     wire,
 )
@@ -76,7 +76,7 @@ def test_mode_rejects_builtins_union_view_and_unknown_without_sidecar_mutation(t
     comms = populated(tmp_path)
     comms.set_channel("engineering", frozenset({"api", "ui"}))
     comms.set_saved_view(
-        SavedView("saved", ViewKind.ACTIVITY, ViewPredicate(ViewMatch.ANY_OF, frozenset({"api"})))
+        SavedView("saved", ViewKind.ACTIVITY, ViewPredicate(AnyOfMatch, frozenset({"api"})))
     )
     metadata = comms.channel_catalog.metadata_path
     before = metadata.read_bytes() if metadata.exists() else None

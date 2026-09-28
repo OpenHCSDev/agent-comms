@@ -19,6 +19,7 @@ from .declarations import (
     _store_lock,
     file_revision,
 )
+from .field_codec import FieldCodec
 from .registration import Registration
 
 
@@ -154,7 +155,11 @@ class ChannelCatalog:
                     for name, tags in raw.get("channels", {}).items()
                 }
                 views = {
-                    name: SavedView.from_wire(name, value)
+                    # The catalog key owns the name. Missing historical dates
+                    # remain unknown (zero), rather than becoming today's date.
+                    name: FieldCodec.decode(
+                        SavedView, dict(name=name, **{"created_at": 0.0, **value})
+                    )
                     for name, value in saved_views.get("views", {}).items()
                 }
                 self._tags, self._channels, self._saved_views, self._revision = (
@@ -231,9 +236,7 @@ class ChannelCatalog:
                 json.dumps(
                     {
                         "views": {
-                            name: {
-                                key: value for key, value in view.to_wire().items() if key != "name"
-                            }
+                            name: FieldCodec.project(view, "catalog")
                             for name, view in sorted(self._saved_views.items())
                         }
                     },
