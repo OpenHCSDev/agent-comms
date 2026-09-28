@@ -550,7 +550,7 @@ class ThreadRelationships:
                     else message.target
                 )
                 outbound.setdefault(key, entry(message.target, message=message, detail=detail))
-            elif delivery.delivers(message):
+            elif delivery.delivers(message.sender, message.target):
                 # Expose both the sender and the actual channel, not a fake author.
                 inbound.setdefault(
                     canonical(message.sender), entry(message.sender, message=message, detail=detail)
