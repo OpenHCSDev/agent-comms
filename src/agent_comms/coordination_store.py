@@ -45,6 +45,7 @@ from .coordination import (
     OwnerGenerations,
     ParticipantAliases,
     Participants,
+    PrivateRuntimeSchema,
     PublicationIntents,
     PublicationReceipt,
     PublicationReceipts,
@@ -315,6 +316,16 @@ class MutationStore(CoordinationStore):
     ) -> None:
         super().__init__(path, lock_timeout=lock_timeout)
         self._clock_ms = clock_ms or (lambda: time.time_ns() // 1_000_000)
+
+    def install_private_runtime(self) -> None:
+        """Explicit protocol/owner bootstrap, never invoked by a reader."""
+        # Load the canonical declarations before querying their existing family.
+        from . import cohort_schema, coordination_response, native_prompt_binding  # noqa: F401
+        from .native_runtime_input import NativeRuntimeSchemaMeta  # noqa: F401
+        from .typed_table import TypedTable
+
+        for schema in TypedTable.members_with(PrivateRuntimeSchema):
+            schema.install(self)
 
     def _now(self, floor: int = 0) -> int:
         now = self._clock_ms()

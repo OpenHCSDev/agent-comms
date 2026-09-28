@@ -15,7 +15,7 @@ from pathlib import Path
 
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination import WakeAssignment
+from .coordination import PrivateRuntimeSchema, WakeAssignment
 from .coordination_store import IdentityConflict, MutationStore
 from .native_pi import _INPUT_ID, NativePiUnavailable, read_tracked_input_digest
 from .native_runtime_input import NativeRuntimeInput
@@ -34,7 +34,11 @@ def binding_store_path(store: MutationStore) -> Path:
 
 
 @dataclass(frozen=True, slots=True)
-class PromptBinding(TypedTable):
+class PromptBinding(TypedTable, PrivateRuntimeSchema):
+    @classmethod
+    def install(cls, store) -> None:
+        install_prompt_binding_schema(store)
+
     input_id: str = field(
         metadata={
             "sql": Column(

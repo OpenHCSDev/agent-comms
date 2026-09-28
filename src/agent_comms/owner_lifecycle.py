@@ -275,13 +275,13 @@ class OwnerLifecycle:
                 # The default stock binary cannot attest native input IDs.
                 # Keep the owner on this installation's pinned Pi entrypoint.
                 agent_bin = str(Path(sys.executable).with_name("pi-comms-native"))
-            # Cutover stages its owners up front, but a later owner can be
-            # registered on the active route. The cohort reader needs this
-            # same immutable creation identity before the worker can wake.
+            # Explicit launch installs the current runtime before registering
+            # this owner. Readers never create or repair runtime schemas.
             from .bus_publication import stable_thread_lookup
             from .coordination_store import MutationStore
 
             with MutationStore(str(self.root / "coordination.sqlite3")) as store:
+                store.install_private_runtime()
                 store.register_participant(
                     stable_thread_lookup(thread.created_at),
                     thread.name,

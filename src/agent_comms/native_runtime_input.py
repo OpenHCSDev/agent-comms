@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from .coordination import ExecutionRecord, Participants, WakeAssignment
+from .coordination import ExecutionRecord, Participants, PrivateRuntimeSchema, WakeAssignment
 from .typed_table import Column, TypedTable
 
 
@@ -18,7 +18,13 @@ class NativeRuntimeTable:
 
 
 @dataclass(frozen=True)
-class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable):
+class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSchema):
+    @classmethod
+    def install(cls, store) -> None:
+        from .coordinated_runtime_schema import install_native_runtime_schema
+
+        install_native_runtime_schema(store)
+
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True, check="singleton=1")})
     version: Literal[4]
     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})

@@ -11,6 +11,7 @@ from typing import Literal
 from .coordination import (
     COORDINATION_SCHEMA_VERSION,
     Participants,
+    PrivateRuntimeSchema,
     SchemaVersionError,
     WakeAssignment,
 )
@@ -38,7 +39,11 @@ class AwarenessTable:
 
 
 @dataclass(frozen=True, kw_only=True)
-class CohortSchemaMeta(CohortTable, TypedTable):
+class CohortSchemaMeta(CohortTable, TypedTable, PrivateRuntimeSchema):
+    @classmethod
+    def install(cls, store) -> None:
+        install_private_cohort_schema(store)
+
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
     version: Literal[2]
     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest) = 64")})
