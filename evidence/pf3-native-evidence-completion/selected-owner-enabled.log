@@ -1,0 +1,2946 @@
+command: ['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-m', 'pytest', '-q', '-o', 'addopts=', 'tests/test_selected_owner_compaction_integration.py']
+FFsFsFFFFFsFsFFFFFFFF                                                    [100%]
+=================================== FAILURES ===================================
+____ test_selected_native_summary_commits_and_admits_original_exactly_once _____
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_selected_native_summary_c0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4af1430e90>
+
+    async def test_selected_native_summary_commits_and_admits_original_exactly_once(
+        tmp_path, monkeypatch
+    ):
+        async with owner_fixture(tmp_path, monkeypatch) as (
+            persistent,
+            registry,
+            inputs,
+            file,
+            launcher,
+            info,
+        ):
+            admitted = []
+            assert (
+>               await maybe_compact_owner_turn(
+                    registry,
+                    launcher,
+                    "owner",
+                    "turn",
+                    info,
+                    "acp:original",
+                    persistent,
+                    input_text="Continue",
+                    on_admission=admitted.append,
+                )
+                is True
+            )
+
+tests/test_selected_owner_compaction_integration.py:143: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+_ test_acp_selected_summary_handoff_uses_final_prompt_once[summary-False-False-ordinary] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_acp_selected_summary_hand0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4af14c45f0>
+correction = False, real_host = False, clean_decline = False
+private_session = False
+
+    @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+    @pytest.mark.parametrize("correction", [False, True])
+    @pytest.mark.parametrize("real_host", [False, True])
+    @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
+    async def test_acp_selected_summary_handoff_uses_final_prompt_once(
+        tmp_path, monkeypatch, correction, real_host, clean_decline, private_session
+    ):
+        original_key = "acp:original-proj" if private_session else "acp:original"
+        from dataclasses import replace
+    
+        from agent_comms import backend
+        from agent_comms.acp import CommsAgent
+        from agent_comms.comms import wire
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.goal_attempts import GoalAttemptStore
+        from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+    
+        if private_session:
+            if not real_host:
+                pytest.skip("Private-session coverage needs the real SDK host")
+            monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
+        if clean_decline:
+            monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
+        async with owner_fixture(tmp_path, monkeypatch, real_host=real_host) as (
+            persistent,
+            _registry,
+            _inputs,
+            file,
+            launcher,
+            info,
+        ):
+            root = tmp_path if private_session else tmp_path / "acp-wire"
+            comms = wire(root)
+            project = tmp_path / "proj"
+            project.mkdir()
+    
+            class Client:
+                async def session_update(self, **kwargs):
+                    pass
+    
+            agent = CommsAgent(
+                comms,
+                agent_bin=launcher,
+                agent_args=[],
+                runtime_enabled=True,
+                auto_wake=False,
+            )
+            agent.on_connect(Client())
+            await agent.new_session(cwd=str(project), mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            comms.registry.register(
+                replace(
+                    comms.registry.require("proj"),
+                    goal=Goal("retain history", "goal-acp"),
+                    session_file=file,
+                    model=info.model,
+                    pid=os.getpid(),
+                )
+            )
+            comms.agents.set_agent_info(
+                "proj",
+                model=info.model,
+                context_used=info.context_used,
+                context_size=info.context_size,
+            )
+            private = root / "goal-private"
+            private.mkdir(mode=0o700)
+            store = GoalAttemptStore.initialize(private)
+            store.create_goal("goal-acp")
+            agent.turns.goal_store = store
+            agent.turns.persistent_backends["proj"] = persistent
+            dispositions = InputDispositions(root / InputDispositions.filename)
+            if private_session:
+                record_fixture_history(
+                    dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
+                )
+            dispositions.record(
+                original_key,
+                seq=None,
+                owner="proj",
+                admission=comms.registry.snapshot().admission_generations["proj"],
+                target="proj",
+                text="Continue",
+            )
+            selected_exchange = SelectedSummarySlot.run_selected_summary
+            summary_ids = []
+    
+            async def selected_with_correction(self, *args, **kwargs):
+                result = await selected_exchange(self, *args, **kwargs)
+                summary_ids.append(result.operation_id)
+                if correction:
+                    dispositions.record(
+                        "acp:correction",
+                        seq=None,
+                        owner="proj",
+                        admission=comms.registry.snapshot().admission_generations["proj"],
+                        target="proj",
+                        text="Changed requirement before native commit",
+                    )
+                return result
+    
+            monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", selected_with_correction)
+            dispatched = []
+    
+            async def native_stream(*args, **kwargs):
+                task = args[2]
+                # Exercise actual ACP admission/bind callbacks; no provider or
+                # second native user turn is started by this synthetic receiver.
+                assert task != "Continue" and task.endswith("Continue")
+                if clean_decline:
+                    assert persistent.proc is not None and persistent.reopen_required is None
+                else:
+                    assert persistent.proc is None and persistent.reopen_required == file
+                with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
+                    assert allowed is True
+                    dispatched.append(task)
+                with kwargs["send_boundary"](None, "b" * 32, task) as allowed:
+                    assert allowed is False
+                assert kwargs["native_start"](None, "a" * 32, task)
+                yield ae.InputStarted(id=None)
+                yield ae.StreamSettled()
+                yield ae.Done(ok=True, text="processed")
+    
+            if real_host:
+                # Use the real backend subprocess/reopen/proof protocol. Replace
+                # only its executable with an offline host of the same prepared
+                # SDK and RPC; the selected model stream never accesses a network.
+                spawn = asyncio.create_subprocess_exec
+    
+                async def offline_spawn(program, *args, **kwargs):
+                    if program == launcher:
+                        kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
+                        return await spawn(
+                            "node",
+                            str(
+                                Path(__file__).resolve().parents[1]
+                                / "stack/test-native-selected-owner-host.mjs"
+                            ),
+                            *args,
+                            **kwargs,
+                        )
+                    return await spawn(program, *args, **kwargs)
+    
+                monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+            else:
+                monkeypatch.setattr(backend, "stream_agent_events", native_stream)
+            try:
+                turn = agent.turns.run_agent_turn(
+                    "proj",
+                    "proj",
+                    "Continue",
+                    original_keys=(original_key,),
+                    original_owner_input=True,
+                    original_goal_id="goal-acp",
+                )
+                if correction:
+                    with pytest.raises(RelationViolationError, match="Unsettled"):
+                        await turn
+                    assert dispatched == []
+                    assert dispositions.read().rows.get(original_key).native_id is None
+                else:
+>                   await turn
+
+tests/test_selected_owner_compaction_integration.py:357: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/turn_runner.py:705: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:843: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:723: in prepare_native
+    self.committed = await maybe_compact_owner_turn(
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+_ test_acp_selected_summary_handoff_uses_final_prompt_once[summary-False-True-ordinary] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_acp_selected_summary_hand2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4aeb8fc550>
+correction = True, real_host = False, clean_decline = False
+private_session = False
+
+    @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+    @pytest.mark.parametrize("correction", [False, True])
+    @pytest.mark.parametrize("real_host", [False, True])
+    @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
+    async def test_acp_selected_summary_handoff_uses_final_prompt_once(
+        tmp_path, monkeypatch, correction, real_host, clean_decline, private_session
+    ):
+        original_key = "acp:original-proj" if private_session else "acp:original"
+        from dataclasses import replace
+    
+        from agent_comms import backend
+        from agent_comms.acp import CommsAgent
+        from agent_comms.comms import wire
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.goal_attempts import GoalAttemptStore
+        from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+    
+        if private_session:
+            if not real_host:
+                pytest.skip("Private-session coverage needs the real SDK host")
+            monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
+        if clean_decline:
+            monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
+        async with owner_fixture(tmp_path, monkeypatch, real_host=real_host) as (
+            persistent,
+            _registry,
+            _inputs,
+            file,
+            launcher,
+            info,
+        ):
+            root = tmp_path if private_session else tmp_path / "acp-wire"
+            comms = wire(root)
+            project = tmp_path / "proj"
+            project.mkdir()
+    
+            class Client:
+                async def session_update(self, **kwargs):
+                    pass
+    
+            agent = CommsAgent(
+                comms,
+                agent_bin=launcher,
+                agent_args=[],
+                runtime_enabled=True,
+                auto_wake=False,
+            )
+            agent.on_connect(Client())
+            await agent.new_session(cwd=str(project), mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            comms.registry.register(
+                replace(
+                    comms.registry.require("proj"),
+                    goal=Goal("retain history", "goal-acp"),
+                    session_file=file,
+                    model=info.model,
+                    pid=os.getpid(),
+                )
+            )
+            comms.agents.set_agent_info(
+                "proj",
+                model=info.model,
+                context_used=info.context_used,
+                context_size=info.context_size,
+            )
+            private = root / "goal-private"
+            private.mkdir(mode=0o700)
+            store = GoalAttemptStore.initialize(private)
+            store.create_goal("goal-acp")
+            agent.turns.goal_store = store
+            agent.turns.persistent_backends["proj"] = persistent
+            dispositions = InputDispositions(root / InputDispositions.filename)
+            if private_session:
+                record_fixture_history(
+                    dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
+                )
+            dispositions.record(
+                original_key,
+                seq=None,
+                owner="proj",
+                admission=comms.registry.snapshot().admission_generations["proj"],
+                target="proj",
+                text="Continue",
+            )
+            selected_exchange = SelectedSummarySlot.run_selected_summary
+            summary_ids = []
+    
+            async def selected_with_correction(self, *args, **kwargs):
+                result = await selected_exchange(self, *args, **kwargs)
+                summary_ids.append(result.operation_id)
+                if correction:
+                    dispositions.record(
+                        "acp:correction",
+                        seq=None,
+                        owner="proj",
+                        admission=comms.registry.snapshot().admission_generations["proj"],
+                        target="proj",
+                        text="Changed requirement before native commit",
+                    )
+                return result
+    
+            monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", selected_with_correction)
+            dispatched = []
+    
+            async def native_stream(*args, **kwargs):
+                task = args[2]
+                # Exercise actual ACP admission/bind callbacks; no provider or
+                # second native user turn is started by this synthetic receiver.
+                assert task != "Continue" and task.endswith("Continue")
+                if clean_decline:
+                    assert persistent.proc is not None and persistent.reopen_required is None
+                else:
+                    assert persistent.proc is None and persistent.reopen_required == file
+                with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
+                    assert allowed is True
+                    dispatched.append(task)
+                with kwargs["send_boundary"](None, "b" * 32, task) as allowed:
+                    assert allowed is False
+                assert kwargs["native_start"](None, "a" * 32, task)
+                yield ae.InputStarted(id=None)
+                yield ae.StreamSettled()
+                yield ae.Done(ok=True, text="processed")
+    
+            if real_host:
+                # Use the real backend subprocess/reopen/proof protocol. Replace
+                # only its executable with an offline host of the same prepared
+                # SDK and RPC; the selected model stream never accesses a network.
+                spawn = asyncio.create_subprocess_exec
+    
+                async def offline_spawn(program, *args, **kwargs):
+                    if program == launcher:
+                        kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
+                        return await spawn(
+                            "node",
+                            str(
+                                Path(__file__).resolve().parents[1]
+                                / "stack/test-native-selected-owner-host.mjs"
+                            ),
+                            *args,
+                            **kwargs,
+                        )
+                    return await spawn(program, *args, **kwargs)
+    
+                monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+            else:
+                monkeypatch.setattr(backend, "stream_agent_events", native_stream)
+            try:
+                turn = agent.turns.run_agent_turn(
+                    "proj",
+                    "proj",
+                    "Continue",
+                    original_keys=(original_key,),
+                    original_owner_input=True,
+                    original_goal_id="goal-acp",
+                )
+                if correction:
+                    with pytest.raises(RelationViolationError, match="Unsettled"):
+>                       await turn
+
+tests/test_selected_owner_compaction_integration.py:353: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/turn_runner.py:705: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:843: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:723: in prepare_native
+    self.committed = await maybe_compact_owner_turn(
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+_ test_acp_selected_summary_handoff_uses_final_prompt_once[summary-True-False-ordinary] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_acp_selected_summary_hand4')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4aeb9db850>
+correction = False, real_host = True, clean_decline = False
+private_session = False
+
+    @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+    @pytest.mark.parametrize("correction", [False, True])
+    @pytest.mark.parametrize("real_host", [False, True])
+    @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
+    async def test_acp_selected_summary_handoff_uses_final_prompt_once(
+        tmp_path, monkeypatch, correction, real_host, clean_decline, private_session
+    ):
+        original_key = "acp:original-proj" if private_session else "acp:original"
+        from dataclasses import replace
+    
+        from agent_comms import backend
+        from agent_comms.acp import CommsAgent
+        from agent_comms.comms import wire
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.goal_attempts import GoalAttemptStore
+        from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+    
+        if private_session:
+            if not real_host:
+                pytest.skip("Private-session coverage needs the real SDK host")
+            monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
+        if clean_decline:
+            monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
+        async with owner_fixture(tmp_path, monkeypatch, real_host=real_host) as (
+            persistent,
+            _registry,
+            _inputs,
+            file,
+            launcher,
+            info,
+        ):
+            root = tmp_path if private_session else tmp_path / "acp-wire"
+            comms = wire(root)
+            project = tmp_path / "proj"
+            project.mkdir()
+    
+            class Client:
+                async def session_update(self, **kwargs):
+                    pass
+    
+            agent = CommsAgent(
+                comms,
+                agent_bin=launcher,
+                agent_args=[],
+                runtime_enabled=True,
+                auto_wake=False,
+            )
+            agent.on_connect(Client())
+            await agent.new_session(cwd=str(project), mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            comms.registry.register(
+                replace(
+                    comms.registry.require("proj"),
+                    goal=Goal("retain history", "goal-acp"),
+                    session_file=file,
+                    model=info.model,
+                    pid=os.getpid(),
+                )
+            )
+            comms.agents.set_agent_info(
+                "proj",
+                model=info.model,
+                context_used=info.context_used,
+                context_size=info.context_size,
+            )
+            private = root / "goal-private"
+            private.mkdir(mode=0o700)
+            store = GoalAttemptStore.initialize(private)
+            store.create_goal("goal-acp")
+            agent.turns.goal_store = store
+            agent.turns.persistent_backends["proj"] = persistent
+            dispositions = InputDispositions(root / InputDispositions.filename)
+            if private_session:
+                record_fixture_history(
+                    dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
+                )
+            dispositions.record(
+                original_key,
+                seq=None,
+                owner="proj",
+                admission=comms.registry.snapshot().admission_generations["proj"],
+                target="proj",
+                text="Continue",
+            )
+            selected_exchange = SelectedSummarySlot.run_selected_summary
+            summary_ids = []
+    
+            async def selected_with_correction(self, *args, **kwargs):
+                result = await selected_exchange(self, *args, **kwargs)
+                summary_ids.append(result.operation_id)
+                if correction:
+                    dispositions.record(
+                        "acp:correction",
+                        seq=None,
+                        owner="proj",
+                        admission=comms.registry.snapshot().admission_generations["proj"],
+                        target="proj",
+                        text="Changed requirement before native commit",
+                    )
+                return result
+    
+            monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", selected_with_correction)
+            dispatched = []
+    
+            async def native_stream(*args, **kwargs):
+                task = args[2]
+                # Exercise actual ACP admission/bind callbacks; no provider or
+                # second native user turn is started by this synthetic receiver.
+                assert task != "Continue" and task.endswith("Continue")
+                if clean_decline:
+                    assert persistent.proc is not None and persistent.reopen_required is None
+                else:
+                    assert persistent.proc is None and persistent.reopen_required == file
+                with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
+                    assert allowed is True
+                    dispatched.append(task)
+                with kwargs["send_boundary"](None, "b" * 32, task) as allowed:
+                    assert allowed is False
+                assert kwargs["native_start"](None, "a" * 32, task)
+                yield ae.InputStarted(id=None)
+                yield ae.StreamSettled()
+                yield ae.Done(ok=True, text="processed")
+    
+            if real_host:
+                # Use the real backend subprocess/reopen/proof protocol. Replace
+                # only its executable with an offline host of the same prepared
+                # SDK and RPC; the selected model stream never accesses a network.
+                spawn = asyncio.create_subprocess_exec
+    
+                async def offline_spawn(program, *args, **kwargs):
+                    if program == launcher:
+                        kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
+                        return await spawn(
+                            "node",
+                            str(
+                                Path(__file__).resolve().parents[1]
+                                / "stack/test-native-selected-owner-host.mjs"
+                            ),
+                            *args,
+                            **kwargs,
+                        )
+                    return await spawn(program, *args, **kwargs)
+    
+                monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+            else:
+                monkeypatch.setattr(backend, "stream_agent_events", native_stream)
+            try:
+                turn = agent.turns.run_agent_turn(
+                    "proj",
+                    "proj",
+                    "Continue",
+                    original_keys=(original_key,),
+                    original_owner_input=True,
+                    original_goal_id="goal-acp",
+                )
+                if correction:
+                    with pytest.raises(RelationViolationError, match="Unsettled"):
+                        await turn
+                    assert dispatched == []
+                    assert dispositions.read().rows.get(original_key).native_id is None
+                else:
+>                   await turn
+
+tests/test_selected_owner_compaction_integration.py:357: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/turn_runner.py:705: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:843: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:723: in prepare_native
+    self.committed = await maybe_compact_owner_turn(
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+_ test_acp_selected_summary_handoff_uses_final_prompt_once[summary-True-False-private] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_acp_selected_summary_hand5')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4aebad4590>
+correction = False, real_host = True, clean_decline = False
+private_session = True
+
+    @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+    @pytest.mark.parametrize("correction", [False, True])
+    @pytest.mark.parametrize("real_host", [False, True])
+    @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
+    async def test_acp_selected_summary_handoff_uses_final_prompt_once(
+        tmp_path, monkeypatch, correction, real_host, clean_decline, private_session
+    ):
+        original_key = "acp:original-proj" if private_session else "acp:original"
+        from dataclasses import replace
+    
+        from agent_comms import backend
+        from agent_comms.acp import CommsAgent
+        from agent_comms.comms import wire
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.goal_attempts import GoalAttemptStore
+        from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+    
+        if private_session:
+            if not real_host:
+                pytest.skip("Private-session coverage needs the real SDK host")
+            monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
+        if clean_decline:
+            monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
+        async with owner_fixture(tmp_path, monkeypatch, real_host=real_host) as (
+            persistent,
+            _registry,
+            _inputs,
+            file,
+            launcher,
+            info,
+        ):
+            root = tmp_path if private_session else tmp_path / "acp-wire"
+            comms = wire(root)
+            project = tmp_path / "proj"
+            project.mkdir()
+    
+            class Client:
+                async def session_update(self, **kwargs):
+                    pass
+    
+            agent = CommsAgent(
+                comms,
+                agent_bin=launcher,
+                agent_args=[],
+                runtime_enabled=True,
+                auto_wake=False,
+            )
+            agent.on_connect(Client())
+            await agent.new_session(cwd=str(project), mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            comms.registry.register(
+                replace(
+                    comms.registry.require("proj"),
+                    goal=Goal("retain history", "goal-acp"),
+                    session_file=file,
+                    model=info.model,
+                    pid=os.getpid(),
+                )
+            )
+            comms.agents.set_agent_info(
+                "proj",
+                model=info.model,
+                context_used=info.context_used,
+                context_size=info.context_size,
+            )
+            private = root / "goal-private"
+            private.mkdir(mode=0o700)
+            store = GoalAttemptStore.initialize(private)
+            store.create_goal("goal-acp")
+            agent.turns.goal_store = store
+            agent.turns.persistent_backends["proj"] = persistent
+            dispositions = InputDispositions(root / InputDispositions.filename)
+            if private_session:
+                record_fixture_history(
+                    dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
+                )
+            dispositions.record(
+                original_key,
+                seq=None,
+                owner="proj",
+                admission=comms.registry.snapshot().admission_generations["proj"],
+                target="proj",
+                text="Continue",
+            )
+            selected_exchange = SelectedSummarySlot.run_selected_summary
+            summary_ids = []
+    
+            async def selected_with_correction(self, *args, **kwargs):
+                result = await selected_exchange(self, *args, **kwargs)
+                summary_ids.append(result.operation_id)
+                if correction:
+                    dispositions.record(
+                        "acp:correction",
+                        seq=None,
+                        owner="proj",
+                        admission=comms.registry.snapshot().admission_generations["proj"],
+                        target="proj",
+                        text="Changed requirement before native commit",
+                    )
+                return result
+    
+            monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", selected_with_correction)
+            dispatched = []
+    
+            async def native_stream(*args, **kwargs):
+                task = args[2]
+                # Exercise actual ACP admission/bind callbacks; no provider or
+                # second native user turn is started by this synthetic receiver.
+                assert task != "Continue" and task.endswith("Continue")
+                if clean_decline:
+                    assert persistent.proc is not None and persistent.reopen_required is None
+                else:
+                    assert persistent.proc is None and persistent.reopen_required == file
+                with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
+                    assert allowed is True
+                    dispatched.append(task)
+                with kwargs["send_boundary"](None, "b" * 32, task) as allowed:
+                    assert allowed is False
+                assert kwargs["native_start"](None, "a" * 32, task)
+                yield ae.InputStarted(id=None)
+                yield ae.StreamSettled()
+                yield ae.Done(ok=True, text="processed")
+    
+            if real_host:
+                # Use the real backend subprocess/reopen/proof protocol. Replace
+                # only its executable with an offline host of the same prepared
+                # SDK and RPC; the selected model stream never accesses a network.
+                spawn = asyncio.create_subprocess_exec
+    
+                async def offline_spawn(program, *args, **kwargs):
+                    if program == launcher:
+                        kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
+                        return await spawn(
+                            "node",
+                            str(
+                                Path(__file__).resolve().parents[1]
+                                / "stack/test-native-selected-owner-host.mjs"
+                            ),
+                            *args,
+                            **kwargs,
+                        )
+                    return await spawn(program, *args, **kwargs)
+    
+                monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+            else:
+                monkeypatch.setattr(backend, "stream_agent_events", native_stream)
+            try:
+                turn = agent.turns.run_agent_turn(
+                    "proj",
+                    "proj",
+                    "Continue",
+                    original_keys=(original_key,),
+                    original_owner_input=True,
+                    original_goal_id="goal-acp",
+                )
+                if correction:
+                    with pytest.raises(RelationViolationError, match="Unsettled"):
+                        await turn
+                    assert dispatched == []
+                    assert dispositions.read().rows.get(original_key).native_id is None
+                else:
+>                   await turn
+
+tests/test_selected_owner_compaction_integration.py:357: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/turn_runner.py:705: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:843: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:723: in prepare_native
+    self.committed = await maybe_compact_owner_turn(
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+_ test_acp_selected_summary_handoff_uses_final_prompt_once[summary-True-True-ordinary] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_acp_selected_summary_hand6')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4aeb9ad910>
+correction = True, real_host = True, clean_decline = False
+private_session = False
+
+    @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+    @pytest.mark.parametrize("correction", [False, True])
+    @pytest.mark.parametrize("real_host", [False, True])
+    @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
+    async def test_acp_selected_summary_handoff_uses_final_prompt_once(
+        tmp_path, monkeypatch, correction, real_host, clean_decline, private_session
+    ):
+        original_key = "acp:original-proj" if private_session else "acp:original"
+        from dataclasses import replace
+    
+        from agent_comms import backend
+        from agent_comms.acp import CommsAgent
+        from agent_comms.comms import wire
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.goal_attempts import GoalAttemptStore
+        from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+    
+        if private_session:
+            if not real_host:
+                pytest.skip("Private-session coverage needs the real SDK host")
+            monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
+        if clean_decline:
+            monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
+        async with owner_fixture(tmp_path, monkeypatch, real_host=real_host) as (
+            persistent,
+            _registry,
+            _inputs,
+            file,
+            launcher,
+            info,
+        ):
+            root = tmp_path if private_session else tmp_path / "acp-wire"
+            comms = wire(root)
+            project = tmp_path / "proj"
+            project.mkdir()
+    
+            class Client:
+                async def session_update(self, **kwargs):
+                    pass
+    
+            agent = CommsAgent(
+                comms,
+                agent_bin=launcher,
+                agent_args=[],
+                runtime_enabled=True,
+                auto_wake=False,
+            )
+            agent.on_connect(Client())
+            await agent.new_session(cwd=str(project), mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            comms.registry.register(
+                replace(
+                    comms.registry.require("proj"),
+                    goal=Goal("retain history", "goal-acp"),
+                    session_file=file,
+                    model=info.model,
+                    pid=os.getpid(),
+                )
+            )
+            comms.agents.set_agent_info(
+                "proj",
+                model=info.model,
+                context_used=info.context_used,
+                context_size=info.context_size,
+            )
+            private = root / "goal-private"
+            private.mkdir(mode=0o700)
+            store = GoalAttemptStore.initialize(private)
+            store.create_goal("goal-acp")
+            agent.turns.goal_store = store
+            agent.turns.persistent_backends["proj"] = persistent
+            dispositions = InputDispositions(root / InputDispositions.filename)
+            if private_session:
+                record_fixture_history(
+                    dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
+                )
+            dispositions.record(
+                original_key,
+                seq=None,
+                owner="proj",
+                admission=comms.registry.snapshot().admission_generations["proj"],
+                target="proj",
+                text="Continue",
+            )
+            selected_exchange = SelectedSummarySlot.run_selected_summary
+            summary_ids = []
+    
+            async def selected_with_correction(self, *args, **kwargs):
+                result = await selected_exchange(self, *args, **kwargs)
+                summary_ids.append(result.operation_id)
+                if correction:
+                    dispositions.record(
+                        "acp:correction",
+                        seq=None,
+                        owner="proj",
+                        admission=comms.registry.snapshot().admission_generations["proj"],
+                        target="proj",
+                        text="Changed requirement before native commit",
+                    )
+                return result
+    
+            monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", selected_with_correction)
+            dispatched = []
+    
+            async def native_stream(*args, **kwargs):
+                task = args[2]
+                # Exercise actual ACP admission/bind callbacks; no provider or
+                # second native user turn is started by this synthetic receiver.
+                assert task != "Continue" and task.endswith("Continue")
+                if clean_decline:
+                    assert persistent.proc is not None and persistent.reopen_required is None
+                else:
+                    assert persistent.proc is None and persistent.reopen_required == file
+                with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
+                    assert allowed is True
+                    dispatched.append(task)
+                with kwargs["send_boundary"](None, "b" * 32, task) as allowed:
+                    assert allowed is False
+                assert kwargs["native_start"](None, "a" * 32, task)
+                yield ae.InputStarted(id=None)
+                yield ae.StreamSettled()
+                yield ae.Done(ok=True, text="processed")
+    
+            if real_host:
+                # Use the real backend subprocess/reopen/proof protocol. Replace
+                # only its executable with an offline host of the same prepared
+                # SDK and RPC; the selected model stream never accesses a network.
+                spawn = asyncio.create_subprocess_exec
+    
+                async def offline_spawn(program, *args, **kwargs):
+                    if program == launcher:
+                        kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
+                        return await spawn(
+                            "node",
+                            str(
+                                Path(__file__).resolve().parents[1]
+                                / "stack/test-native-selected-owner-host.mjs"
+                            ),
+                            *args,
+                            **kwargs,
+                        )
+                    return await spawn(program, *args, **kwargs)
+    
+                monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+            else:
+                monkeypatch.setattr(backend, "stream_agent_events", native_stream)
+            try:
+                turn = agent.turns.run_agent_turn(
+                    "proj",
+                    "proj",
+                    "Continue",
+                    original_keys=(original_key,),
+                    original_owner_input=True,
+                    original_goal_id="goal-acp",
+                )
+                if correction:
+                    with pytest.raises(RelationViolationError, match="Unsettled"):
+>                       await turn
+
+tests/test_selected_owner_compaction_integration.py:353: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/turn_runner.py:705: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:843: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:723: in prepare_native
+    self.committed = await maybe_compact_owner_turn(
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+_ test_acp_selected_summary_handoff_uses_final_prompt_once[summary-True-True-private] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_acp_selected_summary_hand7')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4aeba677f0>
+correction = True, real_host = True, clean_decline = False
+private_session = True
+
+    @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+    @pytest.mark.parametrize("correction", [False, True])
+    @pytest.mark.parametrize("real_host", [False, True])
+    @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
+    async def test_acp_selected_summary_handoff_uses_final_prompt_once(
+        tmp_path, monkeypatch, correction, real_host, clean_decline, private_session
+    ):
+        original_key = "acp:original-proj" if private_session else "acp:original"
+        from dataclasses import replace
+    
+        from agent_comms import backend
+        from agent_comms.acp import CommsAgent
+        from agent_comms.comms import wire
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.goal_attempts import GoalAttemptStore
+        from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+    
+        if private_session:
+            if not real_host:
+                pytest.skip("Private-session coverage needs the real SDK host")
+            monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
+        if clean_decline:
+            monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
+        async with owner_fixture(tmp_path, monkeypatch, real_host=real_host) as (
+            persistent,
+            _registry,
+            _inputs,
+            file,
+            launcher,
+            info,
+        ):
+            root = tmp_path if private_session else tmp_path / "acp-wire"
+            comms = wire(root)
+            project = tmp_path / "proj"
+            project.mkdir()
+    
+            class Client:
+                async def session_update(self, **kwargs):
+                    pass
+    
+            agent = CommsAgent(
+                comms,
+                agent_bin=launcher,
+                agent_args=[],
+                runtime_enabled=True,
+                auto_wake=False,
+            )
+            agent.on_connect(Client())
+            await agent.new_session(cwd=str(project), mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            comms.registry.register(
+                replace(
+                    comms.registry.require("proj"),
+                    goal=Goal("retain history", "goal-acp"),
+                    session_file=file,
+                    model=info.model,
+                    pid=os.getpid(),
+                )
+            )
+            comms.agents.set_agent_info(
+                "proj",
+                model=info.model,
+                context_used=info.context_used,
+                context_size=info.context_size,
+            )
+            private = root / "goal-private"
+            private.mkdir(mode=0o700)
+            store = GoalAttemptStore.initialize(private)
+            store.create_goal("goal-acp")
+            agent.turns.goal_store = store
+            agent.turns.persistent_backends["proj"] = persistent
+            dispositions = InputDispositions(root / InputDispositions.filename)
+            if private_session:
+                record_fixture_history(
+                    dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
+                )
+            dispositions.record(
+                original_key,
+                seq=None,
+                owner="proj",
+                admission=comms.registry.snapshot().admission_generations["proj"],
+                target="proj",
+                text="Continue",
+            )
+            selected_exchange = SelectedSummarySlot.run_selected_summary
+            summary_ids = []
+    
+            async def selected_with_correction(self, *args, **kwargs):
+                result = await selected_exchange(self, *args, **kwargs)
+                summary_ids.append(result.operation_id)
+                if correction:
+                    dispositions.record(
+                        "acp:correction",
+                        seq=None,
+                        owner="proj",
+                        admission=comms.registry.snapshot().admission_generations["proj"],
+                        target="proj",
+                        text="Changed requirement before native commit",
+                    )
+                return result
+    
+            monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", selected_with_correction)
+            dispatched = []
+    
+            async def native_stream(*args, **kwargs):
+                task = args[2]
+                # Exercise actual ACP admission/bind callbacks; no provider or
+                # second native user turn is started by this synthetic receiver.
+                assert task != "Continue" and task.endswith("Continue")
+                if clean_decline:
+                    assert persistent.proc is not None and persistent.reopen_required is None
+                else:
+                    assert persistent.proc is None and persistent.reopen_required == file
+                with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
+                    assert allowed is True
+                    dispatched.append(task)
+                with kwargs["send_boundary"](None, "b" * 32, task) as allowed:
+                    assert allowed is False
+                assert kwargs["native_start"](None, "a" * 32, task)
+                yield ae.InputStarted(id=None)
+                yield ae.StreamSettled()
+                yield ae.Done(ok=True, text="processed")
+    
+            if real_host:
+                # Use the real backend subprocess/reopen/proof protocol. Replace
+                # only its executable with an offline host of the same prepared
+                # SDK and RPC; the selected model stream never accesses a network.
+                spawn = asyncio.create_subprocess_exec
+    
+                async def offline_spawn(program, *args, **kwargs):
+                    if program == launcher:
+                        kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
+                        return await spawn(
+                            "node",
+                            str(
+                                Path(__file__).resolve().parents[1]
+                                / "stack/test-native-selected-owner-host.mjs"
+                            ),
+                            *args,
+                            **kwargs,
+                        )
+                    return await spawn(program, *args, **kwargs)
+    
+                monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+            else:
+                monkeypatch.setattr(backend, "stream_agent_events", native_stream)
+            try:
+                turn = agent.turns.run_agent_turn(
+                    "proj",
+                    "proj",
+                    "Continue",
+                    original_keys=(original_key,),
+                    original_owner_input=True,
+                    original_goal_id="goal-acp",
+                )
+                if correction:
+                    with pytest.raises(RelationViolationError, match="Unsettled"):
+>                       await turn
+
+tests/test_selected_owner_compaction_integration.py:353: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/turn_runner.py:705: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:843: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:723: in prepare_native
+    self.committed = await maybe_compact_owner_turn(
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+_ test_acp_selected_summary_handoff_uses_final_prompt_once[decline-False-False-ordinary] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_acp_selected_summary_hand8')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4af1949a30>
+correction = False, real_host = False, clean_decline = True
+private_session = False
+
+    @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+    @pytest.mark.parametrize("correction", [False, True])
+    @pytest.mark.parametrize("real_host", [False, True])
+    @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
+    async def test_acp_selected_summary_handoff_uses_final_prompt_once(
+        tmp_path, monkeypatch, correction, real_host, clean_decline, private_session
+    ):
+        original_key = "acp:original-proj" if private_session else "acp:original"
+        from dataclasses import replace
+    
+        from agent_comms import backend
+        from agent_comms.acp import CommsAgent
+        from agent_comms.comms import wire
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.goal_attempts import GoalAttemptStore
+        from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+    
+        if private_session:
+            if not real_host:
+                pytest.skip("Private-session coverage needs the real SDK host")
+            monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
+        if clean_decline:
+            monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
+        async with owner_fixture(tmp_path, monkeypatch, real_host=real_host) as (
+            persistent,
+            _registry,
+            _inputs,
+            file,
+            launcher,
+            info,
+        ):
+            root = tmp_path if private_session else tmp_path / "acp-wire"
+            comms = wire(root)
+            project = tmp_path / "proj"
+            project.mkdir()
+    
+            class Client:
+                async def session_update(self, **kwargs):
+                    pass
+    
+            agent = CommsAgent(
+                comms,
+                agent_bin=launcher,
+                agent_args=[],
+                runtime_enabled=True,
+                auto_wake=False,
+            )
+            agent.on_connect(Client())
+            await agent.new_session(cwd=str(project), mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            comms.registry.register(
+                replace(
+                    comms.registry.require("proj"),
+                    goal=Goal("retain history", "goal-acp"),
+                    session_file=file,
+                    model=info.model,
+                    pid=os.getpid(),
+                )
+            )
+            comms.agents.set_agent_info(
+                "proj",
+                model=info.model,
+                context_used=info.context_used,
+                context_size=info.context_size,
+            )
+            private = root / "goal-private"
+            private.mkdir(mode=0o700)
+            store = GoalAttemptStore.initialize(private)
+            store.create_goal("goal-acp")
+            agent.turns.goal_store = store
+            agent.turns.persistent_backends["proj"] = persistent
+            dispositions = InputDispositions(root / InputDispositions.filename)
+            if private_session:
+                record_fixture_history(
+                    dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
+                )
+            dispositions.record(
+                original_key,
+                seq=None,
+                owner="proj",
+                admission=comms.registry.snapshot().admission_generations["proj"],
+                target="proj",
+                text="Continue",
+            )
+            selected_exchange = SelectedSummarySlot.run_selected_summary
+            summary_ids = []
+    
+            async def selected_with_correction(self, *args, **kwargs):
+                result = await selected_exchange(self, *args, **kwargs)
+                summary_ids.append(result.operation_id)
+                if correction:
+                    dispositions.record(
+                        "acp:correction",
+                        seq=None,
+                        owner="proj",
+                        admission=comms.registry.snapshot().admission_generations["proj"],
+                        target="proj",
+                        text="Changed requirement before native commit",
+                    )
+                return result
+    
+            monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", selected_with_correction)
+            dispatched = []
+    
+            async def native_stream(*args, **kwargs):
+                task = args[2]
+                # Exercise actual ACP admission/bind callbacks; no provider or
+                # second native user turn is started by this synthetic receiver.
+                assert task != "Continue" and task.endswith("Continue")
+                if clean_decline:
+                    assert persistent.proc is not None and persistent.reopen_required is None
+                else:
+                    assert persistent.proc is None and persistent.reopen_required == file
+                with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
+                    assert allowed is True
+                    dispatched.append(task)
+                with kwargs["send_boundary"](None, "b" * 32, task) as allowed:
+                    assert allowed is False
+                assert kwargs["native_start"](None, "a" * 32, task)
+                yield ae.InputStarted(id=None)
+                yield ae.StreamSettled()
+                yield ae.Done(ok=True, text="processed")
+    
+            if real_host:
+                # Use the real backend subprocess/reopen/proof protocol. Replace
+                # only its executable with an offline host of the same prepared
+                # SDK and RPC; the selected model stream never accesses a network.
+                spawn = asyncio.create_subprocess_exec
+    
+                async def offline_spawn(program, *args, **kwargs):
+                    if program == launcher:
+                        kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
+                        return await spawn(
+                            "node",
+                            str(
+                                Path(__file__).resolve().parents[1]
+                                / "stack/test-native-selected-owner-host.mjs"
+                            ),
+                            *args,
+                            **kwargs,
+                        )
+                    return await spawn(program, *args, **kwargs)
+    
+                monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+            else:
+                monkeypatch.setattr(backend, "stream_agent_events", native_stream)
+            try:
+                turn = agent.turns.run_agent_turn(
+                    "proj",
+                    "proj",
+                    "Continue",
+                    original_keys=(original_key,),
+                    original_owner_input=True,
+                    original_goal_id="goal-acp",
+                )
+                if correction:
+                    with pytest.raises(RelationViolationError, match="Unsettled"):
+                        await turn
+                    assert dispatched == []
+                    assert dispositions.read().rows.get(original_key).native_id is None
+                else:
+>                   await turn
+
+tests/test_selected_owner_compaction_integration.py:357: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/turn_runner.py:705: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:843: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:723: in prepare_native
+    self.committed = await maybe_compact_owner_turn(
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+_ test_acp_selected_summary_handoff_uses_final_prompt_once[decline-False-True-ordinary] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_acp_selected_summary_hand10')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4aeb6e47c0>
+correction = True, real_host = False, clean_decline = True
+private_session = False
+
+    @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+    @pytest.mark.parametrize("correction", [False, True])
+    @pytest.mark.parametrize("real_host", [False, True])
+    @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
+    async def test_acp_selected_summary_handoff_uses_final_prompt_once(
+        tmp_path, monkeypatch, correction, real_host, clean_decline, private_session
+    ):
+        original_key = "acp:original-proj" if private_session else "acp:original"
+        from dataclasses import replace
+    
+        from agent_comms import backend
+        from agent_comms.acp import CommsAgent
+        from agent_comms.comms import wire
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.goal_attempts import GoalAttemptStore
+        from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+    
+        if private_session:
+            if not real_host:
+                pytest.skip("Private-session coverage needs the real SDK host")
+            monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
+        if clean_decline:
+            monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
+        async with owner_fixture(tmp_path, monkeypatch, real_host=real_host) as (
+            persistent,
+            _registry,
+            _inputs,
+            file,
+            launcher,
+            info,
+        ):
+            root = tmp_path if private_session else tmp_path / "acp-wire"
+            comms = wire(root)
+            project = tmp_path / "proj"
+            project.mkdir()
+    
+            class Client:
+                async def session_update(self, **kwargs):
+                    pass
+    
+            agent = CommsAgent(
+                comms,
+                agent_bin=launcher,
+                agent_args=[],
+                runtime_enabled=True,
+                auto_wake=False,
+            )
+            agent.on_connect(Client())
+            await agent.new_session(cwd=str(project), mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            comms.registry.register(
+                replace(
+                    comms.registry.require("proj"),
+                    goal=Goal("retain history", "goal-acp"),
+                    session_file=file,
+                    model=info.model,
+                    pid=os.getpid(),
+                )
+            )
+            comms.agents.set_agent_info(
+                "proj",
+                model=info.model,
+                context_used=info.context_used,
+                context_size=info.context_size,
+            )
+            private = root / "goal-private"
+            private.mkdir(mode=0o700)
+            store = GoalAttemptStore.initialize(private)
+            store.create_goal("goal-acp")
+            agent.turns.goal_store = store
+            agent.turns.persistent_backends["proj"] = persistent
+            dispositions = InputDispositions(root / InputDispositions.filename)
+            if private_session:
+                record_fixture_history(
+                    dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
+                )
+            dispositions.record(
+                original_key,
+                seq=None,
+                owner="proj",
+                admission=comms.registry.snapshot().admission_generations["proj"],
+                target="proj",
+                text="Continue",
+            )
+            selected_exchange = SelectedSummarySlot.run_selected_summary
+            summary_ids = []
+    
+            async def selected_with_correction(self, *args, **kwargs):
+                result = await selected_exchange(self, *args, **kwargs)
+                summary_ids.append(result.operation_id)
+                if correction:
+                    dispositions.record(
+                        "acp:correction",
+                        seq=None,
+                        owner="proj",
+                        admission=comms.registry.snapshot().admission_generations["proj"],
+                        target="proj",
+                        text="Changed requirement before native commit",
+                    )
+                return result
+    
+            monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", selected_with_correction)
+            dispatched = []
+    
+            async def native_stream(*args, **kwargs):
+                task = args[2]
+                # Exercise actual ACP admission/bind callbacks; no provider or
+                # second native user turn is started by this synthetic receiver.
+                assert task != "Continue" and task.endswith("Continue")
+                if clean_decline:
+                    assert persistent.proc is not None and persistent.reopen_required is None
+                else:
+                    assert persistent.proc is None and persistent.reopen_required == file
+                with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
+                    assert allowed is True
+                    dispatched.append(task)
+                with kwargs["send_boundary"](None, "b" * 32, task) as allowed:
+                    assert allowed is False
+                assert kwargs["native_start"](None, "a" * 32, task)
+                yield ae.InputStarted(id=None)
+                yield ae.StreamSettled()
+                yield ae.Done(ok=True, text="processed")
+    
+            if real_host:
+                # Use the real backend subprocess/reopen/proof protocol. Replace
+                # only its executable with an offline host of the same prepared
+                # SDK and RPC; the selected model stream never accesses a network.
+                spawn = asyncio.create_subprocess_exec
+    
+                async def offline_spawn(program, *args, **kwargs):
+                    if program == launcher:
+                        kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
+                        return await spawn(
+                            "node",
+                            str(
+                                Path(__file__).resolve().parents[1]
+                                / "stack/test-native-selected-owner-host.mjs"
+                            ),
+                            *args,
+                            **kwargs,
+                        )
+                    return await spawn(program, *args, **kwargs)
+    
+                monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+            else:
+                monkeypatch.setattr(backend, "stream_agent_events", native_stream)
+            try:
+                turn = agent.turns.run_agent_turn(
+                    "proj",
+                    "proj",
+                    "Continue",
+                    original_keys=(original_key,),
+                    original_owner_input=True,
+                    original_goal_id="goal-acp",
+                )
+                if correction:
+                    with pytest.raises(RelationViolationError, match="Unsettled"):
+>                       await turn
+
+tests/test_selected_owner_compaction_integration.py:353: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/turn_runner.py:705: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:843: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:723: in prepare_native
+    self.committed = await maybe_compact_owner_turn(
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+_ test_acp_selected_summary_handoff_uses_final_prompt_once[decline-True-False-ordinary] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_acp_selected_summary_hand12')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4aeb502890>
+correction = False, real_host = True, clean_decline = True
+private_session = False
+
+    @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+    @pytest.mark.parametrize("correction", [False, True])
+    @pytest.mark.parametrize("real_host", [False, True])
+    @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
+    async def test_acp_selected_summary_handoff_uses_final_prompt_once(
+        tmp_path, monkeypatch, correction, real_host, clean_decline, private_session
+    ):
+        original_key = "acp:original-proj" if private_session else "acp:original"
+        from dataclasses import replace
+    
+        from agent_comms import backend
+        from agent_comms.acp import CommsAgent
+        from agent_comms.comms import wire
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.goal_attempts import GoalAttemptStore
+        from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+    
+        if private_session:
+            if not real_host:
+                pytest.skip("Private-session coverage needs the real SDK host")
+            monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
+        if clean_decline:
+            monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
+        async with owner_fixture(tmp_path, monkeypatch, real_host=real_host) as (
+            persistent,
+            _registry,
+            _inputs,
+            file,
+            launcher,
+            info,
+        ):
+            root = tmp_path if private_session else tmp_path / "acp-wire"
+            comms = wire(root)
+            project = tmp_path / "proj"
+            project.mkdir()
+    
+            class Client:
+                async def session_update(self, **kwargs):
+                    pass
+    
+            agent = CommsAgent(
+                comms,
+                agent_bin=launcher,
+                agent_args=[],
+                runtime_enabled=True,
+                auto_wake=False,
+            )
+            agent.on_connect(Client())
+            await agent.new_session(cwd=str(project), mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            comms.registry.register(
+                replace(
+                    comms.registry.require("proj"),
+                    goal=Goal("retain history", "goal-acp"),
+                    session_file=file,
+                    model=info.model,
+                    pid=os.getpid(),
+                )
+            )
+            comms.agents.set_agent_info(
+                "proj",
+                model=info.model,
+                context_used=info.context_used,
+                context_size=info.context_size,
+            )
+            private = root / "goal-private"
+            private.mkdir(mode=0o700)
+            store = GoalAttemptStore.initialize(private)
+            store.create_goal("goal-acp")
+            agent.turns.goal_store = store
+            agent.turns.persistent_backends["proj"] = persistent
+            dispositions = InputDispositions(root / InputDispositions.filename)
+            if private_session:
+                record_fixture_history(
+                    dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
+                )
+            dispositions.record(
+                original_key,
+                seq=None,
+                owner="proj",
+                admission=comms.registry.snapshot().admission_generations["proj"],
+                target="proj",
+                text="Continue",
+            )
+            selected_exchange = SelectedSummarySlot.run_selected_summary
+            summary_ids = []
+    
+            async def selected_with_correction(self, *args, **kwargs):
+                result = await selected_exchange(self, *args, **kwargs)
+                summary_ids.append(result.operation_id)
+                if correction:
+                    dispositions.record(
+                        "acp:correction",
+                        seq=None,
+                        owner="proj",
+                        admission=comms.registry.snapshot().admission_generations["proj"],
+                        target="proj",
+                        text="Changed requirement before native commit",
+                    )
+                return result
+    
+            monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", selected_with_correction)
+            dispatched = []
+    
+            async def native_stream(*args, **kwargs):
+                task = args[2]
+                # Exercise actual ACP admission/bind callbacks; no provider or
+                # second native user turn is started by this synthetic receiver.
+                assert task != "Continue" and task.endswith("Continue")
+                if clean_decline:
+                    assert persistent.proc is not None and persistent.reopen_required is None
+                else:
+                    assert persistent.proc is None and persistent.reopen_required == file
+                with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
+                    assert allowed is True
+                    dispatched.append(task)
+                with kwargs["send_boundary"](None, "b" * 32, task) as allowed:
+                    assert allowed is False
+                assert kwargs["native_start"](None, "a" * 32, task)
+                yield ae.InputStarted(id=None)
+                yield ae.StreamSettled()
+                yield ae.Done(ok=True, text="processed")
+    
+            if real_host:
+                # Use the real backend subprocess/reopen/proof protocol. Replace
+                # only its executable with an offline host of the same prepared
+                # SDK and RPC; the selected model stream never accesses a network.
+                spawn = asyncio.create_subprocess_exec
+    
+                async def offline_spawn(program, *args, **kwargs):
+                    if program == launcher:
+                        kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
+                        return await spawn(
+                            "node",
+                            str(
+                                Path(__file__).resolve().parents[1]
+                                / "stack/test-native-selected-owner-host.mjs"
+                            ),
+                            *args,
+                            **kwargs,
+                        )
+                    return await spawn(program, *args, **kwargs)
+    
+                monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+            else:
+                monkeypatch.setattr(backend, "stream_agent_events", native_stream)
+            try:
+                turn = agent.turns.run_agent_turn(
+                    "proj",
+                    "proj",
+                    "Continue",
+                    original_keys=(original_key,),
+                    original_owner_input=True,
+                    original_goal_id="goal-acp",
+                )
+                if correction:
+                    with pytest.raises(RelationViolationError, match="Unsettled"):
+                        await turn
+                    assert dispatched == []
+                    assert dispositions.read().rows.get(original_key).native_id is None
+                else:
+>                   await turn
+
+tests/test_selected_owner_compaction_integration.py:357: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/turn_runner.py:705: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:843: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:723: in prepare_native
+    self.committed = await maybe_compact_owner_turn(
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+_ test_acp_selected_summary_handoff_uses_final_prompt_once[decline-True-False-private] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_acp_selected_summary_hand13')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4aeb503460>
+correction = False, real_host = True, clean_decline = True
+private_session = True
+
+    @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+    @pytest.mark.parametrize("correction", [False, True])
+    @pytest.mark.parametrize("real_host", [False, True])
+    @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
+    async def test_acp_selected_summary_handoff_uses_final_prompt_once(
+        tmp_path, monkeypatch, correction, real_host, clean_decline, private_session
+    ):
+        original_key = "acp:original-proj" if private_session else "acp:original"
+        from dataclasses import replace
+    
+        from agent_comms import backend
+        from agent_comms.acp import CommsAgent
+        from agent_comms.comms import wire
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.goal_attempts import GoalAttemptStore
+        from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+    
+        if private_session:
+            if not real_host:
+                pytest.skip("Private-session coverage needs the real SDK host")
+            monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
+        if clean_decline:
+            monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
+        async with owner_fixture(tmp_path, monkeypatch, real_host=real_host) as (
+            persistent,
+            _registry,
+            _inputs,
+            file,
+            launcher,
+            info,
+        ):
+            root = tmp_path if private_session else tmp_path / "acp-wire"
+            comms = wire(root)
+            project = tmp_path / "proj"
+            project.mkdir()
+    
+            class Client:
+                async def session_update(self, **kwargs):
+                    pass
+    
+            agent = CommsAgent(
+                comms,
+                agent_bin=launcher,
+                agent_args=[],
+                runtime_enabled=True,
+                auto_wake=False,
+            )
+            agent.on_connect(Client())
+            await agent.new_session(cwd=str(project), mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            comms.registry.register(
+                replace(
+                    comms.registry.require("proj"),
+                    goal=Goal("retain history", "goal-acp"),
+                    session_file=file,
+                    model=info.model,
+                    pid=os.getpid(),
+                )
+            )
+            comms.agents.set_agent_info(
+                "proj",
+                model=info.model,
+                context_used=info.context_used,
+                context_size=info.context_size,
+            )
+            private = root / "goal-private"
+            private.mkdir(mode=0o700)
+            store = GoalAttemptStore.initialize(private)
+            store.create_goal("goal-acp")
+            agent.turns.goal_store = store
+            agent.turns.persistent_backends["proj"] = persistent
+            dispositions = InputDispositions(root / InputDispositions.filename)
+            if private_session:
+                record_fixture_history(
+                    dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
+                )
+            dispositions.record(
+                original_key,
+                seq=None,
+                owner="proj",
+                admission=comms.registry.snapshot().admission_generations["proj"],
+                target="proj",
+                text="Continue",
+            )
+            selected_exchange = SelectedSummarySlot.run_selected_summary
+            summary_ids = []
+    
+            async def selected_with_correction(self, *args, **kwargs):
+                result = await selected_exchange(self, *args, **kwargs)
+                summary_ids.append(result.operation_id)
+                if correction:
+                    dispositions.record(
+                        "acp:correction",
+                        seq=None,
+                        owner="proj",
+                        admission=comms.registry.snapshot().admission_generations["proj"],
+                        target="proj",
+                        text="Changed requirement before native commit",
+                    )
+                return result
+    
+            monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", selected_with_correction)
+            dispatched = []
+    
+            async def native_stream(*args, **kwargs):
+                task = args[2]
+                # Exercise actual ACP admission/bind callbacks; no provider or
+                # second native user turn is started by this synthetic receiver.
+                assert task != "Continue" and task.endswith("Continue")
+                if clean_decline:
+                    assert persistent.proc is not None and persistent.reopen_required is None
+                else:
+                    assert persistent.proc is None and persistent.reopen_required == file
+                with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
+                    assert allowed is True
+                    dispatched.append(task)
+                with kwargs["send_boundary"](None, "b" * 32, task) as allowed:
+                    assert allowed is False
+                assert kwargs["native_start"](None, "a" * 32, task)
+                yield ae.InputStarted(id=None)
+                yield ae.StreamSettled()
+                yield ae.Done(ok=True, text="processed")
+    
+            if real_host:
+                # Use the real backend subprocess/reopen/proof protocol. Replace
+                # only its executable with an offline host of the same prepared
+                # SDK and RPC; the selected model stream never accesses a network.
+                spawn = asyncio.create_subprocess_exec
+    
+                async def offline_spawn(program, *args, **kwargs):
+                    if program == launcher:
+                        kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
+                        return await spawn(
+                            "node",
+                            str(
+                                Path(__file__).resolve().parents[1]
+                                / "stack/test-native-selected-owner-host.mjs"
+                            ),
+                            *args,
+                            **kwargs,
+                        )
+                    return await spawn(program, *args, **kwargs)
+    
+                monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+            else:
+                monkeypatch.setattr(backend, "stream_agent_events", native_stream)
+            try:
+                turn = agent.turns.run_agent_turn(
+                    "proj",
+                    "proj",
+                    "Continue",
+                    original_keys=(original_key,),
+                    original_owner_input=True,
+                    original_goal_id="goal-acp",
+                )
+                if correction:
+                    with pytest.raises(RelationViolationError, match="Unsettled"):
+                        await turn
+                    assert dispatched == []
+                    assert dispositions.read().rows.get(original_key).native_id is None
+                else:
+>                   await turn
+
+tests/test_selected_owner_compaction_integration.py:357: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/turn_runner.py:705: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:843: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:723: in prepare_native
+    self.committed = await maybe_compact_owner_turn(
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+_ test_acp_selected_summary_handoff_uses_final_prompt_once[decline-True-True-ordinary] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_acp_selected_summary_hand14')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4aeb29bbd0>
+correction = True, real_host = True, clean_decline = True
+private_session = False
+
+    @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+    @pytest.mark.parametrize("correction", [False, True])
+    @pytest.mark.parametrize("real_host", [False, True])
+    @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
+    async def test_acp_selected_summary_handoff_uses_final_prompt_once(
+        tmp_path, monkeypatch, correction, real_host, clean_decline, private_session
+    ):
+        original_key = "acp:original-proj" if private_session else "acp:original"
+        from dataclasses import replace
+    
+        from agent_comms import backend
+        from agent_comms.acp import CommsAgent
+        from agent_comms.comms import wire
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.goal_attempts import GoalAttemptStore
+        from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+    
+        if private_session:
+            if not real_host:
+                pytest.skip("Private-session coverage needs the real SDK host")
+            monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
+        if clean_decline:
+            monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
+        async with owner_fixture(tmp_path, monkeypatch, real_host=real_host) as (
+            persistent,
+            _registry,
+            _inputs,
+            file,
+            launcher,
+            info,
+        ):
+            root = tmp_path if private_session else tmp_path / "acp-wire"
+            comms = wire(root)
+            project = tmp_path / "proj"
+            project.mkdir()
+    
+            class Client:
+                async def session_update(self, **kwargs):
+                    pass
+    
+            agent = CommsAgent(
+                comms,
+                agent_bin=launcher,
+                agent_args=[],
+                runtime_enabled=True,
+                auto_wake=False,
+            )
+            agent.on_connect(Client())
+            await agent.new_session(cwd=str(project), mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            comms.registry.register(
+                replace(
+                    comms.registry.require("proj"),
+                    goal=Goal("retain history", "goal-acp"),
+                    session_file=file,
+                    model=info.model,
+                    pid=os.getpid(),
+                )
+            )
+            comms.agents.set_agent_info(
+                "proj",
+                model=info.model,
+                context_used=info.context_used,
+                context_size=info.context_size,
+            )
+            private = root / "goal-private"
+            private.mkdir(mode=0o700)
+            store = GoalAttemptStore.initialize(private)
+            store.create_goal("goal-acp")
+            agent.turns.goal_store = store
+            agent.turns.persistent_backends["proj"] = persistent
+            dispositions = InputDispositions(root / InputDispositions.filename)
+            if private_session:
+                record_fixture_history(
+                    dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
+                )
+            dispositions.record(
+                original_key,
+                seq=None,
+                owner="proj",
+                admission=comms.registry.snapshot().admission_generations["proj"],
+                target="proj",
+                text="Continue",
+            )
+            selected_exchange = SelectedSummarySlot.run_selected_summary
+            summary_ids = []
+    
+            async def selected_with_correction(self, *args, **kwargs):
+                result = await selected_exchange(self, *args, **kwargs)
+                summary_ids.append(result.operation_id)
+                if correction:
+                    dispositions.record(
+                        "acp:correction",
+                        seq=None,
+                        owner="proj",
+                        admission=comms.registry.snapshot().admission_generations["proj"],
+                        target="proj",
+                        text="Changed requirement before native commit",
+                    )
+                return result
+    
+            monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", selected_with_correction)
+            dispatched = []
+    
+            async def native_stream(*args, **kwargs):
+                task = args[2]
+                # Exercise actual ACP admission/bind callbacks; no provider or
+                # second native user turn is started by this synthetic receiver.
+                assert task != "Continue" and task.endswith("Continue")
+                if clean_decline:
+                    assert persistent.proc is not None and persistent.reopen_required is None
+                else:
+                    assert persistent.proc is None and persistent.reopen_required == file
+                with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
+                    assert allowed is True
+                    dispatched.append(task)
+                with kwargs["send_boundary"](None, "b" * 32, task) as allowed:
+                    assert allowed is False
+                assert kwargs["native_start"](None, "a" * 32, task)
+                yield ae.InputStarted(id=None)
+                yield ae.StreamSettled()
+                yield ae.Done(ok=True, text="processed")
+    
+            if real_host:
+                # Use the real backend subprocess/reopen/proof protocol. Replace
+                # only its executable with an offline host of the same prepared
+                # SDK and RPC; the selected model stream never accesses a network.
+                spawn = asyncio.create_subprocess_exec
+    
+                async def offline_spawn(program, *args, **kwargs):
+                    if program == launcher:
+                        kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
+                        return await spawn(
+                            "node",
+                            str(
+                                Path(__file__).resolve().parents[1]
+                                / "stack/test-native-selected-owner-host.mjs"
+                            ),
+                            *args,
+                            **kwargs,
+                        )
+                    return await spawn(program, *args, **kwargs)
+    
+                monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+            else:
+                monkeypatch.setattr(backend, "stream_agent_events", native_stream)
+            try:
+                turn = agent.turns.run_agent_turn(
+                    "proj",
+                    "proj",
+                    "Continue",
+                    original_keys=(original_key,),
+                    original_owner_input=True,
+                    original_goal_id="goal-acp",
+                )
+                if correction:
+                    with pytest.raises(RelationViolationError, match="Unsettled"):
+>                       await turn
+
+tests/test_selected_owner_compaction_integration.py:353: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/turn_runner.py:705: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:843: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:723: in prepare_native
+    self.committed = await maybe_compact_owner_turn(
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+_ test_acp_selected_summary_handoff_uses_final_prompt_once[decline-True-True-private] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_acp_selected_summary_hand15')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4aeb29a900>
+correction = True, real_host = True, clean_decline = True
+private_session = True
+
+    @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+    @pytest.mark.parametrize("correction", [False, True])
+    @pytest.mark.parametrize("real_host", [False, True])
+    @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
+    async def test_acp_selected_summary_handoff_uses_final_prompt_once(
+        tmp_path, monkeypatch, correction, real_host, clean_decline, private_session
+    ):
+        original_key = "acp:original-proj" if private_session else "acp:original"
+        from dataclasses import replace
+    
+        from agent_comms import backend
+        from agent_comms.acp import CommsAgent
+        from agent_comms.comms import wire
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.goal_attempts import GoalAttemptStore
+        from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+    
+        if private_session:
+            if not real_host:
+                pytest.skip("Private-session coverage needs the real SDK host")
+            monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
+        if clean_decline:
+            monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
+        async with owner_fixture(tmp_path, monkeypatch, real_host=real_host) as (
+            persistent,
+            _registry,
+            _inputs,
+            file,
+            launcher,
+            info,
+        ):
+            root = tmp_path if private_session else tmp_path / "acp-wire"
+            comms = wire(root)
+            project = tmp_path / "proj"
+            project.mkdir()
+    
+            class Client:
+                async def session_update(self, **kwargs):
+                    pass
+    
+            agent = CommsAgent(
+                comms,
+                agent_bin=launcher,
+                agent_args=[],
+                runtime_enabled=True,
+                auto_wake=False,
+            )
+            agent.on_connect(Client())
+            await agent.new_session(cwd=str(project), mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            comms.registry.register(
+                replace(
+                    comms.registry.require("proj"),
+                    goal=Goal("retain history", "goal-acp"),
+                    session_file=file,
+                    model=info.model,
+                    pid=os.getpid(),
+                )
+            )
+            comms.agents.set_agent_info(
+                "proj",
+                model=info.model,
+                context_used=info.context_used,
+                context_size=info.context_size,
+            )
+            private = root / "goal-private"
+            private.mkdir(mode=0o700)
+            store = GoalAttemptStore.initialize(private)
+            store.create_goal("goal-acp")
+            agent.turns.goal_store = store
+            agent.turns.persistent_backends["proj"] = persistent
+            dispositions = InputDispositions(root / InputDispositions.filename)
+            if private_session:
+                record_fixture_history(
+                    dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
+                )
+            dispositions.record(
+                original_key,
+                seq=None,
+                owner="proj",
+                admission=comms.registry.snapshot().admission_generations["proj"],
+                target="proj",
+                text="Continue",
+            )
+            selected_exchange = SelectedSummarySlot.run_selected_summary
+            summary_ids = []
+    
+            async def selected_with_correction(self, *args, **kwargs):
+                result = await selected_exchange(self, *args, **kwargs)
+                summary_ids.append(result.operation_id)
+                if correction:
+                    dispositions.record(
+                        "acp:correction",
+                        seq=None,
+                        owner="proj",
+                        admission=comms.registry.snapshot().admission_generations["proj"],
+                        target="proj",
+                        text="Changed requirement before native commit",
+                    )
+                return result
+    
+            monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", selected_with_correction)
+            dispatched = []
+    
+            async def native_stream(*args, **kwargs):
+                task = args[2]
+                # Exercise actual ACP admission/bind callbacks; no provider or
+                # second native user turn is started by this synthetic receiver.
+                assert task != "Continue" and task.endswith("Continue")
+                if clean_decline:
+                    assert persistent.proc is not None and persistent.reopen_required is None
+                else:
+                    assert persistent.proc is None and persistent.reopen_required == file
+                with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
+                    assert allowed is True
+                    dispatched.append(task)
+                with kwargs["send_boundary"](None, "b" * 32, task) as allowed:
+                    assert allowed is False
+                assert kwargs["native_start"](None, "a" * 32, task)
+                yield ae.InputStarted(id=None)
+                yield ae.StreamSettled()
+                yield ae.Done(ok=True, text="processed")
+    
+            if real_host:
+                # Use the real backend subprocess/reopen/proof protocol. Replace
+                # only its executable with an offline host of the same prepared
+                # SDK and RPC; the selected model stream never accesses a network.
+                spawn = asyncio.create_subprocess_exec
+    
+                async def offline_spawn(program, *args, **kwargs):
+                    if program == launcher:
+                        kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
+                        return await spawn(
+                            "node",
+                            str(
+                                Path(__file__).resolve().parents[1]
+                                / "stack/test-native-selected-owner-host.mjs"
+                            ),
+                            *args,
+                            **kwargs,
+                        )
+                    return await spawn(program, *args, **kwargs)
+    
+                monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+            else:
+                monkeypatch.setattr(backend, "stream_agent_events", native_stream)
+            try:
+                turn = agent.turns.run_agent_turn(
+                    "proj",
+                    "proj",
+                    "Continue",
+                    original_keys=(original_key,),
+                    original_owner_input=True,
+                    original_goal_id="goal-acp",
+                )
+                if correction:
+                    with pytest.raises(RelationViolationError, match="Unsettled"):
+>                       await turn
+
+tests/test_selected_owner_compaction_integration.py:353: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/turn_runner.py:705: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:843: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:723: in prepare_native
+    self.committed = await maybe_compact_owner_turn(
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+______ test_correction_after_native_commit_never_mints_original_admission ______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_correction_after_native_c0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4aeb500b40>
+
+    async def test_correction_after_native_commit_never_mints_original_admission(tmp_path, monkeypatch):
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+    
+        async with owner_fixture(tmp_path, monkeypatch) as (
+            persistent,
+            registry,
+            inputs,
+            file,
+            launcher,
+            info,
+        ):
+            admit = OwnerCompactionCommit.admit_selected_original
+    
+            def corrected(self, owner, owner_generation, operation, source, identity):
+                assert operation.state.declared_name == "committed"
+                inputs.record(
+                    "acp:correction",
+                    seq=None,
+                    owner=owner.name,
+                    admission=owner.active_turn.admission_generation,
+                    target=owner.name,
+                    text="Correction after native commit",
+                )
+                return admit(self, owner, owner_generation, operation, source, identity)
+    
+            monkeypatch.setattr(OwnerCompactionCommit, "admit_selected_original", corrected)
+            admissions = []
+            with pytest.raises(RelationViolationError, match="Unsettled"):
+>               await maybe_compact_owner_turn(
+                    registry,
+                    launcher,
+                    "owner",
+                    "turn",
+                    info,
+                    "acp:original",
+                    persistent,
+                    input_text="Continue",
+                    on_admission=admissions.append,
+                )
+
+tests/test_selected_owner_compaction_integration.py:472: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+_____ test_selected_effective_disabled_skips_without_reserving_or_mutating _____
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_selected_effective_disabl0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4aeb503ee0>
+
+    async def test_selected_effective_disabled_skips_without_reserving_or_mutating(
+        tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("PR95_EFFECTIVE_DISABLED", "1")
+        async with owner_fixture(tmp_path, monkeypatch, real_host=True) as (
+            persistent,
+            registry,
+            inputs,
+            file,
+            launcher,
+            info,
+        ):
+            # Detached disk settings disagree: selected runtime owns the decision.
+            (tmp_path / "pi-settings/settings.json").write_text('{"compaction":{"enabled":true}}')
+            before = Path(file).read_bytes()
+>           assert not await maybe_compact_owner_turn(
+                registry,
+                launcher,
+                "owner",
+                "turn",
+                info,
+                "acp:original",
+                persistent,
+                input_text="Continue",
+                on_admission=lambda _: pytest.fail("Disabled admission"),
+            )
+
+tests/test_selected_owner_compaction_integration.py:505: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+_______ test_selected_custom_model_and_project_settings_use_actual_owner _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_selected_custom_model_and0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4aeb5ee200>
+
+    async def test_selected_custom_model_and_project_settings_use_actual_owner(tmp_path, monkeypatch):
+        monkeypatch.setenv("PR95_CUSTOM_MODEL", "1")
+        model_file = tmp_path / "models.json"
+        model_file.write_text(
+            json.dumps(
+                {
+                    "providers": {
+                        "custom-local": {
+                            "baseUrl": "http://127.0.0.1:1/v1",
+                            "api": "openai-completions",
+                            "models": [
+                                {
+                                    "id": "custom-model",
+                                    "name": "Offline model",
+                                    "contextWindow": 10000,
+                                    "maxTokens": 1000,
+                                }
+                            ],
+                        }
+                    }
+                }
+            )
+        )
+        monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path))
+        project = tmp_path / ".pi"
+        project.mkdir()
+        # These settings are untrusted by this host. A detached projectTrusted:true
+        # reader would disagree; the live SettingsManager is the deciding authority.
+        (project / "settings.json").write_text('{"compaction":{"enabled":false}}')
+        async with owner_fixture(tmp_path, monkeypatch, real_host=True) as (
+            persistent,
+            registry,
+            inputs,
+            file,
+            launcher,
+            info,
+        ):
+            admitted = []
+            assert info.model == "custom-local/custom-model"
+>           assert await maybe_compact_owner_turn(
+                registry,
+                launcher,
+                "owner",
+                "turn",
+                info,
+                "acp:original",
+                persistent,
+                input_text="Continue",
+                on_admission=admitted.append,
+            )
+
+tests/test_selected_owner_compaction_integration.py:561: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+__________ test_owner_without_goal_compacts_with_exact_turn_authority __________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-207/test_owner_without_goal_compac0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4aeb502190>
+
+    async def test_owner_without_goal_compacts_with_exact_turn_authority(tmp_path, monkeypatch):
+        async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
+            persistent,
+            registry,
+            inputs,
+            file,
+            launcher,
+            info,
+        ):
+            admitted = []
+>           assert await maybe_compact_owner_turn(
+                registry,
+                launcher,
+                "owner",
+                "turn",
+                info,
+                "acp:original",
+                persistent,
+                input_text="Continue",
+                on_admission=admitted.append,
+            )
+
+tests/test_selected_owner_compaction_integration.py:593: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/owner_compaction_adaptive.py:89: in maybe_compact_owner_turn
+    package = package_for_launcher(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+launcher = '/home/ts/wt/comms-refactor-integration-20260928/stack/bin/pi-native'
+
+    def package_for_launcher(launcher: str) -> Path:
+        """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
+        executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
+        if executable.name == "pi-comms-native":
+            from .coordination_store import PublicationActivationBlocked
+            from .native_pi import NativePiUnavailable
+            from .private_nk_entrypoint import private_nk_from_environment
+    
+            try:
+                launch = private_nk_from_environment()
+            except (NativePiUnavailable, PublicationActivationBlocked) as error:
+                raise NativeReopenError("Native owner route is unavailable") from error
+            if launch is None:
+                raise NativeReopenError("Native owner backend requires a configured private route")
+            # Use the launcher's route owner, then apply the same complete-tree
+            # commitment as the legacy launcher. A path or seven-file probe alone
+            # cannot select different preparation/commit helpers after compaction.
+            verify_native_package(launch.native_package)
+            return launch.native_package
+        if executable.name != "pi-native" or executable.parent.name != "bin":
+            raise NativeReopenError("Canonical native launcher required for saved-session reopen")
+        stack = executable.parent.parent
+        manifest = stack / "pi-native.sha256"
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+>           raise NativeReopenError("Launcher and Python native commitments differ")
+E           agent_comms.native_session_reopen.NativeReopenError: Launcher and Python native commitments differ
+
+src/agent_comms/native_session_reopen.py:62: NativeReopenError
+=========================== short test summary info ============================
+FAILED tests/test_selected_owner_compaction_integration.py::test_selected_native_summary_commits_and_admits_original_exactly_once
+FAILED tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[summary-False-False-ordinary]
+FAILED tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[summary-False-True-ordinary]
+FAILED tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[summary-True-False-ordinary]
+FAILED tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[summary-True-False-private]
+FAILED tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[summary-True-True-ordinary]
+FAILED tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[summary-True-True-private]
+FAILED tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[decline-False-False-ordinary]
+FAILED tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[decline-False-True-ordinary]
+FAILED tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[decline-True-False-ordinary]
+FAILED tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[decline-True-False-private]
+FAILED tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[decline-True-True-ordinary]
+FAILED tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[decline-True-True-private]
+FAILED tests/test_selected_owner_compaction_integration.py::test_correction_after_native_commit_never_mints_original_admission
+FAILED tests/test_selected_owner_compaction_integration.py::test_selected_effective_disabled_skips_without_reserving_or_mutating
+FAILED tests/test_selected_owner_compaction_integration.py::test_selected_custom_model_and_project_settings_use_actual_owner
+FAILED tests/test_selected_owner_compaction_integration.py::test_owner_without_goal_compacts_with_exact_turn_authority
+17 failed, 4 skipped in 11.98s
+
+exit: 1

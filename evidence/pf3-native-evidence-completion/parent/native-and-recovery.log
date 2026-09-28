@@ -1,0 +1,15 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-pf3-native-evidence-20260928
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, xdist-3.8.0, cov-7.1.0, platformdirs-4.12.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 109 items
+
+tests/test_native_pi.py .............................s.................. [ 44%]
+......                                                                   [ 49%]
+tests/test_native_failure_recovery.py ............                       [ 60%]
+tests/test_native_prompt_binding.py ..........................s          [ 85%]
+tests/test_pi_payloads.py ................                               [100%]
+
+======================= 107 passed, 2 skipped in 23.36s ========================

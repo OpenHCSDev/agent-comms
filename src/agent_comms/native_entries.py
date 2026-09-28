@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from dataclasses import dataclass, field, replace
+from typing import Any, ClassVar, Literal
 
 from .declared_family import DeclaredFamily
 from .messages import Message
@@ -51,15 +51,16 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
             # Opaque display roles must not hide a tracked ID from proof readers.
             if message.get("inputId") is not None and not entry.message.user:
                 raise ValueError("Tracked native input must belong to a user")
-            if entry.message.user and "content" in message:
-                content = entry.message.content
-                represented = (
-                    [part.to_wire() for part in content]
-                    if isinstance(content, tuple)
-                    else content
+            if entry.message.user and isinstance(entry.message.content, tuple):
+                # A digest/context reader may corroborate extended native content,
+                # but continued STARTED text matching must never lose extra fields.
+                content = tuple(
+                    part.preserve_evidence(raw_part)
+                    for part, raw_part in zip(
+                        entry.message.content, message["content"], strict=True
+                    )
                 )
-                if message["content"] != represented:
-                    raise ValueError("Native user content contains unrepresented evidence fields")
+                entry = replace(entry, message=replace(entry.message, content=content))
         return entry
 
     @classmethod
@@ -117,9 +118,21 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
         return False
 
 
+@dataclass(frozen=True)
+class SelectedFreshMarker(PiPayload):
+    """Saved denial marker only; FreshPrivateSession retains enrollment authority."""
+
+    strict_fields = True
+    schema: Literal[1]
+    thinking_level: Literal["low", "high"] = field(metadata={"wire_name": "thinkingLevel"})
+
+
 @dataclass(frozen=True, kw_only=True)
 class SessionEntry(NativeEntry):
     version: int | None = None
+    selected_fresh: SelectedFreshMarker | None = field(
+        default=None, metadata={"wire_name": "agentCommsSelectedFresh"}
+    )
 
     def require_header(self) -> None:
         if not self.id:

@@ -510,18 +510,9 @@ def prepare_native_pi_rpc_launch(
         raise NativePiUnavailable("Native Pi worktree is unavailable")
     if session_file is not None:
         session_file = _session_location(session_dir, str(session_file))
-        entries = _read_private_file(session_file)
-        if not entries or entries[0].get("type") != "session":
-            raise NativePiUnavailable("Selected native source lacks a session header")
-        marker = entries[0].get("agentCommsSelectedFresh")
-        if (marker is not None or selected_thinking_level is not None) and (
-            type(marker) is not dict
-            or marker != {"schema": 1, "thinkingLevel": selected_thinking_level}
-            or selected_thinking_level not in {"low", "high"}
-        ):
-            raise NativePiUnavailable(
-                "Selected fresh source cannot reopen without exact first-start token"
-            )
+        from .fresh_private_session import FreshPrivateSession
+
+        FreshPrivateSession.require_launch_header(session_file, selected_thinking_level)
     agent_dir = _private_agent_dir(session_dir)
     tool_arguments = (
         selected_tool_mode.launch_arguments(package)
