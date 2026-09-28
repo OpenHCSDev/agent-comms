@@ -1,0 +1,38 @@
+{
+  "base_revision": "bf68bbbf5eed95dd79f890fc50886a4481d40a7d",
+  "head_revision": "69cd5ac622dc01f7cc55e85221b7d11639c7b298",
+  "paths": [
+    "src/agent_comms/backend.py",
+    "src/agent_comms/child_process.py",
+    "src/agent_comms/cli_commands.py",
+    "src/agent_comms/cohort_foreground.py",
+    "src/agent_comms/goal_actions.py",
+    "src/agent_comms/goal_history.py",
+    "src/agent_comms/goals.py",
+    "src/agent_comms/nk_foreground.py",
+    "src/agent_comms/owner_lifecycle.py",
+    "src/agent_comms/recovery_gateway.py",
+    "src/agent_comms/registration.py",
+    "src/agent_comms/registry_document.py",
+    "src/agent_comms/registry_store.py",
+    "src/agent_comms/thread_management.py",
+    "src/agent_comms/threads.py",
+    "src/agent_comms/tools.py",
+    "src/agent_comms/turn_inputs.py"
+  ],
+  "base": {
+    "TypeIdentity": 34,
+    "LongBooleanChain": 47,
+    "StringSubscript": 135
+  },
+  "head": {
+    "TypeIdentity": 32,
+    "LongBooleanChain": 42,
+    "StringSubscript": 127
+  },
+  "delta": {
+    "TypeIdentity": -2,
+    "LongBooleanChain": -5,
+    "StringSubscript": -8
+  }
+}

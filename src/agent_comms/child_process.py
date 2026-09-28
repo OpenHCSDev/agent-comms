@@ -541,6 +541,9 @@ class ChildLaunch(ABC):
     def release(self, identity: ProcessIdentity) -> None: ...
 
     @abstractmethod
+    def cancel_before_release(self, identity: ProcessIdentity) -> None: ...
+
+    @abstractmethod
     def verify(self) -> None: ...
 
     async def verify_async(self) -> None:
@@ -571,7 +574,17 @@ class WindowsLaunch(ChildLaunch):
         return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | 0x00000004}
 
     def release(self, identity: ProcessIdentity) -> None:
-        self.platform.bind_and_resume(identity)
+        try:
+            self.platform.bind_and_resume(identity)
+        except BaseException:
+            self.cancel_before_release(identity)
+            raise
+
+    def cancel_before_release(self, identity: ProcessIdentity) -> None:
+        # The executable is suspended: it cannot have created descendants.
+        # No job may exist yet; signal its verified process handle directly.
+        with suppress(ProcessLookupError):
+            self.platform.send(identity, 1)
 
     def verify(self) -> None:
         pass  # CreateProcess itself reports launch failure before returning.
@@ -609,6 +622,11 @@ class PosixLaunch(ChildLaunch):
     def release(self, identity: ProcessIdentity) -> None:
         self.error_writer.close()
         os.write(self.write_fd, b"G")
+
+    def cancel_before_release(self, identity: ProcessIdentity) -> None:
+        # The exec gate has not released user code or spawned descendants.
+        with suppress(ProcessLookupError):
+            Platform.current().send(identity, signal.SIGKILL)
 
     def verify(self) -> None:
         error = os.read(self.error_r, 64)
@@ -960,6 +978,11 @@ class DetachedProcess(ChildProcess):
             try:
                 if before_start is not None:
                     before_start(identity)
+            except BaseException:
+                launch.cancel_before_release(identity)
+                process.wait(timeout=STOP_GRACE_SECONDS)
+                raise
+            try:
                 launch.release(identity)
                 launch.verify()
             except BaseException:

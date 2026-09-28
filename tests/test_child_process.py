@@ -291,3 +291,26 @@ def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> 
     finally:
         child.stop_sync()
     assert not child.alive()
+
+
+def test_reservation_failure_never_executes_and_reaps_child(tmp_path: Path) -> None:
+    receipt = tmp_path / "should-not-exist"
+    captured = []
+
+    def reject(identity: ProcessIdentity) -> None:
+        captured.append(identity)
+        raise ValueError("reservation refused")
+
+    with pytest.raises(ValueError, match="reservation refused"):
+        DetachedProcess.launch(
+            (
+                sys.executable,
+                "-c",
+                "import sys; open(sys.argv[1], 'w').write('wrong')",
+                str(receipt),
+            ),
+            before_start=reject,
+        )
+    assert len(captured) == 1
+    assert not captured[0].alive()
+    assert not receipt.exists()

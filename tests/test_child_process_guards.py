@@ -51,9 +51,9 @@ def test_detached_control_has_no_bare_pid_api() -> None:
     assert ast.unparse(attach.args.args[1].annotation) == "ProcessIdentity"
 
 
-def test_backend_and_input_callers_cannot_reintroduce_local_supervision() -> None:
+def test_s13_callers_cannot_reintroduce_local_supervision() -> None:
     package = Path(child_process.__file__).parent
-    for name in ("backend.py", "turn_inputs.py"):
+    for name in ("backend.py", "turn_inputs.py", "owner_lifecycle.py", "recovery_gateway.py"):
         tree = ast.parse((package / name).read_text())
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
