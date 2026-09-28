@@ -1,4 +1,4 @@
-# Live compaction failure — active correction, not ready for activation
+# Compaction correction and latest fork pins — installed 2026-09-28
 
 User reported agent-comms-ux automatic summary limit_exceeded and manual compact
 refusing its missing owner journal bridge. Actual Toad log is available under
@@ -34,15 +34,40 @@ native commit child, and SessionManager reopen: committed, 601 read-file records
 session/root/user input files remain untouched. Initial copied-file
 permission failure and the second-cap failure logs are retained.
 
-## Still required
+## Installed acceptance and remaining work
 
-- Full ACP manual bridge with retained session; direct journal commit/reopen passes.
-- Existing input remains UNKNOWN; no automatic resend/replay or journal deletion.
-- Systemic capacity closure: cumulative output, overall deadline, response framing,
-  retained snapshot bounds and session loading must follow their actual owners.
-  Do not replace one arbitrary total-history ceiling with a larger ceiling.
-- Installed candidate wheel/native package acceptance, then idle-owner activation.
-- Fold the correction into refactor229 and retain current ownership/deletions.
+- Installed core b407c18, Toad 43e57c9 and Textual 16ede00 from their forks.
+  `stack/pyproject.toml` and its generated lock own the exact pins.
+- Actual retained 143MB session passes installed ACP manual compaction, native
+  journal commit and strict reopen: final-installed-manual.log, 6 passed.
+  The provider response is loopback; no paid provider acceptance is claimed.
+- Framing/native/manual local suite: 67 passed, 2 skipped. Large metadata over
+  the old 512KiB ceiling commits and survives the next native preparation.
+- Streamed ingress scan processed the actual 283MB bus with 41MB peak RSS;
+  exact delivered-row revision semantics are preserved.
+- Same live bus and wire identity, home-based immutable native release.
+  Four idle owners restarted with incarnation fences: agent-comms-ux,
+  pr95-selected-pi-summary-owner, nra-architecture, nra-domain-mapping.
+  Actual ACP attachment passed for all four; model/thinking/session/goal retained.
+- Catalogs migrated in place across the live root, both attached archives and
+  both original sources: 28/16/6/16/6 preferences retained. No bus rows rewritten.
+  Journal constraint migrated transactionally with its one original row intact.
+  Backup: ~/.local/state/agent-comms/before-compaction-policy-activation.
+  Temporary migration tools and their obsolete runner deleted after use.
+- Original failed summary now records its exact observed native prestart refusal:
+  matched the Toad error to original input digest and unchanged native revision.
+  Original input remains UNKNOWN/unbound; zero replay and no automatic retry.
+  This allows the implemented explicit manual recovery to handle the refusal.
+- Latest installed Toad mounted #comms and both DMs on retained real history.
+  Rendering passed; shutdown hung in recursive directory-watcher setup. The
+  probe exited 124, not green. Copernicus owns that independent Toad correction.
+- Existing open Toad processes retain their old imports until reopened. The
+  launchers and four workers are on the new runtime; no user UI was killed.
+
+Still required: fold this correction into parent refactor229; Darwin owns full
+SessionManager EntryStore migration/deletion, Pascal owns proof-journal streaming,
+Lovelace owns actual >256MiB history/resource acceptance. Those remaining history
+allocation bounds are not solved by this corrective deployment. No cap was raised.
 
 ## Capacity ownership
 
