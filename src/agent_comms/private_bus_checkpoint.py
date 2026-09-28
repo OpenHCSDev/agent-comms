@@ -16,6 +16,7 @@ import json
 import os
 import sqlite3
 import stat
+import tempfile
 from collections.abc import Mapping
 from contextlib import closing
 from dataclasses import dataclass, field, replace
@@ -269,7 +270,14 @@ def _index_row(
 
 
 def install_private_bus_checkpoint(bus: MessageBus) -> PrefixWitness:
-    """Explicit fresh-root opt-in; never auto-install or migrate an old wire."""
+    """Explicitly certify the complete current private bus without rewriting it.
+
+    The canonical writer lock excludes appenders throughout the one-time scan.
+    Build the existing certificate/index schema off-path, then publish its inode
+    and durable marker binding. Before publication a failure leaves no active
+    sidecar; after publication an uncertain marker write retains the sidecar and
+    existing read barrier denies access rather than trusting an unsealed index.
+    """
     from .message_bus import MessageBus
     from .store_files import _atomic_write_text, _store_lock
 
@@ -277,23 +285,31 @@ def install_private_bus_checkpoint(bus: MessageBus) -> PrefixWitness:
         raise TypeError("Canonical private MessageBus required")
     with _store_lock(bus._path):
         marker = bus._private_marker_unlocked()
-        if marker.get("claim_envelopes_version") != 1 or marker["last_seq"] != 0:
-            raise _failure("Checkpoint installation needs an empty claim-enabled private root.")
+        if marker.get("claim_envelopes_version") != 1:
+            raise _failure("Checkpoint installation needs a claim-enabled private root.")
         path = _path(bus._path)
-        if path.exists() or path.is_symlink() or (bus._path.exists() and bus._path.stat().st_size):
-            raise _failure("Checkpoint installation requires a fresh empty private bus.")
-        fd = os.open(
-            bus._path, os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600
-        )
-        try:
-            os.fsync(fd)
-        finally:
-            os.close(fd)
+        if path.exists() or path.is_symlink() or "checkpoint_version" in marker:
+            raise _failure("Private bus checkpoint is already installed.")
+        if not bus._path.exists():
+            if marker["last_seq"] != 0:
+                raise _failure("Private bus is missing its reserved publication.")
+            fd = os.open(
+                bus._path,
+                os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
+                0o600,
+            )
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
         _directory_sync(bus._path)
-        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
-        os.close(fd)
-        try:
-            with closing(_connect(path)) as db:
+        # Staging beside the destination makes publication atomic and never
+        # exposes a partially built index to current readers or appenders.
+        with tempfile.TemporaryDirectory(prefix=".checkpoint-install-", dir=path.parent) as stage:
+            staged = Path(stage) / path.name
+            fd = os.open(staged, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+            os.close(fd)
+            with closing(_connect(staged)) as db:
                 db.executescript(
                     "CREATE TABLE certificate(singleton INTEGER PRIMARY KEY CHECK(singleton=1),"
                     "version INTEGER NOT NULL,root_id TEXT NOT NULL,device INTEGER NOT NULL,"
@@ -308,26 +324,44 @@ def install_private_bus_checkpoint(bus: MessageBus) -> PrefixWitness:
                 )
                 with bus._path.open("rb") as stream:
                     info = os.fstat(stream.fileno())
-                    tail = _tail(stream, 0)
-                with db:
-                    db.execute(
-                        "INSERT INTO certificate VALUES(1,?,?,?,?,?,?,?,?,?,?)",
-                        (
-                            _VERSION,
-                            marker["wire_root_id"],
-                            info.st_dev,
-                            info.st_ino,
-                            0,
-                            0,
-                            _SEED.hex(),
-                            tail,
-                            info.st_mtime_ns,
-                            info.st_ctime_ns,
-                        ),
-                    )
-            _directory_sync(path)
-            with closing(_connect(path, readonly=True)) as db:
+                    digest = _SEED
+                    through_seq = 0
+
+                    def collect(offset, raw, message, receipt, initial):
+                        nonlocal digest, through_seq
+                        digest = _chain(digest, raw)
+                        through_seq = message.seq
+                        _index_row(db, offset, raw, message, receipt, initial)
+
+                    with db:
+                        for _ in bus._verified_private_rows_unlocked(marker, on_row=collect):
+                            pass
+                        if through_seq != marker["last_seq"]:
+                            raise _failure("Private bus has an unsettled publication sequence.")
+                        if _revision(os.fstat(stream.fileno())) != _revision(info) or _revision(
+                            bus._path.stat()
+                        ) != _revision(info):
+                            raise _failure("Private bus changed during checkpoint installation.")
+                        db.execute(
+                            "INSERT INTO certificate VALUES(1,?,?,?,?,?,?,?,?,?,?)",
+                            (
+                                _VERSION,
+                                marker["wire_root_id"],
+                                info.st_dev,
+                                info.st_ino,
+                                info.st_size,
+                                through_seq,
+                                digest.hex(),
+                                _tail(stream, info.st_size),
+                                info.st_mtime_ns,
+                                info.st_ctime_ns,
+                            ),
+                        )
+            _directory_sync(staged)
+            with closing(_connect(staged, readonly=True)) as db:
                 witness = _saved(db)
+            os.replace(staged, path)
+            _directory_sync(path)
             marker["checkpoint_version"] = _VERSION
             marker["checkpoint_seal"] = _final_seal(witness, path)
             _atomic_write_text(
@@ -336,10 +370,6 @@ def install_private_bus_checkpoint(bus: MessageBus) -> PrefixWitness:
                 fsync_parent=True,
             )
             return witness
-        except BaseException:
-            # A failed install must not turn a partly initialized sidecar into authority.
-            # Preserve the private bus and quarantine the checkpoint for inspection.
-            raise
 
 
 def certificate_enabled(bus_path: Path) -> bool:

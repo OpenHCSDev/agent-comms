@@ -5,6 +5,7 @@ Provider-free native fake only: a source certificate is not an ACK or input perm
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -41,7 +42,13 @@ def _root(tmp_path: Path):
     comms = Comms(root, private_initial_writes=True)
     people = [
         Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()),
-        Thread("alpha", frozenset({"team"}), str(tmp_path), pid=os.getpid()),
+        Thread(
+            "alpha",
+            frozenset({"team"}),
+            str(tmp_path),
+            pid=os.getpid(),
+            model="openai-codex/gpt-6-sol",
+        ),
         Thread("other", frozenset(), str(tmp_path), pid=os.getpid()),
     ]
     for person in people:
@@ -61,7 +68,10 @@ def _root(tmp_path: Path):
     return root, root_id, comms, first, lookup
 
 
-async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, monkeypatch):
+@pytest.mark.parametrize("migrate_existing", [False, True])
+async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(
+    tmp_path, monkeypatch, migrate_existing
+):
     root, root_id, comms, first, lookup = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
@@ -74,6 +84,20 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, mo
         comms.send_initial_cohort("sender", "other", f"unrelated-{number:04}-" + "x" * 8700)
     second = comms.send_initial_cohort("sender", "#team", "selected after 1000 other rows")
     assert second.seq == first.seq + 1001 and comms.bus._path.stat().st_size > 8 * 1024 * 1024
+    if migrate_existing:
+        # Build the large fixture through the real certified publisher, then
+        # remove only its certificate to represent the same pre-migration bus.
+        # This avoids O(n**2) fixture setup through the old unindexed writer.
+        marker_path = root / "bus_meta.json"
+        marker = json.loads(marker_path.read_text())
+        del marker["checkpoint_version"]
+        del marker["checkpoint_seal"]
+        marker_path.write_text(json.dumps(marker))
+        (root / "private_bus_checkpoint.sqlite3").unlink()
+        before = comms.bus._path.read_bytes()
+        witness = install_private_bus_checkpoint(Comms(root).bus)
+        assert witness.through_seq == second.seq
+        assert comms.bus._path.read_bytes() == before
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second.seq, store)
     second_turn = await runtime.run_one_sealed_claim(

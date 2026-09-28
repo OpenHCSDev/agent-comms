@@ -32,6 +32,7 @@ from .goal_waits import GoalWaits
 from .input_disposition import InputDispositions
 from .native_prompt_binding import install_prompt_binding_schema
 from .operations import Comms
+from .private_bus_checkpoint import install_private_bus_checkpoint
 from .store_files import _store_lock
 from .thread_status import StoppedThreadStatus
 from .threads import Thread
@@ -543,6 +544,7 @@ def stage_private_participants(
     # A claim read barrier can only be installed while the private bus is
     # empty. Selected owner writes on this route need it before any USER row.
     private.initialize_private_claim_protocol()
+    install_private_bus_checkpoint(private.bus)
     with _store_lock(private._wire_lock_path):
         new_waits = GoalWaits(private.root / "goal_waits.json")
         for wait in migrated_waits:

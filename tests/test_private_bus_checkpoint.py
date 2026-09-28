@@ -50,10 +50,10 @@ def _page(comms: Comms, lookup: str, after: int = 0, limit: int = 100):
         )
 
 
-def test_fresh_only_marker_bound_complete_addressed_pages(tmp_path: Path) -> None:
+def test_marker_bound_complete_addressed_pages(tmp_path: Path) -> None:
     comms, root_id = _root(tmp_path)
     install_private_bus_checkpoint(comms.bus)
-    with pytest.raises(RelationViolationError, match="fresh empty"):
+    with pytest.raises(RelationViolationError, match="already installed"):
         install_private_bus_checkpoint(comms.bus)
     one = comms.send_initial_cohort("sender", "#team", "@Alice selected; Bob no-wake")
     two = comms.send_initial_cohort("sender", "outsider", "not their audience")
@@ -411,12 +411,60 @@ def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch
     print(f"checkpoint scale bytes={recovered.offset} warm_ms={warm_ms:.1f} cold_ms={cold_ms:.1f}")
 
 
-def test_legacy_root_never_auto_certified(tmp_path: Path) -> None:
+def test_existing_root_explicit_install_preserves_source_and_supports_append(
+    tmp_path: Path,
+) -> None:
+    comms, root_id = _root(tmp_path)
+    one = comms.send_initial_cohort("sender", "Alice", "already committed")
+    two = comms.send_initial_cohort("sender", "outsider", "other audience")
+    original = comms.bus._path.read_bytes()
+    inode = comms.bus._path.stat().st_ino
+    reopened = Comms(comms.root)
+    assert not (comms.root / "private_bus_checkpoint.sqlite3").exists()
+    witness = install_private_bus_checkpoint(reopened.bus)
+    assert (witness.root_id, witness.through_seq, witness.offset) == (
+        root_id,
+        two.seq,
+        len(original),
+    )
+    assert comms.bus._path.read_bytes() == original
+    assert comms.bus._path.stat().st_ino == inode
+    assert [r.message.seq for r in _page(reopened, stable_thread_lookup(17002.0))[1]] == [one.seq]
+    three = reopened.send_initial_cohort("sender", "Alice", "after installation")
+    assert three.seq == two.seq + 1
+    assert [r.message.seq for r in _page(reopened, stable_thread_lookup(17002.0))[1]] == [
+        one.seq,
+        three.seq,
+    ]
+
+
+@pytest.mark.parametrize("damage", ["partial", "reserved", "unattested"])
+def test_existing_root_invalid_prefix_does_not_install(tmp_path: Path, damage: str) -> None:
     comms, _ = _root(tmp_path)
-    comms.send_initial_cohort("sender", "Alice", "already committed")
-    with pytest.raises(RelationViolationError, match="empty"):
+    comms.send_initial_cohort("sender", "Alice", "committed")
+    marker = comms.root / "bus_meta.json"
+    if damage == "partial":
+        with comms.bus._path.open("ab") as stream:
+            stream.write(b'{"seq":')
+    elif damage == "reserved":
+        data = json.loads(marker.read_text())
+        data["last_seq"] += 1
+        marker.write_text(json.dumps(data))
+    else:
+        rows = [json.loads(line) for line in comms.bus._path.read_text().splitlines()]
+        for row in rows:
+            for key in tuple(row):
+                if key.startswith("_agent_comms_private"):
+                    del row[key]
+        comms.bus._path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    original_bus = comms.bus._path.read_bytes()
+    original_marker = marker.read_bytes()
+    with pytest.raises(RelationViolationError):
         install_private_bus_checkpoint(comms.bus)
-    assert not (comms.bus._path.parent / "private_bus_checkpoint.sqlite3").exists()
+    assert comms.bus._path.read_bytes() == original_bus
+    assert marker.read_bytes() == original_marker
+    assert not (comms.root / "private_bus_checkpoint.sqlite3").exists()
+    assert not list(comms.root.glob(".checkpoint-install-*"))
 
 
 def test_warm_witness_rejects_changed_revision_even_with_complete_row(tmp_path: Path) -> None:
@@ -431,3 +479,21 @@ def test_warm_witness_rejects_changed_revision_even_with_complete_row(tmp_path: 
         os.fsync(stream.fileno())
     with pytest.raises(RelationViolationError, match="prefix tail changed"):
         _page(comms, stable_thread_lookup(17002.0))
+
+
+def test_failed_existing_index_build_leaves_original_readable(tmp_path, monkeypatch):
+    import agent_comms.private_bus_checkpoint as checkpoint
+
+    comms, _ = _root(tmp_path)
+    one = comms.send_initial_cohort("sender", "Alice", "retained")
+    before = comms.bus._path.read_bytes()
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            checkpoint, "_index_row", lambda *_: (_ for _ in ()).throw(OSError("disk full"))
+        )
+        with pytest.raises(OSError, match="disk full"):
+            install_private_bus_checkpoint(comms.bus)
+    assert comms.bus._path.read_bytes() == before
+    assert not (comms.root / "private_bus_checkpoint.sqlite3").exists()
+    assert [m.seq for m in comms.bus.full_history()] == [one.seq]
+    assert not list(comms.root.glob(".checkpoint-install-*"))
