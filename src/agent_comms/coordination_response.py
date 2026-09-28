@@ -32,11 +32,11 @@ from .coordination import (
     Attempts,
     CurrentExecutions,
     Executions,
-    Obligations,
     OwnerFence,
     PublicationIntents,
     PublicationReceipts,
     RecoverySnapshot,
+    ResponseObligation,
     WakeClaims,
     canonical_publication_key,
 )
@@ -53,6 +53,7 @@ from .coordination_store import (
 )
 from .message_bus import MessageBus
 from .messages import Message, MessageType
+from .obligation_states import PublishedResponse, PublishingResponse
 from .registry_document import RegistrySnapshot
 from .store_files import _store_lock
 from .thread_identity import ThreadRole
@@ -443,11 +444,11 @@ def prepare_fenced_response(
                 expected_message_id=candidate.message_id,
             )
             intent.insert(db)
-            Obligations.update(
+            ResponseObligation.update(
                 db,
                 where="execution_id=? AND state='pending' AND revision=?",
                 parameters=(execution.execution_id, snapshot.obligation.revision),
-                state="publishing",
+                lifecycle=PublishingResponse(),
                 revision=snapshot.obligation.revision + 1,
                 updated_at_ms=store._now(snapshot.obligation.updated_at_ms),
             )
@@ -576,13 +577,11 @@ def _settle_fenced_response(
                 received_at_ms=now,
             ).insert(db)
             obligation = snapshot.obligation
-            Obligations.update(
+            ResponseObligation.update(
                 db,
                 where="execution_id=? AND revision=?",
                 parameters=(intent.execution_id, obligation.revision),
-                state="published",
-                receipt_message_id=matched.message_id,
-                receipt_seq=matched.seq,
+                lifecycle=PublishedResponse(matched.message_id, matched.seq),
                 revision=obligation.revision + 1,
                 updated_at_ms=store._now(obligation.updated_at_ms),
             )

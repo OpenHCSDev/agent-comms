@@ -56,7 +56,12 @@ from .coordination import (
 from .coordination_errors import IdentityConflict
 from .execution_states import ExecutionState, QueuedExecution
 from .native_runtime_input import NativeRuntimeInput
-from .obligation_states import ResponseState
+from .obligation_states import (
+    DeferredResponse,
+    FailedResponse,
+    PendingResponse,
+    SilentResponse,
+)
 from .recovery_states import DeferredRecovery, FailedRecovery, RecoveryCondition
 from .wake_policy import WakePolicy
 
@@ -703,22 +708,7 @@ class MutationStore(CoordinationStore):
         )
         assignments = tuple(self.assignment(link.assignment_id) for link in links)
         replay = ReplayAssessments.one(db, execution_id=execution_id)
-        obligation_row = self._row("obligations", "execution_id", execution_id)
-        obligation = (
-            ResponseObligation(
-                execution_id=execution_id,
-                exact_target=obligation_row["exact_target"],
-                reason_code=obligation_row["reason_code"],
-                created_at_ms=obligation_row["created_at_ms"],
-                updated_at_ms=obligation_row["updated_at_ms"],
-                revision=obligation_row["revision"],
-                lifecycle=ResponseState.decode(obligation_row["state"]).load(
-                    obligation_row["receipt_message_id"], obligation_row["receipt_seq"]
-                ),
-            )
-            if obligation_row
-            else None
-        )
+        obligation = ResponseObligation.one(db, execution_id=execution_id)
         # Read-only projections do not grant Tx1, append, Tx2 or resolution.
         intent = PublicationIntents.one(db, execution_id=execution_id)
         receipt_row = PublicationReceipts.one(db, execution_id=execution_id)
@@ -856,12 +846,15 @@ class MutationStore(CoordinationStore):
                 )
                 ExecutionAssignmentLink(execution_id, assignment_id, ordinal).insert(db)
             if origin is ExecutionOrigin.WIRE:
-                db.execute(
-                    "INSERT INTO obligations(execution_id,exact_target,state,reason_code,"
-                    "created_at_ms,updated_at_ms,revision,receipt_message_id,receipt_seq) "
-                    "VALUES (?,?,'pending',NULL,?,?,1,NULL,NULL)",
-                    (execution_id, exact_target, now, now),
-                )
+                ResponseObligation(
+                    execution_id,
+                    exact_target,
+                    PendingResponse(),
+                    None,
+                    now,
+                    now,
+                    1,
+                ).insert(db)
             return Applied(self.snapshot(execution_id))
 
     def mark_pending(
@@ -906,10 +899,14 @@ class MutationStore(CoordinationStore):
                 (state, reason_code, now, execution_id),
             )
             if before.obligation is not None:
-                db.execute(
-                    "UPDATE obligations SET state=?,revision=revision+1,"
-                    "reason_code=?,updated_at_ms=? WHERE execution_id=?",
-                    (state, reason_code, self._now(before.obligation.updated_at_ms), execution_id),
+                ResponseObligation.update(
+                    db,
+                    where="execution_id=?",
+                    parameters=(execution_id,),
+                    lifecycle=FailedResponse(),
+                    revision=before.obligation.revision + 1,
+                    reason_code=reason_code,
+                    updated_at_ms=self._now(before.obligation.updated_at_ms),
                 )
             for assignment in before.assignments:
                 db.execute(
@@ -1082,10 +1079,14 @@ class MutationStore(CoordinationStore):
                 and snapshot.obligation is not None
                 and snapshot.obligation.lifecycle.deferred
             ):
-                db.execute(
-                    "UPDATE obligations SET state='pending',revision=revision+1,"
-                    "reason_code=NULL,updated_at_ms=? WHERE execution_id=?",
-                    (self._now(snapshot.obligation.updated_at_ms), execution_id),
+                ResponseObligation.update(
+                    db,
+                    where="execution_id=?",
+                    parameters=(execution_id,),
+                    lifecycle=PendingResponse(),
+                    revision=snapshot.obligation.revision + 1,
+                    reason_code=None,
+                    updated_at_ms=self._now(snapshot.obligation.updated_at_ms),
                 )
             if execution.lifecycle.retry:
                 for assignment in snapshot.assignments:
@@ -1426,11 +1427,19 @@ class MutationStore(CoordinationStore):
         )
         if snapshot.obligation is not None:
             obligation = snapshot.obligation
-            target = "silent" if success else ("deferred" if authorized else "failed")
-            db.execute(
-                "UPDATE obligations SET state=?,revision=revision+1,"
-                "updated_at_ms=?,reason_code=? WHERE execution_id=?",
-                (target, self._now(obligation.updated_at_ms), reason_code, execution.execution_id),
+            response = (
+                SilentResponse()
+                if success
+                else (DeferredResponse() if authorized else FailedResponse())
+            )
+            ResponseObligation.update(
+                db,
+                where="execution_id=?",
+                parameters=(execution.execution_id,),
+                lifecycle=response,
+                revision=obligation.revision + 1,
+                updated_at_ms=self._now(obligation.updated_at_ms),
+                reason_code=reason_code,
             )
         for assignment in snapshot.assignments:
             db.execute(

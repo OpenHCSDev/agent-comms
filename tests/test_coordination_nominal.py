@@ -251,10 +251,11 @@ async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
                     "VALUES ('e','wire','queued','requester','owner','p',1,NULL,2,NULL,0,0)"
                 )
                 db.execute(
-                    "INSERT INTO obligations(execution_id,exact_target,state,reason_code,"
-                    "created_at_ms,"
-                    "updated_at_ms,revision,receipt_message_id,receipt_seq) "
-                    "VALUES ('e','requester','reviewed',NULL,0,0,1,NULL,NULL)"
+                    (
+                        "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
+                        "ated_at_ms,updated_at_ms,revision) VALUES ('e','requester',json_object('kind"
+                        "','reviewed'),NULL,0,0,1)"
+                    )
                 )
                 db.execute(
                     "INSERT INTO wake_claims(claim_id,recipient,recipient_lookup,wire_seq,"
@@ -285,7 +286,10 @@ async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
             result = await _through_socket(projection)
             assert result["current"]["publication"] == "reviewed"
             store._connection.execute(
-                "UPDATE obligations SET state='silent',revision=2 WHERE execution_id='e'"
+                (
+                    "UPDATE obligations SET lifecycle=json_object('kind','silent'),revision=2 WHE"
+                    "RE execution_id='e'"
+                )
             )
             assert isinstance(store.snapshot("e").obligation.lifecycle, SilentResponse)
     finally:

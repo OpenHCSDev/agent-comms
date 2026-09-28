@@ -374,9 +374,11 @@ def test_publication_uncertain_and_recursive_privacy(tmp_path: Path):
             "VALUES ('e','wire','queued','private-target','Alice','a',1,NULL,2,NULL,0,0)"
         )
         db.execute(
-            "INSERT INTO obligations (execution_id,exact_target,state,reason_code,"
-            "created_at_ms,updated_at_ms,revision,receipt_message_id,receipt_seq) "
-            "VALUES ('e','private-target','pending',NULL,0,0,1,NULL,NULL)"
+            (
+                "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
+                "ated_at_ms,updated_at_ms,revision) VALUES ('e','private-target',json_object("
+                "'kind','pending'),NULL,0,0,1)"
+            )
         )
         db.execute(
             "INSERT INTO wake_claims (claim_id,recipient,recipient_lookup,wire_seq,message_id,"
@@ -428,7 +430,12 @@ def test_publication_uncertain_and_recursive_privacy(tmp_path: Path):
                 message.message_id,
             ),
         )
-        db.execute("UPDATE obligations SET state='publishing',revision=2 WHERE execution_id='e'")
+        db.execute(
+            (
+                "UPDATE obligations SET lifecycle=json_object('kind','publishing'),revision=2"
+                " WHERE execution_id='e'"
+            )
+        )
         db.execute("COMMIT")
         db.execute(
             "INSERT INTO recovery_audit (execution_id,kind,reason_code,sanitized_detail,"

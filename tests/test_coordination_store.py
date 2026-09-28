@@ -719,9 +719,11 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
         before = db.snapshot("exec")
         prepared = prepare_fence_token()
         db._connection.execute(
-            "CREATE TEMP TRIGGER fail_retry_obligation BEFORE UPDATE OF state "
-            "ON main.obligations WHEN NEW.state='pending' BEGIN "
-            "SELECT RAISE(ABORT, 'injected retry failure'); END"
+            (
+                "CREATE TEMP TRIGGER fail_retry_obligation BEFORE UPDATE OF lifecycle ON main"
+                ".obligations WHEN NEW.state='pending' BEGIN SELECT RAISE(ABORT, 'injected re"
+                "try failure'); END"
+            )
         )
         with pytest.raises(sqlite3.IntegrityError, match="injected retry failure"):
             db.start_attempt(
@@ -1162,8 +1164,10 @@ def test_frozen_v2_pre_attempt_deferred_execution_cannot_resume(db_path: Path) -
                 "WHERE execution_id='exec'"
             )
             connection.execute(
-                "UPDATE obligations SET state='deferred',revision=revision+1 "
-                "WHERE execution_id='exec'"
+                (
+                    "UPDATE obligations SET lifecycle=json_object('kind','deferred'),revision=rev"
+                    "ision+1 WHERE execution_id='exec'"
+                )
             )
             connection.execute(
                 "UPDATE wake_claims SET disposition='deferred',revision=revision+1 "
@@ -1277,8 +1281,10 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
                 ),
             )
             connection.execute(
-                "UPDATE obligations SET state='publishing',revision=revision+1 "
-                "WHERE execution_id='exec'"
+                (
+                    "UPDATE obligations SET lifecycle=json_object('kind','publishing'),revision=r"
+                    "evision+1 WHERE execution_id='exec'"
+                )
             )
         projected = db.snapshot("exec")
         assert projected.publication_intent == intent

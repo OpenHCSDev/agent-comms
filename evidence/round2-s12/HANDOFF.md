@@ -387,3 +387,19 @@ core lifecycle/callers and this crossing close.
 All cohort/recovery/relation tables are inside coordination.sqlite3 and reset
 under parent's quiet D22 procedure, preserving WireMetadata admission_after_seq
 and access/current history. Recovery projection/gateway add no durable store.
+
+## Response obligation owner closure
+
+ResponseObligation now directly owns the obligations table and its lifecycle;
+Obligations and the snapshot mapper are deleted. Coordinator schema5 stores
+ResponseState through FieldCodec and derives state/receipt query columns. All
+obligation mutation callers write the typed lifecycle. Existing snapshot and
+external publication formats remain unchanged. BEFORE triggers read the actual
+NEW/OLD lifecycle JSON: SQLite can expose unset NEW generated columns during
+metadata-only updates. The real constraint tests caught this and now prove the
+immutable receipt and same-state metadata guards still reject invalid writes.
+186 focused coordinator/response/recovery/awareness/guard checks passed (one
+concurrent fresh-process stress test deselected). No installed activation claim.
+Runtime reset remains the entire coordination.sqlite3 under parent's quiet
+cutover; no new durable store. ExecutionRecord/AttemptRecord/WakeAssignment
+consolidation and the parent notification reader crossing remain open.

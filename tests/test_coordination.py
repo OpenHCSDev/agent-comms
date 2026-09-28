@@ -205,9 +205,11 @@ def sql_wire_execution(db, *, pending=True, name="e", target="requester"):
     db.execute("BEGIN IMMEDIATE")
     sql_execution(db, name=name, status="queued", origin="wire", target=target)
     db.execute(
-        "INSERT INTO obligations (execution_id,exact_target,state,reason_code,"
-        "created_at_ms,updated_at_ms,revision,receipt_message_id,receipt_seq) "
-        "VALUES (?,?,'pending',NULL,0,0,1,NULL,NULL)",
+        (
+            "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
+            "ated_at_ms,updated_at_ms,revision) VALUES (?,?,json_object('kind','pending')"
+            ",NULL,0,0,1)"
+        ),
         (name, target),
     )
     db.execute(
@@ -892,7 +894,12 @@ def test_failed_attempt_must_settle_failed_when_retry_unauthorized(db, authority
     c, path = db
     if authority == "published":
         sql_wire_execution(c)
-        c.execute("UPDATE obligations SET state='silent',revision=2 WHERE execution_id='e'")
+        c.execute(
+            (
+                "UPDATE obligations SET lifecycle=json_object('kind','silent'),revision=2 WHE"
+                "RE execution_id='e'"
+            )
+        )
     else:
         sql_execution(c, max_attempts=1 if authority == "budget" else 3)
     activate(c)
@@ -1145,7 +1152,12 @@ def test_completed_wire_requires_succeeded_attempt_and_terminal_obligation(db):
     c.execute("UPDATE attempts SET phase='prompt_accepted',revision=2 WHERE execution_id='e'")
     c.execute("UPDATE attempts SET phase='model_running',revision=3 WHERE execution_id='e'")
     c.execute("UPDATE attempts SET phase='settling',revision=4 WHERE execution_id='e'")
-    c.execute("UPDATE obligations SET state='silent',revision=2 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE obligations SET lifecycle=json_object('kind','silent'),revision=2 WHE"
+            "RE execution_id='e'"
+        )
+    )
     c.execute("UPDATE executions SET status='completed',revision=revision+1 WHERE execution_id='e'")
     c.execute("UPDATE wake_claims SET disposition='completed',revision=2 WHERE claim_id='a'")
     c.execute(
@@ -1611,7 +1623,12 @@ def test_numeric_only_message_id_input_is_not_text(db):
         "INSERT INTO publication_intents VALUES (?,?,?,?,?,?,?,?,?,?)",
         (*envelope[:-1], message.message_id),
     )
-    c.execute("UPDATE obligations SET state='publishing',revision=2 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE obligations SET lifecycle=json_object('kind','publishing'),revision=2"
+            " WHERE execution_id='e'"
+        )
+    )
     c.execute("COMMIT")
     with pytest.raises(sqlite3.IntegrityError):
         c.execute(
@@ -1620,8 +1637,10 @@ def test_numeric_only_message_id_input_is_not_text(db):
     c.execute("BEGIN IMMEDIATE")
     c.execute("INSERT INTO publication_receipts VALUES ('e',1,?,100)", (message.message_id,))
     c.execute(
-        "UPDATE obligations SET state='published',revision=3,receipt_message_id=?,"
-        "receipt_seq=1 WHERE execution_id='e'",
+        (
+            "UPDATE obligations SET lifecycle=json_object('kind','published','message_id'"
+            ",?,'seq',1),revision=3 WHERE execution_id='e'"
+        ),
         (message.message_id,),
     )
     c.execute("COMMIT")
@@ -1692,13 +1711,20 @@ def test_notice_canonicalizes_through_sql_reopen_and_snapshot(db, raw_notice, ex
             intent.expected_message_id,
         ),
     )
-    c.execute("UPDATE obligations SET state='publishing',revision=2 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE obligations SET lifecycle=json_object('kind','publishing'),revision=2"
+            " WHERE execution_id='e'"
+        )
+    )
     c.execute("COMMIT")
     c.execute("BEGIN IMMEDIATE")
     c.execute("INSERT INTO publication_receipts VALUES ('e',1,?,100)", (receipt.message_id,))
     c.execute(
-        "UPDATE obligations SET state='published',revision=3,receipt_message_id=?,"
-        "receipt_seq=1 WHERE execution_id='e'",
+        (
+            "UPDATE obligations SET lifecycle=json_object('kind','published','message_id'"
+            ",?,'seq',1),revision=3 WHERE execution_id='e'"
+        ),
         (receipt.message_id,),
     )
     c.execute("COMMIT")
@@ -1807,7 +1833,12 @@ def test_integer_timestamps_canonicalize_through_message_authority(db):
         "INSERT INTO publication_intents VALUES (?,?,?,?,?,?,?,?,?,?)",
         (*envelope[:5], 1, *envelope[6:]),
     )
-    c.execute("UPDATE obligations SET state='publishing',revision=2 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE obligations SET lifecycle=json_object('kind','publishing'),revision=2"
+            " WHERE execution_id='e'"
+        )
+    )
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
         stored = reopened._connection.execute(
@@ -1860,7 +1891,12 @@ def test_signed_zero_timestamps_canonicalize_through_message_authority(db):
         "INSERT INTO publication_intents VALUES (?,?,?,?,?,?,?,?,?,?)",
         ("e", "worker", "requester", "info", 0, -0.0, "hello", digest, key, message.message_id),
     )
-    c.execute("UPDATE obligations SET state='publishing',revision=2 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE obligations SET lifecycle=json_object('kind','publishing'),revision=2"
+            " WHERE execution_id='e'"
+        )
+    )
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
         row = reopened._connection.execute(
@@ -1915,7 +1951,12 @@ with CoordinationStore(sys.argv[1]) as store:
     c.execute("ROLLBACK")
     c.execute("BEGIN IMMEDIATE")
     c.execute(statement, envelope)
-    c.execute("UPDATE obligations SET state='publishing',revision=2 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE obligations SET lifecycle=json_object('kind','publishing'),revision=2"
+            " WHERE execution_id='e'"
+        )
+    )
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
         assert (
@@ -1929,7 +1970,12 @@ def test_obligation_same_state_rewrite_is_rejected_including_terminal(db):
     sql_wire_execution(c)
     with pytest.raises(sqlite3.IntegrityError, match="disposition must change"):
         c.execute("UPDATE obligations SET reason_code='rewrite',revision=2 WHERE execution_id='e'")
-    c.execute("UPDATE obligations SET state='silent',revision=2 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE obligations SET lifecycle=json_object('kind','silent'),revision=2 WHE"
+            "RE execution_id='e'"
+        )
+    )
     with pytest.raises(sqlite3.IntegrityError, match="disposition must change"):
         c.execute("UPDATE obligations SET reason_code='rewrite',revision=3 WHERE execution_id='e'")
     with CoordinationStore(path) as reopened:
@@ -1970,7 +2016,12 @@ def test_publication_intent_receipt_and_lineage_remain_frozen(db):
     assert c.execute("SELECT count(*) FROM publication_intents").fetchone()[0] == 0
     c.execute("BEGIN IMMEDIATE")
     c.execute(insert_intent, envelope)
-    c.execute("UPDATE obligations SET state='publishing',revision=2 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE obligations SET lifecycle=json_object('kind','publishing'),revision=2"
+            " WHERE execution_id='e'"
+        )
+    )
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
         reopened._connection.row_factory = None
@@ -1996,8 +2047,10 @@ def test_publication_intent_receipt_and_lineage_remain_frozen(db):
     c.execute("BEGIN IMMEDIATE")
     c.execute("INSERT INTO publication_receipts VALUES ('e',1,?,100)", (message.message_id,))
     c.execute(
-        "UPDATE obligations SET state='published',revision=3,receipt_message_id=?,"
-        "receipt_seq=1 WHERE execution_id='e'",
+        (
+            "UPDATE obligations SET lifecycle=json_object('kind','published','message_id'"
+            ",?,'seq',1),revision=3 WHERE execution_id='e'"
+        ),
         (message.message_id,),
     )
     c.execute("COMMIT")
