@@ -51,8 +51,8 @@ if mode=='surrogate': result['summary']='\ud800'
 d=dict(version=1,status='summarized',operationId=r['operationId'],
        witness=r['witness'],selected=r['selected'],settings=r['settings'],result=result)
 if mode=='wrong': d['operationId']='f'*32
-if mode=='decline':
-    d=dict(version=1,status='declined',operationId=r['operationId'],reason='split_turn')
+if mode in ('decline','limit'):
+    d=dict(version=1,status='declined',operationId=r['operationId'],reason='limit_exceeded' if mode=='limit' else 'split_turn')
 if mode=='unknown': d=dict(version=1,status='unknown',operationId=r['operationId'])
 if mode in ('provider-error', 'invalid-error', 'oversize-error'):
     d=dict(version=1,status='unknown',operationId=r['operationId'],
@@ -315,3 +315,26 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
             assert await child.wait() == 0
     finally:
         await persistent.close_idle()
+
+
+async def test_limit_decline_is_durable_and_never_admits_original(tmp_path):
+    from agent_comms.cli import main
+    from agent_comms.comms import wire
+    from agent_comms.threads import Thread
+
+    async with selected(tmp_path, "limit") as (run, persistent, journal, file, received):
+        result = await run()
+        assert result.summary is None and result.decline_reason == "limit_exceeded"
+        attempt = CompactionJournal(journal.path).selected_summary(result.operation_id)
+        assert attempt.state.declared_name == "refused"
+        assert attempt.state.decline_reason == "limit_exceeded"
+        assert not attempt.state.original_eligible
+        assert persistent.proc.returncode is None
+        assert not native_input_admitted(tmp_path, str(file))
+        comms = wire(tmp_path)
+        comms.registry.register(Thread("owner", frozenset(), str(tmp_path), session_file=str(file)))
+        assert main(["--root", str(tmp_path), "compaction-status", "--thread", "owner"]) == 0
+        before = received.read_bytes()
+        with pytest.raises(CompactionJournalError, match="never replay"):
+            await run()
+        assert received.read_bytes() == before

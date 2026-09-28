@@ -143,7 +143,7 @@ class ReservedSummary(UnsettledSummary):
 
     @classmethod
     def successors(cls):
-        return (UnknownSummary, LinkedSummary, DeclinedPrestartSummary)
+        return (UnknownSummary, LinkedSummary, DeclinedPrestartSummary, RefusedSummary)
 
 
 class UnknownSummary(UnsettledSummary):
@@ -207,6 +207,28 @@ class DeclinedPrestartSummary(SummaryState, declared_name="declined-prestart"):
 
     def verifies_original(self, journal, session, operation_id, source_json):
         return True
+
+
+@dataclass(frozen=True)
+class RefusedSummary(SummaryState):
+    """Correlated native prestart refusal, never an original-input admission."""
+
+    decline_reason: str = field()
+    terminal = True
+
+    def __post_init__(self):
+        if not self.decline_reason or len(self.decline_reason) > 256:
+            raise ValueError("Bounded native refusal reason required")
+
+    @classmethod
+    def successors(cls):
+        return ()
+
+    @classmethod
+    def load(cls, commit_id, decline_reason):
+        if commit_id is not None:
+            raise ValueError("Refused summary cannot carry a native commit")
+        return cls(decline_reason)
 
 
 @dataclass(frozen=True)
