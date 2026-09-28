@@ -1763,7 +1763,7 @@ async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(
             "SELECT stage,session_id FROM native_runtime_inputs"
         ).fetchone()
         assert tuple(row) == ("full", None)
-        assert store._connection.execute("SELECT state FROM obligations").fetchone()[0] == "pending"
+        assert store._connection.execute("SELECT state FROM obligations").fetchone()[0] == "failed"
 
 
 def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: Path) -> None:

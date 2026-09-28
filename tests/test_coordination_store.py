@@ -1286,6 +1286,8 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
         assert projected.obligation is not None
         assert projected.obligation.lifecycle.declared_name == "publishing"
         with pytest.raises(PublicationUncertain):
+            db.fail_unknown_attempt(fence, expected_pointer_revision=1)
+        with pytest.raises(PublicationUncertain):
             db.settle_nonpublication(
                 fence,
                 expected_pointer_revision=1,
