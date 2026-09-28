@@ -143,7 +143,10 @@ class VerifiedOwnerLoss:
 
         Keep canonical wire/bus/registry exclusion through monitor settlement.
         A later attested release also fences earlier admission epochs of the same
-        incarnation. Lease expiry or a replaced PID alone is insufficient.
+        incarnation. If send admission was never recorded, require the exact
+        current owner to be attested stopped and dead: absence of an epoch is
+        not proof that the input was unsent. Lease expiry or a replaced PID alone
+        is insufficient.
         """
         from .bus_publication import stable_thread_lookup
         from .comms import Comms
@@ -182,8 +185,15 @@ class VerifiedOwnerLoss:
                     type(pid) is int
                     and pid > 0
                     and type(before) is int
-                    and type(admission_generation) is int
-                    and before >= admission_generation
+                    and (
+                        (type(admission_generation) is int and before >= admission_generation)
+                        or (
+                            admission_generation is None
+                            and registry.statuses[current.name].stopped
+                            and current.pid == pid
+                            and registry.admission_generations[current.name] == after
+                        )
+                    )
                     and type(after) is int
                     and after > before
                     and released["name"] == attempt.owner_thread
@@ -1164,38 +1174,49 @@ class MutationStore(CoordinationStore):
             snapshot, attempt = self._assert_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
-            if phase is not type(attempt.lifecycle) and phase not in attempt.lifecycle.successors():
-                raise IdentityConflict("attempt phase edge is not declared")
-            if attempt.lifecycle.process_dead or attempt.lifecycle.backend_done:
-                # Once either finality fact is recorded, the backend cannot
-                # emit another phase or progress observation.  The other fact
-                # may arrive later on the SAME phase before atomic settlement.
-                new_final_fact = (backend_done and not attempt.lifecycle.backend_done) or (
-                    process_dead and not attempt.lifecycle.process_dead
-                )
-                if phase is not type(attempt.lifecycle) or progress or not new_final_fact:
-                    raise RecoveryBlocked(
-                        "final backend evidence forbids further phase or progress"
-                    )
-            now = self._now(attempt.updated_at_ms)
-            db.execute(
-                "UPDATE attempts SET phase=?,revision=revision+1,updated_at_ms=?,"
-                "last_progress_at_ms=?,backend_done=?,process_dead=?,reason_code=? "
-                "WHERE execution_id=? AND attempt_ordinal=?",
-                (
-                    phase.declared_name,
-                    now,
-                    now if progress else attempt.last_progress_at_ms,
-                    int(attempt.lifecycle.backend_done or backend_done),
-                    int(attempt.lifecycle.process_dead or process_dead),
-                    reason_code,
-                    fence.execution_id,
-                    fence.attempt_ordinal,
-                ),
+            return Applied(self._advance_attempt(
+                fence, attempt, phase, backend_done=backend_done, process_dead=process_dead,
+                progress=progress, reason_code=reason_code,
+            ))
+
+    def _advance_attempt(
+        self, fence: OwnerFence, attempt: AttemptRecord, phase: type[AttemptState], *,
+        backend_done: bool, process_dead: bool, progress: bool, reason_code: str | None,
+    ) -> StartResult:
+        """Record a checked phase inside the caller's fenced transaction."""
+        db = self._connection
+        if phase is not type(attempt.lifecycle) and phase not in attempt.lifecycle.successors():
+            raise IdentityConflict("attempt phase edge is not declared")
+        if attempt.lifecycle.process_dead or attempt.lifecycle.backend_done:
+            # Once either finality fact is recorded, the backend cannot
+            # emit another phase or progress observation.  The other fact
+            # may arrive later on the SAME phase before atomic settlement.
+            new_final_fact = (backend_done and not attempt.lifecycle.backend_done) or (
+                process_dead and not attempt.lifecycle.process_dead
             )
-            after = self.snapshot(fence.execution_id)
-            assert after.attempt is not None
-            return Applied(StartResult(after, replace(fence, revision=after.attempt.revision)))
+            if phase is not type(attempt.lifecycle) or progress or not new_final_fact:
+                raise RecoveryBlocked(
+                    "final backend evidence forbids further phase or progress"
+                )
+        now = self._now(attempt.updated_at_ms)
+        db.execute(
+            "UPDATE attempts SET phase=?,revision=revision+1,updated_at_ms=?,"
+            "last_progress_at_ms=?,backend_done=?,process_dead=?,reason_code=? "
+            "WHERE execution_id=? AND attempt_ordinal=?",
+            (
+                phase.declared_name,
+                now,
+                now if progress else attempt.last_progress_at_ms,
+                int(attempt.lifecycle.backend_done or backend_done),
+                int(attempt.lifecycle.process_dead or process_dead),
+                reason_code,
+                fence.execution_id,
+                fence.attempt_ordinal,
+            ),
+        )
+        after = self.snapshot(fence.execution_id)
+        assert after.attempt is not None
+        return StartResult(after, replace(fence, revision=after.attempt.revision))
 
     def observe_replay(
         self,
@@ -1224,36 +1245,75 @@ class MutationStore(CoordinationStore):
                 side_effects_possible,
                 1 if before is None else before.revision + 1,
             )
-            if before is not None:
-                if (before.facts, before.replay_safe, before.side_effects_possible) == (
-                    after.facts,
-                    after.replay_safe,
-                    after.side_effects_possible,
-                ):
-                    return AlreadyApplied(snapshot)
-                if (
-                    (before.facts | after.facts) != after.facts
-                    or (not before.replay_safe and after.replay_safe)
-                    or (before.side_effects_possible and not after.side_effects_possible)
-                ):
-                    raise IdentityConflict("replay facts cannot be erased")
-                db.execute(
-                    "UPDATE replay_assessments SET facts=?,replay_safe=?,"
-                    "side_effects_possible=?,revision=revision+1 WHERE execution_id=?",
-                    (int(facts), int(replay_safe), int(side_effects_possible), fence.execution_id),
+            return self._record_replay(snapshot, after)
+
+    def _record_replay(
+        self, snapshot: RecoverySnapshot, after: ReplayAssessment,
+    ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
+        """Persist monotonic replay evidence inside the checked transaction."""
+        db = self._connection
+        before = snapshot.replay
+        if before is not None:
+            if (before.facts, before.replay_safe, before.side_effects_possible) == (
+                after.facts,
+                after.replay_safe,
+                after.side_effects_possible,
+            ):
+                return AlreadyApplied(snapshot)
+            if (
+                (before.facts | after.facts) != after.facts
+                or (not before.replay_safe and after.replay_safe)
+                or (before.side_effects_possible and not after.side_effects_possible)
+            ):
+                raise IdentityConflict("replay facts cannot be erased")
+            db.execute(
+                "UPDATE replay_assessments SET facts=?,replay_safe=?,"
+                "side_effects_possible=?,revision=revision+1 WHERE execution_id=?",
+                (int(after.facts), int(after.replay_safe), int(after.side_effects_possible), after.execution_id),
+            )
+        else:
+            db.execute(
+                "INSERT INTO replay_assessments VALUES (?,?,?,?,?)",
+                (
+                    after.execution_id,
+                    int(after.facts),
+                    int(after.replay_safe),
+                    int(after.side_effects_possible),
+                    1,
+                ),
+            )
+        return Applied(self.snapshot(after.execution_id))
+
+    def fail_unknown_attempt(
+        self, fence: OwnerFence, *, expected_pointer_revision: int,
+    ) -> Applied[RecoverySnapshot]:
+        """Atomically fail a fenced, reaped backend; UNKNOWN is never replayable.
+
+        The live runner holds registry owner exclusion and has completed native
+        child/tool cleanup. Finality here is local, not provider acceptance.
+        """
+        with self._transaction():
+            snapshot, attempt = self._assert_fence(fence)
+            if snapshot.pointer_revision != expected_pointer_revision:
+                raise StaleRevision("pointer revision changed")
+            if snapshot.publication_intent is not None:
+                raise PublicationUncertain("UNKNOWN failure cannot resolve frozen publication")
+            before = snapshot.replay
+            self._record_replay(snapshot, ReplayAssessment(
+                fence.execution_id,
+                (before.facts if before is not None else ReplayFact.NONE) | ReplayFact.UNKNOWN_EFFECTS,
+                False,
+                True,
+                1 if before is None else before.revision + 1,
+            ))
+            if not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead):
+                self._advance_attempt(
+                    fence, attempt, type(attempt.lifecycle), backend_done=True, process_dead=True,
+                    progress=False, reason_code="native_unknown",
                 )
-            else:
-                db.execute(
-                    "INSERT INTO replay_assessments VALUES (?,?,?,?,?)",
-                    (
-                        fence.execution_id,
-                        int(facts),
-                        int(replay_safe),
-                        int(side_effects_possible),
-                        1,
-                    ),
-                )
-            return Applied(self.snapshot(fence.execution_id))
+            return Applied(self._settle(
+                self.snapshot(fence.execution_id), success=False, reason_code="native_unknown",
+            ))
 
     def observe_connectivity(
         self,
@@ -1412,14 +1472,58 @@ class RecoveryMonitorCapability:
     """Separate attested dead-attempt authority; never a live owner fence.
 
     Construction is deliberately unavailable from MutationStore's public API.
-    The native failure entry point observes owner release and a failed backend
-    terminal itself. Registration, tokens and snapshots cannot mint that grant.
+    Recovery entry points observe owner release and local backend finality
+    themselves. Registration, tokens and snapshots cannot mint that grant.
     """
 
     def __init__(self, store: MutationStore, *, _grant: object) -> None:
         if _grant is not _MONITOR_GRANT:
             raise PermissionError("recovery monitor requires trusted construction")
         self._store = store
+
+    @classmethod
+    def abandon_released_native_attempt(
+        cls, store: MutationStore, execution_id: str
+    ) -> Applied[RecoverySnapshot]:
+        """Close a released, dead native attempt while retaining UNKNOWN effects.
+
+        This explicit operator action abandons the old local backend; it does
+        not reconstruct a provider terminal, acceptance, or an unsent outcome.
+        Owner exclusion and native-process absence prevent further local work.
+        The existing monitor atomically fails the attempt, records replay-unsafe
+        UNKNOWN effects and releases its slot. Input receipts/cursors are never
+        changed. A frozen publication still requires its receipt resolver.
+
+        Without a recorded admission epoch, stop the current owner normally
+        before calling, then restart it normally for unrelated new work.
+        """
+        with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:
+            snapshot = store.snapshot(execution_id)
+            attempt = snapshot.attempt
+            assert attempt is not None  # Required by the release observer.
+            if snapshot.publication_intent is not None:
+                raise PublicationUncertain("UNKNOWN abandonment cannot resolve frozen publication")
+            cls._require_native_session_exited(
+                store.path.parent / "native-sessions" / loss.owner_lookup
+            )
+            return cls(store, _grant=_MONITOR_GRANT).terminalize_dead_attempt(
+                execution_id,
+                attempt.attempt_ordinal,
+                attempt.owner_generation,
+                expected_attempt_revision=attempt.revision,
+                expected_execution_revision=snapshot.execution.revision,
+                expected_pointer_revision=snapshot.pointer_revision,
+                owner_loss=loss,
+                evidence=MonitorEvidence(
+                    subprocess_dead=True,
+                    # Explicitly abandon the fenced, exited LOCAL backend.
+                    # This is not evidence of a provider response or its effects.
+                    backend_done=True,
+                    unknown_effects=True,
+                    reason_code="released_native_unknown",
+                    observed_at_ms=int(time.time() * 1000),
+                ),
+            )
 
     @classmethod
     def recover_native_failure(

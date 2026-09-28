@@ -28,6 +28,8 @@ from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 
 
 def failed_owner(directory, output, exit_allowed):
+    # Persist the historical pre-settlement failure shape for operator recovery.
+    runtime.SelectedExecution._uncertain_failure = lambda self, error: None
     root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
     runtime._trusted_package = lambda path: path
     fake, _calls = _fake_model()
@@ -215,10 +217,14 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
     monkeypatch.setattr(runtime, "_trusted_package", lambda path: path)
     fake, calls = _fake_model(fail_on=1)
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
-    with pytest.raises(NativePiUnavailable):
-        await runtime.SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
-        ).run()
+    # A historical unresolved attempt still blocks; current live failures are
+    # settled separately by DurableTurn and do not produce this old shape.
+    with monkeypatch.context() as historical:
+        historical.setattr(runtime.SelectedExecution, "_uncertain_failure", lambda self, error: None)
+        with pytest.raises(NativePiUnavailable):
+            await runtime.SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
+            ).run()
     source = comms.messaging.send_initial_cohort("sender", "beta", "New independent request")
     lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
     with MutationStore(str(root / "coordination.sqlite3")) as store:

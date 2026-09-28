@@ -96,3 +96,14 @@ class DurableTurn(MroDispatch):
             process_dead=True,
         ).value.fence
         return self.fence
+
+    def fail_unknown(self):
+        """Retire the reaped local backend without granting acceptance or replay.
+
+        The caller holds the live registry owner boundary. Native execution has
+        returned through child/tool cleanup; possible remote effects stay UNKNOWN.
+        MutationStore owns the atomic replay/finality/slot mutation.
+        """
+        return self.store.fail_unknown_attempt(
+            self.fence, expected_pointer_revision=self.pointer_revision,
+        ).value
