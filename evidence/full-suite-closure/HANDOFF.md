@@ -285,3 +285,124 @@ changes. Passive module explicitly relinquished to Cicero, own setup-only diff
 saved at.artifacts/passive-fixture-config.patch then reverted. Direct CLI delivery
 to Cicero rejected (no visible executable); parent notified to relay. Current
 independent remainder continues after runtime. Final combined suite still required.
+
+## Runtime goal socket/retry fixture closure
+
+Remainder-ten12passed10failed2errors2.23s; goal owners lacked canonical native
+configuration. Edit/snapshot fixtures now use the canonical agent and actual
+ProcessIdentity. Focused14:10passed4failed25.33s; all four Retry continuations
+were prevented by an incomplete fixture root (live drain reported missing cohort
+schema). Retry fixture now explicitly installs existing cohort/response/native/
+prompt schemas and registers its actual participant. Nine Retry cases pass4.72s,
+including no overlap, UNKNOWN non-replay, owner/origin/reservation fences and
+cancellation. Together all14 affected cases pass. No production changes.
+Persistent TMPDIR shortened to.artifacts/tmp after seven-digit test PID exceeded
+Unix socket length in prior test directory. Full combined suite still pending.
+
+## Removed saved-format and marker test paths
+
+Remainder-eleven15passed12failed2.82s. Deleted seven parametrized cases requiring
+retired split channels/saved_views file decoding and three legacy read-marker
+migration cases. Current catalog behavior already covered in test_channels;
+retained predicate/declaration/codec tests. Alias behavior now exercises canonical
+send_user_message and history/audience instead of deleted Publisher.publish.
+Current SavedView codec retains original_targets. All14 remaining affected cases
+pass (13 initial focused; corrected alias plus module3pass). Net78 test lines
+removed. Remainder continues through actual selected native execution.
+
+## Selected native fixture closure and prepared-package mismatch
+
+Remainder-twelve163passed12failed4skipped139.94s. Four actual private-session
+summary/decline/correction cases lacked installed native schema; fixtures now
+install the existing schema in real coordination SQLite before coverage checks.
+Selected broker binding tests read NativeRuntimeInput directly, deleting two raw
+queries against retired native_runtime_inputs/epoch/claim columns. Retain before-
+write reservation and after-write admission assertions. Unknown summary refusal
+matches current nominal reservation state. Session config/router tests use canonical
+agent. Focused44pass43.46s includes all four real SDK private-session failures.
+
+Two actual Pi loader cases remain an artifact mismatch: supplied immutable
+.pi-native-0d7ebb4f4b5aa1ec has selected_claimed_write.mjs722dcd9f, while current
+source and selected_tool_broker require361bce47. Manifest is still0d7ebb4f; current
+builder copies source, so a rebuild needs the paired tree pin. Parent install/pin
+owner notified; guard remains enforced and prepared package untouched. PR248 merged;
+continuation is draft PR255. Parent separately deleting broadcast aliases; leave
+its assigned files untouched until checkpoint, then remove now-retired alias test.
+
+## Owner start and thread lifecycle fixtures
+
+Remainder-thirteen15passed12failed50skipped3.53s; mounted Toad cases remain explicit
+opt-ins, not represented as passed. Actual stopped-owner tool startup now pins
+canonical root/package and Pi, rather than unconfigured echo. Lifecycle fixtures
+carry ProcessIdentity.capture. Sort metadata uses canonical publish_ordinary and
+acquires its actual process; event times/rename preservation retained. Deleted
+obsolete automatic legacy registry/session-header migration test. Focused14:
+13passed1failed3.32s; corrected own-process acquisition then final sort case passes.
+Parent alias-owned files withheld from remainder until published checkpoint.
+
+## Current transcript and turn lifecycle closure
+
+Remainder-fourteen69passed12failed62.48s. Real recorded-RPC diff test now declares
+local executable trust, preserving actual child pipes and live-vs-replay diff
+comparison. Annotation refusal matches current migration diagnostic. Turn fixtures
+use canonical agent and captured ProcessIdentity; exception provenance, cancellation,
+shutdown, no-original-send after uncertain compaction, and exact lease fences pass.
+Focused29passed2.88s.
+
+Deleted five cases requiring retired public drain: four incoming bus-steering
+variants plus dependency admission that asserted removed direct_interrupt_goal_id
+queue capabilities. Current canonical selected-owner followup/UNKNOWN suites already
+pass; retained three exact-input transcript routing tests and existing durable
+standby review tests. Net125 lines removed in this batch. Final alphabetical
+remainder runs before complete combined acceptance.
+
+## Final remainder checkpoint and deployment priority
+
+Owner supersedes prior full-suite gate: old mocked-suite completion does not hold
+merge/deployment; meaningful current native/mounted paths take priority. Continue
+concrete fixture/deletion work without restoring retired surfaces.
+
+Remainder-fifteen17passed12failed8.14s. Deleted test_user_channels.py (four old
+public-drain wake_tasks/stream-backend tests); canonical per-recipient channel
+outcome/UNKNOWN and native selected-followup coverage remains. Viewer cache test
+checks that every decode is the new appended row rather than a brittle two-call
+limit. Rename keeps sparse read evidence. Damaged derived display cache rebuilds,
+while replaced authoritative bus inode is correctly refused. Append race now
+publishes canonically inside the already-held wire boundary. Candidate corruption
+tests keep their actual rejection/rollback assertions with current checkpoint
+refusal diagnostic. Focused33:32pass1failure16.19s; corrected missing MessageType
+then actual raced-append test1pass0.25s. Earlier attempt was interrupted after a
+fixture nested the wire lock; no passing result claimed for that attempt.
+
+Verified production blocker: supplied native package extension mismatch (above).
+Other failures in the current remainder were obsolete APIs/fixtures. Parent owns
+paired artifact/activation. Passive and broadcast alias removals are published and
+will be integrated here; retired alias test will be deleted. No complete full-suite
+pass claimed, and no deployment hold imposed on that result.
+
+## Published parent integration and current blocker inventory
+
+Integrated parent c3e7252a: broadcast alias2fa3666a, passive-awareness2569e26c0ec,
+manual writer deletion5a4dd50, TL0A2572b4aeb38. Deleted the remaining S4 alias
+extension test instead of restoring BuiltinChannel.aliases. Combined focused36pass
+16.04s (S4, exact global channel, viewer index, candidate indexes and watcher).
+
+Actual outstanding production issue verified by this worker:
+- Selected claimed-write native-tool launch: Darwin0d7ebb4f package contains an
+  older selected_claimed_write extension than current broker/source permits.
+  Two actual loader tests refuse it; parent owns paired package pin/activation.
+  This is specific to SelectedToolMode.launch_arguments, not a demonstrated
+  ordinary ACP/compaction failure. No guard weakening or package mutation.
+
+Obsolete API/fixture failures fixed/deleted in this checkpoint:
+- Old public drain queue/cursor tests, split saved-view readers, registry timestamp
+  migration and read-marker compatibility tests.
+- Raw native-runtime SQL field/table readers migrated to existing TypedRow.
+- PID constructors, incomplete native store/root/package setup and diagnostic text.
+- Viewer cache decode-count, canonical append/replaced-inode and sparse rename facts.
+
+No other production blocker established by the completed remainder batches.
+Full old suite is not acceptance claimed and does not hold parent deployment.
+Meaningful current native/manual/owner/socket evidence is itemized above; parent
+owns current mounted acceptance and live migration. New failures, if discovered,
+will be triaged at their actual boundary rather than restoring removed APIs.
