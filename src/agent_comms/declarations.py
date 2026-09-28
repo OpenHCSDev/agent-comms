@@ -1472,6 +1472,20 @@ class Thread:
         return TurnIdentity(self.incarnation, turn.turn_generation)
 
     @property
+    def turn_lease(self) -> TurnLeaseFence | None:
+        """Capture this snapshot's exact turn; historical unattested turns have no lease."""
+        identity = self.turn_identity
+        if identity is None:
+            return None
+        assert self.active_turn is not None
+        assert self.active_turn.admission_generation is not None
+        return TurnLeaseFence(
+            identity=identity,
+            turn_id=self.active_turn.id,
+            admission_generation=self.active_turn.admission_generation,
+        )
+
+    @property
     def is_fork(self) -> bool:
         return self.parent is not None
 

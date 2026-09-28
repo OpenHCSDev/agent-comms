@@ -1,0 +1,30 @@
+F.......................s............................................... [ 37%]
+........................................................................ [ 74%]
+..................................................                       [100%]
+=================================== FAILURES ===================================
+_______________ test_silent_active_turn_does_not_age_into_ready ________________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-turn-lease-closure-20260928/.artifacts/turn-lease/core/test_silent_active_turn_does_n0')
+
+    def test_silent_active_turn_does_not_age_into_ready(tmp_path):
+        comms = wire(tmp_path)
+        comms.register(Thread("worker", frozenset(), str(tmp_path), pid=os.getpid()))
+        first = comms.begin_turn("worker", "first", "Long-running work")
+        comms.register(Thread("worker", frozenset(), str(tmp_path)))
+        assert comms.registry.require("worker").pid == os.getpid()
+        comms.activity.emit(
+            Activity("worker", ActivityState.WORKING, "Still working", time.time() - 1000)
+        )
+        view = comms.thread_views()[0]
+        assert view.thread.executing and view.presentation.busy
+        assert comms.activity_of("worker").state is ActivityState.WORKING
+        comms.finish_turn(first)
+>       assert not comms.thread_views()[0].presentation.busy
+E       AssertionError: assert not True
+E        +  where True = ThreadPresentation(title='worker', marker='⌛', summary='Working · Still working', busy=True).busy
+E        +    where ThreadPresentation(title='worker', marker='⌛', summary='Working · Still working', busy=True) = ThreadView(thread=Thread(name='worker', tags=frozenset(), worktree='/home/ts/wt/comms-refactor-turn-lease-closure-2026... detail='Still working', timestamp=1790562350.940039), runtime=None, last_seen=1790563350.9343626, goal_execution=None).presentation
+
+tests/test_active_turn.py:20: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_active_turn.py::test_silent_active_turn_does_not_age_into_ready
+1 failed, 192 passed, 1 skipped in 10.34s

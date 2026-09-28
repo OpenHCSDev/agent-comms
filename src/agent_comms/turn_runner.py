@@ -383,7 +383,7 @@ class TurnRunner:
         claim: TurnLeaseFence,
     ) -> FinishedTurnFence | None:
         """Clear only this turn; waiter release follows committed terminal output."""
-        fence = self.comms.finish_turn(thread_name, turn_id, expected=claim)
+        fence = self.comms.finish_turn(claim)
         if self.active_turns.get(session_id) == turn_id:
             self.active_turns.pop(session_id, None)
         return fence

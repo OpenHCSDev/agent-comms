@@ -284,7 +284,7 @@ class TestHandlers:
                 "activityDetail": "Compacting context",
             }
         }
-        agent._comms.finish_turn("proj", turn_id)
+        agent._comms.finish_turn(agent._comms.registry.require("proj").turn_lease)
 
     async def test_cancel_cleans_up_compaction_lifecycle(self, tmp_path, monkeypatch):
         agent = self._agent(tmp_path)

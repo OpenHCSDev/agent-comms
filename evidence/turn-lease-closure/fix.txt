@@ -1,0 +1,59 @@
+....F                                                                    [100%]
+=================================== FAILURES ===================================
+___________ test_unattested_saved_turn_remains_data_without_a_lease ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-turn-lease-closure-20260928/.artifacts/turn-lease/fix/test_unattested_saved_turn_rem0')
+
+    def test_unattested_saved_turn_remains_data_without_a_lease(tmp_path):
+        owner = Thread("owner", frozenset(), str(tmp_path), pid=os.getpid())
+        retained = replace(owner, active_turn=ActiveTurn("retained", owner.pid))
+>       restored = Thread.from_registry(owner.name, retained.to_wire(), tmp_path)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_lease_release.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/declarations.py:1457: in from_registry
+    else FieldCodec.decode(hints[declaration.name], data[declaration.name])
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:107: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>, target = tuple[str, ...]
+data = ()
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        if target is Any:
+            cls.encode(data)  # still require JSON-compatible data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError):
+                    pass
+            raise ValueError(f"Value does not match {target}")
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+>               raise ValueError("Expected a JSON array.")
+E               ValueError: Expected a JSON array.
+
+src/agent_comms/field_codec.py:166: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_turn_lease_release.py::test_unattested_saved_turn_remains_data_without_a_lease
+1 failed, 4 passed in 0.31s
