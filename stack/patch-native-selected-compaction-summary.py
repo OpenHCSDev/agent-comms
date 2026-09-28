@@ -25,8 +25,7 @@ def main(path: Path) -> None:
     source = raw.decode()
     source = replace_once(source,
         'import { prepareCompaction } from "../../core/compaction/index.js";',
-        'import { compact, prepareCompaction, serializeConversation, shouldCompact } from "../../core/compaction/index.js";\n'
-        'import { convertToLlm } from "../../core/messages.js";\n'
+        'import { compact, prepareCompaction, shouldCompact } from "../../core/compaction/index.js";\n'
         'import { AssistantMessageEventStream } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js";')
     helper = Path(__file__).with_name("native-compaction-selected-summary.mjs").read_text()
     source = replace_once(source, "export async function runRpcMode(runtimeHost) {", helper + "\nexport async function runRpcMode(runtimeHost) {")

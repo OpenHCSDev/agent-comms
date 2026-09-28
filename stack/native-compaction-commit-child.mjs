@@ -42,13 +42,12 @@ try {
     if (request.action === 'commit') {
         const operations = request.details;
         if (operations !== undefined) {
-            const paths = values => Array.isArray(values) && values.length <= 256 &&
+            const paths = values => Array.isArray(values) &&
                 values.every(path => typeof path === 'string' && path.length > 0 &&
                     Buffer.byteLength(path, 'utf8') <= 4096 && !path.includes('\\0'));
             if (!operations || typeof operations !== 'object' || Array.isArray(operations) ||
                 Object.keys(operations).sort().join(',') !== 'modifiedFiles,readFiles' ||
-                !paths(operations.readFiles) || !paths(operations.modifiedFiles) ||
-                Buffer.byteLength(JSON.stringify(operations), 'utf8') > 65536)
+                !paths(operations.readFiles) || !paths(operations.modifiedFiles))
                 throw new Error('Invalid native file operations');
         }
         const usage = request.usage;

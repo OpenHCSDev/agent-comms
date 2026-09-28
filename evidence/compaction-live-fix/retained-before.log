@@ -1,0 +1,35 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-compaction-live-fix-20260928/evidence/compaction-live-fix/retained_session_rpc.py", line 105, in <module>
+    asyncio.run(run(Path(sys.argv[1]).resolve(),Path(sys.argv[2]).resolve(),sys.argv[3]))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-compaction-live-fix-20260928/evidence/compaction-live-fix/retained_session_rpc.py", line 72, in run
+    state=await rpc({'id':'state','type':'get_state'})
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-compaction-live-fix-20260928/evidence/compaction-live-fix/retained_session_rpc.py", line 68, in rpc
+    if not line:raise RuntimeError((root/'native-stderr.log').read_text()[-3000:])
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: file:///var/tmp/agent-comms-pi-native-extensions-20260928/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js:950
+                throw new Error("Native input evidence file is not owner-only");
+                      ^
+
+Error: Native input evidence file is not owner-only
+    at SessionManager.assertNativeInputSafe (file:///var/tmp/agent-comms-pi-native-extensions-20260928/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js:950:23)
+    at AgentSession._loadNativeInputState (file:///var/tmp/agent-comms-pi-native-extensions-20260928/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js:195:67)
+    at new AgentSession (file:///var/tmp/agent-comms-pi-native-extensions-20260928/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js:162:14)
+    at createAgentSession (file:///var/tmp/agent-comms-pi-native-extensions-20260928/node_modules/@earendil-works/pi-coding-agent/dist/core/sdk.js:253:21)
+    at createAgentSessionFromServices (file:///var/tmp/agent-comms-pi-native-extensions-20260928/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session-services.js:120:12)
+    at createRuntime (file:///var/tmp/agent-comms-pi-native-extensions-20260928/node_modules/@earendil-works/pi-coding-agent/dist/main.js:653:31)
+    at async createAgentSessionRuntime (file:///var/tmp/agent-comms-pi-native-extensions-20260928/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session-runtime.js:313:20)
+    at async main (file:///var/tmp/agent-comms-pi-native-extensions-20260928/node_modules/@earendil-works/pi-coding-agent/dist/main.js:676:21)
+
+Node.js v26.5.0
+

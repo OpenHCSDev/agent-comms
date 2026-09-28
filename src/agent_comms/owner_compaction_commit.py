@@ -385,24 +385,18 @@ class OwnerCompactionCommit:
             or set(details) != {"readFiles", "modifiedFiles"}
             or any(
                 type(paths) is not list
-                or len(paths) > 256
                 or any(type(path) is not str or not path or "\\0" in path for path in paths)
                 for paths in details.values()
             )
         ):
             raise ValueError("Bounded native file operations required")
         try:
-            encoded_details = (
-                json.dumps(details, ensure_ascii=False, separators=(",", ":")).encode()
-                if details is not None
-                else b""
-            )
+            if any(
+                len(path.encode()) > 4096 for paths in (details or {}).values() for path in paths
+            ):
+                raise ValueError("Invalid native file operation path")
         except UnicodeError as error:
             raise ValueError("Invalid native file operation encoding") from error
-        if len(encoded_details) > 65536 or any(
-            len(path.encode()) > 4096 for paths in (details or {}).values() for path in paths
-        ):
-            raise ValueError("Bounded native file operations required")
         if usage is not None and not valid_native_usage(usage):
             raise ValueError("Bounded native usage required")
         # Preserve the summary/cut digest and bind fileOps/usage separately
