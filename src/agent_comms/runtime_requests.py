@@ -1,0 +1,357 @@
+"""Declaration-owned commands for the existing local owner socket protocol.
+
+Only the socket boundary translates the external ``action`` tag. Request
+parameters use A2; membership and dispatch use A1; execution uses A5. These
+commands do not own coordination, backend or identity lifecycles.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+from abc import abstractmethod
+from dataclasses import MISSING, asdict, dataclass, field, fields
+from typing import TYPE_CHECKING, Any, ClassVar, Self, get_type_hints
+
+from .command import Command
+from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
+
+if TYPE_CHECKING:
+    from .runtime import RuntimeServer, SocketClient
+
+
+@dataclass(frozen=True)
+class RuntimeRequestContext:
+    server: RuntimeServer
+    reader: asyncio.StreamReader
+    client: SocketClient
+    session_id: str
+    name: str
+
+    async def send(self, payload: dict[str, Any]) -> None:
+        self.client.writer.write((json.dumps(payload) + "\n").encode())
+        await self.client.writer.drain()
+
+
+@dataclass(frozen=True, kw_only=True)
+class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
+    thread: str
+
+    @classmethod
+    def from_wire(cls, payload: object) -> Self:
+        if not isinstance(payload, dict):
+            raise ValueError("Expected a runtime request object.")
+        member = cls.decode(payload["action"])
+        # Older owners ignored extension keys. Keep that compatibility at this
+        # boundary, projecting only fields owned by the selected declaration.
+        keys = {f.metadata.get("wire_name", f.name) for f in fields(member)}
+        try:
+            return member.from_payload(
+                {
+                    "kind": member.declared_name,
+                    **{key: value for key, value in payload.items() if key in keys},
+                }
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError(member.invalid_payload_message(payload, error)) from error
+
+    @classmethod
+    def invalid_payload_message(cls, payload: dict[str, Any], error: Exception) -> str:
+        return str(error)
+
+    @classmethod
+    def accepts_declared_fields(cls, payload: dict[str, Any]) -> bool:
+        """Error diagnostics project this owner's fields, never a second schema.
+
+        Called only after A2 rejected a request, to preserve the legacy domain
+        error wording. Inherited envelope fields keep their own diagnostics.
+        """
+        hints = get_type_hints(cls)
+        for declared in fields(cls):
+            if declared.name not in cls.__annotations__:
+                continue
+            key = declared.metadata.get("wire_name", declared.name)
+            if key not in payload:
+                if declared.default is MISSING and declared.default_factory is MISSING:
+                    return False
+                continue
+            try:
+                FieldCodec.decode(hints[declared.name], payload[key])
+            except (TypeError, ValueError):
+                return False
+        return True
+
+    def to_wire(self) -> dict[str, Any]:
+        payload = FieldCodec.encode(self)
+        return {"action": payload.pop("kind"), **payload}
+
+    @classmethod
+    def proxy_payload(
+        cls, thread: str, controller_token: str | None, parameters: dict[str, Any]
+    ) -> dict[str, Any]:
+        # The owner decodes once; proxies preserve the owner's error envelope.
+        return {"action": cls.declared_name, "thread": thread, **parameters}
+
+    def bind(
+        self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient
+    ) -> RuntimeRequestContext:
+        owner = server.agent._comms.registry.require(self.thread)
+        name = owner.name
+        if owner.pid != os.getpid() or not server.agent._comms.registry.status(name).running:
+            raise RuntimeError("This process no longer owns the thread.")
+        session_id = next(
+            key
+            for key, value in server.agent._sessions.items()
+            if server.agent._comms.registry.canonical_name(value) == name
+        )
+        return RuntimeRequestContext(server, reader, client, session_id, name)
+
+
+class ResultRuntimeRequest(RuntimeRequest):
+    async def apply(self, ctx: RuntimeRequestContext) -> None:
+        await ctx.send({"result": await self.result(ctx)})
+
+    @abstractmethod
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]: ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class SubscribeRuntimeRequest(RuntimeRequest):
+    transcript_snapshots: bool = field(default=False, metadata={"wire_name": "transcriptSnapshots"})
+    transcript_diffs: bool = field(default=False, metadata={"wire_name": "transcriptDiffs"})
+
+    async def apply(self, ctx: RuntimeRequestContext) -> None:
+        agent = ctx.server.agent
+        ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
+        await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
+        await agent._replay_transcript(
+            ctx.session_id,
+            ctx.name,
+            client=ctx.client,
+            snapshots=self.transcript_snapshots,
+            diffs=self.transcript_diffs,
+        )
+        await agent.replay_turn_state(ctx.session_id, client=ctx.client)
+        await agent.replay_unknown_inputs(ctx.session_id, client=ctx.client)
+        config_options = await agent._config_options(ctx.name)
+        metadata = agent._session_metadata(ctx.name)
+        await ctx.send(
+            {
+                "controllerToken": ctx.client.token,
+                "ready": {
+                    **metadata,
+                    "configOptions": [
+                        option.model_dump(by_alias=True, exclude_none=True)
+                        for option in config_options
+                    ],
+                },
+            }
+        )
+        while line := await ctx.reader.readline():
+            response = json.loads(line)
+            receipt = response.get("permissionResponse") if isinstance(response, dict) else None
+            if not isinstance(receipt, dict):
+                continue
+            reply_id = receipt.get("id")
+            pending = ctx.client.pending.get(reply_id) if isinstance(reply_id, str) else None
+            if pending is not None and not pending.done():
+                pending.set_result(receipt)
+
+
+@dataclass(frozen=True, kw_only=True)
+class PromptRuntimeRequest(ResultRuntimeRequest):
+    prompt: list[dict[str, Any]]
+    meta: dict[str, Any] | None = None
+    controller_token: str | None = field(default=None, metadata={"wire_name": "controllerToken"})
+
+    @classmethod
+    def proxy_payload(
+        cls, thread: str, controller_token: str | None, parameters: dict[str, Any]
+    ) -> dict[str, Any]:
+        return super().proxy_payload(
+            thread, controller_token, {"controllerToken": controller_token, **parameters}
+        )
+
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+        controller = next(
+            (
+                subscriber
+                for subscriber in ctx.server.clients.get(ctx.session_id, ())
+                if subscriber.token == self.controller_token and not subscriber.writer.is_closing()
+            ),
+            None,
+        )
+        token = ctx.server.controller.set(controller)
+        try:
+            result = await ctx.server.agent.prompt(
+                ctx.session_id, self.prompt, field_meta=self.meta or {}
+            )
+        finally:
+            ctx.server.controller.reset(token)
+        return result.model_dump(by_alias=True, exclude_none=True)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CancelRuntimeRequest(ResultRuntimeRequest):
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+        await ctx.server.agent.cancel(ctx.session_id)
+        return {}
+
+
+@dataclass(frozen=True, kw_only=True)
+class SetConfigOptionRuntimeRequest(ResultRuntimeRequest):
+    config_id: str
+    value: str | bool
+
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+        result = await ctx.server.agent.set_config_option(
+            self.config_id, ctx.session_id, self.value
+        )
+        return result.model_dump(by_alias=True, exclude_none=True)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CompactRuntimeRequest(ResultRuntimeRequest):
+    instructions: str | None = None
+
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+        handler = getattr(ctx.server.agent, "compact_context", None)
+        if handler is None:
+            from .manual_compaction_bridge import compact_context
+
+            return await compact_context(ctx.server.agent, ctx.session_id, self.instructions)
+        return await handler(ctx.session_id, self.instructions)
+
+
+@dataclass(frozen=True, kw_only=True)
+class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
+    include_history: bool = False
+
+    @classmethod
+    def invalid_payload_message(cls, payload: dict[str, Any], error: Exception) -> str:
+        return (
+            "include_history must be a boolean."
+            if not InputDispositionsRuntimeRequest.accepts_declared_fields(payload)
+            else str(error)
+        )
+
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+        return ctx.server.agent._comms.input_delivery(
+            ctx.name,
+            include_history=self.include_history,
+            awaiting_keys=ctx.server.agent.awaiting_input_keys(ctx.session_id),
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+        result = ctx.server.agent._comms.dismiss_historical_inputs(
+            ctx.name, awaiting_keys=ctx.server.agent.awaiting_input_keys(ctx.session_id)
+        )
+        await ctx.server.agent.emit_input_delivery_changed(ctx.session_id)
+        return result
+
+
+@dataclass(frozen=True, kw_only=True)
+class GoalHistoryRuntimeRequest(ResultRuntimeRequest):
+    goal_id: str | None = None
+
+    @classmethod
+    def invalid_payload_message(cls, payload: dict[str, Any], error: Exception) -> str:
+        return (
+            "Goal identity must be a string."
+            if not GoalHistoryRuntimeRequest.accepts_declared_fields(payload)
+            else str(error)
+        )
+
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+        history = ctx.server.agent._comms.goal_history(ctx.name, goal_id=self.goal_id)
+        return {"history": [asdict(row) for row in history]}
+
+
+class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
+    @abstractmethod
+    async def change(self, ctx: RuntimeRequestContext) -> None: ...
+
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+        await self.change(ctx)
+        goal, execution = ctx.server.agent._comms.goal_snapshot(ctx.name)
+        return {
+            "goal": asdict(goal) if goal is not None else None,
+            "goalExecution": asdict(execution) if execution is not None else None,
+        }
+
+
+@dataclass(frozen=True, kw_only=True)
+class GoalSnapshotRuntimeRequest(GoalSnapshotResultRuntimeRequest):
+    async def change(self, ctx: RuntimeRequestContext) -> None:
+        pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class GoalRevisionRuntimeRequest(ResultRuntimeRequest):
+    goal_id: str
+    expected_revision: int
+    revision_purpose: ClassVar[str] = "updating"
+
+    @classmethod
+    def invalid_payload_message(cls, payload: dict[str, Any], error: Exception) -> str:
+        if not GoalRevisionRuntimeRequest.accepts_declared_fields(payload):
+            return f"A goal identity and revision are required for {cls.revision_purpose}."
+        return super().invalid_payload_message(payload, error)
+
+
+@dataclass(frozen=True, kw_only=True)
+class GoalTextRuntimeRequest(ResultRuntimeRequest):
+    text: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.text.strip():
+            raise ValueError("A goal requires text.")
+
+    @classmethod
+    def invalid_payload_message(cls, payload: dict[str, Any], error: Exception) -> str:
+        if not GoalTextRuntimeRequest.accepts_declared_fields(payload):
+            error = ValueError("A goal requires text.")
+        return super().invalid_payload_message(payload, error)
+
+
+@dataclass(frozen=True, kw_only=True)
+class EditGoalRuntimeRequest(
+    GoalTextRuntimeRequest, GoalRevisionRuntimeRequest, GoalSnapshotResultRuntimeRequest
+):
+    async def change(self, ctx: RuntimeRequestContext) -> None:
+        await ctx.server.agent.edit_goal(
+            ctx.session_id, self.goal_id, self.expected_revision, self.text
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class UpdateGoalRuntimeRequest(GoalRevisionRuntimeRequest, GoalSnapshotResultRuntimeRequest):
+    status: str | None = None
+
+    async def change(self, ctx: RuntimeRequestContext) -> None:
+        await ctx.server.agent.update_goal(
+            ctx.session_id, self.status, self.goal_id, self.expected_revision
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
+    revision_purpose = "retry"
+
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+        goal = await ctx.server.agent.retry_goal(
+            ctx.session_id, self.goal_id, self.expected_revision
+        )
+        return {"goal": asdict(goal)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+        goal = await ctx.server.agent.set_goal(ctx.session_id, self.text)
+        return {"goal": asdict(goal)}
