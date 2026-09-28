@@ -41,6 +41,9 @@ No feature is complete merely because a draft exists or a PR was merged.
 - [ ] Tesla: establish116 ownership first, then finish an independent substantive
   workspace/resource implementation slice (or take over only if unowned). Use110
   measurements, preserve operational ACP/editor state, coordinate with Carver.
+  Completed independent slice126: demand-built session panels, installed64-tab
+  and actual terminal checks, editor/undo/shell continuity. Continues116 global
+  presentation bounds and actual ACP retention; original claim remains recorded.
 - [ ] Noether: establish50 ownership, finish authenticated loopback browser path
   in own worktree and verify actual serving/authentication. No external exposure.
 - [ ] Parent: after T2/T3/T5/T6 merge, remeasure and finish T4 as specified: nominal
