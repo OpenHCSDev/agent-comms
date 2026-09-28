@@ -22,6 +22,13 @@
 - New Toad plans discovered in plans/toad-comms_refactor/toad-refactor.zip;
   separate dispatch preparation must retain current Comms task ownership.
 
+- Latest full-root rehearsal preserves118currentmessages,8420attachedarchive
+  messages,104currentthreads and13unresolvedinputs; no source writes or replay.
+  Current typed root and both archival scopes reopened successfully.
+- Toad plans/complete queued scope ownership published in OpenHCSDev/toad111.
+  No implementation draft is claimed until actual code is published; current
+  Comms/native tasks retain priority before workers take their queued Toad scope.
+
 Older checkpoints below are historical and superseded where noted.
 
 ## Current checkpoint — 2026-09-28

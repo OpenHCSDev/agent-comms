@@ -96,6 +96,12 @@ def test_removed_mechanisms_and_settings_have_one_owner():
         "compaction_child_watchdog.py",
     ):
         assert not (ROOT / name).exists(), name
+    for path in files():
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.Name):
+                assert node.id != "reservable_commit", (path.name, node.lineno)
+            elif isinstance(node, ast.Attribute):
+                assert node.attr != "reservable_commit", (path.name, node.lineno)
     declarations = []
     for path in ROOT.glob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
