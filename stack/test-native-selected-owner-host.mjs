@@ -31,6 +31,7 @@ const loader = new pi.DefaultResourceLoader({cwd: root, agentDir: root, settings
 await loader.reload();
 const existing = process.argv.indexOf('--session');
 const manager = existing >= 0 ? pi.SessionManager.open(process.argv[existing + 1]) :
+  process.env.PR95_OWNER_SAVED_SESSION ? pi.SessionManager.open(process.env.PR95_OWNER_SAVED_SESSION) :
   pi.SessionManager.create(root, process.env.PR95_PRIVATE_SESSION === '1'
     ? join(root, 'native-sessions', 'f'.repeat(32)) : join(root, 'sessions'));
 const { session } = await pi.createAgentSession({
@@ -39,7 +40,7 @@ const { session } = await pi.createAgentSession({
 });
 const usage = {input: model.contextWindow - 500, output: 3, cacheRead: 0, cacheWrite: 0, totalTokens: model.contextWindow - 497,
   cost: {input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0}};
-if (existing < 0) {
+if (existing < 0 && !process.env.PR95_OWNER_SAVED_SESSION) {
   for (let i = 0; i < 5; i++) {
     const text = 'Question ' + i;
     const tracked = process.env.PR95_PRIVATE_SESSION === '1' ? {
