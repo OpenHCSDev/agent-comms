@@ -1,6 +1,6 @@
 // Injected into the exact disposable Pi RPC build, never the installed pin.
 // One operation is NOT a replay grant. Python must journal its ID before send.
-const acSummaryLimits = Object.freeze({ calls: 4, deadlineMs: 90000,
+const acSummaryLimits = Object.freeze({ deadlineMs: 90000,
     sourceBytes: 1048576, outputBytes: 262144 });
 const acSummaryId = value => typeof value === "string" && /^[0-9a-f]{32}$/.test(value);
 const acNativeSummaryResult = AssistantMessageEventStream.prototype.result;
@@ -148,8 +148,10 @@ function acAdmitSummary(request, session, conflict, spent, host) {
     return { preparation, binding };
 }
 async function acExecuteSummary(slot, session, request, preparation, binding) {
+    // Native compact() owns the finite map/reduction plan and its concurrency.
+    // Do not confuse its worker count with a total provider-call allowance.
+    // This selected slot retains its deadline, source/output bounds and no replay.
     const inFlight = new Set();
-    let calls = 0;
     let responseBytes = 0;
     const deadline = Date.now() + acSummaryLimits.deadlineMs;
     const timer = setTimeout(() => { slot.timedOut = true; slot.controller.abort(); }, acSummaryLimits.deadlineMs);
@@ -158,8 +160,6 @@ async function acExecuteSummary(slot, session, request, preparation, binding) {
         if (slot.controller.signal.aborted || Date.now() >= deadline ||
             !acSummaryCurrent(session, request, binding) || model !== binding.model ||
             !acSummaryCompatible(session, binding)) throw new Error("Selected route changed before call");
-        if (calls >= acSummaryLimits.calls) { slot.controller.abort(); throw new Error("Summary call limit"); }
-        calls++;
         // Everything after this line, including auth/header hooks, is possibly
         // spent even if the fake transport observes zero network requests.
         slot.started = true;
