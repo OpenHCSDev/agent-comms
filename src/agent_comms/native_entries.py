@@ -224,7 +224,11 @@ class StartupMetadataEntry(NativeEntry):
             or not entry.timestamp
             or (
                 entry.parent_id is not None
-                and re.fullmatch(r"[0-9a-f]{8}", entry.parent_id) is None
+                and re.fullmatch(
+                    r"[0-9a-f]{8}(?:-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?",
+                    entry.parent_id,
+                )
+                is None
             )
         ):
             raise ValueError("Native startup metadata identity is invalid")
