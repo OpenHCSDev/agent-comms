@@ -100,7 +100,7 @@ class MessageBus:
         import shutil
         import tempfile
 
-        from .catalog_store import CatalogMigration, ChannelCatalog
+        from .catalog_store import ChannelCatalog
 
         from .historical_views import HistorySource
 
@@ -126,7 +126,6 @@ class MessageBus:
                         "bus_meta.json",
                     )
                 ]
-                paths.extend(CatalogMigration.paths(source_root))
                 revisions = tuple(file_revision(path) for path in paths)
                 for path in paths:
                     if path.exists():
@@ -375,7 +374,7 @@ class MessageBus:
                 for path in (
                     self.log.path,
                     self._registry.store.path,
-                    *self._channels.source_paths(),
+                    self._channels.path,
                     self.reads.path,
                 )
             )
@@ -410,7 +409,7 @@ class MessageBus:
             file_revision(path)
             for path in (
                 self.log.path,
-                *self._channels.source_paths(),
+                self._channels.path,
                 self.reads.path.with_name(self.reads.legacy_filename),
             )
         )

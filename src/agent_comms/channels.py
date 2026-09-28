@@ -4,24 +4,22 @@ from __future__ import annotations
 
 import time
 from abc import abstractmethod
-from collections.abc import Mapping
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 from .channel_targets import _TAG_CHARS, BuiltinChannel, Tag
 from .declared_family import DeclaredFamily
 from .display_order import ThreadSort
 from .errors import RelationViolationError
-from .threads import Thread
+from .field_codec import FieldCodec
 
 
 @dataclass(frozen=True, slots=True)
 class Channel:
-    """One routable target and its presentation-only metadata.
+    """A captured channel presentation, including an optional saved projection.
 
-    Legacy declarations may still carry several tags as a compatibility
-    audience. Exact one-tag channels are always projected independently by the
-    catalog; ``parent`` and ``archived`` never participate in matching.
+    Only exact tags and routable builtins admit publication. SavedView owns
+    the predicate and historical target provenance of a read-only projection.
     """
 
     name: str
@@ -32,6 +30,7 @@ class Channel:
     parent: str | None = None
     archived: bool = False
     any_mode: bool = False
+    view: SavedView | None = None
 
     def __post_init__(self) -> None:
         name = self.name if self.name.startswith("#") else f"#{self.name}"
@@ -62,29 +61,22 @@ class Channel:
                 raise ValueError("Built-in channels cannot have tag filters.")
             if self.parent is not None or self.archived:
                 raise ValueError("Built-in channels cannot be grouped or archived.")
-        elif not self.tags:
-            raise ValueError("A channel requires at least one tag.")
+        elif self.view is not None:
+            if name != f"#{self.view.name}" or self.tags != self.view.predicate.tags:
+                raise ValueError("Saved projection must retain its declaration identity.")
+        elif self.tags != frozenset({name.removeprefix("#")}):
+            raise ValueError("A routable channel must be its exact tag.")
         for tag in self.tags:
             Tag(tag)
 
     def matches(self, tags: frozenset[str]) -> bool:
+        if self.view is not None:
+            return self.view.predicate.matches(tags)
         return self.builtin.matches(tags) if self.builtin else bool(self.tags & tags)
 
     @property
     def builtin(self) -> BuiltinChannel | None:
         return BuiltinChannel.lookup(self.name)
-
-    @classmethod
-    def aggregate_target(cls, name: str) -> bool:
-        channel = cls.lookup(name)
-        return channel is not None and channel.aggregate
-
-    @classmethod
-    def members_for(cls, name: str, threads: Mapping[str, Thread]) -> tuple[str, ...] | None:
-        channel = cls.lookup(name)
-        if channel is None:
-            return None
-        return tuple(thread.name for thread in threads.values() if channel.matches(thread.tags))
 
     @property
     def aggregate(self) -> bool:
@@ -92,10 +84,16 @@ class Channel:
 
     @property
     def exact(self) -> bool:
-        return self.builtin is None and self.tags == frozenset({self.name.removeprefix("#")})
+        return self.view is None and self.builtin is None
+
+    @property
+    def history_targets(self) -> frozenset[str] | None:
+        if self.view is not None:
+            return self.view.history_targets
+        return self.builtin.history_targets if self.builtin else frozenset({self.name})
 
     def to_wire(self) -> dict[str, object]:
-        return {**asdict(self), "tags": sorted(self.tags), "order": self.order.value}
+        return FieldCodec.encode(self)
 
 
 class ViewKind(StrEnum):
@@ -149,6 +147,13 @@ class SavedView:
     kind: ViewKind
     predicate: ViewPredicate
     created_at: float = field(default_factory=time.time)
+    original_targets: frozenset[str] = frozenset()
+
+    @property
+    def history_targets(self) -> frozenset[str]:
+        # Original addressed messages remain attached to their immutable target;
+        # this is a read projection, never a rewritten message or delivery scope.
+        return self.original_targets | frozenset(f"#{tag}" for tag in self.predicate.tags)
 
     def __post_init__(self) -> None:
         if (

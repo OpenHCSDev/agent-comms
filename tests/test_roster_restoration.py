@@ -92,9 +92,9 @@ def test_catalog_restore_preserves_current_preferences_and_historical_channels(t
     old = Comms(tmp_path / "old")
     new = Comms(tmp_path / "new")
     for c in (old, new):
-        c.channels.set_channel("comms", frozenset({"comms"}))
-    old.channels.set_channel("nra", frozenset({"nra"}))
-    old.channels.set_channel("openhcs", frozenset({"openhcs"}))
+        c.channels.create_tag("comms")
+    old.channels.create_tag("nra")
+    old.channels.create_tag("openhcs")
     old.channels.set_channel_metadata("#openhcs", parent="#nra", archived=False)
     old.channels.set_channel_any_mode("#nra", True)
     old.channels.set_channel_pinned("#nra", True)

@@ -264,7 +264,7 @@ class ChannelDisplayScope(MessageDisplayScope):
         participant_names = members | frozenset(
             alias for alias, owner in snapshot.aliases.items() if owner in members
         )
-        targets = channel.builtin.history_targets if channel.builtin else frozenset({channel.name})
+        targets = channel.history_targets
         return cls(channel.name, targets, channel.any_mode, participant_names, seen)
 
     @property
