@@ -24,8 +24,6 @@ from .envelope_claim_transitions import (
     ClaimTransition,
     FileClaimPath,
     WakeAdmission,
-    _claim_transition_from_wire,
-    _claim_transition_wire,
     _release_resource,
     apply_transition,
 )
@@ -276,10 +274,6 @@ class Publisher:
                 uuid.uuid4().hex if requested else None,
                 _admission,
             )
-            # The typed decoder imposes its own bound. Never return success on a
-            # durable row that every future guarded reader would reject.
-            if _claim_transition_from_wire(_claim_transition_wire(transition)) != transition:
-                raise RelationViolationError("Claim transition is not wire-roundtrippable.")
             apply_transition(projection, transition)  # pre-append conflict is synchronous
             stored = replace(stored, claim_transition=transition)
             try:

@@ -176,7 +176,7 @@ async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path,
         input_id = result.field_meta["agentComms"]["inputDisposition"]["inputId"]
         pending = owner.inputs.queued_inputs["project"][input_id]
         assert pending.text == reference and pending.images == (ImageInput(PNG, "image/png"),)
-        assert owner.inputs.dispositions.read().rows["acp:" + input_id].declared_name == "unknown"
+        assert owner.inputs.dispositions.read().rows["acp:" + input_id].declared_name == "reserved"
         await client.prompt(
             "project",
             [{"type": "text", "text": "What is this?"}, IMAGE],

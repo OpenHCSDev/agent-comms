@@ -107,7 +107,7 @@ async def test_native_preflight_failure_is_visible_and_cannot_mark_started(tmp_p
             owner.prompt("beta", [TextContentBlock(type="text", text="test")]), 6
         )
         rows = owner.inputs.dispositions.read().unknown(frozenset({"beta"}))
-        assert len(rows) == 1 and rows[0].native_id is None
+        assert len(rows) == 1 and not hasattr(rows[0], "native_id")
         assert not received.exists()
         text = "\n".join(row.get("content", {}).get("text", "") for row in updates.rows)
         assert "[agent error]" in text and "preflight" in text
@@ -236,7 +236,7 @@ asyncio.run(main())
     before = ledger.path.read_bytes()
     rows = ledger.read().unknown(frozenset({"beta"}))
     assert len(rows) == 1 and rows[0].source_text == "Retain exact crash input"
-    assert rows[0].native_id is None and rows[0].sent_text is None
+    assert not hasattr(rows[0], "native_id") and not hasattr(rows[0], "sent_text")
     thread = comms.registry.require("beta")
     comms.registry.register(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
 

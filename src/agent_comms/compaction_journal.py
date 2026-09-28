@@ -7,7 +7,6 @@ before calling ``resolve``. No method here dispatches or retries native work.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -17,15 +16,19 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 from weakref import WeakKeyDictionary
 
+from .child_process import ProcessIdentity
 from .field_codec import FieldCodec
 from .input_attempt import InputAttempt
 from .input_disposition import InputDispositions, InputDocument
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_summary_payloads import SelectedModel
+from .selected_source import SelectedSource
+from .text_digest import TextDigest
+from .thread_identity import ThreadIncarnation
 from .typed_table import Column, Index, TypedRow, TypedTable
 
 if TYPE_CHECKING:
@@ -84,7 +87,7 @@ class SelectedSummarySource:
     its exact source data and owns only durable exclusion and native linkage.
     """
 
-    source: dict[str, Any]
+    source: SelectedSource
     selected: SelectedModel
     settings: PiCompactionSettings
 
@@ -141,25 +144,8 @@ class SelectedSummaryAttempt(JournalTable, TypedTable, declared_name="selected_s
         if not self.state.original_eligible:
             return False
         try:
-            from .selected_summary_admission import SelectedAdmissionSource
-
             envelope = FieldCodec.decode(SelectedSummarySource, json.loads(self.source_json))
-            source = FieldCodec.decode(SelectedAdmissionSource, envelope.source)
-            key = source.ingress_key
-            if not key.startswith("acp:"):
-                return False
-            row = inputs.get(key)
-            return row is not None and (
-                not row.unresolved
-                and row.native_id is not None
-                and row.sequence is None
-                and row.owner == row.target == source.owner_name
-                and row.admission == source.admission_generation
-                and row.turn_id == source.turn_id
-                and row.sent_text is not None
-                and hashlib.sha256(row.sent_text.encode()).hexdigest() == source.input_sha256
-                and hashlib.sha256(row.source_text.encode()).hexdigest() == source.original_sha256
-            )
+            return envelope.source.original_has_started(InputDocument(rows=inputs))
         except (KeyError, TypeError, ValueError):
             return False
 
@@ -190,12 +176,11 @@ class EnrolledPrivateSession(JournalTable, TypedTable, declared_name="enrolled_p
     device: int
     inode: int
     header_sha256: str
-    owner_name: str
-    owner_created_at: str
+    incarnation: ThreadIncarnation
     owner_lookup: str
     owner_generation: int
     admission_generation: int
-    creator_pid: int
+    creator: ProcessIdentity
 
 
 @dataclass(frozen=True)
@@ -382,8 +367,7 @@ class CompactionJournal:
         self,
         fresh: FreshPrivateSession,
         *,
-        owner_name: str,
-        owner_created_at: str,
+        incarnation: ThreadIncarnation,
         owner_lookup: str,
         owner_generation: int,
         admission_generation: int,
@@ -406,10 +390,6 @@ class CompactionJournal:
         private_root = (self.path.parent / "native-sessions").resolve(strict=False)
         if (
             fresh.path.resolve(strict=True).parent != private_root / owner_lookup
-            or type(owner_name) is not str
-            or not owner_name
-            or type(owner_created_at) is not str
-            or not owner_created_at
             or type(owner_generation) is not int
             or owner_generation <= 0
             or type(admission_generation) is not int
@@ -430,12 +410,11 @@ class CompactionJournal:
                     fresh.device,
                     fresh.inode,
                     fresh.header_sha256,
-                    owner_name,
-                    owner_created_at,
+                    incarnation,
                     owner_lookup,
                     owner_generation,
                     admission_generation,
-                    fresh.creator_pid,
+                    ProcessIdentity.capture(fresh.creator_pid),
                 )
                 enrollment.insert(db)
         except sqlite3.IntegrityError as error:
@@ -492,33 +471,12 @@ class CompactionJournal:
         )
         if len(payload.encode()) > 65536:
             raise ValueError("Selected summary source exceeds bound")
-        if "reservedRevision" in source["source"]:
-            from .backend import _session_revision
+        from .backend import _session_revision
 
-            revision = _session_revision(canonical)
-            if revision is None or source["source"]["reservedRevision"] != json.loads(
-                json.dumps(revision)
-            ):
-                raise ValueError("Selected summary saved source revision changed")
-        if "originalSha256" in source["source"]:
-            witness = source["source"]
-            key = witness.get("ingressKey")
-            row = (
-                InputDispositions(self.path.parent / InputDispositions.filename)
-                .read()
-                .rows.get(key)
-                if type(key) is str
-                else None
-            )
-            if (
-                row is None
-                or not row.unresolved
-                or row.native_id is not None
-                or row.owner != witness.get("ownerName")
-                or row.admission != witness.get("admissionGeneration")
-                or hashlib.sha256(row.source_text.encode()).hexdigest() != witness["originalSha256"]
-            ):
-                raise ValueError("Selected summary durable original input changed")
+        envelope.source.reservation_check(
+            _session_revision(canonical),
+            InputDispositions(self.path.parent / InputDispositions.filename).read(),
+        ).require_valid()
         try:
             with (
                 InputDispositions(
@@ -529,15 +487,14 @@ class CompactionJournal:
                 if private and fresh_session is not None:
                     assert fresh_session is not None
                     coverage = EnrolledPrivateSession.one(db, session_file=canonical)
-                    witness = source["source"]
+                    witness = envelope.source
                     if (
                         coverage is None
                         or _returned_fresh_enrollments.get(fresh_session)
                         != (str(self.path), coverage)
-                        or witness.get("ownerName") != coverage.owner_name
-                        or witness.get("ownerCreatedAt") != coverage.owner_created_at
+                        or witness.incarnation != coverage.incarnation
                         or Path(canonical).parent.name != coverage.owner_lookup
-                        or witness.get("ownerPid") != coverage.creator_pid
+                        or witness.owner != coverage.creator
                         or (
                             admission_generation is not None
                             and admission_generation != coverage.admission_generation
@@ -556,7 +513,7 @@ class CompactionJournal:
 
                     try:
                         verify_continued_private_session(
-                            self.path.parent, Path(canonical), source["source"], raw_ids
+                            self.path.parent, Path(canonical), envelope.source, raw_ids
                         )
                     except (OSError, ValueError, sqlite3.Error, RuntimeError) as error:
                         raise CompactionJournalError(
@@ -726,13 +683,36 @@ class CompactionJournal:
                 db, where="operation_id=?", parameters=(attempt.operation_id,), state=target
             )
 
+    def retire_unchanged_summary(self, attempt: SelectedSummaryAttempt) -> None:
+        """Bridge holds the native writer and exact owner/source/input fences."""
+        target = attempt.state.retire_unchanged_source()
+        with self._transaction() as db:
+            if SelectedSummaryAttempt.one(db, operation_id=attempt.operation_id) != attempt:
+                raise CompactionJournalError("Selected summary changed during reconciliation")
+            # Any commit intent is a different uncertainty domain. Even a
+            # terminal commit must be reconciled by its native commit owner.
+            if CompactionOperation.select(
+                db,
+                where=(
+                    "session_file=? AND "
+                    "json_extract(intent_json, '$.selectedSummaryOperationId')=?"
+                ),
+                parameters=(attempt.session_file, attempt.operation_id),
+            ):
+                raise CompactionJournalError("Native commit intent prevents summary retirement")
+            SelectedSummaryAttempt.update(
+                db, where="operation_id=?", parameters=(attempt.operation_id,), state=target
+            )
+
     def selected_summaries(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:
         """Inspect every recorded result without exposing model or input content."""
         canonical = str(Path(session_file).resolve(strict=True))
         with self._transaction() as db:
-            return tuple(SelectedSummaryAttempt.select(
-                db, where="session_file=? ORDER BY rowid", parameters=(canonical,)
-            ))
+            return tuple(
+                SelectedSummaryAttempt.select(
+                    db, where="session_file=? ORDER BY rowid", parameters=(canonical,)
+                )
+            )
 
     def mark_selected_summary_unknown(self, operation_id: str) -> None:
         """Record transport uncertainty; never erase or retry the reservation."""
@@ -742,6 +722,16 @@ class CompactionJournal:
                 raise CompactionJournalError("Selected summary uncertainty transition forbidden")
             SelectedSummaryAttempt.update(
                 db, where="operation_id=?", parameters=(operation_id,), state=UnknownSummary()
+            )
+
+    def fail_selected_summary(self, operation_id: str, reason: str) -> None:
+        """Record the selected child's correlated no-write failure, never a send ACK."""
+        with self._transaction() as db:
+            row = SelectedSummaryAttempt.one(db, operation_id=operation_id)
+            if row is None:
+                raise CompactionJournalError("Unknown selected summary")
+            SelectedSummaryAttempt.update(
+                db, where="operation_id=?", parameters=(operation_id,), state=row.state.fail(reason)
             )
 
     def decline_selected_summary_prestart(
@@ -840,7 +830,7 @@ class CompactionJournal:
             if (
                 admission is not None
                 and json.loads(commit.intent_json).get("selectedSummarySourceDigest")
-                != hashlib.sha256(row.source_json.encode()).hexdigest()
+                != TextDigest.of(row.source_json).value
             ):
                 raise CompactionJournalError("Selected native intent source digest required")
             before = db.total_changes

@@ -16,9 +16,9 @@ from acp.schema import AgentMessageChunk, TextContentBlock, UserMessageChunk
 
 from .comms import Comms
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
 from .routing import MessageRoute
 from .runtime import RuntimeServer
-from .transcript_events import TranscriptCodec
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -122,7 +122,7 @@ class TranscriptReplay:
                     content=TextContentBlock(type="text", text=""),
                     field_meta={
                         "agentComms": {
-                            "transcript": [TranscriptCodec.encode(event) for event in page.events],
+                            "transcript": [FieldCodec.encode(event) for event in page.events],
                             "transcriptPage": page.metadata(),
                         }
                     },

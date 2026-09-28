@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -22,8 +21,11 @@ from .goal_generation import ReservedGeneration
 from .messages import Message
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
 from .runtime import UNBOUND_CONTROLLER
+from .selected_source import SelectedAdmissionSource
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 from .store_files import _store_lock
+from .text_digest import TextDigest
+from .thread_identity import TurnId
 from .turn_progress import TurnProgress
 from .turn_runner import _goal_attempt_unavailable
 
@@ -373,21 +375,19 @@ class OwnedTurn:
                         selected_admission.invalidate()
                         allowed = False
                     else:
-                        digest = hashlib.sha256(sent_text.encode()).hexdigest()
-                        original_digest = hashlib.sha256(original.source_text.encode()).hexdigest()
+                        digest = TextDigest.of(sent_text)
                         identity = SelectedAdmissionIdentity(
-                            owner_name=canonical,
-                            owner_pid=current.pid,
-                            owner_created_at=float(current.created_at).hex(),
-                            turn_id=self.turn_id,
-                            ingress_key=keys[0],
-                            admission_generation=snapshot.admission_generations[canonical],
-                            correction_witness=(
-                                f"{snapshot.admission_generations[canonical]}:{digest}"
+                            source=SelectedAdmissionSource(
+                                incarnation=current.incarnation,
+                                owner=current.process_identity,
+                                turn=TurnId(self.turn_id),
+                                ingress_key=keys[0],
+                                admission_generation=snapshot.admission_generations[canonical],
+                                correction_witness=f"{snapshot.admission_generations[canonical]}:{digest.value}",
+                                input_digest=digest,
+                                original_digest=original.digest,
+                                reserved_revision=selected_admission._identity.source.reserved_revision,
                             ),
-                            input_sha256=digest,
-                            original_sha256=original_digest,
-                            reserved_revision=selected_admission._identity.reserved_revision,
                             session_revision=revision,
                         )
                         try:

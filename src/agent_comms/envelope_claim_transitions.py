@@ -9,16 +9,14 @@ fsync before any reader observes it. Parsed rows alone are NOT durable proof.
 
 from __future__ import annotations
 
-import json
 import stat
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
 
 
 class ClaimTransitionError(ValueError):
@@ -199,10 +197,12 @@ class ClaimTransition:
     incarnation: str
     seq: int
     message_id: str
-    claims: tuple[str, ...] = ()
-    releases: tuple[ClaimRelease, ...] = ()
-    generation: str | None = None
-    admission: WakeAdmission | None = None
+    claims: tuple[str, ...] = field(default=(), metadata={"wire_required": True})
+    releases: tuple[ClaimRelease, ...] = field(default=(), metadata={"wire_required": True})
+    generation: str | None = field(default=None, metadata={"wire_required": True})
+    admission: WakeAdmission | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_nonnull": True}
+    )
 
     def __post_init__(self) -> None:
         _text(self.owner, "Owner")
@@ -330,80 +330,6 @@ def project_verified_transitions(rows: Iterable[ClaimTransition]) -> ClaimProjec
     for transition in rows:
         projection = apply_transition(projection, transition)
     return projection
-
-
-def parse_complete_transition_line(raw: bytes) -> ClaimTransition:
-    """Syntax-only fixture parser; newline/JSON checks DO NOT establish fsync."""
-    if type(raw) is not bytes or not raw.endswith(b"\n") or len(raw) > 16_384:
-        raise ClaimTransitionError("Transition line must be bounded and newline-complete.")
-
-    def unique(pairs: list[tuple[str, object]]) -> dict[str, object]:
-        fields: dict[str, object] = {}
-        for key, value in pairs:
-            if key in fields:
-                raise ClaimTransitionError("Duplicate JSON transition field.")
-            fields[key] = value
-        return fields
-
-    try:
-        data = json.loads(raw.decode("utf-8"), object_pairs_hook=unique)
-    except ClaimTransitionError:
-        raise
-    except (UnicodeError, ValueError) as error:
-        raise ClaimTransitionError("Invalid transition JSON.") from error
-    required = {"owner", "incarnation", "seq", "message_id", "claims", "releases", "generation"}
-    if type(data) is not dict or set(data) not in (required, required | {"admission"}):
-        raise ClaimTransitionError("Transition has missing or unknown fields.")
-    if type(data["claims"]) is not list or type(data["releases"]) is not list:
-        raise ClaimTransitionError("Transition resources must be arrays.")
-    releases: list[ClaimRelease] = []
-    for release in data["releases"]:
-        if type(release) is not dict or set(release) != {"resource", "generation"}:
-            raise ClaimTransitionError("Invalid release record.")
-        releases.append(ClaimRelease(release["resource"], release["generation"]))
-    admission = None
-    if "admission" in data:
-        value = data["admission"]
-        try:
-            admission = FieldCodec.decode(WakeAdmission, value)
-        except (TypeError, ValueError) as error:
-            raise ClaimTransitionError("Wake admission has invalid fields.") from error
-
-    return ClaimTransition(
-        data["owner"],
-        data["incarnation"],
-        data["seq"],
-        data["message_id"],
-        tuple(data["claims"]),
-        tuple(releases),
-        data["generation"],
-        admission,
-    )
-
-
-def _claim_transition_wire(transition: ClaimTransition) -> dict[str, object]:
-    value: dict[str, object] = {
-        "owner": transition.owner,
-        "incarnation": transition.incarnation,
-        "seq": transition.seq,
-        "message_id": transition.message_id,
-        "claims": list(transition.claims),
-        "releases": [asdict(release) for release in transition.releases],
-        "generation": transition.generation,
-    }
-    if transition.admission is not None:
-        value["admission"] = FieldCodec.encode(transition.admission)
-    return value
-
-
-def _claim_transition_from_wire(value: object) -> ClaimTransition:
-    if type(value) is not dict:
-        raise RelationViolationError("Claim transition is not a typed object.")
-    try:
-        encoded = json.dumps(value, allow_nan=False, separators=(",", ":")).encode() + b"\n"
-        return parse_complete_transition_line(encoded)
-    except (TypeError, ValueError) as error:
-        raise RelationViolationError("Claim transition is malformed.") from error
 
 
 def _release_resource(worktree: Path, path: str | Path) -> str:

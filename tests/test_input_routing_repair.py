@@ -62,7 +62,7 @@ def test_preview_is_read_only_and_apply_is_idempotent_without_ack(tmp_path):
     event = wire(comms.root).transcripts.thread_transcript_page("worker").events[0]
     assert event.text == message.body and event.routing.requests == (message,)
     assert dispositions.path.read_bytes() == before
-    assert dispositions.read().rows[f"bus:{message.seq}"].declared_name == "unknown"
+    assert dispositions.read().rows[f"bus:{message.seq}"].declared_name == "bound_unknown"
     assert comms.bus.pending_count("worker") == pending
 
 

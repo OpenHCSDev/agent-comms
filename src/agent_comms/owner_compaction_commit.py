@@ -39,10 +39,14 @@ from .owner_compaction_prepare import NativePreparation, NativeWitness, prepare_
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_summary_payloads import SummaryFiles, SummaryUsage
 from .registration import Registration
+from .reservation_rules import CommitReservationCheck
 from .routing import DeliveryScope
+from .selected_source import SelectedSource
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 from .session_fence import idle_session_writer_fence
 from .store_files import _store_lock
+from .text_digest import TextDigest
+from .thread_identity import TurnId
 from .threads import Thread
 from .wire_log import WireLog
 
@@ -219,9 +223,7 @@ class OwnerCompactionCommit:
             receipt.goal_id,
             receipt.goal_revision,
             WireLog(self.root / "bus.jsonl").delivery_revision_unlocked(delivery),
-            hashlib.sha256(
-                json.dumps(FieldCodec.encode(rows), sort_keys=True).encode()
-            ).hexdigest(),
+            TextDigest.of(json.dumps(FieldCodec.encode(rows), sort_keys=True)).value,
             pending_input_key,
             settings_paths,
             self._settings_source(settings_paths),
@@ -277,6 +279,7 @@ class OwnerCompactionCommit:
         )
         if prepared is None:
             return None
+        self.reconcile_interrupted_summaries(owner, owner_generation, prepared.witness)
         source = self.capture_source(
             owner,
             owner_generation,
@@ -285,6 +288,29 @@ class OwnerCompactionCommit:
             settings_paths=settings_paths,
         )
         return prepared, source
+
+    def reconcile_interrupted_summaries(
+        self, owner: Thread, owner_generation: int, witness: NativeWitness
+    ) -> None:
+        """Retire an interrupted summary only when no original input or write occurred.
+
+        The provider outcome remains UNKNOWN. A later explicit input may request
+        a new summary; neither this method nor the retired row replays anything.
+        """
+        with self._boundary(owner, owner_generation, witness, settled=False):
+            for attempt in self.journal.selected_summaries(witness.session_file):
+                if not attempt.state.reconcile_unchanged_source:
+                    continue
+                source = FieldCodec.decode(
+                    SelectedSource, json.loads(attempt.source_json)["source"]
+                )
+                source.interrupted_check(
+                    _session_revision(witness.session_file),
+                    self.inputs._read_unlocked(),
+                    owner.incarnation,
+                    TurnId(owner.active_turn.id),
+                ).require_valid()
+                self.journal.retire_unchanged_summary(attempt)
 
     def _call(
         self, fd: int, request: dict, timeout: float, retained_fds: tuple[int, ...] = ()
@@ -406,7 +432,7 @@ class OwnerCompactionCommit:
             ensure_ascii=False,
             separators=(",", ":"),
         )
-        digest = hashlib.sha256(payload.encode()).hexdigest()
+        digest = TextDigest.of(payload).value
         with self._boundary(
             owner, owner_generation, witness, pending_input_key=source.pending_input_key
         ) as (
@@ -434,22 +460,20 @@ class OwnerCompactionCommit:
                     raise CompactionJournalError(
                         "Selected summary reservation changed before commit"
                     )
-                selected_source = json.loads(selected_attempt.source_json)["source"]
-                if (
-                    selected_source.get("ownerName") != owner.name
-                    or selected_source.get("ownerPid") != owner.pid
-                    or selected_source.get("ownerCreatedAt") != float(owner.created_at).hex()
-                    or selected_source.get("turnId") != source.turn_id
-                    or selected_source.get("ingressKey") != source.pending_input_key
-                    or selected_source.get("reservedRevision")
-                    != json.loads(json.dumps(_session_revision(witness.session_file)))
-                ):
-                    raise CompactionJournalError("Selected summary owner or saved source differs")
+                selected_source = FieldCodec.decode(
+                    SelectedSource, json.loads(selected_attempt.source_json)["source"]
+                )
+                CommitReservationCheck(
+                    source=selected_source,
+                    revision=_session_revision(witness.session_file),
+                    incarnation=owner.incarnation,
+                    owner=owner.process_identity,
+                    turn=TurnId(source.turn_id),
+                    pending_input_key=source.pending_input_key,
+                ).require_valid()
                 intent.update(
                     selectedSummaryOperationId=selected_attempt.operation_id,
-                    selectedSummarySourceDigest=hashlib.sha256(
-                        selected_attempt.source_json.encode()
-                    ).hexdigest(),
+                    selectedSummarySourceDigest=TextDigest.of(selected_attempt.source_json).value,
                 )
             commit_id = self.journal.begin(
                 witness.session_file, intent, inputs=self.inputs._read_unlocked()
@@ -505,7 +529,7 @@ class OwnerCompactionCommit:
             if (
                 self.journal.selected_summary(attempt.operation_id) != attempt
                 or attempt.session_file != witness.session_file
-                or _session_revision(witness.session_file) != identity.reserved_revision
+                or _session_revision(witness.session_file) != identity.source.reserved_revision
             ):
                 raise CompactionJournalError("Selected decline source changed")
             admission = self.journal.decline_selected_summary_prestart(
@@ -548,7 +572,7 @@ class OwnerCompactionCommit:
             if (
                 revision is None
                 or evidence.revision != ":".join(map(str, revision[0]))
-                or revision[1] != identity.reserved_revision[1]
+                or revision[1] != identity.source.reserved_revision[1]
             ):
                 raise CompactionJournalError("Selected native result is unavailable")
             admission = self.journal.link_selected_summary_commit(

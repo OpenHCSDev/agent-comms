@@ -725,7 +725,7 @@ class TurnRunner:
                         snapshot = self.comms.registry.snapshot()
                         name = snapshot.aliases.get(execution.owner_name, execution.owner_name)
                         owner = snapshot.threads.get(name)
-                        row = self.inputs.dispositions.read().rows.get(key) if key else None
+                        row = self.inputs.dispositions.read().lookup(key)
                         valid = (
                             item is not None
                             and owner is not None
@@ -737,11 +737,8 @@ class TurnRunner:
                                 snapshot.admission_generations[name],
                                 self.comms.goals.goal_wait(name),
                             )
-                            and row is not None
+                            and row.queued_for(owner.incarnation, item.admission, item.text)
                             and row.key == f"acp:{input_id}"
-                            and row.unattempted
-                            and row.owner == name
-                            and row.admission == item.admission
                         )
                     if not valid:
                         await self.inputs.input_refused(session_id, input_id)

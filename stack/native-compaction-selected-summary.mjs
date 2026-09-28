@@ -56,10 +56,18 @@ function acValidSummaryCancel(value) {
         value.type === "agent_comms_cancel_summary" && value.version === 1 && acSummaryId(value.operationId);
 }
 const acSummaryDecline = (operationId, reason) => ({ version: 1, status: "declined", operationId, reason });
-// Failure detail is diagnostic only: it never changes UNKNOWN or grants replay.
+// Diagnostic text never decides whether a failure is terminal and never grants replay.
+const acSummaryReason = reason => reason.replace(/[\u0000-\u001f\u007f]/g, " ")
+    .trim().slice(0, 1024).toWellFormed() || "Selected summary provider failed";
 const acSummaryUnknown = (operationId, reason) => ({ version: 1, status: "unknown", operationId,
-    ...(reason === undefined ? {} : { reason: reason.replace(/[\u0000-\u001f\u007f]/g, " ")
-        .trim().slice(0, 1024).toWellFormed() }) });
+    ...(reason === undefined ? {} : { reason: acSummaryReason(reason) }) });
+class AcSummaryProviderFailure extends Error {
+    outcome(request) {
+        return {version: 1, status: "failed", operationId: request.operationId,
+            witness: request.witness, selected: request.selected, settings: request.settings,
+            reason: acSummaryReason(this.message)};
+    }
+}
 const acSummaryHooks = ["session_before_compact", "before_provider_headers", "before_provider_request",
     "after_provider_response"];
 function acSummaryCompatible(session, binding) {
@@ -150,6 +158,7 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
     // Pi policy owns per-call output tokens. The owner enforces inactivity
     // across correlated real progress; total history does not get a second budget.
     const inFlight = new Set();
+    let uncertainStream = false;
     let progressSequence = 0;
     const progress = () => output({ type: "agent_comms_compaction_progress",
         id: request.id, operationId: request.operationId, sequence: ++progressSequence });
@@ -193,6 +202,7 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
                 acNativeSummaryResult.call(source));
             void providerTerminal.catch(() => {}); // join below retains rejection
             let terminal;
+            let terminalResult;
             let sawStart = false;
             let invalidEvent = false;
             // Consume the pinned AssistantMessageEventStream itself. Its
@@ -220,7 +230,7 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
                 // Consumer iterator closure is NOT provider completion. On
                 // malformed events, parser errors or cancellation, join the
                 // original pinned stream terminal before the slot can clear.
-                try { await providerTerminal; }
+                try { terminalResult = await providerTerminal; }
                 catch {
                     // Rejection is not completion: a forged or broken terminal
                     // can fail early while provider work continues.
@@ -230,6 +240,11 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
             }
             if (invalidEvent)
                 throw new Error("Selected summary stream contained unsupported events");
+            if (terminal?.type === "error" && terminal.reason === "error" &&
+                terminal.error === terminalResult && terminalResult?.role === "assistant" &&
+                terminalResult.stopReason === "error")
+                throw new AcSummaryProviderFailure(typeof terminalResult.errorMessage === "string" &&
+                    terminalResult.errorMessage.trim() ? terminalResult.errorMessage : "Selected summary provider failed");
             if (terminal?.type === "error")
                 throw new Error(typeof terminal.error?.errorMessage === "string" && terminal.error.errorMessage.trim()
                     ? terminal.error.errorMessage : `Selected summary provider stopped: ${terminal.reason}`);
@@ -245,7 +260,10 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
             return value;
         })();
         inFlight.add(response);
-        void response.then(() => inFlight.delete(response), () => inFlight.delete(response));
+        void response.then(() => inFlight.delete(response), error => {
+            if (!(error instanceof AcSummaryProviderFailure)) uncertainStream = true;
+            inFlight.delete(response);
+        });
         return { result: () => response };
     };
     try {
@@ -261,6 +279,12 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
         return { version: 1, status: "summarized", operationId: request.operationId,
             witness: request.witness, selected: request.selected, settings: request.settings, result };
     } catch (error) {
+        // A receipt covers the entire summary-only operation, including sibling
+        // map streams. No provider failure can settle an unjoined/uncertain stream.
+        await Promise.allSettled([...inFlight]);
+        if (error instanceof AcSummaryProviderFailure && !uncertainStream &&
+            !slot.controller.signal.aborted && acSummaryCurrent(session, request, binding))
+            return error.outcome(request);
         const reason = error instanceof Error && error.message ? error.message : "Selected summary failed without error detail";
         return slot.started ? acSummaryUnknown(request.operationId, reason) :
             acSummaryDecline(request.operationId, slot.controller.signal.aborted ? "cancelled" : "unsupported");

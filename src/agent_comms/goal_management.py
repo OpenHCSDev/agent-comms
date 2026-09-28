@@ -126,7 +126,7 @@ class Goals:
         eligible = set()
         snapshot = self.registry.snapshot()
         delivery = self.bus._delivery_scope(thread.name, snapshot)
-        from .input_attempt import UnknownInput
+        from .input_attempt import ReservedInput
 
         # The canonical delivery scope excludes previous incarnations, while
         # viewer read ACKs deliberately have no bearing on native handling.
@@ -142,11 +142,11 @@ class Goals:
                 ):
                     continue
                 key = InputDispositions.bus_key(message, thread)
-                row = document.rows.get(key)
-                if row is None:
+                row = document.lookup(key)
+                if not row.exists:
                     # Read-only inspection of a canonical input. Only an
                     # explicit successful review persists this observation.
-                    row = UnknownInput(
+                    row = ReservedInput(
                         key,
                         message.seq,
                         thread.name,

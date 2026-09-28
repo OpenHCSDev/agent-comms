@@ -163,13 +163,13 @@ void runRpcMode(host);
   await request({id:'error-mode',type:'set_steering_mode',mode:'error-stop'});
   const stopId='e'.repeat(32);
   assert.deepEqual((await request({id:'stop',...base,operationId:stopId})).data,
-    {version:1,status:'unknown',operationId:stopId,reason:'402: insufficient credits on configured model'});
+    {version:1,status:'failed',operationId:stopId,witness,selected,settings,reason:'402: insufficient credits on configured model'});
   for(const [mode,id,reason] of [
       ['error-long','b'.repeat(32),'x'.repeat(1024)],
       ['error-control','0'.repeat(32),'402: insufficient credits']]) {
     await request({id:mode,type:'set_steering_mode',mode});
     assert.deepEqual((await request({id:mode+'-result',...base,operationId:id})).data,
-      {version:1,status:'unknown',operationId:id,reason});
+      {version:1,status:'failed',operationId:id,witness,selected,settings,reason});
   }
   await request({id:'hold-mode',type:'set_auto_retry',enabled:true});
   const holdId='f'.repeat(32);

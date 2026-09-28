@@ -7,16 +7,12 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .channel_targets import _TAG_CHARS, BuiltinChannel, is_channel_target
-from .envelope_claim_transitions import (
-    ClaimTransition,
-    _claim_transition_from_wire,
-    _claim_transition_wire,
-)
+from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, projected
 from .mentions import ThreadMention
 from .response_policy import (
     CollectivePolicy,
@@ -43,16 +39,6 @@ class MessageType(Enum):
 class MembershipChange(StrEnum):
     JOINED = "joined"
     LEFT = "left"
-
-
-class MessageWireCodec(FieldCodec):
-    """Use the claim transition boundary inside the standard message codec."""
-
-    @classmethod
-    def _decode(cls, target: Any, data: Any) -> Any:
-        if target is ClaimTransition:
-            return _claim_transition_from_wire(data)
-        return super()._decode(target, data)
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,7 +122,7 @@ class Message:
     def view_order(self) -> tuple[int, int, int]:
         return 1, 0, self.seq
 
-    @property
+    @projected(view="wire", name="id")
     def message_id(self) -> str:
         digest = hashlib.sha256(
             f"{self.sender}:{self.target}:{self.timestamp}:{self.body}".encode()
@@ -149,11 +135,7 @@ class Message:
         return {}
 
     def to_wire(self) -> dict:
-        result = MessageWireCodec.encode(self)
-        result = {"seq": self.seq, "id": self.message_id, **result}
-        if self.claim_transition is not None:
-            result["claim_transition"] = _claim_transition_wire(self.claim_transition)
-        return result
+        return {"seq": self.seq, "id": self.message_id, **FieldCodec.encode(self)}
 
     @classmethod
     def from_wire(cls, data: Mapping) -> Message:
@@ -163,7 +145,7 @@ class Message:
         public = {
             key: value for key, value in data.items() if key not in ("id", PRIVATE_WIRE_FIELD)
         }
-        return MessageWireCodec.decode(cls, {"ts": 0.0, **public})
+        return FieldCodec.decode(cls, {"ts": 0.0, **public})
 
     @property
     def response_policy(self) -> ResponsePolicy:

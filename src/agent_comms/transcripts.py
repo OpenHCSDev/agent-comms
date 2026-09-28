@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .channel_targets import is_channel_target
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
 from .message_bus import MessageBus
 from .messages import Message
 from .messaging import Messaging
@@ -17,7 +18,7 @@ from .native_transcript import NativeTranscript
 from .registration import Registration
 from .routing import TurnRouting
 from .threads import Thread
-from .transcript_events import NoticeTranscript, TranscriptCodec, TranscriptEvent, UserTranscript
+from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes
 
 _LOG = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ class TranscriptPage:
 
     def metadata(self) -> dict[str, object]:
         return {
-            field.name: TranscriptCodec.encode(getattr(self, field.name))
+            field.name: FieldCodec.encode(getattr(self, field.name))
             for field in fields(self)
             if field.name != "events"
         }
@@ -272,13 +273,13 @@ class Transcripts:
         bindings. A prompt prefix or a matching body alone is not evidence.
         No transcript, input disposition, delivery/read cursor, or model is changed.
         """
-        from .input_attempt import InputAttempt
+        from .input_attempt import SentInput
         from .input_disposition import InputDispositions
         from .routing import ScheduledTurn
 
         rows = InputDispositions(self.root / InputDispositions.filename).read().bound_bus_inputs()
         existing = self.routes.input_bindings()
-        groups: dict[str, list[InputAttempt]] = {}
+        groups: dict[str, list[SentInput]] = {}
         needed = {row.sequence for row in rows}
         envelopes: dict[int, Message] = {}
         aliases = self.registry.snapshot().aliases

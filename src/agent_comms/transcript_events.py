@@ -7,21 +7,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .declared_family import DeclaredFamily
-from .messages import Message, MessageWireCodec
 from .routing import TurnRouting
 from .tool_results import ToolDiff
-
-
-class TranscriptCodec(MessageWireCodec):
-    """Compose the existing message boundary inside saved routing annotations."""
-
-    @classmethod
-    def encode(cls, value):
-        return value.to_wire() if isinstance(value, Message) else super().encode(value)
-
-    @classmethod
-    def _decode(cls, target, data):
-        return Message.from_wire(data) if target is Message else super()._decode(target, data)
 
 
 @dataclass(frozen=True, kw_only=True)

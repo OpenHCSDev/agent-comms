@@ -265,7 +265,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             )
             for key in pending_keys:
                 row = agent.inputs.dispositions.read().rows.get(key)
-                assert row.declared_name == "unknown" and row.native_id is None
+                assert row.declared_name == "reserved" and not hasattr(row, "native_id")
                 assert row.reviewed_for_goal(goal.id)
             assert comms.registry.require("parent").goal.state.declared_name == "completed"
             assert agent.turns.goal_store.snapshot(goal.id).lifecycle == CompletedGeneration()

@@ -137,7 +137,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 comms.registry.rename("worker", "renamed-worker")
             await agent.inputs.drain_inbox("worker")
             key = agent.inputs.dispositions.bus_key(message, comms.registry.require("worker"))
-            assert agent.inputs.dispositions.read().rows[key].declared_name == "unknown"
+            assert agent.inputs.dispositions.read().rows[key].declared_name == "reserved"
             if case == "goal":
                 comms.goals.update_goal("worker", SetGoalAction(text="Changed goal"))
             elif case == "stop":

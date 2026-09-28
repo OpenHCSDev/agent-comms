@@ -88,6 +88,9 @@ async def test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation(tmp_p
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    from goal_owner_fixture import activate_empty_source
+
+    activate_empty_source(owner)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     seed(comms, session)

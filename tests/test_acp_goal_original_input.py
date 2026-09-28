@@ -120,8 +120,8 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
         assert refused.value.data == {"reason": "input_authority_changed"}
         assert backend_calls == 0
         rows = disposition_rows(agent)
-        assert len(rows) == 1 and rows[0].declared_name == "unknown"
-        assert rows[0].native_id is None
+        assert len(rows) == 1 and rows[0].unresolved
+        assert not hasattr(rows[0], "native_id")
         current = comms.registry.require("project").goal
         assert current.id == replacement.id and current.state.active
         generation = store.snapshot(replacement.id)
@@ -151,8 +151,8 @@ async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monke
         await agent.inputs.run_owned_input("project", "project", "do not send after stop")
         assert boundaries == [False]
         rows = disposition_rows(agent)
-        assert len(rows) == 1 and rows[0].declared_name == "unknown"
-        assert rows[0].native_id is None
+        assert len(rows) == 1 and rows[0].unresolved
+        assert not hasattr(rows[0], "native_id")
         # A refused owner input cannot spend an unrelated autonomous grant.
         assert store.snapshot(goal.id) == prior_generation
     finally:

@@ -598,8 +598,7 @@ class SelectedExecution:
                     self.root / "compaction-commits.sqlite3"
                 ).enroll_fresh_private_session(
                     self.fresh_session,
-                    owner_name=self.owner.name,
-                    owner_created_at=float(self.owner.created_at).hex(),
+                    incarnation=self.owner.incarnation,
                     owner_lookup=self.lookup,
                     owner_generation=self.participant.participant_generation,
                     admission_generation=self.owner_admission_generation,

@@ -8,7 +8,6 @@ single-send backend path and its strict saved-session reopen.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import os
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -36,7 +35,10 @@ from .registration import Registration
 from .runtime_info import AgentRuntimeInfo
 from .selected_pi_route import read_selected_compaction_decision
 from .selected_pi_summary_rpc import SelectedSummarySlot
+from .selected_source import SelectedAdmissionSource
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
+from .text_digest import TextDigest
+from .thread_identity import TurnId
 
 
 async def maybe_compact_owner_turn(
@@ -162,18 +164,19 @@ async def maybe_compact_owner_turn(
         original = bridge.inputs.read().rows.get(original_input_key)
         if revision is None or original is None:
             raise PiSettingsEvidenceError("Selected original input or saved session is unavailable")
-        digest = hashlib.sha256(input_text.encode()).hexdigest()
+        digest = TextDigest.of(input_text)
         identity = SelectedAdmissionIdentity(
-            owner_name=owner.name,
-            owner_pid=owner.pid,
-            owner_created_at=float(owner.created_at).hex(),
-            turn_id=turn_id,
-            ingress_key=original_input_key,
-            admission_generation=owner.active_turn.admission_generation,
-            correction_witness=f"{owner.active_turn.admission_generation}:{digest}",
-            input_sha256=digest,
-            original_sha256=hashlib.sha256(original.source_text.encode()).hexdigest(),
-            reserved_revision=revision,
+            source=SelectedAdmissionSource(
+                incarnation=owner.incarnation,
+                owner=owner.process_identity,
+                turn=TurnId(turn_id),
+                ingress_key=original_input_key,
+                admission_generation=owner.active_turn.admission_generation,
+                correction_witness=f"{owner.active_turn.admission_generation}:{digest.value}",
+                input_digest=digest,
+                original_digest=original.digest,
+                reserved_revision=revision,
+            ),
             session_revision=revision,
         )
 
@@ -184,7 +187,7 @@ async def maybe_compact_owner_turn(
                 bridge.journal,
                 prepared.witness,
                 {
-                    "source": FieldCodec.project(identity, "source"),
+                    "source": FieldCodec.encode(identity.source),
                     "selected": {
                         "provider": provider,
                         "modelId": model_id,
