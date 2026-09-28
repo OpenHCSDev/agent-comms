@@ -1,3 +1,12 @@
+## Cold compaction installed acceptance passed — 2026-09-28
+
+PR266 incorporates paired267. Actual copied 137MB UX history passes both cold manual
+and automatic compaction; installed wheel automatic route passes, preserving full
+file details, reopening usable context and completing exactly one original input.
+Local HTTP supplies substantial summaries; no paid test calls. Original live
+UNKNOWN remains unchanged. Deployment follows this acceptance, not yet claimed live.
+TR0 core268 and Toad117 merged; T2/T3/T5/T6 continue independently, T4 follows.
+
 ## Cold native input failure — active fix, 2026-09-28
 
 PR266 (parent) and paired native PR267 (Wegener, Sol high) own the live
