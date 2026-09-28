@@ -1,0 +1,717 @@
+{
+  "findings": [
+    {
+      "label": "SelectedToolRequest semantic descent boundary",
+      "authority_candidates": [
+        "SelectedToolRequest"
+      ],
+      "detector_ids": [
+        "semantic_mirror_without_descent"
+      ],
+      "finding_ids": [
+        "7c4a72c1a6"
+      ],
+      "target_count": 4,
+      "covered_finding_count": 1,
+      "certificate_count": 1,
+      "matched_fact_count": 2,
+      "authority_kinds": [
+        "finding_declared_authority"
+      ],
+      "projection_kinds": [
+        "detector_finding"
+      ],
+      "authority_claims": [
+        {
+          "claim": {
+            "claimed_symbol": "SelectedToolRequest",
+            "authority_kind": "finding_declared_authority",
+            "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+            "qualname": "SelectedToolRequest",
+            "authority_id": "finding:7c4a72c1a6:authority"
+          },
+          "status": "resolved",
+          "proof_edges": [
+            {
+              "edge_kind": "semantic_descent_graph",
+              "authority_id": "finding:7c4a72c1a6:authority",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+              "line": 91,
+              "symbol": "SelectedToolRequest",
+              "detail": "claim matched semantic-descent authority catalog"
+            }
+          ],
+          "discovery_required": null
+        }
+      ],
+      "evidence_symbols": [
+        "SelectedToolRequest.from_arguments:if",
+        "SelectedToolRequest",
+        "SelectedToolRequest.contents",
+        "SelectedToolRequest.resource"
+      ],
+      "stable_id": "ea6ab16f76",
+      "detector_id": "semantic_mirror_without_descent",
+      "title": "Semantic mirror should descend to its nominal authority",
+      "summary": "`SelectedToolRequest` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('contents', 'resource') with dataclass_schema `SelectedToolRequest`; branch literal `SelectedToolRequest.from_arguments:if` repeats fields from dataclass_schema `SelectedToolRequest`; derive it from dataclass fields through a declaration-owned projection.",
+      "relation_context": "branch_literal has semantic overlap ('contents', 'resource') with dataclass_schema `SelectedToolRequest`; branch literal `SelectedToolRequest.from_arguments:if` repeats fields from dataclass_schema `SelectedToolRequest`; derive it from dataclass fields through a declaration-owned projection",
+      "authority_candidate": "SelectedToolRequest",
+      "authority_discovery_required": false
+    },
+    {
+      "label": "SelectedToolRequest semantic descent boundary",
+      "authority_candidates": [
+        "SelectedToolRequest"
+      ],
+      "detector_ids": [
+        "semantic_mirror_without_descent"
+      ],
+      "finding_ids": [
+        "3ee14459b0"
+      ],
+      "target_count": 4,
+      "covered_finding_count": 1,
+      "certificate_count": 1,
+      "matched_fact_count": 2,
+      "authority_kinds": [
+        "finding_declared_authority"
+      ],
+      "projection_kinds": [
+        "detector_finding"
+      ],
+      "authority_claims": [
+        {
+          "claim": {
+            "claimed_symbol": "SelectedToolRequest",
+            "authority_kind": "finding_declared_authority",
+            "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+            "qualname": "SelectedToolRequest",
+            "authority_id": "finding:3ee14459b0:authority"
+          },
+          "status": "resolved",
+          "proof_edges": [
+            {
+              "edge_kind": "semantic_descent_graph",
+              "authority_id": "finding:3ee14459b0:authority",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+              "line": 91,
+              "symbol": "SelectedToolRequest",
+              "detail": "claim matched semantic-descent authority catalog"
+            }
+          ],
+          "discovery_required": null
+        }
+      ],
+      "evidence_symbols": [
+        "SelectedToolRequest.from_wire:if",
+        "SelectedToolRequest",
+        "SelectedToolRequest.contents",
+        "SelectedToolRequest.resource"
+      ],
+      "stable_id": "8e6e06c9b5",
+      "detector_id": "semantic_mirror_without_descent",
+      "title": "Semantic mirror should descend to its nominal authority",
+      "summary": "`SelectedToolRequest` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('contents', 'resource') with dataclass_schema `SelectedToolRequest`; branch literal `SelectedToolRequest.from_wire:if` repeats fields from dataclass_schema `SelectedToolRequest`; derive it from dataclass fields through a declaration-owned projection.",
+      "relation_context": "branch_literal has semantic overlap ('contents', 'resource') with dataclass_schema `SelectedToolRequest`; branch literal `SelectedToolRequest.from_wire:if` repeats fields from dataclass_schema `SelectedToolRequest`; derive it from dataclass fields through a declaration-owned projection",
+      "authority_candidate": "SelectedToolRequest",
+      "authority_discovery_required": false
+    }
+  ],
+  "plans": [],
+  "finding_payload_mode": "semantic_boundary_evidence",
+  "finding_count": 2,
+  "finding_counts": {
+    "by_pattern": [
+      {
+        "pattern_id": 1,
+        "count": 2,
+        "pattern_name": "Nominal Boundary Over Sentinel Simulation"
+      }
+    ],
+    "by_detector": [
+      {
+        "detector_id": "semantic_mirror_without_descent",
+        "count": 2
+      }
+    ]
+  },
+  "scan_status": {
+    "mode": "exact_compact_global",
+    "analyzed_detector_count": 79,
+    "omitted_detector_count": 0,
+    "complete": true,
+    "reason": "all_context_detectors_use_compact_global_projections"
+  },
+  "semantic_descent_graph": {
+    "active_graph_source": "repository",
+    "repository_graph": {
+      "authority_count": 376,
+      "fact_count": 2351,
+      "projection_count": 2542,
+      "relation_count": 12,
+      "missing_descent_count": 10,
+      "authorities_by_kind": [
+        {
+          "authority_kind": "class_family",
+          "count": 94
+        },
+        {
+          "authority_kind": "dataclass_schema",
+          "count": 267
+        },
+        {
+          "authority_kind": "enum",
+          "count": 15
+        }
+      ],
+      "projections_by_kind": [
+        {
+          "projection_kind": "branch_literal",
+          "count": 2009
+        },
+        {
+          "projection_kind": "call_literal",
+          "count": 348
+        },
+        {
+          "projection_kind": "collection_literal",
+          "count": 45
+        },
+        {
+          "projection_kind": "mapping_literal",
+          "count": 139
+        },
+        {
+          "projection_kind": "match_literal",
+          "count": 1
+        }
+      ],
+      "top_certificates": [
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "TOOLS",
+          "projection_kind": "collection_literal",
+          "projection_owner_symbol": "<module>",
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/tools.py",
+          "line": 571,
+          "matched_fact_count": 8,
+          "coverage_ratio": 0.025559105431309903,
+          "matched_tokens": [
+            "fork",
+            "model",
+            "prompt",
+            "status",
+            "type"
+          ],
+          "missing_derivation_path": "collection literal `TOOLS` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "_publication_metadata:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "_publication_metadata",
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/compaction_journal.py",
+          "line": 150,
+          "matched_fact_count": 5,
+          "coverage_ratio": 0.01597444089456869,
+          "matched_tokens": [
+            "status",
+            "type"
+          ],
+          "missing_derivation_path": "branch literal `_publication_metadata:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "_read_snapshot_result:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "_read_snapshot_result",
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_source_snapshot.py",
+          "line": 227,
+          "matched_fact_count": 5,
+          "coverage_ratio": 0.01597444089456869,
+          "matched_tokens": [
+            "status",
+            "type"
+          ],
+          "missing_derivation_path": "branch literal `_read_snapshot_result:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "PrefixWitness",
+          "authority_kind": "dataclass_schema",
+          "projection_label": "_witness_record:return",
+          "projection_kind": "mapping_literal",
+          "projection_owner_symbol": "_witness_record",
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/private_bus_checkpoint.py",
+          "line": 52,
+          "matched_fact_count": 5,
+          "coverage_ratio": 0.5555555555555556,
+          "matched_tokens": [
+            "digest",
+            "revision",
+            "root_id",
+            "tail",
+            "through_seq"
+          ],
+          "missing_derivation_path": "mapping literal `_witness_record:return` repeats fields from dataclass_schema `PrefixWitness`; derive it from dataclass fields through a declaration-owned projection"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "Goal.from_registry:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "Goal.from_registry",
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/goals.py",
+          "line": 114,
+          "matched_fact_count": 3,
+          "coverage_ratio": 0.009584664536741214,
+          "matched_tokens": [
+            "pause_source",
+            "paused_goal",
+            "status"
+          ],
+          "missing_derivation_path": "branch literal `Goal.from_registry:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "Message",
+          "authority_kind": "dataclass_schema",
+          "projection_label": "message",
+          "projection_kind": "mapping_literal",
+          "projection_owner_symbol": "ImportRole.pi_message",
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/importing.py",
+          "line": 48,
+          "matched_fact_count": 3,
+          "coverage_ratio": 0.2727272727272727,
+          "matched_tokens": [
+            "body",
+            "timestamp",
+            "type"
+          ],
+          "missing_derivation_path": "mapping literal `message` repeats fields from dataclass_schema `Message`; derive it from dataclass fields through a declaration-owned projection"
+        },
+        {
+          "authority_name": "DisplayOrder",
+          "authority_kind": "class_family",
+          "projection_label": "TOOLS",
+          "projection_kind": "collection_literal",
+          "projection_owner_symbol": "<module>",
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/tools.py",
+          "line": 571,
+          "matched_fact_count": 2,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "channel_sort",
+            "thread_sort"
+          ],
+          "missing_derivation_path": "collection literal `TOOLS` repeats members from class_family `DisplayOrder`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "ImageInput",
+          "authority_kind": "dataclass_schema",
+          "projection_label": "ImageInput.to_rpc:return",
+          "projection_kind": "mapping_literal",
+          "projection_owner_symbol": "ImageInput.to_rpc",
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/image_inputs.py",
+          "line": 39,
+          "matched_fact_count": 2,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "data",
+            "mime_type"
+          ],
+          "missing_derivation_path": "mapping literal `ImageInput.to_rpc:return` repeats fields from dataclass_schema `ImageInput`; derive it from dataclass fields through a declaration-owned projection"
+        },
+        {
+          "authority_name": "SelectedToolRequest",
+          "authority_kind": "dataclass_schema",
+          "projection_label": "SelectedToolRequest.from_arguments:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "SelectedToolRequest.from_arguments",
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+          "line": 137,
+          "matched_fact_count": 2,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "contents",
+            "resource"
+          ],
+          "missing_derivation_path": "branch literal `SelectedToolRequest.from_arguments:if` repeats fields from dataclass_schema `SelectedToolRequest`; derive it from dataclass fields through a declaration-owned projection"
+        },
+        {
+          "authority_name": "SelectedToolRequest",
+          "authority_kind": "dataclass_schema",
+          "projection_label": "SelectedToolRequest.from_wire:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "SelectedToolRequest.from_wire",
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+          "line": 125,
+          "matched_fact_count": 2,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "contents",
+            "resource"
+          ],
+          "missing_derivation_path": "branch literal `SelectedToolRequest.from_wire:if` repeats fields from dataclass_schema `SelectedToolRequest`; derive it from dataclass fields through a declaration-owned projection"
+        }
+      ]
+    },
+    "finding_backed_graph": {
+      "authority_count": 2,
+      "fact_count": 4,
+      "projection_count": 2,
+      "relation_count": 2,
+      "missing_descent_count": 2,
+      "authorities_by_kind": [
+        {
+          "authority_kind": "finding_declared_authority",
+          "count": 2
+        }
+      ],
+      "projections_by_kind": [
+        {
+          "projection_kind": "detector_finding",
+          "count": 2
+        }
+      ],
+      "top_certificates": [
+        {
+          "authority_name": "SelectedToolRequest",
+          "authority_kind": "finding_declared_authority",
+          "projection_label": "`SelectedToolRequest.from_arguments:if` mirrors `SelectedToolRequest`",
+          "projection_kind": "detector_finding",
+          "projection_owner_symbol": "semantic_mirror_without_descent",
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+          "line": 137,
+          "matched_fact_count": 2,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "contents",
+            "resource"
+          ],
+          "missing_derivation_path": "branch_literal has semantic overlap ('contents', 'resource') with dataclass_schema `SelectedToolRequest`; branch literal `SelectedToolRequest.from_arguments:if` repeats fields from dataclass_schema `SelectedToolRequest`; derive it from dataclass fields through a declaration-owned projection"
+        },
+        {
+          "authority_name": "SelectedToolRequest",
+          "authority_kind": "finding_declared_authority",
+          "projection_label": "`SelectedToolRequest.from_wire:if` mirrors `SelectedToolRequest`",
+          "projection_kind": "detector_finding",
+          "projection_owner_symbol": "semantic_mirror_without_descent",
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+          "line": 125,
+          "matched_fact_count": 2,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "contents",
+            "resource"
+          ],
+          "missing_derivation_path": "branch_literal has semantic overlap ('contents', 'resource') with dataclass_schema `SelectedToolRequest`; branch literal `SelectedToolRequest.from_wire:if` repeats fields from dataclass_schema `SelectedToolRequest`; derive it from dataclass fields through a declaration-owned projection"
+        }
+      ]
+    }
+  },
+  "timing": {
+    "parse_seconds": 20.757,
+    "analysis_seconds": 1.232,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 0.0,
+    "analysis_cache_status": "disabled",
+    "total_seconds": 21.989
+  },
+  "semantic_refactor_gate": {
+    "boundary_evidence": [
+      {
+        "label": "SelectedToolRequest semantic descent boundary",
+        "authority_candidates": [
+          "SelectedToolRequest"
+        ],
+        "detector_ids": [
+          "semantic_mirror_without_descent"
+        ],
+        "finding_ids": [
+          "7c4a72c1a6"
+        ],
+        "target_count": 4,
+        "covered_finding_count": 1,
+        "certificate_count": 1,
+        "matched_fact_count": 2,
+        "authority_kinds": [
+          "finding_declared_authority"
+        ],
+        "projection_kinds": [
+          "detector_finding"
+        ],
+        "authority_claims": [
+          {
+            "claim": {
+              "claimed_symbol": "SelectedToolRequest",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+              "qualname": "SelectedToolRequest",
+              "authority_id": "finding:7c4a72c1a6:authority"
+            },
+            "status": "resolved",
+            "proof_edges": [
+              {
+                "edge_kind": "semantic_descent_graph",
+                "authority_id": "finding:7c4a72c1a6:authority",
+                "authority_kind": "finding_declared_authority",
+                "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+                "line": 91,
+                "symbol": "SelectedToolRequest",
+                "detail": "claim matched semantic-descent authority catalog"
+              }
+            ],
+            "discovery_required": null
+          }
+        ],
+        "evidence_symbols": [
+          "SelectedToolRequest.from_arguments:if",
+          "SelectedToolRequest",
+          "SelectedToolRequest.contents",
+          "SelectedToolRequest.resource"
+        ],
+        "stable_id": "ea6ab16f76",
+        "detector_id": "semantic_mirror_without_descent",
+        "title": "Semantic mirror should descend to its nominal authority",
+        "summary": "`SelectedToolRequest` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('contents', 'resource') with dataclass_schema `SelectedToolRequest`; branch literal `SelectedToolRequest.from_arguments:if` repeats fields from dataclass_schema `SelectedToolRequest`; derive it from dataclass fields through a declaration-owned projection.",
+        "relation_context": "branch_literal has semantic overlap ('contents', 'resource') with dataclass_schema `SelectedToolRequest`; branch literal `SelectedToolRequest.from_arguments:if` repeats fields from dataclass_schema `SelectedToolRequest`; derive it from dataclass fields through a declaration-owned projection",
+        "authority_candidate": "SelectedToolRequest",
+        "authority_discovery_required": false
+      },
+      {
+        "label": "SelectedToolRequest semantic descent boundary",
+        "authority_candidates": [
+          "SelectedToolRequest"
+        ],
+        "detector_ids": [
+          "semantic_mirror_without_descent"
+        ],
+        "finding_ids": [
+          "3ee14459b0"
+        ],
+        "target_count": 4,
+        "covered_finding_count": 1,
+        "certificate_count": 1,
+        "matched_fact_count": 2,
+        "authority_kinds": [
+          "finding_declared_authority"
+        ],
+        "projection_kinds": [
+          "detector_finding"
+        ],
+        "authority_claims": [
+          {
+            "claim": {
+              "claimed_symbol": "SelectedToolRequest",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+              "qualname": "SelectedToolRequest",
+              "authority_id": "finding:3ee14459b0:authority"
+            },
+            "status": "resolved",
+            "proof_edges": [
+              {
+                "edge_kind": "semantic_descent_graph",
+                "authority_id": "finding:3ee14459b0:authority",
+                "authority_kind": "finding_declared_authority",
+                "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+                "line": 91,
+                "symbol": "SelectedToolRequest",
+                "detail": "claim matched semantic-descent authority catalog"
+              }
+            ],
+            "discovery_required": null
+          }
+        ],
+        "evidence_symbols": [
+          "SelectedToolRequest.from_wire:if",
+          "SelectedToolRequest",
+          "SelectedToolRequest.contents",
+          "SelectedToolRequest.resource"
+        ],
+        "stable_id": "8e6e06c9b5",
+        "detector_id": "semantic_mirror_without_descent",
+        "title": "Semantic mirror should descend to its nominal authority",
+        "summary": "`SelectedToolRequest` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('contents', 'resource') with dataclass_schema `SelectedToolRequest`; branch literal `SelectedToolRequest.from_wire:if` repeats fields from dataclass_schema `SelectedToolRequest`; derive it from dataclass fields through a declaration-owned projection.",
+        "relation_context": "branch_literal has semantic overlap ('contents', 'resource') with dataclass_schema `SelectedToolRequest`; branch literal `SelectedToolRequest.from_wire:if` repeats fields from dataclass_schema `SelectedToolRequest`; derive it from dataclass fields through a declaration-owned projection",
+        "authority_candidate": "SelectedToolRequest",
+        "authority_discovery_required": false
+      }
+    ],
+    "authority_discovery_findings": [],
+    "active": true,
+    "ssot_authority_finding_count": 2,
+    "policy": "authority_boundary_proof",
+    "raw_findings_default": "suppressed_when_active"
+  },
+  "active_finding_surface": "semantic_refactor_boundary_evidence",
+  "raw_findings_default": "suppressed_when_active",
+  "supporting_raw_finding_count": 2,
+  "supporting_raw_findings": [
+    {
+      "pattern_id": 1,
+      "title": "`SelectedToolRequest.from_wire:if` mirrors `SelectedToolRequest`",
+      "why": "The branch literal at /home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py:125 repeats contents, resource from the `SelectedToolRequest` semantic authority. A later class, enum member, or schema field can diverge from this hand-maintained view.",
+      "capability_gap": "dataclass-schema-derived projection",
+      "relation_context": "branch_literal has semantic overlap ('contents', 'resource') with dataclass_schema `SelectedToolRequest`; branch literal `SelectedToolRequest.from_wire:if` repeats fields from dataclass_schema `SelectedToolRequest`; derive it from dataclass fields through a declaration-owned projection",
+      "confidence": "high",
+      "certification": "certified",
+      "capability_tags": [
+        "nominal_identity",
+        "provenance",
+        "enumeration",
+        "authoritative_mapping"
+      ],
+      "observation_tags": [
+        "class_family",
+        "manual_synchronization",
+        "projection_dict"
+      ],
+      "detector_id": "semantic_mirror_without_descent",
+      "summary": "`SelectedToolRequest.from_wire:if` mirrors 2 member(s) of `SelectedToolRequest` without a descent path",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+          "line": 125,
+          "symbol": "SelectedToolRequest.from_wire:if"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+          "line": 91,
+          "symbol": "SelectedToolRequest"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+          "line": 93,
+          "symbol": "SelectedToolRequest.contents"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+          "line": 92,
+          "symbol": "SelectedToolRequest.resource"
+        }
+      ],
+      "projection_evidence": {
+        "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+        "line": 125,
+        "symbol": "SelectedToolRequest.from_wire:if"
+      },
+      "authority_evidence": {
+        "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+        "line": 91,
+        "symbol": "SelectedToolRequest"
+      },
+      "compression_certificate": null,
+      "metrics": {
+        "mapping_site_count": 2,
+        "field_count": 2,
+        "mapping_name": "SelectedToolRequest.from_wire:if",
+        "field_names": [
+          "contents",
+          "resource"
+        ],
+        "source_name": "SelectedToolRequest",
+        "identity_field_names": [
+          "contents",
+          "resource"
+        ]
+      },
+      "stable_id": "3ee14459b0",
+      "evidence_ids": [
+        "2ecc93911c",
+        "74f49093ed",
+        "4a8b425db1",
+        "d45bacf751"
+      ]
+    },
+    {
+      "pattern_id": 1,
+      "title": "`SelectedToolRequest.from_arguments:if` mirrors `SelectedToolRequest`",
+      "why": "The branch literal at /home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py:137 repeats contents, resource from the `SelectedToolRequest` semantic authority. A later class, enum member, or schema field can diverge from this hand-maintained view.",
+      "capability_gap": "dataclass-schema-derived projection",
+      "relation_context": "branch_literal has semantic overlap ('contents', 'resource') with dataclass_schema `SelectedToolRequest`; branch literal `SelectedToolRequest.from_arguments:if` repeats fields from dataclass_schema `SelectedToolRequest`; derive it from dataclass fields through a declaration-owned projection",
+      "confidence": "high",
+      "certification": "certified",
+      "capability_tags": [
+        "nominal_identity",
+        "provenance",
+        "enumeration",
+        "authoritative_mapping"
+      ],
+      "observation_tags": [
+        "class_family",
+        "manual_synchronization",
+        "projection_dict"
+      ],
+      "detector_id": "semantic_mirror_without_descent",
+      "summary": "`SelectedToolRequest.from_arguments:if` mirrors 2 member(s) of `SelectedToolRequest` without a descent path",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+          "line": 137,
+          "symbol": "SelectedToolRequest.from_arguments:if"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+          "line": 91,
+          "symbol": "SelectedToolRequest"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+          "line": 93,
+          "symbol": "SelectedToolRequest.contents"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+          "line": 92,
+          "symbol": "SelectedToolRequest.resource"
+        }
+      ],
+      "projection_evidence": {
+        "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+        "line": 137,
+        "symbol": "SelectedToolRequest.from_arguments:if"
+      },
+      "authority_evidence": {
+        "file_path": "/home/ts/wt/comms-pf1-native-tool-lifecycle-20260928/src/agent_comms/selected_tool_broker.py",
+        "line": 91,
+        "symbol": "SelectedToolRequest"
+      },
+      "compression_certificate": null,
+      "metrics": {
+        "mapping_site_count": 2,
+        "field_count": 2,
+        "mapping_name": "SelectedToolRequest.from_arguments:if",
+        "field_names": [
+          "contents",
+          "resource"
+        ],
+        "source_name": "SelectedToolRequest",
+        "identity_field_names": [
+          "contents",
+          "resource"
+        ]
+      },
+      "stable_id": "7c4a72c1a6",
+      "evidence_ids": [
+        "87c792bebd",
+        "74f49093ed",
+        "4a8b425db1",
+        "d45bacf751"
+      ]
+    }
+  ],
+  "payload_timing": {
+    "observation_graph_seconds": 0.0,
+    "semantic_descent_graph_seconds": 0.004,
+    "source_snapshot_seconds": 0.0,
+    "source_index_payload_seconds": 0.0,
+    "semantic_refactor_gate_seconds": 0.002,
+    "finding_recipe_plan_seconds": 0.0,
+    "total_seconds": 0.011
+  }
+}
