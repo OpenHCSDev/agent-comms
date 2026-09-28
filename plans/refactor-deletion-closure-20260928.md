@@ -174,3 +174,30 @@ net production lines removed with native four-tool acceptance; PR236 reports
 107 passed/2 skipped. A12 cancellation/launch fixes belong to Lovelace, and
 NativeRuntimeInput/startup declarations to Cicero/Pascal. These branches and
 the D22 data rewrite are not yet installed.
+
+## Combined S13/S10 and durable conversion rehearsal
+
+Integrated PR232 through5d2935f and PR234 through9b75660 into parent229.
+Kept S13's newer child supervisor, tests and handoff when S10's older cherry-picked
+A12 foundation collided; removed the obsolete InputDrain observation-interval
+import. Three parent fixture families now bind actual process birth identities.
+
+- Child-process and process-inventory integration:20 passed (real child trees,
+  repeated cancellation, inherited descriptors/deadline, owner-death cleanup).
+- Actual Pi post-admission-floor read/edit/write/bash execution:1 passed in3.49s
+  with loopback-only model responses, actual native CLI/tools, no paid provider.
+- Route/native-input/admission integration:49 passed,1 skipped. Unit boundary
+  cases in that shard do not substitute for the actual Pi execution above.
+- One-shot registry_history.py staged all four actual retained registry sources.
+  Live104threads/18goals/2history entries; prior root104/20/456; archived sources
+  104/20 and7/1. Compared all durable Thread fields, aliases, generation maps
+  including tombstones, goal content/revisions/states, journal sequence/identity/
+  outcomes and metadata. All current records decode and SQLite integrity passes.
+  Process identities/active turns are cleared only in candidates; raw evidence
+  and original journals are retained. Five archived pauses lack provenance;
+  preserve their prior protected-pause behavior and record the missing evidence.
+
+Receipts: evidence/round2-l0/d22-registry-acceptance.json and the child/native/
+entrypoint integration logs. Final cutover, history manifest refresh, runtime
+UNKNOWN preservation, remaining source/caller closure, integration of236/237
+and installed acceptance remain open. No source/live store was rewritten.

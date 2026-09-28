@@ -20,6 +20,7 @@ import pytest
 from agent_comms import coordinated_runtime as runtime
 from agent_comms import proven_source_coverage as coverage_module
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime import SelectedExecution
@@ -58,12 +59,17 @@ def _root(tmp_path: Path):
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     people = [
-        Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()),
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ),
         Thread(
             "alpha",
             frozenset({"team"}),
             str(tmp_path),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             task="math answers",
             model="openai-codex/gpt-6-sol",
         ),
@@ -376,7 +382,7 @@ def test_source_coverage_refuses_early_and_caps_bytes_before_bus_guard(tmp_path,
             scanned += 1
             yield row
 
-    monkeypatch.setattr(WireLog, '_verified_private_rows_unlocked', observed_rows)
+    monkeypatch.setattr(WireLog, "_verified_private_rows_unlocked", observed_rows)
     with (
         MutationStore(str(root / "coordination.sqlite3")) as store,
         pytest.raises(IdentityConflict, match="bounded private initial scan"),
@@ -407,7 +413,12 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
-    beta = Thread("beta", frozenset({"team"}), str(tmp_path), pid=os.getpid())
+    beta = Thread(
+        "beta",
+        frozenset({"team"}),
+        str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    )
     comms.threads.register(beta)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         store.register_participant(

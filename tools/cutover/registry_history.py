@@ -25,7 +25,8 @@ from agent_comms.threads import Thread
 class StoredGoal(Goal):
     """The flat saved format, restricted to this disposable conversion tool."""
 
-    status: type[GoalState] = ActiveGoal
+    state: GoalState = field(init=False, default_factory=ActiveGoal)
+    status: type[GoalState] = field(default=ActiveGoal, metadata={"wire_required": True})
     block_reason: str | None = None
     pause_source: type[PauseSource] | None = None
 
@@ -49,6 +50,7 @@ class StoredGoal(Goal):
 
 @dataclass(frozen=True)
 class StoredThread(Thread):
+    pid: int = 0
     goal: StoredGoal | None = None
     status: type[ThreadStatus] = StoppedThreadStatus
     last_seen: float = 0.0
@@ -56,7 +58,9 @@ class StoredThread(Thread):
     def current(self, pauses: dict[str, GoalPauseEvent]) -> Thread:
         values = {item.name: getattr(self, item.name) for item in fields(Thread) if item.init}
         values.update(
-            pid=0, active_turn=None, goal=self.goal.current(pauses) if self.goal else None
+            process_identity=None,
+            active_turn=None,
+            goal=self.goal.current(pauses) if self.goal else None,
         )
         return Thread(**values)
 
@@ -74,7 +78,7 @@ class StoredRegistry:
     def current(self, pauses: dict[str, GoalPauseEvent]) -> RegistryDocument:
         return RegistryDocument(
             threads={name: thread.current(pauses) for name, thread in self.threads.items()},
-            statuses={name: thread.status().restored() for name, thread in self.threads.items()},
+            statuses={name: thread.status() for name, thread in self.threads.items()},
             last_seen={name: thread.last_seen for name, thread in self.threads.items()},
             aliases=self.aliases,
             owners=GenerationCounter(self.owner_epoch_counter, self.owner_epochs),
