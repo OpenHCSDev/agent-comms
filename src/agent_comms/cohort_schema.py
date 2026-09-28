@@ -8,7 +8,12 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import Literal
 
-from .coordination import COORDINATION_SCHEMA_VERSION, Participants, SchemaVersionError, WakeClaims
+from .coordination import (
+    COORDINATION_SCHEMA_VERSION,
+    Participants,
+    SchemaVersionError,
+    WakeAssignment,
+)
 from .coordination_store import MutationStore
 from .typed_table import (
     Column,
@@ -220,7 +225,7 @@ class ClaimBatchMembers(CohortTable, TypedTable):
     @classmethod
     def references(cls):
         return (
-            ForeignKey(("claim_id",), WakeClaims, ("claim_id",)),
+            ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
             ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
             ForeignKey(
                 ("wire_root_id", "wire_seq"), ClaimBatchReceipts, ("wire_root_id", "wire_seq")
@@ -246,7 +251,7 @@ class ClaimBatchMembers(CohortTable, TypedTable):
                 "                JOIN claim_batch_receipts r\n"
                 "                  ON r.wire_root_id = NEW.wire_root_id AND r.wir"
                 "e_seq = NEW.wire_seq\n"
-                "                WHERE c.claim_id = NEW.claim_id\n"
+                "                WHERE c.assignment_id = NEW.claim_id\n"
                 "                  AND c.recipient_lookup = NEW.recipient_lookup\n"
                 "                  AND c.wire_seq = NEW.wire_seq\n"
                 "                  AND c.message_id = r.message_id\n"
@@ -300,7 +305,7 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
     def references(cls):
         return (
             ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
-            ForeignKey(("claim_id",), WakeClaims, ("claim_id",)),
+            ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
             ForeignKey(
                 ("wire_root_id", "wire_seq"), ClaimBatchReceipts, ("wire_root_id", "wire_seq")
             ),
@@ -322,7 +327,7 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
                 "ng claim member')\n"
                 "            WHERE NEW.kind = 'selected' AND NOT EXISTS (\n"
                 "                SELECT 1 FROM claim_batch_members m\n"
-                "                JOIN wake_claims c ON c.claim_id = m.claim_id\n"
+                "                JOIN wake_claims c ON c.assignment_id = m.claim_id\n"
                 "                WHERE m.wire_root_id = NEW.wire_root_id AND m.wi"
                 "re_seq = NEW.wire_seq\n"
                 "                  AND m.claim_id = NEW.claim_id\n"
@@ -397,7 +402,7 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
     @classmethod
     def references(cls):
         return (
-            ForeignKey(("claim_id",), WakeClaims, ("claim_id",)),
+            ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
             ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
             ForeignKey(
                 ("wire_root_id", "wire_seq", "claim_id"),
@@ -417,7 +422,7 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
                 "            WHERE NOT EXISTS (\n"
                 "                SELECT 1 FROM claim_batch_members m JOIN wake_cl"
                 "aims c\n"
-                "                  ON c.claim_id=m.claim_id JOIN claim_batch_rece"
+                "                  ON c.assignment_id=m.claim_id JOIN claim_batch_rece"
                 "ipts r\n"
                 "                  ON r.wire_root_id=m.wire_root_id AND r.wire_se"
                 "q=m.wire_seq\n"

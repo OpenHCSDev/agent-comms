@@ -423,3 +423,70 @@ optional no-attempt lookup. Raw SQL fixtures now write current lifecycle JSON;
 actual corruption and immutable-identity/finality tests retained. No repeated
 unchanged gateway suite. Remaining production consolidation: WakeAssignment and
 its notification/cohort/caller boundary, then global guards and final integration.
+
+## S12 source closure: wake owner, notifications, package-wide guard
+
+WakeAssignment now owns wake_claims (physical assignment_id, lifecycle).
+Deleted WakeClaims and _assignment; all coordinator/cohort/publication/native
+triage writers use declared columns. Assignment/engagement classes own SQL
+mode/verdict/binding projections; removed the old hand-listed assignment case
+constraint. Generated mode/verdict/binding columns remain read-only. Schema8
+preserves acceptance immutability, exact execution relations, transitions and
+CAS. NativeRuntimeInput/ExecutionAssignmentLink/cohort FKs and history/awareness
+joins all target assignment_id. External snapshots still spell claim_id.
+
+HistoryViews notification query uses NotificationAssignment(TypedRow), preserving
+241's process_alive/current-turn checks. Its actual current schema query no longer
+passes a raw joined SQLite row into a deleted mapper. No history/attachment data
+regions were changed. OpenCode's external SQLite snapshot importer now uses typed
+read-only projections and streams messages with explicit cursor release; no
+foreign format rewrite or source writes. This was the final raw SQL reader.
+
+The guard now covers every Python file under src/agent_comms recursively; only
+its owning typed_table implementation can create tables/write column lists/read
+raw SQLite. No adopted-module loophole, per-module allowlist or runtime converter.
+All source extraction/write/DDL checks pass. Removed the lifecycle old-format
+capture-only test and evidence/s3/legacy-lifecycles.json. New-case behavior proves
+a declared assignment gets SQLite mode/binding projection and transitions without
+editing a registry/schema roster. Existing no-replay and fault tests remain.
+
+Acceptance receipts: wake-owner-current134pass,1stress deselected; SQL boundary
+first13pass including real external OpenCode readonly file equality; remaining
+native consumers68pass after current S9 fixture corrections; two previously failing
+consumer cases2pass. Native checks include actual child release/UNKNOWN recovery,
+current proof/digest mismatch, no wake replay, pointer/revocation, cohort-page
+continuation, notifications, and shared declarations/guards. Some providers are
+fixture-controlled; this is not an installed retained-session/RPC activation proof.
+That real-path acceptance remains parent-owned. No unchanged suite rerun after
+these results. Focused lint (excluding existing long SQL lines) and diff checks pass.
+
+### Exact remaining cutover obligations (parent)
+
+No unowned S12 production table/caller remains. Source closure is ready for review;
+S12 overall is NOT globally complete until quiet activation/durable one-shots and
+real retained-session/native/RPC acceptance finish. No live operation performed.
+
+- Close owners before resetting coordination.sqlite3 and its -wal/-shm together.
+  Schema8 includes core typed lifecycle tables, cohort/awareness, response metadata,
+  native runtime input/current cursor; history/backlog never becomes fresh work.
+- Reset native_prompt_bindings.sqlite3 and closed SQLite sidecars; no manufactured
+  current proof or binding, no reissued UNKNOWN/input attempt.
+- Derived wake_candidates.sqlite3 and transcript_reply_index.sqlite3/page index
+  files may be recreated only after current canonical source validation. Candidate
+  checkpoint is an index boundary, not input/provider authority.
+- For private checkpoint sidecar reset, remove checkpoint_version/checkpoint_seal
+  from the SAME staged root marker and recertify the canonical full prefix before
+  attach. Preserve root ID, last sequence, required access and admission_after_seq.
+  Capture H once under quiet lock; current admission/scanners stay strictly >H;
+  native proof starts0 until genuine post-floor source coverage. No parallel store.
+- Durable todos.sqlite3, goal history + goal-private/goal_attempts.sqlite3,
+  transcript route/input-display annotations, read ledger and attached history
+  preserve IDs, rows, content and uncertainty through parent's one-shot stage and
+  reopen equality. Never reset them with runtime state. Parent already implements
+  actual annotation and goal conversion; do not duplicate converters in src.
+
+S9 owns compaction journal tables/adoption; its remaining JournalMode and
+JournalSchemaObject duplicates should use A13 SQLiteJournalMode/SQLiteSchemaObject.
+Parent was notified; this file was not edited. S10 owns selected_tool_broker and
+already uses NativeRuntimeInput. Parent retains actual quiet activation/unknown
+session proof and deletes one-shot tools after successful durable replacement.

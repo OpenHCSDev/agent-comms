@@ -1,4 +1,4 @@
-"""Adopting A13 closes a module's raw SQLite access; no exception list."""
+"""A13 owns all SQLite DDL, mutation columns and typed reads package-wide."""
 
 import ast
 import re
@@ -53,19 +53,16 @@ def violations(tree):
     return failures
 
 
-def test_adopted_modules_have_no_raw_sqlite_access():
-    adopted = {}
-    for path in SOURCE.glob("*.py"):
-        tree = ast.parse(path.read_text())
-        if any(
-            isinstance(node, ast.ImportFrom)
-            and node.module
-            and node.module.split(".")[-1] == "typed_table"
-            for node in ast.walk(tree)
-        ):
-            adopted[path.name] = violations(tree)
-    assert adopted, "No production module has adopted the typed table boundary"
-    assert not {name: failures for name, failures in adopted.items() if failures}
+def test_production_sqlite_access_uses_the_declared_boundary():
+    from agent_comms import typed_table
+
+    owner = Path(typed_table.__file__).resolve()
+    failures = {
+        str(path.relative_to(SOURCE)): violations(ast.parse(path.read_text()))
+        for path in SOURCE.rglob("*.py")
+        if path.resolve() != owner
+    }
+    assert not {name: hits for name, hits in failures.items() if hits}
 
 
 def test_guard_rejects_reintroduced_mechanisms():

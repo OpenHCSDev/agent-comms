@@ -395,11 +395,14 @@ def test_publication_uncertain_and_recursive_privacy(tmp_path: Path):
             )
         )
         db.execute(
-            "INSERT INTO wake_claims (claim_id,recipient,recipient_lookup,wire_seq,message_id,"
-            "exact_target,audience,wake_mode,triage_verdict,disposition,resolver_version,"
-            "policy_version,accepted_at_ms,updated_at_ms,revision,execution_id) "
-            "VALUES ('private-claim','Alice','a',1,'private-message','private-target',"
-            "'direct','full',NULL,'engaged','resolver','policy',0,0,1,'e')"
+            (
+                "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
+                "essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,"
+                "updated_at_ms,revision) VALUES ('private-claim','Alice','a',1,'private-messa"
+                "ge',json_object('kind','engaged','decision',json_object('kind','full','exact"
+                "_target','private-target','execution_id','e')),'direct','resolver','policy',"
+                "0,0,1)"
+            )
         )
         db.execute("INSERT INTO execution_claims VALUES ('e','private-claim',0)")
         db.execute(

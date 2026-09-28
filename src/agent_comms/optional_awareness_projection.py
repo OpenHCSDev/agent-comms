@@ -353,7 +353,7 @@ class OptionalAwarenessProjection:
     ) -> list[_SelectedDecision]:
         rows = _SelectedDecision.read(
             db.execute(
-                "SELECT c.claim_id,c.recipient,c.wire_seq,c.message_id,c.wake_mode,"
+                "SELECT c.assignment_id AS claim_id,c.recipient,c.wire_seq,c.message_id,c.wake_mode,"
                 "c.disposition,r.exact_target,r.sealed,r.message_id AS receipt_message_id,"
                 "m.claim_id AS member_claim,"
                 "d.claim_id AS delivery_claim,d.kind,d.canonical_thread,"
@@ -363,10 +363,10 @@ class OptionalAwarenessProjection:
                 "FROM wake_claims c "
                 "LEFT JOIN claim_batch_receipts r ON r.wire_root_id=? AND r.wire_seq=c.wire_seq "
                 "LEFT JOIN claim_batch_members m ON m.wire_root_id=r.wire_root_id "
-                "AND m.wire_seq=r.wire_seq AND m.claim_id=c.claim_id "
+                "AND m.wire_seq=r.wire_seq AND m.claim_id=c.assignment_id "
                 "LEFT JOIN cohort_delivery_receipts d ON d.wire_root_id=r.wire_root_id "
                 "AND d.wire_seq=r.wire_seq AND d.recipient_lookup=c.recipient_lookup "
-                "LEFT JOIN awareness_claim_generations ag ON ag.claim_id=c.claim_id "
+                "LEFT JOIN awareness_claim_generations ag ON ag.claim_id=c.assignment_id "
                 "AND ag.wire_root_id=r.wire_root_id AND ag.wire_seq=r.wire_seq "
                 "WHERE c.recipient_lookup=? AND c.wire_seq>? AND c.wire_seq<=? "
                 "ORDER BY c.wire_seq LIMIT ?",

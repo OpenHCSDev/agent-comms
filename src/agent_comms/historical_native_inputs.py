@@ -86,13 +86,13 @@ def read_historical_native_inputs(
         sources = _HistoricalSource.read(
             db.execute(
                 "SELECT n.input_id,c.wire_seq,c.message_id FROM native_runtime_input n "
-                "JOIN wake_claims c ON c.claim_id=n.assignment_id "
-                "JOIN claim_batch_members m ON m.claim_id=c.claim_id "
+                "JOIN wake_claims c ON c.assignment_id=n.assignment_id "
+                "JOIN claim_batch_members m ON m.claim_id=c.assignment_id "
                 "AND m.recipient_lookup=c.recipient_lookup "
                 "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
                 "AND r.wire_seq=m.wire_seq AND r.message_id=c.message_id AND r.sealed=1 "
                 "JOIN cohort_delivery_receipts d ON d.wire_root_id=r.wire_root_id "
-                "AND d.wire_seq=r.wire_seq AND d.claim_id=c.claim_id "
+                "AND d.wire_seq=r.wire_seq AND d.claim_id=c.assignment_id "
                 "AND d.recipient_lookup=n.owner_lookup AND d.kind='selected' "
                 "WHERE r.wire_root_id=? AND c.recipient_lookup=? AND c.wire_seq=? "
                 "AND n.owner_lookup=c.recipient_lookup AND n.session_id IS NOT NULL "

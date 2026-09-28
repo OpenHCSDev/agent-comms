@@ -1172,8 +1172,10 @@ def test_frozen_v2_pre_attempt_deferred_execution_cannot_resume(db_path: Path) -
                 )
             )
             connection.execute(
-                "UPDATE wake_claims SET disposition='deferred',revision=revision+1 "
-                "WHERE claim_id='claim'"
+                (
+                    "UPDATE wake_claims SET lifecycle=json_set(lifecycle,'$.kind','deferred'),rev"
+                    "ision=revision+1 WHERE assignment_id='claim'"
+                )
             )
         before = db.snapshot("exec")
         assert type(before.execution.lifecycle) is DeferredExecution

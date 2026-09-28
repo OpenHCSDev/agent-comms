@@ -6,14 +6,16 @@ import logging
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .assignment_states import AssignmentState
 from .catalog_store import ChannelCatalog
 from .goal_pauses import GoalPauseEvents
 from .goal_waits import GoalWaits
 from .registration import Registration
+from .typed_table import SQLiteUserVersion, TypedRow
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
@@ -53,6 +55,18 @@ from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
 
 _LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class NotificationAssignment(TypedRow):
+    recipient: str
+    recipient_lookup: str
+    wire_seq: int
+    message_id: str
+    lifecycle: AssignmentState
+    updated_at_ms: int
+    triage_inflight: bool
+    current_execution_id: str | None
 
 
 class HistoryViews:
@@ -138,7 +152,7 @@ class HistoryViews:
         import sqlite3
         from contextlib import closing
 
-        from .coordination import COORDINATION_SCHEMA_VERSION, CurrentExecutions, WakeClaims
+        from .coordination import COORDINATION_SCHEMA_VERSION, CurrentExecutions, WakeAssignment
         from .native_runtime_input import NativeRuntimeInput
         from .recovery_projection import _preflight
 
@@ -148,33 +162,42 @@ class HistoryViews:
             return ()
         if failure:
             raise ValueError(f"Channel notification status unavailable: {failure}")
-        with closing(sqlite3.connect(
-            database.resolve().as_uri() + "?mode=ro", uri=True,
-            timeout=0.05, isolation_level=None,
-        )) as connection:
+        with closing(
+            sqlite3.connect(
+                database.resolve().as_uri() + "?mode=ro",
+                uri=True,
+                timeout=0.05,
+                isolation_level=None,
+            )
+        ) as connection:
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA query_only=ON")
             connection.execute("BEGIN")
-            if (
-                connection.execute("PRAGMA user_version").fetchone()[0]
-                != COORDINATION_SCHEMA_VERSION
-            ):
+            if SQLiteUserVersion.read(connection.execute("PRAGMA user_version")) != [
+                SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)
+            ]:
                 raise ValueError("Channel notification status has an unsupported schema")
-            return tuple(connection.execute(
-                f"SELECT w.*, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n "
-                "WHERE n.assignment_id=w.claim_id AND n.stage='triage' AND n.verdict IS NULL) "
-                "AS triage_inflight, c.execution_id AS current_execution_id "
-                f"FROM {WakeClaims.declared_name} w "
-                f"LEFT JOIN {CurrentExecutions.declared_name} c "
-                "ON c.owner_lookup=w.recipient_lookup "
-                f"WHERE {predicate} ORDER BY w.wire_seq DESC,w.recipient"
-                + (" LIMIT ?" if limit else ""),
-                (*parameters, limit) if limit else parameters,
-            ))
+            columns = ",".join(
+                f"w.{name}"
+                for name in NotificationAssignment.columns()
+                if name in WakeAssignment.columns()
+            )
+            return NotificationAssignment.read(
+                connection.execute(
+                    f"SELECT {columns}, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n "
+                    "WHERE n.assignment_id=w.assignment_id AND n.stage='triage' AND n.verdict IS NULL) "
+                    "AS triage_inflight, c.execution_id AS current_execution_id "
+                    f"FROM {WakeAssignment.declared_name} w "
+                    f"LEFT JOIN {CurrentExecutions.declared_name} c "
+                    "ON c.owner_lookup=w.recipient_lookup "
+                    f"WHERE {predicate} ORDER BY w.wire_seq DESC,w.recipient"
+                    + (" LIMIT ?" if limit else ""),
+                    (*parameters, limit) if limit else parameters,
+                )
+            )
 
     def _project_notifications(self, rows):
         from .bus_publication import stable_thread_lookup
-        from .coordination_store import _assignment
 
         snapshot = self.registry.snapshot()
         owners = {
@@ -182,8 +205,7 @@ class HistoryViews:
             for name, thread in snapshot.threads.items()
             if snapshot.statuses[name].active and thread.process_alive
         }
-        for row in rows:
-            assignment = _assignment(row)
+        for assignment in rows:
             owner = owners.get(assignment.recipient_lookup)
             current_turn = bool(
                 owner is not None
@@ -191,16 +213,19 @@ class HistoryViews:
                 and owner.active_turn.owner_pid == owner.pid
                 and owner.active_turn.started_at * 1000 <= assignment.updated_at_ms + 1
             )
-            yield assignment, assignment.lifecycle.notification(
-                assignment.recipient,
-                owner_active=owner is not None,
-                current_turn=current_turn,
-                triage_inflight=bool(row["triage_inflight"]),
-                blocked_by_prior=bool(
-                    row["current_execution_id"] is not None
-                    and row["current_execution_id"] != assignment.lifecycle.execution_id
+            yield (
+                assignment,
+                assignment.lifecycle.notification(
+                    assignment.recipient,
+                    owner_active=owner is not None,
+                    current_turn=current_turn,
+                    triage_inflight=assignment.triage_inflight,
+                    blocked_by_prior=bool(
+                        assignment.current_execution_id is not None
+                        and assignment.current_execution_id != assignment.lifecycle.execution_id
+                    ),
+                    prior_turn_active=bool(owner is not None and owner.active_turn is not None),
                 ),
-                prior_turn_active=bool(owner is not None and owner.active_turn is not None),
             )
 
     @staticmethod

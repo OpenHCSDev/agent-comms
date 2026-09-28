@@ -264,6 +264,11 @@ class _Field:
         )
 
 
+def sql_literal(value: str | None) -> str:
+    """Quote a declaration-owned SQL constant, never a query parameter."""
+    return "NULL" if value is None else "'" + value.replace("'", "''") + "'"
+
+
 class TypedRow:
     """Typed query projection; also the shared decoder for stored row types."""
 

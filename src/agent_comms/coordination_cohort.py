@@ -29,14 +29,12 @@ from .coordination import (
     Participants,
     SchemaVersionError,
     WakeAssignment,
-    WakeClaims,
 )
 from .coordination_store import (
     AlreadyApplied,
     Applied,
     IdentityConflict,
     MutationStore,
-    _assignment,
 )
 from .message_bus import MessageBus
 from .wake import NoWakeDecision, WakeDecision
@@ -172,17 +170,17 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedInitial) -> Accep
         raise IdentityConflict("sealed N delivery receipts conflict with committed bus")
     current: list[WakeAssignment] = []
     for accepted in expected:
-        db_row = WakeClaims.one(db, claim_id=accepted.assignment_id)
+        db_row = WakeAssignment.one(db, assignment_id=accepted.assignment_id)
         if db_row is None:
             raise IdentityConflict("sealed cohort claim is missing")
-        actual = _assignment(db_row)
+        actual = db_row
         if not _immutable_assignment_matches(actual, accepted):
             raise IdentityConflict("sealed cohort claim immutable facts conflict")
         current.append(actual)
     # A singleton claim for an explicitly no-wake observer cannot be accepted
     # as a K member or hidden by a valid sealed N receipt.
     if any(
-        WakeClaims.one(db, recipient_lookup=recipient.recipient_lookup, wire_seq=message.seq)
+        WakeAssignment.one(db, recipient_lookup=recipient.recipient_lookup, wire_seq=message.seq)
         for recipient, decision in zip(audience.recipients, initial.decisions, strict=True)
         if type(decision) is NoWakeDecision
     ):
@@ -258,7 +256,7 @@ def accept_initial_cohort(
         receipt = ClaimBatchReceipts.one(db, wire_root_id=wire_root_id, wire_seq=wire_seq)
         if receipt is not None:
             return AlreadyApplied(_receipt_matches(db, initial))
-        if WakeClaims.select(db, where="wire_seq=?", parameters=(wire_seq,)):
+        if WakeAssignment.select(db, where="wire_seq=?", parameters=(wire_seq,)):
             raise IdentityConflict("singleton claim cannot be adopted by a cohort")
         if ClaimBatchReceipts.select(db, where="wire_seq=?", parameters=(wire_seq,)):
             raise IdentityConflict("wire sequence already belongs to another cohort root")
@@ -283,24 +281,7 @@ def accept_initial_cohort(
             accepted_at_ms=accepted_at,
         ).insert(db)
         for ordinal, assignment in enumerate(expected):
-            WakeClaims(
-                claim_id=assignment.assignment_id,
-                recipient=assignment.recipient,
-                recipient_lookup=assignment.recipient_lookup,
-                wire_seq=assignment.wire_seq,
-                message_id=assignment.message_id,
-                exact_target=None,
-                audience=assignment.audience.value,
-                wake_mode=assignment.lifecycle.mode.declared_name,
-                triage_verdict=None,
-                disposition=assignment.lifecycle.declared_name,
-                resolver_version=assignment.resolver_version,
-                policy_version=assignment.policy_version,
-                accepted_at_ms=assignment.accepted_at_ms,
-                updated_at_ms=assignment.updated_at_ms,
-                revision=1,
-                execution_id=None,
-            ).insert(db)
+            assignment.insert(db)
             ClaimBatchMembers(
                 wire_root_id=wire_root_id,
                 wire_seq=wire_seq,
@@ -387,17 +368,16 @@ def sealed_cohort_assignments(
         db = store._connection
         assert_cohort_schema(db)
         return tuple(
-            _assignment(row)
-            for row in WakeClaims.read(
+            WakeAssignment.read(
                 db.execute(
                     "SELECT c.* FROM wake_claims c "
-                    "JOIN claim_batch_members m ON m.claim_id=c.claim_id "
+                    "JOIN claim_batch_members m ON m.claim_id=c.assignment_id "
                     "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
                     "AND r.wire_seq=m.wire_seq AND r.sealed=1 "
                     "JOIN cohort_delivery_receipts d ON d.wire_root_id=m.wire_root_id "
-                    "AND d.wire_seq=m.wire_seq AND d.claim_id=c.claim_id AND d.kind='selected' "
+                    "AND d.wire_seq=m.wire_seq AND d.claim_id=c.assignment_id AND d.kind='selected' "
                     "WHERE c.recipient_lookup=? AND c.wire_seq>? "
-                    "ORDER BY c.wire_seq,c.claim_id LIMIT ?",
+                    "ORDER BY c.wire_seq,c.assignment_id LIMIT ?",
                     (recipient_lookup, after_seq, limit),
                 )
             )

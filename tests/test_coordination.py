@@ -222,11 +222,13 @@ def sql_wire_execution(db, *, pending=True, name="e", target="requester"):
         (name, target),
     )
     db.execute(
-        "INSERT INTO wake_claims (claim_id,recipient,recipient_lookup,wire_seq,"
-        "message_id,exact_target,audience,wake_mode,triage_verdict,disposition,"
-        "resolver_version,policy_version,accepted_at_ms,updated_at_ms,revision,"
-        "execution_id) VALUES ('a','worker','p',2,'m',?,'direct','full',"
-        "NULL,'engaged','resolver-v1','policy-v1',0,0,1,?)",
+        (
+        'INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m'
+        'essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,'
+        "updated_at_ms,revision) VALUES ('a','worker','p',2,'m',json_object('kind','e"
+        "ngaged','decision',json_object('kind','full','exact_target',?,'execution_id'"
+        ",?)),'direct','resolver-v1','policy-v1',0,0,1)"
+        ),
         (target, name),
     )
     db.execute("INSERT INTO execution_claims VALUES (?,'a',0)", (name,))
@@ -973,7 +975,10 @@ def test_failed_attempt_must_settle_failed_when_retry_unauthorized(db, authority
             )
         )
         if authority == "published":
-            c.execute("UPDATE wake_claims SET disposition='deferred',revision=2 WHERE claim_id='a'")
+            c.execute((
+                      "UPDATE wake_claims SET lifecycle=json_set(lifecycle,'$.kind','deferred'),rev"
+                      "ision=2 WHERE assignment_id='a'"
+                      ))
         c.execute(
             "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
             "pointer_revision=2 WHERE owner_lookup='p'"
@@ -995,7 +1000,10 @@ def test_failed_attempt_must_settle_failed_when_retry_unauthorized(db, authority
         )
     )
     if authority == "published":
-        c.execute("UPDATE wake_claims SET disposition='failed',revision=2 WHERE claim_id='a'")
+        c.execute((
+                  "UPDATE wake_claims SET lifecycle=json_set(lifecycle,'$.kind','failed'),revis"
+                  "ion=2 WHERE assignment_id='a'"
+                  ))
     c.execute(
         "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
         "pointer_revision=2 WHERE owner_lookup='p'"
@@ -1248,7 +1256,10 @@ def test_completed_wire_requires_succeeded_attempt_and_terminal_obligation(db):
             "ision=revision+1 WHERE execution_id='e'"
         )
     )
-    c.execute("UPDATE wake_claims SET disposition='completed',revision=2 WHERE claim_id='a'")
+    c.execute((
+              "UPDATE wake_claims SET lifecycle=json_set(lifecycle,'$.kind','completed'),re"
+              "vision=2 WHERE assignment_id='a'"
+              ))
     c.execute(
         "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
         "pointer_revision=2 WHERE owner_lookup='p'"
@@ -1293,7 +1304,10 @@ def test_completed_wire_requires_succeeded_attempt_and_terminal_obligation(db):
             "ision=revision+1 WHERE execution_id='e'"
         )
     )
-    c.execute("UPDATE wake_claims SET disposition='completed',revision=2 WHERE claim_id='a'")
+    c.execute((
+              "UPDATE wake_claims SET lifecycle=json_set(lifecycle,'$.kind','completed'),re"
+              "vision=2 WHERE assignment_id='a'"
+              ))
     c.execute(
         "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
         "pointer_revision=2 WHERE owner_lookup='p'"
@@ -1320,7 +1334,10 @@ def test_claim_execution_status_partition_is_atomic_at_commit(db):
     c, path = db
     sql_wire_execution(c, pending=False)
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
-        c.execute("UPDATE wake_claims SET disposition='failed',revision=2 WHERE claim_id='a'")
+        c.execute((
+                  "UPDATE wake_claims SET lifecycle=json_set(lifecycle,'$.kind','failed'),revis"
+                  "ion=2 WHERE assignment_id='a'"
+                  ))
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
         c.execute(
             (
@@ -1335,7 +1352,10 @@ def test_claim_execution_status_partition_is_atomic_at_commit(db):
             "on=2 WHERE execution_id='e'"
         )
     )
-    c.execute("UPDATE wake_claims SET disposition='failed',revision=2 WHERE claim_id='a'")
+    c.execute((
+              "UPDATE wake_claims SET lifecycle=json_set(lifecycle,'$.kind','failed'),revis"
+              "ion=2 WHERE assignment_id='a'"
+              ))
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
         reopened._connection.row_factory = None
@@ -1354,11 +1374,13 @@ def test_membership_ordinals_contiguous_and_frozen_after_activation(db):
 
     def bind(identifier, seq):
         c.execute(
-            "INSERT INTO wake_claims (claim_id,recipient,recipient_lookup,wire_seq,"
-            "message_id,exact_target,audience,wake_mode,triage_verdict,disposition,"
-            "resolver_version,policy_version,accepted_at_ms,updated_at_ms,revision,"
-            "execution_id) VALUES (?,'worker','p',?,'m','requester','direct','full',"
-            "NULL,'engaged','resolver-v1','policy-v1',0,0,1,'e')",
+            (
+            'INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m'
+            'essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,'
+            "updated_at_ms,revision) VALUES (?,'worker','p',?,'m',json_object('kind','eng"
+            "aged','decision',json_object('kind','full','exact_target','requester','execu"
+            "tion_id','e')),'direct','resolver-v1','policy-v1',0,0,1)"
+            ),
             (identifier, seq),
         )
 
@@ -1490,11 +1512,13 @@ def test_claim_target_and_recipient_lineage_is_immutable(db):
     c.execute("INSERT INTO participants VALUES ('other','other-worker',1)")
     c.execute("BEGIN IMMEDIATE")
     c.execute(
-        "INSERT INTO wake_claims (claim_id,recipient,recipient_lookup,wire_seq,"
-        "message_id,exact_target,audience,wake_mode,triage_verdict,disposition,"
-        "resolver_version,policy_version,accepted_at_ms,updated_at_ms,revision,"
-        "execution_id) VALUES ('b','other-worker','other',3,'m','requester',"
-        "'direct','full',NULL,'engaged','resolver-v1','policy-v1',0,0,1,'e')"
+        (
+        'INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m'
+        'essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,'
+        "updated_at_ms,revision) VALUES ('b','other-worker','other',3,'m',json_object"
+        "('kind','engaged','decision',json_object('kind','full','exact_target','reque"
+        "ster','execution_id','e')),'direct','resolver-v1','policy-v1',0,0,1)"
+        )
     )
     with pytest.raises(sqlite3.IntegrityError, match="claim target"):
         c.execute("INSERT INTO execution_claims VALUES ('e','b',1)")

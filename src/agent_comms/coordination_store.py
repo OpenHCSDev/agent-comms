@@ -40,7 +40,6 @@ from .coordination import (
     ExecutionOrigin,
     ExecutionRecord,
     IntegrityViolationError,
-    MessageAudience,
     OwnerConnectivity,
     OwnerFence,
     OwnerGenerations,
@@ -55,7 +54,6 @@ from .coordination import (
     ReplayFact,
     ResponseObligation,
     WakeAssignment,
-    WakeClaims,
     retry_disposition_authorized,
 )
 from .coordination_errors import IdentityConflict
@@ -75,7 +73,6 @@ from .obligation_states import (
     SilentResponse,
 )
 from .recovery_states import DeferredRecovery, FailedRecovery, RecoveryCondition
-from .wake_policy import WakePolicy
 
 T = TypeVar("T")
 INITIAL_LEASE_POLICY_VERSION = "initial-lease-v1"
@@ -310,28 +307,6 @@ def _bounded_reason(reason: str | None) -> None:
         raise ValueError("reason code is invalid")
 
 
-def _assignment(row: WakeClaims) -> WakeAssignment:
-    return WakeAssignment(
-        assignment_id=row.claim_id,
-        recipient=row.recipient,
-        recipient_lookup=row.recipient_lookup,
-        wire_seq=row.wire_seq,
-        message_id=row.message_id,
-        audience=MessageAudience(row.audience),
-        accepted_at_ms=row.accepted_at_ms,
-        updated_at_ms=row.updated_at_ms,
-        revision=row.revision,
-        resolver_version=row.resolver_version,
-        policy_version=row.policy_version,
-        lifecycle=AssignmentState.decode(row.disposition).load(
-            WakePolicy.decode(row.wake_mode)(),
-            row.triage_verdict,
-            row.execution_id,
-            row.exact_target,
-        ),
-    )
-
-
 class MutationStore(CoordinationStore):
     """Single-writer transactions over Slice-1's frozen private schema."""
 
@@ -539,10 +514,10 @@ class MutationStore(CoordinationStore):
             return Applied(self._participant(lookup))
 
     def assignment(self, assignment_id: str) -> WakeAssignment:
-        row = WakeClaims.one(self._connection, claim_id=assignment_id)
+        row = WakeAssignment.one(self._connection, assignment_id=assignment_id)
         if row is None:
             raise IdentityConflict("unknown claim")
-        return _assignment(row)
+        return row
 
     def accept_assignment(
         self, assignment: WakeAssignment
@@ -559,10 +534,10 @@ class MutationStore(CoordinationStore):
         ):
             raise IdentityConflict("claim acceptance requires initial frozen decision")
         with self._transaction() as db:
-            rows = WakeClaims.read(
+            rows = WakeAssignment.read(
                 db.execute(
                     (
-                        "SELECT * FROM wake_claims WHERE claim_id=? OR (recipient_lookup="
+                        "SELECT * FROM wake_claims WHERE assignment_id=? OR (recipient_lookup="
                         "? AND wire_seq=?) LIMIT 1"
                     ),
                     (assignment.assignment_id, assignment.recipient_lookup, assignment.wire_seq),
@@ -570,7 +545,7 @@ class MutationStore(CoordinationStore):
             )
             row = next(iter(rows), None)
             if row is not None:
-                current = _assignment(row)
+                current = row
                 immutable = (
                     "assignment_id",
                     "recipient",
@@ -587,30 +562,7 @@ class MutationStore(CoordinationStore):
                 ):
                     raise IdentityConflict("accepted claim identity conflicts")
                 return AlreadyApplied(current)
-            db.execute(
-                "INSERT INTO wake_claims(claim_id,recipient,recipient_lookup,wire_seq,"
-                "message_id,exact_target,audience,wake_mode,triage_verdict,disposition,"
-                "resolver_version,policy_version,accepted_at_ms,updated_at_ms,"
-                "revision,execution_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    assignment.assignment_id,
-                    assignment.recipient,
-                    assignment.recipient_lookup,
-                    assignment.wire_seq,
-                    assignment.message_id,
-                    None,
-                    assignment.audience.value,
-                    assignment.lifecycle.mode.declared_name,
-                    assignment.lifecycle.verdict if assignment.lifecycle.verdict else None,
-                    assignment.lifecycle.declared_name,
-                    assignment.resolver_version,
-                    assignment.policy_version,
-                    assignment.accepted_at_ms,
-                    assignment.updated_at_ms,
-                    1,
-                    None,
-                ),
-            )
+            assignment.insert(db)
             return Applied(assignment)
 
     def transition_preengagement(
@@ -642,17 +594,13 @@ class MutationStore(CoordinationStore):
             )
             if after.lifecycle.mode != current.lifecycle.mode:
                 raise IdentityConflict("preengagement cannot change frozen wake policy")
-            db.execute(
-                "UPDATE wake_claims SET disposition=?,triage_verdict=?,updated_at_ms=?,"
-                "revision=? WHERE claim_id=? AND revision=?",
-                (
-                    disposition.declared_name,
-                    after.lifecycle.verdict,
-                    after.updated_at_ms,
-                    after.revision,
-                    assignment_id,
-                    expected_revision,
-                ),
+            WakeAssignment.update(
+                db,
+                where="assignment_id=? AND revision=?",
+                parameters=(assignment_id, expected_revision),
+                lifecycle=after.lifecycle,
+                updated_at_ms=after.updated_at_ms,
+                revision=after.revision,
             )
             return Applied(after)
 
@@ -800,17 +748,13 @@ class MutationStore(CoordinationStore):
                 decision = EngagedAssignment.build(
                     assignment.lifecycle.mode, execution_id, exact_target
                 )
-                db.execute(
-                    "UPDATE wake_claims SET disposition=?,triage_verdict=?,exact_target=?,"
-                    "execution_id=?,revision=revision+1,updated_at_ms=? WHERE claim_id=?",
-                    (
-                        decision.declared_name,
-                        decision.verdict,
-                        decision.exact_target,
-                        decision.execution_id,
-                        self._now(assignment.updated_at_ms),
-                        assignment_id,
-                    ),
+                WakeAssignment.update(
+                    db,
+                    where="assignment_id=?",
+                    parameters=(assignment_id,),
+                    lifecycle=decision,
+                    revision=assignment.revision + 1,
+                    updated_at_ms=self._now(assignment.updated_at_ms),
                 )
                 ExecutionAssignmentLink(execution_id, assignment_id, ordinal).insert(db)
             if origin is ExecutionOrigin.WIRE:
@@ -862,7 +806,6 @@ class MutationStore(CoordinationStore):
                 raise StaleRevision("execution revision changed")
             if not execution.lifecycle.unstarted:
                 raise IdentityConflict("unstarted failure requires queued/pending work")
-            state = "failed"
             now = self._now(execution.updated_at_ms)
             ExecutionRecord.update(
                 db,
@@ -884,10 +827,17 @@ class MutationStore(CoordinationStore):
                     updated_at_ms=self._now(before.obligation.updated_at_ms),
                 )
             for assignment in before.assignments:
-                db.execute(
-                    "UPDATE wake_claims SET disposition=?,revision=revision+1,"
-                    "updated_at_ms=? WHERE claim_id=?",
-                    (state, self._now(assignment.updated_at_ms), assignment.assignment_id),
+                WakeAssignment.update(
+                    db,
+                    where="assignment_id=?",
+                    parameters=(assignment.assignment_id,),
+                    lifecycle=FailedExecution.assignment_state().build(
+                        assignment.lifecycle.mode,
+                        assignment.lifecycle.execution_id,
+                        assignment.lifecycle.exact_target,
+                    ),
+                    revision=assignment.revision + 1,
+                    updated_at_ms=self._now(assignment.updated_at_ms),
                 )
             return Applied(self.snapshot(execution_id))
 
@@ -1059,10 +1009,17 @@ class MutationStore(CoordinationStore):
                 )
             if execution.lifecycle.retry:
                 for assignment in snapshot.assignments:
-                    db.execute(
-                        "UPDATE wake_claims SET disposition='engaged',revision=revision+1,"
-                        "updated_at_ms=? WHERE claim_id=?",
-                        (self._now(assignment.updated_at_ms), assignment.assignment_id),
+                    WakeAssignment.update(
+                        db,
+                        where="assignment_id=?",
+                        parameters=(assignment.assignment_id,),
+                        lifecycle=EngagedAssignment.build(
+                            assignment.lifecycle.mode,
+                            assignment.lifecycle.execution_id,
+                            assignment.lifecycle.exact_target,
+                        ),
+                        revision=assignment.revision + 1,
+                        updated_at_ms=self._now(assignment.updated_at_ms),
                     )
             current = self.snapshot(execution_id)
             return Applied(
@@ -1371,13 +1328,10 @@ class MutationStore(CoordinationStore):
                 raise IdentityConflict("silent completion requires settling phase")
             if snapshot.obligation is not None and not snapshot.obligation.lifecycle.retryable:
                 raise IdentityConflict("wire completion requires nonpublication obligation")
-            disposition = "completed"
         else:
             authorized = retry_disposition_authorized(
                 execution, snapshot.replay, snapshot.obligation
             )
-            status = "deferred" if authorized else "failed"
-            disposition = status
         now = self._now(max(execution.updated_at_ms, attempt.updated_at_ms))
         AttemptRecord.update(
             db,
@@ -1423,10 +1377,17 @@ class MutationStore(CoordinationStore):
                 reason_code=reason_code,
             )
         for assignment in snapshot.assignments:
-            db.execute(
-                "UPDATE wake_claims SET disposition=?,revision=revision+1,"
-                "updated_at_ms=? WHERE claim_id=?",
-                (disposition, self._now(assignment.updated_at_ms), assignment.assignment_id),
+            WakeAssignment.update(
+                db,
+                where="assignment_id=?",
+                parameters=(assignment.assignment_id,),
+                lifecycle=execution_state.assignment_state().build(
+                    assignment.lifecycle.mode,
+                    assignment.lifecycle.execution_id,
+                    assignment.lifecycle.exact_target,
+                ),
+                revision=assignment.revision + 1,
+                updated_at_ms=self._now(assignment.updated_at_ms),
             )
         CurrentExecutions.update(
             db,

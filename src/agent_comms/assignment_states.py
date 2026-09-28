@@ -9,6 +9,7 @@ from typing import ClassVar
 from .coordination_errors import IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
 
 
@@ -64,8 +65,8 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
                 recipient,
                 "Queued behind current turn" if prior_turn_active else "Blocked by earlier turn",
                 "The agent is finishing an earlier turn; this message has not started."
-                if prior_turn_active else
-                "An earlier turn has an unresolved outcome. This message is saved "
+                if prior_turn_active
+                else "An earlier turn has an unresolved outcome. This message is saved "
                 "and has not started; the earlier turn needs recovery, not a resend.",
             )
         return MessageNotification(
@@ -85,6 +86,18 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     engageable: ClassVar[bool] = False
     failed: ClassVar[bool] = False
     completed: ClassVar[bool] = False
+
+    @classmethod
+    def mode_expression(cls, expression: str) -> str:
+        return sql_literal(cls().mode.declared_name)
+
+    @classmethod
+    def verdict_expression(cls, expression: str) -> str:
+        return sql_literal(cls().verdict)
+
+    @classmethod
+    def binding_expression(cls) -> str:
+        return "execution_id IS NULL AND exact_target IS NULL"
 
     def permits_engagement_change(self, after):
         gaining = self.execution_id is None and after.execution_id is not None
@@ -204,6 +217,29 @@ class AssignmentDecision:
 
     decision: PendingDecision | Engagement
 
+    @classmethod
+    def mode_expression(cls, expression: str) -> str:
+        return (
+            f"coalesce(json_extract({expression}, '$.decision.mode.kind'), "
+            f"json_extract({expression}, '$.decision.kind'))"
+        )
+
+    @classmethod
+    def verdict_expression(cls, expression: str) -> str:
+        return Engagement.verdict_expression(f"json_extract({expression}, '$.decision')")
+
+    @classmethod
+    def binding_expression(cls) -> str:
+        active = ",".join(
+            sql_literal(member.declared_name)
+            for member in WakePolicy.members_with(WakePolicy)
+            if member.active
+        )
+        return (
+            f"wake_mode IN ({active}) AND ((execution_id IS NULL AND exact_target IS NULL) "
+            "OR (execution_id IS NOT NULL AND exact_target IS NOT NULL))"
+        )
+
     @property
     def mode(self):
         return self.decision.mode
@@ -226,14 +262,24 @@ class BoundAssignment(AssignmentDecision, AssignmentState):
     decision: Engagement
 
     @classmethod
+    def binding_expression(cls) -> str:
+        return "execution_id IS NOT NULL AND exact_target IS NOT NULL"
+
+    @classmethod
     def build(cls, mode, execution_id, target):
         return cls(mode.engage(execution_id, target))
 
 
 class EngagedAssignment(BoundAssignment):
     def notification(
-        self, recipient, *, owner_active, current_turn=False, triage_inflight=False,
-        blocked_by_prior=False, prior_turn_active=False,
+        self,
+        recipient,
+        *,
+        owner_active,
+        current_turn=False,
+        triage_inflight=False,
+        blocked_by_prior=False,
+        prior_turn_active=False,
     ):
         from .presentation import MessageNotification
 
@@ -285,8 +331,14 @@ class InterruptedAssignment(AssignmentDecision, AssignmentState):
 
 class DeferredAssignment(InterruptedAssignment):
     def notification(
-        self, recipient, *, owner_active, current_turn=False, triage_inflight=False,
-        blocked_by_prior=False, prior_turn_active=False,
+        self,
+        recipient,
+        *,
+        owner_active,
+        current_turn=False,
+        triage_inflight=False,
+        blocked_by_prior=False,
+        prior_turn_active=False,
     ):
         from .presentation import MessageNotification
 

@@ -38,7 +38,7 @@ from .coordination import (
     PublicationReceipts,
     RecoverySnapshot,
     ResponseObligation,
-    WakeClaims,
+    WakeAssignment,
     canonical_publication_key,
 )
 from .coordination_store import (
@@ -604,11 +604,15 @@ def _settle_fenced_response(
                 updated_at_ms=store._now(snapshot.execution.updated_at_ms),
             )
             for assignment in snapshot.assignments:
-                WakeClaims.update(
+                WakeAssignment.update(
                     db,
-                    where="claim_id=? AND revision=?",
+                    where="assignment_id=? AND revision=?",
                     parameters=(assignment.assignment_id, assignment.revision),
-                    disposition="completed",
+                    lifecycle=CompletedExecution.assignment_state().build(
+                        assignment.lifecycle.mode,
+                        assignment.lifecycle.execution_id,
+                        assignment.lifecycle.exact_target,
+                    ),
                     revision=assignment.revision + 1,
                     updated_at_ms=store._now(assignment.updated_at_ms),
                 )

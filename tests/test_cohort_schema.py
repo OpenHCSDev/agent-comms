@@ -62,12 +62,12 @@ def _assignment(db: sqlite3.Connection) -> None:
     db.execute("INSERT INTO participants VALUES ('a','Alice',1)")
     db.execute("INSERT INTO participants VALUES ('b','Bob',1)")
     db.execute(
-        "INSERT INTO wake_claims "
-        "(claim_id,recipient,recipient_lookup,wire_seq,message_id,exact_target,audience,"
-        "wake_mode,triage_verdict,disposition,resolver_version,policy_version,"
-        "accepted_at_ms,updated_at_ms,revision,execution_id) "
-        "VALUES ('claim-a','Alice','a',7,'msg',NULL,'collective','bounded_triage',"
-        "NULL,'triage_pending','r1','p1',100,100,1,NULL)"
+        (
+            "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
+            "essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,"
+            "updated_at_ms,revision) VALUES ('claim-a','Alice','a',7,'msg',json_object('k"
+            "ind','triage_pending'),'collective','r1','p1',100,100,1)"
+        )
     )
 
 
@@ -104,10 +104,13 @@ def _seal_two_selected_with_observer(db: sqlite3.Connection, *, reverse_claims: 
     _assignment(db)
     db.execute("INSERT INTO participants VALUES ('c','Cara',1)")
     db.execute(
-        "INSERT INTO wake_claims SELECT 'claim-b','Bob','b',wire_seq,message_id,"
-        "exact_target,audience,wake_mode,triage_verdict,disposition,resolver_version,"
-        "policy_version,accepted_at_ms,updated_at_ms,revision,execution_id "
-        "FROM wake_claims WHERE claim_id='claim-a'"
+        (
+            "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
+            "essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,"
+            "updated_at_ms,revision) SELECT 'claim-b','Bob','b',wire_seq,message_id,lifec"
+            "ycle,audience,resolver_version,policy_version,accepted_at_ms,updated_at_ms,r"
+            "evision FROM wake_claims WHERE assignment_id='claim-a'"
+        )
     )
     _receipt(db, n=3, k=2)
     ordered = (
@@ -198,10 +201,13 @@ def test_seal_rejects_observer_with_preexisting_legacy_singleton_claim(tmp_path:
         with store._transaction() as db:
             _assignment(db)
             db.execute(
-                "INSERT INTO wake_claims SELECT 'legacy-b','Bob','b',wire_seq,message_id,"
-                "exact_target,audience,wake_mode,triage_verdict,disposition,resolver_version,"
-                "policy_version,accepted_at_ms,updated_at_ms,revision,execution_id "
-                "FROM wake_claims WHERE claim_id='claim-a'"
+                (
+                    "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
+                    "essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,"
+                    "updated_at_ms,revision) SELECT 'legacy-b','Bob','b',wire_seq,message_id,life"
+                    "cycle,audience,resolver_version,policy_version,accepted_at_ms,updated_at_ms,"
+                    "revision FROM wake_claims WHERE assignment_id='claim-a'"
+                )
             )
         with (
             pytest.raises(sqlite3.IntegrityError, match="observer has an existing wake claim"),

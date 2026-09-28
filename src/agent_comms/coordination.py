@@ -42,7 +42,7 @@ from .typed_table import (
 )
 from .wake_policy import WakePolicy
 
-COORDINATION_SCHEMA_VERSION: Final = 7
+COORDINATION_SCHEMA_VERSION: Final = 8
 COORDINATION_SNAPSHOT_VERSION: Final = 2
 RESOLVER_VERSION: Final = "resolver-v1"
 POLICY_VERSION: Final = "policy-v1"
@@ -137,19 +137,36 @@ class CoordinatorTable:
 
 
 @dataclass(frozen=True, slots=True)
-class WakeAssignment:
-    assignment_id: str = dataclass_field(metadata={"wire_name": "claim_id"})
-    recipient: str
+class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
+    assignment_id: str = dataclass_field(
+        metadata={
+            "wire_name": "claim_id",
+            "sql": Column(primary_key=True, check="length(assignment_id) BETWEEN 1 AND 256"),
+        }
+    )
+    recipient: str = dataclass_field(
+        metadata={"sql": Column(check="length(recipient) BETWEEN 1 AND 256")}
+    )
     recipient_lookup: str
-    wire_seq: int
-    message_id: str
+    wire_seq: int = dataclass_field(metadata={"sql": Column(check="wire_seq > 0")})
+    message_id: str = dataclass_field(
+        metadata={"sql": Column(check="length(message_id) BETWEEN 1 AND 256")}
+    )
     audience: MessageAudience
     lifecycle: AssignmentState = dataclass_field(metadata={"snapshot_exclude": True})
-    accepted_at_ms: int
-    updated_at_ms: int
-    revision: int = 1
-    resolver_version: str = RESOLVER_VERSION
-    policy_version: str = POLICY_VERSION
+    accepted_at_ms: int = dataclass_field(metadata={"sql": Column(check="accepted_at_ms >= 0")})
+    updated_at_ms: int = dataclass_field(
+        metadata={"sql": Column(check="updated_at_ms >= accepted_at_ms")}
+    )
+    revision: int = dataclass_field(default=1, metadata={"sql": Column(check="revision > 0")})
+    resolver_version: str = dataclass_field(
+        default=RESOLVER_VERSION,
+        metadata={"sql": Column(check="length(resolver_version) BETWEEN 1 AND 256")},
+    )
+    policy_version: str = dataclass_field(
+        default=POLICY_VERSION,
+        metadata={"sql": Column(check="length(policy_version) BETWEEN 1 AND 256")},
+    )
 
     @projected(view="snapshot", name="disposition")
     def snapshot_disposition(self):
@@ -195,6 +212,162 @@ class WakeAssignment:
     @property
     def durable_key(self) -> tuple[str, int]:
         return (self.recipient_lookup, self.wire_seq)
+
+    exact_target: str | None = dataclass_field(
+        init=False,
+        compare=False,
+        repr=False,
+        default=None,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated="json_extract(lifecycle, '$.decision.exact_target')",
+                check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256",
+            ),
+        },
+    )
+    wake_mode: str = dataclass_field(
+        init=False,
+        compare=False,
+        repr=False,
+        default=None,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(generated="({assignment_mode})", check="wake_mode IN ({wake_names})"),
+        },
+    )
+    triage_verdict: str | None = dataclass_field(
+        init=False,
+        compare=False,
+        repr=False,
+        default=None,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated="({assignment_verdict})",
+                check="triage_verdict IS NULL OR triage_verdict IN ('ignore', 'engage')",
+            ),
+        },
+    )
+    disposition: str = dataclass_field(
+        init=False,
+        compare=False,
+        repr=False,
+        default=None,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated="json_extract(lifecycle, '$.kind')",
+                check="disposition IN ({assignment_names})",
+            ),
+        },
+    )
+    execution_id: str | None = dataclass_field(
+        init=False,
+        compare=False,
+        repr=False,
+        default=None,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated="json_extract(lifecycle, '$.decision.execution_id')",
+            ),
+        },
+    )
+    claim_status_kind: str | None = dataclass_field(
+        init=False,
+        default=None,
+        compare=False,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(generated="CASE WHEN execution_id IS NOT NULL THEN disposition END"),
+        },
+    )
+    checks = ("COALESCE(({assignment_binding}), 0)",)
+    unique = (("recipient_lookup", "wire_seq"), ("assignment_id", "execution_id"))
+    indexes = (Index(("execution_id",), unique=False, where=None),)
+
+    @classmethod
+    def references(cls):
+        return (
+            ForeignKey(
+                ("recipient_lookup",),
+                Participants,
+                ("participant_lookup",),
+                deferred=False,
+                on_delete=None,
+            ),
+            ForeignKey(
+                ("execution_id",),
+                ExecutionRecord,
+                ("execution_id",),
+                deferred=False,
+                on_delete=None,
+            ),
+            ForeignKey(
+                ("execution_id", "assignment_id"),
+                ExecutionAssignmentLink,
+                ("execution_id", "assignment_id"),
+                deferred=True,
+                on_delete=None,
+            ),
+            ForeignKey(
+                ("execution_id", "claim_status_kind"),
+                ExecutionRecord,
+                ("execution_id", "claim_status_kind"),
+                deferred=True,
+                on_delete=None,
+            ),
+        )
+
+    @classmethod
+    def triggers(cls):
+        return {
+            "claim_transition_frozen_facts": (
+                """CREATE TRIGGER claim_transition_frozen_facts
+BEFORE UPDATE ON wake_claims
+BEGIN
+    SELECT RAISE(ABORT, 'claim disposition must change')
+    WHERE (json_extract(NEW.lifecycle, '$.kind')) = (json_extract(OLD.lifecycle, '$.kind'));
+    SELECT RAISE(ABORT, 'claim transition rewrites acceptance')
+    WHERE NEW.assignment_id IS NOT OLD.assignment_id
+       OR NEW.recipient_lookup IS NOT OLD.recipient_lookup
+       OR NEW.wire_seq IS NOT OLD.wire_seq
+       OR NEW.message_id IS NOT OLD.message_id
+       OR NEW.recipient IS NOT OLD.recipient
+       OR NEW.audience IS NOT OLD.audience
+       OR (({assignment_mode_new})) IS NOT (({assignment_mode_old}))
+       OR NEW.resolver_version IS NOT OLD.resolver_version
+       OR NEW.policy_version IS NOT OLD.policy_version
+       OR NEW.accepted_at_ms IS NOT OLD.accepted_at_ms
+       OR NEW.revision != OLD.revision + 1
+       OR NEW.updated_at_ms < OLD.updated_at_ms;
+    SELECT RAISE(ABORT, 'claim transition erases engagement facts')
+    WHERE ((({assignment_verdict_old})) IS NOT NULL
+           AND (({assignment_verdict_new})) IS NOT (({assignment_verdict_old})))
+       OR ((json_extract(OLD.lifecycle, '$.decision.execution_id')) IS NOT NULL AND (json_extract(NEW.lifecycle, '$.decision.execution_id')) IS NOT (json_extract(OLD.lifecycle, '$.decision.execution_id')))
+       OR ((json_extract(OLD.lifecycle, '$.decision.exact_target')) IS NOT NULL AND (json_extract(NEW.lifecycle, '$.decision.exact_target')) IS NOT (json_extract(OLD.lifecycle, '$.decision.exact_target')))
+       OR ((json_extract(OLD.lifecycle, '$.decision.exact_target')) IS NULL AND (json_extract(NEW.lifecycle, '$.decision.exact_target')) IS NOT NULL
+           AND (json_extract(NEW.lifecycle, '$.decision.execution_id')) IS NULL)
+       OR ((json_extract(OLD.lifecycle, '$.decision.execution_id')) IS NULL AND (json_extract(NEW.lifecycle, '$.decision.execution_id')) IS NOT NULL
+           AND (json_extract(NEW.lifecycle, '$.kind')) != 'engaged');
+    SELECT RAISE(ABORT, 'claim disposition edge is not realizable')
+    WHERE (json_extract(OLD.lifecycle, '$.kind')) != (json_extract(NEW.lifecycle, '$.kind')) AND NOT ({assignment_edges}
+    );
+    SELECT RAISE(ABORT, 'pre-engagement failure cannot invent execution')
+    WHERE (json_extract(NEW.lifecycle, '$.kind')) = 'failed' AND (json_extract(OLD.lifecycle, '$.decision.execution_id')) IS NULL
+      AND (json_extract(NEW.lifecycle, '$.decision.execution_id')) IS NOT NULL;
+    SELECT RAISE(ABORT, 'post-engagement deferral cannot become pending')
+    WHERE (json_extract(OLD.lifecycle, '$.kind')) = 'deferred' AND (json_extract(OLD.lifecycle, '$.decision.execution_id')) IS NOT NULL
+      AND (json_extract(NEW.lifecycle, '$.kind')) IN ('triage_pending', 'full_pending');
+END"""
+            ),
+            "wake_claim_delete_frozen": (
+                """CREATE TRIGGER wake_claim_delete_frozen BEFORE DELETE ON wake_claims BEGIN
+    SELECT RAISE(ABORT, 'wake claim cannot be deleted');
+END"""
+            ),
+        }
 
 
 def assignment_transition_allowed(before: WakeAssignment, after: WakeAssignment) -> bool:
@@ -377,8 +550,8 @@ class ExecutionAssignmentLink(CoordinatorTable, TypedTable, declared_name="execu
             ),
             ForeignKey(
                 ("assignment_id", "execution_id"),
-                WakeClaims,
-                ("claim_id", "execution_id"),
+                WakeAssignment,
+                ("assignment_id", "execution_id"),
                 deferred=False,
                 on_delete=None,
             ),
@@ -404,7 +577,7 @@ class ExecutionAssignmentLink(CoordinatorTable, TypedTable, declared_name="execu
     WHEN NOT EXISTS (
         SELECT 1 FROM executions e JOIN wake_claims c
           ON c.execution_id = e.execution_id
-        WHERE e.execution_id = NEW.execution_id AND c.claim_id = NEW.assignment_id
+        WHERE e.execution_id = NEW.execution_id AND c.assignment_id = NEW.assignment_id
           AND c.exact_target = e.exact_target
           AND c.recipient_lookup = e.owner_lookup
     )
@@ -2358,192 +2531,6 @@ BEGIN SELECT RAISE(ABORT, 'owner generation cannot advance with active attempts'
 
 
 @dataclass(frozen=True, kw_only=True)
-class WakeClaims(CoordinatorTable, TypedTable):
-    claim_id: str = dataclass_field(
-        metadata={"sql": Column(primary_key=True, check="length(claim_id) BETWEEN 1 AND 256")}
-    )
-    recipient: str = dataclass_field(
-        metadata={"sql": Column(check="length(recipient) BETWEEN 1 AND 256")}
-    )
-    recipient_lookup: str
-    wire_seq: int = dataclass_field(metadata={"sql": Column(check="wire_seq > 0")})
-    message_id: str = dataclass_field(
-        metadata={"sql": Column(check="length(message_id) BETWEEN 1 AND 256")}
-    )
-    exact_target: str | None = dataclass_field(
-        metadata={
-            "sql": Column(check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256")
-        }
-    )
-    audience: str = dataclass_field(
-        metadata={"sql": Column(check="audience IN ('direct', 'mentioned', 'collective')")}
-    )
-    wake_mode: str = dataclass_field(metadata={"sql": Column(check="wake_mode IN ({wake_names})")})
-    triage_verdict: str | None = dataclass_field(
-        metadata={
-            "sql": Column(check="triage_verdict IS NULL OR triage_verdict IN ('ignore', 'engage')")
-        }
-    )
-    disposition: str = dataclass_field(
-        metadata={"sql": Column(check="disposition IN ({assignment_names})")}
-    )
-    resolver_version: str = dataclass_field(
-        metadata={"sql": Column(check="length(resolver_version) BETWEEN 1 AND 256")}
-    )
-    policy_version: str = dataclass_field(
-        metadata={"sql": Column(check="length(policy_version) BETWEEN 1 AND 256")}
-    )
-    accepted_at_ms: int = dataclass_field(metadata={"sql": Column(check="accepted_at_ms >= 0")})
-    updated_at_ms: int = dataclass_field(
-        metadata={"sql": Column(check="updated_at_ms >= accepted_at_ms")}
-    )
-    revision: int = dataclass_field(metadata={"sql": Column(check="revision > 0")})
-    execution_id: str | None
-    claim_status_kind: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "sql": Column(generated="CASE WHEN execution_id IS NOT NULL THEN disposition END")
-        },
-    )
-    checks = (
-        (
-            "(execution_id IS NULL AND exact_target IS NULL)\n"
-            "        OR (execution_id IS NOT NULL AND exact_target IS NOT NUL"
-            "L)"
-        ),
-        (
-            "COALESCE((\n"
-            "        (disposition = 'passive' AND wake_mode = 'passive'\n"
-            "         AND triage_verdict IS NULL AND execution_id IS NULL)\n"
-            "        OR\n"
-            "        (disposition = 'triage_pending' AND wake_mode = 'bounded"
-            "_triage'\n"
-            "         AND triage_verdict IS NULL AND execution_id IS NULL)\n"
-            "        OR\n"
-            "        (disposition = 'ignored' AND wake_mode = 'bounded_triage"
-            "'\n"
-            "         AND triage_verdict = 'ignore' AND execution_id IS NULL)"
-            "\n"
-            "        OR\n"
-            "        (disposition = 'full_pending' AND wake_mode = 'full'\n"
-            "         AND triage_verdict IS NULL AND execution_id IS NULL)\n"
-            "        OR\n"
-            "        (disposition = 'engaged' AND execution_id IS NOT NULL AN"
-            "D (\n"
-            "            (wake_mode = 'bounded_triage' AND triage_verdict = '"
-            "engage')\n"
-            "            OR (wake_mode = 'full' AND triage_verdict IS NULL)\n"
-            "        ))\n"
-            "        OR\n"
-            "        (disposition IN ('deferred', 'failed') AND wake_mode != "
-            "'passive' AND (\n"
-            "            (execution_id IS NULL AND triage_verdict IS NULL)\n"
-            "            OR (execution_id IS NOT NULL AND (\n"
-            "                (wake_mode = 'bounded_triage' AND triage_verdict"
-            " = 'engage')\n"
-            "                OR (wake_mode = 'full' AND triage_verdict IS NUL"
-            "L)\n"
-            "            ))\n"
-            "        ))\n"
-            "        OR\n"
-            "        (disposition = 'completed' AND execution_id IS NOT NULL "
-            "AND (\n"
-            "            (wake_mode = 'bounded_triage' AND triage_verdict = '"
-            "engage')\n"
-            "            OR (wake_mode = 'full' AND triage_verdict IS NULL)\n"
-            "        ))\n"
-            "    ), 0)"
-        ),
-    )
-    unique = (("recipient_lookup", "wire_seq"), ("claim_id", "execution_id"))
-    indexes = (Index(("execution_id",), unique=False, where=None),)
-
-    @classmethod
-    def references(cls):
-        return (
-            ForeignKey(
-                ("recipient_lookup",),
-                Participants,
-                ("participant_lookup",),
-                deferred=False,
-                on_delete=None,
-            ),
-            ForeignKey(
-                ("execution_id",),
-                ExecutionRecord,
-                ("execution_id",),
-                deferred=False,
-                on_delete=None,
-            ),
-            ForeignKey(
-                ("execution_id", "claim_id"),
-                ExecutionAssignmentLink,
-                ("execution_id", "assignment_id"),
-                deferred=True,
-                on_delete=None,
-            ),
-            ForeignKey(
-                ("execution_id", "claim_status_kind"),
-                ExecutionRecord,
-                ("execution_id", "claim_status_kind"),
-                deferred=True,
-                on_delete=None,
-            ),
-        )
-
-    @classmethod
-    def triggers(cls):
-        return {
-            "claim_transition_frozen_facts": (
-                """CREATE TRIGGER claim_transition_frozen_facts
-BEFORE UPDATE ON wake_claims
-BEGIN
-    SELECT RAISE(ABORT, 'claim disposition must change')
-    WHERE NEW.disposition = OLD.disposition;
-    SELECT RAISE(ABORT, 'claim transition rewrites acceptance')
-    WHERE NEW.claim_id IS NOT OLD.claim_id
-       OR NEW.recipient_lookup IS NOT OLD.recipient_lookup
-       OR NEW.wire_seq IS NOT OLD.wire_seq
-       OR NEW.message_id IS NOT OLD.message_id
-       OR NEW.recipient IS NOT OLD.recipient
-       OR NEW.audience IS NOT OLD.audience
-       OR NEW.wake_mode IS NOT OLD.wake_mode
-       OR NEW.resolver_version IS NOT OLD.resolver_version
-       OR NEW.policy_version IS NOT OLD.policy_version
-       OR NEW.accepted_at_ms IS NOT OLD.accepted_at_ms
-       OR NEW.revision != OLD.revision + 1
-       OR NEW.updated_at_ms < OLD.updated_at_ms;
-    SELECT RAISE(ABORT, 'claim transition erases engagement facts')
-    WHERE (OLD.triage_verdict IS NOT NULL
-           AND NEW.triage_verdict IS NOT OLD.triage_verdict)
-       OR (OLD.execution_id IS NOT NULL AND NEW.execution_id IS NOT OLD.execution_id)
-       OR (OLD.exact_target IS NOT NULL AND NEW.exact_target IS NOT OLD.exact_target)
-       OR (OLD.exact_target IS NULL AND NEW.exact_target IS NOT NULL
-           AND NEW.execution_id IS NULL)
-       OR (OLD.execution_id IS NULL AND NEW.execution_id IS NOT NULL
-           AND NEW.disposition != 'engaged');
-    SELECT RAISE(ABORT, 'claim disposition edge is not realizable')
-    WHERE OLD.disposition != NEW.disposition AND NOT ({assignment_edges}
-    );
-    SELECT RAISE(ABORT, 'pre-engagement failure cannot invent execution')
-    WHERE NEW.disposition = 'failed' AND OLD.execution_id IS NULL
-      AND NEW.execution_id IS NOT NULL;
-    SELECT RAISE(ABORT, 'post-engagement deferral cannot become pending')
-    WHERE OLD.disposition = 'deferred' AND OLD.execution_id IS NOT NULL
-      AND NEW.disposition IN ('triage_pending', 'full_pending');
-END"""
-            ),
-            "wake_claim_delete_frozen": (
-                """CREATE TRIGGER wake_claim_delete_frozen BEFORE DELETE ON wake_claims BEGIN
-    SELECT RAISE(ABORT, 'wake claim cannot be deleted');
-END"""
-            ),
-        }
-
-
-@dataclass(frozen=True, kw_only=True)
 class PublicationReceipts(CoordinatorTable, TypedTable):
     execution_id: str = dataclass_field(
         metadata={
@@ -2656,7 +2643,7 @@ def _sql_edges(family, column):
 
 
 def _schema_context():
-    return dict(
+    context = dict(
         execution_names=_sql_members(ExecutionState),
         attempt_names=_sql_members(AttemptState),
         assignment_names=_sql_members(AssignmentState),
@@ -2665,7 +2652,7 @@ def _schema_context():
         recovery_names=_sql_members(RecoveryCondition),
         execution_edges=_sql_edges(ExecutionState, "json_extract({row}.lifecycle, '$.kind')"),
         attempt_edges=_sql_edges(AttemptState, "json_extract({row}.lifecycle, '$.kind')"),
-        assignment_edges=_sql_edges(AssignmentState, "{row}.disposition"),
+        assignment_edges=_sql_edges(AssignmentState, "json_extract({row}.lifecycle, '$.kind')"),
         obligation_edges=_sql_edges(ResponseState, "json_extract({row}.lifecycle, '$.kind')"),
         terminal_attempt_names=_sql_members(AttemptState, lambda member: member.terminal),
         engaged_execution_names=_sql_members(
@@ -2688,6 +2675,41 @@ def _schema_context():
             ResponseState, lambda member: member.requires_intent
         ),
     )
+
+    for suffix, expression in (
+        ("", "lifecycle"),
+        ("_new", "NEW.lifecycle"),
+        ("_old", "OLD.lifecycle"),
+    ):
+        context["assignment_mode" + suffix] = (
+            "CASE json_extract("
+            + expression
+            + ", '$.kind') "
+            + " ".join(
+                f"WHEN {_sql_values((member.declared_name,))} THEN {member.mode_expression(expression)}"
+                for member in AssignmentState.members_with(AssignmentState)
+            )
+            + " END"
+        )
+        context["assignment_verdict" + suffix] = (
+            "CASE json_extract("
+            + expression
+            + ", '$.kind') "
+            + " ".join(
+                f"WHEN {_sql_values((member.declared_name,))} THEN {member.verdict_expression(expression)}"
+                for member in AssignmentState.members_with(AssignmentState)
+            )
+            + " END"
+        )
+    context["assignment_binding"] = (
+        "CASE disposition "
+        + " ".join(
+            f"WHEN {_sql_values((member.declared_name,))} THEN ({member.binding_expression()})"
+            for member in AssignmentState.members_with(AssignmentState)
+        )
+        + " END"
+    )
+    return context
 
 
 def _schema():

@@ -190,3 +190,20 @@ UNKNOWN/reset proof remain open.
   ExecutionAssignmentLink/ConnectivityFacet now sole row and domain owners.
   Remaining: four core lifecycle owners and core raw mutations; parent history
   notification-reader crossing requested. Full237 remains draft, not complete.
+
+## Source closure checkpoint (237)
+
+Foundation230 + caller closure237 now cover every unowned production SQLite table,
+mutation/read caller and raw-row mapper. Coordinator schema8 consolidates existing
+WakeAssignment/ExecutionRecord/AttemptRecord/ResponseObligation as table owners;
+no duplicate flat row class or compatibility mapper remains. Cohort, response,
+recovery, checkpoint, candidate, prompt/cursor, goal/todo/transcript/page readers
+use A13; notifications use a declared joined projection. The package-wide guard
+covers all src modules (A13 alone owns raw SQLite), including the external
+read-only OpenCode importer. Removed old lifecycle golden capture/tests.
+
+Full S12 remains **cutover/real-path acceptance pending**, owned by parent229:
+quiet runtime reset, durable one-shot preservation, current root access/floor,
+no replay of <=H/UNKNOWN and retained-session/native/RPC acceptance. Detailed exact
+files/tables and receipts are in evidence/round2-s12/HANDOFF.md. Never mark global
+completion from source tests. No runtime installation/reset was performed by S12.
