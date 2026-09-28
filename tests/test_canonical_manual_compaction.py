@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent_comms.backend import _session_revision
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
@@ -30,7 +31,9 @@ async def test_explicit_manual_selected_commit_never_invents_original_input(tmp_
         info,
     ):
         # The ordinary fixture seeds an original input. This explicit command has none.
-        inputs.replace(InputDocument())
+        inputs.replace(InputDocument(rows={
+            key: row for key, row in inputs.read().rows.items() if key != "acp:original"
+        }))
         comms = Comms(tmp_path)
         runner = SimpleNamespace(
             persistent_backends={"owner": persistent},
@@ -71,7 +74,10 @@ async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
         operation = journal.reserve_selected_summary(
             file,
             {
-                "source": {"ownerName": owner.name, "ingressKey": "acp:original"},
+                "source": {
+                    "ownerName": owner.name, "ingressKey": "acp:original",
+                    "reservedRevision": json.loads(json.dumps(_session_revision(file))),
+                },
                 "selected": {
                     "provider": "openai",
                     "modelId": "gpt-4.1-mini",
@@ -84,7 +90,7 @@ async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
         before_inputs = inputs.path.read_bytes()
         runner = SimpleNamespace(
             persistent_backends={"owner": persistent},
-            comms=wire(tmp_path),
+            comms=Comms(tmp_path),
             agent_bin=launcher,
             effects=SimpleNamespace(
                 _private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve()
@@ -118,7 +124,9 @@ async def test_actual_acp_compact_uses_journal_and_reports_saved_history(tmp_pat
         launcher,
         info,
     ):
-        inputs.replace(InputDocument())
+        inputs.replace(InputDocument(rows={
+            key: row for key, row in inputs.read().rows.items() if key != "acp:original"
+        }))
         registry.register(replace(registry.require("owner"), active_turn=None))
         comms = Comms(tmp_path)
         root_id = comms.messaging.initialize_private_initial_protocol()
@@ -181,12 +189,17 @@ async def test_manual_does_not_retire_or_repeat_uncertain_provider(
         launcher,
         info,
     ):
-        inputs.replace(InputDocument())
+        inputs.replace(InputDocument(rows={
+            key: row for key, row in inputs.read().rows.items() if key != "acp:original"
+        }))
         journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
         operation = journal.reserve_selected_summary(
             file,
             {
-                "source": {"ownerName": "owner"},
+                "source": {
+                    "ownerName": "owner",
+                    "reservedRevision": json.loads(json.dumps(_session_revision(file))),
+                },
                 "selected": {
                     "provider": "openai",
                     "modelId": "gpt-4.1-mini",
@@ -201,7 +214,7 @@ async def test_manual_does_not_retire_or_repeat_uncertain_provider(
         before = Path(file).read_bytes()
         runner = SimpleNamespace(
             persistent_backends={"owner": persistent},
-            comms=wire(tmp_path),
+            comms=Comms(tmp_path),
             agent_bin=launcher,
             effects=SimpleNamespace(
                 _private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve()

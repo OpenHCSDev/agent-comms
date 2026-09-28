@@ -330,7 +330,7 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
             assert journal.selected_summary(result.operation_id).state.declared_name == "reserved"
             assert not native_input_admitted(journal.path.parent, str(file))
             child.stdin.close()
-            assert await child.wait() == 0
+            assert (await child.wait()).successful
     finally:
         await persistent.close_idle()
 

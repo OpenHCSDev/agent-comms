@@ -424,7 +424,8 @@ class OwnerCompactionCommit:
                 source=FieldCodec.project(source, "journal"),
             )
             if selected_attempt is not None:
-                selected_attempt.state.require_commit_reservation()
+                if not selected_attempt.state.reservable_commit:
+                    raise CompactionJournalError("Selected summary is not a commit reservation")
                 if (
                     self.journal.selected_summary(selected_attempt.operation_id) != selected_attempt
                     or selected_attempt.session_file != witness.session_file
