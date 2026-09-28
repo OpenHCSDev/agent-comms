@@ -8,22 +8,29 @@ from __future__ import annotations
 
 import json
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 from typing import ClassVar
 
+from .agent_events import CompactionEvent, CompactionProgress
+from .compaction_states import CompactionPublishedMetadata
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .goal_presentation import GoalExecution
 from .goals import Goal
 from .native_runtime_input import CurrentNativeCursor
+from .pi_payloads import McpLiveReceipt
 from .routing import MessageRoute
 from .thread_identity import OwnerIdentity, ThreadIncarnation
-from .transcripts import TranscriptCursor
+from .transcript_events import TranscriptCodec
+from .transcripts import TranscriptCursor, TranscriptPage
 
 
 class AgentCommsUpdate(DeclaredFamily, affix="Update"):
     """One declared fact; member identity supplies its wire discriminator."""
+
+    def for_session(self, session_id: str) -> AgentCommsUpdate:
+        return self
 
 
 @dataclass(frozen=True)
@@ -80,7 +87,7 @@ class UpdateBatch:
 
 
 def encode_updates(*updates: AgentCommsUpdate) -> dict:
-    return {"agentComms": FieldCodec.encode(UpdateBatch(updates))}
+    return {"agentComms": TranscriptCodec.encode(UpdateBatch(updates))}
 
 
 def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:
@@ -94,7 +101,7 @@ def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:
     extension = metadata["agentComms"]
     if not isinstance(extension, dict):
         raise ValueError("Comms metadata must be an object")
-    return FieldCodec.decode(UpdateBatch, extension).updates
+    return TranscriptCodec.decode(UpdateBatch, extension).updates
 
 
 @dataclass(frozen=True)
@@ -200,6 +207,16 @@ class CursorAdvancedUpdate(AgentCommsUpdate):
     envelope: CursorEnvelope
     selected_status: str | None = None
 
+    def for_session(self, session_id: str) -> CursorAdvancedUpdate:
+        if self.envelope.scope is None:
+            return self
+        return replace(
+            self,
+            envelope=replace(
+                self.envelope, scope=replace(self.envelope.scope, session_id=session_id)
+            ),
+        )
+
 
 @dataclass(frozen=True)
 class QueueScope:
@@ -265,6 +282,13 @@ class QueueChangedUpdate(AgentCommsUpdate):
     revision: int
     projection: QueueProjection
 
+    def for_session(self, session_id: str) -> QueueChangedUpdate:
+        return (
+            self
+            if self.scope is None
+            else replace(self, scope=replace(self.scope, session_id=session_id))
+        )
+
     @property
     def status(self) -> str | None:
         return self.projection.status
@@ -282,6 +306,13 @@ class InputStartedUpdate(AgentCommsUpdate):
     text: str | None
     scope: QueueScope | None
     revision: int | None
+
+    def for_session(self, session_id: str) -> InputStartedUpdate:
+        return (
+            self
+            if self.scope is None
+            else replace(self, scope=replace(self.scope, session_id=session_id))
+        )
 
 
 @dataclass(frozen=True)
@@ -320,3 +351,35 @@ class GoalChangedUpdate(AgentCommsUpdate):
             self.goal is None or self.execution.goal_id != self.goal.id
         ):
             raise ValueError("Goal execution identity does not match its declaration")
+
+
+@dataclass(frozen=True)
+class CompactionChangedUpdate(AgentCommsUpdate):
+    event: CompactionEvent | CompactionProgress
+
+
+@dataclass(frozen=True)
+class CompactionCommittedUpdate(AgentCommsUpdate):
+    commit_id: str
+    summary: str
+
+
+@dataclass(frozen=True)
+class TranscriptSnapshotUpdate(AgentCommsUpdate):
+    page: TranscriptPage
+
+
+@dataclass(frozen=True)
+class InputDeliveryChangedUpdate(AgentCommsUpdate):
+    input_id: str | None = None
+
+
+@dataclass(frozen=True)
+class CompactionPublishedUpdate(AgentCommsUpdate):
+    publication: CompactionPublishedMetadata
+
+
+@dataclass(frozen=True)
+class McpClientReceiptUpdate(AgentCommsUpdate):
+    turn_id: str
+    receipt: McpLiveReceipt

@@ -19,8 +19,10 @@ from . import agent_events as events
 from . import backend
 from .acp_extension import (
     BackendDeliveryFailure,
+    CompactionChangedUpdate,
     GoalChangedUpdate,
     InputFailedUpdate,
+    McpClientReceiptUpdate,
     TextRouteUpdate,
     TurnSettledUpdate,
     encode_updates,
@@ -162,7 +164,7 @@ class AcpEventConsumer(MroDispatch):
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta={"agentComms": {"turnId": turn_id, "mcpClient": event.receipt}},
+                field_meta=encode_updates(McpClientReceiptUpdate(turn_id, event.receipt)),
             ),
         )
 
@@ -182,75 +184,16 @@ class AcpEventConsumer(MroDispatch):
                 ),
             )
 
-    @handles(events.CompactionProgress)
-    async def on_compaction_progress(self, event: events.CompactionProgress) -> None:
-        session_id = self.session_id
-        client = self.client
-        chunk_index = event.chunk_index
-        done = event.source_bytes_done
-        total = event.source_bytes_total
-        measured = done is not None and total is not None and 0 <= done <= total and total > 0
-        if chunk_index > 0 or chunk_index == 0 and measured:
-            await client.session_update(
-                session_id=session_id,
-                update=AgentMessageChunk(
-                    session_update="agent_message_chunk",
-                    content=TextContentBlock(type="text", text=""),
-                    field_meta={
-                        "agentComms": {
-                            "compaction": {
-                                "phase": "progress",
-                                "status": "running",
-                                "chunkIndex": chunk_index,
-                                **(
-                                    {"sourceBytesDone": done, "sourceBytesTotal": total}
-                                    if measured
-                                    else {}
-                                ),
-                                **(
-                                    {"summaryPhase": event.summary_phase}
-                                    if event.summary_phase
-                                    else {}
-                                ),
-                            }
-                        }
-                    },
-                ),
-            )
-
-    @handles(events.CompactionEvent)
-    async def on_compaction(self, event: events.CompactionEvent) -> None:
-        session_id = self.session_id
-        client = self.client
-        phase = event.phase
-        reason = event.reason
-        if reason not in {"manual", "threshold", "overflow", "unknown"}:
-            reason = "unknown"
-        summary = backend.compaction_summary(event.publication_summary)
-        status = {"start": "running", "end": "completed", "abort": "aborted"}[phase]
-        status_text = {
-            "start": "",
-            "end": "Context compacted; usage is recalculating.",
-            "abort": "Context compaction aborted; usage is unknown.",
-        }[phase]
-        if summary:
-            status_text += f" {event.summary_label}{summary}"
-        detail: dict[str, Any] = {
-            "phase": phase,
-            "status": status,
-            "reason": reason,
-            "contextUsed": None,
-            "contextState": "unknown",
-            "willRetry": event.will_retry is True,
-        }
-        if summary:
-            detail["summary"] = summary
-        await client.session_update(
-            session_id=session_id,
+    @handles(events.CompactionProgress, events.CompactionEvent)
+    async def on_compaction(
+        self, event: events.CompactionEvent | events.CompactionProgress
+    ) -> None:
+        await self.client.session_update(
+            session_id=self.session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=status_text),
-                field_meta={"agentComms": {"compaction": detail}},
+                content=TextContentBlock(type="text", text=""),
+                field_meta=encode_updates(CompactionChangedUpdate(event)),
             ),
         )
 

@@ -14,12 +14,16 @@ from typing import Any
 
 from acp.schema import AgentMessageChunk, TextContentBlock, UserMessageChunk
 
-from .acp_extension import TextRouteUpdate, TurnStartedUpdate, encode_updates
+from .acp_extension import (
+    TextRouteUpdate,
+    TranscriptSnapshotUpdate,
+    TurnStartedUpdate,
+    encode_updates,
+)
 from .comms import Comms
 from .declared_family import DeclaredFamily
 from .routing import MessageRoute
 from .runtime import RuntimeServer
-from .transcript_events import TranscriptCodec
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -93,38 +97,15 @@ class StartedTranscriptUpdate(TranscriptUpdate):
 class TranscriptReplay:
     def __init__(self, comms: Comms, runtime: RuntimeServer):
         self.comms, self.runtime = comms, runtime
-        self.snapshots = False
 
-    async def replay(
-        self,
-        session_id: str,
-        name: str,
-        client: Any = None,
-        *,
-        snapshots: bool | None = None,
-    ) -> None:
-        use_snapshots = (
-            (self.snapshots if client is None else getattr(client, "transcript_snapshots", False))
-            if snapshots is None
-            else snapshots is True
-        )
+    async def replay(self, session_id: str, name: str, client: Any = None) -> None:
         destination = client or self.runtime
-        if use_snapshots:
-            page = await asyncio.to_thread(self.comms.transcripts.thread_transcript_page, name)
-            await destination.session_update(
-                session_id=session_id,
-                update=AgentMessageChunk(
-                    session_update="agent_message_chunk",
-                    content=TextContentBlock(type="text", text=""),
-                    field_meta={
-                        "agentComms": {
-                            "transcript": [TranscriptCodec.encode(event) for event in page.events],
-                            "transcriptPage": page.metadata(),
-                        }
-                    },
-                ),
-            )
-            return
-        events = await asyncio.to_thread(self.comms.transcripts.thread_transcript, name)
-        for event in events:
-            await event.replay_update().publish(session_id, destination)
+        page = await asyncio.to_thread(self.comms.transcripts.thread_transcript_page, name)
+        await destination.session_update(
+            session_id=session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=""),
+                field_meta=encode_updates(TranscriptSnapshotUpdate(page)),
+            ),
+        )

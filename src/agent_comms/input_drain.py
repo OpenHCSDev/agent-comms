@@ -19,6 +19,7 @@ from acp.schema import (
 
 from .acp_extension import (
     AvailableQueueProjection,
+    InputDeliveryChangedUpdate,
     InputStartedUpdate,
     QueueChangedUpdate,
     QueueItem,
@@ -203,38 +204,23 @@ class InputDrain(FutureInputQueue):
     async def emit_input_disposition(
         self, session_id: str, row: InputAttempt, client: Any = None
     ) -> None:
-        await self.emit_public_input_disposition(session_id, row.public(), client)
+        await self.emit_input_delivery_changed(session_id, input_id=row.public_id, client=client)
 
-    async def emit_public_input_disposition(
-        self, session_id: str, disposition: dict[str, Any], client: Any = None
+    async def emit_input_delivery_changed(
+        self, session_id: str, *, input_id: str | None = None, client: Any = None
     ) -> None:
         await (client or self.runtime).session_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta={"agentComms": {"inputDisposition": disposition}},
-            ),
-        )
-
-    async def emit_input_delivery_changed(self, session_id: str) -> None:
-        """Invalidate attached views after a notice-only owner action."""
-        await self.runtime.session_update(
-            session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta={"agentComms": {"inputDeliveryChanged": True}},
+                field_meta=encode_updates(InputDeliveryChangedUpdate(input_id)),
             ),
         )
 
     async def replay_unknown_inputs(self, session_id: str, client: Any = None) -> None:
-        owner = self.sessions.require(session_id)
-        overview = self.comms.goals.input_delivery(
-            owner, awaiting_keys=self.awaiting_input_keys(session_id)
-        )
-        for disposition in overview["inputs"]:
-            await self.emit_public_input_disposition(session_id, disposition, client=client)
+        """Refresh the producer-owned delivery ledger; this never replays an input."""
+        await self.emit_input_delivery_changed(session_id, client=client)
 
     def awaiting_input_keys(self, session_id: str) -> frozenset[str] | None:
         """Derive delivery notices from existing owner queues; never create new authority."""
@@ -489,16 +475,7 @@ class InputDrain(FutureInputQueue):
         # ACP receipt is only local acceptance. The matching inputStarted
         # update, not this end_turn, is the model-read boundary.
         return PromptResponse(
-            stop_reason="end_turn",
-            field_meta={
-                "agentComms": {
-                    "inputDisposition": {
-                        "inputId": input_id,
-                        "status": "accepted_not_started",
-                        "delivery": delivery,
-                    }
-                }
-            },
+            stop_reason="end_turn", field_meta=encode_updates(InputDeliveryChangedUpdate(input_id))
         )
 
     def bind_native_turn(

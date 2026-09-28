@@ -54,7 +54,6 @@ class SessionLifecycle:
         self.display_titles: dict[str, str | None] = {}
         self.worktrees: dict[str, str] = {}
         self.proxies: dict[str, RuntimeProxy] = {}
-        self.proxy_image_support: dict[str, bool] = {}
         self.transcript = TranscriptReplay(comms, runtime)
         self.config = ConfigOptions(comms, agent_bin, agent_args, runtime, self, effects)
 
@@ -64,12 +63,6 @@ class SessionLifecycle:
         client_capabilities: Any = None,
         client_info: Any = None,
     ) -> InitializeResponse:
-        meta = (
-            client_capabilities.get("_meta", {})
-            if isinstance(client_capabilities, dict)
-            else getattr(client_capabilities, "field_meta", None) or {}
-        )
-        self.transcript.snapshots = meta.get("agentComms", {}).get("transcriptSnapshots") is True
         capabilities = (
             client_capabilities
             if isinstance(client_capabilities, dict)
@@ -209,9 +202,6 @@ class SessionLifecycle:
                 {"reason": f"Unable to attach to {thread.name!r} owner {thread.pid}: {error}"}
             ) from error
         self.proxies[session_id] = proxy
-        self.proxy_image_support[session_id] = (
-            metadata.get("agentComms", {}).get("imagePrompts") is True
-        )
         return LoadSessionResponse(
             config_options=metadata.pop("configOptions", []), field_meta=metadata
         )
@@ -279,7 +269,6 @@ class SessionLifecycle:
         for proxy in self.proxies.values():
             await proxy.close()
         self.proxies.clear()
-        self.proxy_image_support.clear()
 
     async def release_owned(self) -> None:
         for name in set(self.bindings.values()):

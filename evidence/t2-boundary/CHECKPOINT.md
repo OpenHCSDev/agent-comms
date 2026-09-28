@@ -1,0 +1,7 @@
+# T2 paired checkpoint
+
+Shared update decoding now covers queue, cursor, coordination, goals, compaction progress/commit/publication, transcript snapshots, input-ledger invalidation and MCP receipts. The native MCP JSON receipt is decoded once into declaration-owned server state and call policy; its old schema walk and state roster were deleted. Transcript snapshots are unconditional on this paired protocol; own snapshot/image capability negotiation was removed. Runtime presentation rebinds typed session scope rather than probing fields.
+
+Verification: focused family round-trip/strict boundary test: 1 passed (pytest -o addopts=""). Default repository coverage configuration failed its aggregate 85% threshold when running just this test; no full suite pass claimed. Fresh ACP producer process through SDK JSON RPC into mounted actual Toad passed turn start, stale settlement rejection, matching settlement and compaction start/progress/end rendering using the installed round2-final Python with candidate source paths. No provider call or live-root mutation.
+
+Remaining: typed request decoding, copied UI-message deletion, dead replay fallback deletion and all meaningful caller/test migration; queue/cursor freshness and copied converted-history/native acceptance. These paired drafts are not complete or ready to install. Parent266 owns startup preparation/readiness; this batch changes only backend MCP receipt parsing and preserves the parent startup surface.

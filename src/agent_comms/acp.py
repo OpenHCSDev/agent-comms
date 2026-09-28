@@ -42,6 +42,7 @@ from acp.schema import (
 from . import agent_events as events
 from . import manual_compaction_bridge
 from .acp_extension import (
+    CompactionCommittedUpdate,
     CursorAdvancedUpdate,
     CursorEnvelope,
     CursorScope,
@@ -216,7 +217,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 raise RequestError(-32603, str(reason), {"reason": str(reason)})
             return PromptResponse(
                 stop_reason="end_turn",
-                field_meta={"agentComms": {"compaction": result}},
+                field_meta=encode_updates(
+                    CompactionCommittedUpdate(result["commitId"], result["summary"])
+                ),
             )
         meta = kwargs.get("_meta") or kwargs.get("field_meta") or {}
         # The ACP SDK expands _meta entries into handler keyword arguments.
@@ -288,20 +291,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             images = self._prompt_images(prompt)
         except ValueError as error:
             raise RequestError.invalid_params({"reason": str(error)}) from error
-        if images:
-            supported = (
-                self.sessions.proxy_image_support.get(session_id, False)
-                if session_id in self.sessions.proxies
-                else True
+        if images and self._prompt_text(prompt).lstrip().startswith(("@", "#", RELAY_PREFIX)):
+            raise RequestError.invalid_params(
+                {"reason": "Send images to an agent thread, not as a coordination relay."}
             )
-            if not supported:
-                raise RequestError.invalid_params(
-                    {"reason": "This owner does not support image prompts; refresh it while idle."}
-                )
-            if self._prompt_text(prompt).lstrip().startswith(("@", "#", RELAY_PREFIX)):
-                raise RequestError.invalid_params(
-                    {"reason": "Send images to an agent thread, not as a coordination relay."}
-                )
         if session_id in self.sessions.proxies:
             result = await self.sessions.proxies[session_id].request(
                 "prompt",
@@ -443,9 +436,12 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             return None
         if owner.pid != os.getpid():
             return None
-        return CursorScope(session_id, root_id,
+        return CursorScope(
+            session_id,
+            root_id,
             OwnerIdentity(ThreadIncarnation(owner.name, owner.created_at), admission_generation),
-            owner.pid)
+            owner.pid,
+        )
 
     def _private_cursor_metadata(
         self, thread_name: str, session_id: str, *, defer_busy: bool = False
@@ -499,8 +495,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             return CursorEnvelope(current_scope, revision, UnavailableCursorObservation())
         if unavailable:
             return result
-        return CursorEnvelope(scope, revision,
-            EmptyCursorObservation() if cursor is None else VerifiedCursorObservation(cursor))
+        return CursorEnvelope(
+            scope,
+            revision,
+            EmptyCursorObservation() if cursor is None else VerifiedCursorObservation(cursor),
+        )
 
     async def _publish_private_cursor(
         self, session_id: str, thread_name: str, *, selected_status: str | None = None
@@ -525,19 +524,21 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         try:
             await self._runtime.session_update(
                 session_id=session_id,
-                update=SessionInfoUpdate(
-                    session_update="session_info_update", field_meta=fields
-                ),
+                update=SessionInfoUpdate(session_update="session_info_update", field_meta=fields),
             )
         except (OSError, RuntimeError):
             return  # A disconnected client can read a fresh trusted load later.
         self._private_cursor_announced[session_id] = signature
 
     def _session_runtime_metadata(self, thread_name: str, session_id: str) -> tuple:
-        return (self.inputs.queue_state(session_id), *(
-            (CursorAdvancedUpdate(self._private_cursor_metadata(thread_name, session_id)),)
-            if self._private_nk_wire_root_id is not None else ()
-        ))
+        return (
+            self.inputs.queue_state(session_id),
+            *(
+                (CursorAdvancedUpdate(self._private_cursor_metadata(thread_name, session_id)),)
+                if self._private_nk_wire_root_id is not None
+                else ()
+            ),
+        )
 
     def _private_nk_marker(self) -> str:
         """Require the configured, certified root before any selected request."""
