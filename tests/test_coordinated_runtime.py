@@ -128,9 +128,6 @@ def _root(
     message = comms.messaging.send_initial_cohort("sender", target, body)
     initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
-        install_private_cohort_schema(store)
-        install_private_response_schema(store)
-        install_native_runtime_schema(store)
         for recipient in initial.audience.recipients:
             store.register_participant(
                 recipient.recipient_lookup,

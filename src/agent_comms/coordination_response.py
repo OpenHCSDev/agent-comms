@@ -34,6 +34,7 @@ from .coordination import (
     CurrentExecutions,
     ExecutionRecord,
     OwnerFence,
+    PrivateRuntimeSchema,
     PublicationIntents,
     PublicationReceipts,
     RecoverySnapshot,
@@ -79,7 +80,11 @@ class ResponseTable:
 
 
 @dataclass(frozen=True)
-class ResponseSchemaMeta(ResponseTable, TypedTable):
+class ResponseSchemaMeta(ResponseTable, TypedTable, PrivateRuntimeSchema):
+    @classmethod
+    def install(cls, store) -> None:
+        install_private_response_schema(store)
+
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
     version: Literal[2]
     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
