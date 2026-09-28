@@ -44,7 +44,9 @@ def record_fixture_history(inputs, owner, admission):
 
 
 @asynccontextmanager
-async def owner_fixture(tmp_path, monkeypatch, *, goal=True):
+async def owner_fixture(
+    tmp_path, monkeypatch, *, goal=True, response_gate: asyncio.Event | None = None
+):
     package = Path(PACKAGE).resolve()
     monkeypatch.setattr(
         "agent_comms.private_nk_entrypoint.private_nk_from_environment",
@@ -68,6 +70,8 @@ async def owner_fixture(tmp_path, monkeypatch, *, goal=True):
             request = json.loads(await reader.readexactly(length))
             requests.append(request)
             (tmp_path / "provider-requests.json").write_text(json.dumps(requests))
+            if response_gate is not None:
+                await asyncio.wait_for(response_gate.wait(), 10)
             # Use the real provider transport and its usage response. The selected
             # session (including a reopened session) owns the threshold decision.
             chunk = {
@@ -92,6 +96,8 @@ async def owner_fixture(tmp_path, monkeypatch, *, goal=True):
                 + body
             )
             await writer.drain()
+        except ConnectionError:
+            pass
         finally:
             writer.close()
             await writer.wait_closed()
@@ -680,3 +686,59 @@ async def test_owner_without_goal_compacts_with_exact_turn_authority(tmp_path, m
         )
         assert len(admitted) == 1
         assert inputs.read().lookup("acp:original").accepts_reservation
+
+
+async def test_disconnected_selected_summary_stays_unknown_without_original_replay(
+    tmp_path, monkeypatch
+):
+    from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown
+
+    gate = asyncio.Event()
+    async with owner_fixture(tmp_path, monkeypatch, response_gate=gate) as (
+        persistent,
+        registry,
+        inputs,
+        file,
+        launcher,
+        info,
+    ):
+        before = Path(file).read_bytes()
+        admissions = []
+        operation = asyncio.create_task(
+            maybe_compact_owner_turn(
+                registry,
+                launcher,
+                "owner",
+                "turn",
+                info,
+                "acp:original",
+                persistent,
+                input_text="Continue",
+                on_admission=admissions.append,
+            )
+        )
+        try:
+            async with asyncio.timeout(15):
+                while not (tmp_path / "provider-requests.json").exists():
+                    await asyncio.sleep(0.01)
+                # The actual selected request reached the provider. Kill its
+                # native process before any response can attest an outcome.
+                await persistent.proc.stop()
+                with pytest.raises(SelectedChildUnknown):
+                    await operation
+            journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
+            attempts = journal.blocking_selected_summary(file)
+            assert len(attempts) == 1
+            assert attempts[0].state.declared_name == "unknown"
+            assert admissions == []
+            assert inputs.read().lookup("acp:original").accepts_reservation
+            assert not inputs.read().lookup("acp:original").has_native_binding
+            assert not native_input_admitted(tmp_path, file)
+            assert Path(file).read_bytes() == before
+            assert persistent.proc is None and persistent.reopen_required == file
+            requests = json.loads((tmp_path / "provider-requests.json").read_text())
+            assert len(requests) == 1
+        finally:
+            gate.set()
+            operation.cancel()
+            await asyncio.gather(operation, return_exceptions=True)
