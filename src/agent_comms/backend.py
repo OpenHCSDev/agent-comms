@@ -46,7 +46,6 @@ from .maintenance_barrier import MaintenanceBarrier
 from .native_pi import CAPABILITY as NATIVE_INPUT_CAPABILITY
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .pi_rpc import PiRpcChannel
-from .pi_rpc import PiRpcChannel as _JsonLineReader
 from .turn_inputs import InputForwarding
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
@@ -75,8 +74,6 @@ _TOOL_KINDS = {
 _ACTIVE_PROCESSES: dict[asyncio.Task[Any], asyncio.subprocess.Process] = {}
 _ACTIVE_STDERR_TASKS: dict[asyncio.Task[Any], asyncio.Task[str]] = {}
 _ACTIVE_STEERING: dict[asyncio.Task[Any], asyncio.Task[None]] = {}
-# One shared owner map; older V3 tests and PR#1 diagnostics use different names.
-_ACTIVE_STEERING_TASKS = _ACTIVE_STEERING
 _ACTIVE_INPUT_RESTORERS: dict[asyncio.Task[Any], Callable[[], None]] = {}
 # Pi 0.85.1 owns provider-idle detection and defaults it to 300 seconds. This
 # transport backstop must remain strictly longer so Pi can emit its authoritative
@@ -214,7 +211,7 @@ class PersistentPiSession:
     def __init__(self) -> None:
         self.lock = asyncio.Lock()
         self.proc: asyncio.subprocess.Process | None = None
-        self.reader: _JsonLineReader | None = None
+        self.reader: PiRpcChannel | None = None
         self.stderr_task: asyncio.Task[str] | None = None
         self.launch_key: tuple[Any, ...] | None = None
         self.session_file: str | None = None
@@ -474,7 +471,7 @@ async def discover_thinking_levels(
             ).encode()
         )
         await proc.stdin.drain()
-        reader = _JsonLineReader(proc.stdout)
+        reader = PiRpcChannel(proc.stdout)
         async with asyncio.timeout(10):
             while line := await reader.readline():
                 payload = PiRpcChannel.decode_record(line)
@@ -527,7 +524,7 @@ async def discover_models(
         if proc is not None:
             try:
                 assert proc.stdin is not None and proc.stdout is not None
-                reader = _JsonLineReader(proc.stdout)
+                reader = PiRpcChannel(proc.stdout)
                 proc.stdin.write(
                     (json.dumps({"id": "models", "type": "get_available_models"}) + "\n").encode()
                 )
@@ -607,7 +604,7 @@ async def compact_session(
     try:
         proc.stdin.write(PiRpcChannel.command_bytes(commands.PiCommand.from_wire(command)))
         await proc.stdin.drain()
-        reader = _JsonLineReader(proc.stdout)
+        reader = PiRpcChannel(proc.stdout)
         async with asyncio.timeout(300):
             while line := await reader.readline():
                 payload = PiRpcChannel.decode_record(line)
@@ -1567,7 +1564,7 @@ class TurnSession:
         self.reader = (
             self.persistent_session.reader
             if self.reused and self.persistent_session is not None
-            else _JsonLineReader(self.proc.stdout)
+            else PiRpcChannel(self.proc.stdout)
         )
         assert self.reader is not None
         self.reader.pending.cancel_all()

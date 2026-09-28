@@ -10,13 +10,14 @@ from pathlib import Path
 import pytest
 
 from agent_comms import agent_events as ae
-from agent_comms.backend import PersistentPiSession, _JsonLineReader, _session_revision
+from agent_comms.backend import PersistentPiSession, _session_revision
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.declarations import AgentRuntimeInfo, Goal, Thread, _store_lock
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
 from agent_comms.owner_compaction_settings import PiCompactionDecision
+from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.registration import Registration
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
@@ -71,7 +72,7 @@ async def owner_fixture(tmp_path, monkeypatch, *, real_host=False, goal=True):
         assert line.startswith(b"{"), line.decode()
         fixture = json.loads(line)
         file = fixture["sessionFile"]
-        persistent.reader = _JsonLineReader(child.stdout)
+        persistent.reader = PiRpcChannel(child.stdout)
         persistent.session_file = file
         persistent.session_id = (
             fixture["sessionId"] if real_host else fixture["witness"]["sessionId"]

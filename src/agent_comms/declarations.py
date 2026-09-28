@@ -65,7 +65,13 @@ from .goal_states import (
     PauseSource,
 )
 from .read_basis import DisplayBasis
-from .response_policy import ResponsePolicy
+from .response_policy import (
+    CollectivePolicy,
+    DirectPolicy,
+    InformationalPolicy,
+    MentionedOnlyPolicy,
+    ResponsePolicy,
+)
 from .thread_identity import OwnerIdentity, ThreadIncarnation, TurnIdentity
 
 if TYPE_CHECKING:
@@ -1790,7 +1796,6 @@ class ResponseEligibility:
     recipients: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "policy", ResponsePolicy.resolve(self.policy))
         if len(self.recipients) != len(set(self.recipients)):
             raise ValueError("Response eligibility recipients must be unique.")
         self.policy.validate_recipients(self.recipients)
@@ -1935,14 +1940,14 @@ class Message:
     def response_policy(self) -> ResponsePolicy:
         """Typed response semantics without changing the stored target."""
         if self.notice or self.membership is not None:
-            return ResponsePolicy.INFORMATIONAL
+            return InformationalPolicy.instance()
         if not (is_channel_target(self.target) or BuiltinChannel.lookup(self.target) is not None):
-            return ResponsePolicy.DIRECT
+            return DirectPolicy.instance()
         if self.mentions:
-            return ResponsePolicy.MENTIONED_ONLY
+            return MentionedOnlyPolicy.instance()
         if not self.sender_role.executable:
-            return ResponsePolicy.COLLECTIVE
-        return ResponsePolicy.INFORMATIONAL
+            return CollectivePolicy.instance()
+        return InformationalPolicy.instance()
 
     def response_eligibility(
         self, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
