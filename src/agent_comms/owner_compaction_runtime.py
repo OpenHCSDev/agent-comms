@@ -15,6 +15,7 @@ from .compaction_journal import CompactionOperation, SelectedSummaryAttempt
 from .owner_compaction_commit import CompactionSource, OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import NativeSummary, OwnerSummaryOutcome
+from .owner_compaction_settings import PiCompactionSettings
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 from .threads import Thread
 
@@ -76,10 +77,10 @@ async def compact_owner_once(
     persistent: PersistentPiSession,
     summarize: Callable[[NativePreparation], Awaitable[OwnerSummaryOutcome]],
     *,
-    keep_recent_tokens: int | None = None,
+    settings: PiCompactionSettings,
+    context_window: int,
     pending_input_key: str | None = None,
     settings_paths: tuple[str, ...] | None = None,
-    allow_split_turn: bool = True,
     on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
 ) -> CompactionOperation | None:
     """Exactly one native writer attempt, without input or summary replay.
@@ -93,17 +94,14 @@ async def compact_owner_once(
         bridge.prepare_source,
         owner,
         owner_generation,
-        keep_recent_tokens=keep_recent_tokens,
+        settings=settings,
+        context_window=context_window,
         pending_input_key=pending_input_key,
         settings_paths=settings_paths,
     )
     if prepared_source is None:
         return None
     prepared, source = prepared_source
-    if prepared.is_split_turn and not allow_split_turn:
-        # The current native writer persists one summary but no separate turn
-        # prefix summary. Never discard a split turn's unsummarized prefix.
-        return None
     result = await summarize(prepared)
 
     async def write(summary: NativeSummary) -> CompactionOperation:

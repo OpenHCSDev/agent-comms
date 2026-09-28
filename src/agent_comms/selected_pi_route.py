@@ -189,7 +189,6 @@ def _read_settings_response(
         or data.session_id != request.session_id
         or data.session_file != request.session_file
         or data.selected != request.selected
-        or data.context_tokens != request.context_tokens
     ):
         raise SelectedPiProbeUnknownError("Selected settings source changed")
     return data.decision
@@ -202,7 +201,6 @@ async def read_selected_compaction_decision(
     expected_package: Path,
     provider: str,
     model_id: str,
-    context_tokens: int,
     context_window: int,
     timeout: float = 3.0,
 ) -> PiCompactionDecision:
@@ -213,8 +211,6 @@ async def read_selected_compaction_decision(
         or not session_file
         or not provider
         or not model_id
-        or type(context_tokens) is not int
-        or not 0 <= context_tokens <= 2**53 - 1
         or type(context_window) is not int
         or not 0 < context_window <= 2**53 - 1
     ):
@@ -224,7 +220,6 @@ async def read_selected_compaction_decision(
         session_id=session_id,
         session_file=session_file,
         selected=SelectedModel(provider, model_id, context_window),
-        context_tokens=context_tokens,
     )
     return await _exchange_observation(
         persistent,

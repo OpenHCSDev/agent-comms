@@ -350,4 +350,3 @@ class AgentCommsCompactionSettings(PiCommand):
     session_id: str = field(metadata={"wire_name": "sessionId"})
     session_file: str = field(metadata={"wire_name": "sessionFile"})
     selected: SelectedModel
-    context_tokens: int = field(metadata={"wire_name": "contextTokens"})

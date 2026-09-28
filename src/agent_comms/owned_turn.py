@@ -475,14 +475,7 @@ class OwnedTurn:
         self.worktree = (
             self.thread.worktree if Path(self.thread.worktree).is_dir() else str(Path.cwd())
         )
-        self.env_extra = {
-            "AGENT_COMMS_THREAD": self.thread_name,
-            "PI_AGENT_ID": self.thread_name,
-            "AGENT_COMMS_ROOT": str(self.runner.comms.root),
-            "PI_PARENT_ID": self.thread.parent or "",
-            "AGENT_COMMS_MANAGED": "1",
-            "PI_WORKTREE": self.worktree,
-        }
+        self.env_extra = self.runner.native_environment(self.thread, self.worktree)
         self.peers = [
             {key: person[key] for key in ("name", "status", "activity", "activity_detail")}
             for person in self.runner.comms.views.presence()
@@ -580,12 +573,17 @@ class OwnedTurn:
                 self.runner.inputs.selected_summary_admissions[self.session_id] = admission
 
             try:
+                selected_info = (
+                    await self.runner.prepare_selected_session(self.session_id, self.thread)
+                    if self.runner.adaptive_summary_strategy is None
+                    else self.runner.comms.agents.agent_info_of(self.thread_name)
+                )
                 self.committed = await maybe_compact_owner_turn(
                     self.runner.comms.registry,
                     self.runner.agent_bin,
                     self.thread_name,
                     self.turn_id,
-                    self.runner.comms.agents.agent_info_of(self.thread_name),
+                    selected_info,
                     self.original_keys[0],
                     self.runner.persistent_backends.setdefault(
                         self.session_id, backend.PersistentPiSession()
@@ -625,10 +623,7 @@ class OwnedTurn:
     async def stream(self):
         async for event in backend.stream_agent_events(
             self.runner.agent_bin,
-            backend.args_for_thinking_level(
-                backend.args_for_model(self.runner.agent_args, self.thread.model),
-                self.thread.thinking_level,
-            ),
+            self.runner.native_arguments(self.thread),
             self.task,
             self.worktree,
             self.env_extra,

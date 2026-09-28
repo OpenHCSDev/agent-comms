@@ -31,9 +31,11 @@ async def test_explicit_manual_selected_commit_never_invents_original_input(tmp_
         info,
     ):
         # The ordinary fixture seeds an original input. This explicit command has none.
-        inputs.replace(InputDocument(rows={
-            key: row for key, row in inputs.read().rows.items() if key != "acp:original"
-        }))
+        inputs.replace(
+            InputDocument(
+                rows={key: row for key, row in inputs.read().rows.items() if key != "acp:original"}
+            )
+        )
         comms = Comms(tmp_path)
         runner = SimpleNamespace(
             persistent_backends={"owner": persistent},
@@ -75,7 +77,8 @@ async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
             file,
             {
                 "source": {
-                    "ownerName": owner.name, "ingressKey": "acp:original",
+                    "ownerName": owner.name,
+                    "ingressKey": "acp:original",
                     "reservedRevision": json.loads(json.dumps(_session_revision(file))),
                 },
                 "selected": {
@@ -109,72 +112,6 @@ async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
         )
 
 
-async def test_actual_acp_compact_uses_journal_and_reports_saved_history(tmp_path, monkeypatch):
-    from dataclasses import replace
-
-    from acp.agent.router import build_agent_router
-
-    from agent_comms.acp import CommsAgent
-
-    async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
-        persistent,
-        registry,
-        inputs,
-        file,
-        launcher,
-        info,
-    ):
-        inputs.replace(InputDocument(rows={
-            key: row for key, row in inputs.read().rows.items() if key != "acp:original"
-        }))
-        registry.register(replace(registry.require("owner"), active_turn=None))
-        comms = Comms(tmp_path)
-        root_id = comms.messaging.initialize_private_initial_protocol()
-        agent = CommsAgent(
-            comms,
-            agent_bin=launcher,
-            auto_wake=False,
-            private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(),
-            private_nk_wire_root_id=root_id,
-        )
-        updates = []
-
-        class Client:
-            async def session_update(self, **kwargs):
-                updates.append(kwargs)
-
-        agent.on_connect(Client())
-        await agent.sessions.bind_owned(
-            comms.registry.require("owner"), "owner"
-        )
-        comms.agents.set_agent_info(
-            "owner",
-            model=info.model,
-            context_used=info.context_used,
-            context_size=info.context_size,
-        )
-        agent.turns.persistent_backends["owner"] = persistent
-        before_inputs = inputs.path.read_bytes()
-        try:
-            await build_agent_router(agent)(
-                "session/prompt",
-                {"sessionId": "owner", "prompt": [{"type": "text", "text": "/compact"}]},
-                False,
-            )
-            assert inputs.path.read_bytes() == before_inputs
-            assert comms.registry.require("owner").active_turn is None
-            journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-            (attempt,) = journal.selected_summaries(file)
-            assert isinstance(attempt.state, ManualCommittedSummary)
-            assert journal.get(attempt.state.commit_id).state.committed
-            assert any(
-                (item["update"].field_meta or {}).get("agentComms", {}).get("transcriptChanged")
-                for item in updates
-            )
-        finally:
-            await agent.shutdown()
-
-
 @pytest.mark.parametrize("uncertain", [False, True], ids=["reserved", "unknown"])
 async def test_manual_does_not_retire_or_repeat_uncertain_provider(
     tmp_path, monkeypatch, uncertain
@@ -189,9 +126,11 @@ async def test_manual_does_not_retire_or_repeat_uncertain_provider(
         launcher,
         info,
     ):
-        inputs.replace(InputDocument(rows={
-            key: row for key, row in inputs.read().rows.items() if key != "acp:original"
-        }))
+        inputs.replace(
+            InputDocument(
+                rows={key: row for key, row in inputs.read().rows.items() if key != "acp:original"}
+            )
+        )
         journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
         operation = journal.reserve_selected_summary(
             file,

@@ -18,7 +18,6 @@ from pathlib import Path
 import pytest
 
 from agent_comms import backend, owner_compaction_runtime
-from delivery_owner_fixture import canonical_agent
 from agent_comms.backend import PersistentPiSession
 from agent_comms.child_process import AttachedChild, Platform, ProcessIdentity
 from agent_comms.comms import Comms, wire
@@ -29,8 +28,10 @@ from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativePreparationError, prepare_native_source
 from agent_comms.owner_compaction_provider import NativeSummary
 from agent_comms.owner_compaction_runtime import compact_owner_once
+from agent_comms.owner_compaction_settings import PiCompactionSettings
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
+from delivery_owner_fixture import canonical_agent
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(
@@ -67,7 +68,9 @@ console.log(manager.getSessionFile());
 def test_native_preparation_is_read_only_and_matches_saved_cutpoint(session):
     original = session.read_bytes()
     package = Path(PACKAGE)
-    prepared = prepare_native_source(package, str(session), keep_recent_tokens=1)
+    prepared = prepare_native_source(
+        package, str(session), settings=PiCompactionSettings(16384, 1), context_window=128000
+    )
     assert prepared is not None
     assert prepared.witness.session_id
     assert prepared.witness.session_file == str(session)
@@ -77,7 +80,15 @@ def test_native_preparation_is_read_only_and_matches_saved_cutpoint(session):
         for row in original.splitlines()
     )
     assert session.read_bytes() == original
-    assert prepare_native_source(package, str(session)) is None
+    assert (
+        prepare_native_source(
+            package,
+            str(session),
+            settings=PiCompactionSettings(16384, 20000),
+            context_window=128000,
+        )
+        is None
+    )
     assert session.read_bytes() == original
 
 
@@ -100,7 +111,9 @@ def test_canonical_owner_prepares_source_before_summary_and_commits_once(session
     )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     before = session.read_bytes()
-    candidate = bridge.prepare_source(owner, owner_generation, keep_recent_tokens=1)
+    candidate = bridge.prepare_source(
+        owner, owner_generation, settings=PiCompactionSettings(16384, 1), context_window=128000
+    )
     assert candidate is not None
     prepared, source = candidate
     assert session.read_bytes() == before
@@ -501,7 +514,9 @@ def test_large_history_cli_prepare_commit_reopen_under_memory_budget(
             )
             bridge = OwnerCompactionCommit(root / "registry.json", package)
             monkeypatch.setenv("AC_CAPACITY_PHASE", "prepare")
-            candidate = bridge.prepare_source(owner, generation, keep_recent_tokens=1)
+            candidate = bridge.prepare_source(
+                owner, generation, settings=PiCompactionSettings(16384, 1), context_window=128000
+            )
             assert candidate is not None
             prepared, source = candidate
             receipt["phases"].append("prepare")
@@ -575,7 +590,9 @@ def test_prepared_owner_source_refuses_later_bus_correction(session):
         owner, "turn", expected_owner_generation=owner_generation
     )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
-    candidate = bridge.prepare_source(owner, owner_generation, keep_recent_tokens=1)
+    candidate = bridge.prepare_source(
+        owner, owner_generation, settings=PiCompactionSettings(16384, 1), context_window=128000
+    )
     assert candidate is not None
     prepared, source = candidate
     before = session.read_bytes()
@@ -637,7 +654,13 @@ async def test_owner_summary_discards_idle_manager_before_external_native_write(
         return NativeSummary("Synthetic provider-free summary", None, None)
 
     result = await compact_owner_once(
-        bridge, owner, owner_generation, persistent, synthetic_summary, keep_recent_tokens=1
+        bridge,
+        owner,
+        owner_generation,
+        persistent,
+        synthetic_summary,
+        settings=PiCompactionSettings(16384, 1),
+        context_window=128000,
     )
     assert result is not None and result.state.declared_name == "committed"
     assert persistent.reopen_required == str(session)
@@ -675,7 +698,13 @@ async def test_late_correction_after_summary_refuses_write_without_reusing_manag
 
     with pytest.raises(RelationViolationError, match="source changed"):
         await compact_owner_once(
-            bridge, owner, owner_generation, persistent, corrected_summary, keep_recent_tokens=1
+            bridge,
+            owner,
+            owner_generation,
+            persistent,
+            corrected_summary,
+            settings=PiCompactionSettings(16384, 1),
+            context_window=128000,
         )
     assert persistent.reopen_required == str(session)
     assert session.read_bytes() == original
@@ -733,7 +762,13 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
     async def owned_turn():
         async with turn_lock:
             return await compact_owner_once(
-                bridge, owner, owner_generation, persistent, synthetic_summary, keep_recent_tokens=1
+                bridge,
+                owner,
+                owner_generation,
+                persistent,
+                synthetic_summary,
+                settings=PiCompactionSettings(16384, 1),
+                context_window=128000,
             )
 
     task = asyncio.create_task(owned_turn())
@@ -800,7 +835,11 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
     comms = Comms(root)
     with comms.bus.log.locked():
         metadata = comms.bus.log.read_metadata_unlocked()
-    root_id = metadata.root_id if metadata.private else comms.messaging.initialize_private_initial_protocol()
+    root_id = (
+        metadata.root_id
+        if metadata.private
+        else comms.messaging.initialize_private_initial_protocol()
+    )
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(root))
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", PACKAGE)
@@ -877,7 +916,9 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
                 check=True,
                 timeout=5,
             )
-        candidate = bridge.prepare_source(owner, owner_generation, keep_recent_tokens=1)
+        candidate = bridge.prepare_source(
+            owner, owner_generation, settings=PiCompactionSettings(16384, 1), context_window=128000
+        )
         assert candidate is not None
         prepared, source = candidate
         operation = bridge.commit(
@@ -968,7 +1009,13 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
                 )
 
             operation = await compact_owner_once(
-                bridge, owner, owner_generation, persistent, synthetic_summary, keep_recent_tokens=1
+                bridge,
+                owner,
+                owner_generation,
+                persistent,
+                synthetic_summary,
+                settings=PiCompactionSettings(16384, 1),
+                context_window=128000,
             )
             assert operation is not None and operation.state.declared_name == "committed"
             commit_ids.append(operation.commit_id)
@@ -998,7 +1045,12 @@ def test_invalid_session_fails_closed_without_repair(session):
     session.write_bytes(before + b'{"type":"message", broken\n')
     invalid = session.read_bytes()
     with pytest.raises(NativePreparationError):
-        prepare_native_source(Path(PACKAGE), str(session), keep_recent_tokens=1)
+        prepare_native_source(
+            Path(PACKAGE),
+            str(session),
+            settings=PiCompactionSettings(16384, 1),
+            context_window=128000,
+        )
     assert session.read_bytes() == invalid
 
 
@@ -1006,6 +1058,16 @@ def test_unapproved_session_alias_and_bounds_are_refused(session):
     alias = session.with_name("alias.jsonl")
     alias.symlink_to(session)
     with pytest.raises(NativePreparationError, match="canonical"):
-        prepare_native_source(Path(PACKAGE), str(alias), keep_recent_tokens=1)
+        prepare_native_source(
+            Path(PACKAGE),
+            str(alias),
+            settings=PiCompactionSettings(16384, 1),
+            context_window=128000,
+        )
     with pytest.raises(NativePreparationError, match="Native source cannot be prepared"):
-        prepare_native_source(Path(PACKAGE), str(session), keep_recent_tokens=0)
+        prepare_native_source(
+            Path(PACKAGE),
+            str(session),
+            settings=PiCompactionSettings(16384, 0),
+            context_window=128000,
+        )

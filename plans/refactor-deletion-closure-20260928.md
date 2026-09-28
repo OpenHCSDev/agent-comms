@@ -1,3 +1,33 @@
+## Cold compaction installed acceptance passed — 2026-09-28
+
+PR266 incorporates paired267. Actual copied 137MB UX history passes both cold manual
+and automatic compaction; installed wheel automatic route passes, preserving full
+file details, reopening usable context and completing exactly one original input.
+Local HTTP supplies substantial summaries; no paid test calls. Original live
+UNKNOWN remains unchanged. Deployment follows this acceptance, not yet claimed live.
+TR0 core268 and Toad117 merged; T2/T3/T5/T6 continue independently, T4 follows.
+
+## Cold native input failure — active fix, 2026-09-28
+
+PR266 (parent) and paired native PR267 (Wegener, Sol high) own the live
+agent-comms-ux failure reported at16:26. Cold startup skipped journaled compaction
+when the Pi child and cached usage were absent. New native preparation shares the
+normal launch/attestation/retention machinery; selected decisions now read actual
+native context. No user input has been replayed.
+
+Actual137MB retained-history local native/ACP acceptance exposed a second fault:
+summary plus retained tail is221506bytes against the dynamic191712-byte restore
+budget. Manual commit/reopen alone did not prove usable context. PR267 is fixing
+cut selection/accounting; PR266 requires usable reopened context and a completed
+original input. These PRs are not ready for deployment yet. Old UNKNOWN remains
+preserved. Native7+protocol18 and backend/adaptive/manual21 focused checks passed;
+the real adaptive send failed and its receipt is retained, not counted green.
+
+The earlier D22 cutover remains installed. PR264 converter deletion and PR265
+final pins were verified merged. Those attachment/admission/read receipts did
+not prove the large cold-history input path; this entry corrects that limitation.
+Five other workers retain TR0/T2/T3/T5/T6. T4 follows those surfaces as planned.
+
 ## Live cutover and converter deletion — 2026-09-28
 
 Live now: core1853503b (merged229/258/259/254), Toad107 df0a758, Textual16ede007,

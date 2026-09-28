@@ -162,7 +162,7 @@ manager.appendMessage({role:'user',content:'next task',timestamp:3});
 manager.appendMessage({role:'assistant',content:[{type:'text',text:'next answer'}],
   provider:'fixture',model:'fixture',api:'fixture',stopReason:'stop',timestamp:4});
 const prepared=prepareCompaction(manager.entryStore,
-  {...DEFAULT_COMPACTION_SETTINGS,keepRecentTokens:1});
+  {...DEFAULT_COMPACTION_SETTINGS,keepRecentTokens:1},{contextWindow:128000});
 console.log(JSON.stringify(prepared && computeFileLists(prepared.fileOps)));
 """
     result = subprocess.run(

@@ -129,8 +129,8 @@ try {
   manager.appendMessage({role:'assistant',content:[{type:'text',text:'prefix progress'}],timestamp:4,provider:'openrouter',model:'fake',api:'openai-completions',stopReason:'stop',usage});
   const previous='PRIOR_GOAL_984 EXACT_PATH_src/domain.py UNRESOLVED_FAILURE_431';
   manager.appendCompaction(previous,kept,200000);
-  manager.appendMessage({role:'assistant',content:[{type:'text',text:`retained ${'r'.repeat(120000)}`}],timestamp:5,provider:'openrouter',model:'fake',api:'openai-completions',stopReason:'stop',usage});
-  const preparation=prepareCompaction(manager.entryStore,{reserveTokens:16384,keepRecentTokens:20000});
+  for(let index=0;index<3;index++)manager.appendMessage({role:'assistant',content:[{type:'text',text:`retained ${'r'.repeat(40000)}`}],timestamp:5+index,provider:'openrouter',model:'fake',api:'openai-completions',stopReason:'stop',usage});
+  const preparation=prepareCompaction(manager.entryStore,{reserveTokens:16384,keepRecentTokens:20000},model);
   assert.equal(preparation.isSplitTurn,true);
   assert.equal(preparation.messagesToSummarize.isEmpty(),true);
   assert.equal(preparation.previousSummary,previous);

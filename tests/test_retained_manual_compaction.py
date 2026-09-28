@@ -10,18 +10,15 @@ import pytest
 from acp.agent.router import build_agent_router
 
 from agent_comms.acp import CommsAgent
-from agent_comms.backend import PersistentPiSession, _session_revision
-from agent_comms.child_process import AttachedChild, ProcessIdentity
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_session_reopen import validate_native_reopen
 from agent_comms.owner_compaction_prepare import prepare_native_source
-from agent_comms.pi_commands import GetState
-from agent_comms.pi_events import Response
-from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.owner_compaction_settings import PiCompactionSettings
+from agent_comms.selected_pi_route import read_selected_compaction_decision
 from agent_comms.threads import Thread
 from compaction_loopback import LoopbackProvider
 
@@ -30,7 +27,8 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-async def test_actual_retained_manual_commit_and_reopen(tmp_path, monkeypatch):
+@pytest.mark.parametrize("mode", ["manual", "adaptive"])
+async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mode):
     source = Path(os.environ["RETAINED_COMPACTION_SOURCE"])
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve()
     launcher = os.environ["AC_NATIVE_STACK_BIN"]
@@ -47,7 +45,7 @@ async def test_actual_retained_manual_commit_and_reopen(tmp_path, monkeypatch):
     config.mkdir()
     project = tmp_path / "project"
     project.mkdir()
-    provider = LoopbackProvider(status=200)
+    provider = LoopbackProvider(status=200, text="Condensed context. " * 800)
     server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
     provider.port = server.sockets[0].getsockname()[1]
     model = "retained-local/fixture"
@@ -92,66 +90,23 @@ async def test_actual_retained_manual_commit_and_reopen(tmp_path, monkeypatch):
             }
         )
     )
-    guard = tmp_path / "local-only.cjs"
-    guard.write_text(
-        "const fetch=globalThis.fetch;globalThis.fetch=(url,...args)=>{"
-        "const target=url instanceof Request?url.url:String(url);"
-        f"if(!target.startsWith('http://127.0.0.1:{provider.port}/'))"
-        "throw Error('NONLOCAL_NETWORK_REFUSED');return fetch(url,...args)};"
-    )
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(config))
     monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path / "wire"))
-    env = dict(os.environ, NODE_OPTIONS=f"--require={guard}", PI_OFFLINE="1")
-    proc = await AttachedChild.start(
-        ("node",
-        "--max-old-space-size=1536",
-        str(package / "dist/cli.js"),
-        "--mode",
-        "rpc",
-        "--offline",
-        "--no-extensions",
-        "--no-skills",
-        "--no-prompt-templates",
-        "--no-context-files",
-        "--no-tools",
-        "--provider",
-        "retained-local",
-        "--model",
-        "fixture",
-        "--session",
-        str(session)),
-        env=env,
-        cwd=project,
-    )
-    stderr_task = asyncio.create_task(proc.stderr.read())
-    persistent = PersistentPiSession()
-    persistent.proc = proc
-    persistent.reader = PiRpcChannel(proc.stdout)
     agent = None
     try:
-        request = GetState(id="retained-state")
-        proc.stdin.write(PiRpcChannel.command_bytes(request))
-        await proc.stdin.drain()
-        while True:
-            async with asyncio.timeout(30):
-                event = await persistent.reader.receive(strict=True)
-            if isinstance(event, Response) and event.id == request.id:
-                assert event.success
-                break
         preparation = await asyncio.to_thread(
-            prepare_native_source, package, str(session), keep_recent_tokens=20000
+            prepare_native_source,
+            package,
+            str(session),
+            settings=PiCompactionSettings(16384, 20000),
+            context_window=272000,
         )
         assert preparation is not None
-        persistent.session_file = str(session)
-        persistent.session_id = preparation.witness.session_id
-        persistent.revision = _session_revision(str(session))
-        persistent.launch_key = (
-            NativePiRpcLaunch(("node",), project, env, session.parent, session, package),
-            (0, 0),
-        )
         comms = Comms(tmp_path / "wire")
         root_id = comms.messaging.initialize_private_initial_protocol()
+        monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
+        monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(package))
         thread = Thread(
             "retained",
             frozenset(),
@@ -164,6 +119,13 @@ async def test_actual_retained_manual_commit_and_reopen(tmp_path, monkeypatch):
         agent = CommsAgent(
             comms,
             agent_bin=launcher,
+            agent_args=[
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-context-files",
+                "--no-tools",
+            ],
             auto_wake=False,
             private_nk_native_package=package,
             private_nk_wire_root_id=root_id,
@@ -175,26 +137,45 @@ async def test_actual_retained_manual_commit_and_reopen(tmp_path, monkeypatch):
                 updates.append(kwargs)
 
         agent.on_connect(Client())
-        await agent.sessions.bind_owned(
-            comms.registry.require("retained"), "retained"
-        )
-        comms.agents.set_agent_info(
-            "retained", model=model, context_used=preparation.tokens_before, context_size=272000
-        )
-        agent.turns.persistent_backends["retained"] = persistent
+        await agent.sessions.bind_owned(comms.registry.require("retained"), "retained")
+        assert not agent.turns.persistent_backends
+        assert comms.agents.agent_info_of("retained") is None
         await build_agent_router(agent)(
             "session/prompt",
             {
                 "sessionId": "retained",
-                "prompt": [{"type": "text", "text": "/compact"}],
+                "prompt": [
+                    {"type": "text", "text": "/compact" if mode == "manual" else "cold-start input"}
+                ],
             },
             False,
         )
+        (tmp_path / "updates.json").write_text(
+            json.dumps([item["update"].model_dump(mode="json") for item in updates], indent=2)
+        )
         journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
         (attempt,) = journal.selected_summaries(str(session))
-        assert isinstance(attempt.state, ManualCommittedSummary)
+        if mode == "manual":
+            assert isinstance(attempt.state, ManualCommittedSummary)
+        assert attempt.state.commit_id
         assert journal.get(attempt.state.commit_id).state.committed
-        assert persistent.proc is None and persistent.reopen_required == str(session)
+        persistent = agent.turns.persistent_backends["retained"]
+        if mode == "manual":
+            assert persistent.proc is None and persistent.reopen_required == str(session)
+            await agent.turns.prepare_selected_session(
+                "retained", comms.registry.require("retained")
+            )
+        else:
+            assert persistent.proc is not None and persistent.proc.returncode is None
+        decision = await read_selected_compaction_decision(
+            persistent,
+            session_file=str(session),
+            expected_package=package,
+            provider="retained-local",
+            model_id="fixture",
+            context_window=272000,
+        )
+        assert not decision.trigger, "Committed context must be usable on a fresh native reopen"
         identity = await asyncio.to_thread(
             validate_native_reopen,
             package,
@@ -226,9 +207,9 @@ async def test_actual_retained_manual_commit_and_reopen(tmp_path, monkeypatch):
                 InputDispositions(comms.root / InputDispositions.filename).read().rows
             ),
         }
-        assert receipt["new_user_inputs"] == 0
+        assert receipt["new_user_inputs"] == (0 if mode == "manual" else 1)
         assert receipt["owner_idle"] and receipt["strict_reopen"]
-        assert user_entries_after == user_entries_before
+        assert user_entries_after == user_entries_before + (0 if mode == "manual" else 1)
         assert (source.stat().st_size, source.stat().st_mtime_ns) == (
             before_source.st_size,
             before_source.st_mtime_ns,
@@ -238,7 +219,5 @@ async def test_actual_retained_manual_commit_and_reopen(tmp_path, monkeypatch):
     finally:
         if agent is not None:
             await agent.shutdown()
-        await persistent.close_idle()
-        (tmp_path / "native-stderr.log").write_bytes(await stderr_task)
         server.close()
         await server.wait_closed()

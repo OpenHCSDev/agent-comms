@@ -50,11 +50,10 @@ function acPrepareReadiness(command, session, conflictingCommand) {
         Object.keys(command.witness).some(key => witness[key] !== command.witness[key]))
         return decline("source_mismatch");
     let preparation;
-    try { preparation = prepareCompaction(manager.entryStore, settings, manager.getLeafId()); }
+    try { preparation = prepareCompaction(manager.entryStore, settings, model, manager.getLeafId()); }
     catch { return decline("unsupported"); }
     if (!preparation || preparation.firstKeptEntryId !== command.witness.firstKeptEntryId)
         return decline("source_mismatch");
-    if (preparation.isSplitTurn || !preparation.turnPrefixMessages.isEmpty()) return decline("split_turn");
     return { version: 1, status: "ready", routeStatus: acReadinessRouteStatus,
         witness: command.witness, selected: command.selected, settings: command.settings };
 }
