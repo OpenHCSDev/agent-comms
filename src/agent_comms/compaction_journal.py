@@ -38,6 +38,7 @@ from .compaction_states import (
     PendingPublication,
     PublicationState,
     RefusedSummary,
+    RetiredRefusalSummary,
     ReservedSummary,
     SummaryState,
     UnknownSummary,
@@ -639,9 +640,8 @@ class CompactionJournal:
         return tuple(
             attempt
             for row in rows
-            if not (attempt := SelectedSummaryAttempt.from_row(row)).original_has_started(
-                inputs.rows
-            )
+            if not (attempt := SelectedSummaryAttempt.from_row(row)).state.settled_without_original
+            and not attempt.original_has_started(inputs.rows)
         )
 
     def blocking_selected_summary(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:
@@ -745,6 +745,27 @@ class CompactionJournal:
                 (target.declared_name, target.decline_reason, operation_id),
             )
 
+    def retire_refused_summary(self, attempt: SelectedSummaryAttempt) -> None:
+        """An explicit manual command can retire a proved prestart refusal only.
+
+        This does not change or admit its original UNKNOWN input, and cannot
+        transition a reserved/UNKNOWN provider attempt or native commit.
+        """
+        if not isinstance(attempt.state, RefusedSummary):
+            raise CompactionJournalError("Exact observed native refusal required")
+        target = RetiredRefusalSummary(attempt.state.decline_reason)
+        with self._transaction() as db:
+            row = db.execute(
+                "SELECT * FROM selected_summary_attempts WHERE operation_id = ?",
+                (attempt.operation_id,),
+            ).fetchone()
+            if row is None or SelectedSummaryAttempt.from_row(row) != attempt:
+                raise CompactionJournalError("Native refusal changed before explicit retirement")
+            db.execute(
+                "UPDATE selected_summary_attempts SET status = ? WHERE operation_id = ?",
+                (target.declared_name, attempt.operation_id),
+            )
+
     def selected_summaries(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:
         """Inspect every recorded result without exposing model or input content."""
         canonical = str(Path(session_file).resolve(strict=True))
@@ -843,6 +864,7 @@ class CompactionJournal:
         commit_id: str,
         *,
         admission: SelectedAdmissionIdentity | None = None,
+        state_type: type[LinkedSummary] = LinkedSummary,
     ) -> SelectedSummaryAdmission | None:
         """Settle only a reserved attempt after its exact native commit is durable.
 
@@ -853,7 +875,9 @@ class CompactionJournal:
         only after the native journal committed.
         An UNKNOWN provider attempt cannot be automatically linked or retried.
         """
-        target = LinkedSummary(commit_id)
+        target = state_type(commit_id)
+        if admission is not None and not target.original_eligible:
+            raise CompactionJournalError("Manual compaction cannot admit an original input")
         with self._transaction() as db:
             row = db.execute(
                 "SELECT session_file, status, source_json, commit_id, decline_reason "
