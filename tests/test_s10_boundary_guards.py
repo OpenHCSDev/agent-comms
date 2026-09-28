@@ -49,6 +49,7 @@ def test_s10_native_lifetime_is_owned_by_a12_without_retired_guardian():
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 assert node.name not in {
+                    "from_journal",
                     "exchange_fake_rpc",
                     "_run_fake",
                     "arm_selected_child",
