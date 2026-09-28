@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
@@ -122,9 +123,12 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
 ):
     comms = inbox_comms
     monkeypatch.setenv("PI_AGENT_ID", "b")
-    goal = comms.goals.update_goal("b", SetGoalAction(text="Wait for a after reviewing its replies"))
+    goal = comms.goals.update_goal(
+        "b", SetGoalAction(text="Wait for a after reviewing its replies")
+    )
     messages = [
-        comms.messaging.send_message("a", "b", body) for body in (large_body, "Previously reviewed reply")
+        comms.messaging.send_message("a", "b", body)
+        for body in (large_body, "Previously reviewed reply")
     ]
     dispositions = InputDispositions(comms.root / InputDispositions.filename)
     for message in messages:
@@ -176,7 +180,9 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
     full_review = json.loads(Path(result["result_file"]).read_text())["standby_review"]
     assert full_review == review
     assert full_review["messages"][0]["text"] == messages[0].body
-    comms.registry.register(replace(comms.registry.require("a"), pid=os.getpid()))
+    comms.registry.register(
+        replace(comms.registry.require("a"), process_identity=ProcessIdentity.capture(os.getpid()))
+    )
     comms.agents.begin_turn("a", "next-a-result-in-flight")
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": full_review["reviewed_inputs"]})
     assert comms.goals.goal_wait("b") is not None
@@ -218,7 +224,9 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     monkeypatch.setenv("PI_AGENT_ID", "b")
     # The reviewed standby liveness gate refuses a declared dependency with
     # no active turn. Give "a" a live in-process turn for this fixture only.
-    comms.threads.register(replace(comms.registry.require("a"), pid=os.getpid()))
+    comms.threads.register(
+        replace(comms.registry.require("a"), process_identity=ProcessIdentity.capture(os.getpid()))
+    )
     comms.agents.begin_turn("a", "a-review-in-flight")
     goal = comms.goals.update_goal("b", SetGoalAction(text="Review a and wait for its next reply"))
     dispositions = InputDispositions(comms.root / InputDispositions.filename)
@@ -311,7 +319,11 @@ async def test_pending_dependency_becomes_reviewable_after_owner_admission(tmp_p
     owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     await owner.new_session(str(tmp_path / "b"))
-    comms.threads.register(Thread("a", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "a", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
+        )
+    )
     comms.agents.begin_turn("a", "a-admission-in-flight")
     goal = comms.goals.update_goal(
         "b",

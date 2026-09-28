@@ -11,6 +11,7 @@ from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
 from agent_comms.activity import ActivityState
 from agent_comms.agent_loop import ParticipantEventConsumer
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.pending_requests import PendingRequests
 from agent_comms.threads import Thread
@@ -82,7 +83,14 @@ class ContextWarning(events.ActivityEvent):
 
 
 async def test_new_activity_declaration_reaches_both_real_consumers(comms, tmp_path, monkeypatch):
-    comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            name="bot",
+            tags=frozenset(),
+            worktree=str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     participant = ParticipantEventConsumer(comms, "bot", "task")
     await participant.dispatch(ContextWarning("context warning"))
     assert comms.agents.activity_of("bot").detail == "context warning"
@@ -92,7 +100,9 @@ async def test_new_activity_declaration_reaches_both_real_consumers(comms, tmp_p
 
     async def stream(*args, **kwargs):
         yield ContextWarning("context warning")
-        observed.append(comms.agents.activity_of(owner.sessions.bindings[session.session_id]).detail)
+        observed.append(
+            comms.agents.activity_of(owner.sessions.bindings[session.session_id]).detail
+        )
         yield events.Done("done", True)
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", stream)
@@ -129,7 +139,14 @@ async def test_request_correlation_separates_families_and_ignores_late_results()
 async def test_settle_turn_releases_fence_after_publication_even_on_error(
     comms, tmp_path, monkeypatch, publication_fails
 ):
-    comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            name="bot",
+            tags=frozenset(),
+            worktree=str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     owner = CommsAgent(comms, agent_bin="unused")
     lease = comms.agents.begin_turn("bot", "turn")
     owner.turns.active_turns["session"] = "turn"
@@ -148,7 +165,7 @@ async def test_settle_turn_releases_fence_after_publication_even_on_error(
         effects.append("release")
 
     monkeypatch.setattr(owner, "_emit_event", emit)
-    monkeypatch.setattr(comms.goals, 'release_waits_after_terminal_turn', release)
+    monkeypatch.setattr(comms.goals, "release_waits_after_terminal_turn", release)
     if publication_fails:
         with pytest.raises(RuntimeError, match="client closed"):
             await owner.turns.settle_turn("session", "bot", "turn", lease)
@@ -160,12 +177,19 @@ async def test_settle_turn_releases_fence_after_publication_even_on_error(
 async def test_stream_settlement_defers_waiters_and_preserves_replacement_turn(
     comms, tmp_path, monkeypatch
 ):
-    comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            name="bot",
+            tags=frozenset(),
+            worktree=str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     owner = CommsAgent(comms, agent_bin="unused")
     lease = comms.agents.begin_turn("bot", "turn")
     owner.turns.active_turns["session"] = "turn"
     released = []
-    monkeypatch.setattr(comms.goals, 'release_waits_after_terminal_turn', released.append)
+    monkeypatch.setattr(comms.goals, "release_waits_after_terminal_turn", released.append)
     fence = owner.turns.finish_turn_stream("session", "bot", "turn", lease)
     assert released == []
     owner.turns.active_turns["session"] = "replacement"

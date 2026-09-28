@@ -9,6 +9,7 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.goal_actions import (
     EditGoalAction,
@@ -24,7 +25,11 @@ from agent_comms.threads import Thread
 
 
 def _thread(comms, name, worktree):
-    comms.threads.register(Thread(name, frozenset(), str(worktree), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            name, frozenset(), str(worktree), process_identity=ProcessIdentity.capture(os.getpid())
+        )
+    )
 
 
 def _begin(comms, name, turn_id):

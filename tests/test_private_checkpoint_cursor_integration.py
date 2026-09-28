@@ -14,6 +14,7 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
@@ -41,15 +42,25 @@ def _root(tmp_path: Path):
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     people = [
-        Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()),
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ),
         Thread(
             "alpha",
             frozenset({"team"}),
             str(tmp_path),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             model="openai-codex/gpt-6-sol",
         ),
-        Thread("other", frozenset(), str(tmp_path), pid=os.getpid()),
+        Thread(
+            "other",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ),
     ]
     for person in people:
         comms.threads.register(person)
@@ -81,8 +92,12 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(
     ).run()
     assert first_turn is not None and first_turn.cursor_status == "proven"
     for number in range(1000):
-        comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number:04}-" + "x" * 8700)
-    second = comms.messaging.send_initial_cohort("sender", "#team", "selected after 1000 other rows")
+        comms.messaging.send_initial_cohort(
+            "sender", "other", f"unrelated-{number:04}-" + "x" * 8700
+        )
+    second = comms.messaging.send_initial_cohort(
+        "sender", "#team", "selected after 1000 other rows"
+    )
     assert second.seq == first.seq + 1001 and comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
     if migrate_existing:
         # Build the large fixture through the real certified publisher, then

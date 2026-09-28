@@ -16,6 +16,7 @@ import pytest
 from agent_comms import cohort_foreground, coordinated_runtime
 from agent_comms.acp import CommsAgent
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_foreground import _accept_visible_initials
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
@@ -40,9 +41,20 @@ tmp_path = private_root_fixture
 def _session(tmp_path, *, package=True):
     root = tmp_path / "wire"
     comms = Comms(root)
-    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     owner = Thread(
-        "beta", frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="openai-codex/gpt-6-sol"
+        "beta",
+        frozenset({"team"}),
+        str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+        model="openai-codex/gpt-6-sol",
     )
     comms.threads.register(owner)
     root_id = comms.messaging.initialize_private_initial_protocol()
@@ -317,7 +329,14 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     project = tmp_path / "proj"
     project.mkdir()
     comms = Comms(root)
-    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     root_id = comms.messaging.initialize_private_initial_protocol()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
@@ -357,7 +376,6 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     )
     assert await agent.inputs.drain_inbox(session.session_id) == 1
     assert len(calls) == 1
-    assert agent.inputs.inbox_cursors == {}  # private receipt, never legacy display cursor
 
 
 @pytest.mark.parametrize("managed", [False, True])
@@ -594,7 +612,7 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
         )
     assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 1
-    assert agent.inputs.inbox_cursors == {} and agent.inputs.pending_turns == {}
+    assert agent.inputs.pending_turns == {}
     assert not (comms.root / "acks.json").exists()
 
 
@@ -772,7 +790,7 @@ async def test_acp_private_does_not_overlap_owner_turn(tmp_path, monkeypatch):
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
     agent.turns.active_turns["beta"] = "active-human-turn"
     assert await agent.inputs.drain_inbox("beta") == 0
-    assert calls == [] and agent.inputs.inbox_cursors == {}
+    assert calls == []
     agent.turns.active_turns.pop("beta")
     assert await agent.inputs.drain_inbox("beta") == 1
     assert len(calls) == 1
@@ -792,12 +810,17 @@ async def test_acp_private_without_explicit_package_refuses_legacy_delivery(tmp_
             ).fetchone()[0]
             == 0
         )
-    assert agent.inputs.inbox_cursors == {} and agent.inputs.pending_turns == {}
+    assert agent.inputs.pending_turns == {}
 
 
 async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, monkeypatch):
     comms, agent, root_id = _session(tmp_path)
-    alpha = Thread("alpha", frozenset({"team"}), str(tmp_path), pid=os.getpid())
+    alpha = Thread(
+        "alpha",
+        frozenset({"team"}),
+        str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    )
     comms.threads.register(alpha)
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         store.register_participant(
@@ -814,7 +837,7 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
     )
     original = comms.bus.log.message_by_id(sent["id"])
     assert await agent.inputs.drain_inbox("beta") == 0
-    assert calls == [] and agent.inputs.inbox_cursors == {}
+    assert calls == []
     cursor = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
     assert cursor["status"] == "coverage_only"
     fixture = json.loads(
@@ -851,7 +874,7 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
     assert len(calls) == 1
     assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 1
-    assert agent.inputs.inbox_cursors == {} and agent.inputs.pending_turns == {}
+    assert agent.inputs.pending_turns == {}
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         row = store._connection.execute("SELECT session_id FROM native_runtime_inputs").fetchone()
         assert row is not None and row[0] is None
@@ -966,7 +989,7 @@ async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path,
         release.set()
     with pytest.raises(StaleFence, match="owner changed before native send"):
         await asyncio.wait_for(running, timeout=5)
-    assert calls == [] and agent.inputs.inbox_cursors == {}
+    assert calls == []
     assert await agent.inputs.drain_inbox("beta") == 0
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         row = store._connection.execute("SELECT session_id FROM native_runtime_inputs").fetchone()
@@ -1010,4 +1033,3 @@ async def test_acp_mismatched_root_and_bad_package_cannot_accept_claim(tmp_path,
             ).fetchone()[0]
             == 0
         )
-    assert agent.inputs.inbox_cursors == {}

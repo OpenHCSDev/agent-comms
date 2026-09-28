@@ -12,6 +12,7 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_generation import CompletedGeneration
@@ -189,7 +190,14 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             project = root / "parent"
             project.mkdir()
             await agent.new_session(str(project))
-            comms.threads.register(Thread("child", frozenset(), str(project), pid=os.getpid()))
+            comms.threads.register(
+                Thread(
+                    "child",
+                    frozenset(),
+                    str(project),
+                    process_identity=ProcessIdentity.capture(os.getpid()),
+                )
+            )
             comms.agents.begin_turn("child", "child-report-in-flight")
             goal = comms.goals.update_goal(
                 "parent",

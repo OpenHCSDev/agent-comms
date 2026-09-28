@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import (
@@ -43,7 +44,7 @@ def _fresh(tmp_path: Path, *, recipients: int = 1) -> tuple[Comms, WakeCandidate
             "sender",
             frozenset({"writer"}),
             str(tmp_path),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             created_at=1_700_010_000.0,
         )
     )
@@ -53,7 +54,7 @@ def _fresh(tmp_path: Path, *, recipients: int = 1) -> tuple[Comms, WakeCandidate
                 f"member{number:03}",
                 frozenset({"cohort"}),
                 str(tmp_path),
-                pid=os.getpid(),
+                process_identity=ProcessIdentity.capture(os.getpid()),
                 created_at=1_700_010_100.0 + number,
             )
         )
@@ -201,7 +202,9 @@ def test_bounded_101_initials_and_150_frozen_recipients(tmp_path: Path) -> None:
     send_times: list[float] = []
     for number in range(101):
         start = time.perf_counter()
-        message = comms.messaging.send_initial_cohort("sender", "#cohort", f"@member000 benchmark {number}")
+        message = comms.messaging.send_initial_cohort(
+            "sender", "#cohort", f"@member000 benchmark {number}"
+        )
         send_times.append(time.perf_counter() - start)
     hint = index.notify_committed_append(root_id=root_id, through_seq=message.seq)
     rounds = 0

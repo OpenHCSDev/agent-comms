@@ -12,6 +12,7 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
@@ -38,10 +39,25 @@ def _fresh(tmp_path: Path, count: int = 2):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     for n in range(count):
         name = "alpha" if n == 0 else f"other{n:03}"
-        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="fake/fake"))
+        comms.threads.register(
+            Thread(
+                name,
+                frozenset({"team"}),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+                model="fake/fake",
+            )
+        )
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.messaging.initialize_private_claim_protocol()
     install_private_bus_checkpoint(comms.bus.log)  # Strictly fresh-root opt-in.

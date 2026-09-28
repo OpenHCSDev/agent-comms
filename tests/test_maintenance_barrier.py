@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.backend import _maintenance_send_boundary, stream_agent_events
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.maintenance_barrier import MaintenanceBarrier
@@ -74,7 +75,14 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     comms = Comms(tmp_path / "wire")
     gate = comms.owners.maintenance
     assert gate.read() is None
-    comms.threads.register(Thread(name="owner", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            name="owner",
+            tags=frozenset(),
+            worktree=str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     assert comms.agents.begin_turn("owner", "before")
     comms.agents.finish_turn(comms.registry.require("owner").turn_lease)
     control = FixtureMaintenanceControl(gate)
@@ -159,7 +167,14 @@ def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp_path:
     proc = mp.Process(target=_claim_other_process, args=(str(comms.registry.store.path), ready, q))
     proc.start()
     assert proc.pid is not None
-    comms.threads.register(Thread(name="owner", tags=frozenset(), worktree=str(tmp_path), pid=proc.pid))
+    comms.threads.register(
+        Thread(
+            name="owner",
+            tags=frozenset(),
+            worktree=str(tmp_path),
+            process_identity=ProcessIdentity.capture(proc.pid),
+        )
+    )
     receipt = FixtureMaintenanceControl(comms.owners.maintenance).begin("operator")
     ready.set()
     proc.join(10)
@@ -204,7 +219,12 @@ def test_unknown_parent_fsync_does_not_reopen_admission(
 
 def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path) -> None:
     comms = Comms(tmp_path / "wire")
-    owner = Thread(name="owner", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid())
+    owner = Thread(
+        name="owner",
+        tags=frozenset(),
+        worktree=str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    )
     comms.threads.register(owner)
     comms.registry.rename("owner", "renamed")
     comms.registry.unregister("renamed")
@@ -224,7 +244,14 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
     child = mp.Process(target=_claim_other_process, args=(str(comms.registry.store.path), ready, q))
     child.start()
     assert child.pid is not None
-    comms.threads.register(Thread(name="owner", tags=frozenset(), worktree=str(tmp_path), pid=child.pid))
+    comms.threads.register(
+        Thread(
+            name="owner",
+            tags=frozenset(),
+            worktree=str(tmp_path),
+            process_identity=ProcessIdentity.capture(child.pid),
+        )
+    )
     ready.set()
     receipt = FixtureMaintenanceControl(comms.owners.maintenance).begin("operator")
     child.join(10)
