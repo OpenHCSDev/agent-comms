@@ -1,0 +1,148 @@
+...F........F.......................                                     [100%]
+=================================== FAILURES ===================================
+______ test_cancelled_retirement_keeps_marker_and_reaps_before_next_input ______
+
+saved = (PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/stack/bin/pi-native'), PosixPath('/home/ts/wt/comms-refactor2-s9-2...sessions/2026-09-28T15-12-55-982Z_01a0e893-80ad-7583-877f-4768f3f144d9.jsonl'), '01a0e893-80ad-7583-877f-4768f3f144d9')
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-12/test_cancelled_retirement_keep0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa414d71480>
+
+    @pytest.mark.asyncio
+    async def test_cancelled_retirement_keeps_marker_and_reaps_before_next_input(
+        saved, tmp_path, monkeypatch
+    ):
+        launcher, file, identity = saved
+        child = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-u",
+            "-c",
+            "import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);"
+            "print('ready',flush=True);time.sleep(30)",
+            start_new_session=True,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        persistent = backend.PersistentPiSession()
+        try:
+            assert child.stdout is not None
+            assert await asyncio.wait_for(child.stdout.readline(), 2) == b"ready\n"
+            persistent.proc = child
+            persistent.session_file = str(file)
+            persistent.session_id = identity
+            retiring = asyncio.create_task(persistent.discard_for_external_write(str(file)))
+            deadline = asyncio.get_running_loop().time() + 2
+            while child.stdin is not None and not child.stdin.is_closing():
+>               assert asyncio.get_running_loop().time() < deadline
+E               assert 84017.195482265 < 84017.194190433
+E                +  where 84017.195482265 = time()
+E                +    where time = <_UnixSelectorEventLoop running=True closed=False debug=False>.time
+E                +      where <_UnixSelectorEventLoop running=True closed=False debug=False> = <built-in function get_running_loop>()
+E                +        where <built-in function get_running_loop> = asyncio.get_running_loop
+
+tests/test_native_session_reopen.py:79: AssertionError
+_____ test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt ______
+
+saved = (PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/stack/bin/pi-native'), PosixPath('/home/ts/wt/comms-refactor2-s9-2...sessions/2026-09-28T15-13-07-630Z_01a0e893-ae2e-777c-827c-1352a09de7f3.jsonl'), '01a0e893-ae2e-777c-827c-1352a09de7f3')
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-12/test_discarded_manager_recheck0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa414be7750>
+
+    @pytest.mark.asyncio
+    async def test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt(
+        saved, tmp_path, monkeypatch
+    ):
+        launcher, file, identity = saved
+        original = native_session_reopen.validate_native_reopen
+        checks = []
+    
+        def checked(_stub, session, *, expected_session_id):
+            checks.append((session, expected_session_id))
+            return original(str(launcher), session, expected_session_id=expected_session_id)
+    
+        monkeypatch.setattr(native_session_reopen, "validate_native_reopen", checked)
+        marker = tmp_path / "provider-prompt-sent"
+        state_identity = tmp_path / "rpc-identity"
+        state_identity.write_text("wrong-session")
+        stub = tmp_path / "pi-stub"
+        stub.write_text(
+            f"#!{sys.executable}\n"
+            "import json,sys,select\n"
+            f"from pathlib import Path\n"
+            "state=json.loads(sys.stdin.readline())\n"
+            f"identity=Path({str(state_identity)!r}).read_text()\n"
+            "print(json.dumps({'type':'response','command':'get_state','id':state['id'],"
+            "'success':True,'data':{'nativeInputProofCapability':"
+            f"{backend.NATIVE_INPUT_CAPABILITY!r},'sessionId':identity,"
+            f"'sessionFile':{str(file)!r}}}}}),flush=True)\n"
+            "if select.select([sys.stdin],[],[],0.1)[0]:\n"
+            f"    Path({str(marker)!r}).write_text(sys.stdin.readline())\n"
+        )
+        stub.chmod(0o700)
+        persistent = backend.PersistentPiSession()
+        await persistent.discard_for_external_write(str(file))
+        assert persistent.proc is None and persistent.reopen_required == str(file)
+        first = [
+            event
+            async for event in backend.stream_agent_events(
+                str(stub),
+                [],
+                "never send",
+                str(tmp_path),
+                session_file=str(file),
+                persistent_session=persistent,
+            )
+        ]
+        assert first[-1].ok is False and not marker.exists()
+        assert persistent.reopen_required == str(file)
+        assert checks == [(str(file), None)]
+        state_identity.write_text(identity)
+    
+        @contextmanager
+        def refuse(_public, _native, _text):
+            yield False
+    
+        second = [
+            event
+            async for event in backend.stream_agent_events(
+                str(stub),
+                [],
+                "still no provider",
+                str(tmp_path),
+                session_file=str(file),
+                persistent_session=persistent,
+                send_boundary=refuse,
+            )
+        ]
+        assert second[-1].ok is False and not marker.exists()
+        assert checks == [(str(file), None), (str(file), None)]
+        assert persistent.reopen_required == str(file), "Only a settled validated turn clears it"
+        before = file.read_bytes()
+        file.write_bytes(before.rstrip(b"\n"))
+        called = []
+    
+        async def no_spawn(*args, **kwargs):
+            called.append(args)
+            raise AssertionError("Invalid saved disk must not launch Pi")
+    
+        monkeypatch.setattr(backend.asyncio, "create_subprocess_exec", no_spawn)
+        third = [
+            event
+            async for event in backend.stream_agent_events(
+                str(stub),
+                [],
+                "do not retry",
+                str(tmp_path),
+                session_file=str(file),
+                persistent_session=persistent,
+            )
+        ]
+>       assert third[-1].reason_code == "compaction_reopen_invalid"
+E       AssertionError: assert 'pi_invalid_rpc_event' == 'compaction_reopen_invalid'
+E         
+E         - compaction_reopen_invalid
+E         + pi_invalid_rpc_event
+
+tests/test_native_session_reopen.py:318: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_native_session_reopen.py::test_cancelled_retirement_keeps_marker_and_reaps_before_next_input
+FAILED tests/test_native_session_reopen.py::test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt
+2 failed, 34 passed in 22.46s

@@ -1,0 +1,131 @@
+SIM117 Use a single `with` statement with multiple contexts instead of nested `with` statements
+  --> evidence/s9/saved_journal_check.py:15:5
+   |
+13 |       source, candidate = (Path(value).absolute() for value in sys.argv[1:])
+14 |       assert not candidate.exists()
+15 | /     with closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as old:
+16 | |         with closing(sqlite3.connect(candidate)) as copy:
+   | |_________________________________________________________^
+17 |               old.backup(copy)
+   |
+help: Combine `with` statements
+
+E501 Line too long (122 > 100)
+   --> src/agent_comms/compaction_journal.py:369:101
+    |
+367 |             rows = CompactionOperation.select(
+368 |                 db,
+369 |                 where=f"session_file=? AND json_extract(state, '$.kind') IN {sql_names(OperationState, unresolved=True)}",
+    |                                                                                                     ^^^^^^^^^^^^^^^^^^^^^^
+370 |                 parameters=(canonical,),
+371 |             )
+    |
+
+E501 Line too long (134 > 100)
+   --> src/agent_comms/compaction_journal.py:568:101
+    |
+566 |                 if CompactionOperation.select(
+567 |                     db,
+568 |                     where=f"session_file=? AND json_extract(state, '$.kind') IN {sql_names(OperationState, unresolved=True)} LIMIT 1",
+    |                                                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+569 |                     parameters=(canonical,),
+570 |                 ):
+    |
+
+E501 Line too long (120 > 100)
+   --> src/agent_comms/compaction_journal.py:605:101
+    |
+603 |             rows = SelectedSummaryAttempt.select(
+604 |                 db,
+605 |                 where=f"session_file=? AND json_extract(state, '$.kind') IN {sql_names(SummaryState, unresolved=True)}",
+    |                                                                                                     ^^^^^^^^^^^^^^^^^^^^
+606 |                 parameters=(canonical,),
+607 |             )
+    |
+
+E501 Line too long (134 > 100)
+   --> src/agent_comms/compaction_journal.py:656:101
+    |
+654 |                 if CompactionOperation.select(
+655 |                     db,
+656 |                     where=f"session_file=? AND json_extract(state, '$.kind') IN {sql_names(OperationState, unresolved=True)} LIMIT 1",
+    |                                                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+657 |                     parameters=(canonical,),
+658 |                 ) or self._blocking_selected_summary(db, canonical, inputs):
+    |
+
+E501 Line too long (130 > 100)
+   --> src/agent_comms/compaction_journal.py:691:101
+    |
+689 |             if CompactionOperation.select(
+690 |                 db,
+691 |                 where=f"session_file=? AND json_extract(state, '$.kind') IN {sql_names(OperationState, unresolved=True)} LIMIT 1",
+    |                                                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+692 |                 parameters=(canonical,),
+693 |             ) or self._blocking_selected_summary(db, canonical, inputs):
+    |
+
+SIM102 Use a single `if` statement instead of nested `if` statements
+  --> tests/round2/test_s9_guards.py:43:13
+   |
+41 |                   if any(name == "subprocess" for name in names):
+42 |                       violations.append((path.name, node.lineno, "local process import"))
+43 | /             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+44 | |                 if node.func.attr in {
+45 | |                     "kill",
+46 | |                     "killpg",
+47 | |                     "Popen",
+48 | |                     "create_subprocess_exec",
+49 | |                     "create_subprocess_shell",
+50 | |                 }:
+   | |__________________^
+51 |                       violations.append((path.name, node.lineno, "local process control"))
+52 |               if (
+   |
+help: Combine `if` statements using `and`
+
+E501 Line too long (155 > 100)
+   --> tests/test_compaction_journal.py:126:101
+    |
+124 | …
+125 | …
+126 | …id='a'*32, inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read())
+    |                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+127 | …
+128 | …
+    |
+
+E501 Line too long (115 > 100)
+   --> tests/test_owner_compaction_commit.py:548:101
+    |
+546 | root = Path(sys.argv[1])
+547 | mutation = sys.argv[2]
+548 | lock_name = {'bus': 'bus.jsonl', 'input': 'input_dispositions.json', 'send': 'wire'}.get(mutation, 'registry.json')
+    |                                                                                                     ^^^^^^^^^^^^^^^
+549 | with (root / ('.' + lock_name + '.lock')).open('ab') as lock:
+550 |     try:
+    |
+
+E501 Line too long (168 > 100)
+   --> tests/test_owner_compaction_commit.py:557:101
+    |
+555 | …)
+556 | …
+557 | …:late', seq=None, owner='owner', admission=int(sys.argv[3]), target='owner', text='late correction')
+    |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+558 | …
+559 | …
+    |
+
+E501 Line too long (155 > 100)
+   --> tests/test_owner_compaction_commit.py:568:101
+    |
+566 | …-goal')))
+567 | …
+568 | …lish(Message(sender='owner', target='broadcast', body='late message', type=MessageType.INFO))
+    |                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+569 | …
+570 | … message')
+    |
+
+Found 11 errors.
