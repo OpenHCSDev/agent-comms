@@ -40,6 +40,7 @@ from acp.schema import (
     TextContentBlock,
 )
 
+from .acp_extension import TextRouteUpdate, encode_updates
 from . import agent_events as events
 from . import manual_compaction_bridge
 from .agent_event_updates import AcpEventConsumer
@@ -718,7 +719,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=text),
-                field_meta={"agentComms": {"route": asdict(route) if route else None}},
+                field_meta=encode_updates(TextRouteUpdate(route)),
             ),
         )
 

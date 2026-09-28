@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import asyncio
 from abc import abstractmethod
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Any
 
 from acp.schema import AgentMessageChunk, TextContentBlock, UserMessageChunk
 
+from .acp_extension import TextRouteUpdate, TurnStartedUpdate, encode_updates
 from .comms import Comms
 from .declared_family import DeclaredFamily
 from .routing import MessageRoute
@@ -60,9 +61,7 @@ class AgentTextTranscriptUpdate(TranscriptUpdate):
                 update=AgentMessageChunk(
                     session_update="agent_message_chunk",
                     content=TextContentBlock(type="text", text=self.text),
-                    field_meta={
-                        "agentComms": {"route": asdict(self.route) if self.route else None}
-                    },
+                    field_meta=encode_updates(TextRouteUpdate(self.route)),
                 ),
             )
 
@@ -75,21 +74,18 @@ class StartedTranscriptUpdate(TranscriptUpdate):
     activity_detail: str | None = None
 
     async def publish(self, session_id: str, client: Any) -> None:
-        lifecycle = {
-            "turnStarted": True,
-            "turnId": self.turn_id,
-            **({"startedAt": self.started_at} if self.started_at is not None else {}),
-            **({"activity": self.activity} if self.activity is not None else {}),
-            **(
-                {"activityDetail": self.activity_detail} if self.activity_detail is not None else {}
-            ),
-        }
+        if self.turn_id is None:
+            return
         await client.session_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta={"agentComms": lifecycle},
+                field_meta=encode_updates(
+                    TurnStartedUpdate(
+                        self.turn_id, self.started_at, self.activity, self.activity_detail
+                    )
+                ),
             ),
         )
 
