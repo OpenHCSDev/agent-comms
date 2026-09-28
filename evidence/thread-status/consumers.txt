@@ -1,0 +1,73 @@
+........................................................................ [ 48%]
+...................................F..........F......................... [ 96%]
+......                                                                   [100%]
+=================================== FAILURES ===================================
+___________ test_real_stopped_owner_starts_through_shared_agent_tool ___________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-thread-status-20260928/.artifacts/thread-status/consumers/test_real_stopped_owner_starts0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f827eefc670>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner fixture")
+    async def test_real_stopped_owner_starts_through_shared_agent_tool(tmp_path, monkeypatch):
+        from agent_comms.runtime import socket_path
+    
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/bin/echo")
+        source = tmp_path / "saved.jsonl"
+        source.touch()
+        comms = wire(tmp_path / "wire")
+        comms.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(source)))
+        comms.registry.unregister("worker")
+        try:
+            result = await asyncio.to_thread(invoke_tool, comms, "comms_start", {"name": "worker"})
+            async with asyncio.timeout(10):
+                while not socket_path(comms.root, result["pid"]).exists():
+>                   assert comms._process_alive(result["pid"])
+E                   assert False
+E                    +  where False = <function Comms._process_alive at 0x7f827faee560>(2509910)
+E                    +    where <function Comms._process_alive at 0x7f827faee560> = <agent_comms.operations.Comms object at 0x7f827eed2cf0>._process_alive
+
+tests/test_start.py:115: AssertionError
+___________ test_real_idle_owner_is_replaced_without_losing_session ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-thread-status-20260928/.artifacts/thread-status/consumers/test_real_idle_owner_is_replac0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f827d45fc40>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner process fixture")
+    async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monkeypatch):
+        from agent_comms.runtime import socket_path
+    
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        session = tmp_path / "session.jsonl"
+        session.write_text("")
+        comms = wire(tmp_path / "wire")
+        comms.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
+        owner = comms.ensure_owner("worker", agent_bin="/bin/echo")
+    
+        async def ready(pid):
+            async with asyncio.timeout(10):
+                while not socket_path(comms.root, pid).exists():
+                    assert comms._process_alive(pid)
+                    await asyncio.sleep(0.05)
+    
+        try:
+>           await ready(owner.pid)
+
+tests/test_restart.py:232: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pid = 2510011
+
+    async def ready(pid):
+        async with asyncio.timeout(10):
+            while not socket_path(comms.root, pid).exists():
+>               assert comms._process_alive(pid)
+E               assert False
+E                +  where False = <function Comms._process_alive at 0x7f827faee560>(2510011)
+E                +    where <function Comms._process_alive at 0x7f827faee560> = <agent_comms.operations.Comms object at 0x7f827d4ab150>._process_alive
+
+tests/test_restart.py:228: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_start.py::test_real_stopped_owner_starts_through_shared_agent_tool
+FAILED tests/test_restart.py::test_real_idle_owner_is_replaced_without_losing_session
+2 failed, 148 passed in 12.90s

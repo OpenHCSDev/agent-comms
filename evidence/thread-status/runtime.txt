@@ -1,0 +1,151 @@
+.........F.............................................................. [ 30%]
+........................................................................ [ 60%]
+........................................................................ [ 90%]
+......................F.                                                 [100%]
+=================================== FAILURES ===================================
+____ test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate ____
+
+predicate = <function test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate.<locals>.<lambda> at 0x7f8c23bda820>
+timeout = 10
+
+    async def until(predicate, timeout=10):
+        async with asyncio.timeout(timeout):
+            while not predicate():
+>               await asyncio.sleep(0.05)
+
+tests/test_runtime.py:48: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+delay = 0.05, result = None
+
+    async def sleep(delay, result=None):
+        """Coroutine that completes after a given time (in seconds)."""
+        if delay <= 0:
+            await __sleep0()
+            return result
+    
+        if math.isnan(delay):
+            raise ValueError("Invalid delay: NaN (not a number)")
+    
+        loop = events.get_running_loop()
+        future = loop.create_future()
+        h = loop.call_later(delay,
+                            futures._set_result_unless_cancelled,
+                            future, result)
+        try:
+>           return await future
+                   ^^^^^^^^^^^^
+E           asyncio.exceptions.CancelledError
+
+/usr/lib/python3.14/asyncio/tasks.py:704: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-thread-status-20260928/.artifacts/thread-status/runtime/test_fork_owner_survives_turn_0')
+
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime and /bin/echo backend")
+    async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "parent.jsonl"
+        session.write_text("")
+        comms.register(
+            Thread(name="parent", tags=frozenset(), worktree=str(tmp_path), session_file=str(session))
+        )
+        comms.send("parent", "#all", "old broadcast must not be delivered")
+        child = comms.fork(
+            ForkSpec(name="child", parent="parent", task="initial turn"), pi_bin="/bin/echo"
+        )
+        first, second = CommsAgent(comms), CommsAgent(comms)
+        first_updates, second_updates = [], []
+    
+        class Client:
+            def __init__(self, updates):
+                self.updates = updates
+    
+            async def session_update(self, session_id, update):
+                self.updates.append(
+                    update
+                    if isinstance(update, dict)
+                    else update.model_dump(by_alias=True, exclude_none=True)
+                )
+    
+        first.on_connect(Client(first_updates))
+        second.on_connect(Client(second_updates))
+        try:
+>           await until(lambda: socket_path(comms.root, child.pid).exists())
+
+tests/test_runtime.py:461: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_runtime.py:46: in until
+    async with asyncio.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f8c247300c0>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+/usr/lib/python3.14/asyncio/timeouts.py:115: TimeoutError
+_____ test_source_recheck_retains_shared_store_lock_through_exact_bus_read _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-thread-status-20260928/.artifacts/thread-status/runtime/test_source_recheck_retains_sh0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f8c25a6b700>
+
+    async def test_source_recheck_retains_shared_store_lock_through_exact_bus_read(
+        tmp_path, monkeypatch
+    ):
+        from contextlib import contextmanager
+    
+        from agent_comms import locked_store
+        from agent_comms.declarations import _store_lock
+    
+        comms, agent, owner = await _agent(tmp_path, monkeypatch)
+        try:
+            comms.send("speaker", "#comms", "Exact source")
+            await agent.inputs.drain_inbox(owner)
+            current = comms.registry.require(owner)
+            snapshot = comms.registry.snapshot()
+            channels = comms.channel_catalog.targets_for(current.tags)
+            awareness = agent.inputs.passive_awareness
+            modes = []
+    
+            @contextmanager
+            def observed(path, *, shared=False):
+                with _store_lock(path, shared=shared):
+                    modes.append(shared)
+                    yield
+    
+            monkeypatch.setattr(locked_store, "_store_lock", observed)
+>           assert "Exact source" in awareness.frame(current, snapshot, channels)
+E           AssertionError: assert 'Exact source' in ''
+E            +  where '' = frame(Thread(name='owner', tags=frozenset({'acp', 'comms'}), worktree='/home/ts/wt/comms-refactor-thread-status-20260928/.ar...ctive_turn=None, last_goal_report_turn=None, channel_scope_generation=1, turn_generation=0, last_finished_turn_id=None), RegistrySnapshot(threads={'owner': Thread(name='owner', tags=frozenset({'acp', 'comms'}), worktree='/home/ts/wt/comms-...1.8807468}, aliases={}, owner_generations={'owner': 1, 'speaker': 2}, admission_generations={'owner': 1, 'speaker': 2}), frozenset({'#acp', '#all', '#any', '#comms', 'broadcast'}))
+E            +    where frame = <agent_comms.passive_channel_awareness.PassiveChannelAwareness object at 0x7f8c23a5fdd0>.frame
+
+tests/test_passive_channel_awareness.py:535: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_runtime.py::test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
+FAILED tests/test_passive_channel_awareness.py::test_source_recheck_retains_shared_store_lock_through_exact_bus_read
+2 failed, 238 passed in 58.47s

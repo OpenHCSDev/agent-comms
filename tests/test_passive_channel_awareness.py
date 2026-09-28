@@ -12,7 +12,7 @@ from agent_comms import agent_events as ae
 from agent_comms import passive_channel_awareness as passive_store
 from agent_comms.acp import CommsAgent
 from agent_comms.bus_page_index import BusPageIndex
-from agent_comms.declarations import ThreadStatus
+from agent_comms.thread_status import RunningThreadStatus
 
 
 def _sender(comms, tmp_path):
@@ -430,8 +430,8 @@ async def test_scope_removed_then_restored_outside_api_still_invalidates_old_sou
         await agent.turns.run_agent_turn(owner, owner, "Capture prior scope")
         assert "old scoped update" in captured[-1]
         saved = comms.registry.require(owner)
-        comms.registry.register(replace(saved, tags=frozenset({"acp"})), ThreadStatus.RUNNING)
-        comms.registry.register(replace(saved, tags=saved.tags), ThreadStatus.RUNNING)
+        comms.registry.register(replace(saved, tags=frozenset({"acp"})), RunningThreadStatus())
+        comms.registry.register(replace(saved, tags=saved.tags), RunningThreadStatus())
         await agent.turns.run_agent_turn(owner, owner, "Restored-tag natural turn")
         assert "passive channel awareness" not in captured[-1]
         assert (

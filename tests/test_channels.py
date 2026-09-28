@@ -16,7 +16,6 @@ from agent_comms import (
     SavedView,
     Thread,
     ThreadSort,
-    ThreadStatus,
     ThreadView,
     ViewKind,
     ViewMatch,
@@ -24,6 +23,7 @@ from agent_comms import (
     invoke_tool,
     wire,
 )
+from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
 
 
 def setup_wire(path):
@@ -401,7 +401,7 @@ def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatc
     assert "a" not in next(
         view.members for view in comms.channel_views() if view.channel.name == "#any"
     )
-    assert comms.registry.status("a") is ThreadStatus.ARCHIVED
+    assert comms.registry.status("a") == ArchivedThreadStatus()
 
 
 def test_pending_cache_observes_external_changes_without_rescanning(tmp_path):
@@ -445,10 +445,10 @@ def test_invalid_filters_and_reserved_channels(tmp_path):
 def test_thread_presentation_owns_lifecycle_precedence(tmp_path):
     thread = Thread("worker", frozenset(), str(tmp_path))
     working = Activity("worker", ActivityState.WORKING, "Running tests")
-    view = ThreadView(thread, ThreadStatus.RUNNING, working, None, 0)
+    view = ThreadView(thread, RunningThreadStatus(), working, None, 0)
     assert view.presentation.busy
     assert view.presentation.summary == "Working · Running tests"
-    stopped = replace(view, status=ThreadStatus.STOPPED)
+    stopped = replace(view, status=StoppedThreadStatus())
     assert not stopped.presentation.busy
     assert stopped.presentation.summary == "Stopped"
     assert stopped.presentation.label == "○ worker"

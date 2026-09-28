@@ -22,7 +22,6 @@ from agent_comms.declarations import (
     GoalWaitTarget,
     RelationViolationError,
     Thread,
-    ThreadStatus,
 )
 from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.input_disposition import InputDispositions
@@ -33,6 +32,7 @@ from agent_comms.supervised_cutover import (
     archive_stopped_root,
     stage_private_participants,
 )
+from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 
 pytestmark = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux cutover")
 
@@ -92,7 +92,7 @@ def test_private_archive_keeps_nested_pi_journal_without_legacy_dispositions(tmp
     root.mkdir(mode=0o700)
     comms = Comms(root)
     comms.registry.register(
-        Thread("owner", frozenset(), str(tmp_path), pid=0), ThreadStatus.STOPPED
+        Thread("owner", frozenset(), str(tmp_path), pid=0), StoppedThreadStatus()
     )
     comms.initialize_private_initial_protocol()
     comms.send_user_message("owner", "pending", worktree=str(tmp_path))
@@ -215,7 +215,7 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
         assert selected == (witness, receiver_witness)
         assert staged.pid == 0 and staged.session_file == str(saved)
         assert staged.created_at == thread.created_at
-        assert private.registry.status("sender") is ThreadStatus.STOPPED
+        assert private.registry.status("sender") == StoppedThreadStatus()
         with MutationStore(str(private.root / "coordination.sqlite3")) as store:
             sender = store.participant(stable_thread_lookup(staged.created_at))
             assert sender.display_name == "sender"
@@ -232,9 +232,9 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
         assert migrated_wait.target_turn_generations == (None,)
         assert not (private.root / "bus.jsonl").exists()
         assert archive.pending_messages == archive.unknown_inputs == 1
-        private.registry.register(replace(staged, pid=os.getpid()), ThreadStatus.RUNNING)
+        private.registry.register(replace(staged, pid=os.getpid()), RunningThreadStatus())
         private.registry.register(
-            replace(private.registry.require("receiver"), pid=os.getpid()), ThreadStatus.RUNNING
+            replace(private.registry.require("receiver"), pid=os.getpid()), RunningThreadStatus()
         )
         message = private.send_initial_cohort("sender", "receiver", "new private input")
         initial = private.bus.read_initial_cohort(root_id, message.seq)

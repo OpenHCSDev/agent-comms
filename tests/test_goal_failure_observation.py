@@ -9,7 +9,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import agent_events as ae
-from agent_comms.declarations import Goal, Thread, ThreadStatus, TurnLeaseFence
+from agent_comms.declarations import Goal, Thread, TurnLeaseFence
 from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_actions import (
     GoalPrecondition,
@@ -27,6 +27,12 @@ from agent_comms.goal_failure_observation import FailedTurnObservation, read_fai
 from agent_comms.goal_pauses import GoalPauseEvent
 from agent_comms.goal_states import BlockedGoal, ModelPause, OwnerPause, PausedGoal
 from agent_comms.thread_identity import ThreadIncarnation, TurnIdentity
+from agent_comms.thread_status import (
+    ArchivedThreadStatus,
+    DeletingThreadStatus,
+    IdleThreadStatus,
+    StoppedThreadStatus,
+)
 
 
 @pytest.fixture
@@ -74,7 +80,7 @@ def blocked(owner):
 
 def read(store, owner, **kwargs):
     return read_failed_turn_projection(
-        store.path, owner=owner, owner_status=ThreadStatus.IDLE, admission=3, pause=None, **kwargs
+        store.path, owner=owner, owner_status=IdleThreadStatus(), admission=3, pause=None, **kwargs
     )
 
 
@@ -219,7 +225,7 @@ def test_pause_projection_never_becomes_runnable(bound, source):
     )
     before = store.path.read_bytes()
     projection = read_failed_turn_projection(
-        store.path, owner=owner, owner_status=ThreadStatus.IDLE, admission=3, pause=pause
+        store.path, owner=owner, owner_status=IdleThreadStatus(), admission=3, pause=pause
     )
     assert projection.state == (
         "paused_uncertain" if isinstance(source, ModelPause) else "owner_paused"
@@ -266,7 +272,7 @@ def test_reader_never_creates_repairs_or_migrates(bound, tmp_path, mode):
     before = {str(p): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
     assert (
         read_failed_turn_projection(
-            path, owner=blocked(owner), owner_status=ThreadStatus.IDLE, admission=3, pause=None
+            path, owner=blocked(owner), owner_status=IdleThreadStatus(), admission=3, pause=None
         ).state
         == "unavailable"
     )
@@ -434,7 +440,7 @@ def test_process_crash_has_no_partial_incident_or_replay_right(bound, after_comm
 
 
 @pytest.mark.parametrize(
-    "status", [ThreadStatus.STOPPED, ThreadStatus.ARCHIVED, ThreadStatus.DELETING]
+    "status", [StoppedThreadStatus(), ArchivedThreadStatus(), DeletingThreadStatus()]
 )
 def test_stopped_status_is_unavailable_even_with_retained_pid(bound, status):
     store, owner, _, observation = bound
