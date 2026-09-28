@@ -1,0 +1,20 @@
+{
+  "installed_owner_file": "/home/ts/.local/share/agent-comms/runtime-manual-owner-20260928/lib/python3.14/site-packages/agent_comms/manual_compaction.py",
+  "retired_backend_helper_absent": true,
+  "bus_seq": 56,
+  "roster_count": 103,
+  "owners": {
+    "agent-comms-ux": {
+      "alive": true,
+      "local": true,
+      "idle": true,
+      "candidate_command": true
+    },
+    "pr95-selected-pi-summary-owner": {
+      "alive": true,
+      "local": true,
+      "idle": true,
+      "candidate_command": true
+    }
+  }
+}
