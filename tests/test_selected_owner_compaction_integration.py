@@ -13,6 +13,8 @@ from agent_comms import agent_events as ae
 from agent_comms.backend import PersistentPiSession, _session_revision
 from agent_comms.child_process import AttachedChild, ProcessIdentity
 from agent_comms.compaction_journal import CompactionJournal
+from agent_comms.coordination_store import MutationStore
+from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
@@ -283,6 +285,8 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
         agent.turns.persistent_backends["proj"] = persistent
         dispositions = InputDispositions(root / InputDispositions.filename)
         if private_session:
+            with MutationStore(str(root / "coordination.sqlite3")) as coordination:
+                install_native_runtime_schema(coordination)
             record_fixture_history(
                 dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
             )

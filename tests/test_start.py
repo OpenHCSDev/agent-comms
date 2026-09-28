@@ -1,5 +1,7 @@
 import asyncio
 import sys
+import os
+from pathlib import Path
 
 import pytest
 
@@ -31,10 +33,14 @@ async def test_real_stopped_owner_starts_through_shared_agent_tool(tmp_path, mon
     from agent_comms.runtime import socket_path
 
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/bin/echo")
+    monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "pi")
     source = tmp_path / "saved.jsonl"
     source.touch()
     comms = wire(tmp_path / "wire")
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.owners.pin_private_nk_launch(
+        comms.root, root_id, Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    )
     comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(source)))
     comms.registry.unregister("worker")
     try:

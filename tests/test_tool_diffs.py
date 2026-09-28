@@ -53,7 +53,7 @@ def test_native_edit_evidence(name, native, ok, expected):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Executable POSIX test stub")
-async def test_live_diff_matches_result_only_replay_page(tmp_path):
+async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fixture):
     # Diffs bypass the ordinary tool-output preview's 4K truncation.
     patch = PATCH + " context\n" * 600
     native = result(patch)

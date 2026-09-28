@@ -27,8 +27,16 @@ class NewCaseHelper(PiHelper):
 
 
 async def test_new_helper_inherits_real_runner_and_strict_result(tmp_path):
+    fence = tmp_path / "dist/agent-comms-import-fence.mjs"
+    fence.parent.mkdir()
+    fence.write_text('globalThis.fixtureFence = true;\n')
     assert await NewCaseHelper.run(
         UpperRequest(str(tmp_path), "declared"), cwd=tmp_path
     ) == UpperResult("DECLARED")
     with pytest.raises(PiHelperError, match="invalid evidence"):
         await NewCaseHelper.run(UpperRequest(str(tmp_path), "declared", True), cwd=tmp_path)
+
+
+async def test_helper_cannot_run_without_native_import_fence(tmp_path):
+    with pytest.raises(PiHelperError, match="failed"):
+        await NewCaseHelper.run(UpperRequest(str(tmp_path), "declared"), cwd=tmp_path)

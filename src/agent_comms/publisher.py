@@ -95,19 +95,11 @@ class Publisher:
             raise RelationViolationError(
                 f"View {message.target!r} is a projection, not a routable target."
             )
-        if (
-            not is_channel_target(message.target)
-            and not BuiltinChannel.is_alias(message.target)
-            and not exists(message.target)
-        ):
+        if not is_channel_target(message.target) and not exists(message.target):
             raise UnregisteredThreadError(f"Target {message.target!r} is not a registered thread.")
         sender = canonical(message.sender)
         target = message.target
-        if (
-            not is_channel_target(target)
-            and not BuiltinChannel.is_alias(target)
-            and canonical(target) == sender
-        ):
+        if not is_channel_target(target) and canonical(target) == sender:
             raise RelationViolationError(f"Thread {sender!r} cannot message itself.")
         return sender, target
 
@@ -136,7 +128,7 @@ class Publisher:
         return replace(
             message,
             sender=sender,
-            target=BuiltinChannel.canonical(target),
+            target=target,
             seq=sequence,
             sender_role=snapshot.threads[sender].role,
             mentions=ThreadMention.find(message.body, resolve_mention),
@@ -363,7 +355,7 @@ class Publisher:
                 message.target
             ):
                 raise RelationViolationError("A saved/aggregate view is not routable.")
-            target = BuiltinChannel.canonical(message.target)
+            target = message.target
             if not is_channel_target(target):
                 # Bind the alias in this guarded publication snapshot. The
                 # envelope and frozen audience carry its canonical incarnation.
@@ -514,10 +506,7 @@ class Publisher:
             executable = registry_snapshot.threads[sender].role.executable
         if not executable:
             raise RelationViolationError("Keyed response sender must be executable.")
-        canonical_target = BuiltinChannel.canonical(target)
-        if intent.publication_key != canonical_publication_key(
-            intent.execution_id, canonical_target
-        ):
+        if intent.publication_key != canonical_publication_key(intent.execution_id, target):
             raise RelationViolationError("Response publication key does not match its route.")
         last_sequence = max(metadata.last_seq, previous_sequence)
         if last_sequence >= MAX_WIRE_SEQ:

@@ -282,8 +282,6 @@ class ThreadManagement:
 
             with self.channels.catalog.editing() as document:
                 document.remember_tags(thread.tags, thread.created_at)
-            if existing is not None and existing.tags != thread.tags:
-                self.channels._rebase_passive_channel_scope(thread.name)
 
     def claim_thread(
         self,

@@ -1,3 +1,31 @@
+## Deletion integration and deployment preparation — 2026-09-28
+
+Parent PR229 now includes c3e7252a: global routing alias/forwarder deletion,
+PR256 passive-awareness ledger retirement and PR257 MCP capability-claim deletion.
+Current canonical source pointers retain next-natural-turn channel awareness,
+including unmentioned observers after UI ACK, without a second cursor store.
+Stock manual writer and its exclusive callers/tests were deleted previously.
+
+- Global routing/callers: 85 local tests pass. Read-only serialized `to` audit of
+  146 current and 8,420 archived messages finds no old broadcast target needing
+  conversion. The first audit incorrectly checked `target`; corrected receipt
+  explicitly replaces that invalid check. Real agent named broadcast remains a DM.
+- Combined deletions: 14 tests pass, one native-package-dependent check skipped;
+  rerun with the prepared package passes all four channel-ownership tests.
+  This exercises actual turn preparation, not a completed model response.
+- Latest complete copied-root D22 atomic installation/reopen passes and removes
+  disposable copies. Original history, UNKNOWN, native sessions and read positions
+  remain preserved; live root has not been converted.
+- Native 302/604MB actual CLI/commit/reopen acceptance remains valid for unchanged
+  EntryStore mechanics. Darwin is preparing final package with257 producer removal.
+- Copernicus owns final paired107 integration of118/TL0A and119/T1 plus currentcore.
+  Nietzsche255 owns remaining current fixture/caller closure; Pascal254/117 TR0.
+- Parent owns final immutable runtime, merge, quiet conversion and activation.
+  User Toad894792 with ACP895195 is currently open; do not interrupt it. Prepare
+  everything before requesting its closure for the final data conversion.
+- Current live runtime remains stable main252. All four owners were checked idle
+  and send-admitted. This does not certify a new model response or final deployment.
+
 ## Combined receiver and live recovery — 2026-09-28 19:12 UTC
 
 - Parent integrates243/244indexed-native history through current PiHelper,

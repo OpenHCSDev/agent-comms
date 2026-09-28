@@ -80,9 +80,9 @@ def test_incomplete_durable_annotation_schema_is_not_repaired(tmp_path):
         connection.execute("DROP TABLE transcript_route")
     before = path.read_bytes()
     reopened = wire(comms.root)
-    with pytest.raises(ValueError, match="one-shot durable cutover"):
+    with pytest.raises(ValueError, match="one-shot durable migration"):
         reopened.transcripts.routes.record_input_display("b" * 32, None)
-    with pytest.raises(ValueError, match="one-shot durable cutover"):
+    with pytest.raises(ValueError, match="one-shot durable migration"):
         reopened.transcripts.routes.input_bindings()
     assert path.read_bytes() == before
 

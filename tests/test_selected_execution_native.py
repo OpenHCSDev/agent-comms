@@ -16,14 +16,15 @@ from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_store import IdentityConflict, MutationStore
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_source_cursor import read_current_native_cursor
+from agent_comms.selected_tool_broker import SelectedToolIntent
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
 tmp_path = private_root_fixture
 
 
-@pytest.mark.parametrize("after_cutover", [False, True])
-async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch, after_cutover):
+@pytest.mark.parametrize("after_cutover, selected_write", [(False, False), (True, False), (False, True)])
+async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch, after_cutover, selected_write):
     package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
     if not package:
         pytest.skip("Prepared native package required; never build or call a paid provider")
@@ -58,6 +59,9 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
         ),
     ]
 
+    if selected_write:
+        calls = [("selected_claimed_write", {"resource": "input.txt", "contents": "state=AFTER\n"})]
+
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             try:
@@ -67,9 +71,7 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
                 assert self.headers["Authorization"] == "Bearer offline-only-fixture"
                 assert len(requests) <= 2
                 if len(requests) == 1:
-                    assert {t["function"]["name"] for t in request["tools"]} == {
-                        n for n, _ in calls
-                    }
+                    assert {t["function"]["name"] for t in request["tools"]} == {name for name, _ in calls}
                     delta = {
                         "role": "assistant",
                         "tool_calls": [
@@ -85,9 +87,10 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
                     reason = "tool_calls"
                 else:
                     tools = [m for m in request["messages"] if m["role"] == "tool"]
-                    assert len(tools) == 4
+                    assert len(tools) == len(calls)
                     assert (tmp_path / "input.txt").read_text() == "state=AFTER\n"
-                    assert (tmp_path / "nested/result.txt").read_text() == "state=AFTER\n"
+                    if not selected_write:
+                        assert (tmp_path / "nested/result.txt").read_text() == "state=AFTER\n"
                     assert not any("Error:" in str(t["content"]) for t in tools)
                     delta = {"role": "assistant", "content": "CODING_TOOLS_OK"}
                     reason = "stop"
@@ -150,7 +153,8 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(config))
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     execution = SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=Path(package)
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=Path(package),
+        selected_tool_intent=SelectedToolIntent() if selected_write else None
     )
     try:
         outcome = await asyncio.wait_for(execution.run(), 40)
@@ -162,7 +166,8 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
         ]
         assert len(responses) == 1 and responses[0].body == "CODING_TOOLS_OK"
         assert comms.registry.require("beta").active_turn is None
-        assert not comms.bus.log.claim_projection()
+        if not selected_write:
+            assert not comms.bus.log.claim_projection()
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             snapshot = store.snapshot(execution.execution_id)
             assert snapshot.execution.lifecycle.completed

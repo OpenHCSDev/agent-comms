@@ -5,9 +5,12 @@ import os
 from contextlib import contextmanager
 from unittest.mock import patch
 
+import pytest
+
 from agent_comms.bus_display_index import BusDisplayIndex
+from agent_comms.errors import RelationViolationError
 from agent_comms.comms import wire
-from agent_comms.messages import Message
+from agent_comms.messages import Message, MessageType
 from agent_comms.threads import Thread
 
 
@@ -29,14 +32,15 @@ def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
         latest = fresh.views.viewer_snapshot(str(tmp_path))
         assert latest.channel_unread["#team"] == 101
-        # The activity and display projections each validate the new row.
-        assert decode.call_count <= 2
+        # Every decode belongs to the appended row; retained history is not replayed.
+        assert decode.call_count > 0
+        assert all(call.args[0]["text"] == "one new message" for call in decode.call_args_list)
 
     comms.channels.set_channel_any_mode("#team", True)
     assert fresh.views.viewer_snapshot(str(tmp_path)) == wire(tmp_path).views.viewer_snapshot(str(tmp_path))
 
 
-def test_display_checkpoint_damage_and_bus_replacement_rebuild(tmp_path):
+def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
     comms = wire(tmp_path)
     comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.threads.register(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
@@ -52,9 +56,11 @@ def test_display_checkpoint_damage_and_bus_replacement_rebuild(tmp_path):
 
     bus_path = comms.bus.log.path
     replacement = bus_path.with_name("replacement.jsonl")
-    replacement.write_bytes(bus_path.read_bytes().splitlines(keepends=True)[-1])
+    replacement.write_bytes(bus_path.read_bytes())
+    replacement.chmod(0o600)
     os.replace(replacement, bus_path)
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
+    with pytest.raises(RelationViolationError, match="checkpoint root/inode/size changed"):
+        wire(tmp_path).views.viewer_snapshot(str(tmp_path))
 
 
 def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
@@ -65,15 +71,13 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     comms.threads.register(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     comms.messaging.send("bob", "#team", "first")
     bus_path = comms.bus.log.path
-    first = json.loads(bus_path.read_text().splitlines()[0])
-    raced_timestamp = first["ts"] + 10
+    appended = []
     original = comms.bus.log._record_snapshot
 
     @contextmanager
     def append_before_open(*args, **kwargs):
-        row = dict(first, seq=2, ts=raced_timestamp, text="raced append")
-        with bus_path.open("a") as stream:
-            stream.write(json.dumps(row) + "\n")
+        # _display_snapshot already holds the wire lock at this boundary.
+        appended.append(comms.bus.publisher.publish_ordinary(Message("bob", "#team", "raced append", MessageType.INFO)))
         with original(*args, **kwargs) as boundary:
             yield boundary
 
@@ -81,7 +85,7 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     snapshot = comms.views.viewer_snapshot(str(tmp_path))
     team = next(view for view in snapshot.channels if view.channel.name == "#team")
     assert snapshot.channel_unread["#team"] == 2
-    assert team.last_activity == raced_timestamp
+    assert team.last_activity == appended[0].timestamp
 
 
 def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tmp_path):
@@ -112,9 +116,9 @@ def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tm
     expected = Counter(
         delivery.conversation(message.sender, message.target) for message in comms.bus.inbox(viewer)
     )
-    # The untagged human inbox excludes channel rows. Renaming invalidates
-    # its old DM conversation evidence exactly as the authoritative inbox does.
-    assert expected == {"renamed-bob": 3}
+    # Rename preserves sparse read evidence through the canonical thread alias.
+    # The untagged human inbox still excludes channel rows.
+    assert expected == {"renamed-bob": 2}
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
         assert wire(tmp_path).bus.pending_counts(viewer) == expected
         assert decode.call_count == 0

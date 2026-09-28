@@ -48,11 +48,9 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         environment["PI_OFFLINE"] = "1"
         package = Path(request.package)
         command = (node, "--no-global-search-paths")
-        # Manual /compact uses independently pinned stock Pi; its input owner
-        # verifies those bytes. Native callers verify the complete deployment.
+        # Every current caller supplies the verified native deployment.
         fence = package / "dist/agent-comms-import-fence.mjs"
-        if fence.exists():
-            command += ("--import", str(fence))
+        command += ("--import", str(fence))
         payload = json.dumps(FieldCodec.encode(request), separators=(",", ":"), allow_nan=False)
         outcome = await BoundedRun.run(
             (*command, "--input-type=module", "--eval", cls.script.read_text(), payload),

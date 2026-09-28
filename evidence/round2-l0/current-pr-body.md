@@ -23,6 +23,8 @@ in evidence; this current summary supersedes their old readiness labels.
 - Main252 watcher/unread pins synced. Toad107 combines typed callers with114/115;
   its final current-core pin/installed check is owned by Copernicus.
 -251 bootstrap deletion and253 current compaction-journal conversion integrated.
+-256 awareness-ledger deletion,257 MCP capability-claim deletion, global routing
+  alias/forwarder removal and all affected current callers integrated.
 
 ## Local and actual-path evidence
 
@@ -42,10 +44,11 @@ in evidence; this current summary supersedes their old readiness labels.
 
 ## Remaining work and owners
 
-- Cicero: complete removal/migration of old passive-awareness ledger consumers;
-  trace remaining original-plan deletion gaps, including the stock manual path.
-- Nietzsche/248: remaining current caller fixtures and final combined local suite.
-- Copernicus/107: final current-core paired Toad installed acceptance.
+- Cicero: quiet idle-owner stop operator review; passive ledger and stock manual
+  writer deletion are integrated. Lovelace owns final original-plan evidence audit.
+- Nietzsche/255 (continuation of248): remaining current caller fixtures.
+- Copernicus/107: final current-core paired Toad118/119 integration and installed acceptance.
+- Darwin: final immutable native package rebuild with257 producer deletion.
 - Parent: integrate those closures, prepare the immutable paired runtime, perform
   the quiet D22 conversion without interrupting an active user session, verify live
   operation, then delete executed one-shot migration tools and obsolete tests.
