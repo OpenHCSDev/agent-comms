@@ -11,7 +11,7 @@ import pytest
 from acp import RequestError
 
 from agent_comms import agent_events as ae
-from agent_comms.acp import CommsAgent
+from delivery_owner_fixture import canonical_agent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
@@ -67,7 +67,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[])
+    agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[])
     session = (await agent.new_session(str(old))).session_id
     updates = []
 
@@ -80,7 +80,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
     await agent.sessions.sync_identity(session)
     assert updates[-1].field_meta["agentComms"]["worktree"] == str(new)
     await agent.shutdown()
-    resumed = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[])
+    resumed = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[])
     try:
         result = await resumed.load_session(str(old), session)
         assert result.field_meta["agentComms"]["worktree"] == str(new)
@@ -97,7 +97,7 @@ async def test_owner_automatically_continues_same_session_in_new_project(tmp_pat
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
     session = (await agent.new_session(str(old))).session_id
     session_file = str(old / "session.jsonl")
     calls = []
@@ -131,7 +131,7 @@ async def test_cancel_during_project_change_does_not_restart_work(tmp_path, monk
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[])
+    agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[])
     session = (await agent.new_session(str(old))).session_id
     changed = asyncio.Event()
 
@@ -161,7 +161,7 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path):
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / "wire")
-    owner = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    owner = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
     session = (await owner.new_session(str(old))).session_id
     proxies, updates = [], [[], []]
 
@@ -174,7 +174,7 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path):
 
     try:
         for values in updates:
-            client = CommsAgent(comms)
+            client = canonical_agent(comms)
             client.on_connect(Client(values))
             proxy = RuntimeProxy(client, session, socket_path(comms.root, os.getpid()))
             proxies.append(proxy)

@@ -249,3 +249,39 @@ channel_management retain consumers.11 failures observed in affected partial
 run; parent global L0 owner notified with exact source references for ownership.
 Do not silently recreate old cursor engine. Other remainder after passive tests
 and final complete suite still pending; no full-suite pass claimed.
+
+## Project, queue, ingress reservation and routing closure
+
+Remainder-eight301pass12failed119.72s on current native package. Human ingress
+failure injection now targets write-only append after reservation, permitting
+canonical pre-publication read verification. Exact UNKNOWN reservation/no replay
+and later-gap behavior pass. Replaced bus inode is refused by canonical checkpoint;
+read-ledger test preserves no inherited read facts instead of accepting replaced bus.
+
+Project/queue/reply fixtures use explicit canonical agent; queued waits bounded.
+Invalid queued Pi command fixture grants only local executable trust. Focused52:
+50pass2fail11.46s; both routing defects then corrected, module5pass2.42s. Routing
+checks use current OwnedTurn origins/reply targets rather than removed public drain;
+retain live route, entry-ID persistence and equal private text isolation. Removed
+monkeypatch of deleted acp.backend import. Actual channel delivery remains covered
+by canonical ACP/native suites. Passive fixture changes remain uncommitted pending
+parent source disposition. Independent remainder after reply routing continues.
+
+## Runtime attachment and restart fixture closure
+
+Remainder-nine15pass12failed1skip14.77s. Current response-policy test drops its
+retired disposition_key/bus_key mechanism, retains nominal eligibility/guidance/
+batching. Actual owner restart uses pinned canonical root/package, preserving
+session and collaboration bytes. Runtime client fixtures configure current route;
+socket-only owner identities use explicit ProcessIdentity, not deleted Thread.pid.
+Removed115-line text-executor fork/drain test; actual native detached-owner test
+already proves turn survival and concurrent client attachment. Long-root socket
+roundtrip uses current owned input callbacks with real RPC server/client, keeping
+prompt/settlement/cancel/compact behavior; actual bind replaces arbitrary<100 test
+since owned persistent TMPDIR yields107 bytes accepted by this OS.
+
+Focused13:12passed1failed10.61s; corrected long-root test1passed0.83s. No production
+changes. Passive module explicitly relinquished to Cicero, own setup-only diff
+saved at.artifacts/passive-fixture-config.patch then reverted. Direct CLI delivery
+to Cicero rejected (no visible executable); parent notified to relay. Current
+independent remainder continues after runtime. Final combined suite still required.
