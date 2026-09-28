@@ -1,0 +1,11 @@
+{
+  "time": "2026-09-28T19:12:05.018069+00:00",
+  "owner": "agent-comms-ux",
+  "prior": "refused: limit_exceeded",
+  "current": "retired_refusal",
+  "original_unknown_unchanged": true,
+  "send_admitted": true,
+  "provider_calls": 0,
+  "inputs_submitted": 0,
+  "owners_restarted": 0
+}
