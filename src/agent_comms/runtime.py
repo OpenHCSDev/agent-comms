@@ -370,11 +370,11 @@ class RuntimeProxy:
                 _raise_owner_error(data)
                 if "ready" in data:
                     token = data.get("controllerToken")
-                    # Older detached owners remain attachable for ordinary
-                    # messages, but can never become a permission controller.
-                    self._controller_token = (
-                        token if isinstance(token, str) and len(token) == 64 else None
-                    )
+                    if not isinstance(token, str) or len(token) != 64:
+                        raise ValueError(
+                            "Owner subscription ready requires a valid controllerToken."
+                        )
+                    self._controller_token = token
                     metadata = cast(dict[str, Any], data["ready"])
                     return reader, _present_cursor_session(metadata, self.session_id)
                 await self.update(data)

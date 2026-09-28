@@ -308,7 +308,7 @@ async def test_explicit_owner_cancellation_is_not_swallowed_by_socket_permission
 
 async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/z-ai/glm-5.3-flash")
-    owner = CommsAgent(wire(tmp_path / "wire"), runtime_enabled=True, auto_wake=False)
+    owner = canonical_agent(wire(tmp_path / "wire"), runtime_enabled=True, auto_wake=False)
     await owner.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
     session_id = "project"
     calls = [[], []]
@@ -364,10 +364,11 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
         assert calls[0][0]["options"][0]["kind"] == "allow_once"
         # No subscriber may borrow another attachment's controller token.
         saved = proxies[1]._controller_token
-        proxies[1]._controller_token = "0" * 64
-        result = await asyncio.wait_for(proxies[1].request("prompt", prompt=[]), timeout=4)
-        assert result["_meta"]["answer"]["cancelled"] is True
-        assert not calls[1]
+        for absent_or_invalid in (None, "0" * 64):
+            proxies[1]._controller_token = absent_or_invalid
+            result = await asyncio.wait_for(proxies[1].request("prompt", prompt=[]), timeout=4)
+            assert result["_meta"]["answer"]["cancelled"] is True
+            assert not calls[1]
         proxies[1]._controller_token = saved
         # A controller can disappear after presentation but before answering.
         # The detached owner must deny and must not transfer the pending
