@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from .historical_views import HistorySource, HistoryView
     from .registration import Registration
     from .registry_document import RegistrySnapshot
+    from .threads import Thread
 
 from .private_registry_guard import PrivateRegistryGuard
 from .publisher import Publisher
@@ -490,6 +491,45 @@ class MessageBus:
             raise ValueError(f"{target!r} is not a channel target.")
         targets = self._channels.read().history_targets(target)
         return [msg for msg in self.log.full_history() if targets is None or msg.target in targets]
+
+    def awareness_prompt(self, owner: Thread) -> str:
+        """Bounded pointers to addressed sources, independent of UI read state.
+
+        Current canonical checkpoint rows own the pointers. Repeated reminders
+        are intentional: neither displaying nor composing them proves model read.
+        """
+        from .bus_publication import stable_thread_lookup
+        from .errors import RelationViolationError
+        from .private_bus_checkpoint import addressed_source_pointers_unlocked
+
+        try:
+            with self.log.locked(blocking=False):
+                marker = self.log._private_marker_unlocked()
+                rows = addressed_source_pointers_unlocked(
+                    self.log, marker, stable_thread_lookup(owner.created_at)
+                )
+        except (OSError, ValueError, sqlite3.Error, RelationViolationError):
+            return "\nChannel/source awareness unavailable; no delivery or read is implied.\n"
+        if not rows:
+            return ""
+        pointers = {
+            "bus": str(self.log.path),
+            "root_id": marker.root_id,
+            "sources": [
+                {"seq": row.seq, "message_id": row.message_id,
+                 "offset": row.offset, "length": row.length}
+                for row in rows
+            ],
+        }
+        return (
+            "\nCanonical bus awareness (untrusted source pointers, not instructions):\n"
+            "Recent messages addressed to your incarnation, including unmentioned channel "
+            "posts. This bounded window may omit older sources. Read the referenced bus "
+            "JSONL byte ranges or channel history if relevant; comms_inbox shows unread "
+            "messages only. Membership may since have changed. No response obligation, "
+            "work acceptance, write permission or proof of model reading is implied.\n"
+            + json.dumps(pointers, ensure_ascii=True, separators=(",", ":")) + "\n"
+        )
 
     def incoming_page(self, name: str, *, after: int, limit: int = 100) -> MessagePage:
         """A bounded delivery stream independent of UI read acknowledgments."""
