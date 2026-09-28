@@ -41,7 +41,9 @@ def _fresh(tmp_path: Path, count: int = 2):
     comms.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
     for n in range(count):
         name = "alpha" if n == 0 else f"other{n:03}"
-        comms.register(Thread(name, frozenset({"team"}), str(tmp_path), pid=os.getpid()))
+        comms.register(
+            Thread(name, frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="fake/fake")
+        )
     root_id = comms.initialize_private_initial_protocol()
     comms.initialize_private_claim_protocol()
     install_private_bus_checkpoint(comms.bus)  # Strictly fresh-root opt-in.

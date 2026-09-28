@@ -1,3 +1,5 @@
+> Later integration note: this audit was completed and published as e3ee932 against the recorded installed baseline. Parent subsequently implemented existing-root checkpoint migration and fresh-cutover activation in PR176 (main4216214); those source changes are integrated in the C0 candidate. Parent owns installed activation/acceptance. The original metadata-only audit and existing provider receipts below are retained, not rerun or represented as a fresh C0 installed proof.
+
 # Six-requirement functional completion audit
 
 ## Result and ownership

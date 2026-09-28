@@ -1,7 +1,7 @@
 # C0 declaration ownership — Darwin
 
-Base b5ec95a (merged Pascal lease174). Implementation starting; not yet validated.
-Parent accepted functional audit e3ee932 and owns checkpoint migration/activation.
+Base b5ec95a (merged Pascal lease174). Declaration split implemented; see HANDOFF.md for focused results and integration boundaries.
+Parent accepted functional audit e3ee932; its evidence is included. Parent checkpoint176 is integrated, with actual installer/schema preserved. Parent owns activation.
 
 Sequence / actual defining modules:
 
