@@ -10,6 +10,7 @@ import asyncio
 import json
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Any
 
 from .backend import PersistentPiSession, _session_revision
@@ -100,7 +101,7 @@ class SelectedSummarySlot:
         witness: NativeWitness,
         source: dict[str, Any],
         *,
-        expected_launcher: str,
+        expected_package: Path,
         tokens_before: int,
         fresh_session: FreshPrivateSession | None = None,
         admission_generation: int | None = None,
@@ -129,7 +130,6 @@ class SelectedSummarySlot:
             or source["source"].get("ownerName") != self.owner
             or type(tokens_before) is not int
             or not 0 <= tokens_before <= 2**53 - 1
-            or not expected_launcher
             or not 0 < timeout_seconds <= 90
         ):
             raise ValueError("Exact selected owner, session and bounded deadline required")
@@ -149,7 +149,7 @@ class SelectedSummarySlot:
                 or persistent.revision != revision
                 or witness.revision != ":".join(map(str, revision[0]))
                 or persistent.launch_key is None
-                or persistent.launch_key[0] != expected_launcher
+                or persistent.launch_key[0].package != expected_package
             ):
                 raise SelectedChildUnknown("Selected idle Pi child is unavailable or stale")
             operation = journal.reserve_selected_summary(
