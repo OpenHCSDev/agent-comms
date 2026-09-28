@@ -10,8 +10,8 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms import wire
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.goal_actions import BlockedGoalAction, GoalPrecondition, SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.runtime import RuntimeProxy, socket_path

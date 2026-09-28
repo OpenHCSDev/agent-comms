@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from agent_comms import Comms
+from agent_comms.comms import Comms
 
 
 def main():

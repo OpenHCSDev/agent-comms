@@ -6,8 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import ImportFormat, ImportLimits, wire
+from agent_comms import ImportFormat, ImportLimits
 from agent_comms.cli import main
+from agent_comms.comms import wire
 from agent_comms.thread_status import StoppedThreadStatus
 
 

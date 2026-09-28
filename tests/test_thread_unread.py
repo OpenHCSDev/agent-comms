@@ -4,7 +4,9 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms import Thread, TranscriptCursor, wire
+from agent_comms import Thread
+from agent_comms.comms import wire
+from agent_comms.transcripts import TranscriptCursor
 from agent_comms.view_unread import TranscriptReadState
 
 

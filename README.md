@@ -52,7 +52,8 @@ coding turn.
 
 ```python
 from pathlib import Path
-from agent_comms import Thread, wire
+from agent_comms import Thread
+from agent_comms.comms import wire
 
 comms = wire(Path("~/.agent-comms").expanduser())
 comms.threads.register(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt"))

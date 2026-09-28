@@ -11,8 +11,9 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms import GoalExecutionState, Thread, wire
+from agent_comms import GoalExecutionState, Thread
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
 
 

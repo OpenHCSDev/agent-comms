@@ -6,7 +6,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Thread, ThreadRole, invoke_context_tool, invoke_tool, tool_catalog, wire
+from agent_comms import Thread, ThreadRole, invoke_context_tool, invoke_tool, tool_catalog
+from agent_comms.comms import wire
 from agent_comms.declarations import ActiveTurn
 
 

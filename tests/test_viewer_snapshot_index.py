@@ -5,8 +5,9 @@ import os
 from contextlib import contextmanager
 from unittest.mock import patch
 
-from agent_comms import Thread, wire
+from agent_comms import Thread
 from agent_comms.bus_display_index import BusDisplayIndex
+from agent_comms.comms import wire
 from agent_comms.declarations import Message
 
 

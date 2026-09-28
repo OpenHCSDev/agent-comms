@@ -5,8 +5,10 @@ from dataclasses import asdict
 import pytest
 from acp.schema import NewSessionResponse
 
-from agent_comms import Comms, Goal, MessageRoute, Thread, TranscriptCursor, TranscriptPage, wire
+from agent_comms import Goal, MessageRoute, Thread
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import Comms, wire
+from agent_comms.transcripts import TranscriptCursor, TranscriptPage
 
 
 @pytest.mark.asyncio

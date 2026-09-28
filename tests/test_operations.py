@@ -8,16 +8,16 @@ import pytest
 
 from agent_comms import (
     ActivityState,
-    ForkSpec,
     MessageType,
     RelationViolationError,
     Thread,
     UnregisteredThreadError,
-    wire,
 )
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
+from agent_comms.comms import wire
 from agent_comms.declarations import _store_lock
 from agent_comms.owner_lifecycle import _owner_launch_proof
+from agent_comms.thread_management import ForkSpec
 
 
 class TestMessaging:

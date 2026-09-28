@@ -6,7 +6,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Activity, ActivityState, RelationViolationError, Thread, ThreadView, wire
+from agent_comms import Activity, ActivityState, RelationViolationError, Thread, ThreadView
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.registration import Registration
 from agent_comms.thread_status import (

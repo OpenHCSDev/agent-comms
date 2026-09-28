@@ -9,8 +9,8 @@ from agent_comms import (
     Registration,
     Thread,
     UnregisteredThreadError,
-    wire,
 )
+from agent_comms.comms import wire
 
 
 @pytest.fixture

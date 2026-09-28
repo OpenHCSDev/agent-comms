@@ -5,7 +5,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import Thread
+from agent_comms.comms import wire
 
 
 def prepared(root):
@@ -89,14 +90,7 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
         [
             sys.executable,
             "-c",
-            """
-import os, sys
-from agent_comms import wire
-comms = wire(sys.argv[1])
-page = comms.views.dm_display_page('alice', worktree=sys.argv[1])
-comms.views.mark_dm_view_read('alice', worktree=sys.argv[1], through=page.newest_seq, expected_display_basis=page.display_basis)
-os._exit(9)
-""",
+            "\nimport os, sys\nfrom agent_comms.comms import wire\ncomms = wire(sys.argv[1])\npage = comms.views.dm_display_page('alice', worktree=sys.argv[1])\ncomms.views.mark_dm_view_read('alice', worktree=sys.argv[1], through=page.newest_seq, expected_display_basis=page.display_basis)\nos._exit(9)\n",
             str(tmp_path),
         ],
         timeout=15,

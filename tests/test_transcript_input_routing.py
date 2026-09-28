@@ -4,9 +4,10 @@ import json
 
 import pytest
 
-from agent_comms import Thread, TurnRouting, wire
+from agent_comms import Thread, TurnRouting
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.declarations import ScheduledTurn
 
 

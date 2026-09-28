@@ -12,7 +12,6 @@ from agent_comms import (
     AnyOfMatch,
     Channel,
     ChannelSort,
-    ForkSpec,
     Message,
     MessageType,
     SavedView,
@@ -22,8 +21,9 @@ from agent_comms import (
     ViewKind,
     ViewPredicate,
     invoke_tool,
-    wire,
 )
+from agent_comms.comms import wire
+from agent_comms.thread_management import ForkSpec
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
 
 

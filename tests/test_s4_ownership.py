@@ -6,16 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import (
-    AnyOfMatch,
-    Message,
-    MessageType,
-    SavedView,
-    Thread,
-    ViewKind,
-    ViewPredicate,
-    wire,
-)
+from agent_comms import AnyOfMatch, Message, MessageType, SavedView, Thread, ViewKind, ViewPredicate
+from agent_comms.comms import wire
 from agent_comms.declarations import BuiltinChannel, ThreadRole
 from agent_comms.field_codec import FieldCodec
 

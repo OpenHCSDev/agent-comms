@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Comms, HistoricalMessage, HistoryCursor, Thread
+from agent_comms import HistoricalMessage, HistoryCursor, Thread
+from agent_comms.comms import Comms
 from agent_comms.read_ledger import ReadLedger
 
 

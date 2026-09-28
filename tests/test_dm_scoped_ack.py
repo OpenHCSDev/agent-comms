@@ -10,8 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import Thread
 from agent_comms import declarations as declarations_module
+from agent_comms.comms import wire
 from agent_comms.declarations import DMDisplayBasis
 
 

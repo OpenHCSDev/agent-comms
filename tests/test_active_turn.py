@@ -1,7 +1,8 @@
 import os
 import time
 
-from agent_comms import Activity, ActivityState, Thread, wire
+from agent_comms import Activity, ActivityState, Thread
+from agent_comms.comms import wire
 
 
 def test_silent_active_turn_does_not_age_into_ready(tmp_path):

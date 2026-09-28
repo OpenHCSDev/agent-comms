@@ -3,7 +3,8 @@
 import json
 from datetime import datetime
 
-from agent_comms import Activity, ActivityState, Message, MessageType, Thread, wire
+from agent_comms import Activity, ActivityState, Message, MessageType, Thread
+from agent_comms.comms import wire
 
 
 def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeypatch):

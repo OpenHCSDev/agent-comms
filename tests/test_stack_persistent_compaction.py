@@ -13,8 +13,8 @@ from uuid import uuid4
 
 import pytest
 
-from agent_comms import wire
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.manual_compaction_bridge import compact_context
 
 

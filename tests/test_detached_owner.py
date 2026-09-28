@@ -8,8 +8,9 @@ from threading import Thread as WorkerThread
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import Thread
 from agent_comms.acp import CommsClient
+from agent_comms.comms import wire
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Named FIFO fixture requires POSIX")

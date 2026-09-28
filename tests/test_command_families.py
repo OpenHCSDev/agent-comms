@@ -10,9 +10,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import Thread
 from agent_comms.cli import build_parser, main
 from agent_comms.cli_commands import CliCommand, option
+from agent_comms.comms import wire
 from agent_comms.declarations import MessageType
 from agent_comms.runtime import RuntimeProxy, RuntimeServer
 from agent_comms.runtime_requests import (

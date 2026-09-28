@@ -3,8 +3,9 @@
 import json
 import sqlite3
 
-from agent_comms import Thread, wire
+from agent_comms import Thread
 from agent_comms.cli import main
+from agent_comms.comms import wire
 from agent_comms.declarations import ScheduledTurn
 from agent_comms.input_disposition import InputDispositions
 

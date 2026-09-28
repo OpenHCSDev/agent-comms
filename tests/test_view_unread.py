@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import Thread
+from agent_comms.comms import wire
 
 
 def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
@@ -155,7 +156,7 @@ def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
             [
                 sys.executable,
                 "-c",
-                "import os, sys\nfrom agent_comms import wire\nwire(sys.argv[1]).messaging.send_message('alice', 'bob', 'hidden before exit')\nos._exit(9)",
+                "import os, sys\nfrom agent_comms.comms import wire\nwire(sys.argv[1]).messaging.send_message('alice', 'bob', 'hidden before exit')\nos._exit(9)",
                 str(root),
             ],
             check=False,

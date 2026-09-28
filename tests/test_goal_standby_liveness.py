@@ -7,10 +7,10 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import Thread
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalPrecondition,

@@ -3,9 +3,10 @@ import json
 
 import pytest
 
-from agent_comms import MessageRoute, Thread, invoke_tool, wire
+from agent_comms import MessageRoute, Thread, invoke_tool
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 
 
 def test_incoming_route_distinguishes_channel_and_direct_delivery():

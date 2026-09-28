@@ -1,7 +1,7 @@
 import pytest
 
-from agent_comms import wire
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 
 
 async def test_new_pi_thread_requests_one_concise_title(tmp_path, monkeypatch):

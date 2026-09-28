@@ -3,7 +3,8 @@
 import json
 from pathlib import Path
 
-from agent_comms import MessageRoute, Thread, TurnRouting, wire
+from agent_comms import MessageRoute, Thread, TurnRouting
+from agent_comms.comms import wire
 
 
 def _session(path: Path, count: int) -> None:

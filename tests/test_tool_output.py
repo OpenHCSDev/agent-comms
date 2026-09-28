@@ -301,8 +301,8 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
 
 
 async def test_pending_dependency_becomes_reviewable_after_owner_admission(tmp_path, monkeypatch):
-    from agent_comms import wire
     from agent_comms.acp import CommsAgent
+    from agent_comms.comms import wire
 
     monkeypatch.setenv("PI_AGENT_ID", "b")
     comms = wire(tmp_path / "wire")

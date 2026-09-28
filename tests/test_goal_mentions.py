@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Comms, Thread
+from agent_comms import Thread
+from agent_comms.comms import Comms
 from agent_comms.declarations import ThreadRole
 from agent_comms.goal_actions import (
     ActiveGoalAction,

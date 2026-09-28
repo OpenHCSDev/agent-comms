@@ -13,8 +13,8 @@ from agent_comms import (
     ViewMatch,
     ViewPredicate,
     invoke_tool,
-    wire,
 )
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.tools import tool_catalog
 

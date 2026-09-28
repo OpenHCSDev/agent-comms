@@ -7,11 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import Thread
 from agent_comms import agent_events as ae
 from agent_comms import passive_channel_awareness as passive_store
 from agent_comms.acp import CommsAgent
 from agent_comms.bus_page_index import BusPageIndex
+from agent_comms.comms import wire
 from agent_comms.thread_status import RunningThreadStatus
 
 

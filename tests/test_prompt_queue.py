@@ -1,8 +1,9 @@
 import asyncio
 
 from agent_comms import agent_events as ae
-from agent_comms import backend, wire
+from agent_comms import backend
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 
 
 async def make_agent(tmp_path, monkeypatch):

@@ -8,10 +8,11 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import ForkSpec, Thread
+from agent_comms import Thread
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.runtime import RuntimeProxy, _present_cursor_session, socket_path
+from agent_comms.thread_management import ForkSpec
 
 
 def test_owner_cursor_scope_rebases_only_attachment_session_alias():

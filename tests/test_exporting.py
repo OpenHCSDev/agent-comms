@@ -6,9 +6,10 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import AnyOfMatch, SavedView, Thread, ViewKind, ViewPredicate, wire
+from agent_comms import AnyOfMatch, SavedView, Thread, ViewKind, ViewPredicate
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
 from agent_comms.cli import main
+from agent_comms.comms import wire
 from agent_comms.declarations import Message, MessageType, RelationViolationError
 from agent_comms.exporting import (
     ChannelScope,
