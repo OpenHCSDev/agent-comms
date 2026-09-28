@@ -90,7 +90,7 @@ class TranscriptReadState:
     def __init__(self, path: Path):
         self.path = path.with_name(ReadLedger.filename)
         self.reads = ReadLedger(self.path)
-        self._index_path = path.with_name("transcript_reply_index.sqlite3")
+        self._index_path = path.with_name(f"transcript_reply_index.v{_INDEX_VERSION}.sqlite3")
         self._connection: sqlite3.Connection | None = None
         self._database_inode: int | None = None
         self._lock = RLock()
