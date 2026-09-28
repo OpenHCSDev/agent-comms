@@ -63,8 +63,8 @@ async def test_new_nondependency_direct_dm_interrupts_active_goal_without_attemp
         yield ae.Done(ok=True, text="Answer to outsider")
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", fake_events)
-    original_schedule = agent._schedule_wake
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    original_schedule = agent.inputs.schedule_wake
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
         assert await agent._drain_owned_inbox(session) == 1
         queued = agent._pending_turns[session]
@@ -77,7 +77,7 @@ async def test_new_nondependency_direct_dm_interrupts_active_goal_without_attemp
         assert queued[0].goal_wait_id is None
         assert queued[0].direct_interrupt_input_key == f"bus:{message.seq}"
         assert queued[0].direct_interrupt_ticket is not None
-        monkeypatch.setattr(agent, "_schedule_wake", original_schedule)
+        monkeypatch.setattr(agent.inputs, "schedule_wake", original_schedule)
         agent._schedule_wake(session)
         await asyncio.wait_for(agent._wake_tasks[session], timeout=3)
         assert len(seen) == 1
@@ -136,7 +136,7 @@ async def test_benign_wait_replacement_does_not_strand_queued_interrupt(tmp_path
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch, standby=True)
     old_wait = comms.goal_wait(session)
     message = comms.send_message("outsider", session, "Fresh direct")
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
         await agent._drain_owned_inbox(session)
         assert agent._pending_turns[session][0].direct_interrupt_wait_id == old_wait.wait_id
@@ -191,7 +191,7 @@ async def test_historical_unknown_is_not_replayed_and_dependency_path_is_distinc
     tmp_path, monkeypatch
 ):
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch, standby=True)
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
         old = comms.send_message("outsider", session, "Already uncertain")
         owner = comms.registry.require(session)
@@ -243,7 +243,7 @@ async def test_historical_unknown_is_not_replayed_and_dependency_path_is_distinc
 async def test_new_owner_admission_refuses_old_direct_input_at_send_boundary(tmp_path, monkeypatch):
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch)
     message = comms.send_message("outsider", session, "Do not cross owner change")
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
         await agent._drain_owned_inbox(session)
         pending = agent._pending_turns.pop(session)[0]
@@ -283,7 +283,7 @@ async def test_active_backend_does_not_steer_nondependency_dm_into_goal_attempt(
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch)
     message = comms.send_message("outsider", session, "Wait for an ordinary turn")
     agent._backend_inboxes[session] = asyncio.Queue()
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
         assert await agent._drain_owned_inbox(session) == 1
         assert agent._backend_inboxes[session].empty()
@@ -306,7 +306,7 @@ async def test_channel_post_does_not_gain_direct_interrupt_authority(tmp_path, m
         comms.registry.status(session),
     )
     channel = comms.send_message("member", "#ci", "Unmentioned channel update")
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
         await agent._drain_owned_inbox(session)
         assert not agent._pending_turns.get(session)
@@ -321,8 +321,8 @@ async def test_queue_survives_progress_bump_and_rebinds_at_dispatch(tmp_path, mo
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch)
     original_goal = comms.registry.require(session).goal
     message = comms.send_message("outsider", session, "Question during progress")
-    original_schedule = agent._schedule_wake
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    original_schedule = agent.inputs.schedule_wake
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
         await agent._drain_owned_inbox(session)
         queued = agent._pending_turns[session][0]
@@ -347,7 +347,7 @@ async def test_queue_survives_progress_bump_and_rebinds_at_dispatch(tmp_path, mo
             yield ae.Done(ok=True, text="Answer after the bump")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
-        monkeypatch.setattr(agent, "_schedule_wake", original_schedule)
+        monkeypatch.setattr(agent.inputs, "schedule_wake", original_schedule)
         agent._schedule_wake(session)
         await asyncio.wait_for(agent._wake_tasks[session], timeout=3)
         # The turn dispatched once with the FRESH revision and stayed started.
@@ -364,7 +364,7 @@ async def test_change_after_dispatch_denies_without_retry(tmp_path, monkeypatch,
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch, standby=True)
     original_wait = comms.goal_wait(session)
     message = comms.send_message("outsider", session, "Question during standby")
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
         await agent._drain_owned_inbox(session)
         pending = agent._pending_turns.pop(session)[0]
@@ -410,8 +410,8 @@ async def test_goal_cleared_or_paused_drops_queued_interrupt_without_crash(
     """No active goal: queued ordinary interrupts are discarded, never dispatched."""
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch)
     message = comms.send_message("outsider", session, "Question before the change")
-    original_schedule = agent._schedule_wake
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    original_schedule = agent.inputs.schedule_wake
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
         await agent._drain_owned_inbox(session)
         assert agent._pending_turns[session][0].direct_interrupt_goal_id == goal.id
@@ -426,7 +426,7 @@ async def test_goal_cleared_or_paused_drops_queued_interrupt_without_crash(
             yield ae.Done(ok=True, text="unexpected")
 
         monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", forbidden_events)
-        monkeypatch.setattr(agent, "_schedule_wake", original_schedule)
+        monkeypatch.setattr(agent.inputs, "schedule_wake", original_schedule)
         agent._schedule_wake(session)
         if agent._wake_tasks.get(session):
             await asyncio.wait_for(agent._wake_tasks[session], timeout=3)

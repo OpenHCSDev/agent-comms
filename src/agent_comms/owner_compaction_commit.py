@@ -19,6 +19,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from .backend import _session_revision
+from .channels import ChannelCatalog
 from .compaction_journal import (
     CompactionJournal,
     CompactionJournalError,
@@ -26,6 +27,7 @@ from .compaction_journal import (
     SelectedSummaryAttempt,
 )
 from .declarations import (
+    DeliveryScope,
     Message,
     RelationViolationError,
     Thread,
@@ -33,7 +35,7 @@ from .declarations import (
     _store_lock,
     unique_wire_object,
 )
-from .input_disposition import InputDispositions
+from .input_disposition import FutureInputQueue, InputDispositions
 from .native_package import COMPACTION_HELPER, verify_native_package
 from .owner_compaction_gate import OwnerCompactionAttestation
 from .owner_compaction_prepare import NativePreparation, prepare_native_source
@@ -68,11 +70,18 @@ class CompactionSource:
 class OwnerCompactionCommit:
     """Trusted owner bridge. A returned UNKNOWN never grants another dispatch."""
 
-    def __init__(self, registry_path: Path, package_dir: Path):
+    def __init__(
+        self,
+        registry_path: Path,
+        package_dir: Path,
+        *,
+        future_queue: FutureInputQueue | None = None,
+    ):
         require_deadline_support()
         self.root = registry_path.parent.resolve(strict=True)
         self.registry = ThreadRegistry(registry_path)
         self.inputs = InputDispositions(self.root)
+        self.future_queue = future_queue
         self.package_dir = package_dir.resolve(strict=True)
         self.helper = self.package_dir / "dist/agent-comms-compaction-commit-child.mjs"
         self.import_fence = self.package_dir / "dist/agent-comms-import-fence.mjs"
@@ -143,42 +152,19 @@ class OwnerCompactionCommit:
             _store_lock(self.inputs.path) as input_fd,
         ):
             if settled:
-                assert owner.active_turn is not None
-                admission = owner.active_turn.admission_generation
-                rows = self.inputs._read()
-                pending = rows.get(pending_input_key) if pending_input_key else None
-                if pending_input_key is not None and (
-                    not pending_input_key.startswith("acp:")
-                    or pending is None
-                    or pending["sequence"] is not None
-                    or pending["target"] != owner.name
-                    or pending["owner"] != owner.name
-                    or pending["admission"] != admission
-                    or pending["status"] != "unknown"
-                    or pending["turn_id"] is not None
-                    or pending["native_id"] is not None
-                    or pending["sent_text"] is not None
-                ):
-                    raise RelationViolationError("Original owner input already attempted")
-                if admission is None or any(
-                    row["owner"] == owner.name
-                    and row["admission"] == admission
-                    and row["status"] == "unknown"
-                    and key != pending_input_key
-                    for key, row in rows.items()
-                ):
-                    raise RelationViolationError("Unsettled owner input; compaction not dispatched")
+                self.inputs._compaction_rows_unlocked(owner, pending_input_key, self.future_queue)
             yield receipt, fd, (executor_fd, wire_fd, bus_fd, input_fd)
 
     @staticmethod
-    def _ingress_revision(path: Path, *, bus: bool = False) -> str:
+    def _ingress_revision(path: Path, *, bus: bool = False, delivery=None) -> str:
         try:
             info = path.lstat()
         except FileNotFoundError:
-            return "missing"
+            return hashlib.sha256(b"").hexdigest() if bus else "missing"
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > 256 * 1024**2:
             raise RelationViolationError("Compaction ingress must be bounded regular storage")
         raw = path.read_bytes()
+        selected = []
         if bus and raw:
             try:
                 if not raw.endswith(b"\n"):
@@ -191,8 +177,12 @@ class OwnerCompactionCommit:
                     if message.seq <= previous:
                         raise ValueError("Bus sequence is not increasing")
                     previous = message.seq
+                    if delivery is None or delivery.delivers(message):
+                        selected.append(line)
             except (ValueError, KeyError, TypeError, AttributeError) as error:
                 raise RelationViolationError("Invalid compaction ingress bus") from error
+        if bus:
+            return hashlib.sha256(b"\n".join(selected)).hexdigest()
         digest = hashlib.sha256(raw).hexdigest()
         return (
             f"{info.st_dev}:{info.st_ino}:{info.st_size}:"
@@ -230,6 +220,14 @@ class OwnerCompactionCommit:
         settings_paths: tuple[str, ...] | None,
     ) -> CompactionSource:
         root = self.root.stat()
+        snapshot = self.registry._snapshot_unlocked()
+        owner = snapshot.threads[receipt.thread]
+        delivery = DeliveryScope(
+            owner.name,
+            snapshot.aliases,
+            ChannelCatalog(self.root / "channels.json", self.registry).targets_for(owner.tags),
+        )
+        rows = self.inputs._compaction_rows_unlocked(owner, pending_input_key, self.future_queue)
         return CompactionSource(
             json.dumps(witness, sort_keys=True, separators=(",", ":")),
             f"{self.root}:{root.st_dev}:{root.st_ino}",
@@ -238,8 +236,8 @@ class OwnerCompactionCommit:
             receipt.turn_id,
             receipt.goal_id,
             receipt.goal_revision,
-            self._ingress_revision(self.root / "bus.jsonl", bus=True),
-            self._ingress_revision(self.inputs.path),
+            self._ingress_revision(self.root / "bus.jsonl", bus=True, delivery=delivery),
+            hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest(),
             pending_input_key,
             settings_paths,
             self._settings_source(settings_paths),
@@ -256,8 +254,8 @@ class OwnerCompactionCommit:
     ) -> CompactionSource:
         """Capture BEFORE generating a summary; no provider work under these locks.
 
-        Whole-store ingress revisions are conservative: even unrelated bus
-        movement declines a candidate. No UNKNOWN input is replayed or resolved.
+        Owner-relevant ingress remains fenced. Exact live future queue receipts
+        may wait through the summary; no UNKNOWN input is replayed or resolved.
         """
         witness = dict(witness)
         with self._boundary(owner, epoch, witness, pending_input_key=pending_input_key) as (

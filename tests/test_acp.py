@@ -1366,7 +1366,7 @@ class TestAgentTurn:
 
         agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
         monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
-        monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
 
         class FakeClient:
             async def session_update(self, **kwargs):
@@ -1412,7 +1412,7 @@ class TestAgentTurn:
 
         agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
         monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
-        monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.update_goal("proj", "set", text="Recover a retry")
         store = agent._open_goal_store()
@@ -1498,7 +1498,7 @@ class TestAgentTurn:
 
         agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
         monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
-        monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.update_goal("proj", "set", text="No silent stalled goal")
         store = agent._open_goal_store()

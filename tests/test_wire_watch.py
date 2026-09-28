@@ -56,7 +56,7 @@ async def test_idle_owner_wakes_on_bus_append_without_polling(tmp_path, monkeypa
     async def noop(_session_id=None):
         return None
 
-    monkeypatch.setattr(agent, "_drain_inbox", drain)
+    monkeypatch.setattr(agent.inputs, "drain_inbox", drain)
     monkeypatch.setattr(agent, "_sync_thread_config", noop)
     monkeypatch.setattr(agent, "_schedule_goal", lambda _session_id: None)
     monkeypatch.setattr(agent, "_refresh_auth_models", noop)
@@ -95,7 +95,7 @@ async def test_shutdown_cancels_idle_file_wait(tmp_path, monkeypatch):
     async def noop(_session_id=None):
         return None
 
-    monkeypatch.setattr(agent, "_drain_inbox", drain)
+    monkeypatch.setattr(agent.inputs, "drain_inbox", drain)
     monkeypatch.setattr(agent, "_sync_thread_config", noop)
     monkeypatch.setattr(agent, "_schedule_goal", lambda _session_id: None)
     monkeypatch.setattr(agent, "_refresh_auth_models", noop)

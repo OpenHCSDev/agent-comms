@@ -28,7 +28,7 @@ import sys
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
@@ -71,6 +71,7 @@ from .declarations import (
     MessageBus,
     MessageRoute,
     MessageType,
+    RelationViolationError,
     ScheduledTurn,
     Thread,
     TurnClaimFence,
@@ -100,11 +101,11 @@ from .goal_attempts import (
 )
 from .goal_failure_observation import FailedTurnObservation
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
-from .input_disposition import AcpDeliveryCursors, InputDispositions
+from .input_drain import InputDrain, QueuedInput
+from .input_effects import InputEffects
 from .mro_dispatch import MroDispatch, handles
 from .native_source_cursor import advance_current_native_cursor, read_current_native_cursor
-from .operations import OBSERVATION_INTERVAL, Comms, wire
-from .passive_channel_awareness import PassiveChannelAwareness
+from .operations import Comms, wire
 from .pending_requests import PendingRequests
 from .runtime import (
     ACP_PERMISSION_TIMEOUT_SECONDS,
@@ -119,7 +120,6 @@ from .selected_write_plan import PlannedWrite, SelectedWritePlans
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from .transcript_updates import SentTranscriptUpdate, StartedTranscriptUpdate, TranscriptUpdate
-from .wire_watch import open_wire_watcher
 
 if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent  # type: ignore[import-not-found]
@@ -136,9 +136,6 @@ DEFAULT_AGENT_ARGS = [
     "--model",
     "z-ai/glm-5.3-flash",
 ]
-LIVE_DRAIN_INTERVAL = OBSERVATION_INTERVAL
-WATCH_FALLBACK_INTERVAL = 1.0
-GOAL_WAIT_RECHECK_INTERVAL = 60.0
 NO_REPLY_WINDOW = 2.5  # silence: end the turn after this long with nothing
 REPLY_WINDOW = 8.0  # once replies flow, keep collecting at most this long
 REPLY_QUIET = 1.5  # after the last reply, wait this long then end the turn
@@ -157,15 +154,7 @@ def _goal_attempt_unavailable() -> RequestError:
     )
 
 
-@dataclass(frozen=True, slots=True)
-class QueuedInput:
-    text: str
-    echo: bool
-    owner_created_at: float
-    admission: int
-
-
-class CommsAgent(SessionEffects):
+class CommsAgent(SessionEffects, InputEffects):
     """ACP agent bound to one Comms wire.
 
     Session -> thread. Coding prompts run the configured backend; targeted
@@ -218,49 +207,20 @@ class CommsAgent(SessionEffects):
             if agent_args is not None
             else (shlex.split(arg_env) if arg_env is not None else list(DEFAULT_AGENT_ARGS))
         )
-        self._drain_tasks: dict[str, asyncio.Task[None]] = {}
         self._turn_tasks: dict[str, asyncio.Task[Any]] = {}
-        self._backend_inboxes: dict[str, asyncio.Queue[str | dict[str, Any]]] = {}
         self._persistent_backends: dict[str, backend.PersistentPiSession] = {}
-        self._queued_inputs: dict[str, dict[str, QueuedInput]] = {}
-        self._restored_inputs: dict[str, dict[str, QueuedInput]] = {}
-        self._queue_revisions: dict[str, int] = {}
-        # ACK/queue insertion is not model-read. Every accepted follow-up,
-        # including non-displayed steers, needs its own identified user start.
-        self._forwarded_inputs: dict[str, set[str]] = {}
-        self._steering_input_keys: dict[str, dict[str, str]] = {}
-        self._steering_origins: dict[str, dict[str, Message]] = {}
-        self._steering_goal_ids: dict[str, dict[str, str | None]] = {}
-        self._turn_input_keys: dict[str, set[str]] = {}
-        self._turn_original_input_keys: dict[str, tuple[str, ...]] = {}
-        # Adaptive selected summaries hand off their returned owner admission here.
-        # A terminal journal row can never recreate an admission after restart.
-        self._selected_summary_admissions: dict[str, SelectedSummaryAdmission] = {}
-        self._turn_input_text: dict[str, str] = {}
-        self._dispositions = InputDispositions(comms.root)
         self._goal_store: GoalAttemptStore | None = None
         self._pending_goal_origins: dict[str, str] = {}
-        self._delivery_cursors = AcpDeliveryCursors(comms.root)
-        self._passive_awareness = PassiveChannelAwareness(comms.root)
-        self._legacy_through: dict[str, int] = {}
         self._runtime = RuntimeServer(self)
         self.sessions = self.session_lifecycle_class(
             comms, self._agent_bin, self._agent_args, self._runtime, runtime_enabled, self
         )
         self.config = self.sessions.config
+        self.inputs = InputDrain(comms, self.sessions, self._runtime, self, auto_wake)
         # A preplanned write is valid only while its original ACP controller
         # remains attached. Never restore this binding after a process crash.
         self._selected_write_controllers: dict[tuple[str, int], tuple[str, object]] = {}
-        self._auto_wake = auto_wake
-        self._pending_turns: dict[str, list[ScheduledTurn]] = {}
-        # Ephemeral one-shot tickets exist only for freshly recorded direct
-        # inputs. Reopening a durable UNKNOWN row cannot mint one by itself.
-        self._direct_interrupt_tickets: dict[str, dict[str, str]] = {}
-        self._drain_locks: dict[str, asyncio.Lock] = {}
         self._turn_locks: dict[str, asyncio.Lock] = {}
-        self._closing = False
-        self._inbox_cursors: dict[str, int] = {}
-        self._wake_tasks: dict[str, asyncio.Task[None]] = {}
         self._active_turns: dict[str, str] = {}
         self._emitted_errors: dict[str, str] = {}
         self._goal_execution_signatures: dict[str, tuple[Goal | None, GoalExecution | None]] = {}
@@ -283,31 +243,9 @@ class CommsAgent(SessionEffects):
     def _initialize_session_delivery(
         self, session_id: str, thread: Thread, *, fresh: bool, private: bool
     ) -> None:
-        if private:
-            if not fresh:
-                self._inbox_cursors.pop(session_id, None)
-                self._legacy_through.pop(session_id, None)
-            return
-        cursor, legacy = self._delivery_cursors.initialize(
-            self._comms.registry.aliases_for(thread.name),
-            thread.name,
-            high_water=self._comms.message_high_water(),
-            fresh=fresh,
+        return self.inputs.initialize_session_delivery(
+            session_id, thread, fresh=fresh, private=private
         )
-        with _store_lock(self._comms._wire_lock_path):
-            owner = self._comms.registry.require(thread.name)
-            admission = self._comms.registry.snapshot().admission_generations[owner.name]
-            # Advisory awareness must not fail a committed session attach.
-            with suppress(OSError, TypeError, ValueError):
-                self._passive_awareness.initialize(
-                    owner,
-                    admission=admission,
-                    high_water=self._comms.message_high_water(),
-                    channels=self._comms.channel_catalog.targets_for(owner.tags),
-                    fresh=fresh,
-                )
-        self._inbox_cursors[session_id] = cursor
-        self._legacy_through[session_id] = legacy
 
     def _create_runtime_proxy(self, thread: Thread, session_id: str) -> RuntimeProxy:
         return RuntimeProxy(self, session_id, socket_path(self._comms.root, thread.pid))
@@ -319,7 +257,11 @@ class CommsAgent(SessionEffects):
             await persistent.close_idle()
 
     def _active_backend_inbox(self, session_id: str) -> asyncio.Queue[str | dict[str, Any]] | None:
-        return self._backend_inboxes.get(session_id) if session_id in self._active_turns else None
+        return (
+            self.inputs.backend_inboxes.get(session_id)
+            if session_id in self._active_turns
+            else None
+        )
 
     # Private attachment ABI consumed by runtime/compaction. State exists only
     # on its component; in-process consumers use that owner directly.
@@ -376,6 +318,102 @@ class CommsAgent(SessionEffects):
         self.sessions.client = client
 
     # ─── ACP methods ─────────────────────────────────────────────────────────
+
+    @property
+    def _drain_tasks(self):
+        return self.inputs.drain_tasks
+
+    @property
+    def _backend_inboxes(self):
+        return self.inputs.backend_inboxes
+
+    @property
+    def _queued_inputs(self):
+        return self.inputs.queued_inputs
+
+    @property
+    def _restored_inputs(self):
+        return self.inputs.restored_inputs
+
+    @property
+    def _queue_revisions(self):
+        return self.inputs.queue_revisions
+
+    @property
+    def _forwarded_inputs(self):
+        return self.inputs.forwarded_inputs
+
+    @property
+    def _steering_input_keys(self):
+        return self.inputs.steering_input_keys
+
+    @property
+    def _steering_origins(self):
+        return self.inputs.steering_origins
+
+    @property
+    def _steering_goal_ids(self):
+        return self.inputs.steering_goal_ids
+
+    @property
+    def _turn_input_keys(self):
+        return self.inputs.turn_input_keys
+
+    @property
+    def _turn_original_input_keys(self):
+        return self.inputs.turn_original_input_keys
+
+    @property
+    def _selected_summary_admissions(self):
+        return self.inputs.selected_summary_admissions
+
+    @property
+    def _turn_input_text(self):
+        return self.inputs.turn_input_text
+
+    @property
+    def _dispositions(self):
+        return self.inputs.dispositions
+
+    @property
+    def _delivery_cursors(self):
+        return self.inputs.delivery_cursors
+
+    @property
+    def _passive_awareness(self):
+        return self.inputs.passive_awareness
+
+    @property
+    def _legacy_through(self):
+        return self.inputs.legacy_through
+
+    @property
+    def _pending_turns(self):
+        return self.inputs.pending_turns
+
+    @property
+    def _direct_interrupt_tickets(self):
+        return self.inputs.direct_interrupt_tickets
+
+    @property
+    def _drain_locks(self):
+        return self.inputs.drain_locks
+
+    @property
+    def _inbox_cursors(self):
+        return self.inputs.inbox_cursors
+
+    @property
+    def _wake_tasks(self):
+        return self.inputs.wake_tasks
+
+    @property
+    def _closing(self):
+        return self.inputs.closing
+
+    @property
+    def _auto_wake(self):
+        return self.inputs.auto_wake
 
     async def initialize(
         self,
@@ -502,7 +540,7 @@ class CommsAgent(SessionEffects):
             if session_id in self.sessions.proxies:
                 await self.sessions.proxies[session_id].request("clear_queue")
             else:
-                await self.clear_queued_inputs(session_id)
+                await self.inputs.clear_queued_inputs(session_id)
             return PromptResponse(stop_reason="end_turn")
         try:
             images = self._prompt_images(prompt)
@@ -537,88 +575,22 @@ class CommsAgent(SessionEffects):
             )
             return PromptResponse.model_validate(result)
         if options.get("sendNow") is True:
-            inbox = self._backend_inboxes.get(session_id)
-            selected = list(self._queued_inputs.get(session_id, {}))
-            if inbox is not None and selected:
-                inbox.put_nowait({"type": "interrupt_steering", "_input_ids": selected})
+            self.inputs.send_now(session_id)
             return PromptResponse(stop_reason="end_turn")
         text = self._prompt_text(prompt)
         if (
             session_id in self._active_turns
             and backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
-            and (inbox := self._backend_inboxes.get(session_id)) is not None
+            and self.inputs.backend_inboxes.get(session_id) is not None
             and not text.lstrip().startswith(("@", "#", RELAY_PREFIX))
         ):
-            pending_ids = self._forwarded_inputs.setdefault(session_id, set())
-            if len(pending_ids) >= 32:
-                raise RequestError.invalid_params(
-                    {"reason": "Too many follow-up inputs awaiting their own user start."}
-                )
-            input_id = uuid4().hex
-            pending_ids.add(input_id)
-            key = f"acp:{input_id}"
-            with _store_lock(self._comms._wire_lock_path):
-                snapshot = self._comms.registry.snapshot()
-                owner = snapshot.aliases.get(
-                    self._require_session(session_id), self._require_session(session_id)
-                )
-                admission = snapshot.admission_generations[owner]
-                admitted_goal = snapshot.threads[owner].goal
-                self._steering_goal_ids.setdefault(session_id, {})[input_id] = (
-                    admitted_goal.id if admitted_goal is not None and admitted_goal.active else None
-                )
-                self._dispositions.record(
-                    key,
-                    seq=None,
-                    owner=owner,
-                    admission=admission,
-                    target=owner,
-                    text=display_text or text or "[image prompt]",
-                )
-            self._steering_input_keys.setdefault(session_id, {})[input_id] = key
-            self._turn_input_keys.setdefault(session_id, set()).add(key)
-            enqueued = False
-            try:
-                if delivery == "queue":
-                    owner_row = snapshot.threads[owner]
-                    self._queued_inputs.setdefault(session_id, {})[input_id] = QueuedInput(
-                        display_text, defer_display, owner_row.created_at, admission
-                    )
-                inbox.put_nowait(
-                    {
-                        "type": "prompt",
-                        "message": "User follow-up:\n" + text.removeprefix(AGENT_PREFIX),
-                        # Queue once; explicit immediate delivery interrupts the
-                        # current response after this exact input is accepted.
-                        "streamingBehavior": "steer",
-                        "_input_id": input_id,
-                        **({"images": [image.to_rpc() for image in images]} if images else {}),
-                    }
-                )
-                enqueued = True
-                if delivery == "steer":
-                    inbox.put_nowait({"type": "interrupt_steering", "_input_ids": [input_id]})
-                if delivery == "queue":
-                    await self._emit_queue_state(session_id)
-            except BaseException:
-                if not enqueued:
-                    self._queued_inputs.get(session_id, {}).pop(input_id, None)
-                # A failure after put_nowait is UNKNOWN, not permission to
-                # discard the queue row or replay the exact input.
-                raise
-            # ACP receipt is only local acceptance. The matching inputStarted
-            # update, not this end_turn, is the model-read boundary.
-            return PromptResponse(
-                stop_reason="end_turn",
-                field_meta={
-                    "agentComms": {
-                        "inputDisposition": {
-                            "inputId": input_id,
-                            "status": "accepted_not_started",
-                            "delivery": delivery,
-                        }
-                    }
-                },
+            return await self.inputs.accept_followup(
+                session_id,
+                text=text,
+                display_text=display_text,
+                delivery=delivery,
+                defer_display=defer_display,
+                images=images,
             )
         async with self._turn_locks.setdefault(session_id, asyncio.Lock()):
             # A direct ACP prompt owns this one controller. Owner-socket prompts
@@ -689,17 +661,7 @@ class CommsAgent(SessionEffects):
         return instructions
 
     async def clear_queued_inputs(self, session_id: str) -> None:
-        """Drop prompts queued against the backend for this session.
-
-        Pi's own queue is cleared, then the local deferred-display list is
-        reset. Callers may re-send the prompts they want to keep.
-        """
-        inbox = self._backend_inboxes.get(session_id)
-        if inbox is not None:
-            inbox.put_nowait({"type": "clear_queue"})
-        self._queued_inputs.pop(session_id, None)
-        self._restored_inputs.pop(session_id, None)
-        await self._emit_queue_state(session_id)
+        return await self.inputs.clear_queued_inputs(session_id)
 
     async def compact_context(
         self, session_id: str, instructions: str | None = None
@@ -710,93 +672,15 @@ class CommsAgent(SessionEffects):
         return await compact_context(self, session_id, instructions)
 
     def _queue_binding(self, session_id: str) -> dict[str, Any] | None:
-        try:
-            owner, admission = self._comms.registry.live_owner_with_admission(
-                self.sessions.bindings.get(session_id, session_id)
-            )
-        except (OSError, ValueError):
-            return None
-        return {
-            "version": 1,
-            "sessionId": session_id,
-            "ownerThread": owner.name,
-            "ownerCreatedAt": owner.created_at,
-            "ownerEpoch": admission,
-            "admissionGeneration": admission,
-        }
+        return self.inputs.queue_binding(session_id)
 
     def _queue_state(self, session_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-        """Bounded exact-ID presentation of this ACP owner's in-memory queue.
-
-        A changed owner admission never inherits old in-memory queue entries.
-        They and their durable input dispositions remain untouched/UNKNOWN.
-        An oversized projection is unavailable, not an empty queue or retry.
-        """
-        revision = self._queue_revisions.get(session_id, 0) + 1
-        self._queue_revisions[session_id] = revision
-        binding = self._queue_binding(session_id)
-        if binding is None:
-            return None, None
-        scope = {key: value for key, value in binding.items() if key != "version"}
-
-        def current(values: dict[str, QueuedInput]) -> list[dict[str, str]]:
-            return [
-                {"inputId": input_id, "text": item.text}
-                for input_id, item in values.items()
-                if item.echo
-                and item.owner_created_at == binding["ownerCreatedAt"]
-                and item.admission == binding["admissionGeneration"]
-            ]
-
-        items = current(self._queued_inputs.get(session_id, {}))
-        restored = current(self._restored_inputs.get(session_id, {}))
-        if len(items) + len(restored) > 32:
-            return binding, None
-        if any(type(row["text"]) is not str for row in items + restored):
-            # Historical malformed entries retain their exact IDs and UNKNOWN
-            # dispositions, but cannot be projected as a valid queue state.
-            return binding, None
-        try:
-            sizes = [len(row["text"].encode("utf-8")) for row in items + restored]
-        except UnicodeError:
-            # JSON permits lone surrogates. They remain exact queued/UNKNOWN
-            # inputs, but cannot be advertised as a valid UTF-8 queue row.
-            return binding, None
-        if any(size > 4096 for size in sizes) or sum(sizes) > 65536:
-            return binding, None
-        return binding, {
-            "version": 1,
-            "scope": scope,
-            "revision": revision,
-            "items": items,
-            "restored": restored,
-        }
+        return self.inputs.queue_state(session_id)
 
     async def _emit_queue_state(
         self, session_id: str, *, restored: list[str] | None = None, client: Any = None
     ) -> None:
-        binding, state = self._queue_state(session_id)
-        await (client or self._runtime).session_update(
-            session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta={
-                    "agentComms": {
-                        "queueBinding": binding,
-                        "queueState": state,
-                        # Legacy text-only projection is informational, never
-                        # authoritative for exact-ID queue matching.
-                        "queue": [row["text"] for row in state["items"]] if state else [],
-                        "restored": (
-                            [row["text"] for row in state["restored"]]
-                            if state is not None and restored is not None
-                            else []
-                        ),
-                    }
-                },
-            ),
-        )
+        return await self.inputs.emit_queue_state(session_id, restored=restored, client=client)
 
     async def _emit_input_started(
         self,
@@ -805,79 +689,26 @@ class CommsAgent(SessionEffects):
         input_id: str | None = None,
         queued_item: QueuedInput | None = None,
     ) -> None:
-        proof: dict[str, Any] = {"text": text}
-        if input_id is not None:
-            proof["inputId"] = input_id
-        if input_id is not None and queued_item is not None:
-            binding = self._queue_binding(session_id)
-            if binding is not None and (
-                binding["ownerCreatedAt"],
-                binding["admissionGeneration"],
-            ) == (queued_item.owner_created_at, queued_item.admission):
-                revision = self._queue_revisions.get(session_id, 0) + 1
-                self._queue_revisions[session_id] = revision
-                proof.update(
-                    version=1,
-                    scope={key: value for key, value in binding.items() if key != "version"},
-                    revision=revision,
-                )
-        await self._runtime.session_update(
-            session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta={"agentComms": {"inputStarted": proof}},
-            ),
-        )
+        return await self.inputs.emit_input_started(session_id, text, input_id, queued_item)
 
     async def _emit_input_disposition(
         self, session_id: str, row: dict[str, Any], client: Any = None
     ) -> None:
-        await self._emit_public_input_disposition(session_id, InputDispositions.public(row), client)
+        return await self.inputs.emit_input_disposition(session_id, row, client)
 
     async def _emit_public_input_disposition(
         self, session_id: str, disposition: dict[str, Any], client: Any = None
     ) -> None:
-        await (client or self._runtime).session_update(
-            session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta={"agentComms": {"inputDisposition": disposition}},
-            ),
-        )
+        return await self.inputs.emit_public_input_disposition(session_id, disposition, client)
 
     async def emit_input_delivery_changed(self, session_id: str) -> None:
-        """Invalidate attached views after a notice-only owner action."""
-        await self._runtime.session_update(
-            session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta={"agentComms": {"inputDeliveryChanged": True}},
-            ),
-        )
+        return await self.inputs.emit_input_delivery_changed(session_id)
 
     async def replay_unknown_inputs(self, session_id: str, client: Any = None) -> None:
-        owner = self._require_session(session_id)
-        overview = self._comms.input_delivery(
-            owner, awaiting_keys=self.awaiting_input_keys(session_id)
-        )
-        for disposition in overview["inputs"]:
-            await self._emit_public_input_disposition(session_id, disposition, client=client)
+        return await self.inputs.replay_unknown_inputs(session_id, client)
 
     def awaiting_input_keys(self, session_id: str) -> frozenset[str] | None:
-        """Derive delivery notices from existing owner queues; never create new authority."""
-        owner = self._comms.registry.require(self._require_session(session_id))
-        if owner.pid != os.getpid() or not self._comms.registry.status(owner.name).running:
-            return None
-        keys = set(self._turn_input_keys.get(session_id, ()))
-        keys.update(
-            self._dispositions.bus_key(turn.origin, owner)
-            for turn in self._pending_turns.get(session_id, ())
-            if turn.origin is not None
-        )
-        return frozenset(keys)
+        return self.inputs.awaiting_input_keys(session_id)
 
     async def emit_session_identity(self, session_id: str, name: str, client: Any = None) -> None:
         """Let a subscriber identify its owner before potentially long replay."""
@@ -921,7 +752,7 @@ class CommsAgent(SessionEffects):
                 f"sent_seq={sent_seq}"
             )
             if images:
-                await self._run_owned_input(
+                await self.inputs.run_owned_input(
                     session_id,
                     thread_name,
                     agent_task or "",
@@ -929,7 +760,7 @@ class CommsAgent(SessionEffects):
                     display_text=display_text,
                 )
             elif agent_task:
-                await self._run_owned_input(
+                await self.inputs.run_owned_input(
                     session_id, thread_name, agent_task, display_text=display_text
                 )
             else:
@@ -938,7 +769,7 @@ class CommsAgent(SessionEffects):
                 self._active_turns[session_id] = turn_id
                 try:
                     await self._emit_event(session_id, self._started_event(thread_name, turn_id))
-                    await self._drain_inbox(session_id)
+                    await self.inputs.drain_inbox(session_id)
                     await self._collect_replies(session_id, thread_name, sent_seq)
                 finally:
                     await self.settle_turn(session_id, thread_name, turn_id, turn_claim)
@@ -951,7 +782,7 @@ class CommsAgent(SessionEffects):
         finally:
             if self._turn_tasks.get(session_id) is turn_task:
                 self._turn_tasks.pop(session_id, None)
-            self._ensure_live_drain(session_id)
+            self.inputs.ensure_live_drain(session_id)
 
     async def _run_owned_input(
         self,
@@ -962,40 +793,8 @@ class CommsAgent(SessionEffects):
         images: tuple[Any, ...] = (),
         display_text: str | None = None,
     ) -> None:
-        if backend.rpc_args_for(self._agent_bin, self._agent_args) is None:
-            # The plain text fallback has no Pi native input-ID protocol.
-            # Preserve its existing local command behavior without attaching
-            # a false Pi start claim to it.
-            await self._run_agent_turn(session_id, thread_name, task, images=images)
-            return
-        key = f"acp:{uuid4().hex}"
-        with _store_lock(self._comms._wire_lock_path):
-            snapshot = self._comms.registry.snapshot()
-            canonical = snapshot.aliases.get(thread_name, thread_name)
-            admitted_goal = snapshot.threads[canonical].goal
-            original_goal_id = (
-                admitted_goal.id if admitted_goal is not None and admitted_goal.active else None
-            )
-            self._dispositions.record(
-                key,
-                seq=None,
-                owner=canonical,
-                admission=snapshot.admission_generations[canonical],
-                target=canonical,
-                text=display_text or task or "[image prompt]",
-            )
-        row = self._dispositions.get(key)
-        assert row is not None
-        await self._emit_input_disposition(session_id, row)
-        await self._run_agent_turn(
-            session_id,
-            thread_name,
-            task,
-            images=images,
-            original_keys=(key,),
-            initial_display_text=display_text,
-            original_owner_input=True,
-            original_goal_id=original_goal_id,
+        await self.inputs.run_owned_input(
+            session_id, thread_name, task, images=images, display_text=display_text
         )
 
     def _debug_log(self, message: str) -> None:
@@ -1019,7 +818,7 @@ class CommsAgent(SessionEffects):
             await asyncio.sleep(REPLY_POLL)
             waited += REPLY_POLL
             quiet += REPLY_POLL
-            pushed = await self._drain_count(session_id)
+            pushed = await self.inputs.drain_count(session_id)
             if pushed:
                 got_reply = True
                 quiet = 0.0
@@ -1208,7 +1007,7 @@ class CommsAgent(SessionEffects):
         return self.sessions.metadata(thread_name, session_id=session_id)
 
     def _session_runtime_metadata(self, thread_name: str, session_id: str) -> dict[str, Any]:
-        queue_binding, queue_state = self._queue_state(session_id)
+        queue_binding, queue_state = self.inputs.queue_state(session_id)
         return {
             "queueBinding": queue_binding,
             "queueState": queue_state,
@@ -1229,58 +1028,10 @@ class CommsAgent(SessionEffects):
         return await self.sessions.sync_identity(session_id)
 
     def _ensure_live_drain(self, session_id: str) -> None:
-        """Keep one background task per session pushing inbox messages live."""
-        if self._closing:
-            return
-        if session_id in self._drain_tasks and not self._drain_tasks[session_id].done():
-            return
-
-        async def loop() -> None:
-            watcher = open_wire_watcher(self._comms.root)
-            next_goal_wait_check = 0.0
-            try:
-                while True:
-                    if watcher is None:
-                        await asyncio.sleep(LIVE_DRAIN_INTERVAL)
-                    else:
-                        watcher.changed.clear()
-                    try:
-                        await self._drain_inbox(session_id)
-                        await self.config.sync_thread(session_id)
-                        if time.monotonic() >= next_goal_wait_check:
-                            self._comms.recover_closed_goal_wait(session_id)
-                            next_goal_wait_check = time.monotonic() + GOAL_WAIT_RECHECK_INTERVAL
-                        self._schedule_goal(session_id)
-                        await self.config.refresh_auth_models()
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception as error:
-                        # Never let the drain task die silently: a dead drain
-                        # means replies stop reaching the client.
-                        self._debug_log(f"live-drain error: {error!r}")
-                    if watcher is not None:
-                        if watcher.invalid:
-                            watcher.close()
-                            watcher = None
-                        else:
-                            with suppress(TimeoutError):
-                                async with asyncio.timeout(WATCH_FALLBACK_INTERVAL):
-                                    await watcher.changed.wait()
-            finally:
-                if watcher is not None:
-                    watcher.close()
-
-        context = self._runtime.controller.set(UNBOUND_CONTROLLER)
-        try:
-            task = asyncio.create_task(loop())
-        finally:
-            self._runtime.controller.reset(context)
-        self._drain_tasks[session_id] = task
+        return self.inputs.ensure_live_drain(session_id)
 
     async def _drain_inbox(self, session_id: str) -> int:
-        """Push undelivered messages to the client; returns count pushed."""
-        async with self._drain_locks.setdefault(session_id, asyncio.Lock()):
-            return await self._drain_owned_inbox(session_id)
+        return await self.inputs.drain_inbox(session_id)
 
     async def _sync_thread_config(self, session_id: str) -> None:
         await self.config.sync_thread(session_id)
@@ -1353,14 +1104,14 @@ class CommsAgent(SessionEffects):
         # Publish the observed status even when stopped, busy, or no-wake;
         # callbacks may only invalidate a prior client binding, not replace it.
         await self._publish_private_cursor(session_id, thread_name)
-        if not self._auto_wake or not self._runtime_enabled:
+        if not self.inputs.auto_wake or not self._runtime_enabled:
             return 0  # Explicitly disabled: no legacy path or ACK fallback.
         if self._comms.registry.status(thread_name).stopped:
             return 0
         if (
             session_id in self._active_turns
             or session_id in self._turn_tasks
-            or session_id in self._backend_inboxes
+            or session_id in self.inputs.backend_inboxes
         ):
             return 0  # Never overlap the ACP owner session's running turn.
         owner = self._comms.registry.require(thread_name)
@@ -1447,314 +1198,27 @@ class CommsAgent(SessionEffects):
         return int(result is not None)
 
     async def _drain_owned_inbox(self, session_id: str) -> int:
-        # The legacy ACP display cursor/ACK/steer path is not a native input
-        # receipt. Never let it consume an explicitly cut-over private bus.
-        if private_root := self._private_nk_marker():
-            return await self._drain_private_nk(session_id, private_root)
-        if self._private_nk_native_package is not None:
-            raise PublicationActivationBlocked("configured private N/K ACP has no durable marker")
-        thread_name = await self.sessions.sync_identity(session_id)
-        if self._comms.registry.status(thread_name).stopped:
-            return 0
-        backend_inbox = self._backend_inboxes.get(session_id)
-        if self.sessions.client is None and backend_inbox is None and not self._runtime_enabled:
-            return 0
-        pushed = 0
-        after = self._inbox_cursors.get(session_id, 0)
-        high_water = self._comms.message_high_water()
-        page = self._comms.incoming_page(thread_name, after=after) if after < high_water else None
-        # A private cutover on a previously empty bus may have occurred after
-        # the first classification but before this page was read. Reclassify
-        # before touching delivery cursors, input dispositions or legacy ACK.
-        if private_root := self._private_nk_marker():
-            return await self._drain_private_nk(session_id, private_root)
-        incoming_messages = page.messages if page else ()
-        for message in incoming_messages:
-            admitted = True
-            dependency_wait = None
-            row: dict[str, Any] | None = None
-            with _store_lock(self._comms._wire_lock_path):
-                snapshot = self._comms.registry.snapshot()
-                current_name = snapshot.aliases.get(thread_name, thread_name)
-                current = snapshot.threads[current_name]
-                status = snapshot.statuses[current_name]
-                aliases = frozenset(
-                    {
-                        current_name,
-                        *(
-                            alias
-                            for alias, target in snapshot.aliases.items()
-                            if target == current_name
-                        ),
-                    }
-                )
-                incoming = ScheduledTurn.incoming(message, aliases=snapshot.aliases)
-                starts_turn = message.starts_turn_for(current_name, aliases=snapshot.aliases)
-                direct = starts_turn and message.target in aliases
-                if starts_turn:
-                    wait = self._comms.goal_wait(current_name) if direct else None
-                    if wait is not None and wait.matches(message, snapshot):
-                        dependency_wait = wait
-                        incoming = replace(
-                            incoming, goal_id=wait.goal_id, goal_wait_id=wait.wait_id
-                        )
-                    elif direct and current.goal is not None and current.goal.active:
-                        # A NEW direct DM may interrupt the goal without being
-                        # a declared dependency reply or a goal continuation.
-                        incoming = replace(
-                            incoming,
-                            direct_interrupt_goal_id=current.goal.id,
-                            direct_interrupt_goal_revision=current.goal.revision,
-                            direct_interrupt_wait_id=wait.wait_id if wait else None,
-                        )
-                    key = self._dispositions.bus_key(message, current)
-                    admitted = self._dispositions.record(
-                        key,
-                        seq=message.seq,
-                        owner=current_name,
-                        admission=snapshot.admission_generations[current_name],
-                        target=message.target,
-                        text=incoming.prompt,
-                    )
-                    row = self._dispositions.get(key)
-                    admitted = (
-                        admitted
-                        and message.seq > self._legacy_through.get(session_id, 0)
-                        and status.running
-                        and (
-                            current.goal is None
-                            or not current.goal.active
-                            or dependency_wait is not None
-                            or incoming.direct_interrupt_goal_id is not None
-                        )
-                        and backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
-                    )
-                    if (
-                        admitted
-                        and incoming.direct_interrupt_goal_id is not None
-                        and self._auto_wake
-                        and self._runtime_enabled
-                    ):
-                        ticket = uuid4().hex
-                        self._direct_interrupt_tickets.setdefault(session_id, {})[key] = ticket
-                        incoming = replace(
-                            incoming,
-                            direct_interrupt_input_key=key,
-                            direct_interrupt_ticket=ticket,
-                        )
-                self._delivery_cursors.advance(aliases, message.seq)
-                self._inbox_cursors[session_id] = message.seq
-            if row is not None and row["status"] == "unknown":
-                await self._emit_input_disposition(session_id, row)
-            if (
-                admitted
-                and dependency_wait is None
-                and incoming.direct_interrupt_goal_id is None
-                and backend_inbox is not None
-                and starts_turn
-                and incoming.reply_target is None
-            ):
-                input_id = f"bus-{message.seq}"
-                self._steering_origins.setdefault(session_id, {})[input_id] = message
-                self._steering_input_keys.setdefault(session_id, {})[input_id] = key
-                self._turn_input_keys.setdefault(session_id, set()).add(key)
-                self._forwarded_inputs.setdefault(session_id, set()).add(input_id)
-                backend_inbox.put_nowait(
-                    {
-                        "type": "prompt",
-                        "message": incoming.prompt,
-                        "streamingBehavior": "steer",
-                        "_input_id": input_id,
-                    }
-                )
-            elif admitted and self._auto_wake and self._runtime_enabled and starts_turn:
-                self._pending_turns.setdefault(session_id, []).append(incoming)
-            await self._runtime.session_update(
-                session_id=session_id,
-                update=AgentMessageChunk(
-                    session_update="agent_message_chunk",
-                    content=TextContentBlock(
-                        type="text", text=f"Incoming from {message.sender}:\n{message.body}\n"
-                    ),
-                    field_meta={
-                        "agentComms": {
-                            "incoming": {
-                                "sender": message.sender,
-                                "target": message.target,
-                                "body": message.body,
-                                "sequence": message.seq,
-                            }
-                        }
-                    },
-                ),
-            )
-            pushed += 1
-        if page is not None and not page.has_newer:
-            aliases = self._comms.registry.aliases_for(thread_name)
-            self._delivery_cursors.advance(aliases, high_water)
-            self._inbox_cursors[session_id] = max(
-                self._inbox_cursors.get(session_id, 0), high_water
-            )
-        if pushed:
-            self._comms.acknowledge_through(thread_name, self._inbox_cursors[session_id])
-            await self.emit_input_delivery_changed(session_id)
-        self._schedule_wake(session_id)
-        return pushed
+        return await self.inputs.drain_owned_inbox(session_id)
 
     def _forget_direct_interrupt(self, session_id: str, turn: ScheduledTurn) -> None:
-        tickets = self._direct_interrupt_tickets.get(session_id, {})
-        if turn.direct_interrupt_input_key and tickets.get(turn.direct_interrupt_input_key) == (
-            turn.direct_interrupt_ticket
-        ):
-            tickets.pop(turn.direct_interrupt_input_key, None)
+        return self.inputs.forget_direct_interrupt(session_id, turn)
 
     def _schedule_wake(self, session_id: str) -> None:
-        if (
-            self._closing
-            or not self._auto_wake
-            or not self._runtime_enabled
-            or not self._pending_turns.get(session_id)
-        ):
-            return
-        if session_id in self._wake_tasks and not self._wake_tasks[session_id].done():
-            return
-
-        async def wake() -> None:
-            while self._pending_turns.get(session_id) and not self._closing:
-                async with self._turn_locks.setdefault(session_id, asyncio.Lock()):
-                    pending = self._pending_turns.pop(session_id, [])
-                    owner = self._comms.registry.require(self._require_session(session_id))
-                    if not self._comms.registry.status(owner.name).running:
-                        # The durable UNKNOWN rows remain visible. A stopped
-                        # owner cannot launch a turn from this old wake queue.
-                        for turn in pending:
-                            self._forget_direct_interrupt(session_id, turn)
-                        continue
-                    goal = owner.goal
-                    old_pending = pending
-                    if goal is not None and goal.active:
-                        pending = [
-                            turn
-                            for turn in pending
-                            if (turn.goal_id == goal.id or turn.direct_interrupt_goal_id == goal.id)
-                            and turn.still_current_interrupt(goal)
-                            # Fresh admission at dispatch: only a provably
-                            # unattempted disposition may still launch. An
-                            # attempted/historical input is dropped, never
-                            # replayed, and its ticket is discarded.
-                            and (
-                                turn.direct_interrupt_goal_id is None
-                                or (
-                                    (
-                                        row := self._dispositions.get(
-                                            turn.direct_interrupt_input_key or ""
-                                        )
-                                    )
-                                    is not None
-                                    and row["status"] == "unknown"
-                                    and row["native_id"] is None
-                                )
-                            )
-                        ]
-                    else:
-                        # No active goal: ordinary interrupts are invalid now
-                        # (their goal is gone/cleared); discard them and their
-                        # tickets instead of dispatching parked-goal framing.
-                        active_pending = [
-                            turn for turn in pending if turn.direct_interrupt_goal_id is None
-                        ]
-                        for turn in pending:
-                            if turn not in active_pending:
-                                self._forget_direct_interrupt(session_id, turn)
-                        pending = active_pending
-                    for turn in old_pending:
-                        if turn not in pending:
-                            self._forget_direct_interrupt(session_id, turn)
-                    if not pending:
-                        continue
-                    pending, remaining = ScheduledTurn.take_batch(pending)
-                    if remaining:
-                        self._pending_turns[session_id] = remaining
-                    if pending[0].direct_interrupt_goal_id is not None:
-                        # Rebind fresh expectations AT DISPATCH: the queue may
-                        # have survived benign same-goal bumps, but the turn
-                        # must then pin the CURRENT goal revision and wait ID
-                        # and hold them exactly through the native send lock.
-                        # Any change after dispatch denies without retry.
-                        current_wait = self._comms.goal_wait(owner.name)
-                        assert goal is not None  # filtered above: goal active
-                        pending[0] = replace(
-                            pending[0],
-                            direct_interrupt_goal_revision=goal.revision,
-                            direct_interrupt_wait_id=(
-                                current_wait.wait_id if current_wait else None
-                            ),
-                        )
-                    self._turn_tasks[session_id] = asyncio.current_task()  # type: ignore[assignment]
-                    try:
-                        await self._run_agent_turn(
-                            session_id,
-                            self._require_session(session_id),
-                            "\n\n".join(turn.prompt for turn in pending),
-                            reply_targets=tuple(
-                                dict.fromkeys(
-                                    turn.reply_target for turn in pending if turn.reply_target
-                                )
-                            ),
-                            origins=tuple(
-                                turn.origin for turn in pending if turn.origin is not None
-                            ),
-                            autonomous_goal=bool(
-                                len(pending) == 1
-                                and pending[0].goal_id is not None
-                                and pending[0].origin is None
-                            ),
-                            dependency_wait_id=pending[0].goal_wait_id,
-                            direct_interrupt_goal_id=pending[0].direct_interrupt_goal_id,
-                            direct_interrupt_goal_revision=pending[
-                                0
-                            ].direct_interrupt_goal_revision,
-                            direct_interrupt_wait_id=pending[0].direct_interrupt_wait_id,
-                            direct_interrupt_input_key=pending[0].direct_interrupt_input_key,
-                            direct_interrupt_ticket=pending[0].direct_interrupt_ticket,
-                        )
-                    except RequestError:
-                        if pending[0].goal_wait_id is None or goal is None:
-                            raise
-                        self._comms.block_goal_after_failed_turn(
-                            owner.name,
-                            started_goal=goal,
-                            expected_worktree=owner.worktree,
-                            diagnostic=(
-                                "Standby wake launch authority unavailable; inspect the UNKNOWN "
-                                "input before explicit Retry. No input was replayed."
-                            ),
-                        )
-                        await self._sync_goal_execution(session_id, owner.name)
-                    finally:
-                        self._turn_tasks.pop(session_id, None)
-
-        # Background work must not inherit a human controller from the task
-        # that happened to schedule it. Only its own ACP prompt may bind one.
-        context = self._runtime.controller.set(UNBOUND_CONTROLLER)
-        try:
-            self._wake_tasks[session_id] = asyncio.create_task(wake())
-        finally:
-            self._runtime.controller.reset(context)
+        return self.inputs.schedule_wake(session_id)
 
     def _schedule_goal(self, session_id: str) -> None:
         """Only the existing thread owner may schedule another goal turn."""
         if (
-            self._closing
+            self.inputs.closing
             or session_id in self._turn_tasks
-            or session_id in self._backend_inboxes
+            or session_id in self.inputs.backend_inboxes
             or session_id in self._active_turns
         ):
             return
-        if (wake := self._wake_tasks.get(session_id)) is not None and not wake.done():
+        if (wake := self.inputs.wake_tasks.get(session_id)) is not None and not wake.done():
             return
         thread = self._comms.registry.require(self._require_session(session_id))
-        if pending := self._pending_turns.get(session_id):
+        if pending := self.inputs.pending_turns.get(session_id):
             fresh = [
                 turn
                 for turn in pending
@@ -1762,7 +1226,7 @@ class CommsAgent(SessionEffects):
                 and (
                     turn.direct_interrupt_goal_id is None
                     or (
-                        (row := self._dispositions.get(turn.direct_interrupt_input_key or ""))
+                        (row := self.inputs.dispositions.get(turn.direct_interrupt_input_key or ""))
                         is not None
                         and row["status"] == "unknown"
                         and row["native_id"] is None
@@ -1771,11 +1235,11 @@ class CommsAgent(SessionEffects):
             ]
             for turn in pending:
                 if turn not in fresh:
-                    self._forget_direct_interrupt(session_id, turn)
+                    self.inputs.forget_direct_interrupt(session_id, turn)
             if fresh:
-                self._pending_turns[session_id] = fresh
+                self.inputs.pending_turns[session_id] = fresh
                 return
-            self._pending_turns.pop(session_id, None)
+            self.inputs.pending_turns.pop(session_id, None)
         if thread.pid != os.getpid() or not self._comms.registry.status(thread.name).running:
             return
         goal = thread.goal
@@ -1821,10 +1285,10 @@ class CommsAgent(SessionEffects):
                     diagnostic="Goal launch grant unavailable; explicit Retry required.",
                 )
                 return
-            self._pending_turns.setdefault(session_id, []).append(
+            self.inputs.pending_turns.setdefault(session_id, []).append(
                 ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
             )
-            self._schedule_wake(session_id)
+            self.inputs.schedule_wake(session_id)
 
     def _open_goal_store(self) -> GoalAttemptStore:
         if self._goal_store is None:
@@ -1964,7 +1428,7 @@ class CommsAgent(SessionEffects):
         return resumed
 
     async def _drain_count(self, session_id: str) -> int:
-        return await self._drain_inbox(session_id)
+        return await self.inputs.drain_count(session_id)
 
     async def _extension_ui_permission(
         self,
@@ -2103,7 +1567,7 @@ class CommsAgent(SessionEffects):
         wait = self._comms.goal_wait(thread_name)
         direct_interrupt = direct_interrupt_goal_id is not None
         if direct_interrupt:
-            tickets = self._direct_interrupt_tickets.get(session_id, {})
+            tickets = self.inputs.direct_interrupt_tickets.get(session_id, {})
             if (
                 direct_interrupt_input_key is None
                 or direct_interrupt_ticket is None
@@ -2130,10 +1594,11 @@ class CommsAgent(SessionEffects):
                 or origins[0].target not in aliases
                 or direct_interrupt_input_key is None
                 or original_keys
-                or direct_interrupt_input_key != self._dispositions.bus_key(origins[0], thread)
+                or direct_interrupt_input_key
+                != self.inputs.dispositions.bus_key(origins[0], thread)
             ):
                 return
-            row = self._dispositions.get(direct_interrupt_input_key)
+            row = self.inputs.dispositions.get(direct_interrupt_input_key)
             if (
                 row is None
                 or row["status"] != "unknown"
@@ -2207,9 +1672,9 @@ class CommsAgent(SessionEffects):
             with _store_lock(self._comms._wire_lock_path):
                 snapshot = self._comms.registry.snapshot()
                 for origin in bus_origins:
-                    key = self._dispositions.bus_key(origin, thread)
-                    if self._dispositions.get(key) is None:
-                        self._dispositions.record(
+                    key = self.inputs.dispositions.bus_key(origin, thread)
+                    if self.inputs.dispositions.get(key) is None:
+                        self.inputs.dispositions.record(
                             key,
                             seq=origin.seq,
                             owner=thread_name,
@@ -2218,10 +1683,10 @@ class CommsAgent(SessionEffects):
                             text=ScheduledTurn.incoming(origin, aliases=snapshot.aliases).prompt,
                         )
                     original_keys = (*original_keys, key)
-        self._turn_input_keys[session_id] = set(original_keys)
-        self._steering_input_keys[session_id] = {}
-        self._steering_origins[session_id] = {}
-        self._steering_goal_ids[session_id] = {}
+        self.inputs.turn_input_keys[session_id] = set(original_keys)
+        self.inputs.steering_input_keys[session_id] = {}
+        self.inputs.steering_origins[session_id] = {}
+        self.inputs.steering_goal_ids[session_id] = {}
 
         passive_frame = ""
         passive_sources: tuple[tuple[int, str, str], ...] = ()
@@ -2230,11 +1695,11 @@ class CommsAgent(SessionEffects):
             and len({origin.seq for origin in origins}) == len(origins)
             and all(origin.seq > 0 and is_channel_target(origin.target) for origin in origins)
             and original_keys
-            == tuple(self._dispositions.bus_key(origin, thread) for origin in origins)
+            == tuple(self.inputs.dispositions.bus_key(origin, thread) for origin in origins)
             # The durable admission owns the exact prompt, including the
             # names resolved at admission. Re-deriving it here can drift if
             # a recipient was renamed before or after inbox draining.
-            and (admitted_texts := self._dispositions.source_texts(original_keys)) is not None
+            and (admitted_texts := self.inputs.dispositions.source_texts(original_keys)) is not None
             and task == "\n\n".join(admitted_texts)
         )
 
@@ -2279,7 +1744,7 @@ class CommsAgent(SessionEffects):
                 )
                 owner_interrupt_followup = False
                 input_permit = goal_permit
-                admitted_goals = self._steering_goal_ids.get(session_id, {})
+                admitted_goals = self.inputs.steering_goal_ids.get(session_id, {})
                 owner_followup = public_id is not None and public_id in admitted_goals
                 if owner_followup:
                     assert public_id is not None
@@ -2304,7 +1769,11 @@ class CommsAgent(SessionEffects):
                     if public_id is None
                     else (
                         (key,)
-                        if (key := self._steering_input_keys.get(session_id, {}).get(public_id))
+                        if (
+                            key := self.inputs.steering_input_keys.get(session_id, {}).get(
+                                public_id
+                            )
+                        )
                         else ()
                     )
                 )
@@ -2320,7 +1789,7 @@ class CommsAgent(SessionEffects):
                     and len(keys) == 1
                     and current is not None
                     and keys[0] == direct_interrupt_input_key
-                    and keys[0] == self._dispositions.bus_key(direct_origins[0], current)
+                    and keys[0] == self.inputs.dispositions.bus_key(direct_origins[0], current)
                 )
                 owner_ok = (
                     current is not None
@@ -2336,7 +1805,7 @@ class CommsAgent(SessionEffects):
                 if owner_ok and public_id is None and passive_frame:
                     assert current is not None
                     try:
-                        owner_ok = self._passive_awareness.still_current(
+                        owner_ok = self.inputs.passive_awareness.still_current(
                             current,
                             snapshot,
                             self._comms.channel_catalog.targets_for(current.tags),
@@ -2390,7 +1859,9 @@ class CommsAgent(SessionEffects):
                     )
                 )
                 selected_admission = (
-                    self._selected_summary_admissions.get(session_id) if public_id is None else None
+                    self.inputs.selected_summary_admissions.get(session_id)
+                    if public_id is None
+                    else None
                 )
                 if allowed and selected_admission is None:
                     from .compaction_send_admission import native_input_admitted
@@ -2429,7 +1900,7 @@ class CommsAgent(SessionEffects):
                         selected_admission.invalidate()
                         allowed = False
                     else:
-                        original = self._dispositions.get(keys[0])
+                        original = self.inputs.dispositions.get(keys[0])
                         if original is None or type(original["source_text"]) is not str:
                             selected_admission.invalidate()
                             allowed = False
@@ -2453,17 +1924,23 @@ class CommsAgent(SessionEffects):
                                 reserved_revision=selected_admission._identity.reserved_revision,
                                 session_revision=revision,
                             )
+                            try:
+                                self.inputs.dispositions.compaction_rows(
+                                    current, keys[0], self.inputs
+                                )
+                            except RelationViolationError:
+                                selected_admission.invalidate()
                             allowed = selected_admission.consume_bound_original(
                                 wire_root=self._comms.root,
                                 session_file=current.session_file,
                                 identity=identity,
                                 native_id=native_id,
                                 sent_text=sent_text,
-                                dispositions=self._dispositions,
+                                dispositions=self.inputs.dispositions,
                             )
                 elif allowed:
                     for key in keys:
-                        row = self._dispositions.get(key)
+                        row = self.inputs.dispositions.get(key)
                         if (
                             row is None
                             or row["status"] != "unknown"
@@ -2473,7 +1950,7 @@ class CommsAgent(SessionEffects):
                                 and row["turn_id"] == turn_id
                                 and row["sent_text"] == sent_text
                                 if already_bound
-                                else self._dispositions.bind(
+                                else self.inputs.dispositions.bind(
                                     key,
                                     admission=row["admission"],
                                     turn_id=turn_id,
@@ -2496,9 +1973,9 @@ class CommsAgent(SessionEffects):
                         display = original_display
                         input_origins = origins
                     else:
-                        row = self._dispositions.get(keys[0]) if keys else None
+                        row = self.inputs.dispositions.get(keys[0]) if keys else None
                         display = row["source_text"] if row is not None else sent_text
-                        origin = self._steering_origins.get(session_id, {}).get(public_id)
+                        origin = self.inputs.steering_origins.get(session_id, {}).get(public_id)
                         input_origins = (origin,) if origin is not None else ()
                     self._comms.record_input_display(
                         native_id,
@@ -2518,12 +1995,12 @@ class CommsAgent(SessionEffects):
                 if public_id is None
                 else (
                     (key,)
-                    if (key := self._steering_input_keys.get(session_id, {}).get(public_id))
+                    if (key := self.inputs.steering_input_keys.get(session_id, {}).get(public_id))
                     else ()
                 )
             )
             return input_keys_valid(public_id, keys, sent_text) and all(
-                self._dispositions.started(
+                self.inputs.dispositions.started(
                     key, turn_id=turn_id, native_id=native_id, text=sent_text
                 )
                 for key in keys
@@ -2628,15 +2105,15 @@ class CommsAgent(SessionEffects):
         controller = self._runtime.controller.get()
         if controller is UNBOUND_CONTROLLER:
             controller = None  # Autonomous/channel/goal turns have no controller.
-        self._backend_inboxes[session_id] = backend_inbox
+        self.inputs.backend_inboxes[session_id] = backend_inbox
         self._active_turns[session_id] = turn_id
         if original_owner_input and original_keys:
-            self._turn_original_input_keys[session_id] = tuple(original_keys)
-            self._turn_input_text[session_id] = original_display or task
+            self.inputs.turn_original_input_keys[session_id] = tuple(original_keys)
+            self.inputs.turn_input_text[session_id] = original_display or task
         try:
             await self._emit_event(session_id, self._started_event(thread_name, turn_id))
-            await self.emit_input_delivery_changed(session_id)
-            await self._drain_inbox(session_id)
+            await self.inputs.emit_input_delivery_changed(session_id)
+            await self.inputs.drain_inbox(session_id)
             from .compaction_publication import publish_pending_local
 
             # Existing local ACP owner session only. If delivery is uncertain,
@@ -2658,13 +2135,15 @@ class CommsAgent(SessionEffects):
                         and current_thread.active_turn.id == turn_id
                     ):
                         try:
-                            passive_frame = self._passive_awareness.frame(
+                            passive_frame = self.inputs.passive_awareness.frame(
                                 current_thread,
                                 snapshot,
                                 self._comms.channel_catalog.targets_for(current_thread.tags),
                             )
                             if passive_frame:
-                                passive_sources = self._passive_awareness.sources(current_thread)
+                                passive_sources = self.inputs.passive_awareness.sources(
+                                    current_thread
+                                )
                                 if passive_sources:
                                     task += passive_frame
                                 else:
@@ -2684,7 +2163,7 @@ class CommsAgent(SessionEffects):
                 from .owner_compaction_adaptive import maybe_compact_owner_turn
 
                 def admit_original(admission: SelectedSummaryAdmission) -> None:
-                    self._selected_summary_admissions[session_id] = admission
+                    self.inputs.selected_summary_admissions[session_id] = admission
 
                 try:
                     committed = await maybe_compact_owner_turn(
@@ -2700,6 +2179,7 @@ class CommsAgent(SessionEffects):
                         summary_strategy=self._adaptive_summary_strategy,
                         input_text=task,
                         on_admission=admit_original,
+                        future_queue=self.inputs,
                     )
                 except Exception:
                     # A selected adaptive operation may already have paid or
@@ -2767,18 +2247,7 @@ class CommsAgent(SessionEffects):
 
                 @handles(events.InputRefused)
                 async def input_refused(self, event: events.InputRefused) -> None:
-                    input_id = event.id
-                    if input_id is not None:
-                        agent._forwarded_inputs.get(session_id, set()).discard(input_id)
-                        refused_key = agent._steering_input_keys.get(session_id, {}).get(input_id)
-                        if refused_key is not None:
-                            # This input was denied before stdin.write. Keep
-                            # its persisted UNKNOWN row visible, but do not
-                            # count it as an unstarted sent follow-up.
-                            agent._turn_input_keys.get(session_id, set()).discard(refused_key)
-                            await agent.emit_input_delivery_changed(session_id)
-                        if agent._queued_inputs.get(session_id, {}).pop(input_id, None):
-                            await agent._emit_queue_state(session_id)
+                    await agent.inputs.input_refused(session_id, event.id)
 
                 @handles(events.ProviderUsage)
                 async def provider_usage(self, event: events.ProviderUsage) -> None:
@@ -2852,11 +2321,11 @@ class CommsAgent(SessionEffects):
                     nonlocal terminal_failure, terminal_ok
                     terminal_failure = asdict(event)
                     unknown_attempts = any(
-                        agent._dispositions.status(key) != "started"
-                        for key in agent._turn_input_keys.get(session_id, set())
+                        agent.inputs.dispositions.status(key) != "started"
+                        for key in agent.inputs.turn_input_keys.get(session_id, set())
                     )
                     if event.ok is True and (
-                        agent._forwarded_inputs.get(session_id) or unknown_attempts
+                        agent.inputs.forwarded_inputs.get(session_id) or unknown_attempts
                     ):
                         # A final assistant stop can prove the original turn,
                         # not an ACKed follow-up lacking its own user start.
@@ -2914,41 +2383,9 @@ class CommsAgent(SessionEffects):
 
                 @handles(events.InputStarted)
                 async def input_started(self, event: events.InputStarted) -> None:
-                    input_id = event.id
-                    started_keys = (
-                        original_keys
-                        if input_id is None
-                        else (
-                            (steering_key,)
-                            if input_id is not None
-                            and (
-                                steering_key := agent._steering_input_keys.get(session_id, {}).get(
-                                    input_id
-                                )
-                            )
-                            else ()
-                        )
+                    await agent.inputs.input_started(
+                        session_id, event.id, original_keys, initial_display_text
                     )
-                    for key in started_keys:
-                        row = agent._dispositions.get(key)
-                        if row is not None and row["status"] == "started":
-                            await agent._emit_input_disposition(session_id, row)
-                    if input_id is not None:
-                        agent._forwarded_inputs.get(session_id, set()).discard(input_id)
-                    item = agent._queued_inputs.get(session_id, {}).pop(input_id or "", None)
-                    await agent._emit_input_started(
-                        session_id,
-                        (
-                            item.text
-                            if item and item.echo
-                            else initial_display_text
-                            if input_id is None
-                            else None
-                        ),
-                        input_id,
-                        queued_item=item,
-                    )
-                    await agent._emit_queue_state(session_id)
 
                 @handles(events.SettingChangeResult)
                 async def setting_result(self, event: events.SettingChangeResult) -> None:
@@ -3240,40 +2677,15 @@ class CommsAgent(SessionEffects):
                         "Goal attempt ended without a verified terminal result.",
                     )
             self._emitted_errors.pop(session_id, None)
-            if self._backend_inboxes.get(session_id) is backend_inbox:
-                self._backend_inboxes.pop(session_id, None)
-            while not backend_inbox.empty():
-                pending = backend_inbox.get_nowait()
-                if isinstance(pending, str):
-                    self._pending_turns.setdefault(session_id, []).append(ScheduledTurn(pending))
             thread_name = await self.sessions.sync_identity(session_id)
             current_project = self._comms.registry.require(thread_name).worktree
             if current_project != thread.worktree and (
                 persistent := self._persistent_backends.get(session_id)
             ):
                 await persistent.close_idle()
-            # Discard unresolved per-turn IDs without replay. Durable ACP input
-            # disposition across owner crashes remains a separate integration.
-            self._forwarded_inputs.pop(session_id, None)
-            self._turn_original_input_keys.pop(session_id, None)
-            self._turn_input_text.pop(session_id, None)
-            self._steering_input_keys.pop(session_id, None)
-            self._steering_origins.pop(session_id, None)
-            self._steering_goal_ids.pop(session_id, None)
-            self._turn_input_keys.pop(session_id, None)
-            self._selected_summary_admissions.pop(session_id, None)
-            await self.emit_input_delivery_changed(session_id)
-            remaining = self._queued_inputs.pop(session_id, {})
-            if remaining:
-                self._restored_inputs.setdefault(session_id, {}).update(
-                    {input_id: item for input_id, item in remaining.items() if item.echo}
-                )
-                await self._emit_queue_state(
-                    session_id,
-                    restored=[item.text for item in remaining.values() if item.echo],
-                )
-            if not cancelled and not self._closing and current_project != thread.worktree:
-                self._pending_turns.setdefault(session_id, []).append(
+            await self.inputs.finish_turn_inputs(session_id, backend_inbox)
+            if not cancelled and not self.inputs.closing and current_project != thread.worktree:
+                self.inputs.pending_turns.setdefault(session_id, []).append(
                     ScheduledTurn(
                         f"Project change completed: tools and context now use {current_project!r}. "
                         "Continue the user's previous request from this directory. "
@@ -3354,11 +2766,7 @@ class CommsAgent(SessionEffects):
 
     async def shutdown(self) -> None:
         """Stop drains and mark threads owned by this ACP connection offline."""
-        self._closing = True
-        for wake_task in self._wake_tasks.values():
-            wake_task.cancel()
-        self._direct_interrupt_tickets.clear()
-        await asyncio.gather(*self._wake_tasks.values(), return_exceptions=True)
+        await self.inputs.stop_wakes()
         await self.sessions.close_proxies()
         turns = list(self._turn_tasks.values())
         self._turn_tasks.clear()
@@ -3373,12 +2781,7 @@ class CommsAgent(SessionEffects):
         for persistent in self._persistent_backends.values():
             await persistent.close_idle()
         self._persistent_backends.clear()
-        tasks = list(self._drain_tasks.values())
-        self._drain_tasks.clear()
-        for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        await self.inputs.close()
         await self.sessions.release_owned()
 
     async def _emit_text(

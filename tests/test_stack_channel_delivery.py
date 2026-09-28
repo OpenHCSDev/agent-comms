@@ -12,6 +12,7 @@ import pytest
 
 from agent_comms import Thread, wire
 from agent_comms.acp import CommsAgent
+from agent_comms.input_drain import InputDrain
 
 
 @pytest.mark.parametrize(
@@ -101,7 +102,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
         comms = wire(root / "wire")
         agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
         monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
-        monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
         project = root / "worker"
         project.mkdir()
         turn = None
@@ -151,7 +152,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 release.set()
                 await asyncio.wait_for(turn, 20)
             elif case != "reopen":
-                CommsAgent._schedule_wake(agent, "worker")
+                InputDrain.schedule_wake(agent.inputs, "worker")
                 await asyncio.wait_for(agent._wake_tasks["worker"], 20)
             success = case in {"deliver", "batch", "steer", "rename", "batch_rename"}
             assert len(requests) == (2 if success else 1)

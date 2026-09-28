@@ -106,7 +106,7 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
         reopened.update_goal("worker", "active", goal_id=goal.id)
         reopened.update_goal("worker", "standby", goal_id=goal.id, wait_for=["parent"])
         fresh = comms.send_message("parent", "worker", "New result")
-        monkeypatch.setattr(agent, "_schedule_wake", lambda _: None)
+        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _: None)
         await agent._drain_inbox("worker")
         pending = agent._pending_turns["worker"]
         fresh_entries = [turn for turn in pending if turn.origin.seq == fresh.seq]

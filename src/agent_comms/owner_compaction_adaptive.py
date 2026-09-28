@@ -17,6 +17,7 @@ from pathlib import Path
 from .backend import PersistentPiSession, _session_revision
 from .compaction_journal import CompactionJournalError
 from .declarations import AgentRuntimeInfo, RelationViolationError, ThreadRegistry
+from .input_disposition import FutureInputQueue
 from .native_session_reopen import package_for_launcher
 from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_provider import OwnerSummaryOutcome
@@ -50,6 +51,7 @@ async def maybe_compact_owner_turn(
     ) = None,
     input_text: str | None = None,
     on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
+    future_queue: FutureInputQueue | None = None,
 ) -> bool:
     """Return False only for a clean trigger skip; errors never dispatch input.
 
@@ -153,7 +155,9 @@ async def maybe_compact_owner_turn(
     settings = await decision()
     if not settings.enabled or not settings.trigger:
         return False
-    bridge = await asyncio.to_thread(OwnerCompactionCommit, registry._path, package)
+    bridge = await asyncio.to_thread(
+        OwnerCompactionCommit, registry._path, package, future_queue=future_queue
+    )
     if summary_strategy is None:
         assert input_text is not None and on_admission is not None
         revision = _session_revision(owner.session_file)

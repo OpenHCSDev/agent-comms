@@ -421,7 +421,7 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
     )
     assert goal is not None
     wakes = []
-    monkeypatch.setattr(agent, "_schedule_wake", wakes.append)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", wakes.append)
     try:
         claim = comms.begin_turn(child, "child-turn")
         comms.update_goal(owner, "standby", goal_id=goal.id, wait_for=[child])
