@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from . import agent_events as events
+from .pi_payloads import PiUsage
 
 
 @dataclass
@@ -17,18 +17,11 @@ class UsageAccount:
     response_index: int = 0
     compaction_recorded: bool = False
 
-    @staticmethod
-    def positive_tokens(usage: Any) -> int | None:
-        if not isinstance(usage, dict):
-            return None
-        tokens = usage.get("totalTokens")
-        return tokens if type(tokens) is int and tokens > 0 else None
-
     def invalidate(self) -> None:
         self.used = self.confirmed = None
         self.provisional = False
 
-    def charge(self, usage: dict[str, Any]) -> events.ProviderUsage:
+    def charge(self, usage: PiUsage) -> events.ProviderUsage:
         self.response_index += 1
         return events.ProviderUsage(response_id=str(self.response_index), usage=usage)
 

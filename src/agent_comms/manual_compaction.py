@@ -24,6 +24,7 @@ from uuid import uuid4
 from . import pi_events as pi
 from .backend import compaction_summary, configured_model, rpc_args_for
 from .pi_commands import Compact, GetState, PiCommand
+from .pi_payloads import StateData
 from .pi_rpc import PiRpcChannel
 
 MAX_LINE = 64 * 1024
@@ -320,7 +321,7 @@ async def _reap_immune(proc: asyncio.subprocess.Process, *, force: bool) -> tupl
 
 async def _preflight(
     package: Path, session: Path, cwd: Path, env: dict[str, str]
-) -> dict[str, Any] | None:
+) -> StateData | None:
     child_env = dict(
         env, COMPACT_PI_PACKAGE=str(package), COMPACT_SESSION=str(session), COMPACT_CWD=str(cwd)
     )
@@ -357,10 +358,9 @@ async def _preflight(
     if not clean or not output.endswith(b"\n"):
         return None
     try:
-        result = json.loads(output)
-    except (ValueError, UnicodeError):
+        return StateData.from_wire(json.loads(output))
+    except (ValueError, TypeError, UnicodeError):
         return None
-    return result if isinstance(result, dict) else None
 
 
 def _startup_metadata(before: bytes, after: bytes) -> bool:
@@ -376,13 +376,9 @@ def _startup_metadata(before: bytes, after: bytes) -> bool:
         return False
 
 
-def _count(value: Any) -> int | None:
-    return value if type(value) is int and value >= 0 else None
-
-
-def _public_pi_compaction_error(value: Any) -> str:
+def _public_pi_compaction_error(value: str | None) -> str:
     """Classify a Pi failure without copying provider text or prompt data to ACP."""
-    raw = value if isinstance(value, str) else ""
+    raw = value or ""
     lower = raw.lower()
     if "generation hit the token cap" in lower or "summary is incomplete" in lower:
         return "Compaction summary hit the model output limit."
@@ -526,12 +522,7 @@ class ManualCompaction:
 
     async def _open_session(self) -> bool:
         state = await _preflight(self.package, self.session, self.project, self.env)
-        if (
-            not state
-            or state.get("sessionFile") != str(self.session)
-            or type(state.get("sessionId")) is not str
-            or not state["sessionId"]
-        ):
+        if not state or state.session_file != str(self.session) or not state.session_id:
             self.result = {"ok": False, "error": "Compaction requires a saved Pi session."}
             return False
         if _session_bytes(self.session) != self.before:
@@ -558,12 +549,12 @@ class ManualCompaction:
         data = response.data
         if (
             response.success is not True
-            or not isinstance(data, dict)
-            or data.get("sessionFile") != str(self.session)
-            or data.get("sessionId") != state["sessionId"]
-            or not isinstance(data.get("model"), dict)
-            or data["model"].get("provider") != self.provider
-            or data["model"].get("id") != self.model
+            or data is None
+            or data.session_file != str(self.session)
+            or data.session_id != state.session_id
+            or data.model is None
+            or data.model.provider != self.provider
+            or data.model.id != self.model
         ):
             raise ValueError("Pi reopened another session")
         current = _session_bytes(self.session)
@@ -572,8 +563,8 @@ class ManualCompaction:
         active = await _preflight(self.package, self.session, self.project, self.env)
         if (
             not active
-            or active.get("sessionFile") != str(self.session)
-            or active.get("sessionId") != state["sessionId"]
+            or active.session_file != str(self.session)
+            or active.session_id != state.session_id
             or _session_bytes(self.session) != current
         ):
             raise ValueError("Pi active session changed before compaction")
@@ -599,7 +590,7 @@ class ManualCompaction:
             response = self.reader.decode_record(row)
             if not isinstance(response, pi.Response) or response.id != command.id:
                 continue
-            if type(response.success) is not bool or response.command_type is not type(command):
+            if response.success is None or response.command is not type(command):
                 raise ValueError("Invalid correlated response")
             if self.reader.correlate(response) is not command:
                 raise ValueError("Unowned compaction response")
@@ -609,21 +600,23 @@ class ManualCompaction:
         response = await self._request(
             Compact(
                 id=uuid4().hex,
-                custom_instructions=(self.instructions.strip() or None)
-                if self.instructions
-                else None,
+                custom_instructions=(
+                    (self.instructions.strip() or None) if self.instructions else None
+                ),
             )
         )
         if not response.success:
             self.result = {"ok": False, "error": _public_pi_compaction_error(response.error)}
             return
         data = response.data
-        if not isinstance(data, dict):
+        if data is None:
             raise ValueError("Invalid compact data")
-        self.result = {"ok": True, "summary": compaction_summary(data.get("summary"))}
-        for key in ("tokensBefore", "estimatedTokensAfter"):
-            count = _count(data.get(key))
-            if count is not None:
+        self.result = {"ok": True, "summary": compaction_summary(data.summary)}
+        for key, count in (
+            ("tokensBefore", data.tokens_before),
+            ("estimatedTokensAfter", data.estimated_tokens_after),
+        ):
+            if count is not None and count >= 0:
                 self.result[key] = count
 
     async def _close(self) -> None:

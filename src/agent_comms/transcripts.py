@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .pi_payloads import PiToolResult
 from .registration import Registration
 
 if TYPE_CHECKING:
@@ -468,7 +469,7 @@ class Transcripts:
                         ok=not bool(message.get("isError")),
                         diff=ToolDiff.from_result(
                             str(message.get("toolName") or "tool"),
-                            message,
+                            PiToolResult.from_wire(message),
                             not bool(message.get("isError")),
                         ),
                     )
