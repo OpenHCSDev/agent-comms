@@ -31,10 +31,11 @@ row=db.execute('SELECT status FROM selected_summary_attempts WHERE operation_id=
                (r['operationId'],)).fetchone()
 assert row==('reserved',),row
 Path(received).write_text(json.dumps(r))
-if mode in ('progress','duplicate-progress'):
+if mode in ('progress','duplicate-progress','foreign-progress'):
     for sequence in range(1, 6):
         print(json.dumps(dict(type='agent_comms_compaction_progress',id=r['id'],
-              operationId=r['operationId'],sequence=sequence if mode=='progress' else 1)),flush=True)
+              operationId='foreign' if mode=='foreign-progress' else r['operationId'],
+              sequence=sequence if mode=='progress' else 1)),flush=True)
         time.sleep(.035)
 if mode=='hang':
     time.sleep(30)
