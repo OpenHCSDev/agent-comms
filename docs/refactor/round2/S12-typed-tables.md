@@ -77,7 +77,7 @@ A13 is merged; every table in S12's scope has a row type, derived DDL and typed 
 ## Current implementation ownership
 
 S12 owns branch `refactor/round2-s12-typed-tables`, worktree
-`~/wt/comms-refactor2-s12-20260928`. The first code-bearing draft supplies A13
+`~/wt/comms-refactor2-s12-20260928`. Draft #230 supplies A13
 in `typed_table.py`; the whole surface remains open. A13 is a new shared
 foundation, so this first commit adds source; deletion follows table adoption.
 
@@ -89,7 +89,7 @@ foundation, so this first commit adds source; deletion follows table adoption.
   state. Its tests create disposable SQLite databases under this worktree.
   No reset or durable cutover is needed to install the foundation alone.
 - **Dependencies:** Pascal #226 owns native proof, response authority and claim
-  caller changes. S12 waits for that merge before touching his files. S9 owns
+  caller changes; #226 merged and this branch rebased onto it. S9 owns
   compaction; S10 owns tool broker adoption; L0 owns its file migrations. These
   consumers adopt this API after the foundation merges.
 - **Remaining S12:** declare `NativeRuntimeInput`; migrate all unowned tables,
@@ -101,3 +101,21 @@ foundation, so this first commit adds source; deletion follows table adoption.
   persistence after reopen, transactions, references, constraints and new row
   declarations. Production path acceptance must be performed after actual
   consumer migrations; foundation tests do not establish full S12 readiness.
+
+### Reader closure in #230
+
+`optional_awareness_projection.py` now uses declared typed join projections for
+all SQL reads. Its source/owner/selected-claim/obligation guards still apply.
+No persisted shape or admission cursor changes, so this reader adoption needs no
+reset. A13 adoption guards derive their file scope from imports and prohibit raw
+row extraction and hand-written DDL/writes; complete-table migrations expand that
+scope automatically. Local family/guard/awareness checks: 25 passed.
+
+### Reset admission requirement
+
+Parent owns D22 and quiet activation. Runtime reset must preserve operation
+semantics: capture pre-cutover highwater H, then seed the existing checkpoint /
+candidate / admission owners so native wake eligibility is strictly after H.
+UNKNOWN remains history, never a fresh attempt. No parallel migration store or
+old-schema reader may implement this. Until that real-path proof and the full
+table/caller migrations pass, S12 is open.
