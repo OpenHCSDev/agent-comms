@@ -9,55 +9,26 @@ import os
 import tempfile
 from abc import abstractmethod
 from collections import deque
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, BinaryIO, ClassVar, cast
+from typing import BinaryIO, ClassVar
 
 from .bus_publication import reject_private_wire_fields
 from .channels import ChannelCatalog
 from .declarations import BuiltinChannel, Message, RelationViolationError, ThreadRegistry
-from .declared_family import DeclaredFamily, _FamilyMeta
+from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 
 
-class _FormatMeta(_FamilyMeta):
-    """Keep the enum-era constructor, constants and CLI iteration at the boundary."""
-
-    def __call__(self, *args: Any, **kwargs: Any) -> WireExportFormat:
-        if self is WireExportFormat:
-            return WireExportFormat.parse(*args, **kwargs)
-        return cast(WireExportFormat, super().__call__(*args, **kwargs))
-
-    def __iter__(self) -> Iterator[WireExportFormat]:
-        return (member() for member in WireExportFormat.members_with(WireExportFormat))
-
-    def __getattr__(self, name: str) -> WireExportFormat:
-        if name.isupper():
-            try:
-                return WireExportFormat.decode(name.lower())()
-            except ValueError:
-                pass
-        raise AttributeError(name)
-
-
-class WireExportFormat(DeclaredFamily, metaclass=_FormatMeta, affix="Format"):
+class WireExportFormat(DeclaredFamily, affix="Format"):
     """A representation owns both header and row rendering."""
 
     importable: ClassVar[bool] = False
 
-    @classmethod
-    def parse(cls, value: str | WireExportFormat) -> WireExportFormat:
-        """Decode once at a string boundary; typed instances retain their identity."""
-        return value if isinstance(value, WireExportFormat) else cls.decode(value)()
-
-    @property
-    def value(self) -> str:
-        return self.declared_name
-
     def __str__(self) -> str:
-        return self.value
+        return self.declared_name
 
     @abstractmethod
     def header(self, metadata: Mapping[str, object]) -> bytes:
@@ -126,18 +97,6 @@ class ResolvedExportScope:
 
 class WireExportScope(DeclaredFamily, affix="Scope"):
     """The authoritative conversation, resolved under the wire snapshot lock."""
-
-    @staticmethod
-    def everything() -> WireExportScope:
-        return EverythingScope()
-
-    @staticmethod
-    def for_channel(channel: str) -> WireExportScope:
-        return ChannelScope(channel)
-
-    @staticmethod
-    def for_dm(first: str, second: str) -> WireExportScope:
-        return DmScope((first, second))
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode(self)
@@ -219,18 +178,6 @@ class ExportSelectionStats:
 
 class WireExportLimit(DeclaredFamily, affix="Limit"):
     """Shared filtering algorithm with declaration-owned retention hooks."""
-
-    @staticmethod
-    def full() -> WireExportLimit:
-        return FullLimit()
-
-    @staticmethod
-    def max_bytes(value: int) -> WireExportLimit:
-        return MaxBytesLimit(value)
-
-    @staticmethod
-    def recent(cutoff: float) -> WireExportLimit:
-        return RecentLimit(cutoff)
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode(self)
@@ -386,7 +333,7 @@ class WireExportReceipt:
     def to_wire(self) -> dict[str, object]:
         return {
             **asdict(self),
-            "format": self.format.value,
+            "format": self.format.declared_name,
             "scope": self.scope.to_wire(),
             "limit": self.limit.to_wire(),
             "boundary": self.boundary.to_wire(),
@@ -427,7 +374,7 @@ class WireTranscriptExporter:
         limit: WireExportLimit,
         boundary: WireExportBoundary,
     ) -> None:
-        self.format = WireExportFormat.parse(format)
+        self.format = format
         self.scope = scope
         self.limit = limit
         self.boundary = boundary
@@ -507,7 +454,7 @@ class WireTranscriptExporter:
             "schema": self.SCHEMA,
             "version": self.VERSION,
             "source": "agent-comms-wire",
-            "format": self.format.value,
+            "format": self.format.declared_name,
             "importable": self.format.importable,
             "scope": self.scope.to_wire(),
             "limit": self.limit.to_wire(),

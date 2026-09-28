@@ -11,12 +11,17 @@ from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
 from agent_comms.cli import main
 from agent_comms.declarations import Message, MessageType, RelationViolationError
 from agent_comms.exporting import (
+    ChannelScope,
+    DmScope,
     EverythingScope,
     FullLimit,
+    JsonlFormat,
+    MaxBytesLimit,
+    RecentLimit,
+    TextFormat,
     WireExportBoundary,
     WireExportFormat,
     WireExportLimit,
-    WireExportScope,
     WireTranscriptExporter,
 )
 
@@ -34,15 +39,15 @@ def message(sequence: int, body: str, *, timestamp: float | None = None) -> Mess
 
 def exporter(
     *,
-    format: WireExportFormat = WireExportFormat.JSONL,
+    format: WireExportFormat | None = None,
     limit: WireExportLimit | None = None,
     through: int = 100,
     started: float = 200.0,
 ) -> WireTranscriptExporter:
     return WireTranscriptExporter(
-        format=format,
-        scope=WireExportScope.for_channel("#team"),
-        limit=limit or WireExportLimit.full(),
+        format=format if format is not None else JsonlFormat(),
+        scope=ChannelScope("#team"),
+        limit=limit or FullLimit(),
         boundary=WireExportBoundary(through, started),
     )
 
@@ -52,22 +57,22 @@ def records(path):
 
 
 def test_wire_export_declarations_are_explicit_and_fail_loud():
-    assert WireExportScope.everything().to_wire() == {"kind": "everything"}
-    assert WireExportScope.for_dm("alice", "bob").to_wire() == {
+    assert EverythingScope().to_wire() == {"kind": "everything"}
+    assert DmScope(("alice", "bob")).to_wire() == {
         "kind": "dm",
         "participants": ["alice", "bob"],
     }
-    assert WireExportLimit.max_bytes(10).to_wire() == {"kind": "max_bytes", "value": 10}
-    assert WireExportLimit.recent(123.5).to_wire() == {"kind": "recent", "value": 123.5}
+    assert MaxBytesLimit(10).to_wire() == {"kind": "max_bytes", "value": 10}
+    assert RecentLimit(123.5).to_wire() == {"kind": "recent", "value": 123.5}
 
     with pytest.raises(ValueError, match="aggregate projection"):
-        WireExportScope.for_channel("#any")
+        ChannelScope("#any")
     with pytest.raises(ValueError, match="distinct participants"):
-        WireExportScope.for_dm("alice", "alice")
+        DmScope(("alice", "alice"))
     with pytest.raises(ValueError, match="positive integer"):
-        WireExportLimit.max_bytes(0)
+        MaxBytesLimit(0)
     with pytest.raises(ValueError, match="finite non-negative"):
-        WireExportLimit.recent(float("nan"))
+        RecentLimit(float("nan"))
     with pytest.raises(TypeError):
         FullLimit(1)
     with pytest.raises(TypeError):
@@ -76,7 +81,7 @@ def test_wire_export_declarations_are_explicit_and_fail_loud():
         WireExportBoundary(-1, 1.0)
 
 
-@pytest.mark.parametrize("format", [WireExportFormat.JSONL, WireExportFormat.TEXT])
+@pytest.mark.parametrize("format", [JsonlFormat(), TextFormat()])
 @pytest.mark.parametrize("private_key", [PRIVATE_WIRE_FIELD, "_agent_comms_private_future"])
 def test_raw_mapping_with_private_bus_sideband_never_enters_export(
     tmp_path, format: WireExportFormat, private_key: str
@@ -170,7 +175,7 @@ def test_hard_byte_ceiling_includes_header_and_keeps_contiguous_newest_suffix(tm
     lines = full_path.read_bytes().splitlines(keepends=True)
     ceiling = len(lines[0]) + len(lines[1]) + len(lines[3])
     while True:
-        bounded = exporter(limit=WireExportLimit.max_bytes(ceiling), through=3)
+        bounded = exporter(limit=MaxBytesLimit(ceiling), through=3)
         exact_ceiling = len(bounded._header()) + len(lines[1]) + len(lines[3])
         if exact_ceiling == ceiling:
             break
@@ -192,14 +197,12 @@ def test_byte_ceiling_fails_when_header_cannot_fit_and_oversize_newest_yields_he
 ):
     too_small = tmp_path / "too-small.jsonl"
     with pytest.raises(ValueError, match="too small for required metadata"):
-        exporter(limit=WireExportLimit.max_bytes(1), through=2).export(
-            [message(1, "body")], too_small
-        )
+        exporter(limit=MaxBytesLimit(1), through=2).export([message(1, "body")], too_small)
     assert not too_small.exists()
 
     ceiling = 1_000
     while True:
-        baseline = exporter(limit=WireExportLimit.max_bytes(ceiling), through=2)
+        baseline = exporter(limit=MaxBytesLimit(ceiling), through=2)
         header_size = len(baseline._header())
         if ceiling == header_size + 1:
             break
@@ -224,7 +227,7 @@ def test_recent_cutoff_is_inclusive_and_excludes_invalid_or_future_times_with_co
         message(7, "future", timestamp=200.1),
     ]
     destination = tmp_path / "recent.jsonl"
-    receipt = exporter(limit=WireExportLimit.recent(10.0), through=7).export(
+    receipt = exporter(limit=RecentLimit(10.0), through=7).export(
         (item for item in messages), destination
     )
 
@@ -242,9 +245,7 @@ def test_recent_cutoff_is_inclusive_and_excludes_invalid_or_future_times_with_co
 def test_text_export_is_non_importable_and_prefixes_multiline_body(tmp_path):
     destination = tmp_path / "wire.txt"
     body = "first line\n[forged] <mallory -> #team> second line"
-    receipt = exporter(format=WireExportFormat.TEXT, through=7).export(
-        [message(7, body)], destination
-    )
+    receipt = exporter(format=TextFormat(), through=7).export([message(7, body)], destination)
 
     output = destination.read_text()
     assert output.startswith("# agent-comms wire export v1 (non-importable text view)\n")
@@ -258,7 +259,7 @@ def test_text_export_is_non_importable_and_prefixes_multiline_body(tmp_path):
 @pytest.mark.parametrize("timestamp", [math.nan, math.inf, -math.inf])
 def test_text_full_export_labels_invalid_timestamp_instead_of_failing(tmp_path, timestamp):
     destination = tmp_path / "invalid-time.txt"
-    receipt = exporter(format=WireExportFormat.TEXT, through=1).export(
+    receipt = exporter(format=TextFormat(), through=1).export(
         [message(1, "legacy", timestamp=timestamp)], destination
     )
     assert "[invalid-time]" in destination.read_text()
@@ -314,9 +315,9 @@ def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_pa
     channel_path = tmp_path / "team.jsonl"
     channel_receipt = comms.export_wire(
         channel_path,
-        format=WireExportFormat.JSONL,
-        scope=WireExportScope.for_channel("#team"),
-        limit=WireExportLimit.full(),
+        format=JsonlFormat(),
+        scope=ChannelScope("#team"),
+        limit=FullLimit(),
         export_started_at=100,
     )
     assert [row["message"]["text"] for row in records(channel_path)[1:]] == ["team row"]
@@ -325,9 +326,9 @@ def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_pa
     dm_path = tmp_path / "dm.jsonl"
     dm_receipt = comms.export_wire(
         dm_path,
-        format=WireExportFormat.JSONL,
-        scope=WireExportScope.for_dm("renamed", "bob"),
-        limit=WireExportLimit.full(),
+        format=JsonlFormat(),
+        scope=DmScope(("renamed", "bob")),
+        limit=FullLimit(),
         export_started_at=100,
     )
     assert [row["message"]["text"] for row in records(dm_path)[1:]] == ["private row"]
@@ -343,9 +344,9 @@ def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_pa
     with pytest.raises(RelationViolationError, match="no authoritative wire history"):
         comms.export_wire(
             tmp_path / "projection.jsonl",
-            format=WireExportFormat.JSONL,
-            scope=WireExportScope.for_channel("#projection"),
-            limit=WireExportLimit.full(),
+            format=JsonlFormat(),
+            scope=ChannelScope("#projection"),
+            limit=FullLimit(),
         )
 
 
@@ -391,9 +392,9 @@ def test_export_does_not_mutate_wire_or_read_markers(tmp_path):
 
     comms.export_wire(
         tmp_path / "everything.jsonl",
-        format=WireExportFormat.JSONL,
-        scope=WireExportScope.everything(),
-        limit=WireExportLimit.full(),
+        format=JsonlFormat(),
+        scope=EverythingScope(),
+        limit=FullLimit(),
     )
 
     assert comms.bus._path.read_bytes() == bus_before
