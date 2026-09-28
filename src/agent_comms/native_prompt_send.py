@@ -84,7 +84,8 @@ def _write_fenced(
     except Exception as error:
         if written and not isinstance(error, PromptSendUnknown):
             raise PromptSendUnknown(
-                "Native prompt post-write outcome is UNKNOWN; no retry"
+                "Native prompt post-write outcome is UNKNOWN; no retry: "
+                f"{type(error).__name__}: {error}"
             ) from error
         raise
 
