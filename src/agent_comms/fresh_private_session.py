@@ -14,7 +14,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import stat
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -22,17 +21,21 @@ from pathlib import Path
 from typing import NoReturn
 from uuid import uuid4
 
-from .native_entries import NativeEntry, SelectedFreshMarker, SessionEntry
+from .native_entries import (
+    ModelChangeEntry,
+    NativeEntry,
+    SelectedFreshMarker,
+    SessionEntry,
+    ThinkingLevelChangeEntry,
+)
 from .native_pi import (
     NativePiUnavailable,
     _durable_private_session_dir,
     _fsync_directory,
     _read_private_file,
-    _unique,
 )
 
 _MINT = object()
-_ENTRY_ID = re.compile(r"[0-9a-f]{8}\Z")
 _MAX_STARTUP_APPEND = 2048
 
 
@@ -237,30 +240,17 @@ class FreshPrivateSession:
             lines = data[self.bootstrap_size :].splitlines(keepends=True)
             if len(lines) != 2 or any(not line.endswith(b"\n") for line in lines):
                 raise NativePiUnavailable("Selected startup has extra or partial entries")
-            model, thinking = (json.loads(line, object_pairs_hook=_unique) for line in lines)
-            common = {"type", "id", "parentId", "timestamp"}
+            model = ModelChangeEntry.read_startup(lines[0])
+            thinking = ThinkingLevelChangeEntry.read_startup(lines[1])
+            selected_model = ("openrouter", "z-ai/glm-5.3-flash")
             if (
-                type(model) is not dict
-                or type(thinking) is not dict
-                or set(model) != common | {"provider", "modelId"}
-                or set(thinking) != common | {"thinkingLevel"}
-                or model["type"] != "model_change"
-                or model["provider"] != "openrouter"
-                or model["modelId"] != "z-ai/glm-5.3-flash"
-                or model["parentId"] != self.bootstrap_leaf_id
-                or thinking["type"] != "thinking_level_change"
-                or thinking["thinkingLevel"] != self.selected_thinking_level
-                or thinking["parentId"] != model["id"]
-                or any(
-                    type(row["id"]) is not str
-                    or _ENTRY_ID.fullmatch(row["id"]) is None
-                    or type(row["timestamp"]) is not str
-                    or not row["timestamp"]
-                    for row in (model, thinking)
-                )
-                or model["id"] == thinking["id"]
-                or model["id"] == self.bootstrap_leaf_id
-                or thinking["id"] == self.bootstrap_leaf_id
+                not model.matches_startup(selected_model, self.selected_thinking_level)
+                or not thinking.matches_startup(selected_model, self.selected_thinking_level)
+                or model.parent_id != self.bootstrap_leaf_id
+                or thinking.parent_id != model.id
+                or model.id == thinking.id
+                or model.id == self.bootstrap_leaf_id
+                or thinking.id == self.bootstrap_leaf_id
             ):
                 raise NativePiUnavailable("Selected startup metadata does not match runtime")
             after = self.path.lstat()

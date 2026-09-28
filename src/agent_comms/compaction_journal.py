@@ -141,21 +141,24 @@ class SelectedSummaryAttempt(JournalTable, TypedTable, declared_name="selected_s
         if not self.state.original_eligible:
             return False
         try:
-            source = json.loads(self.source_json)["source"]
-            key = source["ingressKey"]
-            if not isinstance(key, str) or not key.startswith("acp:"):
+            from .selected_summary_admission import SelectedAdmissionSource
+
+            envelope = FieldCodec.decode(SelectedSummarySource, json.loads(self.source_json))
+            source = FieldCodec.decode(SelectedAdmissionSource, envelope.source)
+            key = source.ingress_key
+            if not key.startswith("acp:"):
                 return False
             row = inputs.get(key)
             return row is not None and (
                 not row.unresolved
                 and row.native_id is not None
                 and row.sequence is None
-                and row.owner == row.target == source["ownerName"]
-                and row.admission == source["admissionGeneration"]
-                and row.turn_id == source["turnId"]
+                and row.owner == row.target == source.owner_name
+                and row.admission == source.admission_generation
+                and row.turn_id == source.turn_id
                 and row.sent_text is not None
-                and hashlib.sha256(row.sent_text.encode()).hexdigest() == source["inputSha256"]
-                and hashlib.sha256(row.source_text.encode()).hexdigest() == source["originalSha256"]
+                and hashlib.sha256(row.sent_text.encode()).hexdigest() == source.input_sha256
+                and hashlib.sha256(row.source_text.encode()).hexdigest() == source.original_sha256
             )
         except (KeyError, TypeError, ValueError):
             return False

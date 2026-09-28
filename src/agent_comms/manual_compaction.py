@@ -22,6 +22,7 @@ from uuid import uuid4
 from . import pi_events as pi
 from .backend import compaction_summary, configured_model, rpc_args_for
 from .child_process import AttachedChild, Platform, ProcessGroups
+from .native_entries import StartupMetadataEntry
 from .native_session_reopen import NativeSessionIdentity
 from .pi_commands import Compact, GetState, PiCommand
 from .pi_helper import PiHelper, PiHelperError, SessionHelperRequest
@@ -271,11 +272,10 @@ def _startup_metadata(before: bytes, after: bytes) -> bool:
     if not after.startswith(before):
         return False
     try:
-        return all(
-            json.loads(line).get("type") in {"model_change", "thinking_level_change"}
-            for line in after[len(before) :].splitlines()
-        )
-    except (ValueError, AttributeError, UnicodeError):
+        for line in after[len(before) :].splitlines():
+            StartupMetadataEntry.read_startup(line)
+        return True
+    except (ValueError, TypeError, UnicodeError):
         return False
 
 

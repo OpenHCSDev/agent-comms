@@ -1,5 +1,25 @@
 # S9 PR236 — implementation in progress, not install-ready
 
+## Latest source update (supersedes dependency list below)
+
+K4 uses shared A12 run_inherited; deleted owner_compaction_process, launcher and
+watchdog plus their structural tests. Direct native parentPID/FD proof retained.
+K5 fresh/manual consumers now use S10 StartupMetadataEntry and its concrete
+model/thinking declarations. All S9 guards pass. Deleted inert correction_revision
+from OwnerCompactionAttestation, exact Registration consumers and tests; actual
+correction checks stay on CompactionSource input/wire witnesses.
+
+New evidence: a12-authority-first38pass; a12-native-authority36pass (real pinned
+native, owner SIGKILL before/after write, inherited locks, timeout and UNKNOWN);
+final-source-boundary76pass/1deselected. The excluded ACP case has a concrete
+shared ThreadManagement(pid=) producer failure, reported232/235. The first manual
+batch has8actual stock-Pi startup failures: canonical S10 decoder incorrectly
+limits parentId to8hex although saved native IDs can be UUIDs. Reported234;
+fresh selected parent matching remains consumer-owned and exact. Other2failures
+were tests of deleted supervisor methods, now deleted rather than ported.
+See STATUS.md for actual remaining dependency repairs. No install claim.
+
+
 Branch: `refactor/round2-s9-compaction-20260928`.
 Owned tree: `/home/ts/wt/comms-refactor2-s9-20260928`.
 PR: https://github.com/OpenHCSDev/agent-comms/pull/236
