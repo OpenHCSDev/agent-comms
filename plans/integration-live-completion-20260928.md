@@ -4,13 +4,18 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
-Latest installed pair: core76855582 (276 provider feedback +278 production wake
-bootstrap), Toadc3f7b632 (50 authenticated browser), Textual16ede007, native5fde.
-The immutable runtime-wake-feedback-20260928 is live. Four idle owners restarted;
+Latest installed pair: core46b729cf (277 canonical config/rejection +future queue,
+276 provider feedback +278 production wake bootstrap), Toad08d464bf (127 T4 and
+50 browser), Textual16ede007, native5fde.
+The immutable runtime-private-config-20260928 is live. Four idle owners restarted;
 no store reset, session loss or input replay. Restart the user's Toad to load the
 new imports. Combined local checks38 passed; installed native wake/restart and
 feedback checks18 passed; actual native WebSocket1011 and mounted UI passed.
-The existing failed return152 is still uncertain and is not retried.
+The existing failed return152 remains uncertain and is not retried. NEW live
+diagnostic155 received exact reply156 LIVE_BUS_CONFIG_OK from nra-architecture
+through the actual bus/restarted owner/configured provider, then returned idle.
+Latest pair passes six installed native config/rejection checks and the full
+installed native queue/reattach/DM/channel/stopped-owner UI pilot.
 
 ## Current shipping batch
 
@@ -60,10 +65,12 @@ The existing failed return152 is still uncertain and is not retried.
   PR278 merged and installed; fresh and base-only native send/restart passed.
 - [ ] Boyle: expose failed background drains through existing typed activity and
   diagnostics, so an actual wake failure cannot remain silently Ready.
-- [ ] Wegener: diagnose/fix return-message152 native rejection. Current code
-  discards Pi's actual prompt rejection behind a generic unavailable error.
-  No automatic retry of this uncertain attempt. Also owns the two private future
-  queue regressions previously listed as parent-owned.
+- [x] Wegener: fix return-message152 native rejection and private future queue.
+  PR277 merged/installed: nested private launch overwrote canonical config with
+  credential-free settings, causing No API key found for openai-codex. Preserves
+  canonical config and exact typed private rejection diagnostics.26 actual owner
+  cases,28 reservation cases and6 installed native cases pass. Original152 never
+  retried. Parent's fresh live155/156 verifies an actual configured-provider reply.
 - [x] Parent: install merged274 retained-private-history proof fix. It passed
   four installed actual native reset cases in Wegener's tree. Fresh immutable
   runtime-private-proof-candidate-20260928 is now LIVE; its matching installed
@@ -78,11 +85,10 @@ The existing failed return152 is still uncertain and is not retried.
 
 ## Parallel remaining work
 
-- [ ] Wegener: replace obsolete fake-owner native integration fixture with actual
+- [x] Wegener: replace obsolete fake-owner native integration fixture with actual
   pinned native host path and prove ordinary/private one-original admission,
   correction/queued input/refusal without replay.274 merged actual fixtures and
-  retained-proof production fix; remaining private queue/native rejection code
-  explicitly belongs to Wegener now.
+  retained-proof production fix;277 completes private queue/native rejection.
 - [ ] Tesla: establish116 ownership first, then finish an independent substantive
   workspace/resource implementation slice (or take over only if unowned). Use110
   measurements, preserve operational ACP/editor state, coordinate with Carver.
@@ -95,11 +101,15 @@ The existing failed return152 is still uncertain and is not retried.
 - [ ] After T2/T3/T5/T6 merge, remeasure and finish T4 as specified: nominal
   turn owner, block navigation, TabOrder and clipboard families, no mixin carving.
   Carver now owns Conversation/blocks/Agent lifecycle and the observed Question
-  disconnect/mount race in127; its native full-turn timeout remains owned.
+  disconnect/mount race in127; merged and installed, full native pilot passes.
   Noether now owns App TabOrder/clipboard; Tesla owns116 resource integration.
 - [ ] Parent: finish actual remaining original/round-two plan acceptance and
   deletion audit against current source; stale reports are not current blockers
   and do not establish completion. Keep explicit requirement/evidence mapping.
+  Dalton audit281:19 current guards pass, retired names absent, executed operators
+  deleted. Dalton owns remaining proof-journal decoder; Wegener assigned fixed
+  native RPC reader limit after its provider probe. Historical benchmarks and
+  universal size requirements remain unproven, not silently marked complete.
 
 ## Quiet runtime cutover
 
