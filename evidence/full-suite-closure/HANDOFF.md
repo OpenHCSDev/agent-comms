@@ -83,3 +83,15 @@ history and marker behavior remain covered by the existing real publication test
 
 Next full serial run uses explicit -n0, cleared addopts, maxfail12, verbose log,
 JUnit output, owned .t basetemp and1800-second overall bound with SIGINT cleanup.
+
+## Fourth full run and publication closure
+
+Full serial run:623 passed,2 failed,10 fixture errors in174.58s. Complete JUnit
+was written under owned .artifacts/suite/full-fourth.xml. All earlier ACP,
+backend, channel and actual manual native paths passed in that run.
+
+Corrected command-family real-socket ProcessIdentity; reviewed CLI golden diff
+adds only the already-declared compaction-status command/help. Publication fixture
+now constructs CommittedNativeOutcome with its required fixture digest through
+FieldCodec and canonical_agent. Actual delivery/cancellation/socket/rebinding
+assertions unchanged. Focused command/publication batch:39 passed in21.64s.
