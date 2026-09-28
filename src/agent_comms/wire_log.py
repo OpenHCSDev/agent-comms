@@ -670,33 +670,62 @@ class WireLog:
         return self.path.with_name("bus_meta.json")
 
     def read_metadata_unlocked(self, *, required: bool = False) -> WireMetadata:
-        try:
-            data = json.loads(self.metadata_path.read_text(), object_pairs_hook=unique_wire_object)
-        except FileNotFoundError as error:
-            if required or self.metadata_path.is_symlink() or self.path.exists():
+        """Read one marker inode under its leaf lock, independently of registry reads.
+
+        Callers still own any required bus/registry transaction. Marker ownership
+        is checked on the opened inode before this lock lets publication retire
+        it; zero or multiple links are never accepted as owner-only storage.
+        """
+        with _store_lock(self.metadata_path, shared=True):
+            try:
+                descriptor = os.open(
+                    self.metadata_path,
+                    os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0),
+                )
+            except FileNotFoundError as error:
+                if required or self.metadata_path.is_symlink() or self.path.exists():
+                    raise RelationViolationError(
+                        "Bus protocol marker is missing or redirected."
+                    ) from error
+                return WireMetadata()
+            except OSError as error:
                 raise RelationViolationError(
-                    "Bus protocol marker is missing or redirected."
+                    "Bus protocol marker is unreadable or redirected."
                 ) from error
-            return WireMetadata()
-        except (ValueError, UnicodeError) as error:
-            raise RelationViolationError("Bus protocol marker is malformed.") from error
-        try:
-            metadata = FieldCodec.decode(WireMetadata, data)
-            # Omitted optional fields express absence. Explicit nulls, missing
-            # required public sequence and mixed protocol rows are not aliases.
-            if FieldCodec.encode(metadata) != data:
-                raise ValueError("Noncanonical bus protocol marker")
+            with os.fdopen(descriptor, encoding="utf-8") as source:
+                info = os.fstat(source.fileno())
+                if not stat.S_ISREG(info.st_mode):
+                    raise RelationViolationError("Bus protocol marker must be regular storage.")
+                try:
+                    data = json.load(source, object_pairs_hook=unique_wire_object)
+                except (ValueError, UnicodeError) as error:
+                    raise RelationViolationError("Bus protocol marker is malformed.") from error
+            try:
+                metadata = FieldCodec.decode(WireMetadata, data)
+                # Omitted optional fields express absence. Explicit nulls, missing
+                # required public sequence and mixed protocol rows are not aliases.
+                if FieldCodec.encode(metadata) != data:
+                    raise ValueError("Noncanonical bus protocol marker")
+            except (TypeError, ValueError) as error:
+                raise RelationViolationError(f"Bus protocol marker is invalid: {error}") from error
+            if metadata.private and (
+                info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+                or info.st_nlink != 1
+            ):
+                raise RelationViolationError("Private bus protocol marker is not owner-only")
             return metadata
-        except (TypeError, ValueError) as error:
-            raise RelationViolationError(f"Bus protocol marker is invalid: {error}") from error
 
     def write_metadata_unlocked(self, metadata: WireMetadata) -> None:
-
-        _atomic_write_text(
-            self.metadata_path, json.dumps(FieldCodec.encode(metadata), indent=2), fsync_parent=True
-        )
-
-
+        # Leaf lock order: bus/registry (when needed) -> marker. Marker operations
+        # never acquire a bus or registry lock. Keep replacement AND its parent
+        # fsync inside this boundary so readers cannot observe retired inodes.
+        with _store_lock(self.metadata_path):
+            _atomic_write_text(
+                self.metadata_path,
+                json.dumps(FieldCodec.encode(metadata), indent=2),
+                fsync_parent=True,
+            )
 
     def require_fresh_private_root_unlocked(self) -> None:
         self._assert_private_directory()

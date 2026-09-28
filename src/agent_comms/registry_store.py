@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -117,14 +115,6 @@ class RegistryStore(LockedStore[RegistryDocument]):
             if guard_present:
                 raise RelationViolationError("Private registry guard marker is absent")
             return None
-        marker_info = marker_path.lstat()
-        if (
-            not stat.S_ISREG(marker_info.st_mode)
-            or marker_info.st_uid != os.geteuid()
-            or stat.S_IMODE(marker_info.st_mode) != 0o600
-            or marker_info.st_nlink != 1
-        ):
-            raise RelationViolationError("Private registry guard marker is not owner-only")
         guard = PrivateRegistryGuard(self.path, marker.root_id)
         guard.verify()
         return guard
