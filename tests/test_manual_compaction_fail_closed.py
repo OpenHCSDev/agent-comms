@@ -33,12 +33,12 @@ async def test_malformed_middle_session_row_refused_before_pi_preflight(tmp_path
         raise AssertionError("Malformed JSONL reached Pi preflight")
 
     monkeypatch.setattr(compact, "_preflight", forbidden_preflight)
-    result = await compact.compact_session(
+    result = await compact.ManualCompaction(
         str(backend),
         ["--provider", "openrouter", "--model", "fake"],
         str(session),
         str(tmp_path),
-    )
+    ).run()
     assert result["ok"] is False
 
 
@@ -65,12 +65,12 @@ async def test_compaction_waits_for_session_writer_before_preflight(tmp_path, mo
     with lock_file.open("a+b") as held:
         fcntl.flock(held.fileno(), fcntl.LOCK_EX)
         task = asyncio.create_task(
-            compact.compact_session(
+            compact.ManualCompaction(
                 str(backend),
                 ["--provider", "openrouter", "--model", "fake"],
                 str(session),
                 str(tmp_path),
-            )
+            ).run()
         )
         await asyncio.sleep(0.1)
         assert not preflight_started.is_set()
@@ -138,9 +138,9 @@ async def test_unsupported_platform_refuses_before_policy_or_child(monkeypatch):
     monkeypatch.setattr(compact, "_supported_platform", lambda: False)
     monkeypatch.setattr(compact, "_private_policy", forbidden)
     monkeypatch.setattr(compact.asyncio, "create_subprocess_exec", forbidden)
-    result = await compact.compact_session(
+    result = await compact.ManualCompaction(
         "pi", ["--provider", "openrouter", "--model", "fake"], "/missing", "/missing"
-    )
+    ).run()
     assert result == {"ok": False, "error": "Saved-session compaction requires POSIX teardown."}
 
 

@@ -181,7 +181,7 @@ class TestHandlers:
             }
 
         monkeypatch.setattr(
-            "agent_comms.manual_compaction_bridge.manual_compaction.compact_session",
+            "agent_comms.manual_compaction_bridge.manual_compaction.ManualCompaction.run",
             compact_session,
         )
 
@@ -194,7 +194,7 @@ class TestHandlers:
         result = response.field_meta["agentComms"]["compaction"]
         assert result["ok"] is True
         assert result["summary"] == "Preserved decisions."
-        assert received["args"][-1] == "keep test findings"
+        assert received["args"][0].instructions == "keep test findings"
         # The bridge does not promote estimated post-compaction usage to a
         # measured context receipt; it remains unknown until a fresh sample.
         assert agent._comms.agent_info_of("proj").context_used is None
@@ -224,7 +224,7 @@ class TestHandlers:
 
         agent.sessions.client = FakeClient()
         monkeypatch.setattr(
-            "agent_comms.manual_compaction_bridge.manual_compaction.compact_session",
+            "agent_comms.manual_compaction_bridge.manual_compaction.ManualCompaction.run",
             compact_session,
         )
         compaction = asyncio.create_task(compact_context(agent.turns, "proj"))
@@ -301,7 +301,7 @@ class TestHandlers:
             return {"ok": True}
 
         monkeypatch.setattr(
-            "agent_comms.manual_compaction_bridge.manual_compaction.compact_session",
+            "agent_comms.manual_compaction_bridge.manual_compaction.ManualCompaction.run",
             compact_session,
         )
         compaction = asyncio.create_task(compact_context(agent.turns, "proj"))
