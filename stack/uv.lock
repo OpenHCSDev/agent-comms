@@ -17,7 +17,7 @@ wheels = [
 [[package]]
 name = "agent-comms"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/agent-comms.git?rev=83b4f8ddc31bc5810b3fa94666bfd90771e6edbb#83b4f8ddc31bc5810b3fa94666bfd90771e6edbb" }
+source = { git = "https://github.com/OpenHCSDev/agent-comms.git?rev=f7716d542135bc8a41833561c05e2170aa166ac8#f7716d542135bc8a41833561c05e2170aa166ac8" }
 dependencies = [
     { name = "metaclass-registry" },
 ]
@@ -39,8 +39,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=83b4f8ddc31bc5810b3fa94666bfd90771e6edbb" },
-    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=14310b9721f092dddc909d6f545220f6ebf45ddd" },
+    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=f7716d542135bc8a41833561c05e2170aa166ac8" },
+    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=8adfcad0302ae1ffd6ab5074486cf0a5cf8c24e1" },
     { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=4fa6a9c440eaaa7dfaad45a33af146fc4b7e922e" },
 ]
 
@@ -187,7 +187,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?rev=14310b9721f092dddc909d6f545220f6ebf45ddd#14310b9721f092dddc909d6f545220f6ebf45ddd" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?rev=8adfcad0302ae1ffd6ab5074486cf0a5cf8c24e1#8adfcad0302ae1ffd6ab5074486cf0a5cf8c24e1" }
 dependencies = [
     { name = "agent-comms", extra = ["acp"] },
     { name = "aiosqlite" },

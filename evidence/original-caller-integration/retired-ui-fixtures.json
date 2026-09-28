@@ -1,0 +1,22 @@
+[
+  {
+    "directory": "r6-history-ui",
+    "bytes": 78541
+  },
+  {
+    "directory": "r6-history-ui-clean",
+    "bytes": 78314
+  },
+  {
+    "directory": "r6-history-ui-frame",
+    "bytes": 73431
+  },
+  {
+    "directory": "r6-history-ui-status",
+    "bytes": 73211
+  },
+  {
+    "directory": "r6-history-ui-schema-cache",
+    "bytes": 165752
+  }
+]

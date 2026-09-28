@@ -1,3 +1,11 @@
+## Current result — original caller closure merged/live, 2026-09-28
+
+Core206 (f7716d542135bc8a41833561c05e2170aa166ac8; includes204/205) and Toad100 (8adfcad0302ae1ffd6ab5074486cf0a5cf8c24e1) are installed in runtime-original-closure-20260928. Textual main was rechecked at4fa6a9c. Both normal owners restarted idle and are alive/local on configured models; bus/checkpoint62 and103 identities preserved. Paired stack dependency conflict was corrected by updating Toad's core pin and resolving the stack lock successfully. Installed current-delivery owner/queue and normal launcher pass;57 combined source cases include actual native four tools/lease cleanup. No new schema migration, provider call or replay was needed for this caller-only change.
+
+O1 assignment/lease names and S4 builtin declaration/alias cleanup are closed, with current consumers migrated and replaced names deleted. Both workers completed their assigned source work; parent completed installation. C0 and major original ownership replacements are live. The independent original audit still explicitly qualifies historical universal size/lock guards and exhaustive recorded-stream/50–150-thread benchmarks; none is falsely reported passing. Five PF1–PF5 debt surfaces are proposed in plans/POST-FEATURE-DEBT-AUDIT.md for further planning, not started implementations. Native proof-journal issue107 and explicit native manual-compaction admission retain their separate recorded scopes. Final whole-goal requirement reconciliation remains parent-owned; goal stays active until that audit is recorded.
+
+Latest functional behavior receipts remain core evidence/r6-integration:111 saved choices/original history, all migrated route facts, actual configured-provider compaction queue once/inorder/fourfacts and live61→62 native read/bash16.505s. Current caller/launch receipts are evidence/original-caller-integration. Owned migration fixtures and failed UI fixture state removed; only current original-closure and previousR6/R7 runtimes retained after reference-checked retirement of R1 and R3.
+
 # Original caller/deletion closure — integrated candidate
 
 Combines complete S4 PR204 and R7 O1 PR205 on main203. No source reconstruction: both full branches and audit receipts are retained. The only shared TurnRunner hunks merge cleanly: declaration-owned builtin target plus assignment/lease naming.
