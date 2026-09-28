@@ -816,7 +816,9 @@ async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
     )
     monkeypatch.setattr(AttachedChild, "start", launch)
     monkeypatch.setattr("agent_comms.tracked_turn.send_fenced_prompt", fake_prompt_send)
-    monkeypatch.setattr("agent_comms.maintenance_barrier.MaintenanceBarrier.assert_open_unlocked", lambda _: None)
+    monkeypatch.setattr(
+        "agent_comms.maintenance_barrier.MaintenanceBarrier.assert_open_unlocked", lambda _: None
+    )
     reason = (
         "fake prewrite boundary"
         if damage == "valid_preflight"

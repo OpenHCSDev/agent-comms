@@ -896,7 +896,7 @@ def _reserved_private_selected_row(journal: CompactionJournal, session_file: Pat
     operation_id = "a" * 32
     source = json.dumps(
         {
-            "source": manual_source(saved, incarnation=people[2].incarnation),
+            "source": manual_source(session_file),
             "selected": {"provider": "fake", "modelId": "test", "contextWindow": 200000},
             "settings": {"keepRecentTokens": 2000, "reserveTokens": 1000},
         },
