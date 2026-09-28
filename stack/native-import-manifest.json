@@ -2,7 +2,8 @@
   "version": 1,
   "extensionEntries": [
     "agent-comms-extensions/pi-mcp-client/index.mjs",
-    "dist/selected_claimed_write.mjs"
+    "dist/selected_claimed_write.mjs",
+    "dist/channel_coding_tools.mjs"
   ],
   "peerAliases": {
     "@earendil-works/pi-coding-agent": "dist/index.js"

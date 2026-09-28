@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import os
-import sys
-import types
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -39,15 +37,10 @@ def private_root():
 @pytest.fixture
 def nominal_broker_stub(monkeypatch):
     # Keep this stub focused on owner binding; broker and native tests cover IPC.
-    broker = types.ModuleType("agent_comms.selected_tool_broker")
+    from agent_comms import selected_tool_broker as broker
 
-    @dataclass(frozen=True)
-    class SelectedToolIntent:
-        pass
-
-    @dataclass(frozen=True)
-    class SelectedToolMode:
-        action: object
+    intent_type = broker.SelectedToolIntent
+    mode_type = broker.SelectedToolMode
 
     bound = []
 
@@ -70,13 +63,10 @@ def nominal_broker_stub(monkeypatch):
             == admission.owner_admission_generation
         )
         bound.append((admission, owner, session_dir, input_id))
-        return SelectedToolMode(lambda request: None)  # never invoke fake mutation
+        return mode_type(lambda request: None)  # never invoke fake mutation
 
-    broker.SelectedToolIntent = SelectedToolIntent
-    broker.SelectedToolMode = SelectedToolMode
-    broker.selected_tool_mode_for_owner = selected_tool_mode_for_owner
-    monkeypatch.setitem(sys.modules, broker.__name__, broker)
-    return SelectedToolIntent, SelectedToolMode, bound
+    monkeypatch.setattr(broker, "selected_tool_mode_for_owner", selected_tool_mode_for_owner)
+    return intent_type, mode_type, bound
 
 
 def test_owner_configuration_requires_nominal_intent_and_private_binding(
@@ -126,7 +116,9 @@ async def test_operator_plan_and_tool_intent_are_exclusive(
 
 
 @pytest.mark.asyncio
-async def test_default_full_has_exact_no_tools_prompt(private_root, monkeypatch):
+async def test_default_full_has_normal_coding_tools_and_cooperative_claim_instruction(
+    private_root, monkeypatch
+):
     root, root_id, _comms, _initial, _ = _root(private_root, direct=True)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model()
@@ -143,12 +135,11 @@ async def test_default_full_has_exact_no_tools_prompt(private_root, monkeypatch)
         )
     ).response_message_id
     assert len(calls) == 1
-    assert (
-        "Answer the original committed message directly and concisely, using no tools. "
-        in calls[0][1]
-    )
+    assert "normal read, bash, edit and write tools." in calls[0][1]
     assert "selected_claimed_write" not in calls[0][1]
-    assert "selected_tool_mode" not in kwargs_seen[0]
+    from agent_comms.channel_coding_tools import CodingToolMode
+
+    assert isinstance(kwargs_seen[0]["selected_tool_mode"], CodingToolMode)
 
 
 @pytest.mark.asyncio

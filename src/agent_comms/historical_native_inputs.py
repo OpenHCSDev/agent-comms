@@ -116,7 +116,9 @@ def read_historical_native_inputs(
             # Journal alone cannot promote an unrecorded or uncertain input.
             # The immutable SQL row is already present from the live event;
             # this check only corroborates its message-bearing context facts.
-            observed = _read_native_context_evidence(session_file, row["input_id"])
+            observed = _read_native_context_evidence(
+                session_file, row["input_id"], request_generation=row["request_generation"]
+            )
         except (OSError, ValueError, NativePiUnavailable) as error:
             raise IdentityConflict("historical native context evidence is unavailable") from error
         if observed != recorded:

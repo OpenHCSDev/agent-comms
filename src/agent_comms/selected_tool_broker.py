@@ -16,6 +16,7 @@ import re
 import socket
 import stat
 import struct
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,8 +46,24 @@ class SelectedToolIntent:
     """
 
 
+class NativeToolMode(ABC):
+    """Owner-bound native tool policy shared by selected and normal coding turns."""
+
+    @abstractmethod
+    def launch_arguments(self, package: Path) -> tuple[str, ...]:
+        """Return the native tool selection and reviewed extension."""
+
+    def finish(self) -> None:
+        """Release completed coding claims; selected proof keeps its old semantics."""
+        return None
+
+    @abstractmethod
+    def socket(self, directory: Path, token: str) -> OwnerToolSocket:
+        """Create the existing authenticated owner transport for this policy."""
+
+
 @dataclass(frozen=True, slots=True)
-class SelectedToolMode:
+class SelectedToolMode(NativeToolMode):
     """Trusted owner callback, never parsed from a model call or injected text."""
 
     action: Callable[[SelectedToolRequest], None]
@@ -54,6 +71,18 @@ class SelectedToolMode:
     def __post_init__(self) -> None:
         if not callable(self.action):
             raise TypeError("Selected tool mode requires an owner callback")
+
+    def launch_arguments(self, package: Path) -> tuple[str, ...]:
+        return (
+            "--no-builtin-tools",
+            "--tools",
+            "selected_claimed_write",
+            "-e",
+            str(selected_extension(package)),
+        )
+
+    def socket(self, directory: Path, token: str) -> OwnerToolSocket:
+        return SelectedToolSocket(directory, token, self.action)
 
 
 class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcome
@@ -225,38 +254,45 @@ def selected_tool_mode_for_owner(
         # The prompt-send boundary commits this epoch to the exact reserved
         # FULL input before Pi can receive it. A socket token, PID, model text,
         # or context journal alone does not establish this source binding.
-        with MutationStore(str(store.path), lock_timeout=0) as scoped, scoped._read_transaction():
-            assert_native_runtime_schema(scoped._connection)
-            row = scoped._connection.execute(
-                "SELECT * FROM native_runtime_inputs WHERE input_id=?", (input_id,)
-            ).fetchone()
-            if row is None or (
-                row["stage"],
-                row["claim_id"],
-                row["execution_id"],
-                row["attempt_ordinal"],
-                row["owner_lookup"],
-                row["owner_thread"],
-                row["owner_generation"],
-                row["sent_owner_admission_epoch"],
-                row["session_id"],
-                row["verdict"],
-            ) != (
-                "full",
-                admission.wake_claim_id,
-                admission.execution_id,
-                admission.attempt_ordinal,
-                admission.recipient_lookup,
-                owner_name,
-                admission.participant_generation,
-                admission.owner_admission_generation,
-                None,
-                None,
-            ):
-                raise SelectedToolDenied("Selected tool does not match the exact sent FULL input")
+        verify_sent_full_input(store, admission, owner_name, input_id)
         perform_selected_write(comms, store, admission, owner_name, session_dir, input_id, request)
 
     return SelectedToolMode(owner_action)
+
+
+def verify_sent_full_input(
+    store: MutationStore, admission: WakeAdmission, owner_name: str, input_id: str
+) -> None:
+    """Only the exact FULL input admitted by the owner may call native tools."""
+    with MutationStore(str(store.path), lock_timeout=0) as scoped, scoped._read_transaction():
+        assert_native_runtime_schema(scoped._connection)
+        row = scoped._connection.execute(
+            "SELECT * FROM native_runtime_inputs WHERE input_id=?", (input_id,)
+        ).fetchone()
+        if row is None or (
+            row["stage"],
+            row["claim_id"],
+            row["execution_id"],
+            row["attempt_ordinal"],
+            row["owner_lookup"],
+            row["owner_thread"],
+            row["owner_generation"],
+            row["sent_owner_admission_epoch"],
+            row["session_id"],
+            row["verdict"],
+        ) != (
+            "full",
+            admission.wake_claim_id,
+            admission.execution_id,
+            admission.attempt_ordinal,
+            admission.recipient_lookup,
+            owner_name,
+            admission.participant_generation,
+            admission.owner_admission_generation,
+            None,
+            None,
+        ):
+            raise SelectedToolDenied("Selected tool does not match the exact sent FULL input")
 
 
 def verify_selected_terminal(directory: Path, input_id: str, call_id: str) -> None:
@@ -294,50 +330,46 @@ def perform_selected_write(
     record_selected_terminal(session_dir, input_id, request.call_id)
 
 
-class SelectedToolSocket:
-    """One-shot authenticated child-to-owner IPC; no bearer token is admission."""
+class OwnerToolSocket(ABC):
+    """Authenticated native child transport; the policy owns request admission."""
 
-    def __init__(
-        self,
-        directory: Path,
-        token: str,
-        action: Callable[[SelectedToolRequest], None],
-    ) -> None:
+    max_request = _MAX_REQUEST
+
+    def __init__(self, directory: Path, token: str) -> None:
         if type(token) is not str or not _TOKEN.fullmatch(token):
             raise ValueError("Selected tool transport requires a random 256-bit token")
         # Linux AF_UNIX pathnames are short. The per-recipient private session
         # directory already scopes this socket, so one byte is sufficient.
         self.path = Path(directory).absolute() / "s"
         self.token = token
-        self.action = action
         self.expected_pid: int | None = None
         # Live owner-side completion only. A visible .done file after failed
         # fsync is not a durable receipt and must never be promoted by itself.
-        self.completed_call_id: str | None = None
         self._server: asyncio.AbstractServer | None = None
-        self._approved: dict[str, tuple[str, bytes]] = {}
-        self._approval_changed = asyncio.Event()
         self._created = False
 
-    def approve_tool_start(self, call_id: str, arguments: object) -> None:
-        """Owner supplies a Pi-emitted tool_execution_start, never model text."""
-        if (
-            type(call_id) is not str
-            or not _CALL_ID.fullmatch(call_id)
-            or type(arguments) is not dict
-            or set(arguments) != {"resource", "contents"}
-        ):
-            return
-        if type(arguments["resource"]) is not str or type(arguments["contents"]) is not str:
-            return
-        try:
-            contents = arguments["contents"].encode("utf-8", errors="strict")
-        except UnicodeError:
-            return
-        if len(contents) > _MAX_CONTENT:
-            return
-        self._approved[call_id] = (arguments["resource"], contents)
-        self._approval_changed.set()
+    @abstractmethod
+    def announce(self, content: list[dict[str, Any]]) -> None: ...
+
+    @abstractmethod
+    def tool_started(self, event) -> None: ...
+
+    @abstractmethod
+    def tool_finished(self, event, input_id: str) -> None: ...
+
+    @abstractmethod
+    def assert_complete(self) -> None: ...
+
+    @property
+    def selected_call_id(self) -> str | None:
+        return None
+
+    @abstractmethod
+    async def handle_request(self, raw: bytes) -> dict[str, object]:
+        """Decode and admit the policy's request before replying to Pi."""
+
+    def failure_response(self, error: Exception) -> dict[str, object]:
+        return {"ok": False, "error": "Selected tool denied or outcome UNKNOWN; no retry"}
 
     async def start(self) -> None:
         if not hasattr(socket, "SO_PEERCRED") or not hasattr(os, "O_NOFOLLOW"):
@@ -353,7 +385,7 @@ class SelectedToolSocket:
         if self.path.exists() or self.path.is_symlink():
             raise SelectedToolDenied("Selected tool socket already exists")
         self._server = await asyncio.start_unix_server(
-            self._handle, path=str(self.path), limit=_MAX_REQUEST + 1
+            self._handle, path=str(self.path), limit=self.max_request + 1
         )
         self._created = True
         try:
@@ -382,22 +414,107 @@ class SelectedToolSocket:
             if pid != self.expected_pid or uid != os.geteuid():
                 raise SelectedToolDenied("Selected tool peer is not the launched Pi child")
             raw = await asyncio.wait_for(reader.readline(), timeout=10)
-            request = parse_selected_request(raw, self.token)
-            if request.call_id not in self._approved:
-                await asyncio.wait_for(self._approval_changed.wait(), timeout=10)
-            if self._approved.get(request.call_id) != (request.resource, request.contents):
-                raise SelectedToolDenied("Selected tool call differs from owner's Pi event")
-            # Sync action owns the durable consumption and writer call. A
-            # second socket may queue but cannot pass the one-slot ledger.
-            self.action(request)
-            self.completed_call_id = request.call_id
-            response = {"ok": True}
-        except Exception:
-            # Do not leak details about root, path, admission or file content.
-            response = {"ok": False, "error": "Selected tool denied or outcome UNKNOWN; no retry"}
+            response = await self.handle_request(raw)
+        except Exception as error:
+            response = self.failure_response(error)
         try:
             writer.write((json.dumps(response) + "\n").encode("ascii"))
             await writer.drain()
         finally:
             writer.close()
             await writer.wait_closed()
+
+
+class SelectedToolSocket(OwnerToolSocket):
+    """One selected replacement, preserving the existing one-slot authority."""
+
+    def __init__(
+        self, directory: Path, token: str, action: Callable[[SelectedToolRequest], None]
+    ) -> None:
+        super().__init__(directory, token)
+        self.action = action
+        self.completed_call_id: str | None = None
+        self._approved: dict[str, tuple[str, bytes]] = {}
+        self._approval_changed = asyncio.Event()
+        self._announced_id: str | None = None
+        self._announced_args: object = None
+        self._started = self._finished = False
+
+    def approve_tool_start(self, call_id: str, arguments: object) -> None:
+        """Owner supplies a Pi-emitted tool_execution_start, never model text."""
+        if (
+            type(call_id) is not str
+            or not _CALL_ID.fullmatch(call_id)
+            or type(arguments) is not dict
+            or set(arguments) != {"resource", "contents"}
+        ):
+            return
+        if type(arguments["resource"]) is not str or type(arguments["contents"]) is not str:
+            return
+        try:
+            contents = arguments["contents"].encode("utf-8", errors="strict")
+        except UnicodeError:
+            return
+        if len(contents) > _MAX_CONTENT:
+            return
+        self._approved[call_id] = (arguments["resource"], contents)
+        self._approval_changed.set()
+
+    async def handle_request(self, raw: bytes) -> dict[str, object]:
+        request = parse_selected_request(raw, self.token)
+        if request.call_id not in self._approved:
+            await asyncio.wait_for(self._approval_changed.wait(), timeout=10)
+        if self._approved.get(request.call_id) != (request.resource, request.contents):
+            raise SelectedToolDenied("Selected tool call differs from owner's Pi event")
+        self.action(request)
+        self.completed_call_id = request.call_id
+        return {"ok": True}
+
+    def announce(self, content: list[dict[str, Any]]) -> None:
+        calls = [item for item in content if item.get("type") == "toolCall"]
+        if (
+            self._announced_id is not None
+            or len(calls) != 1
+            or calls[0].get("name") != "selected_claimed_write"
+            or type(calls[0].get("id")) is not str
+        ):
+            raise SelectedToolDenied("Native Pi returned an unapproved tool call")
+        if any(item.get("type") not in {"toolCall", "text", "thinking"} for item in content):
+            raise SelectedToolDenied("Native Pi returned invalid tool content")
+        self._announced_id = calls[0]["id"]
+        self._announced_args = calls[0].get("arguments")
+
+    def tool_started(self, event) -> None:
+        if (
+            self._started
+            or self._announced_id is None
+            or event.get("toolName") != "selected_claimed_write"
+            or event.get("toolCallId") != self._announced_id
+            or event.get("args") != self._announced_args
+        ):
+            raise SelectedToolDenied("Native Pi began an unapproved tool execution")
+        self.approve_tool_start(self._announced_id, event.get("args"))
+        if self._announced_id not in self._approved:
+            raise SelectedToolDenied("Native Pi tool arguments are invalid")
+        self._started = True
+
+    def tool_finished(self, event, input_id: str) -> None:
+        if (
+            not self._started
+            or self._finished
+            or event.get("toolName") != "selected_claimed_write"
+            or event.get("toolCallId") != self._announced_id
+            or event.get("isError") is not False
+            or self.completed_call_id != self._announced_id
+        ):
+            raise SelectedToolDenied("Native Pi selected tool did not finish successfully")
+        verify_selected_terminal(self.path.parent, input_id, self._announced_id)
+        self._finished = True
+
+    def assert_complete(self) -> None:
+        if self._announced_id is not None and not self._finished:
+            raise SelectedToolDenied("Native Pi selected tool has no terminal result")
+
+    @property
+    def selected_call_id(self) -> str | None:
+        return self._announced_id

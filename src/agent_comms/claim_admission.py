@@ -33,7 +33,9 @@ from .declarations import (
 from .envelope_claim_transitions import (
     ClaimConflict,
     ClaimOwner,
+    FileClaimPath,
     WakeAdmission,
+    normalize_claim_file,
     normalize_existing_file,
 )
 from .operations import Comms
@@ -126,19 +128,11 @@ def _verify_selected_wake_state(
             raise IdentityConflict("Wake execution is not the current selected attempt")
 
 
-def publish_selected_resource_claim(
-    comms: Comms,
-    store: MutationStore,
-    admission: WakeAdmission,
-    owner_name: str,
-    resource_path: str | Path,
-) -> ClaimOwner:
-    """Bind one existing file claim to a live selected wake in a durable bus row.
-
-    The common lock order keeps stop and coordinator settlement behind the
-    pre-append check. A lost append result is UNKNOWN; this call never retries it.
-    The returned claim is an ownership receipt, not file-write authorization.
-    """
+@contextmanager
+def _selected_claim_boundary(
+    comms: Comms, store: MutationStore, admission: WakeAdmission, owner_name: str
+):
+    """One wire/bus/registry boundary for claim acquisition and exact release."""
     if type(comms) is not Comms or type(store) is not MutationStore:
         raise TypeError("Wake claim requires the actual wire and coordinator stores")
     if type(admission) is not WakeAdmission or type(owner_name) is not str:
@@ -181,49 +175,106 @@ def publish_selected_resource_claim(
             raise IdentityConflict("Selected wake has no committed initial row")
         with store._read_transaction():
             _verify_selected_wake_state(initial, owner, generation, store, admission)
-            resource = normalize_existing_file(Path(owner.worktree), resource_path)
-            projection, _ = bus._claim_projection_unlocked(metadata)
-            existing = projection.get(resource)
-            if existing is not None:
-                if (
-                    existing.admission == admission
-                    and existing.incarnation == str(owner.created_at)
-                    and existing.owner == owner.name
-                ):
-                    return existing
-                raise ClaimConflict(existing)
-            for prior, _receipt, _initial in bus._verified_private_rows_unlocked(metadata):
-                transition = prior.claim_transition
-                if (
-                    transition is not None
-                    and transition.admission is not None
-                    and transition.admission.operation_id == admission.operation_id
-                ):
-                    raise IdentityConflict("Wake claim operation was already consumed")
-            target = initial.message.sender
-            if target == owner.name:
-                target = "#all"
-            committed = bus.publish_claim_envelope(
+            yield bus, metadata, registry, owner, initial
+
+
+def publish_selected_resource_claim(
+    comms: Comms,
+    store: MutationStore,
+    admission: WakeAdmission,
+    owner_name: str,
+    resource_path: str | Path | FileClaimPath,
+) -> ClaimOwner:
+    """Bind one existing file claim to a live selected wake in a durable bus row.
+
+    The common lock order keeps stop and coordinator settlement behind the
+    pre-append check. A lost append result is UNKNOWN; this call never retries it.
+    The returned claim is an ownership receipt, not file-write authorization.
+    """
+    with _selected_claim_boundary(comms, store, admission, owner_name) as (
+        bus,
+        metadata,
+        registry,
+        owner,
+        initial,
+    ):
+        resource = normalize_claim_file(Path(owner.worktree), resource_path)
+        projection, _ = bus._claim_projection_unlocked(metadata)
+        existing = projection.get(resource)
+        if existing is not None:
+            if (
+                existing.admission == admission
+                and existing.incarnation == str(owner.created_at)
+                and existing.owner == owner.name
+            ):
+                return existing
+            raise ClaimConflict(existing)
+        for prior, _receipt, _initial in bus._verified_private_rows_unlocked(metadata):
+            transition = prior.claim_transition
+            if (
+                transition is not None
+                and transition.admission is not None
+                and transition.admission.operation_id == admission.operation_id
+            ):
+                raise IdentityConflict("Wake claim operation was already consumed")
+        target = initial.message.sender
+        if target == owner.name:
+            target = "#all"
+        committed = bus.publish_claim_envelope(
+            Message(owner.name, target, "Resource claim admitted", MessageType.INFO, notice=True),
+            worktree=Path(owner.worktree),
+            incarnation=str(owner.created_at),
+            claims=[resource_path],
+            _locked_registry_snapshot=registry,
+            _bus_locked=True,
+            _admission=admission,
+        )
+        transition = committed.claim_transition
+        assert transition is not None and transition.generation is not None
+        return ClaimOwner(
+            resource,
+            transition.owner,
+            transition.incarnation,
+            transition.generation,
+            committed.seq,
+            committed.message_id,
+            admission,
+        )
+
+
+def release_selected_resources(
+    comms: Comms,
+    store: MutationStore,
+    admission: WakeAdmission,
+    owner_name: str,
+    claims: tuple[ClaimOwner, ...],
+) -> None:
+    """Release only these observed generations under their current selected owner."""
+    with _selected_claim_boundary(comms, store, admission, owner_name) as (
+        bus,
+        metadata,
+        registry,
+        owner,
+        initial,
+    ):
+        projection, _ = bus._claim_projection_unlocked(metadata)
+        if any(projection.get(claim.resource) != claim for claim in claims):
+            raise IdentityConflict("Coding claim changed before release")
+        if claims:
+            target = initial.message.sender if initial.message.sender != owner.name else "#all"
+            bus.publish_claim_envelope(
                 Message(
-                    owner.name, target, "Resource claim admitted", MessageType.INFO, notice=True
+                    owner.name,
+                    target,
+                    "Completed coding tool claims released",
+                    MessageType.INFO,
+                    notice=True,
                 ),
                 worktree=Path(owner.worktree),
                 incarnation=str(owner.created_at),
-                claims=[resource],
+                releases=tuple(claim.resource for claim in claims),
                 _locked_registry_snapshot=registry,
                 _bus_locked=True,
-                _admission=admission,
-            )
-            transition = committed.claim_transition
-            assert transition is not None and transition.generation is not None
-            return ClaimOwner(
-                resource,
-                transition.owner,
-                transition.incarnation,
-                transition.generation,
-                committed.seq,
-                committed.message_id,
-                admission,
             )
 
 

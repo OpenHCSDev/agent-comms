@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import stat
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,39 +30,73 @@ class ClaimConflict(ClaimTransitionError):  # noqa: N818 - domain-specific losin
         super().__init__(f"Resource already claimed by {existing.owner!r}")
 
 
-def normalize_existing_file(root: Path, resource: str | Path) -> str:
-    """Canonical physical worktree/file identity; no symlink or hardlink aliases.
+@dataclass(frozen=True)
+class FileClaimPath(ABC):
+    """A caller's file operation owns which physical paths may be claimed."""
 
-    Only existing regular files are supported. The physical worktree root is
-    part of the identifier; distinct physical worktrees do not conflict.
-    """
-    if not (type(resource) is str or isinstance(resource, Path)) or not str(resource):
-        raise ClaimTransitionError("Resource must be a nonempty path.")
-    base = Path(root).absolute()
-    try:
-        physical_root = base.resolve(strict=True)
-        if physical_root != base or not base.is_dir():
-            raise ClaimTransitionError("Worktree must be a physical existing directory.")
-        requested = Path(resource)
-        if ".." in requested.parts:
-            raise ClaimTransitionError("Parent traversal is not a resource identifier.")
-        candidate = requested if requested.is_absolute() else base / requested
-        resolved = candidate.resolve(strict=True)
-        if resolved != candidate:
-            raise ClaimTransitionError("Symlink aliases are not supported.")
-        relative = resolved.relative_to(physical_root)
-        if not relative.parts:
-            raise ClaimTransitionError("Worktree directories cannot be claimed.")
-        info = resolved.stat()
-    except (OSError, ValueError, RuntimeError) as error:
-        if isinstance(error, ClaimTransitionError):
-            raise
-        raise ClaimTransitionError(
-            "Resource must be an existing file inside the worktree."
-        ) from error
-    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
-        raise ClaimTransitionError("Only existing singly-linked regular files are supported.")
-    return str(resolved)
+    resource: str | Path
+
+    def normalized(self, root: Path) -> str:
+        if not isinstance(self.resource, (str, Path)) or not str(self.resource):
+            raise ClaimTransitionError("Resource must be a nonempty path.")
+        base = Path(root).absolute()
+        try:
+            physical_root = base.resolve(strict=True)
+            if physical_root != base or not base.is_dir():
+                raise ClaimTransitionError("Worktree must be a physical existing directory.")
+            requested = Path(self.resource)
+            if ".." in requested.parts:
+                raise ClaimTransitionError("Parent traversal is not a resource identifier.")
+            candidate = requested if requested.is_absolute() else base / requested
+            resolved = candidate.resolve(strict=False)
+            if resolved != candidate:
+                raise ClaimTransitionError("Symlink aliases are not supported.")
+            relative = resolved.relative_to(physical_root)
+            if not relative.parts:
+                raise ClaimTransitionError("Worktree directories cannot be claimed.")
+            self.validate_leaf(resolved)
+        except (OSError, ValueError, RuntimeError) as error:
+            if isinstance(error, ClaimTransitionError):
+                raise
+            raise ClaimTransitionError(
+                "Resource is not a supported file inside the worktree."
+            ) from error
+        return str(resolved)
+
+    @abstractmethod
+    def validate_leaf(self, path: Path) -> None:
+        """Validate the file state required by this operation."""
+
+    @staticmethod
+    def validate_regular(info) -> None:
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ClaimTransitionError("Only regular singly-linked files can be claimed.")
+
+
+class ExistingFileClaim(FileClaimPath):
+    def validate_leaf(self, path: Path) -> None:
+        self.validate_regular(path.stat())
+
+
+class WritableFileClaim(FileClaimPath):
+    """Write may create a missing file, including missing parent directories."""
+
+    def validate_leaf(self, path: Path) -> None:
+        try:
+            info = path.stat()
+        except FileNotFoundError:
+            return
+        self.validate_regular(info)
+
+
+def normalize_claim_file(root: Path, resource: str | Path | FileClaimPath) -> str:
+    path = resource if isinstance(resource, FileClaimPath) else ExistingFileClaim(resource)
+    return path.normalized(root)
+
+
+def normalize_existing_file(root: Path, resource: str | Path) -> str:
+    """Compatibility entry for operations requiring an existing regular file."""
+    return ExistingFileClaim(resource).normalized(root)
 
 
 def _text(value: object, label: str) -> str:

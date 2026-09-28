@@ -196,10 +196,9 @@ def main(package: Path) -> None:
         ("native-compaction-commit-child.mjs", "agent-comms-compaction-commit-child.mjs"),
     ):
         shutil.copyfile(stack / source, package / "dist" / target)
-    shutil.copyfile(
-        stack.parent / "src/agent_comms/selected_claimed_write.mjs",
-        package / "dist/selected_claimed_write.mjs",
-    )
+    for name in ("selected_claimed_write.mjs", "channel_coding_tools.mjs"):
+        shutil.copyfile(stack.parent / "src/agent_comms" / name, package / "dist" / name)
+
 
 
 if __name__ == "__main__":

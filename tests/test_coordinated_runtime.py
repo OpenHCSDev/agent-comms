@@ -75,6 +75,12 @@ def _root(
     claims: bool = False,
     body: str | None = None,
 ):
+    # The fake native process bypasses package verification, but normal FULL
+    # launch still selects the packaged coding extension before process spawn.
+    dist = tmp_path / "dist"
+    dist.mkdir(exist_ok=True)
+    extension = Path(__file__).parents[1] / "src/agent_comms/channel_coding_tools.mjs"
+    (dist / extension.name).write_bytes(extension.read_bytes())
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
