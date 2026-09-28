@@ -28,3 +28,5 @@ Known integration dependencies retained:
 - Current foreground model fake calls prompt_send_boundary once and does not implement the raw writer's pre-send PromptAdmissionBusy retry; the two-recipient cases expose lock contention. Real production/raw writer owner remains S10; no relaxation of no-overlap assertions.
 - Passive-awareness tests still target removed acp_passive_channel_awareness.json; migrate to parent's current InputDrain/awareness projection, never recreate that ledger.
 - Owner interruption/followup acceptance still needs the current native steering API from S10. Reproducer source is retained as canonical_followup_probe.py with explicit model-fake boundary. Original behavior assertions were not removed.
+
+Cursor/certificate/checkpoint broad shard reached the60s bound (exit124, no final pytest summary), so remains unverified. Owned .artifacts/integration and test artifacts were removed after a /proc environment scan found no process using that snapshot. Failed/partial logs remain as evidence; no worktree source or live roots were deleted.
