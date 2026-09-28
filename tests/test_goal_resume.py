@@ -15,6 +15,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.goal_generation import BlockedGeneration, CancelledGeneration, CompletedGeneration
 from agent_comms.goals import Goal
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
@@ -87,7 +88,9 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
             {"goal_id": replacement["id"], "status": "active", "progress": "second"},
         )
 
-    comms.goals.update_goal("owner", ClearGoalAction(expect=GoalPrecondition(goal_id=replacement["id"])))
+    comms.goals.update_goal(
+        "owner", ClearGoalAction(expect=GoalPrecondition(goal_id=replacement["id"]))
+    )
     after_clear = invoke_tool(comms, "comms_set_goal", {"text": "after clear"})["goal"]
     reopened = Comms(comms.root)
     assert reopened.registry.require("owner").last_goal_report_turn == "same-assistant-turn"
@@ -111,7 +114,7 @@ def test_clearing_goal_releases_its_reserved_attempt(comms, monkeypatch):
     comms.goals.update_goal("owner", ClearGoalAction(expect=GoalPrecondition(goal_id=goal["id"])))
 
     assert comms.registry.require("owner").goal is None
-    assert GoalAttemptStore(private).snapshot(goal["id"]).state == "cancelled"
+    assert GoalAttemptStore(private).snapshot(goal["id"]).lifecycle == CancelledGeneration()
     assert store.snapshot(goal["id"]).attempt_id == reservation.attempt_id
 
 
@@ -128,7 +131,9 @@ def test_model_tool_cannot_resume_blocked_uncertain_goal(comms, monkeypatch):
 
 def test_resume_refuses_completed_or_replaced_goal(comms, monkeypatch):
     started = _goal(comms, monkeypatch)
-    comms.goals.update_goal("owner", CompletedGoalAction(expect=GoalPrecondition(goal_id=started["id"])))
+    comms.goals.update_goal(
+        "owner", CompletedGoalAction(expect=GoalPrecondition(goal_id=started["id"]))
+    )
     with pytest.raises(ValueError, match="cannot be resumed"):
         invoke_tool(comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "no"})
     replacement = invoke_tool(comms, "comms_set_goal", {"text": "new goal"})["goal"]
@@ -143,7 +148,9 @@ def test_completed_goal_cannot_be_reactivated_by_ui_registry_action(comms, monke
         "owner", CompletedGoalAction(expect=GoalPrecondition(goal_id=started["id"]))
     )
     with pytest.raises(ValueError, match="completed goal"):
-        comms.goals.update_goal("owner", ActiveGoalAction(expect=GoalPrecondition(goal_id=started["id"])))
+        comms.goals.update_goal(
+            "owner", ActiveGoalAction(expect=GoalPrecondition(goal_id=started["id"]))
+        )
     assert comms.registry.require("owner").goal == completed
 
 
@@ -172,10 +179,14 @@ def test_terminal_goal_cannot_reactivate_through_pause(comms, monkeypatch, termi
     )
 
     with pytest.raises(ValueError, match="goal"):
-        comms.goals.update_goal("owner", PausedGoalAction(expect=GoalPrecondition(goal_id=started["id"])))
+        comms.goals.update_goal(
+            "owner", PausedGoalAction(expect=GoalPrecondition(goal_id=started["id"]))
+        )
 
     assert comms.registry.require("owner").goal == terminal_goal
-    assert store.snapshot(started["id"]).state == terminal
+    assert store.snapshot(started["id"]).lifecycle == (
+        BlockedGeneration() if terminal == "blocked" else CompletedGeneration()
+    )
 
 
 def test_resume_does_not_claim_success_after_concurrent_goal_change(comms, monkeypatch):
@@ -194,7 +205,7 @@ def test_resume_does_not_claim_success_after_concurrent_goal_change(comms, monke
         )
         return real_update(name, action, **kwargs)
 
-    monkeypatch.setattr(comms.goals, 'update_goal', race)
+    monkeypatch.setattr(comms.goals, "update_goal", race)
     with pytest.raises(ValueError, match="changed during resume"):
         invoke_tool(
             comms,
@@ -233,7 +244,7 @@ def test_resume_losing_cas_never_reports_another_activations_success(comms, monk
             )
         return real_update(name, action, **kwargs)
 
-    monkeypatch.setattr(comms.goals, 'update_goal', race)
+    monkeypatch.setattr(comms.goals, "update_goal", race)
     with pytest.raises(ValueError, match="changed during resume"):
         invoke_tool(
             comms,
@@ -281,7 +292,7 @@ def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch
         )
         return real_update(name, action, **kwargs)
 
-    monkeypatch.setattr(comms.goals, 'update_goal', race)
+    monkeypatch.setattr(comms.goals, "update_goal", race)
     with pytest.raises(ValueError, match="changed during resume"):
         if prior is PausedGoalAction:
             invoke_tool(

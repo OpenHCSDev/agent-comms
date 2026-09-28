@@ -112,7 +112,7 @@ class InputDrain(FutureInputQueue):
                     owner,
                     admission=admission,
                     high_water=self.comms.bus.log.latest_sequence(),
-                    channels=self.comms.channels.catalog.targets_for(owner.tags),
+                    channels=self.comms.channels.catalog.read().targets_for(owner.tags),
                     fresh=fresh,
                 )
         self.inbox_cursors[session_id] = cursor
@@ -376,7 +376,9 @@ class InputDrain(FutureInputQueue):
         pushed = 0
         after = self.inbox_cursors.get(session_id, 0)
         high_water = self.comms.bus.log.latest_sequence()
-        page = self.comms.bus.incoming_page(thread_name, after=after) if after < high_water else None
+        page = (
+            self.comms.bus.incoming_page(thread_name, after=after) if after < high_water else None
+        )
         # A private cutover on a previously empty bus may have occurred after
         # the first classification but before this page was read. Reclassify
         # before touching delivery cursors, input dispositions or legacy ACK.
@@ -819,9 +821,7 @@ class InputDrain(FutureInputQueue):
             (
                 item.text
                 if item and item.echo
-                else initial_display_text
-                if input_id is None
-                else None
+                else initial_display_text if input_id is None else None
             ),
             input_id,
             queued_item=item,

@@ -1,0 +1,90 @@
+........................................................................ [ 41%]
+..........................................................FF............ [ 83%]
+.............................                                            [100%]
+=================================== FAILURES ===================================
+_________ test_terminal_goal_cannot_reactivate_through_pause[blocked] __________
+
+comms = <agent_comms.comms.Comms object at 0x7fccdea713d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fccdf5781a0>
+terminal = 'blocked'
+
+    @pytest.mark.parametrize("terminal", ["blocked", "completed"])
+    def test_terminal_goal_cannot_reactivate_through_pause(comms, monkeypatch, terminal):
+        started = _goal(comms, monkeypatch)
+        private = comms.root / "goal-private"
+        private.mkdir(mode=0o700)
+        store = GoalAttemptStore.initialize(private)
+        store.create_goal(started["id"])
+        reservation = store.reserve(started["id"], 1)
+        if terminal == "blocked":
+            store.record_failed(reservation, "uncertain turn")
+        else:
+            store.record_verified_completion(store.claim_launch(reservation), "finished")
+        terminal_goal = comms.goals.update_goal(
+            "owner",
+            (
+                BlockedGoalAction(
+                    expect=GoalPrecondition(goal_id=started["id"]),
+                    block_reason="Uncertain turn requires review",
+                )
+                if terminal == "blocked"
+                else CompletedGoalAction(expect=GoalPrecondition(goal_id=started["id"]))
+            ),
+        )
+    
+        with pytest.raises(ValueError, match="goal"):
+            comms.goals.update_goal(
+                "owner", PausedGoalAction(expect=GoalPrecondition(goal_id=started["id"]))
+            )
+    
+        assert comms.registry.require("owner").goal == terminal_goal
+>       assert store.snapshot(started["id"]).state == terminal
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'Generation' object has no attribute 'state'
+
+tests/test_goal_resume.py:187: AttributeError
+________ test_terminal_goal_cannot_reactivate_through_pause[completed] _________
+
+comms = <agent_comms.comms.Comms object at 0x7fccddb6bdd0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fccdf0fb770>
+terminal = 'completed'
+
+    @pytest.mark.parametrize("terminal", ["blocked", "completed"])
+    def test_terminal_goal_cannot_reactivate_through_pause(comms, monkeypatch, terminal):
+        started = _goal(comms, monkeypatch)
+        private = comms.root / "goal-private"
+        private.mkdir(mode=0o700)
+        store = GoalAttemptStore.initialize(private)
+        store.create_goal(started["id"])
+        reservation = store.reserve(started["id"], 1)
+        if terminal == "blocked":
+            store.record_failed(reservation, "uncertain turn")
+        else:
+            store.record_verified_completion(store.claim_launch(reservation), "finished")
+        terminal_goal = comms.goals.update_goal(
+            "owner",
+            (
+                BlockedGoalAction(
+                    expect=GoalPrecondition(goal_id=started["id"]),
+                    block_reason="Uncertain turn requires review",
+                )
+                if terminal == "blocked"
+                else CompletedGoalAction(expect=GoalPrecondition(goal_id=started["id"]))
+            ),
+        )
+    
+        with pytest.raises(ValueError, match="goal"):
+            comms.goals.update_goal(
+                "owner", PausedGoalAction(expect=GoalPrecondition(goal_id=started["id"]))
+            )
+    
+        assert comms.registry.require("owner").goal == terminal_goal
+>       assert store.snapshot(started["id"]).state == terminal
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'Generation' object has no attribute 'state'
+
+tests/test_goal_resume.py:187: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_goal_resume.py::test_terminal_goal_cannot_reactivate_through_pause[blocked]
+FAILED tests/test_goal_resume.py::test_terminal_goal_cannot_reactivate_through_pause[completed]
+2 failed, 171 passed in 41.87s

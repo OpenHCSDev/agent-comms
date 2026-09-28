@@ -10,7 +10,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .channels import ChannelCatalog
+from .catalog_store import ChannelCatalog
 from .goal_pauses import GoalPauseEvents
 from .goal_waits import GoalWaits
 from .registration import Registration
@@ -128,8 +128,13 @@ class HistoryViews:
     def attach_history(self, source_root: Path) -> HistorySource:
         """Attach preserved history without admitting any historical execution."""
         source = self.bus.attach_history(Path(source_root))
-        catalog = ChannelCatalog(Path(source.root) / "channels.json", source.registry())
-        self.channels.catalog.restore_missing(catalog)
+        catalog = ChannelCatalog(Path(source.root) / ChannelCatalog.filename)
+        incoming = catalog.read()
+        source_threads = source.registry().all_threads()
+        with _store_lock(self._wire_lock_path):
+            existing = any(path.exists() for path in self.channels.catalog.source_paths())
+            with self.channels.catalog.editing() as document:
+                document.restore_missing(incoming, source_threads, existing=existing)
         return source
 
     def historical_threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
@@ -257,7 +262,7 @@ class HistoryViews:
                 limit=limit,
                 max_bytes=max_bytes,
             )
-        channel = self.channels.catalog.views(self.registry.snapshot().threads).get(target)
+        channel = self.channels.catalog.read().views(self.registry.snapshot().threads).get(target)
         if channel is None:
             raise ValueError(f"Unknown channel: {target!r}")
 
@@ -407,7 +412,7 @@ class HistoryViews:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         """Bounded channel history for any client adapter."""
-        targets = self.channels.catalog.history_targets(target)
+        targets = self.channels.catalog.read().history_targets(target)
         return self._integrated_display_page(
             lambda **kwargs: self.bus.channel_history_page(target, **kwargs),
             lambda message, snapshot: targets is None or message.target in targets,
@@ -424,10 +429,7 @@ class HistoryViews:
             file_revision(path)
             for path in (
                 self.registry.store.path,
-                self.channels.catalog.path,
-                self.channels.catalog.metadata_path,
-                self.channels.catalog.pins_path,
-                self.channels.catalog.saved_views_path,
+                *self.channels.catalog.source_paths(),
                 self.bus.reads.path,
             )
         )
@@ -435,9 +437,10 @@ class HistoryViews:
     def _capture_display_basis(self, viewer: str | None) -> tuple:
         """Capture one basis while the caller holds the short wire lock."""
         registry = self.registry.snapshot()
-        channels = self.channels.catalog.views(registry.threads)
-        order = self.channels.catalog.list_order
-        pins = self.channels.catalog.pinned_threads_snapshot()
+        catalog = self.channels.catalog.read()
+        channels = catalog.views(registry.threads)
+        order = catalog.list_order
+        pins = catalog.pinned_members()
         seen = (
             self.bus.reads.seen_sequences(viewer, registry) if viewer is not None else frozenset()
         )
@@ -511,7 +514,9 @@ class HistoryViews:
                     if self._display_basis_revision() != revision:
                         continue
                     bus_revision = file_revision(self.bus.log.path)
-                    _, records = stack.enter_context(self.bus.log._record_snapshot(need_sequence=False))
+                    _, records = stack.enter_context(
+                        self.bus.log._record_snapshot(need_sequence=False)
+                    )
                     if self._display_basis_revision() != revision:
                         continue
                     if file_revision(self.bus.log.path) != bus_revision:
@@ -628,12 +633,13 @@ class HistoryViews:
     ) -> tuple[ChannelView, ...]:
         """Channel declarations and current members; clients never infer membership."""
         snapshot = self.registry.snapshot()
-        channels = self.channels.catalog.views(snapshot.threads)
+        catalog = self.channels.catalog.read()
+        channels = catalog.views(snapshot.threads)
         return self._channel_views_for(
             snapshot,
             channels,
-            self.channels.catalog.pinned_threads_snapshot(),
-            self.channels.catalog.list_order,
+            catalog.pinned_members(),
+            catalog.list_order,
             show_stopped=show_stopped,
             show_archived=show_archived,
         )
@@ -743,8 +749,9 @@ class HistoryViews:
         channels = self.channel_views(show_stopped=show_stopped, show_archived=show_archived)
         unread = self.bus.pending_counts(actor) if actor in self.registry else {}
         channel_unread: dict[str, int] = {}
+        catalog = self.channels.catalog.read()
         for view in channels:
-            targets = self.channels.catalog.history_targets(view.channel.name)
+            targets = catalog.history_targets(view.channel.name)
             channel_unread[view.channel.name] = sum(
                 count for target, count in unread.items() if targets is None or target in targets
             )
@@ -754,7 +761,7 @@ class HistoryViews:
             unread,
             self.last_sent_timestamps(),
             channel_unread,
-            self.channels.catalog.list_order,
+            catalog.list_order,
             show_stopped=show_stopped,
             show_archived=show_archived,
         )
@@ -908,10 +915,7 @@ class HistoryViews:
                 file_revision(path)
                 for path in (
                     self.registry.store.path,
-                    self.channels.catalog.path,
-                    self.channels.catalog.pins_path,
-                    self.channels.catalog.metadata_path,
-                    self.channels.catalog.saved_views_path,
+                    *self.channels.catalog.source_paths(),
                     self.bus.log.path,
                     self.bus.history_manifest,
                     self.agents.activity._path,

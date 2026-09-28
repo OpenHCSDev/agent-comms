@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
+from .goal_attempt_phase import (
+    FailedAttempt,
+    GoalAttemptPhase,
+)
 from .lifecycle import LifecycleState
 
 if TYPE_CHECKING:
@@ -23,6 +27,13 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
     @abstractmethod
     def successors(cls) -> tuple[type[GenerationState], ...]: ...
 
+    def validate_attempt(self, attempt_id: str | None) -> None:
+        if not attempt_id:
+            raise ValueError("This generation requires an attempt identity.")
+
+    def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
+        return False
+
     def allows_resume(self, active_turn: bool) -> bool:
         return False
 
@@ -36,9 +47,16 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
 class ReadyGeneration(GenerationState):
     ready = True
 
+    def validate_attempt(self, attempt_id: str | None) -> None:
+        if attempt_id is not None:
+            raise ValueError("READY cannot carry an attempt identity.")
+
+    def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
+        return phase is None
+
     @classmethod
     def successors(cls) -> tuple[type[GenerationState], ...]:
-        return ReservedGeneration, CancelledGeneration
+        return ReadyGeneration, ReservedGeneration, CancelledGeneration
 
     def allows_resume(self, active_turn: bool) -> bool:
         return True
@@ -46,8 +64,6 @@ class ReadyGeneration(GenerationState):
     def authorize_retry(
         self, store: GoalAttemptStore, generation: Generation, decision: str
     ) -> None:
-        if generation.attempt_id is not None:
-            return super().authorize_retry(store, generation, decision)
         store.authorize_ready_recovery(
             generation.goal_id, expected_generation=generation.number, user_decision_id=decision
         )
@@ -55,6 +71,9 @@ class ReadyGeneration(GenerationState):
 
 @dataclass(frozen=True)
 class ReservedGeneration(GenerationState):
+    def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
+        return phase is not None and phase.may_become(FailedAttempt())
+
     @classmethod
     def successors(cls) -> tuple[type[GenerationState], ...]:
         return ReadyGeneration, BlockedGeneration, CompletedGeneration, CancelledGeneration
@@ -67,6 +86,9 @@ class ReservedGeneration(GenerationState):
 class BlockedGeneration(GenerationState):
     failed = True
 
+    def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
+        return isinstance(phase, FailedAttempt)
+
     @classmethod
     def successors(cls) -> tuple[type[GenerationState], ...]:
         return ReadyGeneration, CancelledGeneration
@@ -74,8 +96,7 @@ class BlockedGeneration(GenerationState):
     def authorize_retry(
         self, store: GoalAttemptStore, generation: Generation, decision: str
     ) -> None:
-        if not generation.attempt_id:
-            return super().authorize_retry(store, generation, decision)
+        assert generation.attempt_id is not None
         store.authorize_retry(
             generation.goal_id,
             expected_generation=generation.number,
@@ -96,6 +117,10 @@ class CompletedGeneration(GenerationState):
 @dataclass(frozen=True)
 class CancelledGeneration(GenerationState):
     terminal = True
+
+    def validate_attempt(self, attempt_id: str | None) -> None:
+        if attempt_id is not None and not attempt_id:
+            raise ValueError("A retired attempt identity must be nonempty.")
 
     @classmethod
     def successors(cls) -> tuple[type[GenerationState], ...]:

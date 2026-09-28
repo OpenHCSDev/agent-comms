@@ -13,6 +13,7 @@ from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.input_disposition import InputDispositions
 
 
@@ -78,7 +79,7 @@ async def test_idle_owner_original_input_continues_active_goal(tmp_path, monkeyp
         current = comms.registry.require("project").goal
         assert current.id == goal.id and current.state.active
         generation = store.snapshot(goal.id)
-        assert generation.state == "ready" and generation.number == 2
+        assert generation.lifecycle == ReadyGeneration() and generation.number == 2
     finally:
         await agent.shutdown()
 
@@ -122,7 +123,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
         current = comms.registry.require("project").goal
         assert current.id == replacement.id and current.state.active
         generation = store.snapshot(replacement.id)
-        assert generation.state == "ready" and generation.number == 1
+        assert generation.lifecycle == ReadyGeneration() and generation.number == 1
         reopened = InputDispositions(comms.root)
         assert len(reopened.unknown(frozenset({"project"}))) == 1
     finally:
@@ -149,6 +150,6 @@ async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monke
         rows = disposition_rows(agent)
         assert len(rows) == 1 and rows[0]["status"] == "unknown"
         assert rows[0]["native_id"] is None
-        assert store.snapshot(goal.id).state != "ready"
+        assert store.snapshot(goal.id).lifecycle != ReadyGeneration()
     finally:
         await agent.shutdown()

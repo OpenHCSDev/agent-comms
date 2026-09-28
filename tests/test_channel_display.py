@@ -9,7 +9,6 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms import channels as channel_module
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.comms import wire
 from agent_comms.messages import Message, MessageType
@@ -47,7 +46,7 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
 
     selected = comms.channels.set_channel_any_mode("#api", True)
     assert selected.exact and selected.any_mode
-    assert wire(tmp_path).channels.catalog.resolve("#api").any_mode
+    assert wire(tmp_path).channels.catalog.read().resolve("#api").any_mode
     page = comms.views.channel_display_page("#api")
     assert bodies(page) == [
         "exact target",
@@ -72,7 +71,7 @@ def test_mode_rejects_builtins_union_view_and_unknown_without_sidecar_mutation(t
     comms.channels.set_saved_view(
         SavedView("saved", ViewKind.ACTIVITY, ViewPredicate(AnyOfMatch, frozenset({"api"})))
     )
-    metadata = comms.channels.catalog.metadata_path
+    metadata = comms.channels.catalog.path
     before = metadata.read_bytes() if metadata.exists() else None
     for channel in ("#any", "#all", "#none", "#engineering", "#saved", "#missing"):
         with pytest.raises(ValueError, match="Only existing exact tag channels"):
@@ -107,7 +106,7 @@ def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
                 writer.join(timeout=3)
                 assert finished.is_set()
 
-    with patch.object(comms.bus.log, '_record_snapshot', side_effect=toggle_after_boundary):
+    with patch.object(comms.bus.log, "_record_snapshot", side_effect=toggle_after_boundary):
         first = comms.views.viewer_snapshot(str(tmp_path))
     old = next(view for view in first.channels if view.channel.name == "#api")
     assert not old.channel.any_mode
@@ -150,7 +149,9 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     comms.channels.set_channel_any_mode("api", True)
     high_water = comms.bus.log.latest_sequence()
     assert bodies(comms.views.channel_display_page("#api")) == ["old sender DM"]
-    initial = {view.channel.name: view for view in comms.views.viewer_snapshot(str(tmp_path)).channels}
+    initial = {
+        view.channel.name: view for view in comms.views.viewer_snapshot(str(tmp_path)).channels
+    }
     assert initial["#api"].last_activity > 0
 
     comms.registry.rename("alice", "renamed")
@@ -162,20 +163,22 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     )
     assert comms.bus.log.latest_sequence() == high_water
     assert bodies(comms.views.channel_display_page("#api")) == []
-    after = {view.channel.name: view for view in comms.views.viewer_snapshot(str(tmp_path)).channels}
+    after = {
+        view.channel.name: view for view in comms.views.viewer_snapshot(str(tmp_path)).channels
+    }
     assert after["#api"].last_activity < initial["#api"].last_activity
 
     comms.registry.register(replace(comms.registry.require("renamed"), tags=frozenset({"api"})))
     comms.channels.rename_tag("api", "services")
     assert comms.bus.log.latest_sequence() == high_water
-    assert comms.channels.catalog.resolve("#services").any_mode
-    assert not comms.channels.catalog.resolve("#api").any_mode
+    assert comms.channels.catalog.read().resolve("#services").any_mode
+    assert not comms.channels.catalog.read().resolve("#api").any_mode
     assert bodies(comms.views.channel_display_page("#services")) == ["old sender DM"]
     comms.channels.delete_tag("services")
-    metadata = comms.channels.catalog.metadata_path
+    metadata = comms.channels.catalog.path
     assert not any(
         value.get("any_mode", False)
-        for value in json.loads(metadata.read_text()).get("channels", {}).values()
+        for value in json.loads(metadata.read_text())["preferences"].values()
     )
 
 
@@ -208,9 +211,9 @@ def test_page_boundaries_byte_budget_and_truncated_tail_match_target_pager(tmp_p
     comms.channels.set_channel_any_mode("#api", True)
     rows = comms.views.channel_display_page("#api").messages
     first_bytes = len((json.dumps(rows[0].to_wire()) + "\n").encode())
-    assert bodies(comms.views.channel_display_page("#api", after=0, limit=20, max_bytes=first_bytes)) == [
-        "first projected"
-    ]
+    assert bodies(
+        comms.views.channel_display_page("#api", after=0, limit=20, max_bytes=first_bytes)
+    ) == ["first projected"]
     head = comms.views.channel_display_page("#api", after=0, limit=1)
     assert head.has_newer and not head.has_older
     tail = comms.views.channel_display_page("#api", before=rows[-1].seq, limit=1)
@@ -251,30 +254,28 @@ def test_fixed_opened_boundary_excludes_later_append(tmp_path):
                 writer.join(timeout=3)
                 assert finished.is_set()
 
-    with patch.object(comms.bus.log, '_record_snapshot', side_effect=with_append):
+    with patch.object(comms.bus.log, "_record_snapshot", side_effect=with_append):
         assert bodies(comms.views.channel_display_page("#api")) == ["within boundary"]
-    assert bodies(comms.views.channel_display_page("#api")) == ["within boundary", "outside boundary"]
+    assert bodies(comms.views.channel_display_page("#api")) == [
+        "within boundary",
+        "outside boundary",
+    ]
 
 
-def test_failed_sidecar_write_does_not_leave_in_memory_mode(tmp_path):
+def test_failed_document_write_does_not_publish_mode(tmp_path):
     comms = populated(tmp_path)
-    real_write = channel_module._atomic_write_text
-
-    def fail_metadata(path, text):
-        if path == comms.channels.catalog.metadata_path:
-            raise OSError("synthetic sidecar failure")
-        return real_write(path, text)
+    from agent_comms.catalog_store import ChannelCatalog
 
     with (
-        patch.object(channel_module, "_atomic_write_text", side_effect=fail_metadata),
-        pytest.raises(OSError, match="sidecar failure"),
+        patch.object(ChannelCatalog, "_write_unlocked", side_effect=OSError("catalog failure")),
+        pytest.raises(OSError, match="catalog failure"),
     ):
         comms.channels.set_channel_any_mode("#api", True)
-    assert not comms.channels.catalog.resolve("#api").any_mode
-    assert not wire(tmp_path).channels.catalog.resolve("#api").any_mode
+    assert not comms.channels.catalog.read().resolve("#api").any_mode
+    assert not wire(tmp_path).channels.catalog.read().resolve("#api").any_mode
     comms.channels.set_channel_any_mode("#api", True)
     comms.channels.create_tag("later")
-    assert wire(tmp_path).channels.catalog.resolve("#api").any_mode
+    assert wire(tmp_path).channels.catalog.read().resolve("#api").any_mode
 
 
 def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
@@ -302,7 +303,7 @@ def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
                 writer.join(timeout=3)
                 assert finished.is_set()
 
-    with patch.object(comms.bus.log, '_record_snapshot', side_effect=concurrent_public_change):
+    with patch.object(comms.bus.log, "_record_snapshot", side_effect=concurrent_public_change):
         assert bodies(comms.views.channel_display_page("#api")) == ["before retag"]
     later = comms.views.channel_display_page("#api")
     assert "late nonmember" not in bodies(later)
@@ -327,7 +328,7 @@ def test_direct_retag_and_send_between_basis_and_open_retries(tmp_path):
         with original(need_sequence=need_sequence) as snapshot:
             yield snapshot
 
-    with patch.object(comms.bus.log, '_record_snapshot', side_effect=mutate_before_open):
+    with patch.object(comms.bus.log, "_record_snapshot", side_effect=mutate_before_open):
         assert bodies(comms.views.channel_display_page("#api")) == []
     assert changed
     assert bodies(comms.views.channel_display_page("#api")) == []
@@ -351,7 +352,7 @@ def test_direct_rename_and_own_send_do_not_inflate_unread(tmp_path):
         with original(need_sequence=need_sequence) as snapshot:
             yield snapshot
 
-    with patch.object(comms.bus.log, '_record_snapshot', side_effect=rename_and_send_before_open):
+    with patch.object(comms.bus.log, "_record_snapshot", side_effect=rename_and_send_before_open):
         raced = comms.views.viewer_snapshot(str(tmp_path))
     assert changed
     assert raced.channel_unread["#api"] == 1
@@ -382,7 +383,7 @@ def test_public_mark_read_and_append_share_one_viewer_boundary(tmp_path):
                 writer.join(timeout=3)
                 assert finished.is_set()
 
-    with patch.object(comms.bus.log, '_record_snapshot', side_effect=concurrent_public_mark):
+    with patch.object(comms.bus.log, "_record_snapshot", side_effect=concurrent_public_mark):
         assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 1
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 1
 
@@ -403,7 +404,7 @@ def test_perpetual_direct_mutation_fails_closed_after_bounded_retries(tmp_path):
             yield snapshot
 
     with (
-        patch.object(comms.bus.log, '_record_snapshot', side_effect=continually_retag),
+        patch.object(comms.bus.log, "_record_snapshot", side_effect=continually_retag),
         pytest.raises(RuntimeError, match="Display scope changed during snapshot"),
     ):
         comms.views.channel_display_page("#api")
@@ -421,7 +422,7 @@ def test_display_open_never_scans_missing_or_zero_bus_meta_under_wire_lock(tmp_p
             metadata.write_text(body)
         with patch.object(
             comms.bus.log,
-            '_max_sequence_unlocked',
+            "_max_sequence_unlocked",
             side_effect=AssertionError("display must not scan for a sequence watermark"),
         ):
             assert bodies(comms.views.channel_display_page("#api")) == ["existing row"]
@@ -445,6 +446,6 @@ def test_new_channel_during_boundary_is_not_falsely_unknown(tmp_path):
         with original(need_sequence=need_sequence) as snapshot:
             yield snapshot
 
-    with patch.object(comms.bus.log, '_record_snapshot', side_effect=register_before_open):
+    with patch.object(comms.bus.log, "_record_snapshot", side_effect=register_before_open):
         assert bodies(comms.views.channel_display_page("#new")) == []
     assert added

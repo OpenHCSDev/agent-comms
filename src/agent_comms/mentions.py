@@ -1,7 +1,7 @@
 """Portable thread mentions: textual addressees, independent of message delivery."""
 
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 _NAME = r"[A-Za-z0-9_-]"
@@ -29,10 +29,6 @@ class ThreadMention:
             for match in _MENTION.finditer(body)
             if (name := resolve(match.group(1))) is not None
         )
-
-    @classmethod
-    def from_wire(cls, value: Mapping) -> "ThreadMention":
-        return cls(str(value["thread"]), int(value["start"]), int(value["end"]))
 
 
 @dataclass(frozen=True, slots=True)

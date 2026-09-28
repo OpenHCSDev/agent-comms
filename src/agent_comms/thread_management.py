@@ -300,7 +300,8 @@ class ThreadManagement:
             )
             self.registry.register(thread, new_owner=new_owner)
 
-            self.channels.catalog.remember_tags(thread.tags, thread.created_at)
+            with self.channels.catalog.editing() as document:
+                document.remember_tags(thread.tags, thread.created_at)
             if existing is not None and existing.tags != thread.tags:
                 self.channels._rebase_passive_channel_scope(thread.name)
 
@@ -527,7 +528,8 @@ class ThreadManagement:
         self.agents.activity.rename_thread(previous, current)
         self.agents.runtime_info.rename_thread(previous, current)
         self.ledger.rename_thread(previous, current)
-        self.channels.catalog.rename_thread(previous, current)
+        with self.channels.catalog.editing() as document:
+            document.rename_thread(previous, current)
         if intent_created:
             # Persist completion only after both authorities and ancillary
             # stores agree. If the subsequent unlink/fsync is uncertain, the
@@ -613,7 +615,8 @@ class ThreadManagement:
             runtime_removed = self.agents.runtime_info.get(canonical) is not None
             self.agents.runtime_info.remove(canonical)
             ledger_removed = self.ledger.remove_thread(canonical)
-            self.channels.catalog.remove_thread(canonical)
+            with self.channels.catalog.editing() as document:
+                document.remove_thread(canonical)
             detached_children = self.registry.remove(canonical)
             return DeleteThreadResult(
                 name=canonical,

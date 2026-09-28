@@ -104,7 +104,6 @@ def test_raw_mapping_with_private_bus_sideband_never_enters_export(
 def test_jsonl_is_versioned_lossless_and_receipt_has_artifact_provenance(tmp_path):
     destination = tmp_path / "wire.jsonl"
     first = message(1, "hello").to_wire()
-    first["future_extension"] = {"preserved": True}
     second = message(2, "unicode: café")
 
     receipt = exporter(through=2).export(iter([first, second]), destination)

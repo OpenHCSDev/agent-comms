@@ -94,9 +94,9 @@ class HistoricalMessage(Message):
     def view_order(self) -> tuple[int, int, int]:
         return 0, self.source_order, self.seq
 
-    def to_display_wire(self) -> dict:
+    @property
+    def display_metadata(self) -> dict:
         return {
-            **self.to_wire(),
             "history": {
                 "source": self.source.original_root,
                 "wire_root_id": self.source.wire_root_id,

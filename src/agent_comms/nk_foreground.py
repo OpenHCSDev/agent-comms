@@ -115,7 +115,8 @@ def reserve_foreground_owner(
             raise RelationViolationError("Foreground recipient already exists")
         comms.channels._require_available_new_tags(owner.tags)
         comms.registry.register(owner)
-        comms.channels.catalog.remember_tags(owner.tags, owner.created_at)
+        with comms.channels.catalog.editing() as document:
+            document.remember_tags(owner.tags, owner.created_at)
     return ForegroundOwner(root, wire_root_id, owner.name, package)
 
 
