@@ -51,6 +51,22 @@ _NATIVE_SETTINGS = (
 class NativePiUnavailable(RuntimeError):  # noqa: N818 - nominal fail-closed outcome
     """Tracked execution failed closed without committing a coordinator fact."""
 
+    @property
+    def rejected_response(self) -> pi.Response | None:
+        return None
+
+
+class NativePiPromptRejected(NativePiUnavailable):
+    """A correlated RPC refusal; it grants no retry or admission authority."""
+
+    def __init__(self, response: pi.Response):
+        self.response = response
+        super().__init__("Native Pi rejected the tracked prompt (see diagnostic)")
+
+    @property
+    def rejected_response(self) -> pi.Response:
+        return self.response
+
 
 def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
@@ -722,7 +738,13 @@ def prepare_native_pi_rpc_launch(
         env["PI_OFFLINE"] = "1"
         # Canonical credentials/catalog remain separate from retry isolation.
         env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
-            Path(os.environ.get("PI_CODING_AGENT_DIR", "~/.pi/agent")).expanduser().resolve()
+            Path(
+                env.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
+                or env.get("PI_CODING_AGENT_DIR")
+                or "~/.pi/agent"
+            )
+            .expanduser()
+            .resolve()
         )
         env["PI_CODING_AGENT_DIR"] = str(agent_dir)
     return NativePiRpcLaunch(tuple(argv), worktree, env, session_dir, session_file, package)
@@ -912,12 +934,10 @@ async def run_native_pi_turn(
                 while True:
                     event = await next_event()
                     if isinstance(event, pi.Response) and event.id == "native-prompt":
-                        if (
-                            accepted
-                            or event.command is not commands.Prompt
-                            or event.success is not True
-                        ):
-                            raise NativePiUnavailable("Native Pi did not accept the tracked prompt")
+                        if accepted or event.command is not commands.Prompt:
+                            raise NativePiUnavailable("Native Pi prompt acknowledgement differs")
+                        if event.success is not True:
+                            raise NativePiPromptRejected(event)
                         accepted = True
                     elif isinstance(event, pi.InputCommitted) and event.input_id == input_id:
                         if input_event is not None:

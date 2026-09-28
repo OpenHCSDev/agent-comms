@@ -609,6 +609,15 @@ class Response(PiEvent):
     id: str | None = field(default=None, metadata={"wire_name": "id"})
     success: bool | None = field(default=None, metadata={"wire_name": "success"})
 
+    def rejection_details(self) -> dict:
+        """Private diagnostic projection, excluding response data and prompt content."""
+        return {
+            "command": self.command.declared_name,
+            "id": self.id,
+            "success": self.success,
+            "error": self.error,
+        }
+
     @classmethod
     def normalize_field(cls, target, key, value, record):
         owner = PiCommand.response_owner(record.get("command"))
