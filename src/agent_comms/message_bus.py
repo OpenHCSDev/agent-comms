@@ -23,7 +23,13 @@ from .errors import (
 from .field_codec import FieldCodec
 from .message_page import MessagePage
 from .messages import Message, MessageType
-from .read_basis import ChannelDisplayScope, DisplayBasis, ViewUnread
+from .read_basis import (
+    ChannelDisplayScope,
+    DisplayBasis,
+    DMDisplayScope,
+    MessageDisplayScope,
+    ViewUnread,
+)
 from .routing import DeliveryScope, PendingCounts
 from .store_files import (
     _atomic_write_text,
@@ -34,7 +40,7 @@ from .store_files import (
 from .thread_identity import ThreadRole
 
 if TYPE_CHECKING:
-    from .historical_views import HistorySource
+    from .historical_views import HistorySource, HistoryView
     from .registration import Registration
 
 from .publisher import Publisher
@@ -163,7 +169,9 @@ class MessageBus:
                 shutil.rmtree(stage)
                 raise
 
-    def historical_page(self, matches, *, before=None, after=None, limit=100, max_bytes=256 * 1024):
+    def historical_page(
+        self, view: HistoryView, *, before=None, after=None, limit=100, max_bytes=256 * 1024
+    ):
         """Page one original source at a time, with source-bound cursors.
 
         The caller owns live pages. None means the oldest live boundary;
@@ -184,10 +192,13 @@ class MessageBus:
         indexes = range(start, len(sources)) if after else range(start, -1, -1)
         for index in indexes:
             source = sources[index]
-            snapshot = source.registry().snapshot()
-            historical_bus = MessageBus(Path(source.root) / "bus.jsonl", source.registry())
-            page = historical_bus._history_page(
-                lambda message, snapshot=snapshot: matches(message, snapshot),
+            registry = source.registry()
+            snapshot = registry.snapshot()
+            source.validate()
+            scope = view.capture(snapshot)
+            historical_bus = MessageBus(Path(source.root) / "bus.jsonl", registry)
+            page = historical_bus.display_page(
+                scope,
                 before=cursor.sequence if before and index == start else None,
                 after=cursor.sequence if after and index == start else (0 if after else None),
                 limit=limit,
@@ -743,18 +754,9 @@ class MessageBus:
         """Return one bounded page between two threads in ascending order."""
         a = self._registry.require(a).name
         b = self._registry.require(b).name
-        a_names = self._registry.aliases_for(a)
-        b_names = self._registry.aliases_for(b)
-        return self._history_page(
-            lambda message: (
-                (message.sender in a_names and message.target in b_names)
-                or (message.sender in b_names and message.target in a_names)
-            ),
-            before=before,
-            after=after,
-            limit=limit,
-            max_bytes=max_bytes,
-            targets=a_names | b_names,
+        scope = DMDisplayScope.capture(a, b, self._registry.snapshot())
+        return self.display_page(
+            scope, before=before, after=after, limit=limit, max_bytes=max_bytes
         )
 
     def channel_history_page(
@@ -770,18 +772,17 @@ class MessageBus:
         if not (is_channel_target(target) or BuiltinChannel.is_alias(target)):
             raise ValueError(f"{target!r} is not a channel target.")
         targets = self._channels.read().history_targets(target)
-        return self._history_page(
-            lambda message: targets is None or message.target in targets,
+        return self.display_page(
+            ChannelDisplayScope(target, targets),
             before=before,
             after=after,
             limit=limit,
             max_bytes=max_bytes,
-            targets=targets,
         )
 
-    def channel_display_page(
+    def display_page(
         self,
-        scope: ChannelDisplayScope,
+        scope: MessageDisplayScope,
         *,
         before: int | None = None,
         after: int | None = None,
@@ -789,15 +790,14 @@ class MessageBus:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         """Browse a captured presentation scope, not a delivery/history authority."""
-        with self.log._record_snapshot() as (_, records):
-            return self._collect_history_page(
-                records,
-                scope.includes,
-                before=before,
-                after=after,
-                limit=limit,
-                max_bytes=max_bytes,
-            )
+        return self._history_page(
+            scope.includes,
+            before=before,
+            after=after,
+            limit=limit,
+            max_bytes=max_bytes,
+            targets=scope.index_targets,
+        )
 
     def _history_page(
         self,
@@ -976,8 +976,12 @@ class MessageBus:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         """Bounded combined view of explicit channel and direct wire messages."""
-        return self._history_page(
-            lambda message: True, before=before, after=after, limit=limit, max_bytes=max_bytes
+        return self.display_page(
+            ChannelDisplayScope(BuiltinChannel.ANY.value, BuiltinChannel.ANY.history_targets),
+            before=before,
+            after=after,
+            limit=limit,
+            max_bytes=max_bytes,
         )
 
     def channels(self) -> Sequence[str]:
