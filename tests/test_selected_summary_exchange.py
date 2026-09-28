@@ -11,9 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.backend import PersistentPiSession, _JsonLineReader, _session_revision
+from agent_comms.backend import PersistentPiSession, _session_revision
 from agent_comms.compaction_journal import CompactionJournal, CompactionJournalError
 from agent_comms.compaction_send_admission import native_input_admitted
+from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.selected_pi_child_deadline import SelectedChildUnknown
 from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
 
@@ -86,7 +87,7 @@ async def selected(tmp_path, mode="success"):
     )
     persistent = PersistentPiSession()
     persistent.proc = child
-    persistent.reader = _JsonLineReader(child.stdout)
+    persistent.reader = PiRpcChannel(child.stdout)
     persistent.launch_key = ("existing-pi",)
     persistent.session_file = str(file)
     persistent.session_id = "session"
@@ -216,7 +217,7 @@ async def test_stale_child_never_reserves_or_sends(tmp_path):
 
 async def test_bounded_reader_refuses_oversize_across_transport_fragments():
     stream = asyncio.StreamReader(limit=16)
-    reader = _JsonLineReader(stream)
+    reader = PiRpcChannel(stream)
     stream.feed_data(b"x" * 40)
     with pytest.raises(ValueError, match="transport limit"):
         await reader.readline(max_bytes=32)
@@ -225,7 +226,7 @@ async def test_bounded_reader_refuses_oversize_across_transport_fragments():
 
 async def test_reader_keeps_partial_record_on_cancel_and_enforces_bound():
     stream = asyncio.StreamReader(limit=16)
-    reader = _JsonLineReader(stream)
+    reader = PiRpcChannel(stream)
     stream.feed_data(b"x" * 20)
     task = asyncio.create_task(reader.readline(max_bytes=32))
     await asyncio.sleep(0)
@@ -265,7 +266,7 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
             line = await child.stderr.readline()
             assert line.startswith(b"{"), line.decode()
             fixture = json.loads(line)
-            persistent.reader = _JsonLineReader(child.stdout)
+            persistent.reader = PiRpcChannel(child.stdout)
             persistent.session_file = fixture["sessionFile"]
             persistent.session_id = fixture["witness"]["sessionId"]
             persistent.revision = _session_revision(fixture["sessionFile"])

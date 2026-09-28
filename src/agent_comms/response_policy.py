@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import cache
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 
@@ -16,20 +16,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ResponsePolicy(DeclaredFamily, affix="Policy"):
-    DIRECT: ClassVar[ResponsePolicy]
-    COLLECTIVE: ClassVar[ResponsePolicy]
-    MENTIONED_ONLY: ClassVar[ResponsePolicy]
-    INFORMATIONAL: ClassVar[ResponsePolicy]
     starts_turn = False
     separate_turn = False
-
-    @property
-    def value(self) -> str:
-        return self.declared_name
-
-    @classmethod
-    def resolve(cls, value: ResponsePolicy | str) -> ResponsePolicy:
-        return cls.decode(value).instance() if isinstance(value, str) else value
 
     @classmethod
     @cache
@@ -105,9 +93,3 @@ class MentionedOnlyPolicy(ResponsePolicy):
 class InformationalPolicy(NoChannelRecipients, ResponsePolicy):
     def guidance(self, message: Message, *, aliases: Mapping[str, str] | None = None) -> str:
         return "informational; observe and dismiss without replying"
-
-
-# Compatibility names are projections of the registered declarations, not a roster.
-for _policy in ResponsePolicy.members_with(ResponsePolicy):
-    setattr(ResponsePolicy, _policy.declared_name.upper(), _policy.instance())
-del _policy

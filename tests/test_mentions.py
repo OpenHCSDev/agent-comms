@@ -5,13 +5,13 @@ from agent_comms import (
     MentionQuery,
     Message,
     MessageType,
-    ResponsePolicy,
     Thread,
     ThreadMention,
     ThreadRole,
     wire,
 )
 from agent_comms.declarations import ScheduledTurn
+from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
 
 
 def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
@@ -59,7 +59,7 @@ def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collecti
         "#team", "@unknown can anyone answer?", worktree=str(tmp_path)
     )
     assert not collective.mentions
-    assert collective.response_policy is ResponsePolicy.COLLECTIVE
+    assert collective.response_policy is CollectivePolicy.instance()
     assert collective.response_eligibility(("alpha", "beta")).recipients == (
         "alpha",
         "beta",
@@ -72,7 +72,7 @@ def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collecti
 
     mentioned = comms.send_user_message("#team", "@beta please answer", worktree=str(tmp_path))
     eligibility = mentioned.response_eligibility(("alpha", "beta"))
-    assert eligibility.policy is ResponsePolicy.MENTIONED_ONLY
+    assert eligibility.policy is MentionedOnlyPolicy.instance()
     assert eligibility.recipients == ("beta",)
     assert not mentioned.starts_turn_for("alpha")
     assert mentioned.starts_turn_for("beta")
@@ -82,7 +82,7 @@ def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collecti
     assert "unmentioned observers dismiss quietly" in mentioned_prompt
 
     agent_chatter = comms.send_message("alpha", "#team", "status only")
-    assert agent_chatter.response_policy is ResponsePolicy.INFORMATIONAL
+    assert agent_chatter.response_policy is InformationalPolicy.instance()
     assert not agent_chatter.response_eligibility(("beta",)).recipients
     assert not agent_chatter.starts_turn_for("beta")
     agent_prompt = ScheduledTurn.incoming(agent_chatter).prompt
@@ -90,7 +90,7 @@ def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collecti
     assert "delivery and history remain #team" in agent_prompt
 
     informational = comms.send_message("alpha", "#team", "notice only", notice=True)
-    assert informational.response_policy is ResponsePolicy.INFORMATIONAL
+    assert informational.response_policy is InformationalPolicy.instance()
     assert not informational.response_eligibility(("alpha", "beta")).recipients
     assert not informational.starts_turn_for("beta")
     assert "Response policy: informational; observe and dismiss without replying" in (
@@ -101,8 +101,8 @@ def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collecti
 @pytest.mark.parametrize(
     ("sender_role", "unmentioned_policy"),
     (
-        (ThreadRole.USER, ResponsePolicy.COLLECTIVE),
-        (ThreadRole.AGENT, ResponsePolicy.INFORMATIONAL),
+        (ThreadRole.USER, CollectivePolicy.instance()),
+        (ThreadRole.AGENT, InformationalPolicy.instance()),
     ),
 )
 def test_unmentioned_channel_policy_uses_typed_sender_role(sender_role, unmentioned_policy):
@@ -114,8 +114,10 @@ def test_unmentioned_channel_policy_uses_typed_sender_role(sender_role, unmentio
         sender_role=sender_role,
     )
     assert unmentioned.response_policy is unmentioned_policy
-    assert unmentioned.starts_turn is (unmentioned_policy is ResponsePolicy.COLLECTIVE)
-    assert unmentioned.starts_turn_for("alpha") is (unmentioned_policy is ResponsePolicy.COLLECTIVE)
+    assert unmentioned.starts_turn is (unmentioned_policy is CollectivePolicy.instance())
+    assert unmentioned.starts_turn_for("alpha") is (
+        unmentioned_policy is CollectivePolicy.instance()
+    )
     assert unmentioned.target == "#team"
 
     mentioned = Message(
@@ -126,7 +128,7 @@ def test_unmentioned_channel_policy_uses_typed_sender_role(sender_role, unmentio
         sender_role=sender_role,
         mentions=(ThreadMention("beta", 0, 5),),
     )
-    assert mentioned.response_policy is ResponsePolicy.MENTIONED_ONLY
+    assert mentioned.response_policy is MentionedOnlyPolicy.instance()
     assert not mentioned.starts_turn
     assert not mentioned.starts_turn_for("alpha")
     assert mentioned.starts_turn_for("beta")
@@ -140,7 +142,7 @@ def test_unmentioned_channel_policy_uses_typed_sender_role(sender_role, unmentio
         sender_role=sender_role,
         notice=True,
     )
-    assert notice.response_policy is ResponsePolicy.INFORMATIONAL
+    assert notice.response_policy is InformationalPolicy.instance()
     assert not notice.starts_turn_for("alpha")
 
 

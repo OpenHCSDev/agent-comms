@@ -11,12 +11,12 @@ from agent_comms.declarations import (
     MembershipChange,
     Message,
     MessageType,
-    ResponsePolicy,
     Thread,
     ThreadRole,
 )
 from agent_comms.mentions import ThreadMention
 from agent_comms.operations import wire
+from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
 from agent_comms.wake import (
     ControlClassification,
     NoWakeDecision,
@@ -85,9 +85,9 @@ def test_ordinary_unmentioned_channel_reaches_all_members_without_full_turns(
     assert message.target == "#team"
     # Shadow does not change the existing sender-role-dependent live behavior.
     assert message.response_policy is (
-        ResponsePolicy.COLLECTIVE
+        CollectivePolicy.instance()
         if sender_role is ThreadRole.USER
-        else ResponsePolicy.INFORMATIONAL
+        else InformationalPolicy.instance()
     )
     assert message.starts_turn_for("alpha") is (sender_role is ThreadRole.USER)
 
@@ -115,7 +115,7 @@ def test_valid_mention_selects_canonical_name_and_leaves_other_member_unaddresse
     assert decide(message, "lookup-outsider") is None  # Not in the frozen audience.
     assert MEMBERS[0] in audience(message).recipients  # The bus must retain both identities.
     assert derive_exact_reply_target(message) == "#team"
-    assert message.response_policy is ResponsePolicy.MENTIONED_ONLY
+    assert message.response_policy is MentionedOnlyPolicy.instance()
     assert message.starts_turn_for("beta") and not message.starts_turn_for("alpha")
     assert message.reply_target is None  # Existing live behavior, not shadow route.
 

@@ -8,6 +8,7 @@ from pathlib import Path
 from .declarations import Message, RegistrySnapshot, ResponsePolicy, Thread, file_revision
 from .read_basis import DisplayBasis
 from .registration import Registration
+from .response_policy import InformationalPolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,7 +77,7 @@ class HistoricalMessage(Message):
 
     @property
     def response_policy(self) -> ResponsePolicy:
-        return ResponsePolicy.INFORMATIONAL
+        return InformationalPolicy.instance()
 
     @property
     def view_cursor(self) -> HistoryCursor:
