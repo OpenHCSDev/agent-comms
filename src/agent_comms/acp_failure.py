@@ -9,10 +9,10 @@ import json
 import re
 from abc import abstractmethod
 from dataclasses import dataclass
+from typing import ClassVar
 
 from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
-from .turn_failure import PrestartCompactionFailed, PromptSendFailed, TurnFailure
 
 
 class DeliveryFailure(DeclaredFamily, affix="Failure"):
@@ -46,7 +46,7 @@ class BackendDeliveryFailure(DeliveryFailure):
 class ACPFailure(DeliveryFailure):
     code: int | None
     detail: str
-    failure: TurnFailure
+    classification_priority: ClassVar[int] = 0
     input_state: type[InputAttempt] | None = None
 
     @property
@@ -64,11 +64,7 @@ class ACPFailure(DeliveryFailure):
                 self.input_state.public_status.replace("_", " ").capitalize()
                 + " — input not retried"
             )
-        return (
-            "UNKNOWN — input not retried"
-            if self.failure.input_uncertain
-            else "Unconfirmed — input not retried"
-        )
+        return super().input_disposition
 
     @property
     @abstractmethod
@@ -79,21 +75,21 @@ class ACPFailure(DeliveryFailure):
         return "Inspect the input delivery status before deciding whether to send again."
 
     @classmethod
+    @abstractmethod
+    def matches(cls, code: int | None, detail: str) -> bool:
+        """Display classification only; input state comes from structured facts."""
+
+    @classmethod
     def from_error(cls, code: int | None, message: str, data: object = None) -> ACPFailure:
         detail = _error_detail(data) or message or "ACP request failed"
-        uncertain = bool(
-            re.search(r"outcome uncertain|input not retried|original remains unbound", detail, re.I)
-        )
-        failure = PrestartCompactionFailed(detail) if uncertain else PromptSendFailed(detail)
-        owner = (
-            ProviderQuotaFailure
-            if re.search(
-                r"usage limit|quota|insufficient credits|credit balance|"
-                r"rate.limit|too many requests",
-                detail,
-                re.I,
+        owner = next(
+            member
+            for member in sorted(
+                cls.members_with(ACPFailure),
+                key=lambda member: member.classification_priority,
+                reverse=True,
             )
-            else RequestACPFailure
+            if member.matches(code, detail)
         )
         state = None
         if isinstance(data, dict):
@@ -111,16 +107,30 @@ class ACPFailure(DeliveryFailure):
                     ]
                     if len(matches) == 1:
                         state = matches[0]
-        return owner(code, detail, failure, state)
+        return owner(code, detail, state)
 
 
 class RequestACPFailure(ACPFailure):
+    @classmethod
+    def matches(cls, code: int | None, detail: str) -> bool:
+        return True
+
     @property
     def title(self) -> str:
         return "Request failed"
 
 
 class ProviderQuotaFailure(ACPFailure):
+    classification_priority = 100
+    display_pattern = re.compile(
+        r"usage limit|quota|insufficient credits|credit balance|rate.limit|too many requests",
+        re.I,
+    )
+
+    @classmethod
+    def matches(cls, code: int | None, detail: str) -> bool:
+        return cls.display_pattern.search(detail) is not None
+
     @property
     def title(self) -> str:
         return "Provider usage limit reached"

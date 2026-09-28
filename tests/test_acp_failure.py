@@ -24,7 +24,7 @@ def test_provider_reason_survives_external_nesting(wrap):
     failure = ACPFailure.from_error(-32603, "Internal error", wrap(reason))
     assert isinstance(failure, ProviderQuotaFailure)
     assert failure.detail == reason
-    assert failure.input_disposition == "UNKNOWN — input not retried"
+    assert failure.input_disposition == "Unconfirmed — input not retried"
     assert failure.action in failure.feedback
     fact = RequestFailedUpdate(failure)
     assert decode_updates(encode_updates(fact)) == (fact,)
@@ -53,4 +53,19 @@ def test_public_not_sent_and_ambiguous_unknown_do_not_invent_binding():
     assert failure.input_disposition == "Not sent — input not retried"
     unknown = ACPFailure.from_error(-32603, "Outcome uncertain", {"inputStatus": "unknown"})
     assert unknown.input_state is None
-    assert unknown.input_disposition == "UNKNOWN — input not retried"
+    assert unknown.input_disposition == "Unconfirmed — input not retried"
+
+
+def test_new_display_case_needs_only_its_declaration():
+    class FixtureDisplayFailure(ACPFailure):
+        classification_priority = 200
+        title = "Fixture feedback"
+
+        @classmethod
+        def matches(cls, code, detail):
+            return detail == "T2 display extension fixture"
+
+    failure = ACPFailure.from_error(-32603, "T2 display extension fixture")
+    assert isinstance(failure, FixtureDisplayFailure)
+    assert failure.input_disposition == "Unconfirmed — input not retried"
+    assert decode_updates(encode_updates(RequestFailedUpdate(failure)))[0].failure == failure
