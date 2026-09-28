@@ -56,3 +56,27 @@ Shared reads reduce registry syscall wait clearly, but this run does not show a 
 Peak recorded RSS of any benchmark process: **422.9 MiB**; configured address-space ceiling 768 MiB per process. Maximum scratch: **14.63 MiB**, versus 128 MiB configured. Poller worker count remained three. All disposable case roots were removed in finally, including the failed initial case.
 
 Lock samples retain real flock and durable barriers. Raw wait includes syscall overhead. Full acquisition includes open/path overhead and the barrier. Hold starts after flock and ends just after context exit/close, including small measurement overhead. Failed polls are included in poll-attempt duration and counted separately; they are never described as successful reads.
+
+## Recovered pre-step-1 source measurement
+
+Unmodified installed source `9cb6651fa07d3613587ecf10db53d038c3d63a98`, parent of the first A8 LockedStore commit. Historical private/claim entrypoints, historical real exclusive locks, same three-poller workload and 200 measured sends per size. All 600 measured sends persisted (220 rows including seeds per case); no failed poll. Exact recovery instructions and differences: `HISTORICAL.md`. This is not an A8-only causal comparison.
+
+| Threads | Send p50 ms | Send p99 ms | Poll attempts | Registry raw wait p99 ms range | Registry hold p99 ms range |
+|---:|---:|---:|---:|---:|---:|
+| 50 | 172.32 | 312.55 | 600 | 0.010–0.013 | 0.625–0.752 |
+| 100 | 306.55 | 506.98 | 601 | 0.008–0.010 | 0.651–0.678 |
+| 150 | 424.48 | 757.91 | 600 | 0.011–0.014 | 0.714–0.772 |
+
+| Threads | Sender bus raw wait p50 / p99 ms | Full acquisition p50 / p99 ms | Hold p50 / p99 ms |
+|---:|---:|---:|---:|
+| 50 | 51.757 / 120.810 | 65.313 / 143.171 | 113.919 / 196.443 |
+| 100 | 111.669 / 207.814 | 134.194 / 245.680 | 190.799 / 344.498 |
+| 150 | 147.451 / 256.261 | 189.378 / 337.266 | 275.309 / 511.764 |
+
+Historical peak process RSS **437.1 MiB**; maximum case scratch **11.37 MiB**. Historical scratch is empty after all three cases. The recovery-only checkout/environment and current disposable environment were removed after copying receipts; the current source worktree remains.
+
+## Scope and deletion closure
+
+Deleted the obsolete serial listing/transcript benchmark, removed Comms facade calls and retired ACP replay manipulation from the maintained benchmark. No compatibility dispatch, replay alternative or production-lock change was added. Benchmark source diff: 372 added / 141 deleted; growth implements the missing three-process workload, actual lock timing, resource bounds and failure accounting. The historical translation exists only as a receipt patch, not as an active compatibility path.
+
+No benchmark acceptance measurement remains unexecuted. Production marker-reader failures are still a finding for the parent integration owner; this receipt does not call the runtime error-free. CI was not used as a gate.
