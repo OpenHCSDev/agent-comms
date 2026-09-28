@@ -14,6 +14,7 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 
@@ -46,12 +47,12 @@ async def owner(tmp_path, monkeypatch):
     # The actual registry, wire, disposition, session locks and source CAS run.
     monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
     bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
-    witness = dict(
-        sessionId="saved",
-        sessionFile=str(session),
-        leafId="leaf",
-        firstKeptEntryId="leaf",
-        revision="native-revision",
+    witness = NativeWitness(
+        session_id="saved",
+        session_file=str(session),
+        leaf_id="leaf",
+        first_kept_entry_id="leaf",
+        revision="1:2:3:4:5",
     )
     source = bridge.capture_source(current, epoch, witness, pending_input_key="acp:original")
     yield agent, current, epoch, bridge, witness, source

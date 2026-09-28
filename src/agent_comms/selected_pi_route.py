@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 import secrets
 from collections.abc import Callable
 from contextlib import suppress
@@ -17,11 +16,12 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypeVar
 
 from .backend import PersistentPiSession, _session_revision
+from .field_codec import FieldCodec
+from .owner_compaction_prepare import NativeWitness
 from .owner_compaction_settings import PiCompactionDecision
 from .pi_rpc import PiRpcChannel
 
 _COMMAND = "agent_comms_prepare_compaction"
-_REVISION = re.compile(r"^[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+$")
 _REASONS = frozenset(
     {
         "busy",
@@ -53,15 +53,10 @@ class SelectedPiDryRun:
 
 
 def _request(
-    witness: dict[str, Any], selected: dict[str, Any], settings: dict[str, Any]
+    witness: NativeWitness, selected: dict[str, Any], settings: dict[str, Any]
 ) -> dict[str, Any]:
     if (
-        type(witness) is not dict
-        or set(witness) != {"sessionId", "sessionFile", "leafId", "firstKeptEntryId", "revision"}
-        or any(type(value) is not str or not value for value in witness.values())
-        or not witness["sessionFile"].startswith("/")
-        or _REVISION.fullmatch(witness["revision"]) is None
-        or type(selected) is not dict
+        type(selected) is not dict
         or set(selected) != {"provider", "modelId", "contextWindow"}
         or any(
             type(selected[key]) is not str or not selected[key] for key in ("provider", "modelId")
@@ -80,7 +75,7 @@ def _request(
         "type": _COMMAND,
         "version": 1,
         "dryRun": True,
-        "witness": dict(witness),
+        "witness": FieldCodec.encode(witness),
         "selected": dict(selected),
         "settings": dict(settings),
     }
@@ -93,17 +88,14 @@ def _strict_echo(data: dict[str, Any], request: dict[str, Any]) -> bool:
         data.get("settings"),
     )
     return (
-        type(witness) is dict
+        FieldCodec.encode(FieldCodec.decode(NativeWitness, witness)) == request["witness"]
         and type(selected) is dict
         and type(settings) is dict
-        and set(witness) == set(request["witness"])
         and set(selected) == set(request["selected"])
         and set(settings) == set(request["settings"])
-        and all(type(value) is str for value in witness.values())
         and all(type(selected[key]) is str for key in ("provider", "modelId"))
         and type(selected["contextWindow"]) is int
         and all(type(value) is int for value in settings.values())
-        and witness == request["witness"]
         and selected == request["selected"]
         and settings == request["settings"]
     )
@@ -149,7 +141,7 @@ def _read_response(raw: bytes, request: dict[str, Any]) -> SelectedPiDryRun:
 
 async def probe_idle_selected_pi(
     persistent: PersistentPiSession,
-    witness: dict[str, Any],
+    witness: NativeWitness,
     selected: dict[str, Any],
     settings: dict[str, Any],
     *,
@@ -166,8 +158,8 @@ async def probe_idle_selected_pi(
     return await _exchange_observation(
         persistent,
         request,
-        witness["sessionFile"],
-        witness["sessionId"],
+        witness.session_file,
+        witness.session_id,
         _read_response,
         expected_launcher=expected_launcher,
         timeout=timeout,

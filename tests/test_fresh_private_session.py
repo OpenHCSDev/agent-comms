@@ -353,7 +353,7 @@ def test_returned_enrollment_admits_only_exact_fresh_owner_without_raw_history(
     attempt = journal.reserve_selected_summary(
         str(fresh.path), next_turn, fresh_session=fresh, admission_epoch=3
     )
-    assert journal.selected_summary(attempt).status == "reserved"
+    assert journal.selected_summary(attempt).state.declared_name == "reserved"
     with pytest.raises(CompactionJournalError, match="blocks native input"):
         journal.reserve_private_raw_input(fresh.path, "a" * 32)
 

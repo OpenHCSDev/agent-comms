@@ -24,6 +24,7 @@ from agent_comms.compaction_journal import (
     _ReturnedTerminalAck,
 )
 from agent_comms.compaction_send_admission import native_input_admitted
+from agent_comms.compaction_states import CommittedOperation, DeclinedPrestartSummary, LinkedSummary
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.selected_summary_admission import (
     SelectedAdmissionIdentity,
@@ -128,7 +129,7 @@ def test_returned_ack_only_one_bound_original_and_no_status_bypass(case, termina
                 "selectedSummarySourceDigest": hashlib.sha256(source.encode()).hexdigest(),
             },
         )
-        journal.resolve(commit_id, "committed", {"fixture": "committed"})
+        journal.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
         token = journal.link_selected_summary_commit(operation_id, commit_id, admission=identity)
     else:
         token = journal.decline_selected_summary_prestart(
@@ -151,7 +152,7 @@ def test_returned_ack_only_one_bound_original_and_no_status_bypass(case, termina
             reopened.decline_selected_summary_prestart(
                 operation_id, "split_turn", admission=identity
             )
-    assert reopened.selected_summary(operation_id).status == terminal
+    assert reopened.selected_summary(operation_id).state.declared_name == terminal
     assert not native_input_admitted(comms.root, session)
 
 
@@ -216,10 +217,10 @@ def test_reserve_refuses_wrong_durable_original(case):
 def test_link_cannot_mint_without_committed_native_source_digest(case):
     comms, session, journal, operation_id, dispositions, identity, text = case
     commit_id = journal.begin(session, {"selectedSummaryOperationId": operation_id})
-    journal.resolve(commit_id, "committed", {"fixture": "committed"})
+    journal.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
     with pytest.raises(CompactionJournalError, match="source digest"):
         journal.link_selected_summary_commit(operation_id, commit_id, admission=identity)
-    assert journal.selected_summary(operation_id).status == "reserved"
+    assert journal.selected_summary(operation_id).state.declared_name == "reserved"
     assert not native_input_admitted(comms.root, session)
 
 
@@ -323,7 +324,7 @@ def test_terminal_postcommit_fsync_fault_never_mints_ack(case, monkeypatch, term
                 "selectedSummarySourceDigest": hashlib.sha256(source.encode()).hexdigest(),
             },
         )
-        journal.resolve(commit_id, "committed", {"fixture": "committed"})
+        journal.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
     monkeypatch.setattr(os, "fsync", lambda _fd: (_ for _ in ()).throw(OSError("denied")))
     with pytest.raises(CompactionJournalUnknownError):
         if terminal == "linked":
@@ -334,15 +335,14 @@ def test_terminal_postcommit_fsync_fault_never_mints_ack(case, monkeypatch, term
             )
     monkeypatch.undo()
     saved = journal.selected_summary(operation_id)
-    assert saved.status == terminal
+    assert saved.state.declared_name == terminal
     with pytest.raises(CompactionJournalError, match="returned terminal fsync ACK"):
         SelectedSummaryAdmission._from_returned_ack(
             None,
             journal.path,
             session,
             operation_id,
-            terminal,
-            commit_id if terminal == "linked" else None,
+            saved.state,
             saved.source_json,
             identity,
         )
@@ -354,22 +354,18 @@ def test_terminal_postcommit_fsync_fault_never_mints_ack(case, monkeypatch, term
 def test_private_status_only_transaction_cannot_issue_admission_ack(case, terminal):
     comms, session, journal, operation_id, dispositions, identity, text = case
     saved = journal.selected_summary(operation_id)
-    scope = (str(journal.path), session, operation_id, terminal, None, saved.source_json)
-    ack = [scope]
-    # The exact predecessor bypass accepted these caller-supplied ACK arguments,
-    # one raw SQL UPDATE, then issued an input-capable post-fsync receipt.
-    with (
-        pytest.raises(TypeError),
-        journal._transaction(selected_ack=ack, selected_operation_id=operation_id),
-    ):
-        pass
-    assert journal.selected_summary(operation_id).status == "reserved"
+    state = (
+        LinkedSummary("a" * 32) if terminal == "linked" else DeclinedPrestartSummary("split_turn")
+    )
+    scope = (str(journal.path), session, operation_id, state, saved.source_json)
+    # A well-formed terminal SQL row is still not a returned fsync capability.
+    assert journal.selected_summary(operation_id).state.declared_name == "reserved"
     with journal._transaction() as db:
         db.execute(
-            "UPDATE selected_summary_attempts SET status = ? WHERE operation_id = ?",
-            (terminal, operation_id),
+            "UPDATE selected_summary_attempts SET status = ?, commit_id = ?, decline_reason = ? WHERE operation_id = ?",
+            (state.declared_name, state.commit_id, state.decline_reason, operation_id),
         )
-    assert journal.selected_summary(operation_id).status == terminal
+    assert journal.selected_summary(operation_id).state.declared_name == terminal
     for forged in (scope, _ReturnedTerminalAck()):
         with pytest.raises(CompactionJournalError, match="returned terminal fsync ACK"):
             SelectedSummaryAdmission._from_returned_ack(
@@ -377,8 +373,7 @@ def test_private_status_only_transaction_cannot_issue_admission_ack(case, termin
                 journal.path,
                 session,
                 operation_id,
-                terminal,
-                None,
+                state,
                 saved.source_json,
                 identity,
             )
@@ -398,8 +393,7 @@ def test_success_without_admission_does_not_create_later_receipt(case):
             journal.path,
             session,
             operation_id,
-            "declined-prestart",
-            None,
+            saved.state,
             saved.source_json,
             identity,
         )
@@ -465,7 +459,7 @@ os._exit(17)
     assert result.returncode == 17
     assert marker.exists() == send
     journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
-    assert journal.selected_summary(operation_id).status == "declined-prestart"
+    assert journal.selected_summary(operation_id).state.declared_name == "declined-prestart"
     assert not native_input_admitted(comms.root, str(session))
     row = InputDispositions(comms.root).get(key)
     assert row is not None and row["status"] == "unknown"
@@ -536,7 +530,7 @@ def test_native_start_retires_barrier_without_erasing_history_or_replaying_origi
                 "selectedSummarySourceDigest": hashlib.sha256(source.encode()).hexdigest(),
             },
         )
-        journal.resolve(commit_id, "committed", {"fixture": "committed"})
+        journal.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
         token = journal.link_selected_summary_commit(operation_id, commit_id, admission=identity)
     else:
         token = journal.decline_selected_summary_prestart(
@@ -548,7 +542,7 @@ def test_native_start_retires_barrier_without_erasing_history_or_replaying_origi
     reopened = CompactionJournal(journal.path)
     assert native_input_admitted(comms.root, session)
     assert reopened.blocking_selected_summary(session) == ()
-    assert reopened.selected_summary(operation_id).status == terminal
+    assert reopened.selected_summary(operation_id).state.declared_name == terminal
     assert not _claim(case, token), "native start cannot replenish a consumed token"
     with reopened.ordinary_input_send_fence(Path(session)):
         pass

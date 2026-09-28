@@ -60,10 +60,13 @@ async def test_exact_reserved_operation_fake_rpc_never_grants_original_input(tmp
     assert result["session"] == str(session)
     assert json.loads(receipt.read_text())["status"] == "unknown"
     assert slot._attempt is not None and slot._attempt.done()
-    assert journal.selected_summary(operation_id).status == "reserved"
+    assert journal.selected_summary(operation_id).state.declared_name == "reserved"
     assert not native_input_admitted(comms.root, str(session))
     journal.mark_selected_summary_unknown(operation_id)
-    assert CompactionJournal(journal.path).selected_summary(operation_id).status == "unknown"
+    assert (
+        CompactionJournal(journal.path).selected_summary(operation_id).state.declared_name
+        == "unknown"
+    )
     assert not native_input_admitted(comms.root, str(session))
     with pytest.raises(CompactionJournalError, match="never replay"):
         journal.reserve_selected_summary(

@@ -20,9 +20,9 @@ from .errors import RelationViolationError
 from .input_disposition import FutureInputQueue
 from .native_session_reopen import package_for_launcher
 from .owner_compaction_commit import OwnerCompactionCommit
+from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import OwnerSummaryOutcome
 from .owner_compaction_runtime import (
-    PreparedOwnerSummary,
     SelectedNativeSummary,
     SelectedSummaryDecline,
     compact_owner_once,
@@ -48,9 +48,7 @@ async def maybe_compact_owner_turn(
     original_input_key: str,
     persistent: PersistentPiSession,
     *,
-    summary_strategy: (
-        Callable[[PreparedOwnerSummary], Awaitable[str | OwnerSummaryOutcome]] | None
-    ) = None,
+    summary_strategy: (Callable[[NativePreparation], Awaitable[OwnerSummaryOutcome]] | None) = None,
     input_text: str | None = None,
     on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
     future_queue: FutureInputQueue | None = None,
@@ -181,12 +179,12 @@ async def maybe_compact_owner_turn(
             session_revision=revision,
         )
 
-        async def selected_summary(prepared: PreparedOwnerSummary) -> OwnerSummaryOutcome:
-            slot = SelectedSummarySlot(owner.name, prepared.session_id)
+        async def selected_summary(prepared: NativePreparation) -> OwnerSummaryOutcome:
+            slot = SelectedSummarySlot(owner.name, prepared.witness.session_id)
             result = await slot.run_selected_summary(
                 persistent,
                 bridge.journal,
-                prepared.preparation.witness,
+                prepared.witness,
                 {
                     "source": identity.source_fields(),
                     "selected": {
@@ -223,17 +221,17 @@ async def maybe_compact_owner_turn(
 
         summary_strategy = selected_summary
 
-    async def summarize(prepared: PreparedOwnerSummary) -> str | OwnerSummaryOutcome:
+    async def summarize(prepared: NativePreparation) -> OwnerSummaryOutcome:
         # Recheck immediately before paid provider work, then after it. The
         # owner source and ingress remain independently fenced by the bridge.
         current, current_epoch = registry.live_owner_with_generation(thread_name)
         if current != owner or current_epoch != epoch or await decision() != settings:
             raise RelationViolationError("Adaptive model, owner or settings changed")
-        text = await summary_strategy(prepared)
+        outcome = await summary_strategy(prepared)
         current, current_epoch = registry.live_owner_with_generation(thread_name)
         if current != owner or current_epoch != epoch or await decision() != settings:
             raise RelationViolationError("Adaptive source changed after summary")
-        return text
+        return outcome
 
     operation = await compact_owner_once(
         bridge,
@@ -251,9 +249,9 @@ async def maybe_compact_owner_turn(
         # Pi found no safe cut point. Do not disable the ordinary hard-context
         # backstop or turn this into a request to summarize again.
         return False
-    if operation.status != "committed":
+    if not operation.state.committed:
         raise CompactionJournalError(
-            f"Adaptive native operation {operation.commit_id} is {operation.status}; "
+            f"Adaptive native operation {operation.commit_id} is {operation.state.declared_name}; "
             "reconcile exact ID before any new input"
         )
     return True
