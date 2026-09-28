@@ -12,6 +12,7 @@ import os
 import stat
 import threading
 import uuid
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
@@ -22,14 +23,60 @@ from .bus_publication import unique_wire_object
 from .errors import RelationViolationError
 
 if TYPE_CHECKING:
+    from .owner_lifecycle import OwnerLifecycle
     from .supervised_cutover import ArchiveReceipt
 
 
 @dataclass(frozen=True, slots=True)
-class ActiveRoute:
+class CommsRoute(ABC):
+    """A resolved selection, not a service or permission to mutate its root."""
+
     root: Path
+
+    def observe_root(self) -> Path:
+        return self.root.resolve()
+
+    @abstractmethod
+    def bind_owners(self, owners: OwnerLifecycle) -> None:
+        """Configure launch authority when a caller actually constructs a service."""
+
+
+@dataclass(frozen=True, slots=True)
+class LocalRoute(CommsRoute):
+    """Explicit/environment roots and the unconfigured historical default."""
+
+    def bind_owners(self, owners: OwnerLifecycle) -> None:
+        pass
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveRoute(CommsRoute):
     wire_root_id: str
     native_package: Path
+
+    def observe_root(self) -> Path:
+        from .wire_log import WireLog
+
+        # The writer atomically replaces this marker. Reuse its owner/mode,
+        # ancestry and protocol decoder, without taking the mutation/durability
+        # barrier or interpreting registry/history merely to observe identity.
+        marker = WireLog(self.root / "bus.jsonl")._private_marker_unlocked()
+        if marker.root_id != self.wire_root_id:
+            raise RelationViolationError("private route root ID changed")
+        return super(ActiveRoute, self).observe_root()
+
+    def bind_owners(self, owners: OwnerLifecycle) -> None:
+        # Actual service binding retains the bus-locked durable verification.
+        owners.pin_private_nk_launch(self.root, self.wire_root_id, self.native_package)
+
+
+def resolve_comms_route(root: Path | str | None = None) -> CommsRoute:
+    """Resolve one current selection without creating stores or reading registry."""
+    if root is not None:
+        return LocalRoute(Path(root).expanduser())
+    if "AGENT_COMMS_ROOT" in os.environ:
+        return LocalRoute(Path(os.environ["AGENT_COMMS_ROOT"]).expanduser())
+    return read_active_route() or LocalRoute(Path.home() / ".agent-comms")
 
 
 class RoutePublicationUnknownError(RelationViolationError):

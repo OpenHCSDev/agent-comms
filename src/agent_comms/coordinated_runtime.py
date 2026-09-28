@@ -24,9 +24,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .activity import ActivityState
+from .assignment_states import AssignmentState, CompletedAssignment, IgnoredAssignment
 from .bus_publication import CommittedInitial, stable_thread_lookup
 from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
-from .assignment_states import AssignmentState, CompletedAssignment, IgnoredAssignment
 from .comms import Comms
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -424,7 +425,7 @@ class SelectedExecution:
         finally:
             try:
                 if self.owned_turn_lease is not None:
-                    self.comms.registry.release_turn(self.owned_turn_lease)
+                    self.comms.agents.finish_turn(self.owned_turn_lease)
             finally:
                 self.store.close()
 
@@ -563,6 +564,11 @@ class SelectedExecution:
         if self.owner.active_turn is None or self.owner.active_turn.owner_pid != self.owner.pid:
             raise StaleFence("selected recipient has no live owner-turn identity")
         self.initial = self._selected_source(self.wire_root_id)
+        self.comms.agents.set_activity(
+            self.owner.name,
+            ActivityState.WORKING,
+            f"Preparing {self.initial.message.target} message"[:200],
+        )
         self.owner_witness = LiveResponseOwner(
             self.owner.name,
             self.lookup,
@@ -632,6 +638,11 @@ class SelectedExecution:
 
     async def _triage(self):
         if self.assignment.lifecycle.triage_pending:
+            self.comms.agents.set_activity(
+                self.owner.name,
+                ActivityState.THINKING,
+                f"Checking {self.initial.message.target} message"[:200],
+            )
             self.prompt = _triage_prompt(self.initial, self.assignment, self.owner)
             if len(self.prompt.encode("utf-8")) > _MAX_PROMPT_BYTES:
                 raise IdentityConflict("triage prompt exceeds the bounded model context")
@@ -713,6 +724,11 @@ class SelectedExecution:
             raise IdentityConflict("full wake lost its selected assignment")
         self.assignment = selected[0]
         self.obligation = started.snapshot.obligation
+        self.comms.agents.set_activity(
+            self.owner.name,
+            ActivityState.THINKING,
+            f"Responding in {self.initial.message.target}"[:200],
+        )
 
     async def _prompt(self):
         self.selected_operation_id: str | None = None

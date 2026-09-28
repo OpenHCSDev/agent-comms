@@ -918,7 +918,7 @@ async def run_native_pi_turn(
     except SelectedToolDenied as error:
         raise NativePiUnavailable(str(error)) from error
     except PromptSendUnknown as error:
-        raise NativePiUnavailable("Native Pi prompt send is UNKNOWN; no retry") from error
+        raise NativePiUnavailable(f"Native Pi prompt send is UNKNOWN; no retry: {error}") from error
     except (TimeoutError, OSError) as error:
         raise NativePiUnavailable("Native Pi tracked turn failed; send may be UNKNOWN") from error
     finally:
