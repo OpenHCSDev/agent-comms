@@ -15,6 +15,7 @@ from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime import SelectedExistingFileWrite
 from agent_comms.coordination_store import IdentityConflict, MutationStore, StaleFence
+from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.selected_tool_broker import SelectedToolIntent, SelectedToolRequest
@@ -110,7 +111,9 @@ async def test_operator_plan_and_tool_intent_are_exclusive(
             owner_name="beta",
             native_package=private_root,
             selected_tool_intent=intent_type(),
-            selected_existing_file_write=SelectedExistingFileWrite(path, b"after"),
+            selected_existing_file_write=SelectedExistingFileWrite(
+                ExistingFileClaim(Path(path)), b"after"
+            ),
         ).run()
     assert path.read_text() == "before"
 

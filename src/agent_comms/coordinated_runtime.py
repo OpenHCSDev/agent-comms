@@ -36,7 +36,6 @@ from .coordination_cohort import _assert_schema, accept_initial_cohort, next_sea
 from .coordination_response import (
     LiveResponseOwner,
     _assert_response_schema,
-    _require_live_registry_owner,
     _response_boundary,
     prepare_fenced_response,
     publish_fenced_response,
@@ -50,7 +49,7 @@ from .coordination_store import (
 )
 from .diagnostics import record_terminal_failure
 from .durable_turn import DurableTurn
-from .envelope_claim_transitions import WakeAdmission
+from .envelope_claim_transitions import ExistingFileClaim, WakeAdmission
 from .errors import RelationViolationError
 from .fresh_private_session import FreshPrivateSession, create_fresh_private_session
 from .message_bus import MessageBus
@@ -62,7 +61,6 @@ from .native_pi import (
     NativeTurnResult,
     _fresh_selected_revision,
     _private_session_dir,
-    _read_native_context_evidence,
     _trusted_package,
     run_native_pi_turn,
 )
@@ -110,12 +108,12 @@ class CoordinatedTurn:
 class SelectedExistingFileWrite:
     """Explicit trusted one-shot file replacement, never a Pi tool interceptor."""
 
-    resource: Path
+    resource: ExistingFileClaim
     contents: bytes
 
     def __post_init__(self) -> None:
-        if not isinstance(self.resource, Path) or type(self.contents) is not bytes:
-            raise TypeError("selected write needs a concrete path and bytes")
+        if type(self.resource) is not ExistingFileClaim or type(self.contents) is not bytes:
+            raise TypeError("selected write needs an existing-file claim and bytes")
         if len(self.contents) > 1024 * 1024:
             raise ValueError("selected write exceeds 1 MiB")
 
@@ -935,14 +933,12 @@ class SelectedExecution:
             self.bus,
             self.fence,
             result.text,
-            owner_pid=os.getpid(),
             owner_witness=self.owner_witness,
         )
         published = publish_fenced_response(
             self.store,
             self.bus,
             self.fence,
-            owner_pid=os.getpid(),
             owner_witness=self.owner_witness,
         ).value
         if published.publication_receipt is None:
@@ -997,9 +993,7 @@ class SelectedExecution:
                 # writer and tool socket have closed. Preserve UNKNOWN effects,
                 # but do not strand unrelated work behind this dead local turn.
                 with _response_boundary(self.bus) as registry:
-                    _require_live_registry_owner(
-                        registry, self.progress.fence, os.getpid(), self.owner_witness
-                    )
+                    self.owner_witness.require_live(registry, self.progress.fence)
                     self.progress.fail_unknown()
             else:
                 _require_registry_owner(self.comms, self.owner, self.owner_admission_generation)
@@ -1377,7 +1371,7 @@ class SelectedExecution:
         # The pinned native executor validated exact live events BEFORE returning;
         # the on-disk read is only corroboration and is NOT recovery authority.
         if (
-            _read_native_context_evidence(result.context.session_file, self.input_id)
+            NativeContextProof.read_evidence(result.context.session_file, self.input_id)
             != result.context
         ):
             raise IdentityConflict("native Pi event differs from its private session evidence")

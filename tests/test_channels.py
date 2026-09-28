@@ -24,42 +24,6 @@ def setup_wire(path):
     return comms
 
 
-def test_named_union_membership_and_routing(tmp_path):
-    comms = setup_wire(tmp_path)
-    comms.channels.set_channel("engineering", frozenset({"api", "ui"}))
-    views = {view.channel.name: view for view in comms.views.channel_views()}
-    assert set(views["#engineering"].members) == {"a", "b", "both"}
-    assert set(views["#any"].members) == {"a", "b", "both", "other"}
-    assert views["#none"].members == ("other",)
-    assert set(views["#api"].members) == {"a", "both"}
-    assert set(views["#ui"].members) == {"b", "both"}
-    comms.messaging.send("other", "#engineering", "union delivery")
-    comms.messaging.send("other", "#api", "api delivery")
-    comms.messaging.send("other", "#ui", "ui delivery")
-    assert len(comms.bus.inbox("both")) == 3
-    assert len(comms.bus.incoming_page("both", after=0).messages) == 3
-    assert len(comms.bus.inbox("a")) == 2
-    assert comms.bus.pending_count("both", "#engineering") == 1
-    assert len(comms.views.channel_history_page("#engineering").messages) == 1
-    assert comms.messaging.acknowledge("both", "#engineering") == 1
-    assert comms.bus.pending_count("both") == 2
-    comms.messaging.send("a", "other", "private")
-    assert len(comms.views.channel_history("#any")) == 4
-    assert len(comms.views.channel_history("#engineering")) == 1
-
-
-def test_channel_history_is_owned_by_the_stored_target(tmp_path):
-    comms = setup_wire(tmp_path)
-    comms.channels.set_channel("engineering", frozenset({"api", "ui"}))
-    comms.messaging.send("other", "#engineering", "union target")
-    comms.messaging.send("other", "#api", "exact api target")
-    comms.messaging.send("other", "#ui", "exact ui target")
-    assert [message.body for message in comms.views.channel_history("#engineering")] == [
-        "union target"
-    ]
-    assert [message.body for message in comms.views.channel_history("#api")] == ["exact api target"]
-
-
 def test_channel_metadata_round_trips_without_changing_routing(tmp_path):
     comms = setup_wire(tmp_path)
     before = {view.channel.name: view.members for view in comms.views.channel_views()}
@@ -94,7 +58,7 @@ def test_saved_views_are_typed_persistent_and_non_routable(tmp_path):
         for name, thread in comms.registry.all_threads().items()
         if view.predicate.matches(thread.tags)
     ] == ["both"]
-    assert "#api-and-ui" not in comms.channels.channels()
+    assert "#api-and-ui" in comms.channels.channels()
     with pytest.raises(ValueError, match="not a routable target"):
         comms.messaging.send("other", "#api-and-ui", "must fail")
     comms.channels.delete_saved_view("api-and-ui")
@@ -173,38 +137,6 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
     assert restarted.channels.catalog.read().saved_views["cross-team"].predicate.tags == {"docs"}
 
 
-def test_legacy_channel_deletion_clears_children_without_rewriting_history(tmp_path):
-    comms = setup_wire(tmp_path)
-    original_tags = {name: thread.tags for name, thread in comms.registry.all_threads().items()}
-    comms.channels.set_channel("team", frozenset({"ui"}))
-    comms.channels.set_channel_metadata("api", parent="#team", archived=False)
-    comms.messaging.send("other", "#team", "legacy target row")
-    comms.channels.delete_channel("team")
-
-    restarted = wire(tmp_path)
-    assert restarted.channels.catalog.read().resolve("#api").parent is None
-    assert {
-        name: thread.tags for name, thread in restarted.registry.all_threads().items()
-    } == original_tags
-    assert [message.body for message in restarted.views.channel_history("#team")] == [
-        "legacy target row"
-    ]
-
-
-def test_deleted_legacy_channel_name_gets_fresh_order_and_creation_on_reuse(tmp_path):
-    comms = setup_wire(tmp_path)
-    with patch("agent_comms.channels.time.time", return_value=100):
-        first = comms.channels.set_channel("temporary", frozenset({"ui"}))
-    comms.channels.set_channel_sort("temporary", ThreadSort.LAST_ACTIVITY)
-    comms.channels.delete_channel("temporary")
-
-    with patch("agent_comms.channels.time.time", return_value=200):
-        recreated = comms.channels.set_channel("temporary", frozenset({"ui"}))
-    assert first.created_at == 100
-    assert recreated.created_at == 200
-    assert recreated.order is ThreadSort.CREATED
-
-
 def test_deleted_exact_tag_gets_fresh_order_and_creation_on_reuse(tmp_path):
     comms = setup_wire(tmp_path)
     with patch("agent_comms.channels.time.time", return_value=100):
@@ -221,37 +153,11 @@ def test_deleted_exact_tag_gets_fresh_order_and_creation_on_reuse(tmp_path):
     assert recreated.order is ThreadSort.CREATED
 
 
-def test_deleting_legacy_collision_preserves_revealed_exact_preferences(tmp_path):
-    comms = setup_wire(tmp_path)
-    comms.channels.create_tag("team")
-    comms.channels.update_tags("other", add=frozenset({"team"}))
-    comms.channels.set_channel_sort("team", ThreadSort.LAST_ACTIVITY)
-    comms.channels.set_channel_pinned("team", True)
-    comms.channels.set_thread_pinned("team", "other", True)
-    comms.channels.set_channel_metadata("team", parent="#api", archived=True)
-    with comms.channels.catalog.editing() as document:
-        document.audiences["#team"] = frozenset({"api"})
-    before = wire(tmp_path).channels.catalog.read().resolve("#team")
-    assert before.exact and before.order is ThreadSort.LAST_ACTIVITY
-
-    comms.channels.delete_channel("team")
-    observer = wire(tmp_path)
-    revealed = observer.channels.catalog.read().resolve("#team")
-    assert revealed.exact
-    assert revealed.order is ThreadSort.LAST_ACTIVITY
-    assert revealed.created_at == before.created_at
-    assert revealed.pinned and revealed.parent == "#api" and revealed.archived
-    assert observer.channels.catalog.read().pinned_threads("#team") == {"other"}
-
-
 def test_saved_view_names_are_reserved_for_tags_and_legacy_channels(tmp_path):
     comms = setup_wire(tmp_path)
     predicate = ViewPredicate(AnyOfMatch, frozenset({"api"}))
     with pytest.raises(ValueError, match="conflicts with channel"):
         comms.channels.set_saved_view(SavedView("api", ViewKind.PARTICIPANTS, predicate))
-    comms.channels.set_channel("legacy", frozenset({"api"}))
-    with pytest.raises(ValueError, match="conflicts with channel"):
-        comms.channels.set_saved_view(SavedView("legacy", ViewKind.PARTICIPANTS, predicate))
 
     comms.channels.set_saved_view(
         SavedView(
@@ -267,24 +173,8 @@ def test_saved_view_names_are_reserved_for_tags_and_legacy_channels(tmp_path):
         comms.channels.update_tags("other", add=frozenset({"reserved"}))
     with pytest.raises(ValueError, match="reserved by a saved view"):
         comms.channels.rename_tag("ui", "reserved")
-    with pytest.raises(ValueError, match="reserved by a saved view"):
-        comms.channels.set_channel("reserved", frozenset({"api"}))
     assert comms.registry.snapshot() == before
     assert "reserved" not in comms.channels.catalog.read().all_tags(comms.registry.all_threads())
-
-
-def test_tag_names_cannot_collide_with_legacy_channel_targets(tmp_path):
-    comms = setup_wire(tmp_path)
-    comms.channels.set_channel("team", frozenset({"api", "ui"}))
-    before = comms.registry.snapshot()
-    with pytest.raises(ValueError, match="conflicts with legacy channel"):
-        comms.channels.create_tag("team")
-    with pytest.raises(ValueError, match="conflicts with legacy channel"):
-        comms.channels.update_tags("other", add=frozenset({"team"}))
-    with pytest.raises(ValueError, match="conflicts with legacy channel"):
-        comms.channels.rename_tag("ui", "team")
-    assert comms.registry.snapshot() == before
-    assert comms.channels.catalog.read().resolve("#team").tags == {"api", "ui"}
 
 
 def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
@@ -299,8 +189,6 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
         comms.threads.register(Thread("registered", frozenset({"reserved"}), str(tmp_path)))
     with pytest.raises(ValueError, match="reserved by a saved view"):
         comms.threads.claim_thread("claimed", tags=frozenset({"reserved"}), worktree=str(tmp_path))
-    with pytest.raises(ValueError, match="reserved by a saved view"):
-        comms.channels.set_channel("team", frozenset({"api", "reserved"}))
 
     source = tmp_path / "foreign.json"
     source.write_text("{}")
@@ -371,13 +259,6 @@ def test_channel_metadata_and_saved_views_have_typed_tool_surfaces(tmp_path):
     assert not invoke_tool(comms, "comms_channels", {})["views"]
 
 
-def test_named_audience_cannot_replace_an_exact_tag_channel(tmp_path):
-    comms = setup_wire(tmp_path)
-    with pytest.raises(ValueError, match="cannot replace"):
-        comms.channels.set_channel("api", frozenset({"ui"}))
-    assert comms.channels.catalog.read().resolve("#api").exact
-
-
 def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatch):
     comms = setup_wire(tmp_path)
     original = comms.registry.require("other")
@@ -388,15 +269,19 @@ def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatc
     assert comms.registry.require("other") == replace(
         original, tags=frozenset({"new", "api"}), channel_scope_generation=1
     )
-    invoke_tool(comms, "comms_set_channel", {"name": "team", "tags": "api,ui"})
+    invoke_tool(
+        comms,
+        "comms_set_view",
+        {"name": "team", "kind": "participants", "match": "any_of", "tags": "api,ui"},
+    )
     invoke_tool(comms, "comms_tags", {"action": "rename", "name": "api", "new_name": "backend"})
     assert "backend" in comms.registry.require("a").tags
     assert wire(tmp_path).channels.catalog.read().resolve("#team").tags == frozenset(
         {"backend", "ui"}
     )
+    invoke_tool(comms, "comms_delete_view", {"name": "team"})
     invoke_tool(comms, "comms_tags", {"action": "delete", "name": "backend"})
     assert not comms.registry.require("a").tags
-    invoke_tool(comms, "comms_delete_channel", {"name": "team"})
     assert "#ui" in comms.channels.channels()
     assert "#team" not in comms.channels.channels()
     assert invoke_tool(comms, "comms_channels", {})["channels"]
@@ -410,8 +295,7 @@ def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatc
 def test_pending_cache_observes_external_changes_without_rescanning(tmp_path):
     comms = setup_wire(tmp_path)
     other = wire(tmp_path)
-    comms.channels.set_channel("team", frozenset({"api"}))
-    comms.messaging.send("other", "#team", "one")
+    comms.messaging.send("other", "#api", "one")
     assert comms.bus.pending_count("a") == 1
     with patch.object(
         comms.bus.log, "_iter_log_unlocked", side_effect=AssertionError("rescanned idle log")
@@ -419,14 +303,15 @@ def test_pending_cache_observes_external_changes_without_rescanning(tmp_path):
         for _ in range(10):
             comms.threads.heartbeat("a")
             assert comms.bus.pending_count("a") == 1
-    other.channels.set_channel("team", frozenset({"ui"}))
+    other.channels.update_tags("a", remove=frozenset({"api"}))
     assert comms.bus.pending_count("a") == 0
-    assert comms.bus.pending_count("b") == 1
-    other.channels.update_tags("a", add=frozenset({"ui"}))
-    assert comms.bus.pending_count("a") == 1
+    other.channels.update_tags("b", add=frozenset({"api"}))
+    assert [m.body for m in comms.bus.inbox("b") if m.membership is None] == ["one"]
+    other.channels.update_tags("a", add=frozenset({"api"}))
+    assert [m.body for m in comms.bus.inbox("a") if m.membership is None] == ["one"]
     other.messaging.acknowledge("a")
     assert comms.bus.pending_count("a") == 0
-    other.messaging.send("other", "#team", "two")
+    other.messaging.send("other", "#api", "two")
     assert comms.bus.pending_count("a") == 1
 
 
@@ -438,11 +323,7 @@ def test_invalid_filters_and_reserved_channels(tmp_path):
     with pytest.raises(ValueError):
         Channel("empty")
     with pytest.raises(ValueError):
-        comms.channels.set_channel("#any", frozenset({"api"}))
-    with pytest.raises(ValueError):
-        comms.channels.delete_channel("#all")
-    with pytest.raises(ValueError):
-        comms.channels.delete_channel("#api")
+        Channel("#team", frozenset({"api", "ui"}))
 
 
 def test_thread_presentation_owns_lifecycle_precedence(tmp_path):
@@ -480,10 +361,13 @@ def test_none_membership_and_independent_channel_order(tmp_path):
 def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     comms = setup_wire(tmp_path)
     with patch("agent_comms.channels.time.time", return_value=200):
-        first = comms.channels.set_channel("zeta", frozenset({"ui"}))
+        comms.channels.create_tag("zeta")
+        first = comms.channels.catalog.read().resolve("#zeta")
     with patch("agent_comms.channels.time.time", return_value=300):
-        second = comms.channels.set_channel("alpha", frozenset({"api"}))
+        comms.channels.create_tag("alpha")
+        second = comms.channels.catalog.read().resolve("#alpha")
     assert first.created_at == 200 and second.created_at == 300
+    comms.channels.update_tags("b", add=frozenset({"zeta"}))
 
     def names(client):
         return [
@@ -517,30 +401,29 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
         comms.views.channel_views()
 
 
-def test_membership_notices_follow_union_membership_and_do_not_wake(tmp_path):
+def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     comms = wire(tmp_path)
     comms.threads.register(Thread("moving", frozenset(), str(tmp_path)))
     comms.threads.register(Thread("peer", frozenset({"api"}), str(tmp_path), pid=os.getpid()))
-    comms.channels.set_channel("team", frozenset({"api", "ui"}))
     comms.channels.update_tags("moving", add=frozenset({"api"}))
-    joined = comms.views.channel_history("#team")
+    joined = comms.views.channel_history("#api")
     assert len(joined) == 1 and joined[0].membership.value == "joined"
-    assert joined[0].body == "moving joined #team" and not joined[0].starts_turn
+    assert joined[0].body == "moving joined #api" and not joined[0].starts_turn
     assert "moving" not in comms.views.last_sent_timestamps()
     comms.channels.update_tags("moving", add=frozenset({"ui"}))
     comms.channels.update_tags("moving", remove=frozenset({"api"}))
-    assert len(comms.views.channel_history("#team")) == 1
+    assert len(comms.views.channel_history("#api")) == 2
     comms.channels.update_tags("moving", remove=frozenset({"ui"}))
-    history = wire(tmp_path).views.channel_history("#team")
+    history = wire(tmp_path).views.channel_history("#api")
     assert [message.membership.value for message in history] == ["joined", "left"]
     assert all(not message.starts_turn for message in history)
-    assert not comms.views.coordination_snapshot().participants("#team")
+    assert not comms.views.coordination_snapshot().participants("#api")
     comms.agents.begin_turn("peer", "active-turn")
     assert [
-        person.thread.name for person in comms.views.coordination_snapshot().participants("#team")
+        person.thread.name for person in comms.views.coordination_snapshot().participants("#api")
     ] == ["peer"]
     comms.owners.stop("peer")
-    assert not comms.views.coordination_snapshot().participants("#team")
+    assert not comms.views.coordination_snapshot().participants("#api")
 
 
 @pytest.mark.parametrize("order", tuple(ChannelSort))
@@ -568,7 +451,11 @@ def test_channel_pins_persist_and_partition_existing_order(tmp_path, order):
 @pytest.mark.parametrize("order", tuple(ThreadSort))
 def test_member_pins_are_persistent_channel_scoped_and_preserve_sort(tmp_path, order):
     comms = setup_wire(tmp_path)
-    comms.channels.set_channel("team", frozenset({"api", "ui"}))
+    comms.channels.set_saved_view(
+        SavedView(
+            "team", ViewKind.PARTICIPANTS, ViewPredicate(AnyOfMatch, frozenset({"api", "ui"}))
+        )
+    )
     comms.channels.set_channel_sort("#team", order)
     original = {view.channel.name: view.members for view in comms.views.channel_views()}
     result = invoke_tool(
@@ -587,7 +474,11 @@ def test_member_pins_are_persistent_channel_scoped_and_preserve_sort(tmp_path, o
 
 def test_pin_lifecycle_tracks_identity_and_membership(tmp_path):
     comms = setup_wire(tmp_path)
-    comms.channels.set_channel("team", frozenset({"api", "ui"}))
+    comms.channels.set_saved_view(
+        SavedView(
+            "team", ViewKind.PARTICIPANTS, ViewPredicate(AnyOfMatch, frozenset({"api", "ui"}))
+        )
+    )
     comms.channels.set_channel_pinned("team", True)
     comms.channels.set_thread_pinned("team", "a", True)
     comms.channels.set_thread_pinned("#any", "a", True)
@@ -607,8 +498,10 @@ def test_pin_lifecycle_tracks_identity_and_membership(tmp_path):
     comms.threads.delete("renamed")
     assert not observer.channels.catalog.read().pinned_threads("#team")
     assert not observer.channels.catalog.read().pinned_threads("#any")
-    comms.channels.delete_channel("team")
-    comms.channels.set_channel("team", frozenset({"api"}))
+    comms.channels.delete_saved_view("team")
+    comms.channels.set_saved_view(
+        SavedView("team", ViewKind.PARTICIPANTS, ViewPredicate(AnyOfMatch, frozenset({"api"})))
+    )
     assert not observer.channels.catalog.read().resolve("#team").pinned
 
 

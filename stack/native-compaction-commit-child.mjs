@@ -1,18 +1,30 @@
 // Internal, non-forking single-shot helper. No provider/session runtime imports.
 // The Python owner holds and passes the registry flock until this process exits.
 // This program is NOT a public RPC accepting caller-stamped owner receipts.
-import { fstatSync, readFileSync, statSync } from 'node:fs';
+import { fstatSync, readFileSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const [packageDir, descriptor] = process.argv.slice(2);
+const [packageDir, descriptor, encodedLength] = process.argv.slice(2);
 try {
     const fd = Number(descriptor);
     if (!Number.isSafeInteger(fd) || fd < 3) throw new Error('Inherited authority FD required');
     const held = fstatSync(fd, { bigint: true });
-    const input = readFileSync(0);
-    if (input.length > 524288) throw new Error('Native commit request too large');
-    const request = JSON.parse(input.toString('utf8'));
+    // The existing owner serializes its admitted request once. This exact
+    // length frames the pipe; only the inherited descriptor grants authority.
+    const length = Number(encodedLength);
+    if (!Number.isSafeInteger(length) || length <= 0)
+        throw new Error('Exact encoded commit length required');
+    const input = Buffer.allocUnsafe(length);
+    let offset = 0;
+    while (offset < length) {
+        const received = readSync(0, input, offset, length - offset, null);
+        if (!received) throw new Error('Incomplete native commit request');
+        offset += received;
+    }
+    if (readSync(0, Buffer.allocUnsafe(1), 0, 1, null))
+        throw new Error('Unexpected bytes after native commit request');
+    const request = JSON.parse(new TextDecoder('utf-8', {fatal:true}).decode(input));
     const keys = ['action', 'authority', 'witness', 'commit', 'summary', 'tokensBefore', 'details', 'usage'];
     if (Object.keys(request).some(key => !keys.includes(key)))
         throw new Error('Unexpected request fields; JSON receipts are not authority');

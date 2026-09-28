@@ -18,9 +18,9 @@ import pytest
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_pi import (
     CAPABILITY,
+    NativeContextProof,
     NativePiTerminalFailure,
     NativePiUnavailable,
-    _read_native_context_evidence,
     _trusted_package,
     prepare_native_pi_rpc_launch,
     run_native_pi_turn,
@@ -72,14 +72,14 @@ def _evidence(tmp_path: Path) -> Path:
 
 def test_read_only_journal_parser_is_not_recovery_authority(tmp_path: Path) -> None:
     session = _evidence(tmp_path)
-    first = _read_native_context_evidence(session, INPUT_ID)
-    second = _read_native_context_evidence(session, INPUT_ID)
+    first = NativeContextProof.read_evidence(session, INPUT_ID)
+    second = NativeContextProof.read_evidence(session, INPUT_ID)
     assert first == second
     assert first.session_id == "sid"
     assert first.session_entry_id == "entry"
     assert first.request_generation == 1
     with pytest.raises(NativePiUnavailable, match="specified input"):
-        _read_native_context_evidence(session, "d" * 32)
+        NativeContextProof.read_evidence(session, "d" * 32)
 
 
 @pytest.mark.parametrize(
@@ -120,7 +120,7 @@ def test_corrupt_or_redirected_journal_cannot_assert_context(tmp_path: Path, dam
         journal.unlink()
         journal.symlink_to(replacement)
     with pytest.raises(NativePiUnavailable):
-        _read_native_context_evidence(session, INPUT_ID)
+        NativeContextProof.read_evidence(session, INPUT_ID)
 
 
 def test_proof_reader_rejects_session_id_duplicate_or_untrusted_ancestor(tmp_path: Path) -> None:
@@ -129,11 +129,11 @@ def test_proof_reader_rejects_session_id_duplicate_or_untrusted_ancestor(tmp_pat
     user = json.loads(data.splitlines()[1])
     session.write_text(data + json.dumps({**user, "id": "another"}) + "\n")
     with pytest.raises(NativePiUnavailable, match="ambiguous"):
-        _read_native_context_evidence(session, INPUT_ID)
+        NativeContextProof.read_evidence(session, INPUT_ID)
     session.write_text(data)
     session.parent.chmod(0o777)
     with pytest.raises(NativePiUnavailable, match="writable ancestor"):
-        _read_native_context_evidence(session, INPUT_ID)
+        NativeContextProof.read_evidence(session, INPUT_ID)
 
 
 @pytest.mark.parametrize("unsafe", ["public_directory", "public_session", "symlink_directory"])
@@ -1207,8 +1207,11 @@ async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, mo
         raise AssertionError("Stock Pi must not be started as a tracked backend")
 
     monkeypatch.setattr("agent_comms.native_pi.asyncio.create_subprocess_exec", forbidden)
-    stock = Path("/home/ts/.local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent")
-    with pytest.raises(NativePiUnavailable, match="Pinned disposable"):
+    stock = tmp_path / "stock/node_modules/@earendil-works/pi-coding-agent"
+    stock.mkdir(parents=True)
+    stock.parents[2].chmod(0o700)
+    (stock / "unreviewed.js").write_text("not the pinned package")
+    with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
         await run_native_pi_turn(
             stock,
             input_id=INPUT_ID,
@@ -1217,7 +1220,7 @@ async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, mo
             session_dir=tmp_path / "sessions",
         )
     assert os.geteuid() == os.stat(tmp_path).st_uid
-    with pytest.raises(NativePiUnavailable, match="Pinned disposable"):
+    with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
         _trusted_package(stock)
 
 
@@ -1290,16 +1293,16 @@ def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_pat
 
 def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
     session = _evidence(tmp_path)
-    recorded = _read_native_context_evidence(session, INPUT_ID)
+    recorded = NativeContextProof.read_evidence(session, INPUT_ID)
     journal = Path(str(session) + ".input-proof")
     first = json.loads(journal.read_text())
     later = {**first, "requestGeneration": 2, "llmContextDigest": "d" * 64}
     with journal.open("a") as output:
         output.write(json.dumps(later) + "\n")
-    assert _read_native_context_evidence(session, INPUT_ID).request_generation == 2
-    assert _read_native_context_evidence(session, INPUT_ID, request_generation=1) == recorded
+    assert NativeContextProof.read_evidence(session, INPUT_ID).request_generation == 2
+    assert NativeContextProof.read_evidence(session, INPUT_ID, request_generation=1) == recorded
     with pytest.raises(NativePiUnavailable, match="no assembled-context"):
-        _read_native_context_evidence(session, INPUT_ID, request_generation=3)
+        NativeContextProof.read_evidence(session, INPUT_ID, request_generation=3)
 
 
 def test_retained_proof_beyond_old_reader_quota_preserves_first_generation(tmp_path):
@@ -1310,7 +1313,7 @@ def test_retained_proof_beyond_old_reader_quota_preserves_first_generation(tmp_p
         for generation in range(2, 80002):
             stream.write(json.dumps({**first, "requestGeneration": generation}) + "\n")
     assert journal.stat().st_size > 16 * 1024 * 1024
-    observed = _read_native_context_evidence(session, INPUT_ID, request_generation=1)
+    observed = NativeContextProof.read_evidence(session, INPUT_ID, request_generation=1)
     assert (
         observed.request_generation == 1
         and observed.llm_context_digest == first["llmContextDigest"]

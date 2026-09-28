@@ -26,7 +26,7 @@ from .claim_admission import publish_selected_resource_claim, write_selected_cla
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_store import MutationStore
-from .envelope_claim_transitions import WakeAdmission
+from .envelope_claim_transitions import ExistingFileClaim, WakeAdmission
 from .native_tool_call import NativeToolCall, SelectedToolDenied
 from .pi_events import ToolExecutionEnd, ToolExecutionStart
 from .pi_payloads import PiContent, ToolCallContent
@@ -352,7 +352,9 @@ def perform_selected_write(
     consume_selected_slot(session_dir, input_id, request.call_id)
     # Any exception from here leaves the slot consumed. The caller reports
     # UNKNOWN and never automatically reissues the claim or mutation.
-    claimed = publish_selected_resource_claim(comms, store, admission, owner_name, request.resource)
+    claimed = publish_selected_resource_claim(
+        comms, store, admission, owner_name, ExistingFileClaim(Path(request.resource))
+    )
     write_selected_claimed_file(comms, store, admission, owner_name, claimed, request.contents)
     record_selected_terminal(session_dir, input_id, request.call_id)
 
