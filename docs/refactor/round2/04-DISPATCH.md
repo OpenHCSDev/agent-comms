@@ -14,7 +14,7 @@ proposals in the first deletion ledger are replaced by round-two hard cutover.
 | PF3/response authority/typed claims | Pascal (01a0e525-90a4-77e2-80df-703f622e20f5) | Existing B3/B4 branch; current assignments finish before S12 caller adoption | [Comms226](https://github.com/OpenHCSDev/agent-comms/pull/226), merged; quiet-step installed acceptance pending |
 | L0B and remaining L0A closure | Parent | refactor/canonical-bus-retirement-20260928; includes source audit, D22 tool, read API cleanup; no duplicate L0B agent | [Comms229](https://github.com/OpenHCSDev/agent-comms/pull/229), draft; canonical writer/drain and sole read-ledger implemented; 35 integrated channel/read/idle checks pass; D22/reset admission closure open |
 | L0A core loaders | Copernicus (01a0e872-69dc-7143-8692-7950ea46f2bd) | refactor/round2-l0a-loaders; goals, registry and thread management; S13 owns threads.py | [Comms235](https://github.com/OpenHCSDev/agent-comms/pull/235) + Toad107, drafts |
-| R1 | Nietzsche (01a0e874-0617-7a91-a702-0bc90325b53d) | NRA ~/wt/nra-refactor2-r1-20260928; existing PR8 is distinct dispatch-lead work | [NRA9](https://github.com/OpenHCSDev/NominalRefactorAdvisor/pull/9), merged; installed CLI/skill acceptance in progress |
+| R1 | Nietzsche (01a0e874-0617-7a91-a702-0bc90325b53d) | NRA ~/wt/nra-refactor2-r1-20260928; existing PR8 is distinct dispatch-lead work | [NRA9](https://github.com/OpenHCSDev/NominalRefactorAdvisor/pull/9), merged and installed; real CLI193files81/81detectors, no omissions |
 | S10 | Pascal (01a0e525-90a4-77e2-80df-703f622e20f5), next task dispatched after226 merge | V1/V3 first; V2 requires A13, child adoption requires A12 | [Comms234](https://github.com/OpenHCSDev/agent-comms/pull/234), draft; A12 adoption resumed |
 | S9 / A14 | Darwin (01a0e526-04a9-7981-bbb1-f152b3a9edf5) | ~/wt/comms-refactor2-s9-20260928; K1/K2/K5/K6 and A12/A13 adoption | [Comms236](https://github.com/OpenHCSDev/agent-comms/pull/236), draft |
 
@@ -38,3 +38,22 @@ No agent opens an empty placeholder or duplicates another owner's implementation
   relaunch. Delete executed tools before marking their surfaces complete.
 - Record added/deleted source and tests per PR. Keep failed evidence honest and
   remove owned disposable fixtures after processes have exited.
+
+## Follow-through after integrated source audit
+
+Audit: evidence/round2-l0/L0B-AUDIT.md (actual production both native workers;
+70 lexical matches across40files are leads, not70proven defects).
+
+| Remaining complete batch | Owner / PR | Exact boundary |
+| --- | --- | --- |
+| Native-only execution and headless entrypoint | Pascal,234 (dependent draft if required) | Delete raw argv/stdout engine and rpc_args_for plus all seven production callers; reuse current native launch and owner lifecycle. Owns InputDrain.run_owned_input only, not parent queue/history regions. Darwin owns paired manual-compaction caller. |
+| Typed-table old transcript import | Cicero,237 | Delete TranscriptRoutes initializer converters and obsolete schema migration; inventory durable annotations and give parent one-shot preservation contract. |
+| Queue projection | Parent229 + CopernicusToad107 | Sole queueBinding/queueState metadata; delete old queue/top-level restored arrays and oldToad reader.12core contract checks pass; paired cancellation/UI acceptance remains. |
+| Goal states, retry grant and wait identities | Nietzsche, new Comms draft pending | Own goal_states/actions/waits/relationships and direct tests, new ~/wt tree fromparent229. Inventory historical unknown facts; parent owns one-shot data conversion. No implicit retry grant recreation. |
+| Remaining process-identity test consumers | Lovelace,232 | Delete stale helper imports and migrate real identity fixtures; preserve process/ACP behavior, no pid adapter. Parent owns native_prompt_binding/coordinated_runtime/private_nk_entrypoint/acp_queue_contract/prompt_queue tests. Copernicus owns DM/registry tests. |
+| Delivery-cursor retirement, UNKNOWN preservation, current history and final activation | Parent229 | Finish input_disposition/input_attempt/goal_management callers and data boundaries; retain evidence without replay. Coordinate goal_actions region withNietzsche. |
+
+Parent229 integrated232+234+235 throughb4cb42a; newer worker commits still need
+integration. Required local guard collection found a stale removed-test import
+in test_acp_owner_interrupt_followup; Lovelace owns the fix. Debt ratchet passes
+(-14type identity,-31long boolean chains,-23string subscripts). No CI wait.
