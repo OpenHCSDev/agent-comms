@@ -185,14 +185,14 @@ def inventory_legacy_root(comms: Comms) -> LegacyInventory:
         or before.admission_generations != after.admission_generations
     ):
         raise RelationViolationError("Legacy registry changed during cutover inventory")
-    rows = InputDispositions(comms.root)._read()
+    rows = InputDispositions(comms.root / InputDispositions.filename).read().rows
     return LegacyInventory(
         comms.root,
         tuple(owners),
         tuple(dead),
         tuple(active_turns),
         tuple(pending),
-        sum(row["status"] == "unknown" for row in rows.values()),
+        sum(row.unresolved for row in rows.values()),
     )
 
 
@@ -336,7 +336,8 @@ def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
     identities = {path: _file_identity(path.lstat()) for path in files}
     pending = sum(len(comms.bus.inbox(name)) for name in before.threads)
     unknown = sum(
-        row["status"] == "unknown" for row in InputDispositions(comms.root)._read().values()
+        row.unresolved
+        for row in InputDispositions(comms.root / InputDispositions.filename).read().rows.values()
     )
     stage = Path(tempfile.mkdtemp(prefix=".cutover-archive-", dir=destination.parent))
     try:

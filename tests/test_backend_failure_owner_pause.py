@@ -85,7 +85,10 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
         assert (wired.root / "goal_pause_events.json").read_bytes() == pause_bytes
         assert wired.goals.goal_pause("project").owner_instruction is not None
         assert agent.inputs.dispositions.path.read_bytes() == ledger_before
-        assert agent.inputs.dispositions.status("acp:earlier-uncertain") == "unknown"
+        assert (
+            agent.inputs.dispositions.read().rows["acp:earlier-uncertain"].declared_name
+            == "unknown"
+        )
         generation = agent.turns.goal_store.snapshot(goal.id)
         assert generation.lifecycle == BlockedGeneration() and generation.attempt_id is not None
         with pytest.raises(UnresolvedAttemptError):

@@ -76,7 +76,7 @@ console.log(manager.getSessionFile());
         owner, "turn", expected_owner_generation=epoch
     )
     assert owner.active_turn is not None
-    InputDispositions(tmp_path).record(
+    InputDispositions(tmp_path / InputDispositions.filename).record(
         "acp:original",
         seq=None,
         owner="owner",
@@ -115,7 +115,13 @@ async def test_selected_default_strategy_refuses_detached_provider_before_commit
             PersistentPiSession(),
         )
     assert session.read_bytes() == before
-    assert InputDispositions(session.parent.parent).get("acp:original")["native_id"] is None
+    assert (
+        InputDispositions(session.parent.parent / InputDispositions.filename)
+        .read()
+        .rows.get("acp:original")
+        .native_id
+        is None
+    )
 
 
 async def test_adaptive_owner_one_original_input_native_commit_without_provider(admitted):
@@ -140,7 +146,13 @@ async def test_adaptive_owner_one_original_input_native_commit_without_provider(
     )
     assert result is True
     assert len(seen) == 1
-    assert InputDispositions(session.parent.parent).get("acp:original")["native_id"] is None
+    assert (
+        InputDispositions(session.parent.parent / InputDispositions.filename)
+        .read()
+        .rows.get("acp:original")
+        .native_id
+        is None
+    )
     entries = [json.loads(line) for line in session.read_text().splitlines()]
     assert sum(row["type"] == "compaction" for row in entries) == 1
 
@@ -152,7 +164,7 @@ async def test_adaptive_owner_correction_during_summary_refuses_native_commit(ad
     async def summarize(_prepared):
         owner = registry.require("owner")
         assert owner.active_turn is not None
-        InputDispositions(session.parent.parent).record(
+        InputDispositions(session.parent.parent / InputDispositions.filename).record(
             "acp:correction",
             seq=None,
             owner="owner",
@@ -223,7 +235,13 @@ async def test_adaptive_unproven_project_settings_skips_without_provider(admitte
         summary_strategy=summarize,
     )
     assert not called
-    assert InputDispositions(session.parent.parent).status("acp:original") == "unknown"
+    assert (
+        InputDispositions(session.parent.parent / InputDispositions.filename)
+        .read()
+        .rows["acp:original"]
+        .declared_name
+        == "unknown"
+    )
 
 
 async def test_adaptive_unbound_custom_model_skips_without_provider(admitted, tmp_path):
@@ -265,7 +283,7 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
         if correction:
             owner = comms.registry.require("proj")
             assert owner.active_turn is not None
-            InputDispositions(root).record(
+            InputDispositions(root / InputDispositions.filename).record(
                 "acp:correction",
                 seq=None,
                 owner="proj",
@@ -329,7 +347,7 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
     store.create_goal("goal-acp")
     agent.turns.goal_store = store
     admission = comms.registry.snapshot().admission_generations["proj"]
-    InputDispositions(root).record(
+    InputDispositions(root / InputDispositions.filename).record(
         "acp:original",
         seq=None,
         owner="proj",
@@ -366,12 +384,24 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
             with pytest.raises(RelationViolationError, match="Unsettled"):
                 await turn
             assert dispatched == []
-            assert InputDispositions(root).status("acp:original") == "unknown"
+            assert (
+                InputDispositions(root / InputDispositions.filename)
+                .read()
+                .rows["acp:original"]
+                .declared_name
+                == "unknown"
+            )
             assert comms.registry.require("proj").goal.state.declared_name == "blocked"
         else:
             await turn
             assert dispatched == ["a" * 32]
-            assert InputDispositions(root).status("acp:original") == "started"
+            assert (
+                InputDispositions(root / InputDispositions.filename)
+                .read()
+                .rows["acp:original"]
+                .declared_name
+                == "started"
+            )
         compactions = [
             row
             for line in session.read_text().splitlines()
@@ -412,4 +442,10 @@ async def test_adaptive_owner_selected_model_mismatch_skips_without_provider(adm
         summary_strategy=summarize,
     )
     assert not called
-    assert InputDispositions(session.parent.parent).get("acp:original")["native_id"] is None
+    assert (
+        InputDispositions(session.parent.parent / InputDispositions.filename)
+        .read()
+        .rows.get("acp:original")
+        .native_id
+        is None
+    )

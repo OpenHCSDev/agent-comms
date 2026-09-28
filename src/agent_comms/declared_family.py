@@ -92,6 +92,7 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     """
 
     declared_name: ClassVar[str]
+    family_discriminator: ClassVar[str] = "kind"
     _family_root: ClassVar[type[DeclaredFamily] | None] = None
     _family_affix: ClassVar[str]
     __registry__: ClassVar[dict[str, type[DeclaredFamily]]]

@@ -71,11 +71,11 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
                     "reviewed_inputs": [row["inputId"] for row in result["unresolved_inputs"]],
                 },
             )
-        assert all(not agent.inputs.dispositions.get(key).get("goal_reviews") for key in keys)
-        assert not agent.inputs.dispositions.get("acp:owner-input").get("goal_reviews")
+        assert all(not agent.inputs.dispositions.read().rows.get(key).goal_reviews for key in keys)
+        assert not agent.inputs.dispositions.read().rows.get("acp:owner-input").goal_reviews
         with pytest.raises(ValueError, match="pending or UNKNOWN"):
             report.invoke(comms, {**args, "reviewed_inputs": keys[1:]})
-        assert all(not agent.inputs.dispositions.get(key).get("goal_reviews") for key in keys)
+        assert all(not agent.inputs.dispositions.read().rows.get(key).goal_reviews for key in keys)
         with pytest.raises(ValueError, match="recipient"):
             report.invoke(comms, {**args, "reviewed_inputs": ["bus:999999"]})
         unrelated = comms.messaging.send_message("other", "worker", "Not a declared dependency")
@@ -97,8 +97,8 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
         assert pending and all(turn.direct_interrupt_goal_id == goal.id for turn in pending)
         assert all(turn.goal_wait_id is None for turn in pending)
         for turn in pending:
-            row = agent.inputs.dispositions.get(turn.direct_interrupt_input_key)
-            assert row is not None and row["status"] == "unknown" and row["native_id"] is None
+            row = agent.inputs.dispositions.read().rows.get(turn.direct_interrupt_input_key)
+            assert row is not None and row.declared_name == "unknown" and row.native_id is None
         agent.turns.schedule_goal("worker")
         # The standby wait still defers any goal turn; the ordinary interrupts
         # stay queued and unattempted.
@@ -107,9 +107,9 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
         assert again["reviewed_inputs"] == []
         assert [row["inputId"] for row in again["already_reviewed_inputs"]] == keys
         for key in keys:
-            row = agent.inputs.dispositions.get(key)
-            assert row["status"] == "unknown" and row["native_id"] is None
-            assert agent.inputs.dispositions.reviewed_for_goal(row, goal.id)
+            row = agent.inputs.dispositions.read().rows.get(key)
+            assert row.declared_name == "unknown" and row.native_id is None
+            assert row.reviewed_for_goal(goal.id)
         # Durable explicit handling survives reopening and a later wait declaration.
         reopened = wire(comms.root)
         reopened.goals.update_goal("worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)))

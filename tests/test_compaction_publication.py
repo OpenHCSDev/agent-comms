@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import asyncio
 import json
 import os
@@ -9,6 +10,8 @@ import subprocess
 import sys
 
 import pytest
+
+from agent_comms.input_disposition import InputDispositions
 
 from agent_comms import agent_events as ae
 from agent_comms import compaction_publication
@@ -38,7 +41,11 @@ def owner(tmp_path):
     session = tmp_path / "saved.jsonl"
     session.write_text("{}\n")
     journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
-    commit_id = journal.begin(str(session), {"summary": "private summary must not publish"})
+    commit_id = journal.begin(
+        str(session),
+        {"summary": "private summary must not publish"},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     journal.resolve(
         commit_id,
         CommittedOperation(),

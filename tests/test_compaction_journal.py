@@ -1,5 +1,6 @@
 """Durable intent state machine, provider-free and independent of native Pi."""
 
+
 import json
 import os
 import sqlite3
@@ -8,6 +9,8 @@ import subprocess
 import sys
 
 import pytest
+
+from agent_comms.input_disposition import InputDispositions
 
 from agent_comms.compaction_journal import (
     CompactionJournal,
@@ -50,7 +53,11 @@ def test_every_commit_syncs_directory_after_constructor(journal, monkeypatch):
         fsync(fd)
 
     monkeypatch.setattr(os, "fsync", observed)
-    commit_id = journal.begin(session, {})
+    commit_id = journal.begin(
+        session,
+        {},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     assert len(directories) == 1
     journal.resolve(commit_id, UnknownOperation(), {})
     assert len(directories) == 2
@@ -67,11 +74,20 @@ def test_postcommit_sync_fault_is_unknown_not_accepted_intent(journal, monkeypat
 
     monkeypatch.setattr(os, "fsync", denied)
     with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
-        journal.begin(session, {}, commit_id="a" * 32)
+        journal.begin(
+            session,
+            {},
+            commit_id="a" * 32,
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
     monkeypatch.setattr(os, "fsync", fsync)
     assert journal.get("a" * 32).state.declared_name == "intent"
     with pytest.raises(CompactionJournalError, match="never replay"):
-        journal.begin(session, {})
+        journal.begin(
+            session,
+            {},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
 
 
 def test_ineffective_durability_mode_refused_before_transaction(journal, monkeypatch):
@@ -86,7 +102,11 @@ def test_ineffective_durability_mode_refused_before_transaction(journal, monkeyp
 
     monkeypatch.setattr(sqlite3, "connect", lambda *a, **kw: connect(*a, **kw, factory=WrongMode))
     with pytest.raises(CompactionJournalError, match="mode unavailable"):
-        journal.begin(session, {})
+        journal.begin(
+            session,
+            {},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
     monkeypatch.setattr(sqlite3, "connect", connect)
     assert journal.unresolved(session) == ()
 
@@ -103,8 +123,9 @@ def test_intent_survives_process_death_and_blocks_new_dispatch(tmp_path):
 import os,sys
 from pathlib import Path
 from agent_comms.compaction_journal import CompactionJournal
+from agent_comms.input_disposition import InputDispositions
 journal = CompactionJournal(Path(sys.argv[1]))
-journal.begin(sys.argv[2], {'payloadDigest':'digest'}, commit_id='a'*32)
+journal.begin(sys.argv[2], {'payloadDigest':'digest'}, commit_id='a'*32, inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read())
 os._exit(17)
 """,
             str(db),
@@ -118,36 +139,68 @@ os._exit(17)
     assert operation.state.declared_name == "intent"
     assert json.loads(operation.intent_json) == {"payloadDigest": "digest"}
     with pytest.raises(CompactionJournalError, match="never replay"):
-        journal.begin(str(session), {})
+        journal.begin(
+            str(session),
+            {},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
 
 
 @pytest.mark.parametrize("outcome", ["committed", "refused", "aborted-no-write"])
 def test_terminal_is_immutable_and_id_never_reusable(journal, outcome):
     journal, session = journal
-    commit_id = journal.begin(session, {})
+    commit_id = journal.begin(
+        session,
+        {},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     journal.resolve(commit_id, OperationState.decode(outcome)(), {"proof": "fixture"})
     with pytest.raises(CompactionJournalError):
         journal.resolve(commit_id, UnknownOperation(), {})
     with pytest.raises(CompactionJournalError, match="reused commit ID"):
-        journal.begin(session, {}, commit_id=commit_id)
-    assert journal.begin(session, {}) != commit_id
+        journal.begin(
+            session,
+            {},
+            commit_id=commit_id,
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
+    assert (
+        journal.begin(
+            session,
+            {},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
+        != commit_id
+    )
 
 
 def test_unknown_requires_reconciliation_not_refusal(journal):
     journal, session = journal
-    commit_id = journal.begin(session, {})
+    commit_id = journal.begin(
+        session,
+        {},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     journal.resolve(commit_id, UnknownOperation(), {})
     with pytest.raises(CompactionJournalError):
         journal.resolve(commit_id, RefusedOperation(), {})
     with pytest.raises(CompactionJournalError):
-        journal.begin(session, {})
+        journal.begin(
+            session,
+            {},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
     journal.resolve(commit_id, CommittedOperation(), {"entryId": "native"})
     assert journal.get(commit_id).state.declared_name == "committed"
 
 
 def test_metadata_only_outbox_is_commit_id_keyed_and_atomic(journal, tmp_path):
     journal, session = journal
-    commit_id = journal.begin(session, {"summary": "secret never published"})
+    commit_id = journal.begin(
+        session,
+        {"summary": "secret never published"},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     assert journal.pending_publications(session) == ()
     journal.resolve(commit_id, UnknownOperation(), {"status": "unknown", "reason": "deadline"})
     assert journal.pending_publications(session) == ()
@@ -170,7 +223,11 @@ def test_metadata_only_outbox_is_commit_id_keyed_and_atomic(journal, tmp_path):
     reopened.observe_publication(commit_id, pending[0].metadata_json)
     reopened.observe_publication(commit_id, pending[0].metadata_json)
     assert CompactionJournal(journal.path).pending_publications(session) == ()
-    second = journal.begin(session, {})
+    second = journal.begin(
+        session,
+        {},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     journal.resolve(
         second,
         CommittedOperation(),
@@ -182,7 +239,11 @@ def test_metadata_only_outbox_is_commit_id_keyed_and_atomic(journal, tmp_path):
 
 def test_observe_postcommit_parent_fsync_unknown_can_already_be_observed(journal, monkeypatch):
     journal, session = journal
-    commit_id = journal.begin(session, {})
+    commit_id = journal.begin(
+        session,
+        {},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     journal.resolve(
         commit_id,
         CommittedOperation(),
@@ -214,7 +275,11 @@ def test_observe_postcommit_parent_fsync_unknown_can_already_be_observed(journal
 
 def test_changed_publication_metadata_refuses_local_projection(journal):
     journal, session = journal
-    commit_id = journal.begin(session, {})
+    commit_id = journal.begin(
+        session,
+        {},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     journal.resolve(
         commit_id,
         CommittedOperation(),
@@ -232,7 +297,11 @@ def test_changed_publication_metadata_refuses_local_projection(journal):
 
 def test_no_publication_without_exact_committed_native_evidence(journal):
     journal, session = journal
-    commit_id = journal.begin(session, {})
+    commit_id = journal.begin(
+        session,
+        {},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     with pytest.raises(CompactionJournalError, match="Exact committed"):
         journal.resolve(
             commit_id,
@@ -249,14 +318,26 @@ def test_session_alias_cannot_bypass_unresolved_intent(journal, tmp_path):
     journal, session = journal
     alias = tmp_path / "alias.jsonl"
     alias.symlink_to(session)
-    journal.begin(session, {})
+    journal.begin(
+        session,
+        {},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     with pytest.raises(CompactionJournalError):
-        journal.begin(str(alias), {})
+        journal.begin(
+            str(alias),
+            {},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
 
 
 def test_durable_intent_does_not_retain_mutable_caller_data(journal):
     journal, session = journal
     intent = {"witness": {"leaf": "original"}}
-    commit_id = journal.begin(session, intent)
+    commit_id = journal.begin(
+        session,
+        intent,
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     intent["witness"]["leaf"] = "forged"
     assert json.loads(journal.get(commit_id).intent_json)["witness"]["leaf"] == "original"

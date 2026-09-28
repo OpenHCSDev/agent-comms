@@ -98,7 +98,7 @@ async def owner_fixture(tmp_path, monkeypatch, *, real_host=False, goal=True):
         owner, epoch = registry.claim_live_turn_with_generation(
             owner, "turn", expected_owner_generation=epoch
         )
-        inputs = InputDispositions(tmp_path)
+        inputs = InputDispositions(tmp_path / InputDispositions.filename)
         inputs.record(
             "acp:original",
             seq=None,
@@ -171,7 +171,7 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         assert persistent.proc is None and persistent.reopen_required == file
         assert not native_input_admitted(tmp_path, file)
         token = admitted[0]
-        assert inputs.get("acp:original")["native_id"] is None
+        assert inputs.read().rows.get("acp:original").native_id is None
         with _store_lock(tmp_path / "wire"):
             assert token.consume_bound_original(
                 wire_root=tmp_path,
@@ -189,7 +189,7 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
                 sent_text="Continue",
                 dispositions=inputs,
             )
-        assert inputs.get("acp:original")["native_id"] == "a" * 32
+        assert inputs.read().rows.get("acp:original").native_id == "a" * 32
 
 
 @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
@@ -264,7 +264,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
         store.create_goal("goal-acp")
         agent.turns.goal_store = store
         agent.turns.persistent_backends["proj"] = persistent
-        dispositions = InputDispositions(root)
+        dispositions = InputDispositions(root / InputDispositions.filename)
         if private_session:
             record_fixture_history(
                 dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
@@ -352,11 +352,11 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 with pytest.raises(RelationViolationError, match="Unsettled"):
                     await turn
                 assert dispatched == []
-                assert dispositions.get(original_key)["native_id"] is None
+                assert dispositions.read().rows.get(original_key).native_id is None
             else:
                 await turn
                 assert len(dispatched) == (0 if real_host else 1)
-                assert dispositions.status(original_key) == "started"
+                assert dispositions.read().rows[original_key].declared_name == "started"
             journal = CompactionJournal(root / "compaction-commits.sqlite3")
             attempt = journal.selected_summary(summary_ids[0])
             terminal_status = "declined-prestart" if clean_decline else "linked"
@@ -371,7 +371,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
             if real_host and not correction:
                 assert persistent.reopen_required is None
                 assert persistent.proc is not None
-                native_id = dispositions.get(original_key)["native_id"]
+                native_id = dispositions.read().rows.get(original_key).native_id
                 assert native_id
                 user_entries = [
                     row
@@ -411,7 +411,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                     original_owner_input=True,
                     original_goal_id="goal-next",
                 )
-                assert dispositions.status("acp:next") == "started"
+                assert dispositions.read().rows["acp:next"].declared_name == "started"
                 assert len(summary_ids) == 2
                 assert all(
                     journal.selected_summary(key).state.declared_name == terminal_status
@@ -425,7 +425,8 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                     0 if clean_decline else 2
                 )
                 original_ids = {
-                    dispositions.get(key)["native_id"] for key in (original_key, "acp:next")
+                    dispositions.read().rows.get(key).native_id
+                    for key in (original_key, "acp:next")
                 }
                 assert len(original_ids) == 2
                 assert (
@@ -480,7 +481,7 @@ async def test_correction_after_native_commit_never_mints_original_admission(tmp
                 on_admission=admissions.append,
             )
         assert admissions == []
-        assert inputs.get("acp:original")["native_id"] is None
+        assert inputs.read().rows.get("acp:original").native_id is None
         entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
         assert sum(row["type"] == "compaction" for row in entries) == 1
         assert not native_input_admitted(tmp_path, file)
@@ -515,7 +516,7 @@ async def test_selected_effective_disabled_skips_without_reserving_or_mutating(
         assert Path(file).read_bytes() == before
         assert persistent.proc is not None
         assert not (tmp_path / "compaction-commits.sqlite3").exists()
-        assert inputs.get("acp:original")["native_id"] is None
+        assert inputs.read().rows.get("acp:original").native_id is None
 
 
 async def test_selected_custom_model_and_project_settings_use_actual_owner(tmp_path, monkeypatch):
@@ -569,7 +570,7 @@ async def test_selected_custom_model_and_project_settings_use_actual_owner(tmp_p
             on_admission=admitted.append,
         )
         assert len(admitted) == 1
-        assert inputs.get("acp:original")["native_id"] is None
+        assert inputs.read().rows.get("acp:original").native_id is None
         assert (
             sum(
                 json.loads(line)["type"] == "compaction"
@@ -601,4 +602,4 @@ async def test_owner_without_goal_compacts_with_exact_turn_authority(tmp_path, m
             on_admission=admitted.append,
         )
         assert len(admitted) == 1
-        assert inputs.get("acp:original")["native_id"] is None
+        assert inputs.read().rows.get("acp:original").native_id is None

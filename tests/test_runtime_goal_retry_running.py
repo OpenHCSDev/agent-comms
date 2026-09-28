@@ -65,7 +65,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
         target=session,
         text="Uncertain old input must never replay",
     )
-    old_unknown = owner.inputs.dispositions.get("acp:old-unknown")
+    old_unknown = owner.inputs.dispositions.read().rows.get("acp:old-unknown")
 
     async def events(*args, **kwargs):
         nonlocal active_backends, max_active_backends
@@ -173,7 +173,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
             assert comms.registry.require(session).goal.state.declared_name == "completed"
             assert store.snapshot(goal.id).lifecycle == CompletedGeneration()
         assert max_active_backends == 1
-        assert owner.inputs.dispositions.get("acp:old-unknown") == old_unknown
+        assert owner.inputs.dispositions.read().rows.get("acp:old-unknown") == old_unknown
         assert all("Uncertain old input must never replay" not in prompt for prompt in calls)
     finally:
         release.set()

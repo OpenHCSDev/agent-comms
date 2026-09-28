@@ -5,7 +5,6 @@ import sqlite3
 
 from agent_comms.cli import main
 from agent_comms.comms import wire
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.routing import ScheduledTurn
 from agent_comms.threads import Thread
 
@@ -17,7 +16,7 @@ def fixture(tmp_path):
     message = comms.messaging.send_message("peer", "worker", "Review the implementation")
     source = ScheduledTurn.incoming(message).prompt
     sent = "Coordination context: owner instructions\n\n" + source
-    dispositions = InputDispositions(comms.root)
+    dispositions = InputDispositions(comms.root / InputDispositions.filename)
     key = f"bus:{message.seq}"
     dispositions.record(
         key, seq=message.seq, owner="worker", admission=1, target="worker", text=source
@@ -63,7 +62,7 @@ def test_preview_is_read_only_and_apply_is_idempotent_without_ack(tmp_path):
     event = wire(comms.root).transcripts.thread_transcript_page("worker").events[0]
     assert event.text == message.body and event.routing.requests == (message,)
     assert dispositions.path.read_bytes() == before
-    assert dispositions.status(f"bus:{message.seq}") == "unknown"
+    assert dispositions.read().rows[f"bus:{message.seq}"].declared_name == "unknown"
     assert comms.bus.pending_count("worker") == pending
 
 
@@ -156,7 +155,7 @@ def test_channel_batch_recovers_one_binding_for_all_admitted_sequences(tmp_path)
     messages = tuple(comms.messaging.send_message("peer", "#team", body) for body in ("First", "Second"))
     sources = [ScheduledTurn.incoming(message).prompt for message in messages]
     sent = "Coordination context: owner instructions\n\n" + "\n\n".join(sources)
-    dispositions = InputDispositions(comms.root)
+    dispositions = InputDispositions(comms.root / InputDispositions.filename)
     for message, source in zip(messages, sources, strict=True):
         key = dispositions.bus_key(message, owner)
         dispositions.record(

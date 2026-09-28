@@ -22,6 +22,7 @@ from .comms import Comms
 from .coordination_store import (
     PublicationActivationBlocked,
 )
+from .input_attempt import InputAttempt
 from .input_disposition import AcpDeliveryCursors, FutureInputQueue, InputDispositions
 from .input_effects import InputEffects
 from .messages import Message
@@ -47,7 +48,7 @@ class QueuedInput:
     echo: bool
     owner_created_at: float
     admission: int
-    receipt: dict[str, Any] | None = None
+    receipt: InputAttempt | None = None
     turn_id: str | None = None
 
 
@@ -77,8 +78,8 @@ class InputDrain(FutureInputQueue):
         self.turn_original_input_keys: dict[str, tuple[str, ...]] = {}
         self.selected_summary_admissions: dict[str, SelectedSummaryAdmission] = {}
         self.turn_input_text: dict[str, str] = {}
-        self.dispositions = InputDispositions(comms.root)
-        self.delivery_cursors = AcpDeliveryCursors(comms.root)
+        self.dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        self.delivery_cursors = AcpDeliveryCursors(comms.root / AcpDeliveryCursors.filename)
         self.passive_awareness = PassiveChannelAwareness(comms.root)
         self.legacy_through: dict[str, int] = {}
         self.auto_wake = auto_wake
@@ -97,7 +98,7 @@ class InputDrain(FutureInputQueue):
                 self.inbox_cursors.pop(session_id, None)
                 self.legacy_through.pop(session_id, None)
             return
-        cursor, legacy = self.delivery_cursors.initialize(
+        boundary = self.delivery_cursors.initialize(
             self.comms.registry.aliases_for(thread.name),
             thread.name,
             high_water=self.comms.bus.log.latest_sequence(),
@@ -115,8 +116,8 @@ class InputDrain(FutureInputQueue):
                     channels=self.comms.channels.catalog.read().targets_for(owner.tags),
                     fresh=fresh,
                 )
-        self.inbox_cursors[session_id] = cursor
-        self.legacy_through[session_id] = legacy
+        self.inbox_cursors[session_id] = boundary.cursor
+        self.legacy_through[session_id] = boundary.legacy_through
 
     async def clear_queued_inputs(self, session_id: str) -> None:
         """Drop prompts queued against the backend for this session.
@@ -254,9 +255,9 @@ class InputDrain(FutureInputQueue):
         )
 
     async def emit_input_disposition(
-        self, session_id: str, row: dict[str, Any], client: Any = None
+        self, session_id: str, row: InputAttempt, client: Any = None
     ) -> None:
-        await self.emit_public_input_disposition(session_id, InputDispositions.public(row), client)
+        await self.emit_public_input_disposition(session_id, row.public(), client)
 
     async def emit_public_input_disposition(
         self, session_id: str, disposition: dict[str, Any], client: Any = None
@@ -432,7 +433,7 @@ class InputDrain(FutureInputQueue):
                         target=message.target,
                         text=incoming.prompt,
                     )
-                    row = self.dispositions.get(key)
+                    row = self.dispositions.read().rows.get(key)
                     admitted = (
                         admitted
                         and message.seq > self.legacy_through.get(session_id, 0)
@@ -463,7 +464,7 @@ class InputDrain(FutureInputQueue):
                         )
                 self.delivery_cursors.advance(aliases, message.seq)
                 self.inbox_cursors[session_id] = message.seq
-            if row is not None and row["status"] == "unknown":
+            if row is not None and row.unresolved:
                 await self.emit_input_disposition(session_id, row)
             if (
                 admitted
@@ -563,13 +564,13 @@ class InputDrain(FutureInputQueue):
                                 turn.direct_interrupt_goal_id is None
                                 or (
                                     (
-                                        row := self.dispositions.get(
+                                        row := self.dispositions.read().rows.get(
                                             turn.direct_interrupt_input_key or ""
                                         )
                                     )
                                     is not None
-                                    and row["status"] == "unknown"
-                                    and row["native_id"] is None
+                                    and row.unresolved
+                                    and row.native_id is None
                                 )
                             )
                         ]
@@ -710,7 +711,7 @@ class InputDrain(FutureInputQueue):
                     defer_display,
                     owner_row.created_at,
                     admission,
-                    self.dispositions.get(key),
+                    self.dispositions.read().rows.get(key),
                     owner_row.active_turn.id if owner_row.active_turn else None,
                 )
             inbox.put_nowait(
@@ -743,7 +744,7 @@ class InputDrain(FutureInputQueue):
 
     def future_inputs(
         self, owner: Thread, pending_input_key: str | None
-    ) -> dict[str, dict[str, Any]]:
+    ) -> dict[str, InputAttempt]:
         """Live queued receipts only; durable UNKNOWN alone never grants this exception.
 
         The bridge holds the wire lock while reading this owner. Acceptance,
@@ -810,8 +811,8 @@ class InputDrain(FutureInputQueue):
             )
         )
         for key in started_keys:
-            row = self.dispositions.get(key)
-            if row is not None and row["status"] == "started":
+            row = self.dispositions.read().rows.get(key)
+            if row is not None and not row.unresolved:
                 await self.emit_input_disposition(session_id, row)
         if input_id is not None:
             self.forwarded_inputs.get(session_id, set()).discard(input_id)
@@ -907,7 +908,7 @@ class InputDrain(FutureInputQueue):
                 target=canonical,
                 text=display_text or task or "[image prompt]",
             )
-        row = self.dispositions.get(key)
+        row = self.dispositions.read().rows.get(key)
         assert row is not None
         await self.emit_input_disposition(session_id, row)
         await self.effects.turns.run_agent_turn(

@@ -233,19 +233,24 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         from .input_disposition import AcpDeliveryCursors, InputDispositions
 
         aliases = review.owners
-        cursor = AcpDeliveryCursors(ctx.goals.root).cursor(aliases)
-        dispositions = InputDispositions(ctx.goals.root)
-        unknown = {row["key"]: row for row in review.unknown}
+        cursor = (
+            AcpDeliveryCursors(ctx.goals.root / AcpDeliveryCursors.filename)
+            .read()
+            .boundary(aliases)
+            .cursor
+        )
+        dispositions = InputDispositions(ctx.goals.root / InputDispositions.filename)
+        unknown = {row.key: row for row in review.unknown}
         reviewed_keys = tuple(dict.fromkeys(self.reviewed_inputs))
-        if any(key not in unknown or unknown[key]["sequence"] is None for key in reviewed_keys):
+        if any(key not in unknown or unknown[key].sequence is None for key in reviewed_keys):
             raise ValueError("Review only this recipient's exact unresolved bus input keys.")
-        reviewed_sequences = {unknown[key]["sequence"] for key in reviewed_keys}
+        reviewed_sequences = {unknown[key].sequence for key in reviewed_keys}
         prior_reviews = {
-            row["sequence"]
+            row.sequence
             for row in unknown.values()
-            if goal is not None and dispositions.reviewed_for_goal(row, goal.id)
+            if goal is not None and row.reviewed_for_goal(goal.id)
         }
-        unresolved = {row["sequence"] for row in unknown.values() if row["sequence"] is not None}
+        unresolved = {row.sequence for row in unknown.values() if row.sequence is not None}
         senders = review.senders
         if not set(reviewed_keys) <= review.eligible_keys:
             raise ValueError("Review only direct inputs from these declared dependencies.")

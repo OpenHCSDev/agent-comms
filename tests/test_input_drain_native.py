@@ -73,8 +73,8 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
             assert receipt["status"] == "accepted_not_started"
             key = "acp:" + receipt["inputId"]
             accepted.append(key)
-            row = agent.inputs.dispositions.get(key)
-            assert row["native_id"] is None and row["status"] == "unknown"
+            row = agent.inputs.dispositions.read().rows.get(key)
+            assert row.native_id is None and row.declared_name == "unknown"
             if foreign:
                 for name in ("foreign", "another"):
                     comms.threads.register(Thread(name, frozenset(), str(project)))
@@ -112,11 +112,11 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
         try:
             async with asyncio.timeout(35):
                 await agent.prompt("proj", [{"type": "text", "text": "Original after summary"}])
-            rows = agent.inputs.dispositions._read()
-            own = [row for row in rows.values() if row["owner"] == "proj"]
+            rows = agent.inputs.dispositions.read().rows
+            own = [row for row in rows.values() if row.owner == "proj"]
             assert len(own) == 2
-            assert all(row["status"] == "started" for row in own), own
-            assert len({row["native_id"] for row in own}) == 2
+            assert all(row.declared_name == "started" for row in own), own
+            assert len({row.native_id for row in own}) == 2
             journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
             assert len(operations) == 1
             assert journal.selected_summary(operations[0]).state.declared_name == "linked"
@@ -124,7 +124,7 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
             entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
             compact = [i for i, row in enumerate(entries) if row["type"] == "compaction"]
             assert len(compact) == 1
-            original = next(row for row in own if row["key"] != accepted[0])
+            original = next(row for row in own if row.key != accepted[0])
             followup = rows[accepted[0]]
             positions = []
             for row in (original, followup):
@@ -132,13 +132,13 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
                     i
                     for i, event in enumerate(entries)
                     if event["type"] == "message"
-                    and event["message"].get("inputId") == row["native_id"]
+                    and event["message"].get("inputId") == row.native_id
                 ]
                 assert len(starts) == 1
                 positions.append(starts[0])
             assert compact[0] < positions[0] < positions[1]
             assert not agent.inputs.queued_inputs.get("proj")
             if foreign:
-                assert rows["acp:foreign"]["status"] == "unknown"
+                assert rows["acp:foreign"].declared_name == "unknown"
         finally:
             await agent.shutdown()

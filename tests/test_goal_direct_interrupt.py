@@ -68,10 +68,10 @@ async def test_new_nondependency_direct_dm_interrupts_active_goal_without_attemp
         native = "a" * 32
         with kwargs["send_boundary"](None, native, task) as allowed:
             assert allowed is True
-        row = agent.inputs.dispositions.get(f"bus:{message.seq}")
+        row = agent.inputs.dispositions.read().rows.get(f"bus:{message.seq}")
         assert row is not None
         assert agent.inputs.dispositions.started(
-            row["key"], turn_id=row["turn_id"], native_id=native, text=task
+            row.key, turn_id=row.turn_id, native_id=native, text=task
         )
         yield ae.InputStarted(id=None)
         yield ae.Chunk(text="Answer to outsider")
@@ -97,7 +97,9 @@ async def test_new_nondependency_direct_dm_interrupts_active_goal_without_attemp
         agent.inputs.schedule_wake(session)
         await asyncio.wait_for(agent.inputs.wake_tasks[session], timeout=3)
         assert len(seen) == 1
-        assert agent.inputs.dispositions.status(f"bus:{message.seq}") == "started"
+        assert (
+            agent.inputs.dispositions.read().rows[f"bus:{message.seq}"].declared_name == "started"
+        )
         assert comms.goals.goal_wait(session) == original_wait
         assert comms.registry.require(session).goal == original_goal
         assert not (comms.root / "goal-private").exists()
@@ -126,9 +128,9 @@ async def test_failed_direct_turn_leaves_goal_and_standby_wait_untouched(tmp_pat
         native = "c" * 32
         with kwargs["send_boundary"](None, native, task) as allowed:
             assert allowed is True
-        row = agent.inputs.dispositions.get(f"bus:{message.seq}")
+        row = agent.inputs.dispositions.read().rows.get(f"bus:{message.seq}")
         assert agent.inputs.dispositions.started(
-            row["key"], turn_id=row["turn_id"], native_id=native, text=task
+            row.key, turn_id=row.turn_id, native_id=native, text=task
         )
         yield ae.InputStarted(id=None)
         yield ae.StreamSettled()
@@ -140,7 +142,9 @@ async def test_failed_direct_turn_leaves_goal_and_standby_wait_untouched(tmp_pat
         await asyncio.wait_for(agent.inputs.wake_tasks[session], timeout=3)
         assert comms.registry.require(session).goal == original_goal
         assert comms.goals.goal_wait(session) == original_wait
-        assert agent.inputs.dispositions.status(f"bus:{message.seq}") == "started"
+        assert (
+            agent.inputs.dispositions.read().rows[f"bus:{message.seq}"].declared_name == "started"
+        )
         assert not (comms.root / "goal-private").exists()
         assert not agent.inputs.pending_turns.get(session)
     finally:
@@ -169,9 +173,9 @@ async def test_benign_wait_replacement_does_not_strand_queued_interrupt(tmp_path
             native = "d" * 32
             with kwargs["send_boundary"](None, native, task) as allowed:
                 outcome.append(allowed)
-            row = agent.inputs.dispositions.get(f"bus:{message.seq}")
+            row = agent.inputs.dispositions.read().rows.get(f"bus:{message.seq}")
             assert agent.inputs.dispositions.started(
-                row["key"], turn_id=row["turn_id"], native_id=native, text=task
+                row.key, turn_id=row.turn_id, native_id=native, text=task
             )
             yield ae.InputStarted(id=None)
             yield ae.Chunk(text="Still answering")
@@ -198,7 +202,9 @@ async def test_benign_wait_replacement_does_not_strand_queued_interrupt(tmp_path
         # The interrupt ran once under the SAME goal; the refreshed standby
         # wait is preserved untouched, never consumed by this turn.
         assert outcome == [True]
-        assert agent.inputs.dispositions.status(f"bus:{message.seq}") == "started"
+        assert (
+            agent.inputs.dispositions.read().rows[f"bus:{message.seq}"].declared_name == "started"
+        )
         assert comms.goals.goal_wait(session) == new_wait
         assert comms.registry.require(session).goal.id == goal.id
         assert comms.registry.require(session).goal.state.active
@@ -225,7 +231,7 @@ async def test_historical_unknown_is_not_replayed_and_dependency_path_is_distinc
             text=ScheduledTurn.incoming(old).prompt,
         )
         assert await agent.inputs.drain_owned_inbox(session) == 1
-        assert agent.inputs.dispositions.status(old_key) == "unknown"
+        assert agent.inputs.dispositions.read().rows[old_key].declared_name == "unknown"
         assert not agent.inputs.pending_turns.get(session)
         called = []
 
@@ -245,7 +251,7 @@ async def test_historical_unknown_is_not_replayed_and_dependency_path_is_distinc
             direct_interrupt_ticket="forged-ticket",
         )
         assert called == []
-        assert agent.inputs.dispositions.status(old_key) == "unknown"
+        assert agent.inputs.dispositions.read().rows[old_key].declared_name == "unknown"
         dependent = comms.messaging.send_message("dependency", session, "Declared answer")
         assert await agent.inputs.drain_owned_inbox(session) == 1
         pending = agent.inputs.pending_turns[session]
@@ -254,7 +260,7 @@ async def test_historical_unknown_is_not_replayed_and_dependency_path_is_distinc
         assert pending[0].goal_id == goal.id
         assert pending[0].goal_wait_id == comms.goals.goal_wait(session).wait_id
         assert pending[0].direct_interrupt_goal_id is None
-        assert agent.inputs.dispositions.status(old_key) == "unknown"
+        assert agent.inputs.dispositions.read().rows[old_key].declared_name == "unknown"
     finally:
         await agent.shutdown()
 
@@ -290,7 +296,9 @@ async def test_new_owner_admission_refuses_old_direct_input_at_send_boundary(tmp
             direct_interrupt_ticket=pending.direct_interrupt_ticket,
         )
         assert seen == [False]
-        assert agent.inputs.dispositions.status(f"bus:{message.seq}") == "unknown"
+        assert (
+            agent.inputs.dispositions.read().rows[f"bus:{message.seq}"].declared_name == "unknown"
+        )
         assert comms.registry.require(session).goal == goal
     finally:
         await agent.shutdown()
@@ -310,7 +318,9 @@ async def test_active_backend_does_not_steer_nondependency_dm_into_goal_attempt(
         assert len(pending) == 1
         assert pending[0].direct_interrupt_goal_id == goal.id
         assert pending[0].origin.seq == message.seq
-        assert agent.inputs.dispositions.status(f"bus:{message.seq}") == "unknown"
+        assert (
+            agent.inputs.dispositions.read().rows[f"bus:{message.seq}"].declared_name == "unknown"
+        )
     finally:
         await agent.shutdown()
 
@@ -359,9 +369,9 @@ async def test_queue_survives_progress_bump_and_rebinds_at_dispatch(tmp_path, mo
             native = "f" * 32
             with kwargs["send_boundary"](None, native, task) as allowed:
                 assert allowed is True
-            row = agent.inputs.dispositions.get(f"bus:{message.seq}")
+            row = agent.inputs.dispositions.read().rows.get(f"bus:{message.seq}")
             assert agent.inputs.dispositions.started(
-                row["key"], turn_id=row["turn_id"], native_id=native, text=task
+                row.key, turn_id=row.turn_id, native_id=native, text=task
             )
             yield ae.InputStarted(id=None)
             yield ae.Chunk(text="Answer after the bump")
@@ -373,8 +383,8 @@ async def test_queue_survives_progress_bump_and_rebinds_at_dispatch(tmp_path, mo
         agent.inputs.schedule_wake(session)
         await asyncio.wait_for(agent.inputs.wake_tasks[session], timeout=3)
         # The turn dispatched once with the FRESH revision and stayed started.
-        row = agent.inputs.dispositions.get(f"bus:{message.seq}")
-        assert row is not None and row["status"] == "started"
+        row = agent.inputs.dispositions.read().rows.get(f"bus:{message.seq}")
+        assert row is not None and row.declared_name == "started"
         assert not agent.inputs.pending_turns.get(session)
     finally:
         await agent.shutdown()
@@ -429,8 +439,8 @@ async def test_change_after_dispatch_denies_without_retry(tmp_path, monkeypatch,
         )
         # Deny the stale expectation once; no retry, no replay.
         assert seen == [False]
-        row = agent.inputs.dispositions.get(f"bus:{message.seq}")
-        assert row["status"] == "unknown" and row["native_id"] is None
+        row = agent.inputs.dispositions.read().rows.get(f"bus:{message.seq}")
+        assert row.declared_name == "unknown" and row.native_id is None
     finally:
         await agent.shutdown()
 
@@ -472,8 +482,8 @@ async def test_goal_cleared_or_paused_drops_queued_interrupt_without_crash(
             await asyncio.wait_for(agent.inputs.wake_tasks[session], timeout=3)
         # No turn, no crash, no ticket reuse; the row stays durably UNKNOWN.
         assert called == []
-        row = agent.inputs.dispositions.get(f"bus:{message.seq}")
-        assert row is not None and row["status"] == "unknown" and row["native_id"] is None
+        row = agent.inputs.dispositions.read().rows.get(f"bus:{message.seq}")
+        assert row is not None and row.declared_name == "unknown" and row.native_id is None
         assert not agent.inputs.pending_turns.get(session)
         assert not agent.inputs.direct_interrupt_tickets.get(session, {})
     finally:

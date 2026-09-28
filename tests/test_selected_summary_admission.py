@@ -1,5 +1,6 @@
 """Provider-free exact selected terminal ACK → one native input-ID bind."""
 
+
 import asyncio
 import hashlib
 import json
@@ -91,7 +92,7 @@ def case(tmp_path):
     journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
     key, text = "acp:" + "a" * 32, "original fake input"
     identity = _identity(str(session), text=text, key=key, turn="turn")
-    dispositions = InputDispositions(comms.root)
+    dispositions = InputDispositions(comms.root / InputDispositions.filename)
     assert dispositions.record(
         key,
         seq=None,
@@ -128,6 +129,7 @@ def test_returned_ack_only_one_bound_original_and_no_status_bypass(case, termina
                 "selectedSummaryOperationId": operation_id,
                 "selectedSummarySourceDigest": hashlib.sha256(source.encode()).hexdigest(),
             },
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
         )
         journal.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
         token = journal.link_selected_summary_commit(operation_id, commit_id, admission=identity)
@@ -140,8 +142,8 @@ def test_returned_ack_only_one_bound_original_and_no_status_bypass(case, termina
         pickle.dumps(token)
     assert not native_input_admitted(comms.root, session)
     assert _claim(case, token)
-    row = dispositions.get(identity.ingress_key)
-    assert row is not None and row["native_id"] == "b" * 32 and row["status"] == "unknown"
+    row = dispositions.read().rows.get(identity.ingress_key)
+    assert row is not None and row.native_id == "b" * 32 and row.unresolved
     assert not _claim(case, token, native_id="c" * 32)
     assert not native_input_admitted(comms.root, session)
     reopened = CompactionJournal(journal.path)
@@ -177,7 +179,7 @@ def test_mismatch_consumes_token_without_binding_or_recovery(case, change):
     assert token is not None
     assert not _claim(case, token, identity=replace(identity, **change))
     assert not _claim(case, token)
-    assert dispositions.get(identity.ingress_key)["native_id"] is None
+    assert dispositions.read().rows.get(identity.ingress_key).native_id is None
     assert not native_input_admitted(comms.root, session)
 
 
@@ -216,7 +218,11 @@ def test_reserve_refuses_wrong_durable_original(case):
 
 def test_link_cannot_mint_without_committed_native_source_digest(case):
     comms, session, journal, operation_id, dispositions, identity, text = case
-    commit_id = journal.begin(session, {"selectedSummaryOperationId": operation_id})
+    commit_id = journal.begin(
+        session,
+        {"selectedSummaryOperationId": operation_id},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     journal.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
     with pytest.raises(CompactionJournalError, match="source digest"):
         journal.link_selected_summary_commit(operation_id, commit_id, admission=identity)
@@ -234,7 +240,7 @@ def test_saved_source_drift_consumes_ack(case):
         stream.write("{}\n")
     assert not _claim(case, token)
     assert not _claim(case, token)
-    assert dispositions.get(identity.ingress_key)["native_id"] is None
+    assert dispositions.read().rows.get(identity.ingress_key).native_id is None
     assert not native_input_admitted(comms.root, session)
 
 
@@ -256,7 +262,7 @@ def test_forked_other_process_cannot_use_inherited_ack(case):
     assert os.read(read_fd, 1) == b"0"
     os.close(read_fd)
     assert os.waitpid(child, 0)[1] == 17 << 8
-    assert dispositions.get(identity.ingress_key)["native_id"] is None
+    assert dispositions.read().rows.get(identity.ingress_key).native_id is None
     assert not native_input_admitted(comms.root, session)
 
 
@@ -266,13 +272,12 @@ def test_changed_durable_original_after_reservation_refuses_burn(case):
         operation_id, "split_turn", admission=identity
     )
     assert token is not None
-    with _store_lock(dispositions.path):
-        rows = dispositions._read()
-        rows[identity.ingress_key]["source_text"] = "different original"
-        dispositions._write(rows)
+    saved = json.loads(dispositions.path.read_text())
+    saved["rows"][identity.ingress_key]["source_text"] = "different original"
+    dispositions.path.write_text(json.dumps(saved))
     assert not _claim(case, token)
     assert not _claim(case, token)
-    assert dispositions.get(identity.ingress_key)["native_id"] is None
+    assert dispositions.read().rows.get(identity.ingress_key).native_id is None
     assert not native_input_admitted(comms.root, session)
 
 
@@ -289,7 +294,7 @@ def test_changed_journal_source_refuses_consumption(case):
         )
     assert not _claim(case, token)
     assert not _claim(case, token)
-    assert dispositions.get(identity.ingress_key)["native_id"] is None
+    assert dispositions.read().rows.get(identity.ingress_key).native_id is None
     assert not native_input_admitted(comms.root, session)
 
 
@@ -305,10 +310,12 @@ def test_bind_fault_after_durable_unknown_never_replays(case, monkeypatch):
         assert bind(*args, **kwargs)
         raise OSError("post-bind fault")
 
-    monkeypatch.setattr(dispositions, "bind", bind_then_fail)
+    monkeypatch.setattr(
+        type(dispositions), "bind", lambda self, *args, **kwargs: bind_then_fail(*args, **kwargs)
+    )
     assert not _claim(case, token)
     assert not _claim(case, token)
-    assert dispositions.get(identity.ingress_key)["native_id"] == "b" * 32
+    assert dispositions.read().rows.get(identity.ingress_key).native_id == "b" * 32
     assert not native_input_admitted(comms.root, session)
 
 
@@ -323,6 +330,7 @@ def test_terminal_postcommit_fsync_fault_never_mints_ack(case, monkeypatch, term
                 "selectedSummaryOperationId": operation_id,
                 "selectedSummarySourceDigest": hashlib.sha256(source.encode()).hexdigest(),
             },
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
         )
         journal.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
     monkeypatch.setattr(os, "fsync", lambda _fd: (_ for _ in ()).throw(OSError("denied")))
@@ -347,7 +355,7 @@ def test_terminal_postcommit_fsync_fault_never_mints_ack(case, monkeypatch, term
             identity,
         )
     assert not native_input_admitted(comms.root, session)
-    assert dispositions.get(identity.ingress_key)["native_id"] is None
+    assert dispositions.read().rows.get(identity.ingress_key).native_id is None
 
 
 @pytest.mark.parametrize("terminal", ["declined-prestart", "linked"])
@@ -380,7 +388,7 @@ def test_private_status_only_transaction_cannot_issue_admission_ack(case, termin
     with pytest.raises(CompactionJournalError):
         journal.decline_selected_summary_prestart(operation_id, "split_turn", admission=identity)
     assert not native_input_admitted(comms.root, session)
-    assert dispositions.get(identity.ingress_key)["native_id"] is None
+    assert dispositions.read().rows.get(identity.ingress_key).native_id is None
 
 
 def test_success_without_admission_does_not_create_later_receipt(case):
@@ -428,7 +436,7 @@ source={'source':{'ownerName':identity.owner_name,'ownerPid':identity.owner_pid,
     'originalSha256':digest,'reservedRevision':json.loads(json.dumps(identity.reserved_revision))},
     'selected':{'provider':'fake'},'settings':{'reserveTokens':100}}
 j=CompactionJournal(root/'compaction-commits.sqlite3')
-d=InputDispositions(root)
+d=InputDispositions(root / InputDispositions.filename)
 assert d.record(key,seq=None,owner='project',admission=1,target='project',text=text)
 assert j.reserve_selected_summary(session,source,operation_id=op)==op
 token=j.decline_selected_summary_prestart(op,'split_turn',admission=identity)
@@ -461,9 +469,9 @@ os._exit(17)
     journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
     assert journal.selected_summary(operation_id).state.declared_name == "declined-prestart"
     assert not native_input_admitted(comms.root, str(session))
-    row = InputDispositions(comms.root).get(key)
-    assert row is not None and row["status"] == "unknown"
-    assert (row["native_id"] == "b" * 32) == send
+    row = InputDispositions(comms.root / InputDispositions.filename).read().rows.get(key)
+    assert row is not None and row.declared_name == "unknown"
+    assert (row.native_id == "b" * 32) == send
 
 
 @pytest.mark.asyncio
@@ -493,7 +501,9 @@ async def test_acp_final_boundary_consumes_exact_ack_at_native_id_bind(tmp_path,
             comms.registry.snapshot().admission_generations["project"],
             f"{comms.registry.snapshot().admission_generations['project']}:{digest}",
             digest,
-            hashlib.sha256(agent.inputs.dispositions.get(key)["source_text"].encode()).hexdigest(),
+            hashlib.sha256(
+                agent.inputs.dispositions.read().rows.get(key).source_text.encode()
+            ).hexdigest(),
             backend._session_revision(str(session)),
             backend._session_revision(str(session)),
         )
@@ -529,6 +539,7 @@ def test_native_start_retires_barrier_without_erasing_history_or_replaying_origi
                 "selectedSummaryOperationId": operation_id,
                 "selectedSummarySourceDigest": hashlib.sha256(source.encode()).hexdigest(),
             },
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
         )
         journal.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
         token = journal.link_selected_summary_commit(operation_id, commit_id, admission=identity)
@@ -561,7 +572,11 @@ def test_native_start_retires_barrier_without_erasing_history_or_replaying_origi
     assert [row.operation_id for row in reopened.blocking_selected_summary(session)] == [next_id]
     # A subsequent writer can bind ONLY the new reservation, despite historical
     # terminal rows remaining in the same table for audit and ID uniqueness.
-    reopened.begin(session, {"selectedSummaryOperationId": next_id})
+    reopened.begin(
+        session,
+        {"selectedSummaryOperationId": next_id},
+        inputs=InputDispositions(reopened.path.parent / InputDispositions.filename).read(),
+    )
     assert not native_input_admitted(comms.root, session)
 
 
@@ -585,9 +600,9 @@ def test_unrelated_or_uncertain_input_never_retires_selected_barrier(case, field
     )
     assert _claim(case, token)
     assert dispositions.started(identity.ingress_key, turn_id="turn", native_id="b" * 32, text=text)
-    rows = dispositions._read()
-    rows[identity.ingress_key][field] = value
-    dispositions._write(rows)
+    saved = json.loads(dispositions.path.read_text())
+    saved["rows"][identity.ingress_key][field] = value
+    dispositions.path.write_text(json.dumps(saved))
     assert not native_input_admitted(comms.root, session)
     with (
         pytest.raises(CompactionJournalError, match="blocks native input"),

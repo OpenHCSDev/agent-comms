@@ -38,18 +38,18 @@ def verify_continued_private_session(
     entries = _read_private_file(session)
     if not entries or entries[0].get("type") != "session" or entries[0].get("version") != 3:
         raise ValueError("Continued private session needs a strict native header")
-    rows = InputDispositions(root)._read()
+    rows = InputDispositions(root / InputDispositions.filename).read().rows
     # Any unresolved owner input except the exact new original remains a stop.
     # Do not use admission rollover to hide uncertain history.
     if any(
-        row["owner"] == owner and row["status"] == "unknown" and key != source.get("ingressKey")
+        row.owner == owner and row.unresolved and key != source.get("ingressKey")
         for key, row in rows.items()
     ):
         raise ValueError("Continued private history contains unresolved owner input")
     started = {}
     for row in rows.values():
-        if row["owner"] == owner and row["status"] == "started":
-            native_id = row["native_id"]
+        if row.owner == owner and not row.unresolved:
+            native_id = row.native_id
             if native_id in started:
                 raise ValueError("Continued private native start is ambiguous")
             started[native_id] = row
@@ -73,10 +73,10 @@ def verify_continued_private_session(
         observed.add(native_id)
         started_row = started.get(native_id)
         if started_row is not None:
-            text = started_row["sent_text"]
+            text = started_row.sent_text
             if (
                 type(text) is not str
-                or not started_row["turn_id"]
+                or not started_row.turn_id
                 or message.get("content") != [{"type": "text", "text": text}]
                 or message.get("inputDigest") != native_request_digest(text)
             ):

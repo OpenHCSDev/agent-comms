@@ -126,12 +126,14 @@ class OwnedTurn:
                 != self.runner.inputs.dispositions.bus_key(self.origins[0], self.thread)
             ):
                 return
-            self.row = self.runner.inputs.dispositions.get(self.direct_interrupt_input_key)
+            self.row = self.runner.inputs.dispositions.read().rows.get(
+                self.direct_interrupt_input_key
+            )
             if (
                 self.row is None
-                or self.row["status"] != "unknown"
-                or self.row["native_id"] is not None
-                or self.row["sequence"] != self.origins[0].seq
+                or not self.row.unresolved
+                or self.row.native_id is not None
+                or self.row.sequence != self.origins[0].seq
             ):
                 return
         if (
@@ -217,7 +219,7 @@ class OwnedTurn:
                 self.snapshot = self.runner.comms.registry.snapshot()
                 for origin in self.bus_origins:
                     self.key = self.runner.inputs.dispositions.bus_key(origin, self.thread)
-                    if self.runner.inputs.dispositions.get(self.key) is None:
+                    if self.runner.inputs.dispositions.read().rows.get(self.key) is None:
                         self.runner.inputs.dispositions.record(
                             self.key,
                             seq=origin.seq,
@@ -248,7 +250,11 @@ class OwnedTurn:
             # The durable admission owns the exact prompt, including the
             # names resolved at admission. Re-deriving it here can drift if
             # a recipient was renamed before or after inbox draining.
-            and (admitted_texts := self.runner.inputs.dispositions.source_texts(self.original_keys))
+            and (
+                admitted_texts := self.runner.inputs.dispositions.read().source_texts(
+                    self.original_keys
+                )
+            )
             is not None
             and self.task == "\n\n".join(admitted_texts)
         )
@@ -457,15 +463,13 @@ class OwnedTurn:
                     selected_admission.invalidate()
                     allowed = False
                 else:
-                    original = self.runner.inputs.dispositions.get(keys[0])
-                    if original is None or type(original["source_text"]) is not str:
+                    original = self.runner.inputs.dispositions.read().rows.get(keys[0])
+                    if original is None:
                         selected_admission.invalidate()
                         allowed = False
                     else:
                         digest = hashlib.sha256(sent_text.encode()).hexdigest()
-                        original_digest = hashlib.sha256(
-                            original["source_text"].encode()
-                        ).hexdigest()
+                        original_digest = hashlib.sha256(original.source_text.encode()).hexdigest()
                         identity = SelectedAdmissionIdentity(
                             owner_name=canonical,
                             owner_pid=current.pid,
@@ -482,7 +486,7 @@ class OwnedTurn:
                             session_revision=revision,
                         )
                         try:
-                            self.runner.inputs.dispositions.compaction_rows(
+                            self.runner.inputs.dispositions.read().compaction_rows(
                                 current, keys[0], self.runner.inputs
                             )
                         except RelationViolationError:
@@ -497,19 +501,19 @@ class OwnedTurn:
                         )
             elif allowed:
                 for key in keys:
-                    row = self.runner.inputs.dispositions.get(key)
+                    row = self.runner.inputs.dispositions.read().rows.get(key)
                     if (
                         row is None
-                        or row["status"] != "unknown"
-                        or row["admission"] != snapshot.admission_generations[canonical]
+                        or not row.unresolved
+                        or row.admission != snapshot.admission_generations[canonical]
                         or not (
-                            row["native_id"] == native_id
-                            and row["turn_id"] == self.turn_id
-                            and row["sent_text"] == sent_text
+                            row.matches_native(
+                                native_id=native_id, turn_id=self.turn_id, text=sent_text
+                            )
                             if already_bound
                             else self.runner.inputs.dispositions.bind(
                                 key,
-                                admission=row["admission"],
+                                admission=row.admission,
                                 turn_id=self.turn_id,
                                 native_id=native_id,
                                 text=sent_text,
@@ -530,8 +534,8 @@ class OwnedTurn:
                     display = self.original_display
                     input_origins = self.origins
                 else:
-                    row = self.runner.inputs.dispositions.get(keys[0]) if keys else None
-                    display = row["source_text"] if row is not None else sent_text
+                    row = self.runner.inputs.dispositions.read().rows.get(keys[0]) if keys else None
+                    display = row.source_text if row is not None else sent_text
                     origin = self.runner.inputs.steering_origins.get(self.session_id, {}).get(
                         public_id
                     )

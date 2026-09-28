@@ -38,7 +38,7 @@ async def owner(tmp_path, monkeypatch):
 
 
 def disposition_rows(agent):
-    return list(agent.inputs.dispositions._read().values())
+    return list(agent.inputs.dispositions.read().rows.values())
 
 
 @pytest.mark.asyncio
@@ -75,7 +75,7 @@ async def test_idle_owner_original_input_continues_active_goal(tmp_path, monkeyp
     try:
         await agent.inputs.run_owned_input("project", "project", "testing steering")
         rows = disposition_rows(agent)
-        assert len(rows) == 1 and rows[0]["status"] == "started"
+        assert len(rows) == 1 and rows[0].declared_name == "started"
         current = comms.registry.require("project").goal
         assert current.id == goal.id and current.state.active
         generation = store.snapshot(goal.id)
@@ -118,14 +118,14 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
         assert refused.value.data == {"reason": "input_authority_changed"}
         assert backend_calls == 0
         rows = disposition_rows(agent)
-        assert len(rows) == 1 and rows[0]["status"] == "unknown"
-        assert rows[0]["native_id"] is None
+        assert len(rows) == 1 and rows[0].declared_name == "unknown"
+        assert rows[0].native_id is None
         current = comms.registry.require("project").goal
         assert current.id == replacement.id and current.state.active
         generation = store.snapshot(replacement.id)
         assert generation.lifecycle == ReadyGeneration() and generation.number == 1
-        reopened = InputDispositions(comms.root)
-        assert len(reopened.unknown(frozenset({"project"}))) == 1
+        reopened = InputDispositions(comms.root / InputDispositions.filename)
+        assert len(reopened.read().unknown(frozenset({"project"}))) == 1
     finally:
         await agent.shutdown()
 
@@ -148,8 +148,8 @@ async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monke
         await agent.inputs.run_owned_input("project", "project", "do not send after stop")
         assert boundaries == [False]
         rows = disposition_rows(agent)
-        assert len(rows) == 1 and rows[0]["status"] == "unknown"
-        assert rows[0]["native_id"] is None
+        assert len(rows) == 1 and rows[0].declared_name == "unknown"
+        assert rows[0].native_id is None
         assert store.snapshot(goal.id).lifecycle != ReadyGeneration()
     finally:
         await agent.shutdown()

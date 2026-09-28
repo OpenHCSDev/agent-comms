@@ -52,8 +52,12 @@ class Goals:
 
         with _store_lock(self._wire_lock_path):
             self.registry.require(name)
-            rows = InputDispositions(self.root).unknown(self.registry.aliases_for(name))
-            return [InputDispositions.public(row) for row in rows]
+            rows = (
+                InputDispositions(self.root / InputDispositions.filename)
+                .read()
+                .unknown(self.registry.aliases_for(name))
+            )
+            return [row.public() for row in rows]
 
     def input_delivery(
         self,
@@ -68,9 +72,18 @@ class Goals:
         with _store_lock(self._wire_lock_path):
             self.registry.require(name)
             aliases = self.registry.aliases_for(name)
-            boundary = AcpDeliveryCursors(self.root).legacy_through(aliases)
-            return InputDispositions(self.root).delivery_overview(
-                aliases, boundary, include_history=include_history, awaiting_keys=awaiting_keys
+            boundary = (
+                AcpDeliveryCursors(self.root / AcpDeliveryCursors.filename)
+                .read()
+                .boundary(aliases)
+                .legacy_through
+            )
+            return (
+                InputDispositions(self.root / InputDispositions.filename)
+                .read()
+                .delivery_overview(
+                    aliases, boundary, include_history=include_history, awaiting_keys=awaiting_keys
+                )
             )
 
     def dismiss_historical_inputs(
@@ -82,8 +95,13 @@ class Goals:
         with _store_lock(self._wire_lock_path):
             self.registry.require(name)
             aliases = self.registry.aliases_for(name)
-            boundary = AcpDeliveryCursors(self.root).legacy_through(aliases)
-            return InputDispositions(self.root).dismiss_historical(
+            boundary = (
+                AcpDeliveryCursors(self.root / AcpDeliveryCursors.filename)
+                .read()
+                .boundary(aliases)
+                .legacy_through
+            )
+            return InputDispositions(self.root / InputDispositions.filename).dismiss_historical(
                 aliases, boundary, awaiting_keys=awaiting_keys
             )
 
@@ -117,8 +135,10 @@ class Goals:
         senders = frozenset(
             alias for target in resolved for alias in self.registry.aliases_for(target.name)
         )
-        unknown = tuple(InputDispositions(self.root).unknown(owners))
-        sequences = {row["sequence"] for row in unknown if row["sequence"] is not None}
+        unknown = tuple(
+            InputDispositions(self.root / InputDispositions.filename).read().unknown(owners)
+        )
+        sequences = {row.sequence for row in unknown if row.sequence is not None}
         eligible = set()
         if sequences:
             selected = self.bus._history_page(
@@ -130,7 +150,9 @@ class Goals:
                 before=None,
                 after=min(sequences) - 1,
                 limit=len(sequences),
-                max_bytes=max(256 * 1024, sum(len(json.dumps(row).encode()) for row in unknown)),
+                max_bytes=max(
+                    256 * 1024, sum(len(json.dumps(row.public()).encode()) for row in unknown)
+                ),
             )
             eligible = {message.seq for message in selected.messages}
         return GoalInputReview(
@@ -139,7 +161,7 @@ class Goals:
             owners,
             senders,
             unknown,
-            frozenset(row["key"] for row in unknown if row["sequence"] in eligible),
+            frozenset(row.key for row in unknown if row.sequence in eligible),
         )
 
     def goal_history(

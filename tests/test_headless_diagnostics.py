@@ -81,9 +81,9 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
     assert "[Open diagnostic](file://" in notice["text"]
     assert "SECRET" not in notice["text"]
     assert (
-        owner.inputs.dispositions.status(
-            owner.inputs.dispositions.bus_key(incoming, comms.registry.require(session))
-        )
+        owner.inputs.dispositions.read()
+        .rows[owner.inputs.dispositions.bus_key(incoming, comms.registry.require(session))]
+        .declared_name
         == "unknown"
     )
     await owner.shutdown()

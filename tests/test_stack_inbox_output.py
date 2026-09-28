@@ -15,6 +15,7 @@ from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
 
 
@@ -215,11 +216,13 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
                 for index in range(935)
             }
             # Populate the durable ledger once; setup must not perform 935 rewrites.
-            agent.inputs.dispositions._write(old_rows)
+            agent.inputs.dispositions.path.write_text(json.dumps({"version": 1, "rows": old_rows}))
             full_result = {
                 "messages": [],
                 "acknowledged": 0,
-                "unresolved_inputs": [InputDispositions.public(row) for row in old_rows.values()],
+                "unresolved_inputs": [
+                    row.public() for row in agent.inputs.dispositions.read().rows.values()
+                ],
             }
             assert 900_000 < len(json.dumps(full_result, indent=2).encode()) < 1_100_000
             await asyncio.wait_for(
@@ -263,8 +266,8 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             assert len(terminal) == 1 and terminal[0].ok is True
             assert terminal[0].text == "INBOX_INSPECTED_TWICE"
             assert len([event for event in events if isinstance(event, ae.InputStarted)]) == 1
-            saved_rows = agent.inputs.dispositions._read()
-            assert {key: saved_rows[key] for key in old_rows} == old_rows
+            saved_rows = agent.inputs.dispositions.read().rows
+            assert {key: FieldCodec.encode(saved_rows[key]) for key in old_rows} == old_rows
             transcript = Path(comms.registry.require("parent").session_file)
             rows = [json.loads(line) for line in transcript.read_text().splitlines()]
             assert not any(row.get("type") == "compaction" for row in rows)

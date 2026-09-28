@@ -158,7 +158,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             target=session,
             text="UNCERTAIN_INPUT_MUST_NOT_REPLAY",
         )
-        sentinel_before = owner.inputs.dispositions.get("acp:uncertain-sentinel")
+        sentinel_before = owner.inputs.dispositions.read().rows.get("acp:uncertain-sentinel")
         turn = asyncio.create_task(
             proxy.request(
                 "prompt",
@@ -218,7 +218,10 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             final = GoalAttemptStore(store.root).snapshot(goal_id)
             assert final.number == ready.number + 1 and final.lifecycle == ReadyGeneration()
             assert len(requests) == 2
-            assert owner.inputs.dispositions.get("acp:uncertain-sentinel") == sentinel_before
+            assert (
+                owner.inputs.dispositions.read().rows.get("acp:uncertain-sentinel")
+                == sentinel_before
+            )
             assert "UNCERTAIN_INPUT_MUST_NOT_REPLAY" not in json.dumps(requests)
             disposition_rows = json.loads(owner.inputs.dispositions.path.read_text())[
                 "rows"

@@ -41,9 +41,13 @@ def test_archive_refuses_live_owner_then_preserves_pending_and_unknown(tmp_path)
         for name in ("sender", "receiver"):
             comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=process.pid))
         comms.messaging.send("sender", "receiver", "not yet read")
-        InputDispositions(comms.root).record(
-            "test:unknown", seq=None, owner="receiver", admission=1,
-            target="receiver", text="uncertain input",
+        InputDispositions(comms.root / InputDispositions.filename).record(
+            "test:unknown",
+            seq=None,
+            owner="receiver",
+            admission=1,
+            target="receiver",
+            text="uncertain input",
         )
         with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
             store.register_participant("old-owner", "Old Owner", "sender", committed=True)
@@ -116,9 +120,13 @@ def test_archive_refuses_rival_destination_after_staging(tmp_path, monkeypatch):
     for name in ("sender", "receiver"):
         comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=0))
     comms.messaging.send("sender", "receiver", "pending")
-    InputDispositions(comms.root).record(
-        "test:unknown", seq=None, owner="receiver", admission=1,
-        target="receiver", text="uncertain input",
+    InputDispositions(comms.root / InputDispositions.filename).record(
+        "test:unknown",
+        seq=None,
+        owner="receiver",
+        admission=1,
+        target="receiver",
+        text="uncertain input",
     )
     for name in ("sender", "receiver"):
         comms.registry.unregister(name)
@@ -167,9 +175,13 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
             )
         )
         assert legacy.goals.goal_execution("sender").state is GoalExecutionState.STANDBY
-        InputDispositions(legacy.root).record(
-            "stage:unknown", seq=None, owner="sender", admission=1,
-            target="sender", text="uncertain old input",
+        InputDispositions(legacy.root / InputDispositions.filename).record(
+            "stage:unknown",
+            seq=None,
+            owner="sender",
+            admission=1,
+            target="sender",
+            text="uncertain old input",
         )
         snapshot = legacy.registry.snapshot()
         thread = snapshot.threads["sender"]
@@ -242,9 +254,13 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
         with pytest.raises(RelationViolationError, match="fresh private root"):
             stage_private_participants(legacy, private, archive, inventory, ["sender", "receiver"])
         another = Comms(tmp_path / "another-private")
-        InputDispositions(legacy.root).record(
-            "stage:late", seq=None, owner="sender", admission=1,
-            target="sender", text="late old input",
+        InputDispositions(legacy.root / InputDispositions.filename).record(
+            "stage:late",
+            seq=None,
+            owner="sender",
+            admission=1,
+            target="sender",
+            text="late old input",
         )
         with pytest.raises(RelationViolationError, match="changed after its cutover archive"):
             stage_private_participants(legacy, another, archive, inventory, ["sender", "receiver"])

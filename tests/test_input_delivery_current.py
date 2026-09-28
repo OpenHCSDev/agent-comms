@@ -1,6 +1,7 @@
 """The live owner separates queued delivery from earlier unresolved notices."""
 
 import os
+from dataclasses import replace
 
 import pytest
 
@@ -14,7 +15,7 @@ async def test_owner_queue_projection_clear_preserves_pending_and_unknown(tmp_pa
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     async with queued_delivery_owner(tmp_path) as (owner, proxy, session, incoming):
         ledger = owner.inputs.dispositions
-        before = ledger._read()
+        before = ledger.read().rows
         cursor_before = owner.inputs.delivery_cursors.path.read_bytes()
         snapshot = await proxy.request("input_dispositions")
         assert snapshot["currentScope"] == "owner_queue"
@@ -29,12 +30,9 @@ async def test_owner_queue_projection_clear_preserves_pending_and_unknown(tmp_pa
         details = await proxy.request("input_dispositions", include_history=True)
         assert len(details["historicalInputs"]) == 2
         assert all(row["noticeDismissed"] for row in details["historicalInputs"])
-        assert not ledger.get(f"bus:{incoming.seq}").get("notice_dismissed")
-        after = ledger._read()
-        assert {
-            key: {k: v for k, v in row.items() if k != "notice_dismissed"}
-            for key, row in after.items()
-        } == before
+        assert not ledger.read().rows.get(f"bus:{incoming.seq}").notice_dismissed
+        after = ledger.read().rows
+        assert {key: replace(row, notice_dismissed=False) for key, row in after.items()} == before
         assert owner.inputs.delivery_cursors.path.read_bytes() == cursor_before
         assert len(owner.inputs.pending_turns[session]) == 1 and not owner.inputs.backend_inboxes
         # A new input arriving after the clear cannot inherit a cleared notice.

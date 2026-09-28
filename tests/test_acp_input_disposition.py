@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from dataclasses import replace
 
 import pytest
 
@@ -63,7 +64,11 @@ async def test_preflight_failure_keeps_its_reason_visible(tmp_path, monkeypatch)
             if getattr(update, "content", None) is not None and update.content.text
         ]
         assert "[agent error] Pi native input-ID capability preflight failed." in texts
-        assert InputDispositions(comms.root).unknown(frozenset({"project"}))
+        assert (
+            InputDispositions(comms.root / InputDispositions.filename)
+            .read()
+            .unknown(frozenset({"project"}))
+        )
     finally:
         await agent.shutdown()
 
@@ -115,10 +120,12 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
                 .get("inputDeliveryChanged")
                 for update in updates
             )
-            before = agent.inputs.dispositions.get("bus:1")
+            before = agent.inputs.dispositions.read().rows.get("bus:1")
             cleared = await proxy.request("dismiss_historical_inputs")
             assert cleared["dismissedHistoricalCount"] == 1
-            assert agent.inputs.dispositions.get("bus:1") == {**before, "notice_dismissed": True}
+            assert agent.inputs.dispositions.read().rows.get("bus:1") == replace(
+                before, notice_dismissed=True
+            )
         finally:
             await proxy.close()
         yield ae.StreamSettled()
@@ -133,7 +140,13 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
             GoalAttemptStore(comms.root / "goal-private").snapshot(goal.id).lifecycle
             == ReadyGeneration()
         )
-        assert InputDispositions(comms.root).status("bus:1") == "unknown"
+        assert (
+            InputDispositions(comms.root / InputDispositions.filename)
+            .read()
+            .rows["bus:1"]
+            .declared_name
+            == "unknown"
+        )
         assert not any(
             "[agent error]" in getattr(update.content, "text", "")
             for update in updates
@@ -162,7 +175,13 @@ async def test_direct_cannot_launch_text_backend_without_native_start_proof(tmp_
         assert await agent.inputs.drain_inbox("project") == 1
         assert not agent.inputs.pending_turns.get("project")
         assert not agent.inputs.wake_tasks.get("project")
-        assert InputDispositions(comms.root).status("bus:1") == "unknown"
+        assert (
+            InputDispositions(comms.root / InputDispositions.filename)
+            .read()
+            .rows["bus:1"]
+            .declared_name
+            == "unknown"
+        )
     finally:
         await agent.shutdown()
 
@@ -196,8 +215,20 @@ async def test_two_queued_directs_need_two_distinct_native_starts(tmp_path, monk
         InputDrain.schedule_wake(agent.inputs, "project")
         await asyncio.wait_for(agent.inputs.wake_tasks["project"], timeout=3)
         assert receipts == [f"{1:032x}", f"{2:032x}"]
-        assert InputDispositions(comms.root).status("bus:1") == "started"
-        assert InputDispositions(comms.root).status("bus:2") == "started"
+        assert (
+            InputDispositions(comms.root / InputDispositions.filename)
+            .read()
+            .rows["bus:1"]
+            .declared_name
+            == "started"
+        )
+        assert (
+            InputDispositions(comms.root / InputDispositions.filename)
+            .read()
+            .rows["bus:2"]
+            .declared_name
+            == "started"
+        )
     finally:
         await agent.shutdown()
 
@@ -220,8 +251,12 @@ async def test_ui_ack_does_not_hide_unknown_or_authorize_goal_superseded_direct(
 
     try:
         assert await agent.inputs.drain_inbox("project") == 1
-        rows = InputDispositions(comms.root).unknown(frozenset({"project"}))
-        assert [(row["sequence"], row["status"]) for row in rows] == [(1, "unknown")]
+        rows = (
+            InputDispositions(comms.root / InputDispositions.filename)
+            .read()
+            .unknown(frozenset({"project"}))
+        )
+        assert [(row.sequence, row.declared_name) for row in rows] == [(1, "unknown")]
         assert len(agent.inputs.pending_turns["project"]) == 1
         comms.goals.update_goal("project", SetGoalAction(text="new goal"))
 
@@ -238,7 +273,13 @@ async def test_ui_ack_does_not_hide_unknown_or_authorize_goal_superseded_direct(
                 "project", "project", pending[0].prompt, origins=(pending[0].origin,)
             )
         assert backend_calls == []
-        assert InputDispositions(comms.root).unknown(frozenset({"project"}))[0]["sequence"] == 1
+        assert (
+            InputDispositions(comms.root / InputDispositions.filename)
+            .read()
+            .unknown(frozenset({"project"}))[0]
+            .sequence
+            == 1
+        )
     finally:
         await agent.shutdown()
 
@@ -273,7 +314,13 @@ async def test_project_change_after_queue_denies_stale_project_send(tmp_path, mo
         )
         assert authorized == [False]
         assert comms.registry.snapshot().admission_generations["project"] == before
-        assert InputDispositions(comms.root).status("bus:1") == "unknown"
+        assert (
+            InputDispositions(comms.root / InputDispositions.filename)
+            .read()
+            .rows["bus:1"]
+            .declared_name
+            == "unknown"
+        )
     finally:
         await agent.shutdown()
 
@@ -354,7 +401,13 @@ async def test_stop_before_wake_leaves_direct_unknown_without_backend_send(tmp_p
         InputDrain.schedule_wake(agent.inputs, "project")
         await asyncio.wait_for(agent.inputs.wake_tasks["project"], timeout=2)
         assert not agent.inputs.pending_turns.get("project")
-        assert InputDispositions(comms.root).unknown(frozenset({"project"}))[0]["sequence"] == 1
+        assert (
+            InputDispositions(comms.root / InputDispositions.filename)
+            .read()
+            .unknown(frozenset({"project"}))[0]
+            .sequence
+            == 1
+        )
     finally:
         await agent.shutdown()
 
@@ -417,21 +470,20 @@ send({"type":"agent_settled"})
             await agent.inputs.drain_inbox("project")
             await asyncio.wait_for(turn, timeout=5)
 
-            reopened = InputDispositions(comms.root)
-            assert reopened.status("bus:1") == "started"
-            assert reopened.status("bus:2") == "unknown"
+            reopened = InputDispositions(comms.root / InputDispositions.filename)
+            assert reopened.read().rows["bus:1"].declared_name == "started"
+            assert reopened.read().rows["bus:2"].declared_name == "unknown"
             assert comms.registry.require("project").session_file == str(session_file)
             second_agent = CommsAgent(wire(comms.root), agent_bin="/bin/echo")
             second_agent.sessions.bindings["project"] = "project"
-            (
-                second_agent.inputs.inbox_cursors["project"],
-                second_agent.inputs.legacy_through["project"],
-            ) = second_agent.inputs.delivery_cursors.initialize(
+            boundary = second_agent.inputs.delivery_cursors.initialize(
                 frozenset({"project"}),
                 "project",
                 high_water=second_agent._comms.bus.log.latest_sequence(),
                 fresh=False,
             )
+            second_agent.inputs.inbox_cursors["project"] = boundary.cursor
+            second_agent.inputs.legacy_through["project"] = boundary.legacy_through
 
             class SilentClient:
                 async def session_update(self, **kwargs):
@@ -441,8 +493,8 @@ send({"type":"agent_settled"})
             assert await second_agent.inputs.drain_inbox("project") == 0
             assert not second_agent.inputs.pending_turns.get("project")
             assert Path(str(session_file) + ".launches").read_text() == "x"
-            assert reopened.status("bus:1") == "started"
-            assert reopened.status("bus:2") == "unknown"
+            assert reopened.read().rows["bus:1"].declared_name == "started"
+            assert reopened.read().rows["bus:2"].declared_name == "unknown"
         finally:
             await agent.shutdown()
 
@@ -468,7 +520,7 @@ async def run():
     comms.threads.register(Thread(name='peer', tags=frozenset(), worktree=sys.argv[2]))
     comms.messaging.send('peer', 'project', 'survive hard exit')
     await agent.inputs.drain_inbox('project')
-    assert InputDispositions(comms.root).status('bus:1') == 'unknown'
+    assert InputDispositions(comms.root / InputDispositions.filename).read().rows['bus:1'].declared_name == 'unknown'
     os._exit(0)
 asyncio.run(run())
 """
@@ -496,17 +548,23 @@ asyncio.run(run())
         )
         assert child.returncode == 0, child.stderr
         reopened = wire(Path(wire_dir))
-        assert InputDispositions(reopened.root).status("bus:1") == "unknown"
+        assert (
+            InputDispositions(reopened.root / InputDispositions.filename)
+            .read()
+            .rows["bus:1"]
+            .declared_name
+            == "unknown"
+        )
         owner = CommsAgent(reopened, agent_bin="/bin/echo")
         owner.sessions.bindings["project"] = "project"
-        owner.inputs.inbox_cursors["project"], owner.inputs.legacy_through["project"] = (
-            owner.inputs.delivery_cursors.initialize(
-                frozenset({"project"}),
-                "project",
-                high_water=reopened.bus.log.latest_sequence(),
-                fresh=False,
-            )
+        boundary = owner.inputs.delivery_cursors.initialize(
+            frozenset({"project"}),
+            "project",
+            high_water=reopened.bus.log.latest_sequence(),
+            fresh=False,
         )
+        owner.inputs.inbox_cursors["project"] = boundary.cursor
+        owner.inputs.legacy_through["project"] = boundary.legacy_through
         assert owner.inputs.inbox_cursors["project"] == 1
 
         class SilentClient:
