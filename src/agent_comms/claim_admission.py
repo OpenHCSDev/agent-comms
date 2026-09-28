@@ -14,8 +14,9 @@ from pathlib import Path
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
 from .channel_targets import BuiltinChannel
+from .cohort_schema import assert_cohort_schema
 from .comms import Comms
-from .coordination_cohort import _assert_schema, _receipt_matches
+from .coordination_cohort import _receipt_matches
 from .coordination_store import IdentityConflict, MutationStore
 from .envelope_claim_transitions import (
     ClaimConflict,
@@ -76,7 +77,7 @@ def _verify_selected_wake_state(
     ):
         raise IdentityConflict("Wake source or owner turn does not match")
     with store._read_transaction():
-        _assert_schema(store._connection)
+        assert_cohort_schema(store._connection)
         receipt = _receipt_matches(store._connection, initial)
         if not any(
             assignment.assignment_id == admission.wake_assignment_id

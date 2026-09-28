@@ -671,7 +671,7 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
         assert evidence == ()
         binding = store._connection.execute(
             "SELECT input_id,session_id FROM native_runtime_input WHERE assignment_id IN "
-            "(SELECT claim_id FROM wake_claims WHERE wire_seq=?)",
+            "(SELECT assignment_id FROM wake_claims WHERE wire_seq=?)",
             (initial.message.seq,),
         ).fetchone()
         assert binding is not None and binding[1] is None

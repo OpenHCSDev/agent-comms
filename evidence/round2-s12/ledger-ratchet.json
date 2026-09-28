@@ -1,0 +1,23 @@
+{
+  "base_revision": "121f526bb4c21472cafdc5570e5d084047ab272b",
+  "head_revision": "06996da46d2c59e39fa2475f99b9d6eff6dea64c",
+  "paths": [
+    "src/agent_comms/goal_attempts.py",
+    "src/agent_comms/goal_failure_observation.py"
+  ],
+  "base": {
+    "TypeIdentity": 7,
+    "LongBooleanChain": 5,
+    "StringSubscript": 0
+  },
+  "head": {
+    "TypeIdentity": 5,
+    "LongBooleanChain": 5,
+    "StringSubscript": 0
+  },
+  "delta": {
+    "TypeIdentity": -2,
+    "LongBooleanChain": 0,
+    "StringSubscript": 0
+  }
+}

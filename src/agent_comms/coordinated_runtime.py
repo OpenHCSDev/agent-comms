@@ -25,14 +25,21 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .activity import ActivityState
-from .assignment_states import AssignmentState, CompletedAssignment, IgnoredAssignment
+from .assignment_states import (
+    AssignmentState,
+    CompletedAssignment,
+    DeferredAssignment,
+    IgnoredAssignment,
+    TriagePendingAssignment,
+)
 from .bus_publication import CommittedInitial, stable_thread_lookup
 from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
+from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination import ExecutionOrigin, OwnerFence, WakeAssignment
-from .coordination_cohort import _assert_schema, accept_initial_cohort, next_sealed_assignment
+from .coordination_cohort import accept_initial_cohort, next_sealed_assignment
 from .coordination_response import (
     LiveResponseOwner,
     _assert_response_schema,
@@ -473,7 +480,7 @@ class SelectedExecution:
                 raise IdentityConflict("selected admission wire root changed")
             after_seq = max(self.after_seq, marker.admission_after_seq)
         with self.store._read_transaction():
-            _assert_schema(self.store._connection)
+            assert_cohort_schema(self.store._connection)
             _assert_response_schema(self.store._connection)
             assert_native_runtime_schema(self.store._connection)
         try:
@@ -1318,10 +1325,13 @@ class SelectedExecution:
                 raise IdentityConflict("triage input was previously dispatched; no retry")
             now = self.store._now(current.updated_at_ms)
             # This CAS and the ID reservation commit together BEFORE the Pi launch.
-            update = db.execute(
-                "UPDATE wake_claims SET disposition='deferred',revision=revision+1,"
-                "updated_at_ms=? WHERE claim_id=? AND revision=? AND disposition='triage_pending'",
-                (now, self.assignment.assignment_id, self.assignment.revision),
+            update = WakeAssignment.update(
+                db,
+                where="assignment_id=? AND revision=? AND disposition='triage_pending'",
+                parameters=(self.assignment.assignment_id, self.assignment.revision),
+                lifecycle=DeferredAssignment.build(current.lifecycle.mode, None, None),
+                revision=current.revision + 1,
+                updated_at_ms=now,
             )
             if update.rowcount != 1:
                 raise IdentityConflict("triage reservation lost its claim CAS")
@@ -1500,15 +1510,21 @@ class SelectedExecution:
                 # Both declared SQL edges occur within this ONE transaction. A
                 # crash cannot expose TRIAGE_PENDING and trigger model replay.
                 now = self.store._now(current.updated_at_ms)
-                db.execute(
-                    "UPDATE wake_claims SET disposition='triage_pending',"
-                    "revision=revision+1,updated_at_ms=? WHERE claim_id=?",
-                    (now, self.assignment.assignment_id),
+                WakeAssignment.update(
+                    db,
+                    where="assignment_id=?",
+                    parameters=(self.assignment.assignment_id,),
+                    lifecycle=TriagePendingAssignment(),
+                    revision=current.revision + 1,
+                    updated_at_ms=now,
                 )
-                db.execute(
-                    "UPDATE wake_claims SET disposition='ignored',triage_verdict='ignore',"
-                    "revision=revision+1,updated_at_ms=? WHERE claim_id=?",
-                    (self.store._now(now), self.assignment.assignment_id),
+                WakeAssignment.update(
+                    db,
+                    where="assignment_id=?",
+                    parameters=(self.assignment.assignment_id,),
+                    lifecycle=IgnoredAssignment(),
+                    revision=current.revision + 2,
+                    updated_at_ms=self.store._now(now),
                 )
 
     def _engage_assignment(self) -> str:

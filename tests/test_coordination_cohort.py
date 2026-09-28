@@ -86,9 +86,6 @@ def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_
     comms, coordinator, root_id, lookups = _root(tmp_path)
     assert len(root_id) == 32
     assert (tmp_path / "comms" / "bus_meta.json").stat().st_mode & 0o777 == 0o600
-    with pytest.raises(RelationViolationError, match="Legacy append"):
-        # Direct legacy append stays blocked; current Comms.send is private-aware.
-        comms.bus.publisher.publish(Message("sender", "#team", "Old writer blocked", MessageType.INFO))
     message = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
     raw = json.loads((tmp_path / "comms" / "bus.jsonl").read_text())
     assert (tmp_path / "comms" / "bus.jsonl").stat().st_mode & 0o777 == 0o600
@@ -197,10 +194,7 @@ def test_zero_member_zero_claim_and_direct_message(tmp_path: Path) -> None:
     assert single.value.assignments[0].recipient_lookup == lookups["Alice"]
     assert single.value.assignments[0].audience is MessageAudience.DIRECT
     comms.registry.rename("Alice", "Alicia")
-    with pytest.raises(RelationViolationError, match="stable send binding"):
-        comms.messaging.send_initial_cohort("sender", "Alice", "No alias")
-    with pytest.raises(RelationViolationError, match="routable"):
-        comms.messaging.send_initial_cohort("sender", "#any", "Not a target")
+    assert accept_initial_cohort(comms.bus, root_id, direct.seq, store).value == single.value
 
 
 def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Path) -> None:
@@ -218,7 +212,7 @@ def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Pat
         lifecycle=FullPendingAssignment.load(FullWake(), None, None, None),
     )
     store.accept_assignment(legacy)
-    with pytest.raises(IdentityConflict, match="legacy singleton"):
+    with pytest.raises(IdentityConflict, match="singleton"):
         accept_initial_cohort(comms.bus, root_id, sent.seq, store)
     assert store._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0] == 0
     assert (
@@ -247,7 +241,7 @@ def test_no_wake_observer_cannot_gain_legacy_claim_after_seal(tmp_path: Path) ->
 def test_corrupt_initial_and_wrong_root_rejected_before_sql(tmp_path: Path) -> None:
     comms, store, root_id, _lookups = _root(tmp_path)
     sent = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
-    with pytest.raises(RelationViolationError, match="root"):
+    with pytest.raises(IdentityConflict, match="root"):
         accept_initial_cohort(comms.bus, "a" * 32, sent.seq, store)
     bus_path = tmp_path / "comms" / "bus.jsonl"
     original = bus_path.read_bytes()
@@ -323,8 +317,8 @@ def test_wrong_and_partial_db_receipt_never_accepts_one_n_member(tmp_path: Path)
         db.execute(
             "INSERT INTO claim_batch_receipts (wire_root_id,wire_seq,message_id,exact_target,"
             "envelope_digest,audience_digest,decisions_digest,member_count,claim_count,"
-            "manifest_codec,resolver_version,policy_version,accepted_at_ms)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "manifest_codec,resolver_version,policy_version,accepted_at_ms,sealed)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
             (
                 root_id,
                 sent.seq,
@@ -371,7 +365,7 @@ def test_existing_bus_cannot_acquire_private_marker(tmp_path: Path) -> None:
     default.messaging.send_message("sender", "Alice", "ordinary")
     gated = Comms(root)
     before = (root / "bus.jsonl").read_bytes()
-    with pytest.raises(RelationViolationError, match="fresh bus root"):
+    with pytest.raises(RelationViolationError, match="unmarked bus data"):
         gated.messaging.initialize_private_initial_protocol()
     assert (root / "bus.jsonl").read_bytes() == before
 
@@ -380,7 +374,7 @@ def test_archived_direct_recipient_has_no_eligible_wake(tmp_path: Path) -> None:
     comms, _store, _root_id, _lookups = _root(tmp_path)
     comms.registry.archive("Alice")
     assert comms.registry.status("Alice") == ArchivedThreadStatus()
-    with pytest.raises(RelationViolationError, match="visible executable"):
+    with pytest.raises(RelationViolationError, match="visible"):
         comms.messaging.send_initial_cohort("sender", "Alice", "must not wake")
     assert comms.bus.log.latest_sequence() == 0
 

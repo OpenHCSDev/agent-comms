@@ -26,20 +26,21 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from .attempt_states import SucceededAttempt
 from .bus_publication import stable_thread_lookup
+from .cohort_schema import assert_cohort_schema
 from .coordination import (
-    Attempts,
+    AttemptRecord,
     CurrentExecutions,
-    Executions,
-    Obligations,
+    ExecutionRecord,
     OwnerFence,
     PublicationIntents,
     PublicationReceipts,
     RecoverySnapshot,
-    WakeClaims,
+    ResponseObligation,
+    WakeAssignment,
     canonical_publication_key,
 )
-from .coordination_cohort import _assert_schema as _assert_cohort_schema
 from .coordination_store import (
     AlreadyApplied,
     Applied,
@@ -51,8 +52,10 @@ from .coordination_store import (
     StaleFence,
     _digest,
 )
+from .execution_states import CompletedExecution
 from .message_bus import MessageBus
 from .messages import Message, MessageType
+from .obligation_states import PublishedResponse, PublishingResponse
 from .registry_document import RegistrySnapshot
 from .store_files import _store_lock
 from .thread_identity import ThreadRole
@@ -260,7 +263,7 @@ def _require_cohort_assignments(
     """
     db = store._connection
     _assert_response_schema(db)
-    _assert_cohort_schema(db)
+    assert_cohort_schema(db)
     if not snapshot.assignments or snapshot.obligation is None:
         raise IdentityConflict("wire response requires selected claims and obligation")
     metadata = bus.log._private_marker_unlocked()
@@ -443,11 +446,11 @@ def prepare_fenced_response(
                 expected_message_id=candidate.message_id,
             )
             intent.insert(db)
-            Obligations.update(
+            ResponseObligation.update(
                 db,
                 where="execution_id=? AND state='pending' AND revision=?",
                 parameters=(execution.execution_id, snapshot.obligation.revision),
-                state="publishing",
+                lifecycle=PublishingResponse(),
                 revision=snapshot.obligation.revision + 1,
                 updated_at_ms=store._now(snapshot.obligation.updated_at_ms),
             )
@@ -576,39 +579,40 @@ def _settle_fenced_response(
                 received_at_ms=now,
             ).insert(db)
             obligation = snapshot.obligation
-            Obligations.update(
+            ResponseObligation.update(
                 db,
                 where="execution_id=? AND revision=?",
                 parameters=(intent.execution_id, obligation.revision),
-                state="published",
-                receipt_message_id=matched.message_id,
-                receipt_seq=matched.seq,
+                lifecycle=PublishedResponse(matched.message_id, matched.seq),
                 revision=obligation.revision + 1,
                 updated_at_ms=store._now(obligation.updated_at_ms),
             )
-            Attempts.update(
+            AttemptRecord.update(
                 db,
                 where="execution_id=? AND attempt_ordinal=? AND revision=?",
                 parameters=(intent.execution_id, attempt.attempt_ordinal, attempt.revision),
-                phase="succeeded",
-                lease_expires_at_ms=None,
+                lifecycle=SucceededAttempt(),
                 revision=attempt.revision + 1,
                 updated_at_ms=store._now(attempt.updated_at_ms),
             )
-            Executions.update(
+            ExecutionRecord.update(
                 db,
                 where="execution_id=? AND revision=?",
                 parameters=(intent.execution_id, snapshot.execution.revision),
-                status="completed",
+                lifecycle=CompletedExecution(attempt.attempt_ordinal),
                 revision=snapshot.execution.revision + 1,
                 updated_at_ms=store._now(snapshot.execution.updated_at_ms),
             )
             for assignment in snapshot.assignments:
-                WakeClaims.update(
+                WakeAssignment.update(
                     db,
-                    where="claim_id=? AND revision=?",
+                    where="assignment_id=? AND revision=?",
                     parameters=(assignment.assignment_id, assignment.revision),
-                    disposition="completed",
+                    lifecycle=CompletedExecution.assignment_state().build(
+                        assignment.lifecycle.mode,
+                        assignment.lifecycle.execution_id,
+                        assignment.lifecycle.exact_target,
+                    ),
                     revision=assignment.revision + 1,
                     updated_at_ms=store._now(assignment.updated_at_ms),
                 )

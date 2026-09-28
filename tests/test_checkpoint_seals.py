@@ -10,13 +10,14 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.wire_log import WireLog
+from agent_comms.wire_metadata import WritableAccess
 from test_private_bus_checkpoint import _page, _root, stable_thread_lookup
 
 
 @pytest.mark.parametrize("mode", ["public", "private", "claims", "final", "pending"])
 def test_current_saved_protocol_roundtrips_without_migration(tmp_path, mode):
     comms, root_id = _root(tmp_path)
-    raw = {"last_seq": 0}
+    raw = {"last_seq": 0, "admission_after_seq": 0, "access": FieldCodec.encode(WritableAccess())}
     if mode != "public":
         raw.update(writer_protocol_version=1, wire_root_id=root_id)
     if mode in ("claims", "final", "pending"):

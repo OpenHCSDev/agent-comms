@@ -1,0 +1,26 @@
+{
+  "base_revision": "121f526bb4c21472cafdc5570e5d084047ab272b",
+  "head_revision": "41a2bd50055672033d6eb5e9ff452ab6efcacc94",
+  "paths": [
+    "src/agent_comms/goal_attempts.py",
+    "src/agent_comms/goal_failure_observation.py",
+    "src/agent_comms/private_bus_checkpoint.py",
+    "src/agent_comms/typed_table.py",
+    "src/agent_comms/wake_candidate_index.py"
+  ],
+  "base": {
+    "TypeIdentity": 35,
+    "LongBooleanChain": 11,
+    "StringSubscript": 12
+  },
+  "head": {
+    "TypeIdentity": 29,
+    "LongBooleanChain": 11,
+    "StringSubscript": 7
+  },
+  "delta": {
+    "TypeIdentity": -6,
+    "LongBooleanChain": 0,
+    "StringSubscript": -5
+  }
+}
