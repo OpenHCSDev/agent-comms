@@ -1,5 +1,7 @@
 # PR243: combined native history storage handoff
 
+Update: independent full302/604MB current-receiver acceptance is now PASS; see [CAPACITY-ACCEPTANCE.md](CAPACITY-ACCEPTANCE.md). No native source/package change required. The earlier pending capacity paragraph below records the handoff chronology.
+
 Source checkpoint: `2755c2319cfecb7671412d9e9adcdd5504ae526e`, branch `refactor/native-session-entry-store-20260928`. Combines parent PR242 and Pascal PR244 on the requested installed225 base. This handoff replaces earlier checkpoint pending lists; earlier failed receipts are retained honestly.
 
 ## Matching candidate
