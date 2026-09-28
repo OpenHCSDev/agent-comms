@@ -33,6 +33,10 @@ PR: https://github.com/OpenHCSDev/agent-comms/pull/236
 - Unreferenced selected_source_snapshot and test-only exchange_fake_rpc deleted.
   No production caller used them. Obsolete compatibility/schema/parser/supervision
   tests are deleted; current native/durability/UNKNOWN behavior remains covered.
+  Removed the old all-states commit_id/decline_reason placeholders as well; only
+  the relevant lifecycle member carries each field. The affected current caller
+  passes (terminal-field-caller.log); the larger run passed69 before that obsolete
+  fixture assertion was replaced with its actual ReservedSummary contract.
 
 ## Current local evidence (overlapping batches are not additive)
 

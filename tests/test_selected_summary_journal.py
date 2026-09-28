@@ -21,6 +21,7 @@ from agent_comms.compaction_states import (
     AbortedNoWriteOperation,
     CommittedOperation,
     DeclinedPrestartSummary,
+    ReservedSummary,
 )
 from agent_comms.input_disposition import InputDispositions
 
@@ -46,7 +47,7 @@ def test_reservation_is_durable_unresolved_and_blocks_every_input(reserved):
     assert operation_id == "a" * 32
     reopened = CompactionJournal(journal.path)
     attempt = reopened.selected_summary(operation_id)
-    assert attempt.state.declared_name == "reserved" and attempt.state.commit_id is None
+    assert attempt.state == ReservedSummary()
     assert json.loads(attempt.source_json) == source
     assert reopened.unresolved_selected_summary(session) == (attempt,)
     assert not native_input_admitted(journal.path.parent, session)

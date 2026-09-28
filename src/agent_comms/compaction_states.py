@@ -80,8 +80,6 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
     terminal: ClassVar[bool] = False
     original_eligible: ClassVar[bool] = False
     reservable_commit: ClassVar[bool] = False
-    commit_id: ClassVar[None] = None
-    decline_reason: ClassVar[None] = None
 
     @classmethod
     @abstractmethod
@@ -114,7 +112,7 @@ class LinkedSummary(SummaryState):
     original_eligible = True
 
     def __post_init__(self):
-        if type(self.commit_id) is not str or not self.commit_id:
+        if not self.commit_id:
             raise ValueError("Linked summary requires its native commit ID")
 
     @classmethod
