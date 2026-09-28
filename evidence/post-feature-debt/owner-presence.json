@@ -1,0 +1,362 @@
+{
+  "comms.py": {
+    "Comms": {
+      "line": 22,
+      "methods": [
+        "__init__"
+      ]
+    }
+  },
+  "agent_events.py": {
+    "AgentEvent": {
+      "line": 24,
+      "methods": [
+        "__init__"
+      ]
+    }
+  },
+  "backend.py": {
+    "TurnSession": {
+      "line": 727,
+      "methods": [
+        "__init__",
+        "stderr_tail",
+        "read_rpc_line",
+        "abort_stalled_rpc",
+        "turn_state",
+        "context_info",
+        "run",
+        "record_failure",
+        "fail_reason",
+        "receive_record",
+        "attest_input",
+        "guard_identity",
+        "observe_progress",
+        "settle_or_continue",
+        "prepare_launch",
+        "validate_reopen",
+        "spawn_child",
+        "initialize_output",
+        "initialize_rpc",
+        "retain_or_close",
+        "finish_diagnostics",
+        "finish_result",
+        "handle_timeout"
+      ]
+    }
+  },
+  "execution_states.py": {
+    "ExecutionState": {
+      "line": 16,
+      "methods": [
+        "current_attempt_ordinal",
+        "load",
+        "successors",
+        "claim_state",
+        "validate_budget",
+        "accepts_attempt",
+        "accepts_previous",
+        "validate_snapshot"
+      ]
+    }
+  },
+  "read_ledger.py": {
+    "ReadLedger": {
+      "line": 35,
+      "methods": [
+        "record_type",
+        "empty",
+        "human",
+        "bus_identity",
+        "conversation",
+        "_key",
+        "capture",
+        "mark_displayed",
+        "seen_sequences",
+        "migrate",
+        "_transcript_key",
+        "transcript_seen",
+        "mark_transcript"
+      ]
+    }
+  },
+  "thread_identity.py": {
+    "OwnerIdentity": {
+      "line": 32,
+      "methods": []
+    },
+    "TurnIdentity": {
+      "line": 38,
+      "methods": []
+    }
+  },
+  "exporting.py": {
+    "WireExportFormat": {
+      "line": 28,
+      "methods": [
+        "__str__",
+        "header",
+        "row",
+        "json_record"
+      ]
+    },
+    "JsonlFormat": {
+      "line": 50,
+      "methods": [
+        "header",
+        "row"
+      ]
+    },
+    "TextFormat": {
+      "line": 61,
+      "methods": [
+        "header",
+        "row"
+      ]
+    },
+    "ResolvedExportScope": {
+      "line": 94,
+      "methods": []
+    },
+    "WireExportScope": {
+      "line": 101,
+      "methods": [
+        "to_wire",
+        "resolve"
+      ]
+    },
+    "EverythingScope": {
+      "line": 113,
+      "methods": [
+        "resolve"
+      ]
+    },
+    "ChannelScope": {
+      "line": 119,
+      "methods": [
+        "__post_init__",
+        "resolve"
+      ]
+    },
+    "DmScope": {
+      "line": 145,
+      "methods": [
+        "__post_init__",
+        "resolve"
+      ]
+    },
+    "ExportSelectionStats": {
+      "line": 173,
+      "methods": []
+    },
+    "WireExportLimit": {
+      "line": 182,
+      "methods": [
+        "to_wire",
+        "byte_ceiling",
+        "time_cutoff",
+        "validate_header",
+        "select",
+        "retain"
+      ]
+    },
+    "FullLimit": {
+      "line": 233,
+      "methods": [
+        "retain"
+      ]
+    },
+    "MaxBytesLimit": {
+      "line": 244,
+      "methods": [
+        "__post_init__",
+        "byte_ceiling",
+        "retain"
+      ]
+    },
+    "RecentLimit": {
+      "line": 277,
+      "methods": [
+        "__post_init__",
+        "time_cutoff"
+      ]
+    },
+    "WireExportBoundary": {
+      "line": 296,
+      "methods": [
+        "__post_init__",
+        "to_wire"
+      ]
+    },
+    "WireExportReceipt": {
+      "line": 313,
+      "methods": [
+        "to_wire"
+      ]
+    },
+    "WireExportRow": {
+      "line": 347,
+      "methods": []
+    },
+    "_ArtifactWriter": {
+      "line": 352,
+      "methods": [
+        "__init__",
+        "write"
+      ]
+    },
+    "WireTranscriptExporter": {
+      "line": 366,
+      "methods": [
+        "__init__",
+        "export",
+        "_header",
+        "_rows",
+        "_row",
+        "_validate_sequence",
+        "_publish"
+      ]
+    }
+  },
+  "registration.py": {
+    "Registration": {
+      "line": 24,
+      "methods": [
+        "__init__",
+        "register",
+        "restore_stopped",
+        "rename",
+        "fence_idle_owner",
+        "unregister",
+        "archive",
+        "begin_delete",
+        "remove",
+        "heartbeat",
+        "release_turn",
+        "live_owner_with_generation",
+        "live_owner_with_admission",
+        "claim_live_turn_with_admission",
+        "claim_live_turn_with_generation",
+        "attest_owner_compaction",
+        "guard_owner_compaction",
+        "_assert_maintenance_open_unlocked",
+        "claim_local_turn",
+        "canonical_name",
+        "aliases_for",
+        "goal_history",
+        "name_reserved",
+        "last_seen",
+        "require",
+        "status",
+        "all_threads",
+        "snapshot",
+        "active_threads",
+        "peers",
+        "__contains__"
+      ]
+    }
+  },
+  "wire_log.py": {
+    "WireLog": {
+      "line": 44,
+      "methods": [
+        "__init__",
+        "locked",
+        "full_history",
+        "_assert_private_directory",
+        "_claim_projection_unlocked",
+        "claim_projection",
+        "_private_marker_unlocked",
+        "_verified_private_rows_unlocked",
+        "_append_private_unlocked",
+        "read_initial_cohort",
+        "_keyed_receipt_unlocked",
+        "read_keyed_response",
+        "_public_page_record",
+        "_record_snapshot",
+        "full_history_snapshot",
+        "_receipt_offsets",
+        "message_by_id",
+        "total_messages",
+        "latest_sequence",
+        "_iter_log_unlocked",
+        "_max_sequence_unlocked",
+        "_last_row_sequence_unlocked",
+        "_read_last_sequence",
+        "assert_legacy_rewrite_allowed",
+        "_assert_no_private_authority_unlocked",
+        "remove_legacy_threads",
+        "claim_gate_enabled",
+        "verify_before_read_unlocked",
+        "metadata_path",
+        "write_metadata_unlocked",
+        "uses_private_protocol_unlocked",
+        "next_legacy_sequence_unlocked",
+        "append_legacy_unlocked",
+        "require_fresh_private_root_unlocked",
+        "enable_claim_gate_unlocked"
+      ]
+    }
+  },
+  "publisher.py": {
+    "Publisher": {
+      "line": 57,
+      "methods": [
+        "__init__",
+        "_validate_publish_request",
+        "_prepare_message_unlocked",
+        "publish",
+        "publish_ordinary",
+        "initialize_private_protocol",
+        "initialize_private_claim_protocol",
+        "publish_claim_envelope",
+        "publish_initial_cohort",
+        "publish_keyed_response",
+        "_publish_keyed_response_unlocked"
+      ]
+    }
+  },
+  "goal_generation.py": {
+    "GenerationState": {
+      "line": 21,
+      "methods": [
+        "successors",
+        "validate_attempt",
+        "permits_retirement",
+        "allows_resume",
+        "authorize_retry"
+      ]
+    }
+  },
+  "native_entries.py": {
+    "NativeEntry": {
+      "line": 26,
+      "methods": [
+        "wire_member",
+        "read",
+        "model_choice",
+        "input_id",
+        "events",
+        "unread_reply"
+      ]
+    }
+  },
+  "transcript_events.py": {
+    "TranscriptEvent": {
+      "line": 28,
+      "methods": [
+        "replay_update",
+        "text_size",
+        "routed"
+      ]
+    }
+  },
+  "deleted_aggregates": {
+    "operations.py": true,
+    "declarations.py": true,
+    "state_tags.py": true,
+    "resource_claims.py": true,
+    "bus_durability.py": true
+  },
+  "source_head": "9ef2c097efcde0b564fbb0f8cf7fe1a37eaad7b6"
+}
