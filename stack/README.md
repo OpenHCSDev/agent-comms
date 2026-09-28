@@ -88,10 +88,13 @@ The coordination wire defaults to `~/.agent-comms`; set `AGENT_COMMS_ROOT` if
 your state lives elsewhere. Installing this project does not launch owners or
 submit prompts.
 
-Unread reply counts keep a disposable `transcript_reply_index.sqlite3` in the
-wire root. Existing transcripts are indexed once; later appends and fresh UI
-processes use the index. If that file is removed or damaged, the next read
-rebuilds it from the native transcripts.
+Unread reply counts keep a disposable `transcript_reply_index.v3.sqlite3` in the
+wire root. The filename derives from the index schema version, allowing an open
+UI to finish using its existing cache while a newly installed UI starts. Existing
+transcripts are indexed incrementally; later appends and fresh UI processes use
+the index. If that file is removed or damaged, the next read rebuilds it from the
+native transcripts. Remove superseded cache files after their UI processes exit;
+native transcripts and `read_ledger.json` retain the history and read positions.
 
 ## Compaction strategy
 
