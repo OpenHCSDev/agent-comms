@@ -135,6 +135,13 @@ async def owner_fixture(
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(agent_dir))
     monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path))
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", f"{provider}/{model}")
+    if os.environ.get("PR95_EMPTY_SESSION") == "1":
+        from agent_comms.fresh_private_session import create_fresh_private_session
+
+        fresh = create_fresh_private_session(
+            tmp_path / "native-sessions" / ("f" * 32), worktree=tmp_path
+        )
+        monkeypatch.setenv("PR95_OWNER_SAVED_SESSION", str(fresh.path))
     child = await AttachedChild.start(
         ("node", str(repo / "stack/test-native-selected-owner-host.mjs")),
         env=dict(os.environ, PR95_OWNER_FIXTURE_ROOT=str(tmp_path), TMPDIR=str(tmp_path)),
@@ -180,7 +187,9 @@ async def owner_fixture(
             target="owner",
             text="Continue",
         )
-        if os.environ.get("PR95_PRIVATE_SESSION") == "1":
+        if os.environ.get("PR95_PRIVATE_SESSION") == "1" and not os.environ.get(
+            "PR95_EMPTY_SESSION"
+        ):
             record_fixture_history(inputs, "owner", owner.active_turn.admission_generation)
         info = AgentRuntimeInfo(
             thread="owner",
@@ -742,3 +751,141 @@ async def test_disconnected_selected_summary_stays_unknown_without_original_repl
             gate.set()
             operation.cancel()
             await asyncio.gather(operation, return_exceptions=True)
+
+
+@pytest.mark.parametrize(
+    "compact_after_reset", [False, True], ids=["attach-input", "attach-compact-input"]
+)
+async def test_private_retained_session_accepts_after_runtime_journal_reset(
+    tmp_path, monkeypatch, compact_after_reset
+):
+    from dataclasses import replace
+
+    from agent_comms.acp import CommsAgent
+    from agent_comms.comms import wire
+
+    monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
+    monkeypatch.setenv("PR95_EMPTY_SESSION", "1")
+    async with owner_fixture(tmp_path, monkeypatch, goal=False) as (
+        persistent,
+        _registry,
+        _inputs,
+        file,
+        launcher,
+        info,
+    ):
+        comms = wire(tmp_path)
+        root_id = comms.messaging.initialize_private_initial_protocol()
+        with MutationStore(str(tmp_path / "coordination.sqlite3")) as coordination:
+            install_native_runtime_schema(coordination)
+        project = tmp_path / "proj"
+        project.mkdir()
+        updates = []
+
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs)
+
+        def attached_agent():
+            agent = CommsAgent(
+                comms,
+                agent_bin=launcher,
+                agent_args=[],
+                runtime_enabled=True,
+                auto_wake=False,
+                private_nk_native_package=Path(PACKAGE).resolve(),
+                private_nk_wire_root_id=root_id,
+            )
+            agent.on_connect(Client())
+            return agent
+
+        managed = NativePiRpcLaunch.managed
+
+        def native_launch(command, arguments, **kwargs):
+            launch = managed(command, arguments, **kwargs)
+            return replace(
+                launch,
+                argv=(
+                    "node",
+                    str(
+                        Path(__file__).resolve().parents[1]
+                        / "stack/test-native-selected-owner-host.mjs"
+                    ),
+                    "--session",
+                    launch.session_file,
+                ),
+                env=dict(launch.env, PR95_OWNER_FIXTURE_ROOT=str(tmp_path)),
+            )
+
+        monkeypatch.setattr(NativePiRpcLaunch, "managed", native_launch)
+        agent = attached_agent()
+        try:
+            await agent.new_session(cwd=str(project), mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            comms.registry.register(
+                replace(
+                    comms.registry.require("proj"),
+                    session_file=file,
+                    model=info.model,
+                    process_identity=ProcessIdentity.capture(os.getpid()),
+                )
+            )
+            agent.turns.persistent_backends["proj"] = persistent
+            await agent.prompt("proj", [{"type": "text", "text": "Before quiet cutover"}])
+            await agent.prompt("proj", [{"type": "text", "text": "Second retained turn"}])
+            before_rows = [
+                row for row in agent.inputs.dispositions.read().rows.values() if row.owner == "proj"
+            ]
+            assert len(before_rows) == 2 and all(row.has_started for row in before_rows), updates
+            prior_native_ids = {row.native_id for row in before_rows}
+            await agent.shutdown()
+            before = Path(file).read_bytes()
+            proofs = {
+                p: p.read_bytes() for p in Path(file).parent.glob(Path(file).name + ".input-proof*")
+            }
+            assert proofs
+            coordination_inode = (tmp_path / "coordination.sqlite3").stat().st_ino
+            # Exact authorized reset, only after the real owner and child stop.
+            for name in (
+                "compaction-commits.sqlite3",
+                "compaction-commits.sqlite3-wal",
+                "compaction-commits.sqlite3-shm",
+                InputDispositions.filename,
+            ):
+                (tmp_path / name).unlink(missing_ok=True)
+            assert (tmp_path / "coordination.sqlite3").stat().st_ino == coordination_inode
+            assert Path(file).read_bytes() == before
+            assert all(p.read_bytes() == data for p, data in proofs.items())
+            agent = attached_agent()
+            await agent.load_session(cwd=str(project), session_id="proj", mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            (tmp_path / "cutover-attached.json").write_text(
+                json.dumps({"attached": True, "session": file})
+            )
+            assert not agent.turns.persistent_backends
+            if compact_after_reset:
+                await agent.prompt("proj", [{"type": "text", "text": "/compact"}])
+            await agent.prompt("proj", [{"type": "text", "text": "After quiet cutover"}])
+            after_rows = [
+                row for row in agent.inputs.dispositions.read().rows.values() if row.owner == "proj"
+            ]
+            assert len(after_rows) == 1 and after_rows[0].has_started, updates
+            assert after_rows[0].native_id not in prior_native_ids
+            events = [json.loads(line) for line in Path(file).read_text().splitlines()]
+            for native_id in (*prior_native_ids, after_rows[0].native_id):
+                assert (
+                    sum(
+                        row["type"] == "message" and row["message"].get("inputId") == native_id
+                        for row in events
+                    )
+                    == 1
+                )
+            assert any(row["type"] == "compaction" for row in events)
+            assert Path(file).read_bytes().startswith(before)
+            assert not CompactionJournal(
+                tmp_path / "compaction-commits.sqlite3"
+            ).blocking_selected_summary(file)
+        finally:
+            await agent.shutdown()
