@@ -1,0 +1,20 @@
+{
+  "textual": {
+    "version": "8.2.8",
+    "url": "https://github.com/OpenHCSDev/textual.git",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "6ac3cdd919b1bfb3333091c9ac94df6c114d9fa9",
+      "requested_revision": "6ac3cdd919b1bfb3333091c9ac94df6c114d9fa9"
+    }
+  },
+  "batrachian-toad": {
+    "version": "0.6.20",
+    "url": "https://github.com/OpenHCSDev/toad.git",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "a27814f8a8cc257ded4ce267dd473c5913398918",
+      "requested_revision": "a27814f8a8cc257ded4ce267dd473c5913398918"
+    }
+  }
+}
