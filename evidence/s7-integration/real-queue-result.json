@@ -1,0 +1,112 @@
+{
+  "project": "/home/ts/wt/comms-delete-export-compat-20260928/.artifacts/s7-real-queue-20260928",
+  "root": "/var/tmp/ac-pr95-queue-5cufiamw",
+  "started_at": 1790559686.0293727,
+  "package": "/var/tmp/agent-comms-pi-native-diagnostics-20260928/node_modules/@earendil-works/pi-coding-agent",
+  "launcher": "/home/ts/.local/share/agent-comms/runtime-s7-20260928/bin/pi-comms-native",
+  "verified_success": true,
+  "turns": [
+    {
+      "response": {
+        "stop_reason": "end_turn",
+        "usage": null,
+        "field_meta": null
+      },
+      "seconds": 10.47555160522461
+    },
+    {
+      "response": {
+        "stop_reason": "end_turn",
+        "usage": null,
+        "field_meta": null
+      },
+      "seconds": 8.75905466079712
+    },
+    {
+      "response": {
+        "stop_reason": "end_turn",
+        "usage": null,
+        "field_meta": null
+      },
+      "seconds": 56.13040637969971
+    }
+  ],
+  "session_id": "s7-real-queue-20260928",
+  "session_file": "/home/ts/.pi/agent/sessions/--home-ts-wt-comms-delete-export-compat-20260928-.artifacts-s7-real-queue-20260928--/2026-09-28T01-41-35-039Z_01a0e5ac-b0bf-7042-89ed-e393e11dc98f.jsonl",
+  "effective_reserve_tokens": 263808,
+  "selected_operation": "439bde9d800d4ab995f69a05b9c47e58",
+  "queue_acceptance": {
+    "inputId": "1ffa1d2c515c42429488964562585708",
+    "status": "accepted_not_started",
+    "delivery": "queue"
+  },
+  "queue_before_start": {
+    "admission": 1,
+    "key": "acp:1ffa1d2c515c42429488964562585708",
+    "native_id": null,
+    "owner": "s7-real-queue-20260928",
+    "sent_text": null,
+    "sequence": null,
+    "source_text": "This is a new queued follow-up, not a correction. After the original response, reply QUEUE_FOLLOWUP_OK and list all four original project facts.",
+    "status": "unknown",
+    "target": "s7-real-queue-20260928",
+    "turn_id": null
+  },
+  "original_input": {
+    "admission": 1,
+    "key": "acp:d8ce7ee98aa34462a38866d9e1db9f7f",
+    "native_id": "749f4922429329da39b0d7901b07f4fa",
+    "owner": "s7-real-queue-20260928",
+    "sent_text": "Give this new thread a concise topic title before doing the task: call comms_rename_self with a meaningful 2-5-word hyphenated name (at most 48 characters). Summarize the user's intent; do not copy their first message, greeting, or request phrasing. This is automatic naming for a new thread.\n\nCoordination context: you are thread 's7-real-queue-20260928'; parent=None. This identity overrides identities in inherited conversation history. Use your own identity for comms tools. Incoming direct messages automatically start a new turn when you are idle, or are delivered into your current turn. End your turn when done; never sleep or poll waiting for messages. Reply with comms_send when a reply is useful; otherwise call comms_dismiss with the channel to end quietly. Do not echo acknowledgments. Your project directory is '/home/ts/wt/comms-delete-export-compat-20260928/.artifacts/s7-real-queue-20260928'. Use comms_set_project(path) to change it persistently without creating another thread. After changing projects, end this turn; the runtime automatically resumes in the new project. When the user asks you to set or start a persistent goal, call comms_set_goal(text) so this same thread continues it autonomously. Peer state: []\n\nThis is the queue original. Preserve the four facts. Reply QUEUE_ORIGINAL_OK only.",
+    "sequence": null,
+    "source_text": "This is the queue original. Preserve the four facts. Reply QUEUE_ORIGINAL_OK only.",
+    "status": "started",
+    "target": "s7-real-queue-20260928",
+    "turn_id": "cbdb0b6d9715410a95debf8415770c1f"
+  },
+  "queued_input": {
+    "admission": 1,
+    "key": "acp:1ffa1d2c515c42429488964562585708",
+    "native_id": "71ad94ffbd51f662dfd7cd972f5d3c42",
+    "owner": "s7-real-queue-20260928",
+    "sent_text": "User follow-up:\nThis is a new queued follow-up, not a correction. After the original response, reply QUEUE_FOLLOWUP_OK and list all four original project facts.",
+    "sequence": null,
+    "source_text": "This is a new queued follow-up, not a correction. After the original response, reply QUEUE_FOLLOWUP_OK and list all four original project facts.",
+    "status": "started",
+    "target": "s7-real-queue-20260928",
+    "turn_id": "cbdb0b6d9715410a95debf8415770c1f"
+  },
+  "native_start_positions": [
+    8,
+    10
+  ],
+  "compaction_positions": [
+    7
+  ],
+  "assistant_answers": [
+    "I can\u2019t call `comms_rename_self` in this session. Suggested title: `lighthouse-delivery-facts`.\n\nRECORDED:\n- Lighthouse code: ORCHID-7301\n- Delivery window: Thursday 14:30\n- Rejected option: cobalt\n- Chosen material: cedar",
+    "ACK",
+    "QUEUE_ORIGINAL_OK",
+    "QUEUE_FOLLOWUP_OK\n- Lighthouse code: ORCHID-7301\n- Delivery window: Thursday 14:30\n- Rejected option: cobalt\n- Chosen material: cedar"
+  ],
+  "selected_summaries": [
+    {
+      "operation_id": "439bde9d800d4ab995f69a05b9c47e58",
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-wt-comms-delete-export-compat-20260928-.artifacts-s7-real-queue-20260928--/2026-09-28T01-41-35-039Z_01a0e5ac-b0bf-7042-89ed-e393e11dc98f.jsonl",
+      "source_json": "{\"selected\":{\"contextWindow\":272000,\"modelId\":\"gpt-6-sol\",\"provider\":\"openai-codex\"},\"settings\":{\"keepRecentTokens\":512,\"reserveTokens\":263808},\"source\":{\"admissionGeneration\":1,\"correctionWitness\":\"1:e1adbaef57845992b2b4da469d74d12c62e53eb50f47be5e8d4522544ce08401\",\"ingressKey\":\"acp:d8ce7ee98aa34462a38866d9e1db9f7f\",\"inputSha256\":\"e1adbaef57845992b2b4da469d74d12c62e53eb50f47be5e8d4522544ce08401\",\"originalSha256\":\"c4b8feab5cf48707985d738d59dc9044bf6bbd302754d52816dc65cc8c9be9d1\",\"ownerCreatedAt\":\"0x1.aae7171835d50p+30\",\"ownerName\":\"s7-real-queue-20260928\",\"ownerPid\":2383063,\"reservedRevision\":[[2084,2268027,62876,1790559709624664282,1790559709624664282],[2084,2268026,816,1790559706606602390,1790559706606602390]],\"turnId\":\"cbdb0b6d9715410a95debf8415770c1f\"}}",
+      "status": "linked",
+      "commit_id": "bcecde1424de439b8fea7892590849b2",
+      "decline_reason": null
+    }
+  ],
+  "operations": [
+    {
+      "commit_id": "bcecde1424de439b8fea7892590849b2",
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-wt-comms-delete-export-compat-20260928-.artifacts-s7-real-queue-20260928--/2026-09-28T01-41-35-039Z_01a0e5ac-b0bf-7042-89ed-e393e11dc98f.jsonl",
+      "intent_json": "{\"metadataDigest\":\"fd58bad48e16588818cedf06e8107e89399270d6b98e3b99f9518f88e6bbac0b\",\"owner\":{\"correction_revision\":0,\"goal_id\":null,\"goal_revision\":null,\"owner_epoch\":1,\"registry_revision\":[3338670,1465,1790559710514050131,1790559710514682533],\"session_file\":\"/home/ts/.pi/agent/sessions/--home-ts-wt-comms-delete-export-compat-20260928-.artifacts-s7-real-queue-20260928--/2026-09-28T01-41-35-039Z_01a0e5ac-b0bf-7042-89ed-e393e11dc98f.jsonl\",\"session_leaf\":\"b70aabdc\",\"session_revision\":\"2084:2268027:62876:1790559709624664282:1790559709624664282\",\"thread\":\"s7-real-queue-20260928\",\"turn_id\":\"cbdb0b6d9715410a95debf8415770c1f\"},\"payloadDigest\":\"23ec700afc62f401874cd014b1ded1aaaadf9df98dffaf9ab15ce35ea0c4a323\",\"selectedSummaryOperationId\":\"439bde9d800d4ab995f69a05b9c47e58\",\"selectedSummarySourceDigest\":\"a3b7d91958903d6626f2e31343df694d9dfe7a0421bed2360c2beca16d434f40\",\"source\":{\"bus_revision\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"goal_id\":null,\"goal_revision\":null,\"input_revision\":\"f89ff4dad7c93fefa507af150be56701c9529540e8bed1beffdf2cbf0ffcb988\",\"native_json\":\"{\\\"firstKeptEntryId\\\":\\\"9485c61a\\\",\\\"leafId\\\":\\\"b70aabdc\\\",\\\"revision\\\":\\\"2084:2268027:62876:1790559709624664282:1790559709624664282\\\",\\\"sessionFile\\\":\\\"/home/ts/.pi/agent/sessions/--home-ts-wt-comms-delete-export-compat-20260928-.artifacts-s7-real-queue-20260928--/2026-09-28T01-41-35-039Z_01a0e5ac-b0bf-7042-89ed-e393e11dc98f.jsonl\\\",\\\"sessionId\\\":\\\"01a0e5ac-b0bf-7042-89ed-e393e11dc98f\\\"}\",\"owner_epoch\":1,\"pending_input_key\":\"acp:d8ce7ee98aa34462a38866d9e1db9f7f\",\"settings_paths\":[\"/home/ts/.pi/agent/settings.json\",\"/home/ts/wt/comms-delete-export-compat-20260928/.artifacts/s7-real-queue-20260928/.pi/settings.json\",\"/home/ts/.pi/agent/models.json\",\"/home/ts/wt/comms-delete-export-compat-20260928/.artifacts/s7-real-queue-20260928/.pi/models.json\"],\"settings_revision\":[\"2084:655889:38:1790013225018647670:1790013225018647670:3ed1351864b5628126d34624e95a031e69cbdda8c546d04cf059c933e8de91c9\",\"2084:8914696:84:1790559686029226045:1790559686029226045:3c0f12eadde9a56071a14e878c0badffd7bb8d7e3eb174019e9a6bb2790d772f\",\"missing\",\"missing\"],\"thread\":\"s7-real-queue-20260928\",\"turn_id\":\"cbdb0b6d9715410a95debf8415770c1f\",\"wire_root\":\"/var/tmp/ac-pr95-queue-5cufiamw:2083:3338596\"},\"witness\":{\"firstKeptEntryId\":\"9485c61a\",\"leafId\":\"b70aabdc\",\"revision\":\"2084:2268027:62876:1790559709624664282:1790559709624664282\",\"sessionFile\":\"/home/ts/.pi/agent/sessions/--home-ts-wt-comms-delete-export-compat-20260928-.artifacts-s7-real-queue-20260928--/2026-09-28T01-41-35-039Z_01a0e5ac-b0bf-7042-89ed-e393e11dc98f.jsonl\",\"sessionId\":\"01a0e5ac-b0bf-7042-89ed-e393e11dc98f\"}}",
+      "status": "committed",
+      "evidence_json": "{\"entryId\":\"05ac0f98\",\"leafId\":\"05ac0f98\",\"metadataDigest\":\"fd58bad48e16588818cedf06e8107e89399270d6b98e3b99f9518f88e6bbac0b\",\"revision\":\"2084:2268027:64986:1790559751068514012:1790559751068514012\",\"status\":\"committed\"}"
+    }
+  ],
+  "finished_at": 1790559766.6718218
+}
