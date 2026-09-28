@@ -1223,7 +1223,7 @@ class TestThreadOps:
         assert "fixer" not in wired.registry
         assert [message.body for message in wired.views.full_history()] == ["retained channel"]
         assert "fixer" not in wired.agents.all_activity()
-        assert "fixer" not in wired.agents.runtime_info.all()
+        assert "fixer" not in wired.agents.runtime_info.read()
         assert wired.ledger.read() == {"members": ["PR111"]}
         assert all("fixer" not in key for key in wired.bus._read_markers())
 

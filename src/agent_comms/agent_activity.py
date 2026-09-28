@@ -25,7 +25,7 @@ class AgentActivity:
         self.registry = registry
         self._wire_lock_path = root / "wire"
         self.activity = ActivityLog(root / "activity.jsonl")
-        self.runtime_info = RuntimeInfoStore(root / "runtime_info.json")
+        self.runtime_info = RuntimeInfoStore(root / RuntimeInfoStore.filename)
 
     def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:
         """Declare a thread's current activity (thinking/working/idle)."""
@@ -88,4 +88,4 @@ class AgentActivity:
             )
 
     def agent_info_of(self, thread: str) -> AgentRuntimeInfo | None:
-        return self.runtime_info.get(self.registry.require(thread).name)
+        return self.runtime_info.read().get(self.registry.require(thread).name)

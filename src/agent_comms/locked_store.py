@@ -86,15 +86,24 @@ class LockedStore(ABC, Generic[T]):
             original = self._read_unlocked()
             changed = change(original)
             if changed is not original:
-                self._write_unlocked(
-                    json.dumps(
-                        self._encode(changed),
-                        indent=self.json_indent,
-                        sort_keys=self.json_sort_keys,
-                    )
-                    + self.json_suffix
-                )
+                self._publish_unlocked(changed)
             return changed
+
+    def replace(self, value: T) -> None:
+        """Publish a complete owned snapshot without reading the discarded one.
+
+        Use update for merges. Derived projections must hold their source lock
+        through capture and replacement; this document lock alone is not source
+        authority or a cross-document transaction.
+        """
+        with self.locked():
+            self._publish_unlocked(value)
+
+    def _publish_unlocked(self, value: T) -> None:
+        self._write_unlocked(
+            json.dumps(self._encode(value), indent=self.json_indent, sort_keys=self.json_sort_keys)
+            + self.json_suffix
+        )
 
     def _write_unlocked(self, text: str) -> None:
         """Stage before publication; retain the old inode until directory sync.
