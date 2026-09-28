@@ -1,0 +1,10 @@
+2 2 /home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/manager-qQE5uf/2026-09-28T17-20-14-635Z_01a0e908-0f2a-7609-b422-6edab2dfb970.jsonl
+2
+{
+  type: 'session',
+  version: 3,
+  id: '01a0e908-0f39-7609-b422-6edcf2833f27',
+  timestamp: '2026-09-28T17:20:14.649Z',
+  cwd: '/home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/manager-qQE5uf',
+  parentSession: '/home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/manager-qQE5uf/2026-09-28T17-20-14-635Z_01a0e908-0f2a-7609-b422-6edab2dfb970.jsonl'
+}
