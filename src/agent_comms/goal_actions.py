@@ -133,9 +133,7 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             ctx.goals.waits.clear(ctx.thread.goal.id)
         if goal is not None and goal.state.pause_source is not None:
             # Audit only; current pause authority is already durable in Goal.
-            ctx.goals.pauses.record(
-                GoalPauseEvent(goal.id, goal.revision, goal.state.pause_source)
-            )
+            ctx.goals.pauses.record(GoalPauseEvent(goal.id, goal.revision, goal.state.pause_source))
         return goal
 
     @abstractmethod
@@ -279,9 +277,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         snapshot = ctx.goals.registry.snapshot()
         if not any(
             GoalWaits.target_has_active_turn(target, snapshot)
-            and OwnerLifecycle._process_alive(
-                snapshot.threads[snapshot.aliases.get(target.name, target.name)].pid
-            )
+            and snapshot.threads[snapshot.aliases.get(target.name, target.name)].process_alive
             for target in wait_targets
         ):
             names = ", ".join(f"@{target.name}" for target in wait_targets)

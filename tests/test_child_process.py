@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import signal
 import sys
 import time
+from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 
@@ -31,8 +31,9 @@ TREE = """import subprocess,sys,os,time,json
 from pathlib import Path
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
-grandchild = ('import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); '
-              'print("ready",flush=True); time.sleep(60)')
+grandchild = ('import signal,time,sys; '
+              'stop = signal.SIGBREAK if sys.platform=="win32" else signal.SIGTERM; '
+              'signal.signal(stop, signal.SIG_IGN); print("ready",flush=True); time.sleep(60)')
 child=subprocess.Popen([sys.executable,'-c',grandchild],stdout=subprocess.PIPE)
 assert child.stdout.readline()==b'ready\\n'
 identities=[FieldCodec.encode(ProcessIdentity.capture(p)) for p in (os.getpid(),child.pid)]
@@ -82,7 +83,7 @@ async def test_detached_mismatch_refuses_signal_without_harming_real_child() -> 
     try:
         assert not stale.alive()
         with pytest.raises(IdentityMismatchError):
-            stale.signal(signal.SIGKILL)
+            stale.force()
         with pytest.raises(IdentityMismatchError):
             await stale.stop()
         assert child.alive()
@@ -176,6 +177,8 @@ async def test_exec_failure_is_reported_by_real_exec_boundary(tmp_path: Path) ->
 async def test_namespace_watchdog_survives_launcher_death(tmp_path: Path) -> None:
     from agent_comms.child_process import NamespaceContainment
 
+    if not isinstance(Platform.current(), NamespaceContainment):
+        pytest.skip("This platform does not provide PID namespaces")
     receipt = tmp_path / "namespace.json"
     launcher = DetachedProcess.launch(
         (
@@ -198,7 +201,7 @@ asyncio.run(run())
         await ready(receipt)
         namespace = json.loads(receipt.read_text())
         assert NamespaceContainment.namespace_alive(namespace)
-        launcher.signal(signal.SIGKILL)
+        launcher.force()
         await launcher.wait()
         async with asyncio.timeout(6):
             while NamespaceContainment.namespace_alive(namespace):
@@ -206,3 +209,85 @@ asyncio.run(run())
     finally:
         if launcher.alive():
             await launcher.stop()
+
+
+@pytest.mark.asyncio
+async def test_parent_lifeline_loss_releases_real_sqlite_reader(tmp_path: Path) -> None:
+    import sqlite3
+
+    from agent_comms.child_process import ParentLifeline
+
+    if sys.platform == "win32":
+        pytest.skip("Recovery gateway uses POSIX peer sockets and inherited descriptors")
+    database = tmp_path / "reader.sqlite"
+    with sqlite3.connect(database) as db:
+        db.execute("CREATE TABLE state (value INTEGER)")
+    receipt = tmp_path / "ready"
+    with ParentLifeline() as life:
+        child = await AttachedChild.start(
+            (
+                sys.executable,
+                "-c",
+                """
+import sqlite3,sys,time
+from pathlib import Path
+from agent_comms.child_process import ParentLifeline
+ParentLifeline.guard()
+db=sqlite3.connect(sys.argv[1],isolation_level=None)
+db.execute('BEGIN'); db.execute('SELECT * FROM state').fetchall()
+Path(sys.argv[2]).write_text('ready')
+time.sleep(60)
+""",
+                str(database),
+                str(receipt),
+            ),
+            env=life.environment,
+            pass_fds=(life.read_fd,),
+        )
+        await ready(receipt)
+        with closing(sqlite3.connect(database, timeout=0.05, isolation_level=None)) as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("INSERT INTO state VALUES (1)")
+            with pytest.raises(sqlite3.OperationalError, match="locked"):
+                db.execute("COMMIT")
+            db.execute("ROLLBACK")
+    try:
+        async with asyncio.timeout(5):
+            await child.wait()
+        assert not child.alive()
+        with sqlite3.connect(database, timeout=0.5) as db:
+            db.execute("INSERT INTO state VALUES (2)")
+            db.commit()
+    finally:
+        await child.stop()
+
+
+def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> None:
+    receipt = tmp_path / "started"
+    recorded = []
+
+    def reserve(identity: ProcessIdentity) -> None:
+        assert not receipt.exists()
+        assert identity.alive()
+        recorded.append(identity)
+
+    child = DetachedProcess.launch(
+        (
+            sys.executable,
+            "-c",
+            'import sys,time; open(sys.argv[1],"w").write("started"); time.sleep(60)',
+            str(receipt),
+        ),
+        before_start=reserve,
+    )
+    try:
+        assert recorded == [child.identity]
+        stale = DetachedProcess.attach(
+            replace(child.identity, start_time=child.identity.start_time + 1)
+        )
+        with pytest.raises(IdentityMismatchError):
+            stale.stop_sync()
+        assert child.alive()
+    finally:
+        child.stop_sync()
+    assert not child.alive()

@@ -17,13 +17,14 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
-from contextlib import asynccontextmanager, contextmanager, suppress
+from collections.abc import Callable
+from contextlib import asynccontextmanager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import Any
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
@@ -159,6 +160,15 @@ class Platform(DeclaredFamily, affix="Platform"):
         return cls.decode(sys.platform)()
 
     @abstractmethod
+    def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch: ...
+
+    @abstractmethod
+    def terminate_group(self, identity: ProcessIdentity) -> None: ...
+
+    @abstractmethod
+    def force_group(self, identity: ProcessIdentity) -> None: ...
+
+    @abstractmethod
     def identity(self, pid: int) -> ProcessIdentity: ...
 
     def matches(self, identity: ProcessIdentity) -> bool:
@@ -186,6 +196,15 @@ class Platform(DeclaredFamily, affix="Platform"):
 
 
 class PosixPlatform(ProcessGroups, Platform):
+    def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch:
+        return PosixLaunch(command, pass_fds)
+
+    def terminate_group(self, identity: ProcessIdentity) -> None:
+        self.signal_group(identity, signal.SIGTERM)
+
+    def force_group(self, identity: ProcessIdentity) -> None:
+        self.signal_group(identity, signal.SIGKILL)
+
     def group_members(self, leader: ProcessIdentity) -> tuple[ProcessIdentity, ...]:
         try:
             current = self.identity(leader.pid)
@@ -329,6 +348,283 @@ class DarwinPlatform(PosixPlatform):
         return tuple(members)
 
 
+class Win32Platform(ProcessGroups, Platform):
+    """Kernel creation times and named job objects bind the complete child tree."""
+
+    class ThreadEntry(ctypes.Structure):
+        _fields_ = [
+            ("size", ctypes.c_uint32),
+            ("usage", ctypes.c_uint32),
+            ("tid", ctypes.c_uint32),
+            ("owner", ctypes.c_uint32),
+            ("base_priority", ctypes.c_int32),
+            ("delta_priority", ctypes.c_int32),
+            ("flags", ctypes.c_uint32),
+        ]
+
+    def __init__(self):
+        self.kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        handle, dword, pointer = ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p
+        self._api("OpenProcess", handle, dword, ctypes.c_int, dword)
+        self._api("CloseHandle", ctypes.c_int, handle)
+        self._api("GetProcessTimes", ctypes.c_int, handle, pointer, pointer, pointer, pointer)
+        self._api("WaitForSingleObject", dword, handle, dword)
+        self._api("CreateJobObjectW", handle, pointer, ctypes.c_wchar_p)
+        self._api("OpenJobObjectW", handle, dword, ctypes.c_int, ctypes.c_wchar_p)
+        self._api("AssignProcessToJobObject", ctypes.c_int, handle, handle)
+        self._api(
+            "QueryInformationJobObject", ctypes.c_int, handle, ctypes.c_int, pointer, dword, pointer
+        )
+        self._api("TerminateJobObject", ctypes.c_int, handle, ctypes.c_uint)
+        self._api("TerminateProcess", ctypes.c_int, handle, ctypes.c_uint)
+        self._api("GenerateConsoleCtrlEvent", ctypes.c_int, dword, dword)
+        self._api("CreateToolhelp32Snapshot", handle, dword, dword)
+        self._api("Thread32First", ctypes.c_int, handle, pointer)
+        self._api("Thread32Next", ctypes.c_int, handle, pointer)
+        self._api("OpenThread", handle, dword, ctypes.c_int, dword)
+        self._api("ResumeThread", dword, handle)
+
+    def _api(self, name: str, result, *arguments) -> None:
+        function = getattr(self.kernel, name)
+        function.restype, function.argtypes = result, arguments
+
+    @contextmanager
+    def process_handle(self, pid: int, rights: int = 0x101000):
+        handle = self.kernel.OpenProcess(rights, False, pid)
+        if not handle:
+            code = ctypes.get_last_error()
+            if code == 87:  # ERROR_INVALID_PARAMETER: PID no longer exists.
+                raise ProcessLookupError(pid)
+            raise ctypes.WinError(code)
+        try:
+            yield handle
+        finally:
+            self.kernel.CloseHandle(handle)
+
+    def _identity(self, pid: int, handle) -> ProcessIdentity:
+        if self.kernel.WaitForSingleObject(handle, 0) != 258:  # WAIT_TIMEOUT
+            raise ProcessLookupError(pid)
+        created, exited, kernel, user = (ctypes.c_uint64() for _ in range(4))
+        if not self.kernel.GetProcessTimes(
+            handle,
+            ctypes.byref(created),
+            ctypes.byref(exited),
+            ctypes.byref(kernel),
+            ctypes.byref(user),
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return ProcessIdentity(pid, created.value)
+
+    def identity(self, pid: int) -> ProcessIdentity:
+        with self.process_handle(pid) as handle:
+            return self._identity(pid, handle)
+
+    @staticmethod
+    def job_name(identity: ProcessIdentity) -> str:
+        return f"Local\\agent-comms-{identity.pid}-{identity.start_time}"
+
+    @contextmanager
+    def job(self, identity: ProcessIdentity):
+        handle = self.kernel.OpenJobObjectW(0x000C, False, self.job_name(identity))
+        if not handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            yield handle
+        finally:
+            self.kernel.CloseHandle(handle)
+
+    def group_members(self, leader: ProcessIdentity) -> tuple[ProcessIdentity, ...]:
+        try:
+            with self.job(leader) as job:
+                capacity = 16
+                while True:
+                    # JOBOBJECT_BASIC_PROCESS_ID_LIST: two DWORDs then ULONG_PTRs.
+                    buffer = ctypes.create_string_buffer(
+                        8 + ctypes.sizeof(ctypes.c_size_t) * capacity
+                    )
+                    if self.kernel.QueryInformationJobObject(job, 3, buffer, len(buffer), None):
+                        count = ctypes.c_uint32.from_buffer(buffer, 4).value
+                        identifiers = (ctypes.c_size_t * count).from_buffer(buffer, 8)
+                        members = []
+                        for pid in identifiers:
+                            with suppress(ProcessLookupError):
+                                members.append(self.identity(pid))
+                        return tuple(members)
+                    if ctypes.get_last_error() != 234:  # ERROR_MORE_DATA
+                        raise ctypes.WinError(ctypes.get_last_error())
+                    capacity *= 2
+        except FileNotFoundError:
+            if self.matches(leader):
+                raise RuntimeError("Live process has no owned Windows job") from None
+            return ()
+
+    def send(self, identity: ProcessIdentity, signum: int) -> None:
+        with self.process_handle(identity.pid, 0x101001) as handle:
+            if self._identity(identity.pid, handle) != identity:
+                raise IdentityMismatchError(identity.pid)
+            if not self.kernel.TerminateProcess(handle, signum):
+                raise ctypes.WinError(ctypes.get_last_error())
+
+    def terminate_group(self, identity: ProcessIdentity) -> None:
+        if not self.matches(identity):
+            return  # Surviving job members are still forced in the common stop plan.
+        # Console controls are best-effort: detached/non-console processes
+        # need not have a console or a handler. The common grace deadline still
+        # forces the exact named job; failure to force remains an error.
+        self.kernel.GenerateConsoleCtrlEvent(1, identity.pid)  # CTRL_BREAK_EVENT
+
+    def force_group(self, identity: ProcessIdentity) -> None:
+        try:
+            with self.job(identity) as job:
+                if not self.kernel.TerminateJobObject(job, 1):
+                    raise ctypes.WinError(ctypes.get_last_error())
+        except FileNotFoundError:
+            if self.matches(identity):
+                raise RuntimeError("Refusing to kill a process without its owned job") from None
+
+    def bind_and_resume(self, identity: ProcessIdentity) -> None:
+        with self.process_handle(identity.pid, 0x101101) as process:
+            if self._identity(identity.pid, process) != identity:
+                raise IdentityMismatchError(identity.pid)
+            job = self.kernel.CreateJobObjectW(None, self.job_name(identity))
+            if not job:
+                raise ctypes.WinError(ctypes.get_last_error())
+            try:
+                if not self.kernel.AssignProcessToJobObject(job, process):
+                    raise ctypes.WinError(ctypes.get_last_error())
+                snapshot = self.kernel.CreateToolhelp32Snapshot(4, 0)  # TH32CS_SNAPTHREAD
+                if snapshot == ctypes.c_void_p(-1).value:
+                    raise ctypes.WinError(ctypes.get_last_error())
+                try:
+                    entry = self.ThreadEntry()
+                    entry.size = ctypes.sizeof(entry)
+                    found = self.kernel.Thread32First(snapshot, ctypes.byref(entry))
+                    while found:
+                        if entry.owner == identity.pid:
+                            thread = self.kernel.OpenThread(2, False, entry.tid)
+                            if not thread:
+                                raise ctypes.WinError(ctypes.get_last_error())
+                            try:
+                                if self.kernel.ResumeThread(thread) == 0xFFFFFFFF:
+                                    raise ctypes.WinError(ctypes.get_last_error())
+                                return
+                            finally:
+                                self.kernel.CloseHandle(thread)
+                        found = self.kernel.Thread32Next(snapshot, ctypes.byref(entry))
+                    raise RuntimeError("Suspended child's primary thread is missing")
+                finally:
+                    self.kernel.CloseHandle(snapshot)
+            except BaseException:
+                self.kernel.TerminateProcess(process, 1)
+                raise
+            finally:
+                # Named job stays alive while it contains processes. Detached
+                # owners outlive this launcher; no kill-on-handle-close flag.
+                self.kernel.CloseHandle(job)
+
+    def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch:
+        if pass_fds:
+            raise NotImplementedError("POSIX descriptor inheritance is unavailable on Windows")
+        return WindowsLaunch(command, self)
+
+
+class ChildLaunch(ABC):
+    @property
+    @abstractmethod
+    def argv(self) -> tuple[str, ...]: ...
+
+    @property
+    @abstractmethod
+    def options(self) -> dict: ...
+
+    @abstractmethod
+    def release(self, identity: ProcessIdentity) -> None: ...
+
+    @abstractmethod
+    def verify(self) -> None: ...
+
+    async def verify_async(self) -> None:
+        self.verify()
+
+    @abstractmethod
+    def close(self) -> None: ...
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
+
+
+class WindowsLaunch(ChildLaunch):
+    def __init__(self, command: tuple[str, ...], platform: Win32Platform):
+        self.command, self.platform = command, platform
+
+    @property
+    def argv(self) -> tuple[str, ...]:
+        return self.command
+
+    @property
+    def options(self) -> dict:
+        # Job assignment precedes ResumeThread; arbitrary child code cannot
+        # create an uncontained descendant between CreateProcess and binding.
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | 0x00000004}
+
+    def release(self, identity: ProcessIdentity) -> None:
+        self.platform.bind_and_resume(identity)
+
+    def verify(self) -> None:
+        pass  # CreateProcess itself reports launch failure before returning.
+
+    def close(self) -> None:
+        pass  # The kernel named job owns the detached lifetime.
+
+
+class PosixLaunch(ChildLaunch):
+    def __init__(self, command: tuple[str, ...], pass_fds: tuple[int, ...]):
+        self.command = command
+        self.pass_fds = pass_fds
+        self.read_fd, self.write_fd = os.pipe()
+        self.error_r, error_w = os.pipe()
+        self.error_writer = os.fdopen(error_w, "wb", buffering=0)
+
+    @property
+    def argv(self) -> tuple[str, ...]:
+        return (
+            sys.executable,
+            "-c",
+            _EXEC_GATE,
+            str(self.read_fd),
+            str(self.error_writer.fileno()),
+            *self.command,
+        )
+
+    @property
+    def options(self) -> dict:
+        return {
+            "start_new_session": True,
+            "pass_fds": (self.read_fd, self.error_writer.fileno(), *self.pass_fds),
+        }
+
+    def release(self, identity: ProcessIdentity) -> None:
+        self.error_writer.close()
+        os.write(self.write_fd, b"G")
+
+    def verify(self) -> None:
+        error = os.read(self.error_r, 64)
+        if error:
+            code = int(error)
+            raise OSError(code, os.strerror(code), self.command[0])
+
+    async def verify_async(self) -> None:
+        await _exec_error(self.error_r, self.command[0])
+
+    def close(self) -> None:
+        self.error_writer.close()
+        for fd in (self.read_fd, self.write_fd, self.error_r):
+            os.close(fd)
+
+
 class ChildOutcome(DeclaredFamily, affix="Outcome"):
     @property
     @abstractmethod
@@ -408,34 +704,6 @@ except OSError as error:
 """
 
 
-@contextmanager
-def _launch_gate(
-    command: tuple[str, ...],
-) -> Iterator[tuple[tuple[str, ...], int, int, int, BinaryIO]]:
-    if not command:
-        raise ValueError("A child command is required")
-    # Select capability before spawn. Unsupported platforms cannot silently
-    # weaken containment to a direct-child-only launch.
-    platform = Platform.current()
-    if not isinstance(platform, ProcessGroups):
-        raise NotImplementedError("Process-group containment unavailable")
-    read_fd, write_fd = os.pipe()
-    error_r, error_w = os.pipe()
-    error_writer = os.fdopen(error_w, "wb", buffering=0)
-    try:
-        yield (
-            (sys.executable, "-c", _EXEC_GATE, str(read_fd), str(error_w), *command),
-            read_fd,
-            write_fd,
-            error_r,
-            error_writer,
-        )
-    finally:
-        error_writer.close()
-        for fd in (read_fd, write_fd, error_r):
-            os.close(fd)
-
-
 async def _exec_error(fd: int, command: str) -> None:
     os.set_blocking(fd, False)
     loop = asyncio.get_running_loop()
@@ -473,25 +741,35 @@ class ChildProcess(ABC):
     @abstractmethod
     async def wait(self) -> ChildOutcome: ...
 
-    async def _stop(self) -> ChildOutcome:
-        self.platform.signal_group(self.identity, signal.SIGTERM)
+    def _stop_plan(self, guard):
+        with guard():
+            self.platform.terminate_group(self.identity)
         deadline = time.monotonic() + STOP_GRACE_SECONDS
         stage = GracefulStopOutcome
         while self.platform.group_members(self.identity):
             if time.monotonic() >= deadline:
                 stage = ForcedStopOutcome
-                self.platform.signal_group(self.identity, signal.SIGKILL)
+                with guard():
+                    self.platform.force_group(self.identity)
                 break
-            await asyncio.sleep(0.02)
-        async with asyncio.timeout(STOP_GRACE_SECONDS):
-            outcome = await self.wait()
-        # Leader exit alone is insufficient. A grandchild may ignore TERM.
+            yield 0.02
         while self.platform.group_members(self.identity):
-            self.platform.signal_group(self.identity, signal.SIGKILL)
             if time.monotonic() >= deadline + STOP_GRACE_SECONDS:
                 raise RuntimeError("Child process group did not retire")
-            await asyncio.sleep(0.02)
-        return stage(outcome)
+            yield 0.02
+        return stage
+
+    async def _stop(self) -> ChildOutcome:
+        plan = self._stop_plan(nullcontext)
+        while True:
+            try:
+                delay = next(plan)
+            except StopIteration as done:
+                stage = done.value
+                break
+            await asyncio.sleep(delay)
+        async with asyncio.timeout(STOP_GRACE_SECONDS):
+            return stage(await self.wait())
 
     async def stop(self) -> ChildOutcome:
         if self._stop_task is None:
@@ -518,24 +796,25 @@ class AttachedChild(ChildProcess):
         input_enabled: bool = True,
         limit: int = 65536,
     ) -> AttachedChild:
-        with _launch_gate(command) as (argv, read_fd, write_fd, error_r, error_w):
+        if not command:
+            raise ValueError("A child command is required")
+        platform = Platform.current()
+        with platform.launch(command, pass_fds) as launch:
             process = await asyncio.create_subprocess_exec(
-                *argv,
+                *launch.argv,
                 cwd=cwd,
                 env=env,
                 stdin=subprocess.PIPE if input_enabled else subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 limit=limit,
-                start_new_session=True,
-                pass_fds=(read_fd, error_w.fileno(), *pass_fds),
+                **launch.options,
             )
-            error_w.close()
-            identity = ProcessIdentity.capture(process.pid)
+            identity = platform.identity(process.pid)
             child = cls(process, identity)
             try:
-                os.write(write_fd, b"G")
-                await _exec_error(error_r, command[0])
+                launch.release(identity)
+                await launch.verify_async()
             except BaseException:
                 await child.stop()
                 raise
@@ -547,7 +826,6 @@ class AttachedChild(ChildProcess):
 
     async def wait(self) -> ChildOutcome:
         return ChildOutcome.from_returncode(await self.process.wait())
-
 
     def close_input(self) -> None:
         if self.stdin is not None:
@@ -564,6 +842,42 @@ class AttachedChild(ChildProcess):
             return outcome
         except TimeoutError:
             return TimedOutOutcome(await self.stop())
+
+
+class ParentLifeline:
+    """Inherited pipe for a Python child which must die with its launcher.
+
+    Lifted from the recovery reader's parent watchdog. The child enters guard()
+    before calling the blocking operation; EOF releases OS-owned locks even
+    when the operation is stuck on another Python thread.
+    """
+
+    variable = "AGENT_COMMS_PARENT_LIFELINE_FD"
+
+    def __enter__(self):
+        self.read_fd, self.write_fd = os.pipe()
+        return self
+
+    def __exit__(self, *_):
+        os.close(self.read_fd)
+        os.close(self.write_fd)
+
+    @property
+    def environment(self) -> dict[str, str]:
+        return {**os.environ, self.variable: str(self.read_fd)}
+
+    @classmethod
+    def guard(cls) -> None:
+        descriptor = int(os.environ.pop(cls.variable))
+        os.fstat(descriptor)
+
+        def parent_watchdog() -> None:
+            try:
+                os.read(descriptor, 1)
+            finally:
+                os._exit(1)
+
+        threading.Thread(target=parent_watchdog, daemon=True).start()
 
 
 class BoundedRun:
@@ -591,11 +905,12 @@ class BoundedRun:
         input: bytes | None = None,
         cwd: str | Path | None = None,
         env: dict[str, str] | None = None,
+        pass_fds: tuple[int, ...] = (),
     ) -> ChildResult:
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("A positive finite timeout is required")
         try:
-            child = await AttachedChild.start(command, cwd=cwd, env=env)
+            child = await AttachedChild.start(command, cwd=cwd, env=env, pass_fds=pass_fds)
         except OSError as error:
             return ChildResult(FailedToStartOutcome(str(error)))
         exchange = asyncio.create_task(child.process.communicate(input))
@@ -625,40 +940,62 @@ class DetachedProcess(ChildProcess):
         cwd: str | Path | None = None,
         env: dict[str, str] | None = None,
         output: Any = subprocess.DEVNULL,
+        before_start: Callable[[ProcessIdentity], None] | None = None,
     ) -> DetachedProcess:
-        with _launch_gate(command) as (argv, read_fd, write_fd, error_r, error_w):
+        if not command:
+            raise ValueError("A child command is required")
+        platform = Platform.current()
+        with platform.launch(command, ()) as launch:
             process = subprocess.Popen(
-                argv,
+                launch.argv,
                 cwd=cwd,
                 env=env,
                 stdin=subprocess.DEVNULL,
                 stdout=output,
                 stderr=output,
-                start_new_session=True,
-                pass_fds=(read_fd, error_w.fileno()),
+                **launch.options,
             )
-            error_w.close()
-            identity = ProcessIdentity.capture(process.pid)
-            os.write(write_fd, b"G")
-            error = os.read(error_r, 64)
-            if error:
-                process.wait()
-                code = int(error)
-                raise OSError(code, os.strerror(code), command[0])
-        return cls(identity, process)
+            identity = platform.identity(process.pid)
+            child = cls(identity, process)
+            try:
+                if before_start is not None:
+                    before_start(identity)
+                launch.release(identity)
+                launch.verify()
+            except BaseException:
+                child.stop_sync()
+                raise
+        return child
 
     @classmethod
     def attach(cls, identity: ProcessIdentity) -> DetachedProcess:
         return cls(identity)
 
-    def signal(self, signum: int) -> None:
+    def force(self) -> None:
         self.platform.require(self.identity)
-        self.platform.signal_group(self.identity, signum)
+        self.platform.force_group(self.identity)
 
     async def stop(self) -> ChildOutcome:
         if self._stop_task is None:
             self.platform.require(self.identity)
         return await super().stop()
+
+    def stop_sync(self, *, guard=nullcontext) -> ChildOutcome:
+        self.platform.require(self.identity)
+        plan = self._stop_plan(guard)
+        while True:
+            try:
+                delay = next(plan)
+            except StopIteration as done:
+                stage = done.value
+                break
+            time.sleep(delay)
+        result = (
+            ChildOutcome.from_returncode(self._process.wait(timeout=STOP_GRACE_SECONDS))
+            if self._process is not None
+            else DetachedExitOutcome()
+        )
+        return stage(result)
 
     async def wait(self) -> ChildOutcome:
         if self._process is not None:
