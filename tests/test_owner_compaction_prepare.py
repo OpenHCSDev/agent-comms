@@ -1,5 +1,3 @@
-from agent_comms.acp_extension import CompactionPublishedUpdate, decode_updates
-
 """Provider-free read-only preparation from the exact disposable Pi tree."""
 
 import asyncio
@@ -20,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import backend, owner_compaction_runtime
+from agent_comms.acp_extension import CompactionPublishedUpdate, decode_updates
 from agent_comms.backend import PersistentPiSession
 from agent_comms.child_process import AttachedChild, Platform, ProcessIdentity
 from agent_comms.comms import Comms, wire
@@ -30,7 +29,7 @@ from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativePreparationError, prepare_native_source
 from agent_comms.owner_compaction_provider import NativeSummary
 from agent_comms.owner_compaction_runtime import compact_owner_once
-from agent_comms.owner_compaction_settings import PiCompactionSettings
+from agent_comms.owner_compaction_settings import PiCompactionSettings, PiSettingsEvidenceError
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
@@ -1064,10 +1063,5 @@ def test_unapproved_session_alias_and_bounds_are_refused(session):
             settings=PiCompactionSettings(16384, 1),
             context_window=128000,
         )
-    with pytest.raises(NativePreparationError, match="Native source cannot be prepared"):
-        prepare_native_source(
-            Path(PACKAGE),
-            str(session),
-            settings=PiCompactionSettings(16384, 0),
-            context_window=128000,
-        )
+    with pytest.raises(PiSettingsEvidenceError, match="Invalid effective Pi compaction settings"):
+        PiCompactionSettings(16384, 0)

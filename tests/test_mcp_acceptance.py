@@ -9,7 +9,6 @@ Without that adapter these tests prove the Pi/ACP path, NOT Toad rendering.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import importlib.util
 import json
 import os
@@ -28,11 +27,16 @@ from types import SimpleNamespace
 import pytest
 
 from agent_comms import backend
-from agent_comms.acp import CommsAgent
-from agent_comms.acp_extension import McpClientReceiptUpdate, TurnStartedUpdate, TurnSettledUpdate, decode_updates
-from agent_comms.field_codec import FieldCodec
+from agent_comms.acp_extension import (
+    McpClientReceiptUpdate,
+    TurnSettledUpdate,
+    TurnStartedUpdate,
+    decode_updates,
+)
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime import RuntimeProxy
+from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX PTY acceptance")
 PACKAGE = Path(__file__).resolve().parents[1] / "extensions" / "pi-mcp-client"
@@ -299,8 +303,9 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
     binary = os.environ.get("AC_MCP_NATIVE_BIN")
     if not binary:
         pytest.skip("Set AC_MCP_NATIVE_BIN to an explicitly prepared native Pi launcher")
-    assert Path(binary).is_absolute() and os.access(binary, os.X_OK)
+    assert binary == "pi" or (Path(binary).is_absolute() and os.access(binary, os.X_OK))
     node, agent, project, digest, starts, calls, env = _prepare(tmp_path)
+    env["PI_COMPACTION_TEST_PACKAGE"] = os.environ["PI_COMPACTION_TEST_PACKAGE"]
     receipt_seen, second_request, release_final = (threading.Event() for _ in range(3))
     if case != "revoke_midturn":
         release_final.set()
@@ -313,7 +318,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
         json.dumps(
             {
                 "launcher": binary,
-                "sha256": hashlib.sha256(Path(binary).read_bytes()).hexdigest(),
+                "nativePackage": env["PI_COMPACTION_TEST_PACKAGE"],
                 "package": str(PACKAGE),
                 "case": case,
             }
@@ -344,14 +349,21 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                 "--thinking",
                 "off",
                 "-e",
-                str(PACKAGE),
+                str(Path(env["PI_COMPACTION_TEST_PACKAGE"]) / "agent-comms-extensions/pi-mcp-client"),
             ]
-            owner = CommsAgent(
+            owner = canonical_agent(
                 wire(tmp_path / "wire"),
                 agent_bin=binary,
                 agent_args=args,
                 runtime_enabled=True,
                 auto_wake=False,
+            )
+
+            env.update(
+                AGENT_COMMS_ROOT=str(owner._comms.root),
+                AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=owner._private_nk_wire_root_id,
+                AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=env["PI_COMPACTION_TEST_PACKAGE"],
+                AGENT_COMMS_NATIVE_CONFIG_DIR=str(agent),
             )
 
             class Audit:
@@ -361,7 +373,10 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         "update": update.model_dump(by_alias=True, exclude_none=True),
                     }
                     updates.append(row)
-                    if any(isinstance(fact, McpClientReceiptUpdate) for fact in decode_updates(update.field_meta)):
+                    if any(
+                        isinstance(fact, McpClientReceiptUpdate)
+                        for fact in decode_updates(update.field_meta)
+                    ):
                         receipt_seen.set()
 
             class Attachment:
@@ -372,7 +387,11 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                     for fact in decode_updates(update.get("_meta")):
                         if isinstance(fact, TurnStartedUpdate):
                             attachment_turn = fact.turn_id
-                        if isinstance(fact, TurnSettledUpdate) and attachment_turn == fact.turn_id:
+                        if (
+                            isinstance(fact, TurnSettledUpdate)
+                            and attachment_turn
+                            and attachment_turn == fact.turn_id
+                        ):
                             attachment_settled.set()
 
                 async def request_permission(self, **kwargs):
