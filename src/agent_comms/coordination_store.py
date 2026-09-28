@@ -365,10 +365,28 @@ class MutationStore(CoordinationStore):
 
     @contextmanager
     def _transaction(self) -> Iterator[sqlite3.Connection]:
+        with self._transaction_lifetime() as db:
+            db.execute("BEGIN IMMEDIATE")
+            yield db
+
+    @contextmanager
+    def irreversible_admission(self) -> Iterator[sqlite3.Connection]:
+        """Exclude readers before external effects, never upgrade after sending.
+
+        In rollback-journal mode BEGIN IMMEDIATE admits readers that can block
+        COMMIT. The raw native writer must acquire the exclusive lock before any
+        prompt byte; with its zero timeout, contention remains pre-admission.
+        """
+        with self._transaction_lifetime() as db:
+            db.execute("BEGIN EXCLUSIVE")
+            yield db
+
+    @contextmanager
+    def _transaction_lifetime(self) -> Iterator[sqlite3.Connection]:
+        """Shared non-nesting, commit and rollback ownership for write scopes."""
         db = self._connection
         if db.in_transaction:
             raise IntegrityViolationError("nested coordinator transaction is not allowed")
-        db.execute("BEGIN IMMEDIATE")
         try:
             yield db
             db.execute("COMMIT")

@@ -1081,7 +1081,7 @@ class SelectedExecution:
                         MutationStore(str(store_path), lock_timeout=0)
                     )
                     registry = authority.enter_context(_response_boundary(self.bus, blocking=False))
-                    db = authority.enter_context(admission_store._transaction())
+                    db = authority.enter_context(admission_store.irreversible_admission())
                 except BlockingIOError as error:
                     raise PromptAdmissionBusy("Native admission exclusion is busy") from error
                 except sqlite3.OperationalError as error:
