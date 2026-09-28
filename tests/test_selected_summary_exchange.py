@@ -347,7 +347,7 @@ async def test_limit_decline_is_durable_and_never_admits_original(tmp_path):
 
 async def test_observable_progress_extends_idle_deadline_without_total_limit(tmp_path):
     async with selected(tmp_path, "progress") as (run, persistent, journal, file, _):
-        result = await run(idle_timeout_seconds=.08)
+        result = await run(idle_timeout_seconds=0.08)
         assert result.summary.text == "native summary"
         assert persistent.proc.returncode is None
 
@@ -355,6 +355,19 @@ async def test_observable_progress_extends_idle_deadline_without_total_limit(tmp
 async def test_repeated_progress_does_not_hide_stalled_provider(tmp_path):
     async with selected(tmp_path, "duplicate-progress") as (run, persistent, journal, file, _):
         with pytest.raises(SelectedChildUnknown, match="made no progress"):
-            await run(idle_timeout_seconds=.06)
+            await run(idle_timeout_seconds=0.06)
         assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
         assert persistent.proc is None
+
+
+async def test_manual_instructions_share_selected_rpc_and_adaptive_omits_field(tmp_path):
+    async with selected(tmp_path, "decline") as (run, _, journal, file, received):
+        await run(custom_instructions="Preserve the owner decisions")
+        assert (
+            json.loads(received.read_text())["customInstructions"] == "Preserve the owner decisions"
+        )
+    other = tmp_path / "adaptive"
+    other.mkdir()
+    async with selected(other, "decline") as (run, _, journal, file, received):
+        await run()
+        assert "customInstructions" not in json.loads(received.read_text())
