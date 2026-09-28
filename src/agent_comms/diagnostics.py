@@ -1,4 +1,4 @@
-"""Private terminal diagnostics: structural facts only, never provider text or prompts."""
+"""Private terminal diagnostics, including correlated native RPC refusals."""
 
 from __future__ import annotations
 
@@ -7,8 +7,12 @@ import os
 import re
 from enum import StrEnum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .store_files import _atomic_write_text
+
+if TYPE_CHECKING:
+    from .pi_events import Response
 
 
 class FailureReason(StrEnum):
@@ -38,7 +42,13 @@ def terminal_failure_reason(event: dict) -> FailureReason:
 
 
 def record_terminal_failure(
-    root: Path, *, turn_id: str, thread: str, event: dict, sequences: tuple[int, ...]
+    root: Path,
+    *,
+    turn_id: str,
+    thread: str,
+    event: dict,
+    sequences: tuple[int, ...],
+    native_response: Response | None = None,
 ) -> Path:
     """Persist before publishing the failure notice; this record grants no retry authority."""
     if not re.fullmatch(r"[0-9a-f]{32}", turn_id):
@@ -67,6 +77,8 @@ def record_terminal_failure(
         "measurements": safe,
         "outcome": "failed; inputs must not be replayed automatically",
     }
+    if native_response is not None:
+        document["native_response"] = native_response.rejection_details()
     directory = root / "diagnostics"
     directory.mkdir(mode=0o700, exist_ok=True)
     if os.name == "posix":

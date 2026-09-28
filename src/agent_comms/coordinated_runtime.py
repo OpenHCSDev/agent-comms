@@ -90,6 +90,7 @@ from .wake_candidate_index import WakeCandidateIndex
 from .wake_injection import render_selected_wake_frame
 
 if TYPE_CHECKING:
+    from . import pi_events as pi
     from .selected_tool_broker import SelectedToolIntent
 
 _MAX_PROMPT_BYTES = 32 * 1024
@@ -1012,6 +1013,7 @@ class SelectedExecution:
                     self.initial,
                     self.input_id,
                     f"{error}; the input is uncertain.",
+                    native_response=error.rejected_response,
                 )
 
     def _send_boundary(
@@ -1628,7 +1630,13 @@ class SelectedExecution:
 
 
 def _publish_native_failure(
-    comms: Comms, owner: Thread, initial: CommittedInitial, input_id: str, description: str
+    comms: Comms,
+    owner: Thread,
+    initial: CommittedInitial,
+    input_id: str,
+    description: str,
+    *,
+    native_response: pi.Response | None = None,
 ) -> None:
     """Use the existing durable alert path; a notice never creates another wake."""
     diagnostic = record_terminal_failure(
@@ -1637,6 +1645,7 @@ def _publish_native_failure(
         thread=owner.name,
         event={},
         sequences=(initial.message.seq,),
+        native_response=native_response,
     )
     target = derive_exact_reply_target(initial.message)
     assert target is not None
