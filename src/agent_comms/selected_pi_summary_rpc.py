@@ -21,12 +21,26 @@ from .owner_compaction_provider import NativeSummary
 from .pi_commands import AgentCommsSummarizeCompaction
 from .pi_events import AgentCommsCompactionProgress, Response
 from .pi_rpc import PiRpcChannel
-from .pi_summary_payloads import SummaryDeclinedData, SummarySummarizedData, SummaryUnknownData
+from .pi_summary_payloads import (
+    SummaryDeclinedData,
+    SummaryFailedData,
+    SummarySummarizedData,
+    SummaryUnknownData,
+)
 from .selected_pi_route import _request
 
 
 class SelectedChildUnknown(RuntimeError):  # noqa: N818 - UNKNOWN is a protocol state
     """The selected operation may have started; never replay input on uncertainty."""
+
+
+class SelectedSummaryFailed(RuntimeError):  # noqa: N818 - terminal protocol state
+    """Summary failed without modifying the source or admitting original input."""
+
+    def __init__(self, receipt: SummaryFailedData):
+        self.operation_id = receipt.operation_id
+        self.reason = receipt.reason
+        super().__init__(f"Selected summary failed: {receipt.reason}; original input not sent")
 
 
 @dataclass(frozen=True)
@@ -38,7 +52,7 @@ class SelectedSummaryResult:
 
 def _summary_response(
     raw: bytes, request: AgentCommsSummarizeCompaction, tokens_before: int
-) -> SelectedSummaryResult:
+) -> SelectedSummaryResult | SummaryFailedData:
     """Decode the existing native v1 protocol once at the RPC boundary."""
 
     try:
@@ -61,18 +75,25 @@ def _summary_response(
             detail = (
                 f"Selected summary failed: {data.reason} (outcome uncertain; input not retried)"
                 if data.reason is not None
-                else ("Selected summary outcome is uncertain; "
-                      "native child supplied no failure detail")
+                else (
+                    "Selected summary outcome is uncertain; "
+                    "native child supplied no failure detail"
+                )
             )
             raise SelectedChildUnknown(detail)
-        if not isinstance(data, SummarySummarizedData) or (
+        if not isinstance(data, (SummarySummarizedData, SummaryFailedData)) or (
             data.witness != request.witness
             or data.selected != request.selected
             or data.settings != request.settings
-            or data.result.first_kept_entry_id != request.witness.first_kept_entry_id
-            or data.result.tokens_before != tokens_before
         ):
             raise ValueError("Selected summary outcome unknown")
+        if isinstance(data, SummaryFailedData):
+            return data
+        if (
+            data.result.first_kept_entry_id != request.witness.first_kept_entry_id
+            or data.result.tokens_before != tokens_before
+        ):
+            raise ValueError("Selected summary result source changed")
         return SelectedSummaryResult(
             data.operation_id,
             NativeSummary(
@@ -181,12 +202,13 @@ class SelectedSummarySlot:
                 result = _summary_response(raw, request, tokens_before)
                 if proc.returncode is not None or _session_revision(session_file) != revision:
                     raise SelectedChildUnknown("Selected source changed during summary")
-                if result.summary is None and result.decline_reason not in {
+                if isinstance(result, SummaryFailedData):
+                    journal.fail_selected_summary(operation, result.reason)
+                elif result.summary is None and result.decline_reason not in {
                     "split_turn",
                     "unsupported",
                 }:
                     journal.refuse_selected_summary(operation, result.decline_reason)
-                return result
             except BaseException as error:
                 persistent.reopen_required = session_file
                 persistent.reopen_session_id = self.session
@@ -208,3 +230,8 @@ class SelectedSummarySlot:
                     f"Selected summary transport uncertain: {type(error).__name__}: "
                     f"{str(error)[:1024]}"
                 ) from error
+            # Raise only after attestation and durable settlement succeed. This
+            # known terminal outcome must not enter the transport UNKNOWN handler.
+            if isinstance(result, SummaryFailedData):
+                raise SelectedSummaryFailed(result)
+            return result
