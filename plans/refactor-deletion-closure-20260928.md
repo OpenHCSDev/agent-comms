@@ -1,3 +1,26 @@
+## Live cutover and converter deletion — 2026-09-28
+
+Live now: core1853503b (merged229/258/259/254), Toad107 df0a758, Textual16ede007,
+native package689ce4b5. All five launchers select runtime-round2-final-20260928.
+Four idle owners stopped through exact identity fences and restarted with retained
+sessions/models/thinking. Fresh ACP initialize/load and send admission pass for
+all four. Installed mounted #comms and both DMs render and exit cleanly; no prompts
+were submitted. 149 current +8420archived messages,104threads and13unresolvedinputs
+retained; source backup at /var/tmp/agent-comms-before-d22-20260928. UNKNOWN not replayed.
+
+Executed D22 converters/operators, their exclusive obsolete SQL/test fixtures and
+rehearsal scripts are now removed (2616 lines). Private stop/input receipts remain
+in local state; public sanitized receipt evidence/d22-quiet-stop/LIVE-RESULT.json.
+Original coverage qualifications in original-plan audit remain explicit; this is
+not a claim that historical exhaustive benchmarks or all additional Toad scopes
+are complete. Final source deletion PR and final1853503b stack pin are being published.
+
+Current parallel ownership (Sol): Boyle TR0/117; Dalton T2 paired262/122; Tesla T3/120;
+Carver T5/121; Noether Sol high T6/sharedConversationKind. Predecessor trees preserved.
+T2/T3/T5 are partial drafts and continue, not ready/install claims. Parent owns
+integration, final audit and T4 after these surfaces. Current core open old115/108
+were closed with explicit superseded disposition;243 merged through263 receipt.
+
 ## Deletion integration and deployment preparation — 2026-09-28
 
 Parent PR229 now includes c3e7252a: global routing alias/forwarder deletion,
