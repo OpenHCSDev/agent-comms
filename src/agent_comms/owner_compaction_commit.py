@@ -19,7 +19,6 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .backend import _session_revision
-from .bus_publication import unique_wire_object
 from .catalog_store import ChannelCatalog
 from .compaction_journal import (
     CompactionJournal,
@@ -31,7 +30,6 @@ from .compaction_states import NativeOutcome
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
 from .input_disposition import FutureInputQueue, InputDispositions
-from .messages import Message
 from .native_package import COMPACTION_HELPER, verify_native_package
 from .owner_compaction_gate import OwnerCompactionAttestation
 from .owner_compaction_prepare import NativePreparation, NativeWitness, prepare_native_source
@@ -47,6 +45,7 @@ from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSumma
 from .session_fence import idle_session_writer_fence
 from .store_files import _store_lock
 from .threads import Thread
+from .wire_log import WireLog
 
 
 @dataclass(frozen=True)
@@ -160,34 +159,15 @@ class OwnerCompactionCommit:
             yield receipt, fd, (executor_fd, wire_fd, bus_fd, input_fd)
 
     @staticmethod
-    def _ingress_revision(path: Path, *, bus: bool = False, delivery=None) -> str:
+    def _ingress_revision(path: Path) -> str:
         try:
             info = path.lstat()
         except FileNotFoundError:
-            return hashlib.sha256(b"").hexdigest() if bus else "missing"
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > 256 * 1024**2:
-            raise RelationViolationError("Compaction ingress must be bounded regular storage")
-        raw = path.read_bytes()
-        selected = []
-        if bus and raw:
-            try:
-                if not raw.endswith(b"\n"):
-                    raise ValueError("Incomplete bus row")
-                previous = 0
-                for line in raw.splitlines():
-                    message = Message.from_wire(
-                        json.loads(line, object_pairs_hook=unique_wire_object)
-                    )
-                    if message.seq <= previous:
-                        raise ValueError("Bus sequence is not increasing")
-                    previous = message.seq
-                    if delivery is None or delivery.delivers(message.sender, message.target):
-                        selected.append(line)
-            except (ValueError, KeyError, TypeError, AttributeError) as error:
-                raise RelationViolationError("Invalid compaction ingress bus") from error
-        if bus:
-            return hashlib.sha256(b"\n".join(selected)).hexdigest()
-        digest = hashlib.sha256(raw).hexdigest()
+            return "missing"
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise RelationViolationError("Compaction ingress must be regular storage")
+        with path.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
         return (
             f"{info.st_dev}:{info.st_ino}:{info.st_size}:"
             f"{info.st_mtime_ns}:{info.st_ctime_ns}:{digest}"
@@ -242,7 +222,7 @@ class OwnerCompactionCommit:
             receipt.turn_id,
             receipt.goal_id,
             receipt.goal_revision,
-            self._ingress_revision(self.root / "bus.jsonl", bus=True, delivery=delivery),
+            WireLog(self.root / "bus.jsonl").delivery_revision_unlocked(delivery),
             hashlib.sha256(
                 json.dumps(FieldCodec.encode(rows), sort_keys=True).encode()
             ).hexdigest(),
