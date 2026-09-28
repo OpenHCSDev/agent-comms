@@ -224,7 +224,7 @@ def test_registry_write_failure_never_exposes_uncommitted_contact(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     comms = _wire(tmp_path)
-    before = comms.registry._path.read_bytes()
+    before = comms.registry.store.path.read_bytes()
 
     def fail_save() -> None:
         raise OSError("injected registry write failure")
@@ -232,7 +232,7 @@ def test_registry_write_failure_never_exposes_uncommitted_contact(
     monkeypatch.setattr(comms.registry, "_save_unlocked", fail_save)
     with pytest.raises(OSError, match="injected registry write failure"):
         comms.update_goal("owner", "set", text="@peer")
-    assert comms.registry._path.read_bytes() == before
+    assert comms.registry.store.path.read_bytes() == before
     fresh = Comms(comms.root)
     assert fresh.registry.require("owner").goal is None
     assert _rows(fresh, "peer")[0] == ()
@@ -255,7 +255,7 @@ def test_old_writer_text_change_drops_derived_links_without_erasing_goal(tmp_pat
     comms = _wire(tmp_path)
     goal = comms.update_goal("owner", "set", text="@peer")
     assert goal is not None
-    path = comms.registry._path
+    path = comms.registry.store.path
     raw = json.loads(path.read_text())
     raw["threads"]["owner"]["goal"]["text"] = "No mention"
     raw["threads"]["owner"]["goal"]["revision"] += 1

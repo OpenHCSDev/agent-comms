@@ -62,7 +62,7 @@ class FailedTurnObservation:
             or current_owner.goal is None
             or current_owner.goal.id != goal.id
             or current_owner.goal.revision < goal.revision
-            or current_owner.turn_generation != claim.turn_generation
+            or current_owner.turn_generation != claim.identity.generation
             or (
                 current_owner.active_turn.id
                 if current_owner.active_turn is not None
@@ -77,8 +77,8 @@ class FailedTurnObservation:
             or claim.admission_generation != admission
             or type(admission) is not int
             or admission <= 0
-            or type(claim.turn_generation) is not int
-            or claim.turn_generation <= 0
+            or type(claim.identity.generation) is not int
+            or claim.identity.generation <= 0
             or not math.isfinite(owner.created_at)
             or not re.fullmatch(r"[0-9a-f]{32}", turn_id)
             or not isinstance(reason, FailureReason)
@@ -90,7 +90,7 @@ class FailedTurnObservation:
             owner.created_at,
             owner.worktree,
             admission,
-            claim.turn_generation,
+            claim.identity.generation,
             goal.revision,
             turn_id,
             reason,

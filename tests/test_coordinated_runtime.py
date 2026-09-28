@@ -39,11 +39,12 @@ from agent_comms.coordination_store import (
     PublicationActivationBlocked,
     StaleFence,
 )
-from agent_comms.declarations import MessageBus, Thread, ThreadRegistry
+from agent_comms.declarations import MessageBus, Thread
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, NativeTurnResult
 from agent_comms.native_source_cursor import read_current_native_cursor
 from agent_comms.operations import Comms
+from agent_comms.registration import Registration
 from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 from agent_comms.wake_injection import render_selected_wake_frame
 
@@ -1302,13 +1303,13 @@ async def test_stop_before_atomic_turn_claim_does_not_revive_or_prompt(
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
-    original_claim = ThreadRegistry.claim_live_turn_with_admission
+    original_claim = Registration.claim_live_turn_with_admission
 
     def stop_before_claim(self, *args, **kwargs):
         comms.registry.unregister("beta")
         return original_claim(self, *args, **kwargs)
 
-    monkeypatch.setattr(ThreadRegistry, "claim_live_turn_with_admission", stop_before_claim)
+    monkeypatch.setattr(Registration, "claim_live_turn_with_admission", stop_before_claim)
     with pytest.raises(StaleFence, match="stopped or busy before native turn"):
         await run_one_sealed_claim(
             root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
@@ -1332,7 +1333,7 @@ async def test_owner_epoch_denies_revival_without_blocking_another_owner(
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
-    original_claim = ThreadRegistry.claim_live_turn_with_admission
+    original_claim = Registration.claim_live_turn_with_admission
     expected = comms.registry.require("beta")
 
     def change_registry_before_claim(self, *args, **kwargs):
@@ -1345,7 +1346,7 @@ async def test_owner_epoch_denies_revival_without_blocking_another_owner(
         return original_claim(self, *args, **kwargs)
 
     monkeypatch.setattr(
-        ThreadRegistry, "claim_live_turn_with_admission", change_registry_before_claim
+        Registration, "claim_live_turn_with_admission", change_registry_before_claim
     )
     if mutation == "stop_then_heartbeat":
         with pytest.raises(StaleFence, match="stopped or busy before native turn"):

@@ -16,7 +16,7 @@ from pathlib import Path
 
 from .backend import PersistentPiSession, _session_revision
 from .compaction_journal import CompactionJournalError
-from .declarations import AgentRuntimeInfo, RelationViolationError, ThreadRegistry
+from .declarations import AgentRuntimeInfo, RelationViolationError
 from .input_disposition import FutureInputQueue
 from .native_session_reopen import package_for_launcher
 from .owner_compaction_commit import OwnerCompactionCommit
@@ -32,13 +32,14 @@ from .owner_compaction_settings import (
     PiSettingsEvidenceError,
     read_compaction_decision,
 )
+from .registration import Registration
 from .selected_pi_route import read_selected_compaction_decision
 from .selected_pi_summary_rpc import SelectedSummarySlot
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 
 
 async def maybe_compact_owner_turn(
-    registry: ThreadRegistry,
+    registry: Registration,
     launcher: str,
     thread_name: str,
     turn_id: str,
@@ -156,7 +157,7 @@ async def maybe_compact_owner_turn(
     if not settings.enabled or not settings.trigger:
         return False
     bridge = await asyncio.to_thread(
-        OwnerCompactionCommit, registry._path, package, future_queue=future_queue
+        OwnerCompactionCommit, registry.store.path, package, future_queue=future_queue
     )
     if summary_strategy is None:
         assert input_text is not None and on_admission is not None

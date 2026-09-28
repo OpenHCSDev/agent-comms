@@ -218,7 +218,7 @@ CAS_METHODS = """    /** Native-only observation; never a registry/goal/correcti
     /** Prototype only: owner attestation is Python-issued evidence, not self-asserted. */
     appendCompactionIfCurrent(witness, summary, tokensBefore, details, usage, options = {}) {
         // Blocker-2 bridge: `options.attestation` must be a Python
-        // OwnerCompactionAttestation from ThreadRegistry.attest_owner_compaction.
+        // OwnerCompactionAttestation from Registration.attest_owner_compaction.
         // JS binds it to this witness's session fence at handoff. JS cannot
         // recheck the registry after handoff; Python must re-attest at commit
         // time (blocker-1 recheck design). This check NEVER proves registry

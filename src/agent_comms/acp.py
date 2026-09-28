@@ -74,7 +74,7 @@ from .declarations import (
     RelationViolationError,
     ScheduledTurn,
     Thread,
-    TurnClaimFence,
+    TurnLeaseFence,
     TurnRouting,
     _store_lock,
     is_channel_target,
@@ -2707,7 +2707,7 @@ class CommsAgent(SessionEffects, InputEffects):
         session_id: str,
         thread_name: str,
         turn_id: str,
-        claim: TurnClaimFence,
+        claim: TurnLeaseFence,
     ) -> FinishedTurnFence | None:
         """Clear only this turn; waiter release follows committed terminal output."""
         fence = self._comms.finish_turn(thread_name, turn_id, expected=claim)
@@ -2720,7 +2720,7 @@ class CommsAgent(SessionEffects, InputEffects):
         session_id: str,
         thread_name: str,
         turn_id: str,
-        claim: TurnClaimFence,
+        claim: TurnLeaseFence,
         *,
         stream_settled: bool = False,
         terminal_fence: FinishedTurnFence | None = None,

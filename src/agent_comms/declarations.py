@@ -4,9 +4,9 @@ Each type owns exactly one concept's semantics. Instantiating a type declares
 the concept. Required relations are proved at construction time. Unknown
 references raise — the system is fail-closed.
 
-The types below (Thread, Message) are the authorities: their __post_init__
-proves required relations and normalises values. The stores (ThreadRegistry,
-MessageBus, SharedLedger) persist and route; they do not own semantics.
+The types below own their value relations. Registration and RegistryDocument
+own thread lifecycle and identity transitions; RegistryStore owns persistence.
+MessageBus and SharedLedger persist their own wire and ledger facts.
 
 ACP integration: this module sits behind an ACP (Agent Client Protocol)
 server. Toad, Zed, or VS Code connect as ACP clients; this layer spawns and
@@ -28,13 +28,13 @@ import uuid
 from bisect import bisect_left
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import AbstractContextManager, closing, contextmanager, nullcontext, suppress
-from dataclasses import asdict, dataclass, field, replace
+from contextlib import closing, contextmanager, nullcontext, suppress
+from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import datetime
 from enum import Enum, StrEnum
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO, Self
+from typing import TYPE_CHECKING, Any, BinaryIO, Self, get_type_hints
 
 from .bus_activity_index import BusActivityIndex
 from .bus_page_index import BusPageIndex, StaleBusPageIndexError
@@ -66,14 +66,12 @@ from .goal_states import (
 )
 from .read_basis import DisplayBasis
 from .response_policy import ResponsePolicy
-from .thread_identity import GenerationCounter, OwnerIdentity, ThreadIncarnation, TurnIdentity
+from .thread_identity import OwnerIdentity, ThreadIncarnation, TurnIdentity
 
 if TYPE_CHECKING:
     from .coordination import PublicationIntent
-    from .goal_history import GoalHistoryEntry
     from .historical_views import HistoricalDisplay, HistoryCursor, HistorySource
-    from .owner_compaction_gate import OwnerCompactionAttestation
-    from .private_registry_guard import PrivateRegistryGuard
+    from .registration import Registration
 from .envelope_claim_transitions import (
     ClaimProjection,
     ClaimRelease,
@@ -1359,7 +1357,7 @@ class ActiveTurn:
     turn_generation: int | None = None
 
     def current(self, admission_generation: int, turn_generation: int) -> bool:
-        """Existing persisted witnesses survive a reader from before S5."""
+        """Compare persisted turn witnesses with the current registry authority."""
         return (
             self.admission_generation == admission_generation
             and self.turn_generation == turn_generation
@@ -1381,62 +1379,17 @@ class ActiveTurn:
         return {**asdict(self), "routing": self.routing.to_wire() if self.routing else None}
 
 
-@dataclass(frozen=True, slots=True, init=False)
+@dataclass(frozen=True, slots=True)
 class TurnFence:
-    """One exact turn identity; legacy scalar accessors are derived projections."""
+    """One exact turn identity and its admission witness."""
 
     identity: TurnIdentity
     turn_id: str
     admission_generation: int
 
-    def __init__(
-        self,
-        name: str | None = None,
-        created_at: float | None = None,
-        turn_id: str = "",
-        turn_generation: int | None = None,
-        admission_generation: int = 0,
-        *,
-        identity: TurnIdentity | None = None,
-    ) -> None:
-        # The scalar constructor remains readable for old extension callers.
-        # New producers supply the registry-attested identity under its lock.
-        if identity is None:
-            if name is None or created_at is None or turn_generation is None:
-                raise ValueError("Turn fence requires an exact identity")
-            identity = TurnIdentity(ThreadIncarnation(name, created_at), turn_generation)
-        elif name is not None or created_at is not None or turn_generation is not None:
-            incarnation = identity.incarnation
-            identity = TurnIdentity(
-                ThreadIncarnation(
-                    incarnation.name if name is None else name,
-                    incarnation.created_at if created_at is None else created_at,
-                ),
-                identity.generation if turn_generation is None else turn_generation,
-            )
-        object.__setattr__(self, "identity", identity)
-        object.__setattr__(self, "turn_id", turn_id)
-        object.__setattr__(self, "admission_generation", admission_generation)
-
-    @property
-    def name(self) -> str:
-        return self.identity.incarnation.name
-
-    @property
-    def created_at(self) -> float:
-        return self.identity.incarnation.created_at
-
-    @property
-    def turn_generation(self) -> int:
-        return self.identity.generation
-
 
 class TurnLeaseFence(TurnFence):
     """Exact local begin-turn lease; a reused turn ID is not this lease."""
-
-
-# Compatibility import used by ACP extensions; there is only one lease type.
-TurnClaimFence = TurnLeaseFence
 
 
 class FinishedTurnFence(TurnFence):
@@ -1532,6 +1485,61 @@ class Thread:
             "max",
         }:
             raise ValueError("Unknown thinking level.")
+
+    @staticmethod
+    @lru_cache(maxsize=512)
+    def session_created_at(session_file: str) -> float:
+        # Pi session headers are immutable; avoid reopening legacy transcripts
+        # on every registry lookup before their creation date is persisted.
+        with Path(session_file).open("rb") as stream:
+            line = stream.readline(8192)
+        try:
+            header = json.loads(line)
+            if header.get("type") == "session" and header.get("timestamp"):
+                return datetime.fromisoformat(
+                    header["timestamp"].replace("Z", "+00:00")
+                ).timestamp()
+        except (ValueError, TypeError, AttributeError):
+            pass
+        return 0.0
+
+    @staticmethod
+    def registry_created_at(data: Mapping) -> float:
+        """Read old session headers when a registry predates creation timestamps."""
+        if "created_at" in data:
+            return float(data["created_at"])
+        if session_file := data.get("session_file"):
+            try:
+                return Thread.session_created_at(session_file)
+            except OSError:
+                pass
+        # Unknown legacy creation dates sort oldest, never by a mutable heartbeat.
+        return 0.0
+
+    @classmethod
+    def from_registry(cls, name: str, data: Mapping, root: Path) -> Self:
+        """Decode fields from their declaration, preserving old document defaults."""
+        hints = get_type_hints(cls)
+        special = {
+            "name": name,
+            "created_at": cls.registry_created_at(data),
+            "tags": frozenset(data.get("tags", [])),
+            "worktree": data.get("worktree", ""),
+            "goal": Goal.from_registry(data["goal"], root) if data.get("goal") else None,
+            "active_turn": ActiveTurn.from_wire(data["active_turn"])
+            if data.get("active_turn")
+            else None,
+            "auto_title_pending": bool(data.get("auto_title_pending", False)),
+        }
+        return cls(
+            **{
+                declaration.name: special[declaration.name]
+                if declaration.name in special
+                else FieldCodec.decode(hints[declaration.name], data[declaration.name])
+                for declaration in fields(cls)
+                if declaration.init and (declaration.name in special or declaration.name in data)
+            }
+        )
 
     @property
     def incarnation(self) -> ThreadIncarnation:
@@ -2117,16 +2125,6 @@ class DMDisplayBasis:
     def peer_created_at(self) -> float:
         return self.peer_identity.created_at
 
-    @property
-    def viewer_epoch(self) -> float:
-        """Legacy observer spelling; identity is creation time, never a turn counter."""
-        return self.viewer_created_at
-
-    @property
-    def peer_epoch(self) -> float:
-        """Legacy observer spelling retained for clients comparing page identities."""
-        return self.peer_created_at
-
     def validate_for(
         self,
         root: Path,
@@ -2255,10 +2253,6 @@ class ChannelDisplayScope:
     targets: frozenset[str] | None
     any_mode: bool = False
     participant_names: frozenset[str] = frozenset()
-    # Legacy UI fields retained for call compatibility; never consulted as read authority.
-    after: int = 0
-    basis_revision: tuple = ()
-    expanded_after: int = 0
     seen_sequences: frozenset[int] = frozenset()
     displayed: DisplayBasis | None = field(default=None, compare=False)
 
@@ -2312,1163 +2306,9 @@ class RegistrySnapshot:
     owner_generations: Mapping[str, int]
     admission_generations: Mapping[str, int]
 
-    @property
-    def owner_epochs(self) -> Mapping[str, int]:
-        """Compatibility observer; turns no longer rotate this generation."""
-        return self.owner_generations
-
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.aliases.get(name, name)
         return self.threads[canonical].owner_identity(self.owner_generations[canonical])
-
-
-class ThreadRegistry:
-    """Persists threads and manages status transitions and presence."""
-
-    def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
-        """Restore selected missing identities without importing execution authority.
-
-        Current declarations always win. An explicit identity collision refuses
-        the whole selection before writing; callers can inspect and select the
-        unambiguous records. Saved sessions and metadata retain their original
-        provenance, but old PIDs, active turns and admission epochs do not travel.
-        No bus, delivery cursor, pending input or coordinator row is copied.
-        """
-        selected = tuple(dict.fromkeys(names))
-        with _store_lock(self._path):
-            self._load_unlocked()
-            additions: list[Thread] = []
-            identities = {thread.created_at: name for name, thread in self._threads.items()}
-            for name in selected:
-                thread = source.threads[name]
-                existing = self._threads.get(name)
-                if existing is not None:
-                    if existing.created_at != thread.created_at:
-                        raise RelationViolationError(f"Restoration identity conflicts for {name!r}")
-                    continue
-                if name in self._aliases or thread.created_at in identities:
-                    raise RelationViolationError(f"Restoration identity conflicts for {name!r}")
-                identities[thread.created_at] = name
-                additions.append(replace(thread, pid=0, active_turn=None))
-            restored = {thread.name: thread for thread in additions}
-            available = self._threads | restored
-            aliases = {
-                alias: canonical
-                for alias, canonical in source.aliases.items()
-                if canonical in available
-                and available[canonical].created_at == source.threads[canonical].created_at
-                and alias not in available
-                and alias not in self._aliases
-            }
-            for thread in additions:
-                self._threads[thread.name] = thread
-                self._statuses[thread.name] = (
-                    ThreadStatus.ARCHIVED
-                    if source.statuses[thread.name] is ThreadStatus.ARCHIVED
-                    else ThreadStatus.STOPPED
-                )
-                self._last_seen[thread.name] = source.last_seen.get(thread.name, 0.0)
-                self._bump_admission_unlocked(thread.name)
-                self._bump_owner_generation_unlocked(thread.name)
-            if additions or aliases:
-                self._aliases.update(aliases)
-                self._save_unlocked()
-            return tuple(restored)
-
-    def __init__(self, store_path: Path):
-        self._path = store_path
-        self._threads: dict[str, Thread] = {}
-        self._statuses: dict[str, ThreadStatus] = {}
-        self._last_seen: dict[str, float] = {}
-        self._aliases: dict[str, str] = {}
-        self._revision: tuple[int, int, int, int] | None = None
-        # Private registry metadata, never a Thread wire field or public bus field.
-        self._owners = GenerationCounter()
-        self._admissions = GenerationCounter()
-        # Only an atomic turn claim may create this private attestation. A
-        # registration cannot restore a saved ActiveTurn after it was revoked.
-        self._generation_metadata_present = False
-        self._load()
-
-    @property
-    def _owner_generations(self) -> dict[str, int]:
-        return self._owners.generations
-
-    @property
-    def _admission_generations(self) -> dict[str, int]:
-        return self._admissions.generations
-
-    def _load(self) -> None:
-        with _store_lock(self._path):
-            self._load_unlocked()
-
-    def _private_guard_unlocked(self) -> PrivateRegistryGuard | None:
-        """Validate the private marker/guard BEFORE even a cached registry read.
-
-        The directory, guard file and registry are one private root. A marker
-        without its committed guard (or a guard without a marker) is an
-        uncertain cutover, never an invitation to bootstrap old metadata.
-        """
-        from .private_registry_guard import PrivateRegistryGuard
-
-        marker_path = self._path.parent / "bus_meta.json"
-        guard_path = self._path.parent / ".registry-owner-guard"
-        guard_present = guard_path.exists() or guard_path.is_symlink()
-        if not marker_path.exists() and not marker_path.is_symlink():
-            if guard_present:
-                raise RelationViolationError("Private registry guard has no protocol marker")
-            return None
-        try:
-            marker = json.loads(marker_path.read_text(), object_pairs_hook=unique_wire_object)
-        except (OSError, ValueError, UnicodeError) as error:
-            raise RelationViolationError("Private registry guard marker is invalid") from error
-        if type(marker) is not dict:
-            raise RelationViolationError("Private registry guard marker is not an object")
-        if "writer_protocol_version" not in marker:
-            if guard_present:
-                raise RelationViolationError("Private registry guard marker is absent")
-            return None
-        if (
-            set(marker)
-            not in (
-                {"last_seq", "writer_protocol_version", "wire_root_id"},
-                {"last_seq", "writer_protocol_version", "wire_root_id", "claim_envelopes_version"},
-                {
-                    "last_seq",
-                    "writer_protocol_version",
-                    "wire_root_id",
-                    "claim_envelopes_version",
-                    "checkpoint_version",
-                    "checkpoint_seal",
-                },
-            )
-            or (
-                "checkpoint_version" in marker and (type(marker.get("checkpoint_seal")) is not dict)
-            )
-            or (
-                "checkpoint_version" in marker
-                and (
-                    type(marker["checkpoint_version"]) is not int
-                    or marker["checkpoint_version"] != 1
-                )
-            )
-            or (
-                "claim_envelopes_version" in marker
-                and (
-                    type(marker["claim_envelopes_version"]) is not int
-                    or marker["claim_envelopes_version"] != 1
-                )
-            )
-            or type(marker["writer_protocol_version"]) is not int
-            or marker["writer_protocol_version"] != 1
-            or type(marker["last_seq"]) is not int
-            or not 0 <= marker["last_seq"] < 1 << 63
-        ):
-            raise RelationViolationError("Private registry guard marker is malformed")
-        marker_info = marker_path.lstat()
-        if (
-            not stat.S_ISREG(marker_info.st_mode)
-            or marker_info.st_uid != os.geteuid()
-            or stat.S_IMODE(marker_info.st_mode) != 0o600
-            or marker_info.st_nlink != 1
-        ):
-            raise RelationViolationError("Private registry guard marker is not owner-only")
-        root_id = marker.get("wire_root_id")
-        if type(root_id) is not str:
-            raise RelationViolationError("Private registry guard root ID is invalid")
-        guard = PrivateRegistryGuard(self._path, root_id)
-        guard.verify()
-        return guard
-
-    def _load_unlocked(self) -> None:
-        self._private_guard_unlocked()
-        try:
-            stat = self._path.stat()
-        except FileNotFoundError:
-            revision = None
-        else:
-            revision = (stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
-            if revision == self._revision:
-                return
-        # Validate the new snapshot before replacing the last successful read.
-        self._revision = None
-        raw = json.loads(self._path.read_text()) if revision is not None else {}
-        # Decode the retired persisted spellings only here; all writes use generations.
-        legacy_owner_format = "owner_epochs" in raw or "owner_epoch_counter" in raw
-        if legacy_owner_format:
-            if "owner_generations" in raw or "owner_generation_counter" in raw:
-                raise RelationViolationError("mixed private registry generation formats")
-            raw["owner_generations"] = raw.pop("owner_epochs", None)
-            raw["owner_generation_counter"] = raw.pop("owner_epoch_counter", None)
-        legacy_turns = raw.pop("turn_epochs", {})
-        has_generations = "owner_generations" in raw or "owner_generation_counter" in raw
-        if has_generations:
-            try:
-                self._owners = FieldCodec.decode(
-                    GenerationCounter,
-                    {
-                        "counter": raw.get("owner_generation_counter"),
-                        "generations": raw.get("owner_generations"),
-                    },
-                )
-            except (ValueError, TypeError) as error:
-                raise RelationViolationError(
-                    "invalid private registry owner generations"
-                ) from error
-            generations = self._owners.generations
-            turns = legacy_turns
-            if type(turns) is not dict or any(
-                type(name) is not str
-                or type(epoch) is not int
-                or epoch < 1
-                or generations.get(name) != epoch
-                for name, epoch in turns.items()
-            ):
-                raise RelationViolationError("invalid private registry turn epochs")
-        else:
-            # A private wire marker is issued only on a fresh root. Missing
-            # epochs after that marker are a downgrade, never legacy migration:
-            # an old writer may have removed them without changing the owner.
-            marker_path = self._path.parent / "bus_meta.json"
-            if marker_path.exists() or marker_path.is_symlink():
-                try:
-                    marker = json.loads(marker_path.read_text())
-                except (OSError, ValueError, UnicodeError) as error:
-                    raise RelationViolationError("private wire marker is unreadable") from error
-                if type(marker) is dict and "writer_protocol_version" in marker:
-                    # Marker-before-participant initialization is valid only
-                    # before any bus row or registry snapshot has existed.
-                    fresh_empty_root = (
-                        revision is None
-                        and marker.get("last_seq") == 0
-                        and not (self._path.parent / "bus.jsonl").exists()
-                    )
-                    if not fresh_empty_root:
-                        raise RelationViolationError("private owner epoch metadata was lost")
-            # Unmarked legacy stores remain readable but cannot authorize the
-            # coordinated CAS until an explicit owner registration migrates them.
-            legacy = raw.get("threads", {})
-            if type(legacy) is not dict or any(type(name) is not str for name in legacy):
-                raise RelationViolationError("invalid legacy registry owner declarations")
-            self._owners = GenerationCounter(
-                len(legacy), {name: index for index, name in enumerate(sorted(legacy), start=1)}
-            )
-        has_admissions = "admission_generations" in raw or "admission_generation_counter" in raw
-        if has_admissions:
-            try:
-                self._admissions = FieldCodec.decode(
-                    GenerationCounter,
-                    {
-                        "counter": raw.get("admission_generation_counter"),
-                        "generations": raw.get("admission_generations"),
-                    },
-                )
-            except (ValueError, TypeError) as error:
-                raise RelationViolationError("invalid owner admission generations") from error
-        else:
-            # Existing roots acquire a durable admission witness on their next
-            # registry write. Metadata revisions no longer rotate it.
-            self._admissions = GenerationCounter(
-                self._owners.counter, dict(self._owner_generations)
-            )
-        self._generation_metadata_present = has_generations
-        self._threads.clear()
-        self._statuses.clear()
-        self._last_seen.clear()
-        self._aliases.clear()
-        self._aliases.update(raw.get("aliases", {}))
-        for name, data in raw.get("threads", {}).items():
-            self._threads[name] = Thread(
-                name=name,
-                tags=frozenset(data.get("tags", [])),
-                worktree=data.get("worktree", ""),
-                parent=data.get("parent"),
-                task=data.get("task"),
-                pid=data.get("pid", 0),
-                session_file=data.get("session_file"),
-                model=data.get("model"),
-                thinking_level=data.get("thinking_level"),
-                goal=(
-                    Goal.from_registry(data["goal"], self._path.parent)
-                    if data.get("goal")
-                    else None
-                ),
-                created_at=self._created_at(data),
-                previous_worktrees=tuple(data.get("previous_worktrees", [])),
-                auto_title_pending=bool(data.get("auto_title_pending", False)),
-                title=data.get("title"),
-                role=ThreadRole(data.get("role", ThreadRole.AGENT.value)),
-                active_turn=(
-                    ActiveTurn.from_wire(data["active_turn"]) if data.get("active_turn") else None
-                ),
-                last_goal_report_turn=data.get("last_goal_report_turn"),
-                channel_scope_generation=data.get("channel_scope_generation", 0),
-                turn_generation=data.get("turn_generation", 0),
-                last_finished_turn_id=data.get("last_finished_turn_id"),
-            )
-            if name in legacy_turns and self._threads[name].active_turn is None:
-                raise RelationViolationError("private registry turn attestation has no live turn")
-            self._statuses[name] = ThreadStatus(data.get("status", "running"))
-            self._last_seen[name] = data.get("last_seen", 0.0)
-            if has_generations and name not in self._owner_generations:
-                raise RelationViolationError("missing private registry owner epoch")
-            if has_admissions and name not in self._admission_generations:
-                raise RelationViolationError("missing private registry admission generation")
-        if any(name not in self._threads for name in legacy_turns):
-            raise RelationViolationError("private registry turn attestation has no live turn")
-        # Older stores retained aliases after deletion. Only a retained thread
-        # (including an archived one) can own a name reservation.
-        self._aliases = {
-            alias: target for alias, target in self._aliases.items() if target in self._threads
-        }
-        self._revision = revision
-
-    @staticmethod
-    @lru_cache(maxsize=512)
-    def _session_created_at(session_file: str) -> float:
-        # Pi session headers are immutable; avoid reopening legacy transcripts
-        # on every registry lookup before their creation date is persisted.
-        with Path(session_file).open("rb") as stream:
-            line = stream.readline(8192)
-        try:
-            header = json.loads(line)
-            if header.get("type") == "session" and header.get("timestamp"):
-                return datetime.fromisoformat(
-                    header["timestamp"].replace("Z", "+00:00")
-                ).timestamp()
-        except (ValueError, TypeError, AttributeError):
-            pass
-        return 0.0
-
-    @staticmethod
-    def _created_at(data: Mapping) -> float:
-        """Read old session headers when a registry predates creation timestamps."""
-        if "created_at" in data:
-            return float(data["created_at"])
-        if session_file := data.get("session_file"):
-            try:
-                return ThreadRegistry._session_created_at(session_file)
-            except OSError:
-                pass
-        # Unknown legacy creation dates sort oldest, never by a mutable heartbeat.
-        return 0.0
-
-    def _bump_owner_generation_unlocked(self, name: str) -> None:
-        self._owners.advance(name)
-
-    def _bump_admission_unlocked(self, name: str) -> None:
-        self._admissions.advance(name)
-
-    def _save_unlocked(self) -> None:
-        # A failed write must never make speculative in-memory mutations authoritative.
-        self._revision = None
-        guard = self._private_guard_unlocked()
-        serialized = json.dumps(
-            {
-                "threads": {
-                    name: {
-                        **t.to_wire(),
-                        "status": self._statuses.get(name, ThreadStatus.RUNNING).value,
-                        "last_seen": self._last_seen.get(name, 0.0),
-                    }
-                    for name, t in self._threads.items()
-                },
-                "aliases": dict(sorted(self._aliases.items())),
-                # Keep the established encoding while an old UI process may write.
-                # These are projections of the nominal owners, not parallel state.
-                "owner_epoch_counter": self._owners.counter,
-                "owner_epochs": dict(sorted(self._owner_generations.items())),
-                "turn_epochs": {
-                    name: self._owner_generations[name]
-                    for name, thread in sorted(self._threads.items())
-                    if thread.active_turn is not None
-                    and thread.active_turn.current(
-                        self._admission_generations[name], thread.turn_generation
-                    )
-                },
-                "admission_generation_counter": self._admissions.counter,
-                "admission_generations": dict(sorted(self._admission_generations.items())),
-            },
-            indent=2,
-        )
-        if guard is None:
-            _atomic_write_text(self._path, serialized, fsync_parent=True)
-        else:
-            digest = hashlib.sha256(b"present\0" + serialized.encode("utf-8")).digest()
-            sequence, slot = guard.prepare(digest)
-            _atomic_write_text(self._path, serialized, fsync_parent=True)
-            guard.commit(sequence, slot, digest)
-
-    def register(
-        self,
-        thread: Thread,
-        status: ThreadStatus = ThreadStatus.RUNNING,
-        *,
-        new_owner: bool = False,
-    ) -> None:
-        with _store_lock(self._path):
-            self._load_unlocked()
-            prior = self._threads.get(thread.name)
-            prior_status = self._statuses.get(thread.name)
-            if thread.role.executable and (
-                new_owner
-                or (prior is None and thread.pid > 0 and status.active)
-                or (prior is not None and prior.pid != thread.pid)
-                or (prior_status is not None and not prior_status.active and status.active)
-            ):
-                self._assert_maintenance_open_unlocked()
-            if thread.name in self._aliases:
-                raise RelationViolationError(
-                    f"Thread name {thread.name!r} is a permanent alias and cannot be reused."
-                )
-            if not self._statuses.get(thread.name, ThreadStatus.RUNNING).mutable:
-                raise RelationViolationError(
-                    f"Thread {thread.name!r} is being permanently deleted."
-                )
-            previous = self._threads.get(thread.name)
-            previous_status = self._statuses.get(thread.name)
-            if previous:
-                thread = replace(thread, created_at=previous.created_at)
-                if thread.tags != previous.tags:
-                    if previous.channel_scope_generation >= (1 << 63) - 1:
-                        raise RelationViolationError("Channel scope generation exhausted")
-                    thread = replace(
-                        thread,
-                        channel_scope_generation=previous.channel_scope_generation + 1,
-                    )
-                elif thread.channel_scope_generation != previous.channel_scope_generation:
-                    # A metadata writer cannot erase or forge channel scope history.
-                    thread = replace(
-                        thread, channel_scope_generation=previous.channel_scope_generation
-                    )
-                if thread.turn_generation != previous.turn_generation:
-                    # A stale metadata writer cannot reset a completed-turn fence.
-                    thread = replace(
-                        thread,
-                        turn_generation=previous.turn_generation,
-                        last_finished_turn_id=(
-                            previous.last_finished_turn_id
-                            if thread.active_turn == previous.active_turn
-                            else None
-                        ),
-                    )
-            elif any(
-                existing.created_at == thread.created_at for existing in self._threads.values()
-            ):
-                # The Windows wall clock can return the same value for six
-                # independent default-constructed threads. Allocate a distinct
-                # identity under this store lock, but never rewrite an explicit
-                # caller-supplied creation identity or alias someone else's claim.
-                if not thread._generated_created_at:
-                    raise RelationViolationError("Registry creation identities collide.")
-                used = {existing.created_at for existing in self._threads.values()}
-                candidate = float(thread.created_at)
-                while candidate in used:
-                    candidate = math.nextafter(candidate, math.inf)
-                if not math.isfinite(candidate):
-                    raise RelationViolationError("Registry creation identities collide.")
-                thread = replace(thread, created_at=candidate)
-            identity_changed = previous is not None and (
-                new_owner
-                or previous.created_at != thread.created_at
-                or previous.pid != thread.pid
-                or previous.session_file != thread.session_file
-                or previous.worktree != thread.worktree
-                or previous.role != thread.role
-                or (previous_status is not None and previous_status.active != status.active)
-            )
-            identity_scope: AbstractContextManager[None]
-            if identity_changed:
-                from .compaction_publication_lease import publication_identity_fence
-
-                identity_scope = publication_identity_fence(self._path.parent, nonblocking=True)
-            else:
-                identity_scope = nullcontext()
-            with identity_scope:
-                history = None
-                intent = None
-                before_goal = previous.goal if previous is not None else None
-                if before_goal != thread.goal:
-                    from .goal_history import GoalHistoryStore
-
-                    history = GoalHistoryStore(self._path)
-                    intent = history.begin(thread.created_at, before_goal, thread.goal)
-                self._threads[thread.name] = thread
-                self._statuses[thread.name] = status
-                self._last_seen[thread.name] = time.time()
-                if (
-                    previous is None
-                    or new_owner
-                    or previous.pid != thread.pid
-                    or previous.role != thread.role
-                    or (previous_status is not None and previous_status.active != status.active)
-                ):
-                    self._bump_admission_unlocked(thread.name)
-                    self._bump_owner_generation_unlocked(thread.name)
-                if thread.active_turn is not None and (
-                    previous is None or new_owner or thread.active_turn != previous.active_turn
-                ):
-                    thread = replace(
-                        thread, active_turn=replace(thread.active_turn, admission_generation=None)
-                    )
-                    self._threads[thread.name] = thread
-                self._save_unlocked()
-                if history is not None and intent is not None:
-                    history.commit(intent)
-
-    def live_owner_with_generation(self, name: str) -> tuple[Thread, int]:
-        """Capture an active owner and its persistent incarnation under one lock.
-
-        Unlike a global file revision, an unrelated recipient's claim cannot
-        invalidate this owner's attempt. A stop then heartbeat changes its epoch
-        even if the declaration, PID, and status return to their earlier values.
-        """
-        with _store_lock(self._path):
-            self._load_unlocked()
-            canonical = self._aliases.get(name, name)
-            owner = self._threads.get(canonical)
-            status = self._statuses.get(canonical)
-            epoch = self._owner_generations.get(canonical)
-            if (
-                owner is None
-                or status is None
-                or not status.active
-                or owner.pid != os.getpid()
-                or not owner.role.executable
-                or not self._generation_metadata_present
-                or epoch is None
-                or (
-                    owner is not None
-                    and owner.active_turn is not None
-                    and not owner.active_turn.current(
-                        self._admission_generations[canonical], owner.turn_generation
-                    )
-                )
-            ):
-                raise RelationViolationError("live owner is stopped or unavailable")
-            return owner, epoch
-
-    live_owner_with_epoch = live_owner_with_generation
-
-    def live_owner_with_admission(self, name: str) -> tuple[Thread, int]:
-        """Read the durable process admission, independent of metadata revisions."""
-        with _store_lock(self._path):
-            self._load_unlocked()
-            canonical = self._aliases.get(name, name)
-            owner = self._threads.get(canonical)
-            status = self._statuses.get(canonical)
-            generation = self._admission_generations.get(canonical)
-            if (
-                owner is None
-                or status is None
-                or not status.active
-                or owner.pid != os.getpid()
-                or not owner.role.executable
-                or not self._generation_metadata_present
-                or generation is None
-                or (
-                    owner is not None
-                    and owner.active_turn is not None
-                    and not owner.active_turn.current(generation, owner.turn_generation)
-                )
-            ):
-                raise RelationViolationError("live owner is stopped or unavailable")
-            return owner, generation
-
-    def claim_live_turn_with_admission(
-        self, expected: Thread, turn_id: str, *, expected_generation: int
-    ) -> tuple[Thread, int]:
-        """Claim a turn against stable owner authority under the registry lock."""
-        if (
-            type(expected) is not Thread
-            or type(turn_id) is not str
-            or not 0 < len(turn_id) <= 128
-            or type(expected_generation) is not int
-            or expected_generation < 1
-        ):
-            raise ValueError("live owner turn requires exact admission and bounded ID")
-        with _store_lock(self._path):
-            self._load_unlocked()
-            current = self._threads.get(expected.name)
-            status = self._statuses.get(expected.name)
-            if (
-                not self._generation_metadata_present
-                or self._admission_generations.get(expected.name) != expected_generation
-                or current is None
-                or status is None
-                or not status.active
-                or current.pid != os.getpid()
-                or not current.role.executable
-                or current.active_turn is not None
-                or current.goal != expected.goal
-                or (current.name, current.created_at, current.pid, current.role, current.worktree)
-                != (
-                    expected.name,
-                    expected.created_at,
-                    expected.pid,
-                    expected.role,
-                    expected.worktree,
-                )
-            ):
-                raise RelationViolationError("live owner stopped or changed before turn claim")
-            claimed, _owner_generation = self._claim_turn_unlocked(current, turn_id, None)
-            return claimed, expected_generation
-
-    def claim_live_turn_with_generation(
-        self,
-        expected: Thread,
-        turn_id: str,
-        *,
-        expected_owner_generation: int,
-        routing: TurnRouting | None = None,
-    ) -> tuple[Thread, int]:
-        """Atomically claim a fresh turn and return its turn with stable owner generation.
-
-        Never sample the generation in a second read: an owner may stop and register
-        the same declaration between that read and the claim's return.
-        """
-        if (
-            type(expected) is not Thread
-            or type(turn_id) is not str
-            or not 0 < len(turn_id) <= 128
-            or type(expected_owner_generation) is not int
-            or expected_owner_generation < 1
-        ):
-            raise ValueError("live owner turn requires exact identity, epoch and bounded ID")
-        with _store_lock(self._path):
-            self._load_unlocked()
-            current = self._threads.get(expected.name)
-            status = self._statuses.get(expected.name)
-            if (
-                not self._generation_metadata_present
-                or self._owner_generations.get(expected.name) != expected_owner_generation
-                or current != expected
-                or status is None
-                or not status.active
-                or current is None
-                or current.pid != os.getpid()
-                or not current.role.executable
-                or current.active_turn is not None
-            ):
-                raise RelationViolationError("live owner stopped or changed before turn claim")
-            return self._claim_turn_unlocked(current, turn_id, routing)
-
-    def claim_live_turn_with_epoch(
-        self,
-        expected: Thread,
-        turn_id: str,
-        *,
-        expected_epoch: int,
-        routing: TurnRouting | None = None,
-    ) -> tuple[Thread, int]:
-        """Legacy call spelling, interpreted strictly as owner generation."""
-        return self.claim_live_turn_with_generation(
-            expected, turn_id, expected_owner_generation=expected_epoch, routing=routing
-        )
-
-    def attest_owner_compaction(
-        self,
-        expected: Thread,
-        expected_epoch: int,
-        turn_id: str,
-        *,
-        expected_goal_id: str | None,
-        expected_goal_revision: int | None,
-        correction_revision: int,
-        session_file: str,
-        session_leaf: str,
-        session_revision: str,
-    ) -> OwnerCompactionAttestation:
-        """Return an audit snapshot, NOT authority for a later native mutation."""
-        with self.guard_owner_compaction(
-            expected,
-            expected_epoch,
-            turn_id,
-            expected_goal_id=expected_goal_id,
-            expected_goal_revision=expected_goal_revision,
-            correction_revision=correction_revision,
-            session_file=session_file,
-            session_leaf=session_leaf,
-            session_revision=session_revision,
-        ) as (attestation, _):
-            return attestation
-
-    @contextmanager
-    def guard_owner_compaction(
-        self,
-        expected: Thread,
-        expected_epoch: int,
-        turn_id: str,
-        *,
-        expected_goal_id: str | None,
-        expected_goal_revision: int | None,
-        correction_revision: int,
-        session_file: str,
-        session_leaf: str,
-        session_revision: str,
-    ) -> Iterator[tuple[OwnerCompactionAttestation, int]]:
-        """Hold canonical authority through the caller's native mutation.
-
-        Lock order: registry, then native session writer. No registry method
-        may be called inside this scope (the lock is not reentrant). A native
-        child MUST inherit the yielded descriptor and keep it until exit;
-        the caller must bound, terminate and reap it before leaving normally.
-        This scope does not validate correction or native session evidence.
-
-        This is NOT a bearer token: the same check must run again at commit
-        time under this lock. Anything that moved since the caller captured
-        its expectations — owner epoch, active turn, goal id/revision/status,
-        or liveness — fails closed here. The native session fence (file, leaf,
-        disk revision) is echoed unverified; the native writer CAS is the only
-        authority for those values.
-        """
-        if (
-            type(expected) is not Thread
-            or type(expected_epoch) is not int
-            or expected_epoch < 1
-            or type(turn_id) is not str
-            or not 0 < len(turn_id) <= 128
-            or ((expected_goal_id is None) != (expected_goal_revision is None))
-            or (
-                expected_goal_id is not None
-                and (
-                    type(expected_goal_id) is not str
-                    or not expected_goal_id
-                    or type(expected_goal_revision) is not int
-                    or expected_goal_revision < 0
-                )
-            )
-            or type(correction_revision) is not int
-            or correction_revision < 0
-            or type(session_file) is not str
-            or not session_file
-            or type(session_leaf) is not str
-            or not session_leaf
-            or type(session_revision) is not str
-            or not session_revision
-        ):
-            raise ValueError("owner compaction attestation requires bounded exact expectations")
-        with _store_lock(self._path) as authority_fd:
-            self._load_unlocked()
-            canonical = self._aliases.get(expected.name, expected.name)
-            owner = self._threads.get(canonical)
-            status = self._statuses.get(canonical)
-            epoch = self._owner_generations.get(canonical)
-            goal = owner.goal if owner is not None else None
-            if (
-                not self._generation_metadata_present
-                or owner is None
-                or status is None
-                or not status.active
-                or owner != expected
-                or epoch != expected_epoch
-                or owner.pid != os.getpid()
-                or not owner.role.executable
-                or owner.active_turn is None
-                or owner.active_turn.id != turn_id
-                or not owner.active_turn.current(
-                    self._admission_generations[canonical], owner.turn_generation
-                )
-                or (goal.id if goal is not None else None) != expected_goal_id
-                or (goal.revision if goal is not None else None) != expected_goal_revision
-            ):
-                raise RelationViolationError(
-                    "canonical owner attestation unavailable for compaction commit"
-                )
-            from .owner_compaction_gate import OwnerCompactionAttestation
-
-            yield (
-                OwnerCompactionAttestation(
-                    thread=owner.name,
-                    owner_epoch=epoch,
-                    turn_id=turn_id,
-                    goal_id=goal.id if goal is not None else None,
-                    goal_revision=goal.revision if goal is not None else None,
-                    correction_revision=correction_revision,
-                    session_file=session_file,
-                    session_leaf=session_leaf,
-                    session_revision=session_revision,
-                    registry_revision=file_revision(self._path),
-                ),
-                authority_fd,
-            )
-
-    def _assert_maintenance_open_unlocked(self) -> None:
-        from .maintenance_barrier import MaintenanceBarrier
-
-        MaintenanceBarrier(self._path).assert_open_unlocked()
-
-    def _claim_turn_unlocked(
-        self, current: Thread, turn_id: str, routing: TurnRouting | None
-    ) -> tuple[Thread, int]:
-        """Caller holds the registry lock and has checked live turn ownership."""
-        self._assert_maintenance_open_unlocked()
-        if current.turn_generation >= (1 << 63) - 1:
-            raise RelationViolationError("Turn generation exhausted")
-        claimed = replace(
-            current,
-            turn_generation=current.turn_generation + 1,
-            last_finished_turn_id=None,
-            active_turn=ActiveTurn(
-                turn_id,
-                current.pid,
-                routing=routing,
-                admission_generation=self._admission_generations[current.name],
-                turn_generation=current.turn_generation + 1,
-            ),
-        )
-        self._threads[current.name] = claimed
-        self._last_seen[current.name] = time.time()
-        owner_generation = self._owner_generations[current.name]
-        self._save_unlocked()
-        return claimed, owner_generation
-
-    def claim_local_turn(
-        self, name: str, turn_id: str, *, routing: TurnRouting | None = None
-    ) -> tuple[Thread, int]:
-        """Atomic local begin-turn, never reviving a stopped or replaced owner.
-
-        A legacy unmarked registry can be migrated under the same lock as the
-        claim. Marked private roots must not recreate missing epoch metadata:
-        an old writer may have stripped it during an unsafe cutover.
-        """
-        if type(turn_id) is not str or not 0 < len(turn_id) <= 128:
-            raise ValueError("live owner turn requires a bounded ID")
-        with _store_lock(self._path):
-            self._load_unlocked()
-            canonical = self._aliases.get(name, name)
-            current = self._threads.get(canonical)
-            status = self._statuses.get(canonical)
-            if (
-                current is None
-                or status is None
-                or not status.active
-                or current.pid != os.getpid()
-                or not current.role.executable
-                or current.active_turn is not None
-            ):
-                raise RelationViolationError("live owner is stopped or unavailable")
-            if not self._generation_metadata_present:
-                self._generation_metadata_present = True
-            return self._claim_turn_unlocked(current, turn_id, routing)
-
-    def claim_live_turn(self, expected: Thread, turn_id: str, *, expected_epoch: int) -> Thread:
-        """Compatibility CAS result for callers that do not need the witness."""
-        claimed, _ = self.claim_live_turn_with_generation(
-            expected, turn_id, expected_owner_generation=expected_epoch
-        )
-        return claimed
-
-    def finish_claimed_turn_with_fence(
-        self, name: str, turn_id: str, *, expected: TurnLeaseFence | None = None
-    ) -> tuple[bool, FinishedTurnFence | None]:
-        """Release only the claimed turn; legacy ID-only release cannot attest a fence."""
-        with _store_lock(self._path):
-            self._load_unlocked()
-            name = self._aliases.get(name, name)
-            current = self._threads.get(name)
-            if current is None or current.active_turn is None or current.active_turn.id != turn_id:
-                return False, None
-            admission = current.active_turn.admission_generation
-            if expected is not None and (
-                type(expected) is not TurnLeaseFence
-                or self._aliases.get(expected.name, expected.name) != name
-                or expected.created_at != current.created_at
-                or expected.turn_id != turn_id
-                or expected.turn_generation != current.turn_generation
-                or expected.admission_generation != admission
-                or current.active_turn.turn_generation != expected.turn_generation
-            ):
-                return False, None
-            attested = (
-                expected is not None
-                and current.turn_generation > 0
-                and type(admission) is int
-                and admission > 0
-                and self._admission_generations.get(name) == admission
-                and current.active_turn.turn_generation == current.turn_generation
-                and self._statuses[name].active
-            )
-            self._threads[name] = replace(
-                current,
-                active_turn=None,
-                last_finished_turn_id=(current.active_turn.id if current.turn_generation else None),
-            )
-            self._last_seen[name] = time.time()
-            self._save_unlocked()
-            if not attested:
-                return True, None
-            assert type(admission) is int
-            assert current.turn_identity is not None
-            return True, FinishedTurnFence(
-                identity=current.turn_identity, turn_id=turn_id, admission_generation=admission
-            )
-
-    def finish_claimed_turn(self, name: str, turn_id: str) -> bool:
-        """Release only the exact owned turn, resolving retained aliases under lock."""
-        released, _ = self.finish_claimed_turn_with_fence(name, turn_id)
-        return released
-
-    def canonical_name(self, name: str) -> str:
-        self._load()
-        return self._aliases.get(name, name)
-
-    def aliases_for(self, name: str) -> frozenset[str]:
-        self._load()
-        canonical = self._aliases.get(name, name)
-        return frozenset(
-            {canonical, *(alias for alias, target in self._aliases.items() if target == canonical)}
-        )
-
-    def goal_history(
-        self, name: str, *, goal_id: str | None = None
-    ) -> tuple[GoalHistoryEntry, ...]:
-        """Read this owner's recorded transitions, reconciling crash cuts first."""
-        from .goal_history import GoalHistoryStore
-
-        with _store_lock(self._path):
-            self._load_unlocked()
-            canonical = self._aliases.get(name, name)
-            thread = self._threads.get(canonical)
-            if thread is None:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-            return GoalHistoryStore(self._path).history(
-                thread.created_at, thread.goal, goal_id=goal_id
-            )
-
-    def name_reserved(self, name: str) -> bool:
-        """Return whether a canonical name or permanent alias occupies text."""
-        self._load()
-        return name in self._threads or name in self._aliases
-
-    def rename(self, name: str, new_name: str) -> tuple[str, str]:
-        """Rename one running thread while retaining old names as aliases."""
-        from .compaction_publication_lease import publication_identity_fence
-
-        with (
-            publication_identity_fence(self._path.parent, nonblocking=True),
-            _store_lock(self._path),
-        ):
-            self._load_unlocked()
-            canonical = self._aliases.get(name, name)
-            if canonical not in self._threads:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-            if new_name == canonical:
-                return canonical, canonical
-            current = self._threads[canonical]
-            if not self._statuses[canonical].running:
-                raise RelationViolationError("Only a running thread can rename itself.")
-            alias_owner = self._aliases.get(new_name)
-            if new_name in self._threads or (alias_owner is not None and alias_owner != canonical):
-                raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
-            # Constructing the replacement proves the new name is valid.
-            replacement = replace(current, name=new_name)
-            # Reclaim only this owner's old alias. A canonical name must not
-            # also remain an alias to itself after the declaration moves.
-            if alias_owner == canonical:
-                del self._aliases[new_name]
-            status = self._statuses.pop(canonical)
-            last_seen = self._last_seen.pop(canonical)
-            del self._threads[canonical]
-            self._threads[new_name] = replacement
-            self._statuses[new_name] = status
-            self._last_seen[new_name] = last_seen
-
-            for child_name, child in tuple(self._threads.items()):
-                if child.parent == canonical:
-                    self._threads[child_name] = replace(child, parent=new_name)
-            for alias, target in tuple(self._aliases.items()):
-                if target == canonical:
-                    self._aliases[alias] = new_name
-            self._aliases[canonical] = new_name
-            # Renaming changes the declaration key, not the process that was
-            # admitted. Preserve the durable incarnation across its alias.
-            self._admissions.rename(canonical, new_name)
-            self._owners.rename(canonical, new_name)
-            self._save_unlocked()
-            return canonical, new_name
-
-    def fence_idle_owner(self, expected: Thread, *, expected_admission_generation: int) -> int:
-        """Atomically deny new turns for exactly one idle owner before signaling.
-
-        The outer wire lock alone cannot exclude a direct registry claim; this
-        check and the STOPPED transition share the registry's own lock.
-        """
-        with _store_lock(self._path):
-            self._load_unlocked()
-            current = self._threads.get(expected.name)
-            status = self._statuses.get(expected.name)
-            if (
-                current != expected
-                or current is None
-                or current.active_turn is not None
-                or status is None
-                or not status.active
-                or self._admission_generations.get(expected.name) != expected_admission_generation
-            ):
-                raise RelationViolationError("Idle owner changed before restart fence.")
-            self._statuses[expected.name] = ThreadStatus.STOPPED
-            self._bump_admission_unlocked(expected.name)
-            self._bump_owner_generation_unlocked(expected.name)
-            self._save_unlocked()
-            return self._admission_generations[expected.name]
-
-    def unregister(self, name: str) -> None:
-        from .compaction_publication_lease import publication_identity_fence
-
-        with (
-            publication_identity_fence(self._path.parent, nonblocking=True),
-            _store_lock(self._path),
-        ):
-            self._load_unlocked()
-            name = self._aliases.get(name, name)
-            if name not in self._threads:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-            if self._statuses[name].active:
-                self._bump_owner_generation_unlocked(name)
-            self._statuses[name] = ThreadStatus.STOPPED
-            self._threads[name] = replace(self._threads[name], active_turn=None)
-            self._bump_admission_unlocked(name)
-            self._save_unlocked()
-
-    def archive(self, name: str) -> None:
-        from .compaction_publication_lease import publication_identity_fence
-
-        with (
-            publication_identity_fence(self._path.parent, nonblocking=True),
-            _store_lock(self._path),
-        ):
-            self._load_unlocked()
-            name = self._aliases.get(name, name)
-            if name not in self._threads:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-            if self._statuses[name].active:
-                self._bump_owner_generation_unlocked(name)
-            self._statuses[name] = ThreadStatus.ARCHIVED
-            self._bump_admission_unlocked(name)
-            self._save_unlocked()
-
-    def begin_delete(self, name: str) -> None:
-        from .compaction_publication_lease import publication_identity_fence
-
-        with (
-            publication_identity_fence(self._path.parent, nonblocking=True),
-            _store_lock(self._path),
-        ):
-            self._load_unlocked()
-            name = self._aliases.get(name, name)
-            if name not in self._threads:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-            status = self._statuses.get(name)
-            if status is None or status.active:
-                raise RelationViolationError(
-                    "Stop a running thread before permanently deleting it."
-                )
-            self._statuses[name] = ThreadStatus.DELETING
-            self._bump_admission_unlocked(name)
-            self._save_unlocked()
-
-    def remove(self, name: str) -> tuple[str, ...]:
-        """Remove a declaration and atomically detach its surviving children."""
-        from .compaction_publication_lease import publication_identity_fence
-
-        with (
-            publication_identity_fence(self._path.parent, nonblocking=True),
-            _store_lock(self._path),
-        ):
-            self._load_unlocked()
-            name = self._aliases.get(name, name)
-            if name not in self._threads:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-            detached = tuple(
-                sorted(child.name for child in self._threads.values() if child.parent == name)
-            )
-            for child_name in detached:
-                self._threads[child_name] = replace(self._threads[child_name], parent=None)
-            if self._statuses[name].active:
-                self._bump_owner_generation_unlocked(name)
-            del self._threads[name]
-            self._statuses.pop(name, None)
-            self._last_seen.pop(name, None)
-            # Keep generation tombstones; allocating the next owner cannot recycle
-            # the deleted process identity, even when its name is reused.
-            self._bump_admission_unlocked(name)
-            self._aliases = {
-                alias: target for alias, target in self._aliases.items() if target != name
-            }
-            self._save_unlocked()
-            return detached
-
-    def heartbeat(self, name: str) -> None:
-        with _store_lock(self._path):
-            self._load_unlocked()
-            name = self._aliases.get(name, name)
-            if name not in self._threads:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-            if not self._statuses.get(name, ThreadStatus.RUNNING).mutable:
-                raise RelationViolationError(f"Thread {name!r} is being permanently deleted.")
-            if not self._statuses[name].active:
-                self._bump_admission_unlocked(name)
-                self._bump_owner_generation_unlocked(name)
-            self._statuses[name] = ThreadStatus.RUNNING
-            self._last_seen[name] = time.time()
-            self._save_unlocked()
-
-    def last_seen(self, name: str) -> float:
-        self._load()
-        name = self._aliases.get(name, name)
-        if name not in self._threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-        return self._last_seen.get(name, 0.0)
-
-    def require(self, name: str) -> Thread:
-        self._load()
-        name = self._aliases.get(name, name)
-        if name not in self._threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-        return self._threads[name]
-
-    def status(self, name: str) -> ThreadStatus:
-        self._load()
-        name = self._aliases.get(name, name)
-        if name not in self._statuses:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-        return self._statuses[name]
-
-    def all_threads(self) -> Mapping[str, Thread]:
-        self._load()
-        return dict(self._threads)
-
-    def _snapshot_unlocked(self) -> RegistrySnapshot:
-        """Caller already holds this registry's file lock."""
-        self._load_unlocked()
-        return RegistrySnapshot(
-            dict(self._threads),
-            dict(self._statuses),
-            dict(self._last_seen),
-            dict(self._aliases),
-            dict(self._owner_generations),
-            dict(self._admission_generations),
-        )
-
-    def snapshot(self) -> RegistrySnapshot:
-        """Read related declarations and statuses from exactly one store revision."""
-        with _store_lock(self._path):
-            return self._snapshot_unlocked()
-
-    def active_threads(self) -> Mapping[str, Thread]:
-        self._load()
-        return {name: t for name, t in self._threads.items() if self._statuses[name].active}
-
-    def peers(self, exclude: str) -> Sequence[str]:
-        self._load()
-        exclude = self._aliases.get(exclude, exclude)
-        return [name for name in self._threads if name != exclude]
-
-    def __contains__(self, name: str) -> bool:
-        self._load()
-        name = self._aliases.get(name, name)
-        return name in self._threads
 
 
 # ─── Message Bus ──────────────────────────────────────────────────────────────
@@ -3496,7 +2336,7 @@ class MessageBus:
     def __init__(
         self,
         bus_path: Path,
-        registry: ThreadRegistry,
+        registry: Registration,
         *,
         private_response_writes: bool = False,
         private_initial_writes: bool = False,
@@ -3920,10 +2760,10 @@ class MessageBus:
             # Total order: caller's wire lock, bus lock, registry lock. The
             # durable PENDING guard precedes marker visibility; a failed
             # marker/directory fsync cannot leave a usable registry witness.
-            if self._registry._path.parent != self._path.parent:
+            if self._registry.store.path.parent != self._path.parent:
                 raise RelationViolationError("Private registry must share the bus root")
-            with _store_lock(self._registry._path):
-                guard = PrivateRegistryGuard(self._registry._path, root_id)
+            with _store_lock(self._registry.store.path):
+                guard = PrivateRegistryGuard(self._registry.store.path, root_id)
                 guard.create_pending()
                 _atomic_write_text(
                     meta,
@@ -4366,7 +3206,7 @@ class MessageBus:
             if int(metadata["last_seq"]) >= MAX_WIRE_SEQ:
                 raise RelationViolationError("Private bus sequence is exhausted.")
             source_paths = (
-                self._registry._path,
+                self._registry.store.path,
                 self._channels.path,
                 self._channels.saved_views_path,
             )
@@ -4475,7 +3315,7 @@ class MessageBus:
             revision = hashlib.sha256(
                 repr(
                     (
-                        file_revision(self._registry._path),
+                        file_revision(self._registry.store.path),
                         file_revision(self._channels.path),
                         file_revision(self._channels.saved_views_path),
                         sorted(
@@ -4719,7 +3559,12 @@ class MessageBus:
             delivery = self._delivery_scope(name)
             revision = tuple(
                 file_revision(path)
-                for path in (self._path, self._registry._path, self._channels.path, self.reads.path)
+                for path in (
+                    self._path,
+                    self._registry.store.path,
+                    self._channels.path,
+                    self.reads.path,
+                )
             )
             cached = self._pending_cache.get(name)
             if cached is not None and cached.revision == revision and cached.delivery == delivery:

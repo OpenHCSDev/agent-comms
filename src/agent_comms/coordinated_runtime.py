@@ -364,7 +364,7 @@ def _native_send_boundary(
             _require_no_private_owner_rename(bus._path.parent)
             from .maintenance_barrier import MaintenanceBarrier
 
-            MaintenanceBarrier(bus._registry._path).assert_open_unlocked()
+            MaintenanceBarrier(bus._registry.store.path).assert_open_unlocked()
             actual = registry.threads.get(owner.name)
             status = registry.statuses.get(owner.name)
             if (
@@ -1153,7 +1153,7 @@ async def run_one_sealed_claim(
                 _require_owner(store, lookup, owner, person.participant_generation)
                 from .maintenance_barrier import MaintenanceBarrier
 
-                MaintenanceBarrier(bus._registry._path).assert_open_unlocked()
+                MaintenanceBarrier(bus._registry.store.path).assert_open_unlocked()
                 fresh_session = create_fresh_private_session(
                     session_dir,
                     worktree=worktree,

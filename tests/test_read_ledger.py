@@ -64,10 +64,10 @@ def test_turn_claim_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path
     viewer = comms.user_identity(str(tmp_path)).name
     comms.send("alice", viewer, "painted")
     page = comms.dm_display_page("alice", worktree=str(tmp_path))
-    assert page.display_basis.peer_epoch == page.display_basis.peer_created_at
+    assert page.display_basis.peer_created_at == page.display_basis.peer_created_at
     comms.registry.claim_local_turn("alice", "ordinary-turn")
     fresh = comms.dm_display_page("alice", worktree=str(tmp_path))
-    assert fresh.display_basis.peer_epoch == page.display_basis.peer_epoch
+    assert fresh.display_basis.peer_created_at == page.display_basis.peer_created_at
     comms.registry.register(Thread("unrelated", frozenset(), str(tmp_path)))
     comms.mark_dm_view_read(
         "alice",
@@ -193,7 +193,9 @@ def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
     assert [n for item in first.conversations for n in item.sequences] == [messages[2].seq]
     for selected in (first, scope.displayed.select({messages[4].seq})):
         comms.mark_channel_view_read(
-            "#team", worktree=str(tmp_path), through=page.newest_seq,
+            "#team",
+            worktree=str(tmp_path),
+            through=page.newest_seq,
             expected_scope=replace(scope, displayed=selected),
         )
         # Unrelated registry changes and previous ACKs do not invalidate the
@@ -202,6 +204,7 @@ def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
     reopened = wire(tmp_path)
     viewer = reopened.user_identity(str(tmp_path)).name
     assert reopened.reads.seen_sequences(viewer, reopened.registry.snapshot()) == {
-        messages[2].seq, messages[4].seq,
+        messages[2].seq,
+        messages[4].seq,
     }
     assert reopened.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3

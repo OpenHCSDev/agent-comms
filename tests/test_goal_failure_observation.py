@@ -9,7 +9,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import agent_events as ae
-from agent_comms.declarations import Goal, GoalPauseSource, Thread, ThreadStatus, TurnClaimFence
+from agent_comms.declarations import Goal, GoalPauseSource, Thread, ThreadStatus, TurnLeaseFence
 from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_attempts import (
     GoalAttemptStore,
@@ -19,6 +19,7 @@ from agent_comms.goal_attempts import (
 )
 from agent_comms.goal_failure_observation import FailedTurnObservation, read_failed_turn_projection
 from agent_comms.goal_pauses import GoalPauseEvent
+from agent_comms.thread_identity import ThreadIncarnation, TurnIdentity
 
 
 @pytest.fixture
@@ -39,7 +40,7 @@ def bound(tmp_path):
     )
     store.create_goal(goal.id)
     permit = store.claim_launch(store.reserve(goal.id, 1))
-    claim = TurnClaimFence(owner.name, owner.created_at, "a" * 32, 7, 3)
+    claim = TurnLeaseFence(TurnIdentity(owner.incarnation, 7), "a" * 32, 3)
     observation = FailedTurnObservation.from_terminal(
         permit.reservation,
         owner=owner,
@@ -95,12 +96,12 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
 @pytest.mark.parametrize(
     "mutation",
     [
-        {"name": "other"},
-        {"created_at": 11.0},
+        {"identity": TurnIdentity(ThreadIncarnation("other", 10.0), 7)},
+        {"identity": TurnIdentity(ThreadIncarnation("owner", 11.0), 7)},
         {"turn_id": "b" * 32},
         {"admission_generation": 4},
-        {"turn_generation": 0},
-        {"turn_generation": 8},
+        {"identity": TurnIdentity(ThreadIncarnation("owner", 10.0), 0)},
+        {"identity": TurnIdentity(ThreadIncarnation("owner", 10.0), 8)},
     ],
 )
 def test_mismatched_turn_claim_is_not_bound(bound, mutation):

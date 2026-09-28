@@ -30,7 +30,7 @@ def _finish(comms, name, turn_id):
     claim = next(
         claim
         for claim in comms._test_claims.values()
-        if comms.registry.canonical_name(claim.name) == canonical
+        if comms.registry.canonical_name(claim.identity.incarnation.name) == canonical
     )
     return comms.finish_turn(name, turn_id, expected=claim)
 
@@ -166,7 +166,16 @@ def test_renamed_target_keeps_incarnation_but_replacement_fails_closed(tmp_path)
     # A later registered incarnation must not report an older turn's result.
     assert (
         comms.release_waits_after_terminal_turn(
-            replace(child_fence, created_at=child_fence.created_at + 1)
+            replace(
+                child_fence,
+                identity=replace(
+                    child_fence.identity,
+                    incarnation=replace(
+                        child_fence.identity.incarnation,
+                        created_at=child_fence.identity.incarnation.created_at + 1,
+                    ),
+                ),
+            )
         )
         == ()
     )
@@ -282,7 +291,7 @@ def test_delayed_old_finish_cannot_release_new_active_same_id(tmp_path):
     old_claim = comms._test_claims["child"]
     old_fence = _finish(comms, "child", "child-turn")
     new_claim = _begin(comms, "child", "child-turn")
-    assert new_claim.turn_generation == old_claim.turn_generation + 1
+    assert new_claim.identity.generation == old_claim.identity.generation + 1
     active = comms.registry.require("child").active_turn
     assert comms.finish_turn("child", "child-turn", expected=old_claim) is None
     assert comms.registry.require("child").active_turn == active
@@ -290,7 +299,7 @@ def test_delayed_old_finish_cannot_release_new_active_same_id(tmp_path):
     assert comms.registry.require("owner").goal.active
     assert comms.goal_wait("owner") is not None
     new_fence = comms.finish_turn("child", "child-turn", expected=new_claim)
-    assert new_fence is not None and new_fence.turn_generation == new_claim.turn_generation
+    assert new_fence is not None and new_fence.identity.generation == new_claim.identity.generation
     assert comms.release_waits_after_terminal_turn(new_fence) == ("owner",)
 
 
@@ -311,7 +320,7 @@ def test_delayed_old_terminal_cannot_release_newer_turn_before_reply(tmp_path, r
     _begin(comms, "child", newer_id)
     new_fence = _finish(comms, "child", newer_id)
     assert new_fence is not None
-    assert new_fence.turn_generation == old_fence.turn_generation + 1
+    assert new_fence.identity.generation == old_fence.identity.generation + 1
     assert comms.release_waits_after_terminal_turn(old_fence) == ()
     assert comms.registry.require("owner").goal.active
     assert comms.goal_wait("owner") is not None
@@ -341,7 +350,12 @@ def test_terminal_fence_survives_rename_not_stop_or_metadata_edit(tmp_path):
     child = comms.registry.require("child")
     comms.registry.register(replace(child, title="New title"), ThreadStatus.RUNNING)
     comms.registry.rename("child", "renamed-child")
-    assert comms.release_waits_after_terminal_turn(replace(fence, turn_generation=2)) == ()
+    assert (
+        comms.release_waits_after_terminal_turn(
+            replace(fence, identity=replace(fence.identity, generation=2))
+        )
+        == ()
+    )
     assert comms.release_waits_after_terminal_turn(fence) == ("owner",)
 
     another, _goal = _waiting(tmp_path / "stop")

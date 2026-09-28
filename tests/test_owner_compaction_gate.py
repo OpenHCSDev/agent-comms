@@ -11,13 +11,9 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.declarations import (
-    Goal,
-    RelationViolationError,
-    Thread,
-    ThreadRegistry,
-)
+from agent_comms.declarations import Goal, RelationViolationError, Thread
 from agent_comms.owner_compaction_gate import OwnerCompactionAttestation
+from agent_comms.registration import Registration
 
 FENCE = {
     "session_file": "/tmp/pr48-fence/session.jsonl",
@@ -26,8 +22,8 @@ FENCE = {
 }
 
 
-def make_registry(tmp_path) -> tuple[ThreadRegistry, Thread, int]:
-    registry = ThreadRegistry(tmp_path / "registry.json")
+def make_registry(tmp_path) -> tuple[Registration, Thread, int]:
+    registry = Registration(tmp_path / "registry.json")
     owner = Thread(
         name="owner",
         tags=frozenset(),
@@ -36,17 +32,19 @@ def make_registry(tmp_path) -> tuple[ThreadRegistry, Thread, int]:
         goal=Goal("original task", "goal-1", revision=4),
     )
     registry.register(owner)
-    live, epoch = registry.live_owner_with_epoch("owner")
+    live, epoch = registry.live_owner_with_generation("owner")
     return registry, live, epoch
 
 
-def claim(registry: ThreadRegistry, owner: Thread, epoch: int, turn: str) -> tuple[Thread, int]:
-    claimed, claimed_epoch = registry.claim_live_turn_with_epoch(owner, turn, expected_epoch=epoch)
+def claim(registry: Registration, owner: Thread, epoch: int, turn: str) -> tuple[Thread, int]:
+    claimed, claimed_epoch = registry.claim_live_turn_with_generation(
+        owner, turn, expected_owner_generation=epoch
+    )
     return claimed, claimed_epoch
 
 
 def attest(
-    registry: ThreadRegistry,
+    registry: Registration,
     owner: Thread,
     epoch: int,
     turn: str = "turn-1",
@@ -120,7 +118,9 @@ def test_stale_epoch_after_second_turn_claim_fails(tmp_path) -> None:
     registry.unregister("owner")
     revived = replace(claimed, active_turn=None)
     registry.register(revived)
-    _, second_epoch = claim(registry, revived, registry.snapshot().owner_epochs["owner"], "turn-2")
+    _, second_epoch = claim(
+        registry, revived, registry.snapshot().owner_generations["owner"], "turn-2"
+    )
     assert second_epoch != claimed_epoch
     with pytest.raises(RelationViolationError):
         attest(registry, claimed, claimed_epoch)  # pre-restart epoch is stale
@@ -155,7 +155,7 @@ def test_non_owner_process_cannot_attest(tmp_path, monkeypatch) -> None:
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"expected_epoch": 0},
+        {"expected_owner_generation": 0},
         {"turn_id": ""},
         {"turn_id": "t" * 129},
         {"expected_goal_id": ""},
@@ -170,7 +170,7 @@ def test_malformed_expectations_rejected(tmp_path, kwargs) -> None:
     registry, owner, epoch = make_registry(tmp_path)
     claimed, claimed_epoch = claim(registry, owner, epoch, "turn-1")
     request = {
-        "expected_epoch": claimed_epoch,
+        "expected_owner_generation": claimed_epoch,
         "turn_id": "turn-1",
         "expected_goal_id": "goal-1",
         "expected_goal_revision": 4,

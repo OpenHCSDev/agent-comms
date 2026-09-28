@@ -13,21 +13,24 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.declarations import Goal, Thread, ThreadRegistry, _store_lock
+from agent_comms.declarations import Goal, Thread, _store_lock
 from agent_comms.owner_compaction_process import (
     CompactionTransportUnknownError,
     run_authority_child,
 )
+from agent_comms.registration import Registration
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX inherited flock contract")
 
 
 def owner_guard(root: Path):
-    registry = ThreadRegistry(root / "registry.json")
+    registry = Registration(root / "registry.json")
     owner = Thread("owner", frozenset(), str(root), pid=os.getpid(), goal=Goal("task", "g"))
     registry.register(owner)
-    owner, epoch = registry.live_owner_with_epoch("owner")
-    owner, epoch = registry.claim_live_turn_with_epoch(owner, "turn", expected_epoch=epoch)
+    owner, epoch = registry.live_owner_with_generation("owner")
+    owner, epoch = registry.claim_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=epoch
+    )
     return registry.guard_owner_compaction(
         owner,
         epoch,
@@ -67,7 +70,8 @@ def test_registry_writers_wait_through_mutation(tmp_path, mutation):
 import fcntl, sys
 from dataclasses import replace
 from pathlib import Path
-from agent_comms.declarations import ThreadRegistry, Goal
+from agent_comms.declarations import Goal
+from agent_comms.registration import Registration
 root = Path(sys.argv[1])
 with (root / '.registry.json.lock').open('ab') as lock:
     try:
@@ -76,7 +80,7 @@ with (root / '.registry.json.lock').open('ab') as lock:
         print('blocked', flush=True)
     else:
         raise AssertionError('registry authority escaped')
-registry = ThreadRegistry(root / 'registry.json')
+registry = Registration(root / 'registry.json')
 mutation = sys.argv[2]
 if mutation == 'stop':
     registry.unregister('owner')

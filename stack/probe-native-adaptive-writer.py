@@ -25,8 +25,8 @@ from agent_comms.declarations import (  # noqa: E402
     Goal,
     RelationViolationError,
     Thread,
-    ThreadRegistry,
 )
+from agent_comms.registration import Registration  # noqa: E402
 
 SCRIPT = Path(__file__).with_suffix(".mjs")
 MANIFEST = Path(__file__).with_name("pi-native.sha256")
@@ -119,7 +119,7 @@ def run_case(case: str, package: Path, *, prototype: bool, production: bool = Fa
         claimed = None
         claimed_epoch = None
         if case in {"owner-goal", "owner-stop", "positive"}:
-            registry = ThreadRegistry(root / "registry.json")
+            registry = Registration(root / "registry.json")
             registry.register(
                 Thread(
                     name="owner",
@@ -129,11 +129,11 @@ def run_case(case: str, package: Path, *, prototype: bool, production: bool = Fa
                     goal=Goal("original task", "goal-old"),
                 )
             )
-            original_owner, original_epoch = registry.live_owner_with_epoch("owner")
-            claimed, claimed_epoch = registry.claim_live_turn_with_epoch(
-                original_owner, "turn-old", expected_epoch=original_epoch
+            original_owner, original_epoch = registry.live_owner_with_generation("owner")
+            claimed, claimed_epoch = registry.claim_live_turn_with_generation(
+                original_owner, "turn-old", expected_owner_generation=original_epoch
             )
-            assert claimed.active_turn is not None and claimed_epoch > original_epoch
+            assert claimed.active_turn is not None and claimed_epoch == original_epoch
         proc = subprocess.Popen(
             ["node", str(SCRIPT), "pending", str(root)],
             stdin=subprocess.PIPE,
@@ -187,8 +187,8 @@ def run_case(case: str, package: Path, *, prototype: bool, production: bool = Fa
                         replace(registry.require("owner"), goal=Goal("new task", "goal-new"))
                     )
                     assert registry.require("owner").goal.id == "goal-new"
-                    current_epoch = registry.snapshot().owner_epochs["owner"]
-                    assert current_epoch != claimed_epoch
+                    current_epoch = registry.snapshot().owner_generations["owner"]
+                    assert current_epoch == claimed_epoch  # Goal edits preserve process ownership.
                     invalidation = {
                         "goalBefore": claimed.goal.id if claimed.goal else None,
                         "goalAfter": registry.require("owner").goal.id,
@@ -311,9 +311,9 @@ def run_case(case: str, package: Path, *, prototype: bool, production: bool = Fa
                 # refuses before mutation except the injected post-write case:
                 # bytes may be visible but the outcome is unknown, never retried.
                 # Owner-scoped calls remain denied until a canonical bridge exists.
-                assert (
-                    result["commitId"] is None
-                ), f"UNSAFE {case}: native appendCompaction committed after preflight invalidation"
+                assert result["commitId"] is None, (
+                    f"UNSAFE {case}: native appendCompaction committed after preflight invalidation"
+                )
                 assert result["commitError"] is not None
                 if prototype:
                     expected = {

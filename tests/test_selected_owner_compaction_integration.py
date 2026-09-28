@@ -13,10 +13,11 @@ from agent_comms import agent_events as ae
 from agent_comms.backend import PersistentPiSession, _JsonLineReader, _session_revision
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
-from agent_comms.declarations import AgentRuntimeInfo, Goal, Thread, ThreadRegistry, _store_lock
+from agent_comms.declarations import AgentRuntimeInfo, Goal, Thread, _store_lock
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
 from agent_comms.owner_compaction_settings import PiCompactionDecision
+from agent_comms.registration import Registration
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(not PACKAGE, reason="Normal prepared native bundle required")
@@ -77,7 +78,7 @@ async def owner_fixture(tmp_path, monkeypatch, *, real_host=False, goal=True):
         )
         persistent.revision = _session_revision(file)
         persistent.launch_key = (launcher,)
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         registry.register(
             Thread(
                 "owner",
@@ -89,8 +90,10 @@ async def owner_fixture(tmp_path, monkeypatch, *, real_host=False, goal=True):
                 goal=Goal("work", "goal") if goal else None,
             )
         )
-        owner, epoch = registry.live_owner_with_epoch("owner")
-        owner, epoch = registry.claim_live_turn_with_epoch(owner, "turn", expected_epoch=epoch)
+        owner, epoch = registry.live_owner_with_generation("owner")
+        owner, epoch = registry.claim_live_turn_with_generation(
+            owner, "turn", expected_owner_generation=epoch
+        )
         inputs = InputDispositions(tmp_path)
         inputs.record(
             "acp:original",

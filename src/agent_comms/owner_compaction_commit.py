@@ -31,7 +31,6 @@ from .declarations import (
     Message,
     RelationViolationError,
     Thread,
-    ThreadRegistry,
     _store_lock,
     unique_wire_object,
 )
@@ -45,6 +44,7 @@ from .owner_compaction_process import (
     run_authority_child,
 )
 from .owner_compaction_provider import valid_native_usage
+from .registration import Registration
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 from .session_fence import idle_session_writer_fence
 
@@ -79,7 +79,7 @@ class OwnerCompactionCommit:
     ):
         require_deadline_support()
         self.root = registry_path.parent.resolve(strict=True)
-        self.registry = ThreadRegistry(registry_path)
+        self.registry = Registration(registry_path)
         self.inputs = InputDispositions(self.root)
         self.future_queue = future_queue
         self.package_dir = package_dir.resolve(strict=True)
@@ -220,7 +220,7 @@ class OwnerCompactionCommit:
         settings_paths: tuple[str, ...] | None,
     ) -> CompactionSource:
         root = self.root.stat()
-        snapshot = self.registry._snapshot_unlocked()
+        snapshot = self.registry.store._read_unlocked().snapshot()
         owner = snapshot.threads[receipt.thread]
         delivery = DeliveryScope(
             owner.name,

@@ -15,11 +15,11 @@ from agent_comms import (
     Message,
     MessageBus,
     MessageType,
+    Registration,
     RelationViolationError,
     RuntimeInfoStore,
     SharedLedger,
     Thread,
-    ThreadRegistry,
     ThreadStatus,
     UnregisteredThreadError,
     current_thread,
@@ -86,10 +86,10 @@ def test_windows_snapshot_replace_does_not_retry_real_refusal(
     assert target.read_text() == "old"
 
 
-def _test_only_guard_for_handcrafted_marker(registry: ThreadRegistry) -> None:
+def _test_only_guard_for_handcrafted_marker(registry: Registration) -> None:
     """Legacy-log bus tests forge a marker; this is NOT a safe cutover issuer."""
-    marker = json.loads((registry._path.parent / "bus_meta.json").read_text())
-    guard = PrivateRegistryGuard(registry._path, marker["wire_root_id"])
+    marker = json.loads((registry.store.path.parent / "bus_meta.json").read_text())
+    guard = PrivateRegistryGuard(registry.store.path, marker["wire_root_id"])
     guard.create_pending()
     guard.commit_initial()
 
@@ -129,7 +129,7 @@ def response_intent(message: Message, execution_id: str = "execution-1") -> Publ
 
 @pytest.mark.skipif(os.name == "posix", reason="Windows private-bus fail-closed contract")
 def test_private_bus_rejects_unattestable_windows_ownership(tmp_path: Path) -> None:
-    registry = ThreadRegistry(tmp_path / "registry.json")
+    registry = Registration(tmp_path / "registry.json")
     bus = MessageBus(tmp_path / "bus.jsonl", registry, private_initial_writes=True)
     with pytest.raises(RelationViolationError, match="POSIX ownership"):
         bus.initialize_private_protocol()
@@ -161,14 +161,14 @@ class TestGoalRevision:
 
     def test_old_registry_goal_without_revision_reopens_at_zero(self, tmp_path: Path):
         path = tmp_path / "registry.json"
-        registry = ThreadRegistry(path)
+        registry = Registration(path)
         registry.register(
             Thread(name="owner", tags=frozenset(), worktree="/wt", goal=Goal("work", "old-id"))
         )
         raw = json.loads(path.read_text())
         del raw["threads"]["owner"]["goal"]["revision"]
         path.write_text(json.dumps(raw))
-        restored = ThreadRegistry(path).require("owner").goal
+        restored = Registration(path).require("owner").goal
         assert restored == Goal("work", "old-id", revision=0)
 
 
@@ -243,21 +243,21 @@ class TestMessageDeclaration:
         assert restored.seq == 7
 
 
-class TestThreadRegistry:
+class TestRegistration:
     def test_register_and_require(self, tmp_path: Path):
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         thread = Thread(name="a", tags=frozenset(), worktree="/wt")
         registry.register(thread)
         assert registry.require("a") is not None
         assert "a" in registry
 
     def test_fail_closed_unknown_reference(self, tmp_path: Path):
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         with pytest.raises(UnregisteredThreadError):
             registry.require("missing")
 
     def test_status_transitions(self, tmp_path: Path):
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
         assert registry.status("a") is ThreadStatus.RUNNING
         registry.unregister("a")
@@ -270,43 +270,45 @@ class TestThreadRegistry:
             registry.unregister("ghost")
 
     def test_stop_then_heartbeat_cannot_reclaim_initial_owner_epoch(self, tmp_path: Path):
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
-        expected, epoch = registry.live_owner_with_epoch("a")
+        expected, epoch = registry.live_owner_with_generation("a")
         registry.unregister("a")
         registry.heartbeat("a")  # legacy lifecycle allows this; a turn CAS must not.
         assert registry.require("a") == expected
         assert registry.status("a") is ThreadStatus.RUNNING
-        assert registry.live_owner_with_epoch("a")[1] > epoch
+        assert registry.live_owner_with_generation("a")[1] > epoch
         with pytest.raises(RelationViolationError, match="stopped or changed"):
-            registry.claim_live_turn(expected, "new-turn", expected_epoch=epoch)
+            registry.claim_live_turn_with_generation(
+                expected, "new-turn", expected_owner_generation=epoch
+            )
         assert registry.require("a").active_turn is None
 
     def test_owner_admission_survives_session_metadata_and_rotates_on_restart(
         self, tmp_path: Path
     ) -> None:
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         owner = Thread(name="a", tags=frozenset(), worktree="/wt", pid=1234)
         registry.register(owner)
         before = registry.snapshot().admission_generations["a"]
         registry.register(replace(owner, session_file=str(tmp_path / "session.jsonl")))
         assert registry.snapshot().admission_generations["a"] == before
-        assert ThreadRegistry(registry._path).snapshot().admission_generations["a"] == before
+        assert Registration(registry.store.path).snapshot().admission_generations["a"] == before
 
         registry.register(replace(registry.require("a"), pid=5678))
         assert registry.snapshot().admission_generations["a"] > before
 
     def test_owner_admission_follows_same_owner_rename(self, tmp_path: Path) -> None:
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=1234))
         before = registry.snapshot().admission_generations["a"]
         registry.rename("a", "renamed-a")
-        snapshot = ThreadRegistry(registry._path).snapshot()
+        snapshot = Registration(registry.store.path).snapshot()
         assert snapshot.admission_generations["renamed-a"] == before
         assert "a" not in snapshot.admission_generations
 
     def test_rename_reclaims_own_alias_without_losing_owner_or_turn(self, tmp_path: Path) -> None:
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         registry.register(
             Thread(
                 name="agent-comms-ux",
@@ -326,7 +328,7 @@ class TestThreadRegistry:
 
         assert registry.rename("pr17", "agent-comms-ux") == ("pr17", "agent-comms-ux")
 
-        reopened = ThreadRegistry(registry._path)
+        reopened = Registration(registry.store.path)
         snapshot = reopened.snapshot()
         assert snapshot.aliases == {"pr17": "agent-comms-ux"}
         assert reopened.require("pr17").name == "agent-comms-ux"
@@ -339,15 +341,19 @@ class TestThreadRegistry:
         assert reopened.finish_claimed_turn("pr17", "goal-turn")
 
     def test_other_owner_writes_do_not_invalidate_private_epoch(self, tmp_path: Path):
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         for name in ("a", "b"):
             registry.register(Thread(name=name, tags=frozenset(), worktree="/wt", pid=os.getpid()))
-        owner, epoch = registry.live_owner_with_epoch("a")
+        owner, epoch = registry.live_owner_with_generation("a")
         registry.heartbeat("b")
-        other, other_epoch = registry.live_owner_with_epoch("b")
-        registry.claim_live_turn(other, "other", expected_epoch=other_epoch)
-        assert registry.live_owner_with_epoch("a") == (owner, epoch)
-        turn = registry.claim_live_turn(owner, "mine", expected_epoch=epoch)
+        other, other_epoch = registry.live_owner_with_generation("b")
+        registry.claim_live_turn_with_generation(
+            other, "other", expected_owner_generation=other_epoch
+        )
+        assert registry.live_owner_with_generation("a") == (owner, epoch)
+        turn, _ = registry.claim_live_turn_with_generation(
+            owner, "mine", expected_owner_generation=epoch
+        )
         assert turn.active_turn is not None and turn.active_turn.id == "mine"
         assert registry.finish_claimed_turn("a", "mine")
         assert not registry.finish_claimed_turn("a", "mine")
@@ -357,13 +363,13 @@ class TestThreadRegistry:
     def test_registering_saved_turn_never_attests_a_revoked_incarnation(
         self, tmp_path: Path, revocation: str
     ) -> None:
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
-        owner, epoch = registry.live_owner_with_epoch("a")
-        claimed, claimed_epoch = registry.claim_live_turn_with_epoch(
-            owner, "claimed", expected_epoch=epoch
+        owner, epoch = registry.live_owner_with_generation("a")
+        claimed, claimed_epoch = registry.claim_live_turn_with_generation(
+            owner, "claimed", expected_owner_generation=epoch
         )
-        assert registry.live_owner_with_epoch("a") == (claimed, claimed_epoch)
+        assert registry.live_owner_with_generation("a") == (claimed, claimed_epoch)
         if revocation == "stop":
             registry.unregister("a")
         else:
@@ -371,7 +377,7 @@ class TestThreadRegistry:
         registry.register(claimed)
         assert registry.require("a").active_turn.admission_generation is None
         with pytest.raises(RelationViolationError, match="unavailable"):
-            registry.live_owner_with_epoch("a")
+            registry.live_owner_with_generation("a")
         if revocation == "stop":
             assert registry.snapshot().owner_generations["a"] > claimed_epoch
         else:
@@ -395,12 +401,12 @@ class TestThreadRegistry:
         comms.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
         registry_path = root / "registry.json"
         data = json.loads(registry_path.read_text())
-        for field in ("owner_epochs", "owner_epoch_counter", "turn_epochs"):
+        for field in ("owner_epochs", "owner_epoch_counter"):
             data.pop(field)
         registry_path.write_text(json.dumps(data))
         comms.begin_turn("a", "migrated-turn")
         assert comms.registry.require("a").active_turn is not None
-        assert comms.registry.live_owner_with_epoch("a")[1] > 0
+        assert comms.registry.live_owner_with_generation("a")[1] > 0
         comms.finish_turn("a", "migrated-turn")
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
@@ -411,7 +417,7 @@ class TestThreadRegistry:
         comms.initialize_private_initial_protocol()
         reopened = Comms(root)
         reopened.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
-        assert reopened.registry.live_owner_with_epoch("a")[1] > 0
+        assert reopened.registry.live_owner_with_generation("a")[1] > 0
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     def test_private_marker_does_not_bootstrap_stripped_owner_epoch(self, tmp_path: Path) -> None:
@@ -422,7 +428,7 @@ class TestThreadRegistry:
         comms.initialize_private_initial_protocol()
         registry_path = root / "registry.json"
         data = json.loads(registry_path.read_text())
-        for field in ("owner_epochs", "owner_epoch_counter", "turn_epochs"):
+        for field in ("owner_epochs", "owner_epoch_counter"):
             data.pop(field)
         registry_path.write_text(json.dumps(data))
         with pytest.raises(RelationViolationError, match="guard does not match"):
@@ -443,7 +449,7 @@ class TestThreadRegistry:
         comms.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
         root_id = comms.initialize_private_initial_protocol()
         assert len(root_id) == 32
-        cold = ThreadRegistry(root / "registry.json")
+        cold = Registration(root / "registry.json")
         assert cold.require("a").name == "a"  # cache the old revision
         original_fsync = os.fsync
         original_write = declarations._atomic_write_text
@@ -477,21 +483,21 @@ class TestThreadRegistry:
         # Failed COMMITTED fsync follows successful directory fsync. Complete
         # visible commit bytes are safe; on restart they may also be absent.
         if fail_at == "commit":
-            assert ThreadRegistry(root / "registry.json").require("b").name == "b"
+            assert Registration(root / "registry.json").require("b").name == "b"
         else:
             if fail_at in {"pending", "replacement"}:
                 assert "b" not in json.loads((root / "registry.json").read_text())["threads"]
             with pytest.raises(RelationViolationError, match="Private registry guard"):
                 cold.require("a")
             with pytest.raises(RelationViolationError, match="Private registry guard"):
-                ThreadRegistry(root / "registry.json")
+                Registration(root / "registry.json")
             child = subprocess.run(
                 [
                     sys.executable,
                     "-c",
-                    "from agent_comms import ThreadRegistry; "
+                    "from agent_comms import Registration; "
                     "from pathlib import Path; import sys; "
-                    "ThreadRegistry(Path(sys.argv[1])).require('a')",
+                    "Registration(Path(sys.argv[1])).require('a')",
                     str(root / "registry.json"),
                 ],
                 capture_output=True,
@@ -527,7 +533,7 @@ class TestThreadRegistry:
         assert (root / ".registry-owner-guard").exists()
         assert (root / "bus_meta.json").exists()
         with pytest.raises(RelationViolationError, match="guard is pending"):
-            ThreadRegistry(root / "registry.json")
+            Registration(root / "registry.json")
         with pytest.raises(RelationViolationError, match="fresh bus root"):
             comms.initialize_private_initial_protocol()  # never auto-repair
 
@@ -558,7 +564,7 @@ class TestThreadRegistry:
             comms.registry.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
         monkeypatch.undo()
         with pytest.raises(RelationViolationError, match="slot checksum"):
-            ThreadRegistry(root / "registry.json")
+            Registration(root / "registry.json")
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     @pytest.mark.parametrize("damage", ["missing", "corrupt", "truncated", "strip_epochs"])
@@ -569,7 +575,7 @@ class TestThreadRegistry:
         comms = Comms(root, private_initial_writes=True)
         comms.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
         comms.initialize_private_initial_protocol()
-        cold = ThreadRegistry(root / "registry.json")
+        cold = Registration(root / "registry.json")
         assert cold.require("a").name == "a"
         guard = root / ".registry-owner-guard"
         if damage == "missing":
@@ -590,15 +596,15 @@ class TestThreadRegistry:
             cold.require("a")
         with pytest.raises(RelationViolationError, match="Private registry guard"):
             comms.registry.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
-        assert "registry_guard" not in comms.registry._threads["a"].to_wire()
+        assert "registry_guard" not in comms.registry.store.cache.document.threads["a"].to_wire()
 
     def test_finish_claimed_turn_resolves_retained_alias_only_for_exact_turn(self, tmp_path: Path):
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
         registry.rename("a", "b")
-        owner, epoch = registry.live_owner_with_epoch("a")
+        owner, epoch = registry.live_owner_with_generation("a")
         assert owner.name == "b"
-        registry.claim_live_turn(owner, "claimed", expected_epoch=epoch)
+        registry.claim_live_turn_with_generation(owner, "claimed", expected_owner_generation=epoch)
         registry.rename("b", "c")
         assert not registry.finish_claimed_turn("a", "other")
         assert registry.require("c").active_turn is not None
@@ -607,27 +613,29 @@ class TestThreadRegistry:
 
     def test_missing_or_malformed_private_epoch_metadata_refuses_turn(self, tmp_path: Path):
         path = tmp_path / "registry.json"
-        registry = ThreadRegistry(path)
+        registry = Registration(path)
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
-        owner, epoch = registry.live_owner_with_epoch("a")
+        owner, epoch = registry.live_owner_with_generation("a")
         data = json.loads(path.read_text())
         data.pop("owner_epochs")
         data.pop("owner_epoch_counter")
         path.write_text(json.dumps(data))
         with pytest.raises(RelationViolationError, match="stopped or changed"):
-            registry.claim_live_turn(owner, "claimed", expected_epoch=epoch)
+            registry.claim_live_turn_with_generation(
+                owner, "claimed", expected_owner_generation=epoch
+            )
         with pytest.raises(RelationViolationError, match="unavailable"):
-            registry.live_owner_with_epoch("a")
+            registry.live_owner_with_generation("a")
         data["owner_epochs"] = {"a": True}
         data["owner_epoch_counter"] = epoch
         path.write_text(json.dumps(data))
         with pytest.raises(
             RelationViolationError, match="invalid private registry owner generations"
         ):
-            registry.live_owner_with_epoch("a")
+            registry.live_owner_with_generation("a")
 
     def test_deleting_thread_cannot_be_revived(self, tmp_path: Path):
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         thread = Thread(name="a", tags=frozenset(), worktree="/wt")
         registry.register(thread)
         registry.unregister("a")
@@ -639,7 +647,7 @@ class TestThreadRegistry:
             registry.register(thread)
 
     def test_active_threads_excludes_stopped(self, tmp_path: Path):
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
         registry.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
         registry.unregister("a")
@@ -647,7 +655,7 @@ class TestThreadRegistry:
         assert set(registry.all_threads()) == {"a", "b"}
 
     def test_remove_drops_declaration_entirely(self, tmp_path: Path):
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
         registry.remove("a")
         assert "a" not in registry
@@ -659,7 +667,7 @@ class TestThreadRegistry:
 
     def test_persistence_roundtrip(self, tmp_path: Path):
         path = tmp_path / "registry.json"
-        registry = ThreadRegistry(path)
+        registry = Registration(path)
         registry.register(
             Thread(
                 name="a",
@@ -671,14 +679,14 @@ class TestThreadRegistry:
             )
         )
         registry.unregister("a")
-        reloaded = ThreadRegistry(path)
+        reloaded = Registration(path)
         thread = reloaded.require("a")
         assert thread.parent == "p" and thread.task == "t" and thread.pid == 9
         assert thread.tags == frozenset({"x", "y"})
         assert reloaded.status("a") is ThreadStatus.STOPPED
 
     def test_peers_excludes_self(self, tmp_path: Path):
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         for name in ("a", "b", "c"):
             registry.register(Thread(name=name, tags=frozenset(), worktree="/wt"))
         assert set(registry.peers("b")) == {"a", "c"}
@@ -686,7 +694,7 @@ class TestThreadRegistry:
 
 class TestMessageBus:
     def _bus(self, tmp_path: Path) -> MessageBus:
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         for name in ("a", "b"):
             registry.register(Thread(name=name, tags=frozenset(), worktree="/wt"))
         return MessageBus(tmp_path / "bus.jsonl", registry)
@@ -837,7 +845,7 @@ class TestMessageBus:
 
     def test_persistence_roundtrip(self, tmp_path: Path):
         path = tmp_path / "bus.jsonl"
-        registry = ThreadRegistry(tmp_path / "registry.json")
+        registry = Registration(tmp_path / "registry.json")
         for name in ("a", "b"):
             registry.register(Thread(name=name, tags=frozenset(), worktree="/wt"))
         bus = MessageBus(path, registry)

@@ -5,15 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from pathlib import Path
 
-from .declarations import (
-    Message,
-    RegistrySnapshot,
-    ResponsePolicy,
-    Thread,
-    ThreadRegistry,
-    file_revision,
-)
+from .declarations import Message, RegistrySnapshot, ResponsePolicy, Thread, file_revision
 from .read_basis import DisplayBasis
+from .registration import Registration
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,9 +40,9 @@ class HistorySource:
         ):
             raise ValueError("Historical snapshot changed; restore it before browsing")
 
-    def registry(self) -> ThreadRegistry:
+    def registry(self) -> Registration:
         self.validate()
-        return ThreadRegistry(Path(self.root) / "registry.json")
+        return Registration(Path(self.root) / "registry.json")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

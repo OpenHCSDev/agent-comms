@@ -37,8 +37,9 @@ from agent_comms.coordination_store import (
     StaleRevision,
     prepare_fence_token,
 )
-from agent_comms.declarations import MessageBus, Thread, ThreadRegistry, _store_lock
+from agent_comms.declarations import MessageBus, Thread, _store_lock
 from agent_comms.operations import Comms
+from agent_comms.registration import Registration
 from agent_comms.wake import derive_exact_reply_target
 
 # Private bus publication requires POSIX owner/mode ancestry; Windows stat
@@ -186,7 +187,7 @@ def test_response_requires_explicit_writer_and_exact_same_root_coordinator(tmp_p
             pytest.raises(IdentityConflict, match="different trusted roots"),
         ):
             prepare_fenced_response(wrong_database, case.bus, case.fence, "not allowed")
-        alien_registry = ThreadRegistry(tmp_path / "foreign" / "registry.json")
+        alien_registry = Registration(tmp_path / "foreign" / "registry.json")
         alien_bus = MessageBus(
             case.comms.root / "bus.jsonl", alien_registry, private_response_writes=True
         )
@@ -358,9 +359,9 @@ def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
                     sys.executable,
                     "-c",
                     "import sys; from pathlib import Path; "
-                    "from agent_comms.declarations import ThreadRegistry; "
+                    "from agent_comms.registration import Registration; "
                     "print('READY',flush=True); "
-                    "ThreadRegistry(Path(sys.argv[1])).unregister('owner')",
+                    "Registration(Path(sys.argv[1])).unregister('owner')",
                     str(case.comms.root / "registry.json"),
                 ],
                 cwd=case.comms.root,

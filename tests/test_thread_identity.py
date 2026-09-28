@@ -1,4 +1,4 @@
-"""S5 identity boundaries: process, turn, provenance and persisted compatibility."""
+"""S5 identity boundaries: process, turn, provenance and saved-data preservation."""
 
 import json
 import os
@@ -6,15 +6,11 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.declarations import (
-    RelationViolationError,
-    Thread,
-    ThreadRegistry,
-    ThreadStatus,
-)
+from agent_comms.declarations import RelationViolationError, Thread, ThreadStatus
 from agent_comms.field_codec import FieldCodec
 from agent_comms.operations import Comms
 from agent_comms.read_basis import Conversation
+from agent_comms.registration import Registration
 from agent_comms.thread_identity import (
     GenerationCounter,
     ThreadIncarnation,
@@ -23,7 +19,7 @@ from agent_comms.thread_identity import (
 
 
 def registry_with_owner(tmp_path):
-    registry = ThreadRegistry(tmp_path / "registry.json")
+    registry = Registration(tmp_path / "registry.json")
     registry.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
     return registry
 
@@ -121,29 +117,30 @@ def test_restored_active_turn_has_no_admission_authority(tmp_path, revocation):
             read("owner")
 
 
-def test_legacy_owner_and_turn_metadata_read_then_single_format_write(tmp_path):
+def test_saved_registry_roundtrip_preserves_identity_and_removes_dead_turn_roster(tmp_path):
     registry = registry_with_owner(tmp_path)
     claimed, generation = registry.claim_local_turn("owner", "old")
-    raw = json.loads(registry._path.read_text())
+    raw = json.loads(registry.store.path.read_text())
     raw["turn_epochs"] = {"owner": generation}
-    registry._path.write_text(json.dumps(raw))
-    reopened = ThreadRegistry(registry._path)
+    registry.store.path.write_text(json.dumps(raw))
+    reopened = Registration(registry.store.path)
     assert reopened.live_owner_with_generation("owner") == (claimed, generation)
     assert reopened.require("owner").incarnation == claimed.incarnation
     reopened.finish_claimed_turn("owner", "old")
-    persisted = json.loads(registry._path.read_text())
+    persisted = json.loads(registry.store.path.read_text())
     assert not {"owner_generations", "owner_generation_counter"} & persisted.keys()
+    assert "turn_epochs" not in persisted
     assert persisted["owner_epochs"]["owner"] == generation
-    assert ThreadRegistry(registry._path).require("owner").turn_generation == 1
+    assert Registration(registry.store.path).require("owner").turn_generation == 1
 
 
-def test_old_read_conversation_and_new_codec_have_same_identity(tmp_path):
+def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path):
     registry = registry_with_owner(tmp_path)
     owner = registry.require("owner")
     old = {"target": "", "participants": [["owner", owner.created_at]]}
     conversation = Conversation.from_wire(old)
     assert conversation.participants == (owner.incarnation,)
-    assert FieldCodec.decode(Conversation, FieldCodec.encode(conversation)) == conversation
+    assert Conversation.from_wire(conversation.to_wire()) == conversation
     registry.claim_local_turn("owner", "new")
     assert conversation.current(registry.snapshot())
     registry.finish_claimed_turn("owner", "new")
@@ -183,7 +180,7 @@ def test_coordination_assignment_generation_is_independent_of_registry_process(t
         assert store.participant("lookup").participant_generation == advanced.participant_generation
 
 
-def test_old_read_ledger_key_remains_read_after_reopen_and_new_ack(tmp_path):
+def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     comms = Comms(tmp_path)
     comms.register(Thread("owner", frozenset(), str(tmp_path)))
     viewer = comms.user_identity(str(tmp_path)).name
@@ -197,16 +194,11 @@ def test_old_read_ledger_key_remains_read_after_reopen_and_new_ack(tmp_path):
     )
     path = comms.reads.path
     document = json.loads(path.read_text())
-    keys = {}
-    for key, sequences in document["messages"].items():
-        name, created, conversation = json.loads(key)
-        conversation["participants"] = [
-            item if isinstance(item, list) else [item["name"], item["created_at"]]
-            for item in conversation["participants"]
-        ]
-        keys[json.dumps([name, created, conversation], separators=(",", ":"))] = sequences
-    document["messages"] = keys
-    path.write_text(json.dumps(document))
+    assert all(
+        isinstance(participant, list)
+        for key in document["messages"]
+        for participant in json.loads(key)[2]["participants"]
+    )
     reopened = Comms(tmp_path)
     assert message.seq in reopened.reads.seen_sequences(viewer, reopened.registry.snapshot())
     next_message = reopened.send_message("owner", viewer, "new paint")

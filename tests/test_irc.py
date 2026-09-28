@@ -6,8 +6,8 @@ from agent_comms import (
     GLOBAL_CHANNEL,
     Message,
     MessageType,
+    Registration,
     Thread,
-    ThreadRegistry,
     UnregisteredThreadError,
     wire,
 )
@@ -137,12 +137,12 @@ class TestChannelsDerived:
 
 class TestPresence:
     def test_register_sets_last_seen(self, tmp_path):
-        registry = ThreadRegistry(tmp_path / "r.json")
+        registry = Registration(tmp_path / "r.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
         assert registry.last_seen("a") > 0
 
     def test_heartbeat_updates_last_seen(self, tmp_path):
-        registry = ThreadRegistry(tmp_path / "r.json")
+        registry = Registration(tmp_path / "r.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
         before = registry.last_seen("a")
         import time
@@ -152,16 +152,16 @@ class TestPresence:
         assert registry.last_seen("a") >= before
 
     def test_last_seen_fail_closed(self, tmp_path):
-        registry = ThreadRegistry(tmp_path / "r.json")
+        registry = Registration(tmp_path / "r.json")
         with pytest.raises(UnregisteredThreadError):
             registry.last_seen("ghost")
 
     def test_last_seen_persists(self, tmp_path):
         path = tmp_path / "r.json"
-        registry = ThreadRegistry(path)
+        registry = Registration(path)
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
         seen = registry.last_seen("a")
-        assert ThreadRegistry(path).last_seen("a") == seen
+        assert Registration(path).last_seen("a") == seen
 
     def test_who_shape(self, chat):
         rows = {row["name"]: row for row in chat.who()}

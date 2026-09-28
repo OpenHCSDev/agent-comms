@@ -85,7 +85,7 @@ def test_crash_before_registry_write_does_not_expose_history_intent(tmp_path, mo
     original_write = declarations._atomic_write_text
 
     def failed_registry_write(path, text, *, fsync_parent=False):
-        if path == comms.registry._path:
+        if path == comms.registry.store.path:
             raise OSError("simulated registry write failure")
         return original_write(path, text, fsync_parent=fsync_parent)
 
@@ -135,7 +135,7 @@ def test_crash_after_registry_write_reconciles_pending_history(tmp_path, monkeyp
 def test_old_registry_writer_goal_change_is_labeled_observed_gap(tmp_path):
     comms = _wire(tmp_path)
     current = comms.update_goal("worker", "set", text="Known version")
-    registry_path = comms.registry._path
+    registry_path = comms.registry.store.path
     raw = json.loads(registry_path.read_text())
     raw["threads"]["worker"]["goal"]["text"] = "Old writer changed this"
     raw["threads"]["worker"]["goal"]["revision"] = current.revision + 2

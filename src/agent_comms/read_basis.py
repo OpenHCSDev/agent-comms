@@ -27,17 +27,17 @@ class Conversation:
         return all(participant.current(snapshot) for participant in self.participants)
 
     def to_wire(self) -> dict:
-        """Retain the positional persisted encoding for an already-open UI."""
+        """Encode the persisted participant pair format."""
         data = FieldCodec.encode(self)
         data["participants"] = [list(astuple(participant)) for participant in self.participants]
         return data
 
     @classmethod
     def from_wire(cls, raw: dict) -> Conversation:
-        """Read the old S4 pair format once, at the persisted-key boundary."""
+        """Decode participant pairs once at the persisted-key boundary."""
         data = dict(raw)
         data["participants"] = [
-            {"name": item[0], "created_at": item[1]} if isinstance(item, list) else item
+            FieldCodec.encode(ThreadIncarnation(*FieldCodec.decode(tuple[str, float], item)))
             for item in data.get("participants", [])
         ]
         return FieldCodec.decode(cls, data)

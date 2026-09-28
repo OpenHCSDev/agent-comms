@@ -6,14 +6,15 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms import Thread
-from agent_comms.declarations import ThreadRegistry, ThreadStatus, _atomic_write_text
+from agent_comms.declarations import ThreadStatus, _atomic_write_text
+from agent_comms.registration import Registration
 
 
 def test_repeated_reads_parse_once_and_observe_external_changes(tmp_path):
     path = tmp_path / "registry.json"
-    writer = ThreadRegistry(path)
+    writer = Registration(path)
     writer.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
-    reader = ThreadRegistry(path)
+    reader = Registration(path)
     original = reader.require("worker")
     with patch("agent_comms.declarations.json.loads", wraps=json.loads) as loads:
         for _ in range(20):
@@ -34,7 +35,7 @@ def test_repeated_reads_parse_once_and_observe_external_changes(tmp_path):
 
 def test_malformed_replacement_never_serves_stale_success(tmp_path):
     path = tmp_path / "registry.json"
-    registry = ThreadRegistry(path)
+    registry = Registration(path)
     registry.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     saved = path.read_text()
     registry.require("worker")

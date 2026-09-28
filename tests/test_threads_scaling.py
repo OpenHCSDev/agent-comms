@@ -75,14 +75,15 @@ def test_thread_listing_validates_registry_per_snapshot_not_per_row(wired, monke
     for index in range(30):
         wired.register(Thread(f"peer-{index}", frozenset(), f"/peer-{index}"))
     checks = 0
-    verify = wired.registry._private_guard_unlocked
+    store_type = type(wired.registry.store)
+    verify = store_type.private_guard_unlocked
 
-    def counted_verify():
+    def counted_verify(store):
         nonlocal checks
         checks += 1
-        return verify()
+        return verify(store)
 
-    monkeypatch.setattr(wired.registry, "_private_guard_unlocked", counted_verify)
+    monkeypatch.setattr(store_type, "private_guard_unlocked", counted_verify)
     rows = wired.list_threads()
     assert len(rows) == 32
     assert checks <= 3

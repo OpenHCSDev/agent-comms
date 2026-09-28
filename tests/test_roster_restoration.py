@@ -39,7 +39,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     assert current.registry.restore_stopped(source, ("live", "missing")) == ("missing",)
     after = current.registry.snapshot()
     assert after.threads["live"] == before.threads["live"]
-    assert after.owner_epochs["live"] == before.owner_epochs["live"]
+    assert after.owner_generations["live"] == before.owner_generations["live"]
     assert after.admission_generations["live"] == before.admission_generations["live"]
     assert after.threads["missing"] == replace(missing, pid=0, active_turn=None)
     assert after.statuses["missing"] is ThreadStatus.STOPPED
@@ -47,9 +47,9 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     assert current.bus._path.read_bytes() == bus
     assert old.bus._path.read_bytes() == old_bus
     assert not current.inbox("missing")
-    first = current.registry._path.read_bytes()
+    first = current.registry.store.path.read_bytes()
     assert current.registry.restore_stopped(source, ("live", "missing")) == ()
-    assert current.registry._path.read_bytes() == first
+    assert current.registry.store.path.read_bytes() == first
 
 
 @pytest.mark.parametrize("collision", ["name", "incarnation", "alias"])
@@ -69,10 +69,10 @@ def test_restore_conflict_has_no_partial_registry_write(tmp_path, collision):
         conflicting = replace(conflicting, name="owner")
     source = old.registry.snapshot()
     source = replace(source, threads={"good": good, conflicting.name: conflicting})
-    before = current.registry._path.read_bytes()
+    before = current.registry.store.path.read_bytes()
     with pytest.raises(RelationViolationError, match="identity conflicts"):
         current.registry.restore_stopped(source, ("good", conflicting.name))
-    assert current.registry._path.read_bytes() == before
+    assert current.registry.store.path.read_bytes() == before
 
 
 def test_restore_keeps_archived_status(tmp_path):

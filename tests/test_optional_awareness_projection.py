@@ -37,7 +37,13 @@ def _root(
     comms.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
     for number in range(recipients):
         comms.register(
-            Thread(f"member{number:03}", frozenset({"team"}), str(tmp_path), pid=os.getpid())
+            Thread(
+                f"member{number:03}",
+                frozenset({"team"}),
+                str(tmp_path),
+                pid=os.getpid(),
+                model="openai-codex/gpt-6-sol",
+            )
         )
     root_id = comms.initialize_private_initial_protocol()
     store = MutationStore(str(root / "coordination.sqlite3"))
@@ -451,7 +457,7 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         ).fetchone()[0]
         db.execute("DROP TRIGGER cohort_receipt_update_guard")
         db.execute(
-            "UPDATE claim_batch_receipts SET message_id=? " "WHERE wire_root_id=? AND wire_seq=?",
+            "UPDATE claim_batch_receipts SET message_id=? WHERE wire_root_id=? AND wire_seq=?",
             ("forged-older-id", root_id, prior.message.seq),
         )
         db.execute(trigger)
