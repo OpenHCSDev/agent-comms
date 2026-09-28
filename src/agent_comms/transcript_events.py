@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .declared_family import DeclaredFamily
+from .transcript_merge import EventMerge, StreamingMerge
 from .messages import Message, MessageWireCodec
 from .routing import TurnRouting
 from .tool_results import ToolDiff
@@ -25,7 +26,7 @@ class TranscriptCodec(MessageWireCodec):
 
 
 @dataclass(frozen=True, kw_only=True)
-class TranscriptEvent(DeclaredFamily, affix="Transcript"):
+class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     routing: TurnRouting | None = None
 
     @abstractmethod
@@ -53,7 +54,7 @@ class TextTranscript(TranscriptEvent):
         return len(self.text)
 
 
-class LiveTextTranscript(TextTranscript):
+class LiveTextTranscript(StreamingMerge, TextTranscript):
     """Text that can continue streaming inside an already mounted presentation."""
 
 
