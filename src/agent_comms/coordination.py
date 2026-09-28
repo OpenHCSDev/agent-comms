@@ -1883,7 +1883,8 @@ class CoordinationStore:
             candidate = Path(f"{self.path}{suffix}")
             # SQLite may unlink a journal between observation and chmod.
             with suppress(FileNotFoundError):
-                os.chmod(candidate, 0o600, follow_symlinks=False)
+                if stat.S_IMODE(candidate.lstat().st_mode) != 0o600:
+                    os.chmod(candidate, 0o600, follow_symlinks=False)
 
     @property
     def schema_version(self) -> int:

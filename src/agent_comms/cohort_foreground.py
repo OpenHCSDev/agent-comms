@@ -34,7 +34,7 @@ from .coordinated_runtime import (
     SelectedExecution,
 )
 from .coordinated_runtime_schema import install_native_runtime_schema
-from .coordination_cohort import accept_initial_cohort
+from .coordination_cohort import accept_initial_cohort, sealed_cohort_sequences
 from .coordination_response import install_private_response_schema
 from .coordination_store import IdentityConflict, MutationStore, PublicationActivationBlocked
 from .envelope_claim_transitions import normalize_existing_file
@@ -77,6 +77,7 @@ def _accept_visible_initials(
     after_seq: int,
     *,
     owner_name: str,
+    native_package: Path | None = None,
 ) -> int:
     """Accept only committed initial rows addressed to this durable recipient.
 
@@ -99,9 +100,15 @@ def _accept_visible_initials(
                 for r in initial.audience.recipients
             )
         )
-    if len(initials) > 100:
+    sealed = sealed_cohort_sequences(store, root_id)
+    unaccepted = tuple(initial for initial in initials if initial.message.seq not in sealed)
+    if len(unaccepted) > 100:
         raise IdentityConflict("recipient initial cohort batch exceeds bounded foreground scan")
-    for initial in initials:
+    if unaccepted and native_package is not None:
+        # An ACP observation with new originals must still validate the package
+        # before SQL acceptance. Sealed receipts require no repeated preflight.
+        _preflight(bus.log.path.parent, root_id, native_package, True)
+    for initial in unaccepted:
         # A prior canonical name is historical after a private owner rename.
         # Never create a NEW generation's selected attempt from that old
         # frozen recipient, or infer it was consumed.

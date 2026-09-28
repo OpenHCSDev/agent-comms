@@ -379,6 +379,40 @@ def accept_initial_cohort(
         return Applied(_receipt_matches(db, initial))
 
 
+def sealed_cohort_sequences(store: MutationStore, wire_root_id: str) -> frozenset[int]:
+    """Already committed cohort batches, derived from their immutable receipts."""
+    with store._read_transaction():
+        _assert_schema(store._connection)
+        return frozenset(
+            row[0] for row in store._connection.execute(
+                "SELECT wire_seq FROM claim_batch_receipts WHERE wire_root_id=? AND sealed=1",
+                (wire_root_id,),
+            )
+        )
+
+
+def next_sealed_assignment(
+    store: MutationStore, recipient_lookup: str, owner_name: str, *, after_seq: int = 0,
+) -> WakeAssignment | None:
+    """One receipt-backed pending selection shared by observation and execution.
+
+    Saturated settled pages cannot hide later work. Observation grants no turn;
+    the execution still checks live ownership and verifies its original source.
+    """
+    cursor = after_seq
+    for _ in range(10):
+        selected = sealed_cohort_assignments(store, recipient_lookup, after_seq=cursor, limit=100)
+        for assignment in selected:
+            if assignment.recipient == owner_name and (
+                assignment.lifecycle.triage_pending or assignment.lifecycle.full_pending
+            ):
+                return assignment
+        if len(selected) < 100:
+            return None
+        cursor = selected[-1].wire_seq
+    raise IdentityConflict(f"sealed claim scan exhausted; retry explicitly with after_seq={cursor}")
+
+
 def sealed_cohort_assignments(
     store: MutationStore, recipient_lookup: str, *, after_seq: int = 0, limit: int = 100
 ) -> tuple[WakeAssignment, ...]:

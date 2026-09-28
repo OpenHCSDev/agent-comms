@@ -46,7 +46,8 @@ from . import agent_events as events
 from . import backend, manual_compaction_bridge
 from .agent_event_updates import AcpEventConsumer
 from .bus_publication import stable_thread_lookup
-from .cohort_foreground import _accept_visible_initials, _preflight
+from .cohort_foreground import _accept_visible_initials
+from .coordination_cohort import next_sealed_assignment
 from .comms import Comms, wire
 from .coordinated_runtime import SelectedExecution
 from .coordination import CoordinationError, WakeAssignment
@@ -601,7 +602,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             raise PublicationActivationBlocked(
                 "private N/K ACP requires an explicit matching root and native package"
             )
-        _preflight(self._comms.root, wire_root_id, package, True)
         thread_name = await self.sessions.sync_identity(session_id)
         # Registry admission may change without session/new or session/load.
         # Publish the observed status even when stopped, busy, or no-wake;
@@ -633,7 +633,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 stable_thread_lookup(owner.created_at),
                 0,
                 owner_name=owner.name,
+                native_package=package,
             )
+            participant = store.participant(stable_thread_lookup(owner.created_at))
+            candidate = next_sealed_assignment(store, participant.lookup, owner.name)
+            runnable = candidate is not None and participant.pointer.execution_id is None
         plans = SelectedWritePlans(self._comms, wire_root_id)
 
         def check_plan_controller(
@@ -661,20 +665,22 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             plans.applied(assignment, owner, operation_id)
             self._selected_write_controllers.pop((owner.name, assignment.wire_seq), None)
 
-        result = await SelectedExecution(
-            root=self._comms.root,
-            wire_root_id=wire_root_id,
-            owner_name=thread_name,
-            native_package=package,
-            selected_write_plan_loader=load_plan,
-            selected_write_plan_check=check_plan_controller,
-            selected_write_plan_applied=applied_plan,
-            **(
-                {"selected_tool_intent": self._private_selected_tool_intent}
-                if self._private_selected_tool_intent is not None
-                else {}
-            ),
-        ).run()
+        result = None
+        if runnable:
+            result = await SelectedExecution(
+                root=self._comms.root,
+                wire_root_id=wire_root_id,
+                owner_name=thread_name,
+                native_package=package,
+                selected_write_plan_loader=load_plan,
+                selected_write_plan_check=check_plan_controller,
+                selected_write_plan_applied=applied_plan,
+                **(
+                    {"selected_tool_intent": self._private_selected_tool_intent}
+                    if self._private_selected_tool_intent is not None
+                    else {}
+                ),
+            ).run()
         if result is None:
             # N (or absent-audience) rows prove coverage, not an injected
             # input. Extend only an existing current epoch or an all-N prefix;

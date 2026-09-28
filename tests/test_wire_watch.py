@@ -67,6 +67,9 @@ async def test_idle_owner_wakes_on_bus_append_without_polling(tmp_path, monkeypa
         assert calls == 1
         with (tmp_path / "thread_read_markers.json").open("wb") as output:
             output.write(b"{}")
+        for name in ("coordination.sqlite3", ".registry.json.lock", "private_bus_checkpoint.sqlite3"):
+            with (tmp_path / name).open("ab"):
+                pass
         await asyncio.sleep(0.1)
         assert calls == 1  # A viewer cursor is not new work for the owner.
         with (tmp_path / "bus.jsonl").open("ab") as output:
