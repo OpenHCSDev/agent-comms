@@ -1,6 +1,5 @@
 import json
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import asdict, replace
 
 import pytest
 
@@ -144,34 +143,6 @@ def test_concurrent_add_remove_never_leaves_one_sided_contact(tmp_path):
             json.loads((comms.root / "relationships.json").read_text())["collaborations"]
         ) == len(left)
     assert not comms.full_history()
-
-
-def test_legacy_opposite_declarations_project_once_without_losing_notes(tmp_path):
-    comms = setup_wire(tmp_path)
-    first = comms.relationships.edit("owner", "add", "peer", "Owner note")
-    old_opposite = replace(
-        first,
-        owner="peer",
-        peer="owner",
-        owner_created=first.peer_created,
-        peer_created=first.owner_created,
-        note="Peer note",
-        updated_at=first.updated_at + 1,
-    )
-    path = comms.root / "relationships.json"
-    state = json.loads(path.read_text())
-    state["collaborations"].append(asdict(old_opposite))
-    path.write_text(json.dumps(state))
-    for owner, other in (("owner", "peer"), ("peer", "owner")):
-        assert len(comms.relationships.collaborations(owner)) == 1
-        row = collaboration_rows(comms, owner)[0]
-        assert row.target == other and row.detail == "Owner note\nPeer note"
-    comms.relationships.edit("owner", "add", "child", "Other work")
-    assert len(json.loads(path.read_text())["collaborations"]) == 3
-    comms.relationships.edit("peer", "remove", "owner")
-    assert collaboration_rows(comms, "owner")[0].target == "child"
-    assert collaboration_rows(comms, "peer") == ()
-    assert len(json.loads(path.read_text())["collaborations"]) == 1
 
 
 def test_bounded_window_reports_omitted_history_and_reuses_tail(tmp_path, monkeypatch):

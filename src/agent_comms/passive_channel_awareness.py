@@ -10,10 +10,10 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import closing
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from .bus_page_index import (
     BusPageIndex,
@@ -27,7 +27,6 @@ from .declarations import (
     Thread,
     is_channel_target,
 )
-from .field_codec import FieldCodec
 from .locked_store import LockedStore
 
 _MAX_INSPECT = 32
@@ -66,10 +65,18 @@ class PassiveAwarenessRecord:
         ):
             raise ValueError("Invalid passive awareness record")
 
-    @classmethod
-    def from_payload(cls, row: dict[str, Any]) -> PassiveAwarenessRecord:
-        # Extra legacy fields remain in the document, outside this projection.
-        return FieldCodec.decode(cls, {field.name: row[field.name] for field in fields(cls)})
+    @staticmethod
+    def key(created_at: float) -> str:
+        return sha256(repr(created_at).encode()).hexdigest()
+
+    def current(self, owner: Thread, snapshot: RegistrySnapshot, channels: frozenset[str]) -> bool:
+        return (
+            self.created_at == owner.created_at
+            and self.admission == snapshot.admission_generations.get(owner.name)
+            and self.scope_generation == owner.channel_scope_generation
+            and self.channels == tuple(sorted(channels))
+            and snapshot.aliases.get(self.name, self.name) == owner.name
+        )
 
     def scoped(
         self, owner: Thread, high_water: int, channels: frozenset[str]
@@ -83,40 +90,39 @@ class PassiveAwarenessRecord:
         )
 
 
-class PassiveAwarenessStore(LockedStore[dict[str, Any] | None]):
-    """Optional advisory document; malformed storage is never repaired implicitly.
+@dataclass(frozen=True, slots=True)
+class PassiveAwarenessDocument:
+    rows: dict[str, PassiveAwarenessRecord] = field(
+        default_factory=dict, metadata={"wire_required": True}
+    )
+    version: Literal[1] = field(default=1, metadata={"wire_required": True})
 
-    The versioned envelope and rows are extensible external mappings. Preserve
-    unknown keys through updates; their validation belongs to this boundary.
-    """
+    def __post_init__(self):
+        if any(key != row.key(row.created_at) for key, row in self.rows.items()):
+            raise ValueError("Passive awareness key differs from its saved incarnation")
+
+    def for_owner(self, owner: Thread) -> PassiveAwarenessRecord | None:
+        return self.rows.get(PassiveAwarenessRecord.key(owner.created_at))
+
+    def updated(self, row: PassiveAwarenessRecord) -> PassiveAwarenessDocument:
+        return replace(self, rows={**self.rows, row.key(row.created_at): row})
+
+
+class PassiveAwarenessStore(LockedStore[PassiveAwarenessDocument | None]):
+    """One optional typed document; invalid data is left untouched, never repaired."""
 
     filename = "acp_passive_channel_awareness.json"
     json_sort_keys = True
 
     @property
-    def record_type(self) -> type[dict[str, Any]]:
-        return dict[str, Any]
+    def record_type(self) -> type[PassiveAwarenessDocument]:
+        return PassiveAwarenessDocument
 
-    def empty(self) -> dict[str, Any]:
-        return {"version": 1, "rows": {}}
+    def empty(self) -> PassiveAwarenessDocument:
+        return PassiveAwarenessDocument()
 
     def _unreadable(self, error: Exception) -> None:
         return None
-
-    def _decode(self, payload: Any) -> dict[str, Any] | None:
-        if type(payload) is not dict or payload.get("version") != 1:
-            return None
-        rows = payload.get("rows")
-        if type(rows) is not dict:
-            return None
-        for key, row in rows.items():
-            if type(key) is not str or type(row) is not dict:
-                return None
-            try:
-                PassiveAwarenessRecord.from_payload(row)
-            except (KeyError, ValueError, TypeError):
-                return None
-        return super()._decode(payload)
 
 
 class PassiveChannelAwareness:
@@ -125,14 +131,6 @@ class PassiveChannelAwareness:
     def __init__(self, root: Path) -> None:
         self.store = PassiveAwarenessStore(root / PassiveAwarenessStore.filename)
         self.bus_path = root / "bus.jsonl"
-
-    @staticmethod
-    def _key(owner: Thread) -> str:
-        return sha256(repr(owner.created_at).encode()).hexdigest()
-
-    @property
-    def path(self) -> Path:
-        return self.store.path
 
     def initialize(
         self,
@@ -152,20 +150,17 @@ class PassiveChannelAwareness:
         ):
             raise ValueError("Invalid passive awareness owner or source cursor")
 
-        def change(document: dict[str, Any] | None) -> dict[str, Any] | None:
+        def change(document: PassiveAwarenessDocument | None) -> PassiveAwarenessDocument | None:
             if document is None:
                 return document
-            rows = dict(document["rows"])
-            key = self._key(owner)
-            saved = rows.get(key)
-            row = PassiveAwarenessRecord.from_payload(saved) if saved is not None else None
+            row = document.for_owner(owner)
             if (
                 fresh
                 or row is None
                 or row.created_at != owner.created_at
                 or row.admission != admission
             ):
-                rows[key] = FieldCodec.encode(
+                return document.updated(
                     PassiveAwarenessRecord(
                         owner.name,
                         owner.created_at,
@@ -177,17 +172,12 @@ class PassiveChannelAwareness:
                         (),
                     )
                 )
-                return {**document, "rows": rows}
             elif row.scope_generation != owner.channel_scope_generation or row.channels != tuple(
                 sorted(channels)
             ):
                 # A new channel scope cuts off old sources but never credits
                 # delivery: the original advisory cursor is left unchanged.
-                rows[key] = {
-                    **rows[key],
-                    **FieldCodec.encode(row.scoped(owner, high_water, channels)),
-                }
-                return {**document, "rows": rows}
+                return document.updated(row.scoped(owner, high_water, channels))
             return document
 
         self.store.update(change)
@@ -202,28 +192,20 @@ class PassiveChannelAwareness:
     ) -> None:
         """Cut off former membership, not a native receipt or advisory ACK."""
 
-        def change(document: dict[str, Any] | None) -> dict[str, Any] | None:
+        def change(document: PassiveAwarenessDocument | None) -> PassiveAwarenessDocument | None:
             if document is None:
                 return document
-            rows = dict(document["rows"])
-            saved = rows.get(self._key(owner))
-            row = PassiveAwarenessRecord.from_payload(saved) if saved is not None else None
+            row = document.for_owner(owner)
             if row is None or row.created_at != owner.created_at or row.admission != admission:
                 return document
-            rows[self._key(owner)] = {
-                **rows[self._key(owner)],
-                **FieldCodec.encode(row.scoped(owner, high_water, channels)),
-            }
-            return {**document, "rows": rows}
+            return document.updated(row.scoped(owner, high_water, channels))
 
         self.store.update(change)
 
     def sources(self, owner: Thread) -> tuple[tuple[int, str, str], ...]:
         """Capture bounded exact source witnesses alongside one composed frame."""
         with self.store.reading() as document:
-            rows = document["rows"] if document is not None else None
-            saved = rows.get(self._key(owner)) if rows is not None else None
-            row = PassiveAwarenessRecord.from_payload(saved) if saved is not None else None
+            row = document.for_owner(owner) if document is not None else None
             return row.known if row is not None else ()
 
     def still_current(
@@ -237,16 +219,10 @@ class PassiveChannelAwareness:
         if not expected or snapshot.threads.get(owner.name) != owner:
             return False
         with self.store.reading() as document:
-            rows = document["rows"] if document is not None else None
-            saved = rows.get(self._key(owner)) if rows is not None else None
-            row = PassiveAwarenessRecord.from_payload(saved) if saved is not None else None
+            row = document.for_owner(owner) if document is not None else None
             if (
                 row is None
-                or row.created_at != owner.created_at
-                or row.admission != snapshot.admission_generations.get(owner.name)
-                or row.scope_generation != owner.channel_scope_generation
-                or row.channels != tuple(sorted(channels))
-                or snapshot.aliases.get(row.name, row.name) != owner.name
+                or not row.current(owner, snapshot, channels)
                 or not set(expected).issubset(set(row.known))
             ):
                 return False
@@ -300,25 +276,14 @@ class PassiveChannelAwareness:
         """
         if snapshot.threads.get(owner.name) != owner or not snapshot.statuses[owner.name].running:
             return ""
-        admission = snapshot.admission_generations.get(owner.name)
         frame = ""
 
-        def change(document: dict[str, Any] | None) -> dict[str, Any] | None:
+        def change(document: PassiveAwarenessDocument | None) -> PassiveAwarenessDocument | None:
             nonlocal frame
             if document is None:
                 return document
-            rows = document["rows"]
-            key = self._key(owner)
-            saved = rows.get(key)
-            row = PassiveAwarenessRecord.from_payload(saved) if saved is not None else None
-            if (
-                row is None
-                or row.created_at != owner.created_at
-                or row.admission != admission
-                or row.scope_generation != owner.channel_scope_generation
-                or row.channels != tuple(sorted(channels))
-                or snapshot.aliases.get(row.name, row.name) != owner.name
-            ):
+            row = document.for_owner(owner)
+            if row is None or not row.current(owner, snapshot, channels):
                 return document
             scope = frozenset(target for target in channels if is_channel_target(target))
             if not scope:
@@ -383,16 +348,7 @@ class PassiveChannelAwareness:
                         )
                         changed = document
                         if latest != row.known:
-                            changed = {
-                                **document,
-                                "rows": {
-                                    **rows,
-                                    key: {
-                                        **rows[key],
-                                        **FieldCodec.encode(replace(row, known=latest)),
-                                    },
-                                },
-                            }
+                            changed = document.updated(replace(row, known=latest))
                         selected.reverse()
                         notices = [
                             {
