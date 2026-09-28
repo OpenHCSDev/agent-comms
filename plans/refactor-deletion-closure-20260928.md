@@ -44,6 +44,15 @@ These are landed implementation batches, not a claim of global zero debt.
 | PF4 route observation |214 +Toad103 | Removed observation-time Comms construction and hidden UI polling. |
 | PF5 history scope/index |211 | Removed per-row scope rebuilding and obsolete callback plumbing. |
 
+## Round-two extension
+
+The owner added plans/refactor2 and approved D22 on 2026-09-28. Canonical
+rules/scopes/assignments are now docs/refactor/round2 (PR227). Those rules
+supersede permanent archival converters suggested below: rewrite durable
+history once in place, reset declared runtime stores at quiet installation,
+and remove all old readers plus executed one-shot tools. Original closure
+remains required.
+
 ## Remaining deletion assignments
 
 Every row has an owner. A PR marked pending is NOT yet published; replace it
@@ -51,11 +60,11 @@ with its real number as soon as working source is committed and published.
 
 | Batch | Owner / worktree | PR and state | Required closure |
 | --- | --- | --- | --- |
-| B1 canonical bus execution / S2,S4,S7,R3,R7 | Parent; persistent integration tree | Pending; follows B2 writer caller | Delete public Publisher.publish, old append/sequence and InputDrain ACK/steer execution fallback; remove mark_view_read forwarding. Stage canonical roots through existing cutover owners, preserve original source/history and unresolved input provenance; no UNKNOWN replay. |
+| B1 canonical bus execution / S2,S4,S7,R3,R7 | Parent; persistent integration tree | Pending; refactor/canonical-bus-retirement-20260928; follows B2 writer caller | Delete public Publisher.publish, old append/sequence and InputDrain ACK/steer execution fallback; remove mark_view_read forwarding. Stage canonical roots through existing cutover owners, preserve original source/history and unresolved input provenance; no UNKNOWN replay. |
 | B2 channel/catalog compatibility / S4,R2 | Darwin; ~/wt/comms-channel-deletion-closure-20260928 | Pending; implementation assigned | Migrate saved union audiences/preferences/history into current owners, retire their active creation/routing, delete Channel.aggregate_target/members_for. Migrate update_tags to canonical publisher. Paired Toad callers belong to this batch. |
-| B3 native evidence and response authority / PF3,S3,R7 | Pascal; ~/wt/comms-pf3-deletion-closure-20260928 | Pending; implementation assigned | Delete _read_native_context_evidence after moving validation to NativeContextProof and migrating five current callers. Delete response-owner fixture bypass and optional authority forms; fixtures provide real witnesses. |
-| B4 typed file-claim callers / S5 | Pascal; same authority PR as B3 | Pending; implementation assigned | Move internal callers to ExistingFileClaim/WritableFileClaim; delete normalize_existing_file and raw internal coercion adapters; parse external paths once. |
-| B5 disconnected bridges / S7,R6 | Parent; ~/wt/comms-acp-saved-session-startup-20260928 | In implementation; refactor/retired-bridges-deletion-20260928 | Delete ordinary_delivery_bridge.py, transcript_route_legacy.py and their exclusive tests; preserve existing saved files and current native route/delivery owners. Fix remaining test caller of removed package export. |
+| B3 native evidence and response authority / PF3,S3,R7 | Pascal; ~/wt/comms-pf3-deletion-closure-20260928 | PR226 merged; installation pending quiet step | Delete _read_native_context_evidence after moving validation to NativeContextProof and migrating five current callers. Delete response-owner fixture bypass and optional authority forms; fixtures provide real witnesses. |
+| B4 typed file-claim callers / S5 | Pascal; same authority PR as B3 | PR226 merged; installation pending quiet step | Move internal callers to ExistingFileClaim/WritableFileClaim; delete normalize_existing_file and raw internal coercion adapters; parse external paths once. |
+| B5 disconnected bridges / S7,R6 | Parent; ~/wt/comms-acp-saved-session-startup-20260928 | PR225 merged and installed; local checks and installed read-only DM acceptance passed | Delete ordinary_delivery_bridge.py, transcript_route_legacy.py and their exclusive tests; preserve existing saved files and current native route/delivery owners. Fix remaining test caller of removed package export. |
 
 B2 lands its publisher caller migration before B1 removes the old writer.
 B3/B4 can land independently of B2. Parent serializes integration and activation.

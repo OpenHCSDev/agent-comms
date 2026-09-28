@@ -917,7 +917,7 @@ class HistoryViews:
                     raise ValueError("Channel display changed; refresh the displayed page.")
                 displayed = expected_scope.displayed
                 displayed.validate(viewer, basis[0], self.bus.reads.bus_identity(self.bus.log.path))
-            self.bus.mark_view_read(viewer, target, through, displayed=displayed)
+            self.bus.reads.mark_displayed(viewer, displayed.through(through))
 
     def mark_dm_view_read(
         self,

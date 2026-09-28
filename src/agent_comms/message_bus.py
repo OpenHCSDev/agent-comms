@@ -256,11 +256,6 @@ class MessageBus:
         self._view_unread_cache[viewer] = ViewUnread(revision, scopes, counts)
         return dict(counts)
 
-    def mark_view_read(
-        self, viewer: str, target: str, through: int, *, displayed: DisplayBasis
-    ) -> None:
-        """Compatibility entry point; only an actual display basis advances reads."""
-        self.reads.mark_displayed(viewer, displayed.through(through))
 
     def channel_activity(self) -> Mapping[str, ChannelActivity]:
         """Aggregate channel history clocks once per wire revision, not per viewer."""

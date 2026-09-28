@@ -682,15 +682,7 @@ class WireLog:
             self.metadata_path, json.dumps(FieldCodec.encode(metadata), indent=2), fsync_parent=True
         )
 
-    def next_legacy_sequence_unlocked(self) -> int:
-        if self.read_metadata_unlocked().private:
-            raise RelationViolationError("Legacy append is unavailable after private cutover.")
-        _repair_trailing_jsonl(self.path)
-        return max(self.read_metadata_unlocked().last_seq, self._last_row_sequence_unlocked()) + 1
 
-    def append_legacy_unlocked(self, message: Message) -> None:
-        self.write_metadata_unlocked(WireMetadata(last_seq=message.seq))
-        _append_jsonl(self.path, message.to_wire())
 
     def require_fresh_private_root_unlocked(self) -> None:
         self._assert_private_directory()
@@ -701,7 +693,7 @@ class WireLog:
         if any(
             path.exists() or path.is_symlink() for path in (self.metadata_path, self.path, repair)
         ):
-            raise RelationViolationError("Private marker issuer requires a fresh bus root.")
+            raise RelationViolationError("Existing unmarked bus data is read-only. Archive and migrate it with supervised_cutover before sending on a fresh canonical root.")
 
     def enable_claim_gate_unlocked(self) -> str:
         if self.path.name != "bus.jsonl":
