@@ -28,11 +28,12 @@ from .activity import ActivityState
 from .assignment_states import AssignmentState, CompletedAssignment, IgnoredAssignment
 from .bus_publication import CommittedInitial, stable_thread_lookup
 from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
+from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination import ExecutionOrigin, OwnerFence, WakeAssignment
-from .coordination_cohort import _assert_schema, accept_initial_cohort, next_sealed_assignment
+from .coordination_cohort import accept_initial_cohort, next_sealed_assignment
 from .coordination_response import (
     LiveResponseOwner,
     _assert_response_schema,
@@ -473,7 +474,7 @@ class SelectedExecution:
                 raise IdentityConflict("selected admission wire root changed")
             after_seq = max(self.after_seq, marker.admission_after_seq)
         with self.store._read_transaction():
-            _assert_schema(self.store._connection)
+            assert_cohort_schema(self.store._connection)
             _assert_response_schema(self.store._connection)
             assert_native_runtime_schema(self.store._connection)
         try:

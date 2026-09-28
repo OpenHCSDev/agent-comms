@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Literal
 
 from .bus_publication import stable_thread_lookup
+from .cohort_schema import assert_cohort_schema
 from .coordination import (
     Attempts,
     CurrentExecutions,
@@ -39,7 +40,6 @@ from .coordination import (
     WakeClaims,
     canonical_publication_key,
 )
-from .coordination_cohort import _assert_schema as _assert_cohort_schema
 from .coordination_store import (
     AlreadyApplied,
     Applied,
@@ -260,7 +260,7 @@ def _require_cohort_assignments(
     """
     db = store._connection
     _assert_response_schema(db)
-    _assert_cohort_schema(db)
+    assert_cohort_schema(db)
     if not snapshot.assignments or snapshot.obligation is None:
         raise IdentityConflict("wire response requires selected claims and obligation")
     metadata = bus.log._private_marker_unlocked()

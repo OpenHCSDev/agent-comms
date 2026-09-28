@@ -9,6 +9,8 @@ import os
 import select
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -31,6 +33,7 @@ from agent_comms.coordination_store import (
 )
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.native_pi import NativeContextProof, NativeTurnResult
+from agent_comms.native_prompt_send import _enter_admission
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
@@ -85,7 +88,11 @@ def _fake_pi(calls: list[str]):
             # The fake Pi must cross the same irreversible send-admission
             # boundary before claiming a native context. Do not synthesize a
             # receipt from a reservation that was never sent.
-            with _kwargs["prompt_send_boundary"](session_file):
+            with _enter_admission(
+                lambda: _kwargs["prompt_send_boundary"](session_file),
+                threading.Event(),
+                time.monotonic() + 5,
+            ):
                 calls.append(input_id)
 
         await asyncio.to_thread(admitted)
@@ -180,9 +187,7 @@ async def test_foreground_registers_own_pid_and_seals_one_selected_direct(
         assert comms.views.dm_history("sender", "beta")[-1].body == "42"
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[
-                    0
-                ]
+                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
                 == 1
             )
 
@@ -517,9 +522,7 @@ except Exception as error:
         assert child.stdout.strip() == "StaleFence"
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[
-                    0
-                ]
+                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
                 == 0
             )
         assert comms.registry.status("beta") == RunningThreadStatus()
@@ -533,6 +536,8 @@ def test_actual_foreground_command_owns_its_recipient_process(tmp_path: Path) ->
         # Only the paid Pi edge is mocked IN THE CHILD. The CLI, registry,
         # bus, SQLite acceptance/claim and publication run in its actual PID.
         script = """import sys
+import threading
+import time
 from agent_comms import cohort_foreground as f, coordinated_runtime as r
 from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
 f.Thread = _configured_thread
@@ -616,6 +621,8 @@ def test_two_real_recipient_processes_emit_selected_and_typed_no_wake(tmp_path: 
         base.chmod(0o700)
         root, root_id, comms = _wire(base)
         script = """import sys
+import threading
+import time
 from agent_comms import cohort_foreground as f, coordinated_runtime as r
 from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
 f.Thread = _configured_thread
@@ -744,9 +751,7 @@ async def test_failed_model_reservation_is_not_polled_or_replayed(
         assert len(calls) == 1
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[
-                    0
-                ]
+                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
                 == 1
             )
         assert comms.registry.status("beta") == StoppedThreadStatus()

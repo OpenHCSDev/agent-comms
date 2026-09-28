@@ -255,7 +255,7 @@ def test_current_pointer_and_offline_compaction_phase_are_evidence_not_lifecycle
             "UPDATE attempts SET process_dead=1,revision=5 WHERE execution_id='alice-execution'"
         )
         db.execute(
-            "UPDATE connectivity SET owner_state='connected',revision=2,"
+            "UPDATE connectivity SET owner='connected',revision=2,"
             "observed_at_ms=51 WHERE execution_id='alice-execution'"
         )
     exited = view(private_db)
@@ -350,13 +350,8 @@ def test_other_active_execution_disagrees_with_pointer(active_db: Path):
 
 
 def test_invalid_retry_view_and_exact_receipt_domain(active_db: Path):
-    # The generated v2 retry view always yields 0/1 under its frozen schema.
+    # The declared retry view always yields 0/1 under its current schema.
     # A malformed stored view must not turn 2 into a truthy retry decision.
-    import agent_comms.recovery_projection as projection
-
-    assert not projection._sqlite_integer(2, minimum=0, maximum=1)
-    assert not projection._sqlite_integer(-1, minimum=0, maximum=1)
-    assert not projection._sqlite_integer(True, minimum=0, maximum=1)
     with sqlite3.connect(active_db) as db:
         db.execute("DROP VIEW retry_disposition_basis")
         db.execute(

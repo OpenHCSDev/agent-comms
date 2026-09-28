@@ -334,3 +334,56 @@ current marker fixtures to required floor/access and actual WireLog fsync seam.
 SQLiteJournalMode moved from owned goal ledger into A13 for reuse by candidate
 and cohort connections; S9's JournalMode/JournalSchemaObject can adopt shared
 SQLiteJournalMode/SQLiteSchemaObject at its coordinated crossing (not edited here).
+
+## Cohort, recovery, and relation owner closure
+
+Coordinator schema4 consolidates ExecutionAssignmentLink and ConnectivityFacet
+with their row declarations and deletes ExecutionClaims/Connectivity duplicates.
+Physical execution_claims now uses assignment_id; external snapshot claim_id
+spelling stays unchanged. Connectivity fields are owner/acp_client, typed enums.
+Old positional relation/connectivity writes and snapshot mappers deleted.
+Core WakeAssignment/ExecutionRecord/AttemptRecord/ResponseObligation lifecycle
+consolidation and their remaining mutation calls still open.
+
+All six cohort tables now own A13 schemas, exact checks, foreign keys, sealing
+and immutable-fact triggers. Cohort metadata and optional provenance version2.
+The recipient/sequence index derives from CohortDeliveryReceipts. Deleted two
+handwritten DDL/name rosters and redundant cohort validation copy; the sole
+assert_cohort_schema lives in cohort_schema, current imports updated. Mandatory
+installation and optional savepoints preserve omission/no-retroactive-proof
+semantics. Parent's strict admission_after_seq floor remains at acceptance and
+foreground scanning, and native proof is never manufactured from that floor.
+Cohort acceptance/receipts/pages, foreground observer projection and coverage
+reader now use typed SQL boundaries and writes; no raw row extraction remains
+in these modules. Existing _assignment conversion accepts typed WakeClaims
+while core nominal lifecycle consolidation remains open.
+
+Recovery readers/gateway now use one declared joined RecoverySelection and
+existing public ProjectedRecovery/ProjectedConnectivity types. Deleted raw
+integer/boolean checking and positional mappers. Removed obsolete forced
+execution_owner_status_idx references: the declared owner/status index serves
+those bounded queries. Existing canonical owner scope, Linux peer credentials,
+read-only rollback transaction, reply redaction and bounded child cleanup stay.
+SQLiteUserVersion is shared A13 authority; removed three identical owner-local
+classes in coordinator, reply index and awareness.
+
+Evidence: recovery/socket45pass plus one removed-helper-only failure; after
+deleting the helper assertions the retained actual corrupt-view test+family
+guards6pass. Coordinator/recovery/awareness160pass (one96child stress excluded).
+Cohort first25pass2stale parent-root expectations; consumer40pass2issues
+(archived-target message expectation, fake provider lacking actual bounded
+pre-admission wait); corrected only these seams, final7pass including actual
+concurrent DB acceptance through the existing raw writer's admission wait.
+No unchanged suite repeated afterward. Real OS socket/SQLite/child checks are
+provider-free, not an installed native activation receipt. Parent owns that.
+
+Parent-owned crossing requested before integrating this batch: history_views
+notification join must produce typed WakeClaims before _assignment, or parent
+can hand off that exact reader. Its current raw join also retains retired
+native_runtime_inputs/n.claim_id names. Parent owns history changes; no file
+edit made here, no compatibility fallback. Full237 remains draft until remaining
+core lifecycle/callers and this crossing close.
+
+All cohort/recovery/relation tables are inside coordination.sqlite3 and reset
+under parent's quiet D22 procedure, preserving WireMetadata admission_after_seq
+and access/current history. Recovery projection/gateway add no durable store.

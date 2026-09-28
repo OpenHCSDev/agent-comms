@@ -184,3 +184,9 @@ UNKNOWN/reset proof remain open.
   Old candidate v1 upgrade and converter-only test deleted. Source seals/floor
   and bounded WAL maintenance preserved; reset classifications in HANDOFF.
   Core coordinator/cohort and recovery readers remain open; S12 not complete.
+
+- **Further caller closure:** six cohort table declarations and their readers,
+  foreground observer/coverage reads and recovery projection/gateway typed.
+  ExecutionAssignmentLink/ConnectivityFacet now sole row and domain owners.
+  Remaining: four core lifecycle owners and core raw mutations; parent history
+  notification-reader crossing requested. Full237 remains draft, not complete.

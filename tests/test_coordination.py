@@ -1226,7 +1226,7 @@ def test_membership_ordinals_contiguous_and_frozen_after_activation(db):
     with CoordinationStore(path) as reopened:
         reopened._connection.row_factory = None
         assert reopened._connection.execute(
-            "SELECT claim_id,ordinal FROM execution_claims ORDER BY ordinal"
+            "SELECT assignment_id,ordinal FROM execution_claims ORDER BY ordinal"
         ).fetchall() == [("a", 0), ("b", 1), ("c", 2)]
 
 
@@ -1337,11 +1337,11 @@ def test_claim_target_and_recipient_lineage_is_immutable(db):
         c.execute("COMMIT")  # Orphan execution-bound claim is not durable.
     c.execute("ROLLBACK")
     with pytest.raises(sqlite3.IntegrityError):
-        c.execute("UPDATE execution_claims SET ordinal=1 WHERE claim_id='a'")
+        c.execute("UPDATE execution_claims SET ordinal=1 WHERE assignment_id='a'")
     with CoordinationStore(path) as reopened:
         reopened._connection.row_factory = None
         assert (
-            reopened._connection.execute("SELECT claim_id FROM execution_claims").fetchone()[0]
+            reopened._connection.execute("SELECT assignment_id FROM execution_claims").fetchone()[0]
             == "a"
         )
         assert reopened._connection.execute("SELECT count(*) FROM wake_claims").fetchone()[0] == 1

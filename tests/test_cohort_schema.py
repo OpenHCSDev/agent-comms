@@ -11,7 +11,7 @@ from threading import Barrier
 import pytest
 
 from agent_comms.cohort_schema import install_private_cohort_schema
-from agent_comms.coordination import SchemaVersionError
+from agent_comms.coordination import COORDINATION_SCHEMA_VERSION, SchemaVersionError
 from agent_comms.coordination_store import MutationStore
 
 ROOT = "a" * 32
@@ -38,8 +38,8 @@ def _receipt(
     db.execute(
         "INSERT INTO claim_batch_receipts (wire_root_id,wire_seq,message_id,exact_target,"
         "envelope_digest,audience_digest,decisions_digest,member_count,claim_count,"
-        "manifest_codec,resolver_version,policy_version,accepted_at_ms) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "manifest_codec,resolver_version,policy_version,accepted_at_ms,sealed) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
         (
             root,
             SEQ,
@@ -151,14 +151,14 @@ def test_selected_claims_follow_ordered_n_subsequence_not_only_set_membership(
 def test_schema_is_opt_in_versioned_and_idempotent_on_reopen(tmp_path: Path) -> None:
     path = tmp_path / "coordination.sqlite3"
     with MutationStore(str(path)) as store:
-        assert store.schema_version == 2
+        assert store.schema_version == COORDINATION_SCHEMA_VERSION
         assert "claim_batch_receipts" not in _tables(store)
         assert "cohort_delivery_receipts" not in _tables(store)
         install_private_cohort_schema(store)
         before = set(_tables(store))
         install_private_cohort_schema(store)
         assert _tables(store) == before
-        assert store.schema_version == 2
+        assert store.schema_version == COORDINATION_SCHEMA_VERSION
     if os.name == "posix":
         assert path.stat().st_mode & 0o077 == 0
     # Windows' st_mode does not attest NTFS ACL protection.
@@ -169,7 +169,7 @@ def test_schema_is_opt_in_versioned_and_idempotent_on_reopen(tmp_path: Path) -> 
         assert reopened._connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         assert (
             reopened._connection.execute("SELECT version FROM cohort_schema_meta").fetchone()[0]
-            == 1
+            == 2
         )
 
 
@@ -455,7 +455,7 @@ def test_reopen_rejects_partial_unsupported_or_drifted_schema(tmp_path: Path, pr
                 finally:
                     store._connection.execute("PRAGMA ignore_check_constraints=OFF")
             else:
-                store._connection.execute("DROP INDEX cohort_receipt_owner_seq_idx")
+                store._connection.execute("DROP INDEX cohort_delivery_receipts_0_idx")
         before = set(_tables(store))
         with pytest.raises(SchemaVersionError):
             install_private_cohort_schema(store)
@@ -478,4 +478,4 @@ def test_two_process_like_connections_serialize_explicit_migration(tmp_path: Pat
     with ThreadPoolExecutor(max_workers=2) as pool:
         left = pool.submit(migrate)
         right = pool.submit(migrate)
-        assert (left.result(timeout=10), right.result(timeout=10)) == (1, 1)
+        assert (left.result(timeout=10), right.result(timeout=10)) == (2, 2)

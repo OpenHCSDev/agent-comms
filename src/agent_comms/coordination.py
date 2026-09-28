@@ -31,10 +31,18 @@ from .field_codec import projected
 from .messages import Message, MessageType
 from .obligation_states import ResponseState
 from .recovery_states import RecoveryCondition
-from .typed_table import Column, ExactStorage, ForeignKey, Index, TypedRow, TypedTable
+from .typed_table import (
+    Column,
+    ExactStorage,
+    ForeignKey,
+    Index,
+    SQLiteUserVersion,
+    TypedRow,
+    TypedTable,
+)
 from .wake_policy import WakePolicy
 
-COORDINATION_SCHEMA_VERSION: Final = 3
+COORDINATION_SCHEMA_VERSION: Final = 4
 COORDINATION_SNAPSHOT_VERSION: Final = 2
 RESOLVER_VERSION: Final = "resolver-v1"
 POLICY_VERSION: Final = "policy-v1"
@@ -342,10 +350,13 @@ class OwnerFence:
 
 
 @dataclass(frozen=True, slots=True)
-class ExecutionAssignmentLink:
-    execution_id: str
-    assignment_id: str = dataclass_field(metadata={"wire_name": "claim_id"})
-    ordinal: int
+class ExecutionAssignmentLink(CoordinatorTable, TypedTable, declared_name="execution_claims"):
+    execution_id: str = dataclass_field(metadata={"sql": Column(primary_key=True)})
+    assignment_id: str = dataclass_field(
+        metadata={"wire_name": "claim_id", "sql": Column(unique=True)}
+    )
+    ordinal: int = dataclass_field(metadata={"sql": Column(primary_key=True, check="ordinal>=0")})
+    unique = (("execution_id", "assignment_id"),)
 
     def __post_init__(self) -> None:
         _validate_execution_id(self.execution_id)
@@ -353,6 +364,69 @@ class ExecutionAssignmentLink:
         _bounded(self.assignment_id, "claim_id", MAX_IDENTIFIER_CHARS)
         if self.ordinal < 0:
             raise ValueError("execution claim ordinal cannot be negative")
+
+    @classmethod
+    def references(cls):
+        return (
+            ForeignKey(
+                ("execution_id",),
+                Executions,
+                ("execution_id",),
+                deferred=False,
+                on_delete="RESTRICT",
+            ),
+            ForeignKey(
+                ("assignment_id", "execution_id"),
+                WakeClaims,
+                ("claim_id", "execution_id"),
+                deferred=False,
+                on_delete=None,
+            ),
+        )
+
+    @classmethod
+    def triggers(cls):
+        return {
+            "execution_claim_membership_insert": (
+                """CREATE TRIGGER execution_claim_membership_insert BEFORE INSERT ON
+    execution_claims
+    WHEN NOT EXISTS (SELECT 1 FROM executions e WHERE e.execution_id =
+    NEW.execution_id
+      AND e.status IN ({unstarted_execution_names}))
+     OR NEW.ordinal != (SELECT count(*) FROM execution_claims
+                        WHERE execution_id = NEW.execution_id)
+    BEGIN SELECT RAISE(ABORT,
+    'execution claims require initial contiguous membership' ); END"""
+            ),
+            "execution_claim_target_insert": (
+                """CREATE TRIGGER execution_claim_target_insert
+    BEFORE INSERT ON execution_claims
+    WHEN NOT EXISTS (
+        SELECT 1 FROM executions e JOIN wake_claims c
+          ON c.execution_id = e.execution_id
+        WHERE e.execution_id = NEW.execution_id AND c.claim_id = NEW.assignment_id
+          AND c.exact_target = e.exact_target
+          AND c.recipient_lookup = e.owner_lookup
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'claim target does not match execution target');
+    END"""
+            ),
+            "execution_claim_target_update": (
+                """CREATE TRIGGER execution_claim_target_update
+    BEFORE UPDATE ON execution_claims
+    BEGIN
+        SELECT RAISE(ABORT, 'execution claim relation is immutable');
+    END"""
+            ),
+            "execution_claim_delete_frozen": (
+                """CREATE TRIGGER execution_claim_delete_frozen BEFORE DELETE ON
+    execution_claims BEGIN
+        SELECT RAISE(ABORT, 'execution claim relation cannot be deleted'
+        );
+    END"""
+            ),
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -993,12 +1067,14 @@ class PublicationReceipt(TypedRow):
 
 
 @dataclass(frozen=True, slots=True)
-class ConnectivityFacet:
-    execution_id: str = dataclass_field(metadata={"snapshot_exclude": True})
+class ConnectivityFacet(CoordinatorTable, TypedTable, declared_name="connectivity"):
+    execution_id: str = dataclass_field(
+        metadata={"snapshot_exclude": True, "sql": Column(primary_key=True)}
+    )
     owner: OwnerConnectivity
     acp_client: ACPClientConnectivity
-    revision: int
-    observed_at_ms: int
+    revision: int = dataclass_field(metadata={"sql": Column(check="revision>0")})
+    observed_at_ms: int = dataclass_field(metadata={"sql": Column(check="observed_at_ms>=0")})
 
     def __post_init__(self) -> None:
         _validate_execution_id(self.execution_id)
@@ -1006,6 +1082,38 @@ class ConnectivityFacet:
         object.__setattr__(self, "acp_client", ACPClientConnectivity(self.acp_client))
         if self.revision <= 0 or self.observed_at_ms < 0:
             raise ValueError("revision must be positive and observed_at_ms non-negative")
+
+    @classmethod
+    def references(cls):
+        return (
+            ForeignKey(
+                ("execution_id",),
+                Executions,
+                ("execution_id",),
+                deferred=False,
+                on_delete="RESTRICT",
+            ),
+        )
+
+    @classmethod
+    def triggers(cls):
+        return {
+            "connectivity_observation_monotonic": (
+                """CREATE TRIGGER connectivity_observation_monotonic
+    BEFORE UPDATE ON connectivity
+    WHEN NEW.execution_id IS NOT OLD.execution_id
+     OR NEW.revision != OLD.revision + 1
+     OR NEW.observed_at_ms < OLD.observed_at_ms
+    BEGIN
+        SELECT RAISE(ABORT, 'connectivity revision or observation regressed');
+    END"""
+            ),
+            "connectivity_delete_frozen": (
+                """CREATE TRIGGER connectivity_delete_frozen BEFORE DELETE ON connectivity BEGIN
+        SELECT RAISE(ABORT, 'connectivity cannot be deleted');
+    END"""
+            ),
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -1669,7 +1777,7 @@ class Executions(CoordinatorTable, TypedTable):
             ),
             ForeignKey(
                 ("wire_execution_id", "wire_claim_ordinal"),
-                ExecutionClaims,
+                ExecutionAssignmentLink,
                 ("execution_id", "ordinal"),
                 deferred=True,
                 on_delete=None,
@@ -2031,8 +2139,8 @@ class WakeClaims(CoordinatorTable, TypedTable):
             ),
             ForeignKey(
                 ("execution_id", "claim_id"),
-                ExecutionClaims,
-                ("execution_id", "claim_id"),
+                ExecutionAssignmentLink,
+                ("execution_id", "assignment_id"),
                 deferred=True,
                 on_delete=None,
             ),
@@ -2090,77 +2198,6 @@ END"""
             "wake_claim_delete_frozen": (
                 """CREATE TRIGGER wake_claim_delete_frozen BEFORE DELETE ON wake_claims BEGIN
     SELECT RAISE(ABORT, 'wake claim cannot be deleted');
-END"""
-            ),
-        }
-
-
-@dataclass(frozen=True, kw_only=True)
-class ExecutionClaims(CoordinatorTable, TypedTable):
-    execution_id: str = dataclass_field(metadata={"sql": Column(primary_key=True)})
-    claim_id: str = dataclass_field(metadata={"sql": Column(unique=True)})
-    ordinal: int = dataclass_field(metadata={"sql": Column(primary_key=True, check="ordinal >= 0")})
-    unique = (("execution_id", "claim_id"),)
-
-    @classmethod
-    def references(cls):
-        return (
-            ForeignKey(
-                ("execution_id",),
-                Executions,
-                ("execution_id",),
-                deferred=False,
-                on_delete="RESTRICT",
-            ),
-            ForeignKey(
-                ("claim_id", "execution_id"),
-                WakeClaims,
-                ("claim_id", "execution_id"),
-                deferred=False,
-                on_delete=None,
-            ),
-        )
-
-    @classmethod
-    def triggers(cls):
-        return {
-            "execution_claim_membership_insert": (
-                """CREATE TRIGGER execution_claim_membership_insert BEFORE INSERT ON
-execution_claims
-WHEN NOT EXISTS (SELECT 1 FROM executions e WHERE e.execution_id =
-NEW.execution_id
-  AND e.status IN ({unstarted_execution_names}))
- OR NEW.ordinal != (SELECT count(*) FROM execution_claims
-                    WHERE execution_id = NEW.execution_id)
-BEGIN SELECT RAISE(ABORT,
-'execution claims require initial contiguous membership' ); END"""
-            ),
-            "execution_claim_target_insert": (
-                """CREATE TRIGGER execution_claim_target_insert
-BEFORE INSERT ON execution_claims
-WHEN NOT EXISTS (
-    SELECT 1 FROM executions e JOIN wake_claims c
-      ON c.execution_id = e.execution_id
-    WHERE e.execution_id = NEW.execution_id AND c.claim_id = NEW.claim_id
-      AND c.exact_target = e.exact_target
-      AND c.recipient_lookup = e.owner_lookup
-)
-BEGIN
-    SELECT RAISE(ABORT, 'claim target does not match execution target');
-END"""
-            ),
-            "execution_claim_target_update": (
-                """CREATE TRIGGER execution_claim_target_update
-BEFORE UPDATE ON execution_claims
-BEGIN
-    SELECT RAISE(ABORT, 'execution claim relation is immutable');
-END"""
-            ),
-            "execution_claim_delete_frozen": (
-                """CREATE TRIGGER execution_claim_delete_frozen BEFORE DELETE ON
-execution_claims BEGIN
-    SELECT RAISE(ABORT, 'execution claim relation cannot be deleted'
-    );
 END"""
             ),
         }
@@ -2500,51 +2537,6 @@ END"""
         }
 
 
-@dataclass(frozen=True, kw_only=True)
-class Connectivity(CoordinatorTable, TypedTable):
-    execution_id: str = dataclass_field(metadata={"sql": Column(primary_key=True)})
-    owner_state: str = dataclass_field(
-        metadata={"sql": Column(check="owner_state IN ('connected', 'reconnecting', 'offline')")}
-    )
-    acp_client_state: str = dataclass_field(
-        metadata={"sql": Column(check="acp_client_state IN ('connected', 'disconnected')")}
-    )
-    revision: int = dataclass_field(metadata={"sql": Column(check="revision > 0")})
-    observed_at_ms: int = dataclass_field(metadata={"sql": Column(check="observed_at_ms >= 0")})
-
-    @classmethod
-    def references(cls):
-        return (
-            ForeignKey(
-                ("execution_id",),
-                Executions,
-                ("execution_id",),
-                deferred=False,
-                on_delete="RESTRICT",
-            ),
-        )
-
-    @classmethod
-    def triggers(cls):
-        return {
-            "connectivity_observation_monotonic": (
-                """CREATE TRIGGER connectivity_observation_monotonic
-BEFORE UPDATE ON connectivity
-WHEN NEW.execution_id IS NOT OLD.execution_id
- OR NEW.revision != OLD.revision + 1
- OR NEW.observed_at_ms < OLD.observed_at_ms
-BEGIN
-    SELECT RAISE(ABORT, 'connectivity revision or observation regressed');
-END"""
-            ),
-            "connectivity_delete_frozen": (
-                """CREATE TRIGGER connectivity_delete_frozen BEFORE DELETE ON connectivity BEGIN
-    SELECT RAISE(ABORT, 'connectivity cannot be deleted');
-END"""
-            ),
-        }
-
-
 def _sql_values(names):
     return ",".join("'" + name.replace("'", "''") + "'" for name in names)
 
@@ -2624,11 +2616,6 @@ SELECT e.execution_id,
 FROM executions e;"""
         ).format(**_schema_context())
     )
-
-
-@dataclass(frozen=True)
-class _UserVersion(TypedRow):
-    user_version: int
 
 
 @dataclass(frozen=True)
@@ -2781,7 +2768,7 @@ class CoordinationStore:
 
     @property
     def schema_version(self) -> int:
-        (version,) = _UserVersion.read(self._connection.execute("PRAGMA user_version"))
+        (version,) = SQLiteUserVersion.read(self._connection.execute("PRAGMA user_version"))
         return version.user_version
 
     def close(self) -> None:

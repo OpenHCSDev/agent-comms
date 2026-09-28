@@ -50,6 +50,7 @@ from .coordination import (
     ReplayFact,
     ResponseObligation,
     WakeAssignment,
+    WakeClaims,
     retry_disposition_authorized,
 )
 from .coordination_errors import IdentityConflict
@@ -194,10 +195,7 @@ class VerifiedOwnerLoss:
                 process is not None
                 and current.process_identity == process
                 and (
-                    (
-                        admission_generation is not None
-                        and release.before >= admission_generation
-                    )
+                    (admission_generation is not None and release.before >= admission_generation)
                     or (
                         admission_generation is None
                         and registry.statuses[current.name].stopped
@@ -295,24 +293,24 @@ def _bounded_reason(reason: str | None) -> None:
         raise ValueError("reason code is invalid")
 
 
-def _assignment(row: sqlite3.Row) -> WakeAssignment:
+def _assignment(row: WakeClaims) -> WakeAssignment:
     return WakeAssignment(
-        assignment_id=row["claim_id"],
-        recipient=row["recipient"],
-        recipient_lookup=row["recipient_lookup"],
-        wire_seq=row["wire_seq"],
-        message_id=row["message_id"],
-        audience=MessageAudience(row["audience"]),
-        accepted_at_ms=row["accepted_at_ms"],
-        updated_at_ms=row["updated_at_ms"],
-        revision=row["revision"],
-        resolver_version=row["resolver_version"],
-        policy_version=row["policy_version"],
-        lifecycle=AssignmentState.decode(row["disposition"]).load(
-            WakePolicy.decode(row["wake_mode"])(),
-            row["triage_verdict"],
-            row["execution_id"],
-            row["exact_target"],
+        assignment_id=row.claim_id,
+        recipient=row.recipient,
+        recipient_lookup=row.recipient_lookup,
+        wire_seq=row.wire_seq,
+        message_id=row.message_id,
+        audience=MessageAudience(row.audience),
+        accepted_at_ms=row.accepted_at_ms,
+        updated_at_ms=row.updated_at_ms,
+        revision=row.revision,
+        resolver_version=row.resolver_version,
+        policy_version=row.policy_version,
+        lifecycle=AssignmentState.decode(row.disposition).load(
+            WakePolicy.decode(row.wake_mode)(),
+            row.triage_verdict,
+            row.execution_id,
+            row.exact_target,
         ),
     )
 
@@ -566,7 +564,7 @@ class MutationStore(CoordinationStore):
             return Applied(self._participant(lookup))
 
     def assignment(self, assignment_id: str) -> WakeAssignment:
-        row = self._row("wake_claims", "claim_id", assignment_id)
+        row = WakeClaims.one(self._connection, claim_id=assignment_id)
         if row is None:
             raise IdentityConflict("unknown claim")
         return _assignment(row)
@@ -586,10 +584,16 @@ class MutationStore(CoordinationStore):
         ):
             raise IdentityConflict("claim acceptance requires initial frozen decision")
         with self._transaction() as db:
-            row = db.execute(
-                "SELECT * FROM wake_claims WHERE claim_id=? OR (recipient_lookup=? AND wire_seq=?)",
-                (assignment.assignment_id, assignment.recipient_lookup, assignment.wire_seq),
-            ).fetchone()
+            rows = WakeClaims.read(
+                db.execute(
+                    (
+                        "SELECT * FROM wake_claims WHERE claim_id=? OR (recipient_lookup="
+                        "? AND wire_seq=?) LIMIT 1"
+                    ),
+                    (assignment.assignment_id, assignment.recipient_lookup, assignment.wire_seq),
+                )
+            )
+            row = next(iter(rows), None)
             if row is not None:
                 current = _assignment(row)
                 immutable = (
@@ -693,10 +697,8 @@ class MutationStore(CoordinationStore):
         ).fetchone()
         attempt = _attempt(attempt_row) if attempt_row else None
         links = tuple(
-            ExecutionAssignmentLink(r["execution_id"], r["claim_id"], r["ordinal"])
-            for r in db.execute(
-                "SELECT * FROM execution_claims WHERE execution_id=? ORDER BY ordinal",
-                (execution_id,),
+            ExecutionAssignmentLink.select(
+                db, where="execution_id=?", parameters=(execution_id,), order_by=("ordinal",)
             )
         )
         assignments = tuple(self.assignment(link.assignment_id) for link in links)
@@ -736,18 +738,7 @@ class MutationStore(CoordinationStore):
                     (execution_id,),
                 )
             )
-        connectivity_row = self._row("connectivity", "execution_id", execution_id)
-        connectivity = (
-            ConnectivityFacet(
-                execution_id,
-                OwnerConnectivity(connectivity_row["owner_state"]),
-                ACPClientConnectivity(connectivity_row["acp_client_state"]),
-                connectivity_row["revision"],
-                connectivity_row["observed_at_ms"],
-            )
-            if connectivity_row
-            else None
-        )
+        connectivity = ConnectivityFacet.one(db, execution_id=execution_id)
         audit = next(
             iter(
                 RecoveryAudit.read(
@@ -863,10 +854,7 @@ class MutationStore(CoordinationStore):
                         assignment_id,
                     ),
                 )
-                db.execute(
-                    "INSERT INTO execution_claims VALUES (?,?,?)",
-                    (execution_id, assignment_id, ordinal),
-                )
+                ExecutionAssignmentLink(execution_id, assignment_id, ordinal).insert(db)
             if origin is ExecutionOrigin.WIRE:
                 db.execute(
                     "INSERT INTO obligations(execution_id,exact_target,state,reason_code,"
@@ -1352,17 +1340,13 @@ class MutationStore(CoordinationStore):
             ):
                 raise StaleRevision("connectivity or pointer revision changed")
             now = self._now(before.observed_at_ms if before else 0)
-            if before:
-                db.execute(
-                    "UPDATE connectivity SET owner_state=?,acp_client_state=?,"
-                    "revision=revision+1,observed_at_ms=? WHERE execution_id=?",
-                    (owner.value, acp_client.value, now, fence.execution_id),
-                )
-            else:
-                db.execute(
-                    "INSERT INTO connectivity VALUES (?,?,?,?,?)",
-                    (fence.execution_id, owner.value, acp_client.value, 1, now),
-                )
+            ConnectivityFacet(
+                fence.execution_id,
+                owner,
+                acp_client,
+                before.revision + 1 if before else 1,
+                now,
+            ).upsert(db)
             return Applied(self.snapshot(fence.execution_id))
 
     def append_recovery_audit(

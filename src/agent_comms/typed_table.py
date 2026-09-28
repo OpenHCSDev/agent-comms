@@ -335,6 +335,11 @@ class SQLiteJournalMode(TypedRow):
     journal_mode: str
 
 
+@dataclass(frozen=True)
+class SQLiteUserVersion(TypedRow):
+    user_version: int
+
+
 class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
     """The row declaration owns its table; no separate table/schema registry.
 

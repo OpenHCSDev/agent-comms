@@ -12,8 +12,9 @@ import time
 from dataclasses import dataclass
 
 from .bus_publication import CommittedInitial
+from .cohort_schema import ClaimBatchReceipts, assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_cohort import _assert_schema, _receipt_matches
+from .coordination_cohort import _receipt_matches
 from .coordination_store import IdentityConflict, MutationStore
 from .historical_native_inputs import read_historical_native_inputs
 from .message_bus import MessageBus
@@ -93,11 +94,14 @@ def read_proven_source_coverage(
     # A certificate is a trusted append-writer-maintained *source* index,
     # never SQL seal, selected claim, native input or injected ACK authority.
     # Old roots retain the original complete bounded canonical bus parse.
-    with bus.log.locked(blocking=False, max_bus_bytes=(
+    with bus.log.locked(
+        blocking=False,
+        max_bus_bytes=(
             None
             if (bus.log.path.with_name("private_bus_checkpoint.sqlite3")).exists()
             else _MAX_BUS_BYTES
-        )):
+        ),
+    ):
         if time.monotonic() > deadline:
             raise IdentityConflict("source coverage exceeded its scan deadline")
         marker = bus.log._private_marker_unlocked()
@@ -150,14 +154,16 @@ def read_proven_source_coverage(
             continue
         recipient, decision = matches[0]
         with store._read_transaction():
-            _assert_schema(store._connection)
+            assert_cohort_schema(store._connection)
             assert_native_runtime_schema(store._connection)
-            sealed = store._connection.execute(
-                "SELECT 1 FROM claim_batch_receipts WHERE wire_root_id=? "
-                "AND wire_seq=? AND sealed=1",
-                (wire_root_id, seq),
-            ).fetchone()
-            receipt = _receipt_matches(store._connection, initial) if sealed else None
+            sealed = ClaimBatchReceipts.one(
+                store._connection,
+                wire_root_id=wire_root_id,
+                wire_seq=seq,
+            )
+            receipt = (
+                _receipt_matches(store._connection, initial) if sealed and sealed.sealed else None
+            )
         if receipt is None:
             blocked = seq
             break
