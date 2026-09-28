@@ -1,0 +1,23 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-nominal-states-20260928",
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "restarts": [
+    {
+      "thread": "agent-comms-ux",
+      "previous_pid": 2429788,
+      "pid": 2452460
+    },
+    {
+      "thread": "pr95-selected-pi-summary-owner",
+      "previous_pid": 2429789,
+      "pid": 2452463
+    }
+  ],
+  "error": null,
+  "ready": {
+    "agent-comms-ux": true,
+    "pr95-selected-pi-summary-owner": true
+  },
+  "roster_count": 103,
+  "bus_seq": 44
+}

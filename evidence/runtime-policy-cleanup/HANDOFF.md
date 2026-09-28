@@ -12,3 +12,7 @@ Local verification:
 -NRA full-src context scan attempted with one parse/analysis worker and165s bound, but timed out before emitting coverage. No complete NRA scan or native-equivalence proof is claimed for this authored deletion/caller migration. Runtime verification is explicit above.
 
 Parent owns merge and live activation. Parallel workers own complete coordination-state and goal API deletion; this patch only intersects distinct caller changes in declarations/test_wake.
+
+## Live acceptance
+
+PR164 merged and installed as runtime-policy-cleanup-20260928 on the original bus. Both owners ready,103identities preserved. Fresh unmentioned source43 -> POLICY_CLEANUP_OK reply44 in17.69s; native read/bash success verified. Installed UI opens original #comms/#nra and saved transcript with111historicalchoices without mutating live sequence. Removed three owned unused runtime copies (about201MiB) after process/launcher/dependency reference checks; current runtime and s7 rollback remain.
