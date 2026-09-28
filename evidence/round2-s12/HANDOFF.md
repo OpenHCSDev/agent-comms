@@ -46,7 +46,7 @@ root_id/device/inode/byte_offset/tail_digest/last_seq) records index progress,
 NOT eligibility. Rebuilding it indexes historical recipients too. Existing
 `cohort_foreground._accept_visible_initials` accepts every addressed initial after
 its supplied cursor; `run_foreground_once` starts that cursor at zero.
-`CoordinatedPrivateRunner._select` uses `self.after_seq`, also defaulting to zero.
+`SelectedExecution._select` uses `self.after_seq`, also defaulting to zero.
 `_production_optional_awareness` and `native_source_cursor._bounded_coverage_pages`
 begin their ranges at zero. Therefore a reset plus checkpoint rebuild alone
 would make historical inputs eligible again or stall fresh proof coverage.
@@ -72,3 +72,6 @@ reset and relaunch; verify zero new claim/native/provider attempts for it, then
 append one addressed input > H and verify its single normal admission. Repeat
 ordinary restart/index rebuild to prove the floor survives; history retains both.
 This is an explicit remaining integration requirement, not completed behavior.
+
+Current source diff: -105/+503 lines. Tests: -0/+176 lines. Additions establish
+A13 and typed join shapes; existing behavior tests were not ported or weakened.
