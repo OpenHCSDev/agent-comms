@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from .activity import ActivityState
 from .declared_family import DeclaredFamily
 from .mro_dispatch import MroDispatch, handles
-from .pi_payloads import McpLiveReceipt, PiUsage
+from .pi_payloads import McpLiveReceipt, PiDiagnostic, PiUsage
 from .tool_results import ToolDiff
 
 if TYPE_CHECKING:
@@ -231,6 +231,7 @@ class Error(AgentEvent):
     reason_code: str | None = None
     command: str | None = None
     id: str | None = None
+    diagnostics: tuple[PiDiagnostic, ...] = ()
 
 
 @dataclass(frozen=True)

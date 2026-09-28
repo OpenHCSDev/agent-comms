@@ -447,7 +447,14 @@ class MessageEnd(PiEvent):
                     or f"Model request {session.stop_reason}"
                 )
                 if not (session.explicit_interrupt and session.stop_reason == "aborted"):
-                    yield events.Error(text=session.error_message)
+                    yield events.Error(
+                        text=session.error_message,
+                        diagnostics=(
+                            ()
+                            if session.image_input_sent or session.inherited_image_sensitive
+                            else session.message.diagnostics
+                        ),
+                    )
             else:
                 session.error_message = None
                 session.tokens = (
