@@ -1,13 +1,20 @@
 name: Debt ratchet
 
 on:
-  pull_request:
+  workflow_dispatch:
+    inputs:
+      base:
+        required: true
+        type: string
+      head:
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: debt-ratchet-${{ github.event.pull_request.number }}
+  group: debt-ratchet-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -19,17 +26,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ inputs.head }}
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.14'
+      - name: Install packaged ratchet and guard dependencies
+        run: python -m pip install --disable-pip-version-check '.[all]' pytest pytest-asyncio
       - name: Compare touched production files
         env:
-          PR_BASE: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD: ${{ github.event.pull_request.head.sha }}
-        run: python tools/debt_ratchet.py --base "$PR_BASE" --head "$PR_HEAD"
-      - name: Install guard dependencies
-        run: python -m pip install --disable-pip-version-check -e '.[all]' pytest pytest-asyncio
+          PR_BASE: ${{ inputs.base }}
+          PR_HEAD: ${{ inputs.head }}
+        run: agent-comms-ratchet --root src/agent_comms --base "$PR_BASE" --head "$PR_HEAD"
       - name: Run every marked surface guard
         env:
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'

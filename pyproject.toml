@@ -51,6 +51,7 @@ Repository = "https://github.com/OpenHCSDev/agent-comms"
 Issues = "https://github.com/OpenHCSDev/agent-comms/issues"
 
 [project.scripts]
+agent-comms-ratchet = "agent_comms.debt_ratchet:main"
 agent-comms = "agent_comms.cli:main"
 agent-comms-acp = "agent_comms.acp:main"
 agent-comms-agent = "agent_comms.worker:main"
