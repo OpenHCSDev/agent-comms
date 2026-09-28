@@ -4,11 +4,30 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from . import agent_events as events
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from .image_inputs import ImageInput
+from .owner_compaction_prepare import NativeWitness
+from .pi_payloads import (
+    CompactionData,
+    EmptyData,
+    ModelsData,
+    PiResponseData,
+    SessionStatsData,
+    StateData,
+    ThinkingLevelsData,
+    UnknownData,
+)
+from .pi_summary_payloads import (
+    CompactionSettingsData,
+    SelectedModel,
+    SelectedProbeData,
+    SelectedSettings,
+    SelectedSummaryData,
+)
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -38,6 +57,8 @@ class MutatesSession:
 
 @dataclass(frozen=True, kw_only=True)
 class PiCommand(DeclaredFamily):
+    response_payload: ClassVar[type[PiResponseData]] = EmptyData
+    strict_response: ClassVar[bool] = False
     id: str | None = field(default=None, metadata={"wire_omit_default": True})
 
     async def steer(self, session: TurnSession, forwarded: ForwardedInput) -> bool:
@@ -58,7 +79,12 @@ class PiCommand(DeclaredFamily):
             cls.decode(kind)
         except ValueError:
             return UnknownCommand(wire=value)
-        return FieldCodec.decode(cls, {"kind": kind, **data})
+        member = cls.decode(kind)
+        return FieldCodec.decode(cls, {"kind": kind, **member.decode_parameters(data)})
+
+    @classmethod
+    def decode_parameters(cls, data):
+        return data
 
     @classmethod
     def response_owner(cls, name: str) -> type[PiCommand]:
@@ -77,6 +103,7 @@ class PiCommand(DeclaredFamily):
 
 @dataclass(frozen=True, kw_only=True)
 class UnknownCommand(PiCommand):
+    response_payload = UnknownData
     wire: dict[str, Any]
 
     def to_rpc(self) -> dict[str, Any]:
@@ -92,10 +119,35 @@ class Prompt(PiCommand):
         default=None, metadata={"wire_omit_default": True, "wire_name": "inputId"}
     )
     message: str = field(default=None, metadata={"wire_omit_default": True, "wire_name": "message"})
-    images: Any = field(default=None, metadata={"wire_omit_default": True})
+    images: tuple[ImageInput, ...] | None = field(
+        default=None, metadata={"wire_omit_default": True}
+    )
     streaming_behavior: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "streamingBehavior"}
     )
+
+    def to_rpc(self):
+        data = super().to_rpc()
+        if self.images is not None:
+            data["images"] = [image.to_rpc() for image in self.images]
+        return data
+
+    @classmethod
+    def decode_parameters(cls, data):
+        if data.get("images") is not None:
+            images = data["images"]
+            if not isinstance(images, list) or any(
+                not isinstance(image, dict) or image.get("type") != "image" for image in images
+            ):
+                raise ValueError("Expected native image inputs")
+            data = {
+                **data,
+                "images": [
+                    {key: value for key, value in image.items() if key != "type"}
+                    for image in images
+                ],
+            }
+        return data
 
     @classmethod
     async def on_response(
@@ -105,7 +157,7 @@ class Prompt(PiCommand):
 
         if session.initial_prompt_response:
             session.last_model_progress = session.now
-            if response.get("success"):
+            if response.success:
                 session.initial_prompt_acknowledged = True
                 session.prompt_accepted = True
                 session.phase = phases.ModelWaitPhase()
@@ -113,7 +165,7 @@ class Prompt(PiCommand):
                 session.error_message = (
                     "Image prompt failed; backend diagnostics withheld."
                     if session.image_input_sent or session.inherited_image_sensitive
-                    else str(response.get("error") or "Prompt was rejected")
+                    else str(response.error or "Prompt was rejected")
                 )
                 yield session.turn_state("failed", "prompt_rejected", 0, event_phase="shutdown")
                 yield events.Error(text=session.error_message)
@@ -123,34 +175,26 @@ class Prompt(PiCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class GetState(PiCommand, SessionSnapshot):
+    response_payload = StateData
+
     @classmethod
     async def on_response(
         cls, response: Response, session: TurnSession
     ) -> AsyncIterator[events.AgentEvent]:
-        if response.get("success"):
-            session.command = response.get("command")
-            session.data = response.get("data") or {}
-            session.state_id = session.data.get("sessionId")
-            session.state_file = session.data.get("sessionFile")
+        if response.success:
+            state = response.data or StateData()
             if not session.initial_session_observed:
-                session.initial_session_id = session.state_id
-                session.initial_session_file = session.state_file
+                session.initial_session_id = state.session_id
+                session.initial_session_file = state.session_file
                 session.initial_session_observed = True
-            session.model = session.data.get("model") or {}
-            session.provider = session.model.get("provider")
-            session.model_id = session.model.get("id") or session.model.get("name")
-            session.model_name = (
-                f"{session.provider}/{session.model_id}"
-                if session.provider and session.model_id
-                else session.model_id or session.provider
-            )
-            session.session_name = session.data.get("sessionName")
-            session.active_session_file = session.state_file or session.active_session_file
-            session.usage.size = session.model.get("contextWindow")
+            session.model_name = state.model.display_name if state.model else None
+            session.session_name = state.session_name
+            session.active_session_file = state.session_file or session.active_session_file
+            session.usage.size = state.model.context_window if state.model else None
             yield events.AgentInfo(
-                model=session.model_name,
-                thinking_level=session.data.get("thinkingLevel"),
-                session_name=session.session_name,
+                model=state.model.display_name if state.model else None,
+                thinking_level=state.thinking_level,
+                session_name=state.session_name,
                 session_file=session.active_session_file,
                 context_used=session.usage.used,
                 context_size=session.usage.size,
@@ -159,35 +203,33 @@ class GetState(PiCommand, SessionSnapshot):
 
 @dataclass(frozen=True, kw_only=True)
 class GetSessionStats(PiCommand, SessionSnapshot):
+    response_payload = SessionStatsData
+
     @classmethod
     async def on_response(
         cls, response: Response, session: TurnSession
     ) -> AsyncIterator[events.AgentEvent]:
-        if response.get("success"):
-            session.command = response.get("command")
-            session.data = response.get("data") or {}
-            session.context = session.data.get("contextUsage") or {}
-            session.tokens = (
-                session.context.get("tokens") if isinstance(session.context, dict) else None
-            )
-            if type(session.tokens) is int and session.tokens > 0:
-                session.usage.used = session.tokens
-                session.usage.confirmed = session.tokens
-            if isinstance(session.context, dict) and (not session.session_identity_uncertain):
-                session.usage.size = session.context.get("contextWindow") or session.usage.size
+        if response.success:
+            context = response.data.context_usage if response.data is not None else None
+            if context is not None:
+                if context.tokens is not None and context.tokens > 0:
+                    session.usage.confirm(context.tokens)
+                if not session.session_identity_uncertain:
+                    session.usage.size = context.context_window or session.usage.size
             yield session.context_info()
             if session.persistent_session is None:
                 session.finished = True
-                return
 
 
 @dataclass(frozen=True, kw_only=True)
 class GetAvailableModels(PiCommand):
+    response_payload = ModelsData
     pass
 
 
 @dataclass(frozen=True, kw_only=True)
 class GetAvailableThinkingLevels(PiCommand):
+    response_payload = ThinkingLevelsData
     pass
 
 
@@ -218,9 +260,9 @@ class SetModel(PiCommand):
         cls, response: Response, session: TurnSession
     ) -> AsyncIterator[events.AgentEvent]:
         yield events.ModelChanged(
-            id=response.get("id"),
-            ok=bool(response.get("success")),
-            error=response.get("error", "Model change failed"),
+            id=response.id,
+            ok=bool(response.success),
+            error=response.error or "Model change failed",
         )
 
 
@@ -233,14 +275,15 @@ class SetThinkingLevel(PiCommand):
         cls, response: Response, session: TurnSession
     ) -> AsyncIterator[events.AgentEvent]:
         yield events.ThinkingChanged(
-            id=response.get("id"),
-            ok=bool(response.get("success")),
-            error=response.get("error", "Thinking level change failed"),
+            id=response.id,
+            ok=bool(response.success),
+            error=response.error or "Thinking level change failed",
         )
 
 
 @dataclass(frozen=True, kw_only=True)
 class Compact(PiCommand):
+    response_payload = CompactionData
     custom_instructions: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "customInstructions"}
     )
@@ -271,3 +314,36 @@ class Fork(MutatesSession, PiCommand):
 @dataclass(frozen=True, kw_only=True)
 class Clone(MutatesSession, PiCommand):
     pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentCommsSummarizeCompaction(PiCommand):
+    response_payload = SelectedSummaryData
+    strict_response = True
+    version: int
+    operation_id: str = field(metadata={"wire_name": "operationId"})
+    witness: NativeWitness
+    selected: SelectedModel
+    settings: SelectedSettings
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentCommsPrepareCompaction(PiCommand):
+    response_payload = SelectedProbeData
+    strict_response = True
+    version: int = 1
+    dry_run: bool = field(default=True, metadata={"wire_name": "dryRun"})
+    witness: NativeWitness
+    selected: SelectedModel
+    settings: SelectedSettings
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentCommsCompactionSettings(PiCommand):
+    response_payload = CompactionSettingsData
+    strict_response = True
+    version: int = 1
+    session_id: str = field(metadata={"wire_name": "sessionId"})
+    session_file: str = field(metadata={"wire_name": "sessionFile"})
+    selected: SelectedModel
+    context_tokens: int = field(metadata={"wire_name": "contextTokens"})

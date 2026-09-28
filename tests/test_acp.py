@@ -25,6 +25,7 @@ from agent_comms.backend import NATIVE_INPUT_CAPABILITY
 from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.manual_compaction_bridge import compact_context
+from agent_comms.pi_payloads import PiUsage
 from agent_comms.runtime import RuntimeProxy, socket_path
 
 
@@ -73,7 +74,7 @@ class TestHandlers:
         def no_owner(*args, **kwargs):
             raise AssertionError("foreign ACP declaration reached owner acquisition")
 
-        monkeypatch.setattr(agent._comms.owners, 'ensure_owner', no_owner)
+        monkeypatch.setattr(agent._comms.owners, "ensure_owner", no_owner)
         for supplied in [[{"name": "untrusted", "command": "bad"}], {"bad": "shape"}]:
             with pytest.raises(RequestError) as new_error:
                 await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=supplied)
@@ -739,7 +740,9 @@ class TestAgentTurn:
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        wired.threads.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path / "proj")))
+        wired.threads.register(
+            Thread(name="peer", tags=frozenset(), worktree=str(tmp_path / "proj"))
+        )
         wired.messaging.send("peer", "proj", "ping parent")
 
         await agent.turns.run_agent_turn("proj", "proj", "coordinate with the child")
@@ -1067,8 +1070,8 @@ class TestAgentTurn:
                 independently_advance(name)
             return original_block(name, **kwargs)
 
-        monkeypatch.setattr(wired.goals, 'update_goal', interpose_pause)
-        monkeypatch.setattr(wired.goals, 'block_goal_after_failed_turn', interpose_block)
+        monkeypatch.setattr(wired.goals, "update_goal", interpose_pause)
+        monkeypatch.setattr(wired.goals, "block_goal_after_failed_turn", interpose_block)
         await agent.turns.run_agent_turn("proj", "proj", "work")
         goal = wired.registry.require("proj").goal
         assert raced
@@ -1122,7 +1125,7 @@ class TestAgentTurn:
                 )
             return original_block(name, **kwargs)
 
-        monkeypatch.setattr(wired.goals, 'block_goal_after_failed_turn', interpose)
+        monkeypatch.setattr(wired.goals, "block_goal_after_failed_turn", interpose)
         await agent.turns.run_agent_turn("proj", "proj", "work")
         current = wired.registry.require("proj").goal
         assert superseding is not None and current is not None
@@ -1243,7 +1246,9 @@ class TestAgentTurn:
             yield ae.ToolEnd(id="goal", name="comms_goal", ok=True)
             yield ae.ProviderUsage(
                 response_id="1",
-                usage={"input": 5, "output": 2, "totalTokens": 7, "cost": {"total": 0.01}},
+                usage=PiUsage.from_wire(
+                    {"input": 5, "output": 2, "totalTokens": 7, "cost": {"total": 0.01}}
+                ),
             )
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="done")
@@ -1277,13 +1282,17 @@ class TestAgentTurn:
         async def events(*args, **kwargs):
             yield ae.ProviderUsage(
                 response_id="1",
-                usage={"input": 3, "output": 1, "totalTokens": 4, "cost": {"total": 0.01}},
+                usage=PiUsage.from_wire(
+                    {"input": 3, "output": 1, "totalTokens": 4, "cost": {"total": 0.01}}
+                ),
             )
             wired.goals.update_goal("proj", SetGoalAction(text="Finish the release"))
             yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
             yield ae.ProviderUsage(
                 response_id="2",
-                usage={"input": 2, "output": 2, "totalTokens": 4, "cost": {"total": 0.02}},
+                usage=PiUsage.from_wire(
+                    {"input": 2, "output": 2, "totalTokens": 4, "cost": {"total": 0.02}}
+                ),
             )
             if owner_paused:
                 wired.goals.update_goal("proj", PausedGoalAction(), actor=OwnerInvocable)
@@ -1646,7 +1655,7 @@ class TestAgentTurn:
         terminated = []
 
         async def events(*args, **kwargs):
-            yield ae.ProviderUsage(response_id="1", usage={"totalTokens": 5})
+            yield ae.ProviderUsage(response_id="1", usage=PiUsage.from_wire({"totalTokens": 5}))
             await asyncio.Event().wait()
 
         async def terminate(task):
@@ -1730,9 +1739,9 @@ class TestWireProtocol:
                     deadline = _time.monotonic() + 30
                     while True:
                         if b"\n" not in pending:
-                            assert selector.select(max(0, deadline - _time.monotonic())), (
-                                "ACP timeout"
-                            )
+                            assert selector.select(
+                                max(0, deadline - _time.monotonic())
+                            ), "ACP timeout"
                             chunk = os.read(proc.stdout.fileno(), 65536)
                             assert chunk, "ACP closed before response"
                             pending += chunk
@@ -1783,7 +1792,9 @@ class TestCrossClient:
 
         async def flow() -> None:
             await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-            comms.threads.register(Thread(name="cli-agent", tags=frozenset(), worktree=str(tmp_path)))
+            comms.threads.register(
+                Thread(name="cli-agent", tags=frozenset(), worktree=str(tmp_path))
+            )
             comms.messaging.send("cli-agent", "proj", "from the cli side")
 
             class FakeClient:
@@ -2079,7 +2090,9 @@ class TestActivityLayer:
 
         from agent_comms.activity import Activity, ActivityState
 
-        wired.agents.activity.emit(Activity(thread="PR111", state=ActivityState.WORKING, detail="old"))
+        wired.agents.activity.emit(
+            Activity(thread="PR111", state=ActivityState.WORKING, detail="old")
+        )
         # Tamper the timestamp to be stale.
         import json as _json
 
@@ -2192,7 +2205,9 @@ class TestFailureFeedback:
         reply_target = "#team" if channel else human.name
         origin = Message(human.name, origin_target, "please help", MessageType.INFO)
         routed: list = []
-        monkeypatch.setattr(wired.transcripts, 'record_turn_routing', lambda *args: routed.append(args))
+        monkeypatch.setattr(
+            wired.transcripts, "record_turn_routing", lambda *args: routed.append(args)
+        )
 
         async def events(*args, **kwargs):
             yield ae.Chunk(text="unfinished secret answer")
@@ -2205,7 +2220,9 @@ class TestFailureFeedback:
         )
 
         history = (
-            wired.views.channel_history(reply_target) if channel else wired.views.dm_history("proj", human.name)
+            wired.views.channel_history(reply_target)
+            if channel
+            else wired.views.dm_history("proj", human.name)
         )
         assert len(history) == 1
         assert history[0].notice is True
@@ -2226,7 +2243,9 @@ class TestFailureFeedback:
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
         origin = Message(human.name, "proj", "please help", MessageType.INFO)
         routed: list = []
-        monkeypatch.setattr(wired.transcripts, 'record_turn_routing', lambda *args: routed.append(args))
+        monkeypatch.setattr(
+            wired.transcripts, "record_turn_routing", lambda *args: routed.append(args)
+        )
 
         async def events(*args, **kwargs):
             yield ae.Chunk(text="unfinished secret answer")
@@ -2253,7 +2272,9 @@ class TestFailureFeedback:
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
         origin = Message(human.name, "proj", "please help", MessageType.INFO)
         routed: list = []
-        monkeypatch.setattr(wired.transcripts, 'record_turn_routing', lambda *args: routed.append(args))
+        monkeypatch.setattr(
+            wired.transcripts, "record_turn_routing", lambda *args: routed.append(args)
+        )
 
         async def events(*args, **kwargs):
             yield ae.Chunk(text="complete answer")
@@ -2348,7 +2369,8 @@ class TestFailureFeedback:
             timeout=9,
         )
         assert all(
-            "foreign earlier turn" not in message.body for message in wired.views.channel_history("#team")
+            "foreign earlier turn" not in message.body
+            for message in wired.views.channel_history("#team")
         )
 
     async def test_failed_turn_notices_unique_reply_and_origin_targets(
@@ -2457,7 +2479,9 @@ class TestLiveConfigSync:
             assert after_execution.wait_for[0].name == "renamed-child"
             await assert_snapshot_update()
 
-            wired.goals.update_goal("proj", ClearGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
+            wired.goals.update_goal(
+                "proj", ClearGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+            )
             await assert_snapshot_update()
         finally:
             await agent.shutdown()
@@ -2476,7 +2500,9 @@ class TestQueueControl:
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        wired.threads.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path / "proj")))
+        wired.threads.register(
+            Thread(name="peer", tags=frozenset(), worktree=str(tmp_path / "proj"))
+        )
         agent.inputs.backend_inboxes["proj"] = __import__("asyncio").Queue()
         agent.inputs.queued_inputs["proj"] = {}
         response = await agent.prompt(

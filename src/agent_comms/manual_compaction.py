@@ -558,12 +558,12 @@ class ManualCompaction:
         data = response.data
         if (
             response.success is not True
-            or not isinstance(data, dict)
-            or data.get("sessionFile") != str(self.session)
-            or data.get("sessionId") != state["sessionId"]
-            or not isinstance(data.get("model"), dict)
-            or data["model"].get("provider") != self.provider
-            or data["model"].get("id") != self.model
+            or data is None
+            or data.session_file != str(self.session)
+            or data.session_id != state["sessionId"]
+            or data.model is None
+            or data.model.provider != self.provider
+            or data.model.id != self.model
         ):
             raise ValueError("Pi reopened another session")
         current = _session_bytes(self.session)
@@ -599,7 +599,7 @@ class ManualCompaction:
             response = self.reader.decode_record(row)
             if not isinstance(response, pi.Response) or response.id != command.id:
                 continue
-            if type(response.success) is not bool or response.command_type is not type(command):
+            if response.success is None or response.command is not type(command):
                 raise ValueError("Invalid correlated response")
             if self.reader.correlate(response) is not command:
                 raise ValueError("Unowned compaction response")
@@ -609,20 +609,23 @@ class ManualCompaction:
         response = await self._request(
             Compact(
                 id=uuid4().hex,
-                custom_instructions=(self.instructions.strip() or None)
-                if self.instructions
-                else None,
+                custom_instructions=(
+                    (self.instructions.strip() or None) if self.instructions else None
+                ),
             )
         )
         if not response.success:
             self.result = {"ok": False, "error": _public_pi_compaction_error(response.error)}
             return
         data = response.data
-        if not isinstance(data, dict):
+        if data is None:
             raise ValueError("Invalid compact data")
-        self.result = {"ok": True, "summary": compaction_summary(data.get("summary"))}
-        for key in ("tokensBefore", "estimatedTokensAfter"):
-            count = _count(data.get(key))
+        self.result = {"ok": True, "summary": compaction_summary(data.summary)}
+        for key, count in (
+            ("tokensBefore", data.tokens_before),
+            ("estimatedTokensAfter", data.estimated_tokens_after),
+        ):
+            count = _count(count)
             if count is not None:
                 self.result[key] = count
 

@@ -91,7 +91,7 @@ for line in sys.stdin:
             inject = (
                 isinstance(event, ae.AgentInfo) and event.context_used == 2
                 if inject_during_stats
-                else isinstance(event, ae.ProviderUsage) and event.usage["totalTokens"] == 1
+                else isinstance(event, ae.ProviderUsage) and event.usage.total_tokens == 1
             )
             if inject and not injected:
                 injected = True

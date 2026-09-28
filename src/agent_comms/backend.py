@@ -44,6 +44,7 @@ from .image_inputs import ImageInput
 from .maintenance_barrier import MaintenanceBarrier
 from .native_pi import CAPABILITY as NATIVE_INPUT_CAPABILITY
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
+from .pi_payloads import StateData
 from .pi_rpc import PiRpcChannel
 from .store_files import _store_lock
 from .turn_inputs import InputForwarding
@@ -112,16 +113,16 @@ def _unique_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def _pi_mcp_live_receipt(payload: dict[str, Any], input_id: str) -> dict[str, Any] | None:
+def _pi_mcp_live_receipt(payload: pi.ExtensionUiRequest, input_id: str) -> dict[str, Any] | None:
     """Project only a bounded package claim from the same Pi child and native input.
 
     This is observed live status, never MCP approval or call authorization. A
     same-user Pi extension may mimic an extension UI status; this is not a
     cryptographic attestation of the package against other local extensions.
     """
-    if payload.get("method") != "setStatus" or payload.get("statusKey") != "pi-mcp/live-v1":
+    if payload.method != "setStatus" or payload.status_key != "pi-mcp/live-v1":
         return None
-    text = payload.get("statusText")
+    text = payload.status_text
     if not isinstance(text, str) or len(text) > 8192:
         return None
     try:
@@ -465,20 +466,23 @@ async def discover_thinking_levels(
     levels: list[str] = []
     try:
         assert proc.stdin is not None and proc.stdout is not None
-        proc.stdin.write(
-            (
-                json.dumps({"id": "thinking", "type": "get_available_thinking_levels"}) + "\n"
-            ).encode()
-        )
-        await proc.stdin.drain()
         reader = PiRpcChannel(proc.stdout)
+        proc.stdin.write(reader.encode(commands.GetAvailableThinkingLevels(id="thinking")))
+        await proc.stdin.drain()
         async with asyncio.timeout(10):
             while line := await reader.readline():
                 payload = PiRpcChannel.decode_record(line)
-                if payload.get("id") != "thinking" or payload.get("type") != "response":
+                if (
+                    not isinstance(payload, pi.Response)
+                    or payload.id != "thinking"
+                    or payload.command is not commands.GetAvailableThinkingLevels
+                ):
                     continue
-                values = (payload.get("data") or {}).get("levels", [])
-                levels = [str(value) for value in values if isinstance(value, str)]
+                levels = (
+                    list(payload.data.levels)
+                    if payload.success and payload.data is not None
+                    else []
+                )
                 break
     except (TimeoutError, ValueError, OSError):
         pass
@@ -525,18 +529,22 @@ async def discover_models(
             try:
                 assert proc.stdin is not None and proc.stdout is not None
                 reader = PiRpcChannel(proc.stdout)
-                proc.stdin.write(
-                    (json.dumps({"id": "models", "type": "get_available_models"}) + "\n").encode()
-                )
+                proc.stdin.write(reader.encode(commands.GetAvailableModels(id="models")))
                 await proc.stdin.drain()
                 async with asyncio.timeout(10):
                     while line := await reader.readline():
                         payload = PiRpcChannel.decode_record(line)
-                        if payload.get("id") != "models" or payload.get("type") != "response":
+                        if (
+                            not isinstance(payload, pi.Response)
+                            or payload.id != "models"
+                            or payload.command is not commands.GetAvailableModels
+                        ):
                             continue
-                        for item in (payload.get("data") or {}).get("models", []):
-                            provider = item.get("provider")
-                            model_id = item.get("id")
+                        for item in (
+                            payload.data.models if payload.success and payload.data else ()
+                        ):
+                            provider = item.provider
+                            model_id = item.id
                             if provider and model_id:
                                 values.append(f"{provider}/{model_id}")
                         break
@@ -593,15 +601,6 @@ def _tool_title(name: str, args: Any) -> str:
         detail = None
         action = name.replace("_", " ").title()
     return f"{action} {_short_args(detail, 120)}" if detail else action
-
-
-def _result_text(result: Any, limit: int = 4000) -> str:
-    if not isinstance(result, dict):
-        return ""
-    text = "".join(
-        block.get("text", "") for block in (result.get("content") or []) if isinstance(block, dict)
-    )
-    return text[:limit] + ("…" if len(text) > limit else "")
 
 
 @contextmanager
@@ -743,10 +742,12 @@ class TurnSession:
         model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
         rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
         require_input_id: bool = True,
-        send_boundary: Callable[[str | None, str, str], AbstractContextManager[bool | None]]
-        | None = None,
-        interrupt_boundary: Callable[[str | None, str, str], AbstractContextManager[bool | None]]
-        | None = None,
+        send_boundary: (
+            Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
+        ) = None,
+        interrupt_boundary: (
+            Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
+        ) = None,
         native_start: Callable[[str | None, str, str], bool] | None = None,
         persistent_session: PersistentPiSession | None = None,
         ui_request: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]] | None = None,
@@ -823,9 +824,7 @@ class TurnSession:
         if self.proc.stdin is not None and self.proc.returncode is None:
             abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
             try:
-                self.proc.stdin.write(
-                    (json.dumps({"id": "agent-comms-watchdog", "type": "abort"}) + "\n").encode()
-                )
+                self.proc.stdin.write(self.reader.encode(commands.Abort(id="agent-comms-watchdog")))
                 remaining = max(0.0, abort_deadline - self.loop.time())
                 await asyncio.wait_for(self.proc.stdin.drain(), timeout=remaining)
                 while remaining := max(0.0, abort_deadline - self.loop.time()):
@@ -834,12 +833,12 @@ class TurnSession:
                         break
                     try:
                         abort_payload = PiRpcChannel.decode_record(response)
-                    except json.JSONDecodeError:
+                    except (ValueError, TypeError, UnicodeError):
                         continue
                     abort_payload.observe_abort(self)
                     if (
                         isinstance(abort_payload, pi.Response)
-                        and abort_payload.get("command") == "abort"
+                        and abort_payload.command is commands.Abort
                     ):
                         break
             except (TimeoutError, OSError):
@@ -1030,7 +1029,7 @@ class TurnSession:
         if self.require_input_id and (not self.native_capability_confirmed):
             if (
                 not isinstance(self.payload, pi.Response)
-                or self.payload.command_type is not commands.GetState
+                or self.payload.command is not commands.GetState
             ):
                 self.record_failure(
                     failures.InputIdUnavailable(
@@ -1040,12 +1039,12 @@ class TurnSession:
                 await _terminate_process(self.proc)
                 self.finished = True
                 return
-            self.state = self.payload.get("data")
+            self.state = self.payload.data
             if (
-                self.payload.get("id") != self.preflight_id
-                or self.payload.get("success") is not True
-                or (not isinstance(self.state, dict))
-                or (self.state.get("nativeInputProofCapability") != NATIVE_INPUT_CAPABILITY)
+                self.payload.id != self.preflight_id
+                or self.payload.success is not True
+                or (self.state is None)
+                or (self.state.native_input_proof_capability != NATIVE_INPUT_CAPABILITY)
             ):
                 self.record_failure(
                     failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
@@ -1057,14 +1056,14 @@ class TurnSession:
                 self.reused
                 and self.persistent_session is not None
                 and (
-                    self.state.get("sessionId") != self.persistent_session.session_id
-                    or self.state.get("sessionFile") != self.persistent_session.session_file
+                    self.state.session_id != self.persistent_session.session_id
+                    or self.state.session_file != self.persistent_session.session_file
                 )
                 or (
                     self.validated_session_id is not None
                     and (
-                        self.state.get("sessionId") != self.validated_session_id
-                        or self.state.get("sessionFile") != self.session_file
+                        self.state.session_id != self.validated_session_id
+                        or self.state.session_file != self.session_file
                     )
                 )
             ):
@@ -1127,25 +1126,25 @@ class TurnSession:
                 return
 
     async def guard_identity(self) -> AsyncIterator[events.AgentEvent]:
-        self.data = self.payload.get("data")
+        self.data = self.payload.data if isinstance(self.payload, pi.Response) else None
         self.identity_changed = isinstance(self.payload, pi.Response) and issubclass(
-            self.payload.command_type, commands.MutatesSession
+            self.payload.command, commands.MutatesSession
         )
         if (
             isinstance(self.payload, pi.Response)
-            and self.payload.get("success")
-            and isinstance(self.data, dict)
-            and issubclass(self.payload.command_type, commands.SessionSnapshot)
+            and self.payload.success
+            and self.data is not None
+            and issubclass(self.payload.command, commands.SessionSnapshot)
             and self.initial_session_observed
         ):
             self.identity_changed = self.identity_changed or bool(
                 self.initial_session_id
-                and self.data.get("sessionId")
-                and (self.data["sessionId"] != self.initial_session_id)
+                and self.data.session_id
+                and (self.data.session_id != self.initial_session_id)
                 or (
                     self.initial_session_file
-                    and self.data.get("sessionFile")
-                    and (self.data["sessionFile"] != self.initial_session_file)
+                    and self.data.session_file
+                    and (self.data.session_file != self.initial_session_file)
                 )
             )
         if self.identity_changed:
@@ -1176,33 +1175,32 @@ class TurnSession:
             and isinstance(self.payload, pi.Response)
             and (self.persistent_session is not None)
         ):
-            self.response_id = self.payload.get("id")
+            self.response_id = self.payload.id
             if isinstance(self.response_id, str) and self.response_id in {
                 self.stats.state_id,
                 self.stats.usage_id,
             }:
-                if self.payload.get("success") is True:
+                if self.payload.success is True:
                     self.stats.responses.add(self.response_id)
                     self.stats.complete = len(self.stats.responses) == 2
-                    if self.response_id == self.stats.state_id and isinstance(self.data, dict):
+                    if self.response_id == self.stats.state_id and isinstance(self.data, StateData):
                         self.stats.busy = (
-                            self.data.get("isStreaming") is True
-                            or self.data.get("isCompacting") is True
+                            self.data.is_streaming is True or self.data.is_compacting is True
                         )
                 else:
                     self.stats.failed = True
         self.initial_prompt_response = (
             isinstance(self.payload, pi.Response)
-            and self.payload.command_type is commands.Prompt
-            and (self.payload.get("id") == self.prompt_id)
+            and self.payload.command is commands.Prompt
+            and (self.payload.id == self.prompt_id)
         )
         if (
             isinstance(self.payload, pi.Response)
-            and self.payload.command_type is commands.Prompt
+            and self.payload.command is commands.Prompt
             and (not self.initial_prompt_response)
         ):
-            self.queued_response_id = self.payload.get("id")
-            if self.payload.get("success") is True and any(
+            self.queued_response_id = self.payload.id
+            if self.payload.success is True and any(
                 item[0] == self.queued_response_id for item in self.inputs.pending
             ):
                 self.inputs.accepted.add(self.queued_response_id)
@@ -1217,10 +1215,10 @@ class TurnSession:
             yield events.SteeringInterrupted()
         elif (
             isinstance(self.payload, pi.Response)
-            and self.payload.command_type is commands.InterruptSteering
-            and (self.payload.get("success") is False)
+            and self.payload.command is commands.InterruptSteering
+            and (self.payload.success is False)
         ):
-            yield events.Error(text=str(self.payload.get("error") or "Send now was refused"))
+            yield events.Error(text=str(self.payload.error or "Send now was refused"))
         if self.retry_recovery_pending and self.payload.retry_progress:
             self.output_started |= self.payload.output_progress
             self.tool_ever_started |= self.payload.tool_progress
@@ -1290,7 +1288,7 @@ class TurnSession:
                     id=self.prompt_id,
                     input_id=self.original_input_id,
                     message=self.task,
-                    images=[image.to_rpc() for image in self.images] if self.images else None,
+                    images=self.images or None,
                 )
             )
             self.stdin_payload = PiRpcChannel.command_bytes(commands.GetState(id=self.preflight_id))
@@ -1387,9 +1385,11 @@ class TurnSession:
                     *self.argv,
                     cwd=self.cwd if Path(self.cwd).is_dir() else None,
                     env=self.env,
-                    stdin=asyncio.subprocess.PIPE
-                    if self.stdin_payload is not None
-                    else asyncio.subprocess.DEVNULL,
+                    stdin=(
+                        asyncio.subprocess.PIPE
+                        if self.stdin_payload is not None
+                        else asyncio.subprocess.DEVNULL
+                    ),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     start_new_session=os.name == "posix",
@@ -1449,11 +1449,15 @@ class TurnSession:
                 _ACTIVE_PROCESSES.pop(self.owner, None)
             self.error_text = await self.stderr_task
             yield events.Done(
-                text="".join(self.text_parts).strip()
-                if self.code == 0
-                else "Image prompt failed; backend diagnostics withheld."
-                if self.images and self.error_text
-                else self.error_text or f"Backend exited with code {self.code}",
+                text=(
+                    "".join(self.text_parts).strip()
+                    if self.code == 0
+                    else (
+                        "Image prompt failed; backend diagnostics withheld."
+                        if self.images and self.error_text
+                        else self.error_text or f"Backend exited with code {self.code}"
+                    )
+                ),
                 ok=self.code == 0,
             )
             self.finished = True
@@ -1672,17 +1676,22 @@ class TurnSession:
             )
         self.terminal_reason_code = self.failure.code if self.failure else None
         yield events.Done(
-            text=self.failure.text
-            if self.failure is not None
-            else "".join(self.text_parts).strip()
-            if self.success
-            else self.error_message
-            or (
-                "Image prompt failed; backend diagnostics withheld."
-                if (self.image_input_sent or self.inherited_image_sensitive) and self.error_text
-                else self.error_text
-            )
-            or f"Backend exited with code {self.proc.returncode}",
+            text=(
+                self.failure.text
+                if self.failure is not None
+                else (
+                    "".join(self.text_parts).strip()
+                    if self.success
+                    else self.error_message
+                    or (
+                        "Image prompt failed; backend diagnostics withheld."
+                        if (self.image_input_sent or self.inherited_image_sensitive)
+                        and self.error_text
+                        else self.error_text
+                    )
+                    or f"Backend exited with code {self.proc.returncode}"
+                )
+            ),
             ok=self.success and (not self.session_identity_uncertain),
             reason_code=self.terminal_reason_code,
             diagnostic={

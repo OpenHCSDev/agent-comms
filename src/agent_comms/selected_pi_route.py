@@ -8,7 +8,6 @@ until its exact bytes receive separate review. No subprocess is started here.
 from __future__ import annotations
 
 import asyncio
-import json
 import secrets
 from collections.abc import Callable
 from contextlib import suppress
@@ -16,24 +15,12 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypeVar
 
 from .backend import PersistentPiSession, _session_revision
-from .field_codec import FieldCodec
 from .owner_compaction_prepare import NativeWitness
 from .owner_compaction_settings import PiCompactionDecision
+from .pi_commands import AgentCommsCompactionSettings, AgentCommsPrepareCompaction, PiCommand
+from .pi_events import Response
 from .pi_rpc import PiRpcChannel
-
-_COMMAND = "agent_comms_prepare_compaction"
-_REASONS = frozenset(
-    {
-        "busy",
-        "queue_nonempty",
-        "compacting",
-        "source_mismatch",
-        "model_mismatch",
-        "settings_mismatch",
-        "split_turn",
-        "unsupported",
-    }
-)
+from .pi_summary_payloads import ProbeDeclinedData, ProbeReadyData, SelectedModel, SelectedSettings
 
 
 class SelectedPiProbeUnknownError(RuntimeError):
@@ -54,89 +41,39 @@ class SelectedPiDryRun:
 
 def _request(
     witness: NativeWitness, selected: dict[str, Any], settings: dict[str, Any]
-) -> dict[str, Any]:
-    if (
-        type(selected) is not dict
-        or set(selected) != {"provider", "modelId", "contextWindow"}
-        or any(
-            type(selected[key]) is not str or not selected[key] for key in ("provider", "modelId")
-        )
-        or type(selected["contextWindow"]) is not int
-        or not 0 < selected["contextWindow"] <= 2**53 - 1
-        or type(settings) is not dict
-        or set(settings) != {"reserveTokens", "keepRecentTokens"}
-        or any(type(settings[key]) is not int for key in settings)
-        or not 0 <= settings["reserveTokens"] <= 10_000_000
-        or not 0 < settings["keepRecentTokens"] <= 10_000_000
-    ):
-        raise ValueError("Exact bounded selected Pi dry-run request required")
-    return {
-        "id": secrets.token_hex(16),
-        "type": _COMMAND,
-        "version": 1,
-        "dryRun": True,
-        "witness": FieldCodec.encode(witness),
-        "selected": dict(selected),
-        "settings": dict(settings),
-    }
-
-
-def _strict_echo(data: dict[str, Any], request: dict[str, Any]) -> bool:
-    witness, selected, settings = (
-        data.get("witness"),
-        data.get("selected"),
-        data.get("settings"),
-    )
-    return (
-        FieldCodec.encode(FieldCodec.decode(NativeWitness, witness)) == request["witness"]
-        and type(selected) is dict
-        and type(settings) is dict
-        and set(selected) == set(request["selected"])
-        and set(settings) == set(request["settings"])
-        and all(type(selected[key]) is str for key in ("provider", "modelId"))
-        and type(selected["contextWindow"]) is int
-        and all(type(value) is int for value in settings.values())
-        and selected == request["selected"]
-        and settings == request["settings"]
+) -> AgentCommsPrepareCompaction:
+    return AgentCommsPrepareCompaction(
+        id=secrets.token_hex(16),
+        witness=witness,
+        selected=SelectedModel.from_wire(selected),
+        settings=SelectedSettings.from_wire(settings),
     )
 
 
-def _read_response(raw: bytes, request: dict[str, Any]) -> SelectedPiDryRun:
+def _read_response(raw: bytes, request: AgentCommsPrepareCompaction) -> SelectedPiDryRun:
     if not raw or len(raw) > 8192 or not raw.endswith(b"\n"):
         raise SelectedPiProbeUnknownError("Incomplete bounded selected Pi response")
     try:
-        response = PiRpcChannel.decode_record(raw).wire
-    except (UnicodeError, ValueError) as error:
+        response = PiRpcChannel.decode_record(raw, strict=True, max_bytes=8192)
+        if (
+            not isinstance(response, Response)
+            or response.id != request.id
+            or response.command is not type(request)
+            or response.success is not True
+        ):
+            raise ValueError("Unmatched selected Pi response")
+        data = response.data
+        if isinstance(data, ProbeReadyData) and (
+            data.witness == request.witness
+            and data.selected == request.selected
+            and data.settings == request.settings
+        ):
+            return SelectedPiDryRun("ready", None, data.route_status)
+        if isinstance(data, ProbeDeclinedData):
+            return SelectedPiDryRun("declined", data.reason, None)
+        raise ValueError("Unrecognized selected Pi dry-run outcome")
+    except (UnicodeError, ValueError, TypeError) as error:
         raise SelectedPiProbeUnknownError("Invalid selected Pi response") from error
-    if (
-        set(response) != {"id", "type", "command", "success", "data"}
-        or response["id"] != request["id"]
-        or response["type"] != "response"
-        or response["command"] != _COMMAND
-        or response["success"] is not True
-        or type(response["data"]) is not dict
-    ):
-        raise SelectedPiProbeUnknownError("Unmatched selected Pi response")
-    data = response["data"]
-    if (
-        set(data) == {"version", "status", "routeStatus", "witness", "selected", "settings"}
-        and type(data["version"]) is int
-        and data["version"] == 1
-        and data["status"] == "ready"
-        and data["routeStatus"] == "UNVERIFIED_NO_AUTH_RESOLUTION"
-        and _strict_echo(data, request)
-    ):
-        return SelectedPiDryRun("ready", None, "UNVERIFIED_NO_AUTH_RESOLUTION")
-    if (
-        set(data) == {"version", "status", "reason"}
-        and type(data["version"]) is int
-        and data["version"] == 1
-        and data["status"] == "declined"
-        and type(data["reason"]) is str
-        and data["reason"] in _REASONS
-    ):
-        return SelectedPiDryRun("declined", data["reason"], None)
-    raise SelectedPiProbeUnknownError("Unrecognized selected Pi dry-run outcome")
 
 
 async def probe_idle_selected_pi(
@@ -171,10 +108,10 @@ _Observation = TypeVar("_Observation")
 
 async def _exchange_observation(
     persistent: PersistentPiSession,
-    request: dict[str, Any],
+    request: PiCommand,
     session_file: str,
     session_id: str,
-    decode: Callable[[bytes, dict[str, Any]], _Observation],
+    decode: Callable[[bytes, PiCommand], _Observation],
     *,
     expected_launcher: str,
     timeout: float,
@@ -201,7 +138,7 @@ async def _exchange_observation(
             raise SelectedPiProbeUnknownError("Selected idle Pi child is unavailable or stale")
         transmitted = False
         try:
-            proc.stdin.write((json.dumps(request, separators=(",", ":")) + "\n").encode())
+            proc.stdin.write(PiRpcChannel.command_bytes(request))
             transmitted = True  # Even a failed drain can have put bytes on the pipe.
             async with asyncio.timeout(timeout):
                 await proc.stdin.drain()
@@ -231,35 +168,29 @@ async def _exchange_observation(
             raise SelectedPiProbeUnknownError("Selected Pi dry-run transport uncertain") from error
 
 
-def _read_settings_response(raw: bytes, request: dict[str, Any]) -> PiCompactionDecision:
+def _read_settings_response(
+    raw: bytes, request: AgentCommsCompactionSettings
+) -> PiCompactionDecision:
     if not raw.endswith(b"\n") or len(raw) > 16384:
         raise SelectedPiProbeUnknownError("Incomplete selected settings response")
-    response = PiRpcChannel.decode_record(raw, strict=True, max_bytes=16384).wire
+    response = PiRpcChannel.decode_record(raw, strict=True, max_bytes=16384)
     if (
-        set(response) != {"id", "type", "command", "success", "data"}
-        or response["id"] != request["id"]
-        or response["type"] != "response"
-        or response["command"] != request["type"]
-        or response["success"] is not True
+        not isinstance(response, Response)
+        or response.id != request.id
+        or response.command is not type(request)
+        or response.success is not True
     ):
         raise SelectedPiProbeUnknownError("Unmatched selected settings response")
-    data = response["data"]
+    data = response.data
     if (
-        type(data) is not dict
-        or set(data)
-        != {"version", "sessionId", "sessionFile", "selected", "contextTokens", "decision"}
-        or type(data["version"]) is not int
-        or data["version"] != 1
-        or type(data["contextTokens"]) is not int
-        or type(data["selected"]) is not dict
-        or type(data["selected"].get("contextWindow")) is not int
-        or any(
-            data[key] != request[key]
-            for key in ("sessionId", "sessionFile", "selected", "contextTokens")
-        )
+        data is None
+        or data.session_id != request.session_id
+        or data.session_file != request.session_file
+        or data.selected != request.selected
+        or data.context_tokens != request.context_tokens
     ):
         raise SelectedPiProbeUnknownError("Selected settings source changed")
-    return PiCompactionDecision.from_native(data["decision"])
+    return data.decision
 
 
 async def read_selected_compaction_decision(
@@ -286,15 +217,13 @@ async def read_selected_compaction_decision(
         or not 0 < context_window <= 2**53 - 1
     ):
         raise ValueError("Exact selected settings source required")
-    request = {
-        "id": secrets.token_hex(16),
-        "type": "agent_comms_compaction_settings",
-        "version": 1,
-        "sessionId": session_id,
-        "sessionFile": session_file,
-        "selected": {"provider": provider, "modelId": model_id, "contextWindow": context_window},
-        "contextTokens": context_tokens,
-    }
+    request = AgentCommsCompactionSettings(
+        id=secrets.token_hex(16),
+        session_id=session_id,
+        session_file=session_file,
+        selected=SelectedModel(provider, model_id, context_window),
+        context_tokens=context_tokens,
+    )
     return await _exchange_observation(
         persistent,
         request,

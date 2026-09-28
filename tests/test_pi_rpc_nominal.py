@@ -52,7 +52,7 @@ def test_new_excursion_declares_both_transitions_without_dispatch_edits():
     assert isinstance(phase, AuditPausePhase)
     assert phase.model_progress() is phase
     assert phase.stalled(True) == ("audit_pause_no_progress", "audit_pause")
-    assert isinstance(phase.on(AuditPauseEnd({}), set()), ModelWaitPhase)
+    assert isinstance(phase.on(AuditPauseEnd(), set()), ModelWaitPhase)
     assert issubclass(AuditPausePhase, StallExempt)
     assert AuditPausePhase in TurnPhase.members_with(StallExempt)
 
@@ -62,13 +62,13 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
         "prompt_acceptance_timeout",
         "prompt_acceptance",
     )
-    phase = ModelWaitPhase().on(pi.CompactionStart({}), {"tool"})
+    phase = ModelWaitPhase().on(pi.CompactionStart(), {"tool"})
     assert isinstance(phase, CompactionPhase) and phase.pauses_input_clock
     # Compaction completion exits even if a tool was already present.
-    assert isinstance(phase.on(pi.CompactionEnd({}), {"tool"}), ModelWaitPhase)
-    phase = ModelWaitPhase().on(pi.ToolExecutionStart({}), {"a", "b"})
-    assert isinstance(phase.on(pi.ToolExecutionEnd({}), {"b"}), ToolRunningPhase)
-    assert isinstance(phase.on(pi.ToolExecutionEnd({}), set()), ModelWaitPhase)
+    assert isinstance(phase.on(pi.CompactionEnd(), {"tool"}), ModelWaitPhase)
+    phase = ModelWaitPhase().on(pi.ToolExecutionStart(), {"a", "b"})
+    assert isinstance(phase.on(pi.ToolExecutionEnd(), {"b"}), ToolRunningPhase)
+    assert isinstance(phase.on(pi.ToolExecutionEnd(), set()), ModelWaitPhase)
 
 
 @pytest.mark.parametrize(
@@ -174,7 +174,7 @@ async def test_fragmented_cancelled_line_remains_intact_in_the_only_reader():
     stream.feed_data(b'"}\n')
     event = PiRpcChannel.decode_record(await channel.readline(max_bytes=256), strict=True)
     assert isinstance(event, pi.UnknownPiEvent)
-    assert event.wire["data"] == "x" * 50
+    assert event.payload["data"] == "x" * 50
 
 
 @pytest.mark.parametrize(
