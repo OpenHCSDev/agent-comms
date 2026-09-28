@@ -1,0 +1,13 @@
+{
+  "observations": 20,
+  "roots": [
+    "/var/tmp/agent-comms-live-20260927-wzjtqhza"
+  ],
+  "seconds": 0.0040286250005010515,
+  "service_constructions": 0,
+  "registry_constructions": 0,
+  "registry_decodes": 0,
+  "bus_locks": 0,
+  "live_writes": 0,
+  "provider_calls": 0
+}

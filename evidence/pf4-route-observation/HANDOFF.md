@@ -1,7 +1,7 @@
 # PF4 route observation — urgent live UI blocker
 
 Owner Pascal. Stable core code `cd034e6`, branch `codex/pf4-route-observation-20260928`, tree `/home/ts/wt/comms-pf4-route-observation-20260928`, base parent `67dcb3c` (notification feedback + merged PF1/PF5).
-Paired Toad code `ff106b8`, same branch name in `/home/ts/wt/toad-pf4-route-observation-20260928`, base `9523b45` (Toad PR102).
+Paired Toad code `04fb611` (PF4 `ff106b8` plus screen lifecycle guard correction), same branch name in `/home/ts/wt/toad-pf4-route-observation-20260928`, base `9523b45` (Toad PR102).
 
 ## Actual finding
 
@@ -25,7 +25,7 @@ Exactly one new caller: `ActiveRoute.observe_root` accesses `_private_marker_unl
 ## Candidate paths
 
 - Core: `dist/agent_comms-0.1.0-py3-none-any.whl` (cd034e6).
-- Toad: `/home/ts/wt/toad-pf4-route-observation-20260928/dist/batrachian_toad-0.6.20-py3-none-any.whl` (ff106b8).
+- Toad: `/home/ts/wt/toad-pf4-route-observation-20260928/dist/batrachian_toad-0.6.20-py3-none-any.whl` (04fb611).
 
 Both handed to parent; deployment, live UI, current user process and serial integration remain parent-owned.
 
@@ -37,3 +37,13 @@ Both handed to parent; deployment, live UI, current user process and serial inte
 - No NRA rerun or CI wait. Original NRA attempt in PR102 used incompatible tool Python for existing Toad syntax; not an acceptance gate.
 
 Core command: `PYTHONPATH=src TMPDIR=$PWD/.artifacts/tests timeout 60 /home/ts/wt/comms-refactor-integration-20260927/.venv/bin/python -m pytest -o addopts='' -n 0 tests/test_route_observation.py`; existing route selection uses `tests/test_private_nk_entrypoint.py -k 'route or default'` with same options.
+
+## Final receipts
+
+Draft core PR216 https://github.com/OpenHCSDev/agent-comms/pull/216; paired Toad PR103 https://github.com/OpenHCSDev/toad/pull/103.
+
+`actual-route-read.json`: 20 observations of actual default live route with Comms/Registration constructors, RegistryDocument decoder and WireLog.locked patched to fail if called: all20 succeeded; each call count0, no live writes/provider calls. Reported0.004s is descriptive, not a threshold.
+
+Toad many-tab pilot first exposed new PR102 observation timer reading app.screen while stack was empty. `04fb611` uses existing Textual Screen.is_active (already handles empty stack) in observation/notification/history guards. Rerun PASS:10mountedtabs/40observations, hidden sidebars0, return catches up. Production core unchanged. Parent told immediately; candidate wheel rebuilt.
+
+Parent actual installed configured-provider/UI acceptance is still separate; source/local receipts do not claim live send success or explain prior UNKNOWN definitively.
