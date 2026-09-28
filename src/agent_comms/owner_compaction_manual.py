@@ -132,6 +132,9 @@ async def compact_manual_owner(
             tokens_before=prepared.tokens_before,
         )
         if result.summary is None:
+            attempt = bridge.journal.selected_summary(result.operation_id)
+            if attempt.state.reservable_commit:
+                bridge.journal.refuse_selected_summary(result.operation_id, result.decline_reason)
             raise ValueError(f"Selected Pi declined manual summary ({result.decline_reason})")
         current, current_generation = runner.comms.registry.live_owner_with_generation(thread_name)
         if current != owner or current_generation != generation or await decision() != settings:
