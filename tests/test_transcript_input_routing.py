@@ -4,10 +4,11 @@ import json
 
 import pytest
 
-from agent_comms import Thread, TurnRouting, wire
 from agent_comms import agent_events as ae
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
-from agent_comms.declarations import ScheduledTurn
+from agent_comms.routing import ScheduledTurn, TurnRouting
+from agent_comms.threads import Thread
 
 
 def append_input(path, native_id, text, *, role="user"):

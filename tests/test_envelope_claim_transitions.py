@@ -6,7 +6,6 @@ from dataclasses import asdict, replace
 
 import pytest
 
-from agent_comms.declarations import Message, MessageType
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
     ClaimOwner,
@@ -20,6 +19,7 @@ from agent_comms.envelope_claim_transitions import (
     parse_complete_transition_line,
     project_verified_transitions,
 )
+from agent_comms.messages import Message, MessageType
 
 G1 = "a" * 32
 G2 = "b" * 32

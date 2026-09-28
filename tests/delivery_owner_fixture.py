@@ -4,9 +4,10 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 
-from agent_comms import Thread, wire
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.threads import Thread
 
 
 @asynccontextmanager

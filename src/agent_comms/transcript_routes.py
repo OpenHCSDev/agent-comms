@@ -8,7 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .declarations import RelationViolationError, TurnRouting, _store_lock, file_revision
+from .errors import RelationViolationError
+from .routing import TurnRouting
+from .store_files import _store_lock, file_revision
 
 
 @dataclass(frozen=True, slots=True)

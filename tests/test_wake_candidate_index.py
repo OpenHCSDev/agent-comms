@@ -19,8 +19,9 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordination import canonical_publication_key
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
 from agent_comms.coordination_store import MutationStore
-from agent_comms.declarations import RelationViolationError, Thread
+from agent_comms.errors import RelationViolationError
 from agent_comms.operations import Comms
+from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import (
     ProjectionRebuildRequiredError,
     ProjectionUnavailableError,

@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.bus_publication import stable_thread_lookup
-from agent_comms.declarations import Thread
 from agent_comms.operations import Comms
+from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import (
     CandidateCatchUp,
     CandidatePage,

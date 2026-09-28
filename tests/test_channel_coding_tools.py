@@ -8,7 +8,6 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms.channel_coding_tools import CodingCall, CodingTool, CodingToolSocket
-from agent_comms.declarations import Thread
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
     ClaimTransitionError,
@@ -16,6 +15,7 @@ from agent_comms.envelope_claim_transitions import (
     normalize_existing_file,
 )
 from agent_comms.operations import Comms
+from agent_comms.threads import Thread
 
 
 def test_create_claim_competes_before_file_exists_and_releases_without_creation():

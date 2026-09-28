@@ -39,12 +39,13 @@ from agent_comms.coordination_store import (
     PublicationActivationBlocked,
     StaleFence,
 )
-from agent_comms.declarations import MessageBus, Thread
 from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, NativeTurnResult
 from agent_comms.native_source_cursor import read_current_native_cursor
 from agent_comms.operations import Comms
 from agent_comms.registration import Registration
+from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 from agent_comms.wake_injection import render_selected_wake_frame
 from agent_comms.wake_policy import PassiveWake
@@ -1913,7 +1914,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
 
 
 async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monkeypatch):
-    from agent_comms.declarations import Goal
+    from agent_comms.goals import Goal
 
     root, root_id, comms, _initial, _people = _root(tmp_path)
     owner = comms.registry.require("beta")

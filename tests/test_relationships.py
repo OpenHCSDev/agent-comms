@@ -3,7 +3,9 @@ from concurrent.futures import ProcessPoolExecutor
 
 import pytest
 
-from agent_comms import Comms, Thread, ThreadSort
+from agent_comms import Comms
+from agent_comms.display_order import ThreadSort
+from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 
 

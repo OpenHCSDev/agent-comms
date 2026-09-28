@@ -2,7 +2,6 @@
 
 import pytest
 
-from agent_comms import Thread
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
@@ -12,6 +11,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.operations import wire
+from agent_comms.threads import Thread
 from agent_comms.tools import TOOLS
 
 
@@ -55,7 +55,7 @@ def test_model_cannot_pause_and_unattributed_legacy_pause_preserves_owner_stop(
             PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
             actor=ModelInvocable,
         )
-    from agent_comms import Goal
+    from agent_comms.goals import Goal
 
     saved = Goal.from_wire({"text": "saved objective", "id": "saved", "status": "paused"})
     assert saved.state.source.protects_pause

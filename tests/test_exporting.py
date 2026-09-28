@@ -6,10 +6,11 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import AnyOfMatch, SavedView, Thread, ViewKind, ViewPredicate, wire
+from agent_comms import wire
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
+from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.cli import main
-from agent_comms.declarations import Message, MessageType, RelationViolationError
+from agent_comms.errors import RelationViolationError
 from agent_comms.exporting import (
     ChannelScope,
     DmScope,
@@ -24,6 +25,8 @@ from agent_comms.exporting import (
     WireExportLimit,
     WireTranscriptExporter,
 )
+from agent_comms.messages import Message, MessageType
+from agent_comms.threads import Thread
 
 
 def message(sequence: int, body: str, *, timestamp: float | None = None) -> Message:

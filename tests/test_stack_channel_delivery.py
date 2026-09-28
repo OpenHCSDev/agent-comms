@@ -10,10 +10,11 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.input_drain import InputDrain
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize(

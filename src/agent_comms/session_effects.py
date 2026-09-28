@@ -5,8 +5,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
-from .declarations import Thread
 from .runtime import RuntimeProxy
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .input_drain import InputDrain

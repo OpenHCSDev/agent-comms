@@ -12,11 +12,11 @@ from dataclasses import dataclass
 
 from .backend import PersistentPiSession
 from .compaction_journal import CompactionOperation, SelectedSummaryAttempt
-from .declarations import Thread
 from .owner_compaction_commit import CompactionSource, OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import NativeSummary, OwnerSummaryOutcome
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
+from .threads import Thread
 
 
 @dataclass(frozen=True)

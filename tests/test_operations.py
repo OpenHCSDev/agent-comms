@@ -6,18 +6,14 @@ import sys
 
 import pytest
 
-from agent_comms import (
-    ActivityState,
-    ForkSpec,
-    MessageType,
-    RelationViolationError,
-    Thread,
-    UnregisteredThreadError,
-    wire,
-)
+from agent_comms import ForkSpec, wire
+from agent_comms.activity import ActivityState
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
-from agent_comms.declarations import _store_lock
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.messages import MessageType
 from agent_comms.operations import _owner_launch_proof
+from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
 
 
 class TestMessaging:
@@ -363,7 +359,7 @@ class TestThreadOps:
     def test_stop_waits_for_owner_socket_without_holding_wire_lock(self, wired, monkeypatch):
         import threading
 
-        from agent_comms.operations import _store_lock
+        from agent_comms.store_files import _store_lock
 
         wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
         signals = []
@@ -606,7 +602,7 @@ class TestThreadOps:
     def test_start_waits_outside_wire_lock_and_revalidates_owner(self, wired, monkeypatch):
         import threading
 
-        from agent_comms.operations import _store_lock
+        from agent_comms.store_files import _store_lock
 
         wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
         obtained = threading.Event()
@@ -725,7 +721,7 @@ class TestThreadOps:
     def test_restart_refuses_turn_started_during_owner_proof(self, wired, monkeypatch):
         from dataclasses import replace
 
-        from agent_comms.declarations import ActiveTurn
+        from agent_comms.turn_lease import ActiveTurn
 
         wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
         signals = []
@@ -809,7 +805,7 @@ class TestThreadOps:
         import threading
         from dataclasses import replace
 
-        from agent_comms.operations import _store_lock
+        from agent_comms.store_files import _store_lock
 
         wired.register(Thread(name="restart-a", tags=frozenset(), worktree="/tmp", pid=987654))
         signals = []
@@ -1522,7 +1518,7 @@ class TestReDeclarationPreservesProvenance:
         assert captured["env"]["PI_AGENT_TAGS"] == "ci"
 
     def test_current_thread_reads_agent_comms_tags(self, monkeypatch, tmp_path):
-        from agent_comms import current_thread
+        from agent_comms.threads import current_thread
 
         monkeypatch.delenv("PI_AGENT_ID", raising=False)
         monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")

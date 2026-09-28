@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.declarations import RelationViolationError
+from agent_comms.errors import RelationViolationError
 from agent_comms.input_disposition import AcpDeliveryCursors, InputDispositions
 
 
@@ -88,8 +88,8 @@ def test_legacy_cursor_does_not_authorize_old_inputs(tmp_path: Path) -> None:
 def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path: Path) -> None:
     import os
 
-    from agent_comms import Thread
     from agent_comms.operations import wire
+    from agent_comms.threads import Thread
 
     comms = wire(tmp_path)
     comms.register(Thread(name="kid", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))

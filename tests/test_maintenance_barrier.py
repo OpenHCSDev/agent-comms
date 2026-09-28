@@ -10,10 +10,12 @@ from pathlib import Path
 import pytest
 
 from agent_comms.backend import _maintenance_send_boundary, stream_agent_events
-from agent_comms.declarations import RelationViolationError, Thread, _store_lock
+from agent_comms.errors import RelationViolationError
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.operations import Comms
 from agent_comms.registration import Registration
+from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
 from maintenance_control_fixture import FixtureMaintenanceControl
 
 

@@ -17,11 +17,12 @@ from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import MutationStore
-from agent_comms.declarations import RelationViolationError, Thread
+from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_source_cursor import read_current_native_cursor
 from agent_comms.operations import Comms
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
+from agent_comms.threads import Thread
 from test_native_prompt_binding import _fake_model
 
 
@@ -40,7 +41,9 @@ def _fresh(tmp_path: Path, count: int = 2):
     comms.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
     for n in range(count):
         name = "alpha" if n == 0 else f"other{n:03}"
-        comms.register(Thread(name, frozenset({"team"}), str(tmp_path), pid=os.getpid()))
+        comms.register(
+            Thread(name, frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="fake/fake")
+        )
     root_id = comms.initialize_private_initial_protocol()
     comms.initialize_private_claim_protocol()
     install_private_bus_checkpoint(comms.bus)  # Strictly fresh-root opt-in.

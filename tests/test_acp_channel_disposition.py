@@ -219,7 +219,7 @@ asyncio.run(run())
 async def test_channel_batch_never_credits_omitted_or_duplicate_sequences(
     tmp_path, monkeypatch, mismatch
 ):
-    from agent_comms.declarations import ScheduledTurn
+    from agent_comms.routing import ScheduledTurn
 
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)

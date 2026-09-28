@@ -24,21 +24,14 @@ from agent_comms.coordination import (
 )
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
 from agent_comms.coordination_store import AlreadyApplied, Applied, IdentityConflict, MutationStore
-from agent_comms.declarations import (
-    Message,
-    MessageBus,
-    MessageType,
-    RelationViolationError,
-    Thread,
-    ThreadRole,
-)
-from agent_comms.exporting import (
-    ChannelScope,
-    FullLimit,
-    JsonlFormat,
-)
+from agent_comms.errors import RelationViolationError
+from agent_comms.exporting import ChannelScope, FullLimit, JsonlFormat
+from agent_comms.message_bus import MessageBus
+from agent_comms.messages import Message, MessageType
 from agent_comms.operations import Comms
+from agent_comms.thread_identity import ThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus
+from agent_comms.threads import Thread
 from agent_comms.wake_policy import BoundedTriageWake, FullWake
 
 pytestmark = pytest.mark.skipif(

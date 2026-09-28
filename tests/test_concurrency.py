@@ -11,9 +11,11 @@ from typing import Any
 
 import pytest
 
-from agent_comms import ActivityState, Thread, UnregisteredThreadError, wire
+from agent_comms import wire
+from agent_comms.activity import ActivityState
 from agent_comms.bus_publication import stable_thread_lookup
-from agent_comms.declarations import RelationViolationError
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.threads import Thread
 
 
 def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
@@ -30,9 +32,9 @@ def _register_thread(root: str, name: str, start: Event) -> None:
 
 def _register_thread_same_tick(root: str, name: str, start: Event) -> None:
     start.wait()
-    from agent_comms import declarations
+    from agent_comms import store_files
 
-    declarations.time.time = lambda: 1_700_000_000.0
+    store_files.time.time = lambda: 1_700_000_000.0
     wire(root).register(Thread(name=name, tags=frozenset({"worker"}), worktree="/tmp"))
 
 
@@ -91,7 +93,7 @@ class TestConcurrentWire:
     ) -> None:
         # Windows 3.11 can return the same clock tick to separate spawned
         # workers. Explicit caller-supplied duplicate identities still fail.
-        monkeypatch.setattr("agent_comms.declarations.time.time", lambda: 1_700_000_000.0)
+        monkeypatch.setattr("agent_comms.store_files.time.time", lambda: 1_700_000_000.0)
         root = tmp_path / "wire"
         first = Thread(name="first", tags=frozenset(), worktree="/tmp")
         second = Thread(name="second", tags=frozenset(), worktree="/tmp")

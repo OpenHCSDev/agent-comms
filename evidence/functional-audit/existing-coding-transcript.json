@@ -1,0 +1,45 @@
+{
+  "source_receipt": "evidence/channel-coding/installed-coding-20260928-result.json",
+  "source_root": "/var/tmp/agent-comms-coding-check-qm1irooo",
+  "calls": [
+    {
+      "name": "read",
+      "id": "call_oE8pz2tzF4f6V9LL63SPpVYP|fc_005ae1690b605aa2016ab9b10e44dc87d28b90152b4ab48680"
+    },
+    {
+      "name": "edit",
+      "id": "call_aWVu5eN6EtOjN4k4crzuWNtN|fc_005ae1690b605aa2016ab9b10ff2c487d2a6400557abffa446"
+    },
+    {
+      "name": "write",
+      "id": "call_k3Q7w6bL88jSKNzKugPxmbBf|fc_005ae1690b605aa2016ab9b11226c887d2b9341ec423197dee"
+    },
+    {
+      "name": "bash",
+      "id": "call_gYugewsg9MdJPNJyrTdQN4mc|fc_005ae1690b605aa2016ab9b1142e6c87d2b6062805e2595513"
+    }
+  ],
+  "results": [
+    {
+      "name": "read",
+      "id": "call_oE8pz2tzF4f6V9LL63SPpVYP|fc_005ae1690b605aa2016ab9b10e44dc87d28b90152b4ab48680",
+      "is_error": false
+    },
+    {
+      "name": "edit",
+      "id": "call_aWVu5eN6EtOjN4k4crzuWNtN|fc_005ae1690b605aa2016ab9b10ff2c487d2a6400557abffa446",
+      "is_error": false
+    },
+    {
+      "name": "write",
+      "id": "call_k3Q7w6bL88jSKNzKugPxmbBf|fc_005ae1690b605aa2016ab9b11226c887d2b9341ec423197dee",
+      "is_error": false
+    },
+    {
+      "name": "bash",
+      "id": "call_gYugewsg9MdJPNJyrTdQN4mc|fc_005ae1690b605aa2016ab9b1142e6c87d2b6062805e2595513",
+      "is_error": false
+    }
+  ],
+  "required_tools_present": true
+}

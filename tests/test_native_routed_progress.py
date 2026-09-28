@@ -11,9 +11,10 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
-from agent_comms.declarations import Message, MessageType
+from agent_comms.messages import Message, MessageType
+from agent_comms.threads import Thread
 
 
 async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch):

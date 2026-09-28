@@ -14,9 +14,9 @@ from typing import Any
 
 from acp.schema import AgentMessageChunk, TextContentBlock, UserMessageChunk
 
-from .declarations import MessageRoute
 from .declared_family import DeclaredFamily
 from .operations import Comms, TranscriptEvent
+from .routing import MessageRoute
 from .runtime import RuntimeServer
 
 

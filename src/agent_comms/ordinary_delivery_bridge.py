@@ -23,10 +23,7 @@ from .coordination_store import IdentityConflict, MutationStore
 if TYPE_CHECKING:
     from .operations import Comms
 
-from .private_sidecar import (
-    create_sidecar_file,
-    sidecar_connection,
-)
+from .private_sidecar import create_sidecar_file, sidecar_connection
 
 _DDL = (
     (

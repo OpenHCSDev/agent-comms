@@ -53,36 +53,26 @@ from .coordination_store import (
     PublicationActivationBlocked,
     StaleFence,
 )
-from .declarations import (
-    MessageBus,
-    MessageRoute,
-    Thread,
-    _store_lock,
-)
 from .input_drain import InputDrain
 from .input_effects import InputEffects
+from .message_bus import MessageBus
 from .native_source_cursor import advance_current_native_cursor, read_current_native_cursor
 from .operations import Comms, wire
-from .runtime import (
-    UNBOUND_CONTROLLER,
-    RuntimeProxy,
-    RuntimeServer,
-    SocketClient,
-    socket_path,
-)
+from .routing import MessageRoute
+from .runtime import UNBOUND_CONTROLLER, RuntimeProxy, RuntimeServer, SocketClient, socket_path
 from .selected_write_plan import PlannedWrite, SelectedWritePlans
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
+from .store_files import _store_lock
+from .threads import Thread
 from .transcript_updates import TranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_runner import TurnRunner
 
 if TYPE_CHECKING:
-    from .selected_tool_broker import SelectedToolIntent  # type: ignore[import-not-found]
+    from .selected_tool_broker import SelectedToolIntent
 
-from .turn_runner import (
-    RELAY_PREFIX,
-)
+from .turn_runner import RELAY_PREFIX
 
 
 class CommsAgent(SessionEffects, InputEffects, TurnEffects):

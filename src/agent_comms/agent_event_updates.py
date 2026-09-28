@@ -23,7 +23,7 @@ from .tool_results import tool_result_content
 
 if TYPE_CHECKING:
     from .acp import CommsAgent
-    from .declarations import MessageRoute
+    from .routing import MessageRoute
 
 
 class AcpEventConsumer(MroDispatch):

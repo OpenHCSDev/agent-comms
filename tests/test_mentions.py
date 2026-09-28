@@ -1,17 +1,12 @@
 import pytest
 
-from agent_comms import (
-    MentionCandidate,
-    MentionQuery,
-    Message,
-    MessageType,
-    Thread,
-    ThreadMention,
-    ThreadRole,
-    wire,
-)
-from agent_comms.declarations import ScheduledTurn
+from agent_comms import MentionQuery, wire
+from agent_comms.mentions import MentionCandidate, ThreadMention
+from agent_comms.messages import Message, MessageType
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
+from agent_comms.routing import ScheduledTurn
+from agent_comms.thread_identity import ThreadRole
+from agent_comms.threads import Thread
 
 
 def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
@@ -158,7 +153,7 @@ def test_completion_uses_the_model_syntax_at_the_cursor():
 
 
 def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
-    from agent_comms import MessageType
+    from agent_comms.messages import MessageType
 
     comms = wire(tmp_path)
     for name in ("sender", "owner"):

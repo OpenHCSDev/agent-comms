@@ -8,10 +8,11 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import ForkSpec, Thread
+from agent_comms import ForkSpec
 from agent_comms.acp import CommsAgent
 from agent_comms.operations import wire
 from agent_comms.runtime import RuntimeProxy, _present_cursor_session, socket_path
+from agent_comms.threads import Thread
 
 
 def test_owner_cursor_scope_rebases_only_attachment_session_alias():
@@ -534,7 +535,7 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
 
 
 def test_fork_rejects_duplicate_instead_of_overwriting_owner(tmp_path):
-    from agent_comms import RelationViolationError
+    from agent_comms.errors import RelationViolationError
 
     comms = wire(tmp_path)
     session = tmp_path / "parent.jsonl"

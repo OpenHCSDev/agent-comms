@@ -1,12 +1,7 @@
 import pytest
 
-from agent_comms import Thread
-from agent_comms.tools import (
-    context_tool_catalog,
-    invoke_context_tool,
-    invoke_tool,
-    tool_catalog,
-)
+from agent_comms.threads import Thread
+from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
 
 
 class TestToolCatalog:

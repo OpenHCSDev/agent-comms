@@ -10,8 +10,8 @@ from pathlib import Path
 from threading import RLock
 from weakref import WeakValueDictionary
 
-from .declarations import file_revision
 from .read_ledger import ReadLedger
+from .store_files import file_revision
 
 _INDEX_VERSION = 1
 

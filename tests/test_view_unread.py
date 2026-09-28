@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import wire
+from agent_comms.threads import Thread
 
 
 def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):

@@ -6,18 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import (
-    AnyOfMatch,
-    Message,
-    MessageType,
-    SavedView,
-    Thread,
-    ViewKind,
-    ViewPredicate,
-    wire,
-)
-from agent_comms.declarations import BuiltinChannel, ThreadRole
+from agent_comms import wire
+from agent_comms.channel_targets import BuiltinChannel
+from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.field_codec import FieldCodec
+from agent_comms.messages import Message, MessageType
+from agent_comms.thread_identity import ThreadRole
+from agent_comms.threads import Thread
 
 
 def test_alias_declaration_drives_lookup_delivery_history_and_audience(monkeypatch, tmp_path):
@@ -107,13 +102,13 @@ def test_legacy_markers_without_shown_membership_reset_with_visible_notice(tmp_p
 
 def test_authorities_do_not_import_presentation_or_recover_policy_cases():
     root = Path(__file__).resolve().parents[1] / "src" / "agent_comms"
-    for name in ("declarations.py", "read_basis.py", "read_ledger.py", "response_policy.py"):
+    for name in ("messages.py", "message_bus.py", "read_basis.py", "read_ledger.py", "response_policy.py"):
         tree = ast.parse((root / name).read_text())
         assert not any(
             isinstance(node, ast.ImportFrom) and node.module == "presentation"
             for node in ast.walk(tree)
         )
-    for name in ("declarations.py", "input_disposition.py"):
+    for name in ("messages.py", "message_bus.py", "input_disposition.py"):
         tree = ast.parse((root / name).read_text())
         for node in ast.walk(tree):
             if isinstance(node, ast.Compare):

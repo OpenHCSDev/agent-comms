@@ -16,7 +16,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_publication import publish_pending_local
 from agent_comms.compaction_publication_lease import publication_identity_fence
-from agent_comms.declarations import RelationViolationError
+from agent_comms.errors import RelationViolationError
 from agent_comms.operations import wire
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX durable journal")
@@ -423,8 +423,8 @@ async def test_stalled_local_client_releases_identity_only_after_transport_clean
 def test_cross_process_identity_rebind_is_denied_during_projection_fence(owner, tmp_path):
     _agent, comms, first, _journal, _commit_id = owner
     # Fixture owner has not registered a thread until ACP creates its session.
-    from agent_comms.declarations import Thread
     from agent_comms.registration import Registration
+    from agent_comms.threads import Thread
 
     registry = Registration(comms.registry.store.path)
     registry.register(
@@ -436,7 +436,7 @@ def test_cross_process_identity_rebind_is_denied_during_projection_fence(owner, 
 import sys
 from dataclasses import replace
 from pathlib import Path
-from agent_comms.declarations import RelationViolationError
+from agent_comms.errors import RelationViolationError
 from agent_comms.registration import Registration
 registry=Registration(Path(sys.argv[1]))
 owner=registry.require('project')

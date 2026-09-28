@@ -11,9 +11,11 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms import GoalExecutionState, Thread, wire
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.goal_presentation import GoalExecutionState
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize("restart, review_pending", [(False, False), (True, False), (True, True)])

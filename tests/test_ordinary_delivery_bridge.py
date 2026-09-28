@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Thread
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordination_store import IdentityConflict, MutationStore
@@ -18,6 +17,7 @@ from agent_comms.ordinary_delivery_bridge import (
     read_ordinary_delivery_candidates,
     record_ordinary_delivery,
 )
+from agent_comms.threads import Thread
 
 
 @pytest.fixture

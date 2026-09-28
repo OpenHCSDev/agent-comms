@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Goal, Thread, tools
+from agent_comms import tools
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.agent_events import GoalChanged
 from agent_comms.goal_actions import (
@@ -34,7 +34,9 @@ from agent_comms.goal_states import (
     PausedGoal,
     PauseSource,
 )
+from agent_comms.goals import Goal
 from agent_comms.operations import wire
+from agent_comms.threads import Thread
 
 
 @pytest.fixture

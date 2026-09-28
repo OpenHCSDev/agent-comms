@@ -15,14 +15,6 @@ from pathlib import Path
 from .bus_publication import CommittedInitial, stable_thread_lookup
 from .coordination_cohort import _assert_schema, _receipt_matches
 from .coordination_store import IdentityConflict, MutationStore
-from .declarations import (
-    Message,
-    MessageType,
-    RelationViolationError,
-    Thread,
-    _require_no_private_owner_rename,
-    _store_lock,
-)
 from .envelope_claim_transitions import (
     ClaimConflict,
     ClaimOwner,
@@ -31,7 +23,12 @@ from .envelope_claim_transitions import (
     normalize_claim_file,
     normalize_existing_file,
 )
+from .errors import RelationViolationError
+from .messages import Message, MessageType
 from .operations import Comms
+from .private_registry_guard import _require_no_private_owner_rename
+from .store_files import _store_lock
+from .threads import Thread
 
 
 def verify_selected_wake(

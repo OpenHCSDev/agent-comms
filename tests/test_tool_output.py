@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Thread
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.threads import Thread
 from agent_comms.tool_output import MAX_INLINE_OUTPUT_BYTES, materialize_oversized_output
 from agent_comms.tools import invoke_tool
 

@@ -11,7 +11,9 @@ import time
 import tracemalloc
 from pathlib import Path
 
-from agent_comms import Thread, TurnRouting, wire
+from agent_comms.threads import Thread
+from agent_comms.routing import TurnRouting
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
 
 

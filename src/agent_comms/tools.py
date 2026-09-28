@@ -6,16 +6,9 @@ from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, replace
 from typing import Literal
 
-from .declarations import (
-    ChannelSort,
-    MessageType,
-    SavedView,
-    ThreadSort,
-    ViewKind,
-    ViewMatch,
-    ViewPredicate,
-    is_channel_target,
-)
+from .channel_targets import is_channel_target
+from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
+from .display_order import ChannelSort, ThreadSort
 from .field_codec import FieldCodec
 from .goal_actions import (
     ActiveGoalAction,
@@ -26,6 +19,7 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_states import ActiveGoal, PausedGoal
+from .messages import MessageType
 from .operations import Comms, ForkSpec, TagAction
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,

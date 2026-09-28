@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
 from .command import Command
-from .declarations import Goal, Thread
 from .declared_family import DeclaredFamily
 from .goal_mentions import bind_goal_mentions
 from .goal_pauses import GoalPauseEvent, GoalPauseEvents
@@ -22,6 +21,8 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWait, GoalWaits
+from .goals import Goal
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore

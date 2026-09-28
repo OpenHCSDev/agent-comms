@@ -4,7 +4,6 @@ import json
 
 import pytest
 
-from agent_comms import Thread
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.goal_actions import (
@@ -16,6 +15,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_attempts import UnresolvedAttempt
+from agent_comms.threads import Thread
 from test_acp import TestAgentTurn as GoalFixture
 
 

@@ -27,11 +27,11 @@ from agent_comms.coordination_store import (
     MutationStore,
     PublicationActivationBlocked,
 )
-from agent_comms.declarations import Thread
 from agent_comms.native_pi import NativeContextProof, NativeTurnResult
 from agent_comms.operations import Comms
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux",

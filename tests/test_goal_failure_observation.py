@@ -9,7 +9,6 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import agent_events as ae
-from agent_comms.declarations import Goal, Thread, TurnLeaseFence
 from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_actions import (
     GoalPrecondition,
@@ -26,6 +25,7 @@ from agent_comms.goal_attempts import (
 from agent_comms.goal_failure_observation import FailedTurnObservation, read_failed_turn_projection
 from agent_comms.goal_pauses import GoalPauseEvent
 from agent_comms.goal_states import BlockedGoal, ModelPause, OwnerPause, PausedGoal
+from agent_comms.goals import Goal
 from agent_comms.thread_identity import ThreadIncarnation, TurnIdentity
 from agent_comms.thread_status import (
     ArchivedThreadStatus,
@@ -33,6 +33,8 @@ from agent_comms.thread_status import (
     IdleThreadStatus,
     StoppedThreadStatus,
 )
+from agent_comms.threads import Thread
+from agent_comms.turn_lease import TurnLeaseFence
 
 
 @pytest.fixture

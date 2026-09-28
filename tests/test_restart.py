@@ -8,10 +8,12 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import wire
 from agent_comms.cli import main
-from agent_comms.declarations import ActiveTurn, RelationViolationError
+from agent_comms.errors import RelationViolationError
 from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.threads import Thread
+from agent_comms.turn_lease import ActiveTurn
 
 
 def setup_owners(tmp_path, monkeypatch):
@@ -108,7 +110,7 @@ def test_guarded_restart_fences_post_signal_wake_before_exit(tmp_path, monkeypat
         # and before owner exit; it must fail the persisted admission gate.
         assert comms.registry.status("one") == StoppedThreadStatus()
         with monkeypatch.context() as patch:
-            patch.setattr("agent_comms.declarations.os.getpid", lambda: original.pid)
+            patch.setattr("agent_comms.store_files.os.getpid", lambda: original.pid)
             with pytest.raises(RelationViolationError, match="stopped or unavailable"):
                 comms.registry.claim_local_turn("one", "post-signal-wake")
         observed.append(comms.registry.require("one").active_turn)

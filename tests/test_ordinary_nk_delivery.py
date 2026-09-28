@@ -16,9 +16,11 @@ from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, stable_thread_lookup
 from agent_comms.claim_states import CompletedClaim, IgnoredClaim
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordination_store import MutationStore
-from agent_comms.declarations import Message, MessageType, RelationViolationError, Thread
+from agent_comms.errors import RelationViolationError
 from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.messages import Message, MessageType
 from agent_comms.operations import Comms
+from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from test_coordinated_runtime import _fake_model
 from test_coordinated_runtime import tmp_path as private_root_fixture

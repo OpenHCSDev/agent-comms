@@ -16,14 +16,10 @@ import pytest
 from agent_comms import supervised_cutover
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordination_store import MutationStore
-from agent_comms.declarations import (
-    Goal,
-    GoalExecutionState,
-    GoalWaitTarget,
-    RelationViolationError,
-    Thread,
-)
+from agent_comms.errors import RelationViolationError
+from agent_comms.goal_presentation import GoalExecutionState, GoalWaitTarget
 from agent_comms.goal_waits import GoalWait, GoalWaits
+from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import Comms
 from agent_comms.supervised_cutover import (
@@ -33,6 +29,7 @@ from agent_comms.supervised_cutover import (
     stage_private_participants,
 )
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux cutover")
 

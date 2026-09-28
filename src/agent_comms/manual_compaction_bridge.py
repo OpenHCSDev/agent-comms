@@ -13,7 +13,7 @@ from acp.schema import AgentMessageChunk, TextContentBlock
 
 from . import agent_events as events
 from . import backend, manual_compaction
-from .declarations import ActivityState
+from .activity import ActivityState
 from .transcript_updates import StartedTranscriptUpdate
 
 if TYPE_CHECKING:

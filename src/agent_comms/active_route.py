@@ -18,7 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .declarations import RelationViolationError, _store_lock, unique_wire_object
+from .bus_publication import unique_wire_object
+from .errors import RelationViolationError
+from .store_files import _store_lock
 
 if TYPE_CHECKING:
     from .supervised_cutover import ArchiveReceipt

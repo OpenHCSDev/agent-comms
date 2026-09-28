@@ -18,7 +18,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
-from agent_comms.declarations import ActivityState
+from agent_comms.activity import ActivityState
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import wire
 

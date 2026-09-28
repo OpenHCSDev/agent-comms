@@ -78,9 +78,9 @@ class TestEndToEndLifecycle:
         )
         # A real pi process back-fills its session file into the registry;
         # emulate that here so the parent is forkable.
-        from agent_comms import Thread
         from agent_comms.operations import wire as wire_root
         from agent_comms.runtime import socket_path
+        from agent_comms.threads import Thread
 
         comms = wire_root(root)
         parent = comms.registry.require("PR111")

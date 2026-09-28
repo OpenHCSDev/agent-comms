@@ -6,8 +6,11 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Activity, ActivityState, RelationViolationError, Thread, ThreadView, wire
+from agent_comms import wire
+from agent_comms.activity import Activity, ActivityState
+from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
+from agent_comms.presentation import ThreadView
 from agent_comms.registration import Registration
 from agent_comms.thread_status import (
     ArchivedThreadStatus,
@@ -17,6 +20,7 @@ from agent_comms.thread_status import (
     StoppedThreadStatus,
     ThreadStatus,
 )
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize("status", [member() for member in ThreadStatus.members_with(ThreadStatus)])

@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Thread, wire
-from agent_comms.declarations import ThreadRole
+from agent_comms import wire
+from agent_comms.thread_identity import ThreadRole
+from agent_comms.threads import Thread
 
 
 def _peer(root: Path, name: str) -> Thread:

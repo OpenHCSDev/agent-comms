@@ -26,9 +26,9 @@ from .attempt_states import AttemptState
 from .claim_states import ClaimState
 from .coordination_errors import CoordinationError as CoordinationError
 from .coordination_errors import IntegrityViolationError, SchemaVersionError
-from .declarations import Message, MessageType
 from .execution_states import ExecutionState
 from .field_codec import FieldCodec, projected
+from .messages import Message, MessageType
 from .obligation_states import ResponseState
 from .recovery_states import RecoveryCondition
 from .wake_policy import WakePolicy

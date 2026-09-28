@@ -8,15 +8,16 @@ registry, one ledger — every client (pi, Toad, VS Code, plain CLI) is a thin
 adapter over the same Python core.
 
 Every type owns exactly one concept's semantics. Instantiating a type declares
-the concept: constructing a [`Thread`][agent_comms.Thread] declares a thread;
-constructing a [`Message`][agent_comms.Message] declares a message. Required
+the concept: constructing a [`Thread`][agent_comms.threads.Thread] declares a thread;
+constructing a [`Message`][agent_comms.messages.Message] declares a message. Required
 relations are proved at construction time and at every operation boundary.
 Unknown references raise — the system is fail-closed.
 
 ## Components
 
-- **Core** (`agent_comms.declarations`, `agent_comms.operations`) — zero
-  dependencies. Threads, messages, registry, JSONL bus, shared ledger.
+- **Core** — domain owners in `threads`, `messages`, `channels`, `goals`,
+  `registry_document`, `message_bus` and `shared_ledger`; operations compose them.
+  Import declarations from their defining modules.
 - **CLI** (`agent-comms`) — JSON over stdout; the adapter surface for the pi
   extension and other process-based clients.
 - **ACP server** (`agent-comms-acp`) — Agent Client Protocol agent over
@@ -52,10 +53,11 @@ coding turn.
 
 ```python
 from pathlib import Path
-from agent_comms import Thread, wire
+from agent_comms.operations import wire
+from agent_comms.threads import Thread
 
 comms = wire(Path("~/.agent-comms").expanduser())
-comms.register(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt"))
+comms.register(Thread(name="PR111", tags=frozenset({"base"}), worktree=str(Path("~/wt/pr111").expanduser())))
 comms.broadcast("PR111", "CI is green")
 comms.inbox("fixer")
 ```

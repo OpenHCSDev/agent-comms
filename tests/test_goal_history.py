@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Thread, declarations
+from agent_comms import store_files
 from agent_comms.goal_actions import (
     ClearGoalAction,
     CompletedGoalAction,
@@ -18,6 +18,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.operations import Comms
+from agent_comms.threads import Thread
 from agent_comms.tools import TOOLS
 
 
@@ -96,7 +97,7 @@ def test_existing_goal_seeds_only_current_observed_baseline(tmp_path):
 def test_crash_before_registry_write_does_not_expose_history_intent(tmp_path, monkeypatch):
     comms = _wire(tmp_path)
     current = comms.update_goal("worker", SetGoalAction(text="Keep current"))
-    original_write = declarations._atomic_write_text
+    original_write = store_files._atomic_write_text
 
     def failed_registry_write(path, text, *, fsync_parent=False):
         if path == comms.registry.store.path:
@@ -104,7 +105,7 @@ def test_crash_before_registry_write_does_not_expose_history_intent(tmp_path, mo
         return original_write(path, text, fsync_parent=fsync_parent)
 
     with monkeypatch.context() as patch:
-        patch.setattr(declarations, "_atomic_write_text", failed_registry_write)
+        patch.setattr(store_files, "_atomic_write_text", failed_registry_write)
         with pytest.raises(OSError, match="registry write failure"):
             comms.update_goal(
                 "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=current.id))

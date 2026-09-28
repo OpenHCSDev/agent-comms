@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from agent_comms import Thread, wire
+from agent_comms import wire
 from agent_comms.acp import CommsAgent
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -14,6 +14,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
+from agent_comms.threads import Thread
 from agent_comms.tools import TOOLS
 
 

@@ -14,13 +14,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from .declarations import Goal, Thread, TurnLeaseFence
 from .diagnostics import FailureReason
 from .field_codec import FieldCodec
 from .goal_pauses import GoalPauseEvent
 from .goal_states import BlockedGoal, PausedGoal
+from .goals import Goal
 from .recovery_projection import _preflight
 from .thread_status import ThreadStatus
+from .threads import Thread
+from .turn_lease import TurnLeaseFence
 
 if TYPE_CHECKING:
     from .goal_attempts import Reservation

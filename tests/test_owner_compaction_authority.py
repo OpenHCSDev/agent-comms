@@ -13,12 +13,14 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.declarations import Goal, Thread, _store_lock
+from agent_comms.goals import Goal
 from agent_comms.owner_compaction_process import (
     CompactionTransportUnknownError,
     run_authority_child,
 )
 from agent_comms.registration import Registration
+from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX inherited flock contract")
 
@@ -70,7 +72,7 @@ def test_registry_writers_wait_through_mutation(tmp_path, mutation):
 import fcntl, sys
 from dataclasses import replace
 from pathlib import Path
-from agent_comms.declarations import Goal
+from agent_comms.goals import Goal
 from agent_comms.registration import Registration
 root = Path(sys.argv[1])
 with (root / '.registry.json.lock').open('ab') as lock:
@@ -208,7 +210,7 @@ def test_parent_sigkill_cannot_release_child_authority(tmp_path):
     script = """
 import os, signal, subprocess, sys
 from pathlib import Path
-from agent_comms.declarations import _store_lock
+from agent_comms.store_files import _store_lock
 root = Path(sys.argv[1])
 with _store_lock(root / 'registry.json') as fd:
     child = subprocess.Popen(
@@ -295,7 +297,7 @@ def test_parent_sigkill_during_watchdog_setup_never_execs_native(tmp_path):
     script = """
 import os,signal,sys
 from pathlib import Path
-from agent_comms.declarations import _store_lock
+from agent_comms.store_files import _store_lock
 import agent_comms.owner_compaction_process as transport
 root = Path(sys.argv[1])
 open_pidfd = transport.open_pidfd
@@ -327,7 +329,7 @@ with _store_lock(root / 'registry.json') as fd:
                 """
 from pathlib import Path
 import sys
-from agent_comms.declarations import _store_lock
+from agent_comms.store_files import _store_lock
 with _store_lock(Path(sys.argv[1]) / 'registry.json'):
     print('released')
 """,

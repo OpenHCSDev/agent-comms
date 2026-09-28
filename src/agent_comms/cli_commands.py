@@ -1,7 +1,7 @@
 """CLI commands own their options, boundary decoding and operation bodies.
 
 The parser is a projection of dataclass fields; DeclaredFamily is the sole
-command catalog. Existing CLI spellings belong to the declarations.
+command catalog. Existing CLI spellings belong to the store_files.
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, ClassVar, Self, get_args, get_origin, get_type_hints
 
+from .activity import ActivityState
 from .command import Command
-from .declarations import ActivityState, MessageType
 from .declared_family import DeclaredFamily
 from .exporting import (
     ChannelScope,
@@ -33,6 +33,7 @@ from .exporting import (
     WireExportFormat,
 )
 from .importing import ImportFormat, ImportLimits
+from .messages import MessageType
 from .operations import Comms, ForkSpec
 
 
@@ -414,7 +415,7 @@ class RegisterCliCommand(CliCommand):
     pid: int = option("--pid", default=0)
 
     def apply(self, ctx: Comms) -> Any:
-        from .declarations import Thread
+        from .threads import Thread
 
         thread = Thread(
             name=self.name,

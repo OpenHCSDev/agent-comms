@@ -5,7 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms.declarations import Activity, ActivityLog, ActivityState, _atomic_write_text
+from agent_comms.activity import Activity, ActivityLog, ActivityState
+from agent_comms.store_files import _atomic_write_text
 
 
 def encoded(name="a", detail="before"):
@@ -116,8 +117,8 @@ def test_malformed_complete_record_never_returns_stale_success(tmp_path):
 def test_cached_activity_still_expires_unless_its_thread_is_active(tmp_path):
     log = ActivityLog(tmp_path / "activity.jsonl", stale_after=10)
     log.emit(Activity("a", ActivityState.THINKING, "working", timestamp=100))
-    with patch("agent_comms.declarations.time.time", return_value=105):
+    with patch("agent_comms.store_files.time.time", return_value=105):
         assert log.current("a").state is ActivityState.THINKING
-    with patch("agent_comms.declarations.time.time", return_value=111):
+    with patch("agent_comms.store_files.time.time", return_value=111):
         assert log.current("a").state is ActivityState.IDLE
         assert log.all_current(active=frozenset({"a"}))["a"].state is ActivityState.THINKING

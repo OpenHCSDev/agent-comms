@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Thread
 from agent_comms.agent_loop import Participant
 from agent_comms.operations import wire
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="participant tests exec shell-script stubs; POSIX only"
@@ -138,7 +138,7 @@ class TestParticipantLifecycle:
 
 class TestParticipantActivity:
     async def test_activity_trail_thinking_working_idle(self, tmp_path, monkeypatch):
-        from agent_comms import ActivityState
+        from agent_comms.activity import ActivityState
 
         root = tmp_path / "wire"
         stub = _echo_stub(tmp_path, "on-it")

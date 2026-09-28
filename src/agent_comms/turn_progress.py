@@ -13,27 +13,19 @@ from acp.schema import (
 )
 
 from . import agent_events as events
-from .declarations import (
-    ActivityState,
-    FinishedTurnFence,
-    MessageRoute,
-    MessageType,
-    is_channel_target,
-)
+from .activity import ActivityState
+from .channel_targets import is_channel_target
 from .diagnostics import record_terminal_failure, terminal_failure_reason
-from .goal_actions import (
-    BlockedGoalAction,
-    GoalPrecondition,
-)
-from .goal_attempts import (
-    LaunchPermit,
-    StaleAttempt,
-)
+from .goal_actions import BlockedGoalAction, GoalPrecondition
+from .goal_attempts import LaunchPermit, StaleAttempt
 from .goal_failure_observation import FailedTurnObservation
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
+from .messages import MessageType
 from .mro_dispatch import MroDispatch, handles
 from .operations import Comms
+from .routing import MessageRoute
 from .transcript_updates import SentTranscriptUpdate
+from .turn_lease import FinishedTurnFence
 
 if TYPE_CHECKING:
     from .owned_turn import OwnedTurn

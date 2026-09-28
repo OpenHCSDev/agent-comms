@@ -33,11 +33,13 @@ from agent_comms.coordination_store import (
     StaleRevision,
     prepare_fence_token,
 )
-from agent_comms.declarations import MessageBus, Thread, _store_lock
 from agent_comms.execution_states import CompletedExecution
+from agent_comms.message_bus import MessageBus
 from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
 from agent_comms.operations import Comms
 from agent_comms.registration import Registration
+from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
 from agent_comms.wake import derive_exact_reply_target
 
 # Private bus publication requires POSIX owner/mode ancestry; Windows stat

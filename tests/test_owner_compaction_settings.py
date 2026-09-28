@@ -9,10 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.owner_compaction_settings import (
-    PiSettingsEvidenceError,
-    read_compaction_decision,
-)
+from agent_comms.owner_compaction_settings import PiSettingsEvidenceError, read_compaction_decision
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(

@@ -17,7 +17,8 @@ from math import isfinite
 from pathlib import Path
 from types import MappingProxyType
 
-from .declarations import Message, ScheduledTurn, TurnRouting
+from .messages import Message
+from .routing import ScheduledTurn, TurnRouting
 
 _MAX_TEXT_BYTES = 256 * 1024
 _MAX_CANDIDATES = 256

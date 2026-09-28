@@ -9,10 +9,11 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
+from agent_comms.activity import ActivityState
 from agent_comms.agent_loop import ParticipantEventConsumer
-from agent_comms.declarations import ActivityState, Thread
 from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.pending_requests import PendingRequests
+from agent_comms.threads import Thread
 
 
 async def test_mro_specific_before_shared_and_consumer_override():

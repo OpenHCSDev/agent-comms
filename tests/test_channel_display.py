@@ -9,17 +9,11 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms import (
-    AnyOfMatch,
-    Message,
-    MessageType,
-    SavedView,
-    Thread,
-    ViewKind,
-    ViewPredicate,
-    wire,
-)
 from agent_comms import channels as channel_module
+from agent_comms import wire
+from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
+from agent_comms.messages import Message, MessageType
+from agent_comms.threads import Thread
 
 
 def populated(tmp_path):

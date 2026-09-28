@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Thread, wire
-from agent_comms import declarations as declarations_module
-from agent_comms.declarations import DMDisplayBasis
+from agent_comms import store_files, wire
+from agent_comms.read_basis import DMDisplayBasis
+from agent_comms.threads import Thread
 
 
 def _thread(root: Path, name: str) -> Thread:
@@ -177,7 +177,7 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root
     comms.send("peer", viewer, "painted")
     page = comms.dm_display_page("peer", worktree=str(tmp_path))
     assert page.display_basis is not None
-    original = declarations_module.os.fsync
+    original = store_files.os.fsync
     parent_fd_seen: list[int] = []
 
     def observe(fd: int) -> None:
@@ -186,7 +186,7 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root
             parent_fd_seen.append(fd)
         original(fd)
 
-    monkeypatch.setattr(declarations_module.os, "fsync", observe)
+    monkeypatch.setattr(store_files.os, "fsync", observe)
     comms.mark_dm_view_read(
         "peer",
         worktree=str(tmp_path),
@@ -206,7 +206,7 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root
         original(fd)
 
     marker_before = (tmp_path / "read_ledger.json").read_bytes()
-    monkeypatch.setattr(declarations_module.os, "fsync", deny_parent)
+    monkeypatch.setattr(store_files.os, "fsync", deny_parent)
     with pytest.raises(OSError, match="injected parent fsync denial"):
         comms.mark_dm_view_read(
             "peer",
