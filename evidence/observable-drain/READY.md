@@ -11,4 +11,4 @@ Implementation: a2f57bffc5fcefd55bad760062042c604523db00. Merged current main af
 
 Installed wheel (noneditable): `python -m pytest tests/test_live_drain_failure.py tests/test_private_idle_drain.py tests/test_activity_index.py -q` — **17 passed in 21.96s**, installed.log. This runs the actual SQLite/private ACP drain; the unexpected TypeError regression alone injects an implementation failure to verify fail-loud behavior.
 
-Paired Toad mounted pilot passed on its installed wheel; final T4-main integration is being checked in the paired branch. No provider call or live-root mutation. Core source is ready independently; UI deployment needs paired Toad caller changes. CI deferred.
+Paired Toad PR128: installed wheel on current T4 main 08d464b, two affected mounted pilots passed (45.95s), including native conversation + DM warning, ACP Ready preservation, and recovery. No provider call or live-root mutation. Core source is ready independently; UI deployment needs paired Toad caller changes. CI deferred.
