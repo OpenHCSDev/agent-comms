@@ -21,10 +21,11 @@ async def main():
     verify_native_package(package)
     copied_session = repo / '.artifacts/acp-reopen/session.jsonl'
     assert copied_session.is_file() and copied_session.parent.stat().st_mode & 0o777 == 0o700
-    environment = dict(os.environ)
+    environment = dict(item.decode().split("=", 1) for item in
+                       Path(f"/proc/{sys.argv[1]}/environ").read_bytes().split(b"\0") if item)
     environment.pop('PYTHONPATH', None)
     environment.update(
-        PATH=f'{runtime}:{environment["PATH"]}', PI_OFFLINE='1',
+        PI_OFFLINE='1',
         AGENT_COMMS_ROOT=str(route.root), AGENT_COMMS_MANAGED='1',
         AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=route.wire_root_id,
         AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
@@ -64,7 +65,7 @@ async def main():
         errors = (await stderr).decode(errors='replace')
         (evidence / 'installed-startup-stderr.txt').write_text(errors)
     assert not errors.strip(), errors
-    result = {'normal_automatic_extensions': True, 'get_state': True,
+    result = {'inherited_worker_path': environment['PATH'], 'normal_automatic_extensions': True, 'get_state': True,
               'runtime': str(runtime.parent), 'native_package': str(package),
               'native_capability': reply['data']['nativeInputProofCapability'],
               'model': reply['data']['model']['id'],

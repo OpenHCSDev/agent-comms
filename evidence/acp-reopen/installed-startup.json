@@ -1,4 +1,5 @@
 {
+  "inherited_worker_path": "/usr/local/bin:/usr/bin",
   "normal_automatic_extensions": true,
   "get_state": true,
   "runtime": "/home/ts/.local/share/agent-comms/runtime-acp-extensions-20260928",

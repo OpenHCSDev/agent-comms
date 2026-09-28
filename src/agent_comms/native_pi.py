@@ -60,6 +60,11 @@ def main() -> int:
         raise NativePiUnavailable("Native owner backend requires a configured private route")
     cli = _trusted_package(launch.native_package)
     environment = dict(os.environ)
+    # Global extensions invoke this installation's console tools. Services
+    # need not inherit an activated virtualenv or an interactive shell PATH.
+    environment["PATH"] = os.pathsep.join(
+        (str(Path(sys.executable).parent), environment.get("PATH", os.defpath))
+    )
     environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
         Path(
             environment.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
