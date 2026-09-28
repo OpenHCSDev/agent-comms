@@ -1,6 +1,6 @@
 {
   "base_revision": "7ba2676462506d1d0fd603a72cd7299bc605ca7c",
-  "head_revision": "25f75a82ebc5bae7ba53e48d37cfbb66a46f5480",
+  "head_revision": "ac6f0c642eb12f78fcaef3322db00181e524b788",
   "paths": [
     "src/agent_comms/acp.py",
     "src/agent_comms/input_drain.py",
