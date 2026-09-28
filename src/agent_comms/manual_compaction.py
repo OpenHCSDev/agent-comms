@@ -21,7 +21,10 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from . import pi_events as pi
 from .backend import compaction_summary, configured_model, rpc_args_for
+from .pi_commands import PiCommand
+from .pi_rpc import PiRpcChannel
 
 MAX_LINE = 64 * 1024
 MAX_OUTPUT = 256 * 1024
@@ -367,21 +370,20 @@ async def _response(
     proc.stdin.write((json.dumps({"id": request_id, "type": command}) + "\n").encode())
     await proc.stdin.drain()
     total = 0
+    channel = PiRpcChannel(proc.stdout)
     while True:
-        line = await proc.stdout.readline()
+        line = await channel.readline(max_bytes=MAX_OUTPUT - total)
         if not line:
             raise ValueError("No correlated response")
         total += len(line)
         if total > MAX_OUTPUT:
             raise ValueError("RPC output limit")
-        payload = json.loads(line)
-        if not isinstance(payload, dict):
-            raise ValueError("Invalid RPC row")
-        if payload.get("type") != "response" or payload.get("id") != request_id:
+        payload = PiRpcChannel.decode_record(line)
+        if not isinstance(payload, pi.Response) or payload.id != request_id:
             continue
         if payload.get("command") != command or type(payload.get("success")) is not bool:
             raise ValueError("Invalid correlated response")
-        return payload
+        return payload.wire
 
 
 def _startup_metadata(before: bytes, after: bytes) -> bool:
@@ -591,22 +593,21 @@ async def _compact_session_under_fence(
             if custom_instructions and custom_instructions.strip():
                 command["customInstructions"] = custom_instructions.strip()
             assert proc.stdin is not None
-            proc.stdin.write((json.dumps(command) + "\n").encode())
+            proc.stdin.write(PiRpcChannel.command_bytes(PiCommand.from_wire(command)))
             await proc.stdin.drain()
             # Read the exact compact id; unrelated events and responses are not success.
             assert proc.stdout is not None
             consumed = 0
+            channel = PiRpcChannel(proc.stdout)
             while True:
-                row = await proc.stdout.readline()
+                row = await channel.readline(max_bytes=MAX_OUTPUT - consumed)
                 if not row:
                     raise ValueError("No compact response")
                 consumed += len(row)
                 if consumed > MAX_OUTPUT:
                     raise ValueError("Compact response limit")
-                payload = json.loads(row)
-                if not isinstance(payload, dict):
-                    raise ValueError("Invalid compact response")
-                if payload.get("type") != "response" or payload.get("id") != request_id:
+                payload = PiRpcChannel.decode_record(row)
+                if not isinstance(payload, pi.Response) or payload.id != request_id:
                     continue
                 if payload.get("command") != "compact" or type(payload.get("success")) is not bool:
                     raise ValueError("Invalid compact reply")
