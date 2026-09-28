@@ -17,6 +17,7 @@ from typing import Any
 from .backend import PersistentPiSession, _session_revision
 from .compaction_journal import CompactionJournal
 from .fresh_private_session import FreshPrivateSession
+from .owner_compaction_prepare import NativeWitness
 from .owner_compaction_provider import NativeSummary, valid_native_usage
 from .pi_rpc import PiRpcChannel
 from .selected_pi_child_deadline import SelectedChildUnknown, arm_selected_child
@@ -135,7 +136,7 @@ class SelectedSummarySlot:
         self,
         persistent: PersistentPiSession,
         journal: CompactionJournal,
-        witness: dict[str, Any],
+        witness: NativeWitness,
         source: dict[str, Any],
         *,
         expected_launcher: str,
@@ -154,11 +155,10 @@ class SelectedSummarySlot:
         """
         source = json.loads(json.dumps(source, allow_nan=False))
         request = _request(witness, source["selected"], source["settings"])
-        witness = request["witness"]
         request.pop("dryRun")
         request["type"] = "agent_comms_summarize_compaction"
         if (
-            witness["sessionId"] != self.session
+            witness.session_id != self.session
             or source["source"].get("ownerName") != self.owner
             or type(tokens_before) is not int
             or not 0 <= tokens_before <= 2**53 - 1
@@ -168,7 +168,7 @@ class SelectedSummarySlot:
             raise ValueError("Exact selected owner, session and bounded deadline required")
         async with self.lock, persistent.lock:
             proc, reader = persistent.proc, persistent.reader
-            session_file = witness["sessionFile"]
+            session_file = witness.session_file
             revision = _session_revision(session_file)
             if (
                 persistent.reopen_required is not None
@@ -180,7 +180,7 @@ class SelectedSummarySlot:
                 or persistent.session_id != self.session
                 or revision is None
                 or persistent.revision != revision
-                or witness["revision"] != ":".join(map(str, revision[0]))
+                or witness.revision != ":".join(map(str, revision[0]))
                 or persistent.launch_key is None
                 or persistent.launch_key[0] != expected_launcher
             ):

@@ -9,7 +9,8 @@ from types import SimpleNamespace
 import pytest
 
 from agent_comms import owner_compaction_runtime
-from agent_comms.owner_compaction_prepare import NativePreparation
+from agent_comms.owner_compaction_prepare import NativePreparation, NativeWitness
+from agent_comms.owner_compaction_provider import NativeSummary
 from agent_comms.owner_compaction_runtime import compact_owner_once
 
 
@@ -36,7 +37,11 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
     class Bridge:
         def prepare_source(self, *_args, **_kwargs):
             return (
-                NativePreparation("session-id", {"sessionFile": "/tmp/fake-saved"}, 1, False),
+                NativePreparation(
+                    NativeWitness("session-id", "/tmp/fake-saved", "leaf", "kept", "1:2:3:4:5"),
+                    1,
+                    False,
+                ),
                 object(),
             )
 
@@ -51,7 +56,7 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
             pass
 
     async def synthetic_summary(_metadata):
-        return "synthetic, no provider"
+        return NativeSummary("synthetic, no provider", None, None)
 
     async def owner():
         async with turn_lock:

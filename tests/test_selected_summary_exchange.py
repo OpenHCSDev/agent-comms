@@ -14,6 +14,8 @@ import pytest
 from agent_comms.backend import PersistentPiSession, _session_revision
 from agent_comms.compaction_journal import CompactionJournal, CompactionJournalError
 from agent_comms.compaction_send_admission import native_input_admitted
+from agent_comms.field_codec import FieldCodec
+from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.selected_pi_child_deadline import SelectedChildUnknown
 from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
@@ -92,11 +94,11 @@ async def selected(tmp_path, mode="success"):
     persistent.session_file = str(file)
     persistent.session_id = "session"
     persistent.revision = _session_revision(str(file))
-    witness = dict(
-        sessionId="session",
-        sessionFile=str(file),
-        leafId="last",
-        firstKeptEntryId="kept",
+    witness = NativeWitness(
+        session_id="session",
+        session_file=str(file),
+        leaf_id="last",
+        first_kept_entry_id="kept",
         revision=":".join(map(str, persistent.revision[0])),
     )
     source = dict(
@@ -135,7 +137,7 @@ async def test_existing_child_summary_preserves_native_metadata_and_blocks_repla
         assert result.summary.usage["cost"]["total"] == 0
         assert result.decline_reason is None
         assert json.loads(received.read_text())["operationId"] == result.operation_id
-        assert journal.selected_summary(result.operation_id).status == "reserved"
+        assert journal.selected_summary(result.operation_id).state.declared_name == "reserved"
         assert file.read_bytes() == before
         assert not native_input_admitted(journal.path.parent, str(file))
         assert persistent.reopen_required is None
@@ -147,7 +149,7 @@ async def test_decline_is_data_and_does_not_automatically_clear_input_gate(tmp_p
     async with selected(tmp_path, "decline") as (run, _, journal, file, _received):
         result = await run()
         assert result.summary is None and result.decline_reason == "split_turn"
-        assert journal.selected_summary(result.operation_id).status == "reserved"
+        assert journal.selected_summary(result.operation_id).state.declared_name == "reserved"
         assert not native_input_admitted(journal.path.parent, str(file))
 
 
@@ -161,7 +163,7 @@ async def test_uncertain_result_retires_child_and_retains_unknown(tmp_path, mode
             await run()
         assert child.returncode is not None
         assert persistent.reopen_required == str(file)
-        assert journal.unresolved_selected_summary(str(file))[0].status == "unknown"
+        assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
         assert not native_input_admitted(journal.path.parent, str(file))
 
 
@@ -187,7 +189,7 @@ async def test_failure_detail_survives_without_authorizing_replay(tmp_path, mode
             await run()
         assert persistent.proc is None
         operation = json.loads(received.read_text())["operationId"]
-        assert journal.selected_summary(operation).status == "unknown"
+        assert journal.selected_summary(operation).state.declared_name == "unknown"
         assert not native_input_admitted(journal.path.parent, str(file))
         assert len(journal.unresolved_selected_summary(str(file))) == 1
 
@@ -203,7 +205,7 @@ async def test_cancellation_retains_durable_unknown_and_reaps(tmp_path):
         with pytest.raises(asyncio.CancelledError):
             await task
         assert child.returncode is not None
-        assert journal.unresolved_selected_summary(str(file))[0].status == "unknown"
+        assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
 
 
 async def test_stale_child_never_reserves_or_sends(tmp_path):
@@ -282,7 +284,7 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
             exchange = SelectedSummarySlot("owner", persistent.session_id).run_selected_summary(
                 persistent,
                 journal,
-                fixture["witness"],
+                FieldCodec.decode(NativeWitness, fixture["witness"]),
                 source,
                 tokens_before=fixture["tokensBefore"],
                 expected_launcher="native-fixture",
@@ -295,7 +297,10 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
                     await exchange
                 assert file.read_bytes() == before
                 assert len(journal.unresolved_selected_summary(str(file))) == 1
-                assert journal.unresolved_selected_summary(str(file))[0].status == "unknown"
+                assert (
+                    journal.unresolved_selected_summary(str(file))[0].state.declared_name
+                    == "unknown"
+                )
                 assert not native_input_admitted(journal.path.parent, str(file))
                 assert persistent.proc is None
                 return
@@ -304,7 +309,7 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
             assert result.summary.details == dict(readFiles=[], modifiedFiles=[])
             assert result.summary.usage["output"] > 0
             assert file.read_bytes() == before
-            assert journal.selected_summary(result.operation_id).status == "reserved"
+            assert journal.selected_summary(result.operation_id).state.declared_name == "reserved"
             assert not native_input_admitted(journal.path.parent, str(file))
             child.stdin.close()
             assert await child.wait() == 0

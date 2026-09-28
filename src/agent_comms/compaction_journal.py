@@ -17,7 +17,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 from weakref import WeakKeyDictionary
 
@@ -25,8 +25,20 @@ if TYPE_CHECKING:
     from .fresh_private_session import FreshPrivateSession
     from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 
-Outcome = Literal["committed", "refused", "aborted-no-write", "unknown"]
-_TERMINAL = frozenset({"committed", "refused", "aborted-no-write"})
+from .compaction_states import (
+    CommittedOperation,
+    DeclinedPrestartSummary,
+    IntentOperation,
+    LinkedSummary,
+    ObservedPublication,
+    OperationState,
+    PendingPublication,
+    PublicationState,
+    ReservedSummary,
+    SummaryState,
+    UnknownSummary,
+    sql_names,
+)
 
 
 class _ReturnedTerminalAck:
@@ -62,8 +74,13 @@ class CompactionOperation:
     commit_id: str
     session_file: str
     intent_json: str
-    status: str
+    state: OperationState
     evidence_json: str | None
+
+    @classmethod
+    def from_row(cls, row):
+        commit_id, session, intent, status, evidence = row
+        return cls(commit_id, session, intent, OperationState.decode(status)(), evidence)
 
 
 @dataclass(frozen=True)
@@ -73,9 +90,18 @@ class SelectedSummaryAttempt:
     operation_id: str
     session_file: str
     source_json: str
-    status: str
-    commit_id: str | None
-    decline_reason: str | None
+    state: SummaryState
+
+    @classmethod
+    def from_row(cls, row):
+        operation_id, session, source, status, commit_id, reason = row
+        try:
+            state = SummaryState.from_columns(status, commit_id, reason)
+        except (TypeError, ValueError) as error:
+            raise CompactionJournalError(
+                "Invalid saved selected summary state; never replay"
+            ) from error
+        return cls(operation_id, session, source, state)
 
     def original_has_started(self, inputs: dict[str, dict[str, Any]]) -> bool:
         """Completed input evidence retires this barrier, never recreates a send token.
@@ -84,7 +110,7 @@ class SelectedSummaryAttempt:
         summary alone, a bound UNKNOWN input, or an unrelated started input
         cannot retire the reservation. Historical rows and IDs stay intact.
         """
-        if self.status not in {"linked", "declined-prestart"}:
+        if not self.state.original_eligible:
             return False
         try:
             source = json.loads(self.source_json)["source"]
@@ -115,7 +141,7 @@ class CompactionPublication:
     commit_id: str
     session_file: str
     metadata_json: str
-    status: str
+    state: PublicationState
 
 
 def _publication_metadata(commit_id: str, evidence: dict) -> str:
@@ -125,7 +151,7 @@ def _publication_metadata(commit_id: str, evidence: dict) -> str:
             {"status", "entryId", "revision", "leafId"},
             {"status", "entryId", "revision", "leafId", "metadataDigest"},
         )
-        or evidence.get("status") != "committed"
+        or evidence.get("status") != CommittedOperation.declared_name
         or (
             "metadataDigest" in evidence
             and (
@@ -177,28 +203,28 @@ class CompactionJournal:
         else:
             os.close(fd)
         with self._transaction() as db:
-            db.execute("""CREATE TABLE IF NOT EXISTS operations (
+            db.execute(f"""CREATE TABLE IF NOT EXISTS operations (
                     commit_id TEXT PRIMARY KEY,
                     session_file TEXT NOT NULL,
                     intent_json TEXT NOT NULL,
                     status TEXT NOT NULL CHECK(status IN
-                        ('intent','unknown','committed','refused','aborted-no-write')),
+                        {sql_names(OperationState)}),
                     evidence_json TEXT
                 )""")
-            db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS unresolved_session
-                ON operations(session_file) WHERE status IN ('intent','unknown')""")
-            db.execute("""CREATE TABLE IF NOT EXISTS publications (
+            db.execute(f"""CREATE UNIQUE INDEX IF NOT EXISTS unresolved_session
+                ON operations(session_file) WHERE status IN {sql_names(OperationState, unresolved=True)}""")
+            db.execute(f"""CREATE TABLE IF NOT EXISTS publications (
                     commit_id TEXT PRIMARY KEY REFERENCES operations(commit_id),
                     session_file TEXT NOT NULL,
                     metadata_json TEXT NOT NULL,
-                    status TEXT NOT NULL CHECK(status IN ('pending','observed'))
+                    status TEXT NOT NULL CHECK(status IN {sql_names(PublicationState)})
                 )""")
-            db.execute("""CREATE TABLE IF NOT EXISTS selected_summary_attempts (
+            db.execute(f"""CREATE TABLE IF NOT EXISTS selected_summary_attempts (
                     operation_id TEXT PRIMARY KEY,
                     session_file TEXT NOT NULL,
                     source_json TEXT NOT NULL,
                     status TEXT NOT NULL CHECK(status IN
-                        ('reserved','unknown','linked','declined-prestart')),
+                        {sql_names(SummaryState)}),
                     commit_id TEXT,
                     decline_reason TEXT
                 )""")
@@ -207,9 +233,9 @@ class CompactionJournal:
             # open and block unrelated sessions. BEGIN IMMEDIATE + the SELECT
             # before reserve below excludes incomplete attempts for that session.
             db.execute("DROP INDEX IF EXISTS selected_summary_session")
-            db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS unresolved_selected_summary_session
+            db.execute(f"""CREATE UNIQUE INDEX IF NOT EXISTS unresolved_selected_summary_session
                 ON selected_summary_attempts(session_file)
-                WHERE status IN ('reserved','unknown')""")
+                WHERE status IN {sql_names(SummaryState, unresolved=True)}""")
             # Exact saved-session prewrite barrier for PR94's private raw writer.
             # An UNKNOWN marker is never cleared by a pipe ACK or fake result.
             db.execute("""CREATE TABLE IF NOT EXISTS private_raw_inputs (
@@ -290,7 +316,7 @@ class CompactionJournal:
                 selected = self._blocking_selected_summary(db, canonical)
                 if selected and (
                     len(selected) != 1
-                    or selected[0].status != "reserved"
+                    or not selected[0].state.reservable_commit
                     or type(intent) is not dict
                     or intent.get("selectedSummaryOperationId") != selected[0].operation_id
                 ):
@@ -298,8 +324,8 @@ class CompactionJournal:
                         "Blocked selected summary; unrelated native commit forbidden"
                     )
                 db.execute(
-                    "INSERT INTO operations VALUES (?, ?, ?, 'intent', NULL)",
-                    (commit_id, canonical, payload),
+                    "INSERT INTO operations VALUES (?, ?, ?, ?, NULL)",
+                    (commit_id, canonical, payload, IntentOperation.declared_name),
                 )
         except sqlite3.IntegrityError as error:
             raise CompactionJournalError(
@@ -314,7 +340,7 @@ class CompactionJournal:
             ).fetchone()
         if row is None:
             raise CompactionJournalError("Unknown compaction operation")
-        return CompactionOperation(*row)
+        return CompactionOperation.from_row(row)
 
     def unresolved(self, session_file: str) -> tuple[CompactionOperation, ...]:
         """Discover crash-orphaned intents for explicit recovery, never dispatch."""
@@ -322,10 +348,10 @@ class CompactionJournal:
         with self._transaction() as db:
             rows = db.execute(
                 "SELECT * FROM operations WHERE session_file = ? "
-                "AND status IN ('intent','unknown')",
+                f"AND status IN {sql_names(OperationState, unresolved=True)}",
                 (canonical,),
             ).fetchall()
-        return tuple(CompactionOperation(*row) for row in rows)
+        return tuple(CompactionOperation.from_row(row) for row in rows)
 
     def enroll_fresh_private_session(
         self,
@@ -539,7 +565,7 @@ class CompactionJournal:
                         ) from error
                 if db.execute(
                     "SELECT 1 FROM operations WHERE session_file = ? "
-                    "AND status IN ('intent','unknown') LIMIT 1",
+                    f"AND status IN {sql_names(OperationState, unresolved=True)} LIMIT 1",
                     (canonical,),
                 ).fetchone():
                     raise CompactionJournalError("Unresolved native commit; no selected summary")
@@ -548,9 +574,8 @@ class CompactionJournal:
                 ):
                     raise CompactionJournalError("Blocked selected summary; never replay")
                 db.execute(
-                    "INSERT INTO selected_summary_attempts "
-                    "VALUES (?, ?, ?, 'reserved', NULL, NULL)",
-                    (operation_id, canonical, payload),
+                    "INSERT INTO selected_summary_attempts VALUES (?, ?, ?, ?, NULL, NULL)",
+                    (operation_id, canonical, payload, ReservedSummary.declared_name),
                 )
         except sqlite3.IntegrityError as error:
             raise CompactionJournalError(
@@ -566,7 +591,7 @@ class CompactionJournal:
             ).fetchone()
         if row is None:
             raise CompactionJournalError("Unknown selected summary operation")
-        return SelectedSummaryAttempt(*row)
+        return SelectedSummaryAttempt.from_row(row)
 
     def unresolved_selected_summary(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:
         """Crash-orphaned reservations block every subsequent input send."""
@@ -574,10 +599,10 @@ class CompactionJournal:
         with self._transaction() as db:
             rows = db.execute(
                 "SELECT * FROM selected_summary_attempts WHERE session_file = ? "
-                "AND status IN ('reserved','unknown')",
+                f"AND status IN {sql_names(SummaryState, unresolved=True)}",
                 (canonical,),
             ).fetchall()
-        return tuple(SelectedSummaryAttempt(*row) for row in rows)
+        return tuple(SelectedSummaryAttempt.from_row(row) for row in rows)
 
     def _blocking_selected_summary(
         self, db: sqlite3.Connection, canonical: str
@@ -593,7 +618,7 @@ class CompactionJournal:
         return tuple(
             attempt
             for row in rows
-            if not (attempt := SelectedSummaryAttempt(*row)).original_has_started(inputs)
+            if not (attempt := SelectedSummaryAttempt.from_row(row)).original_has_started(inputs)
         )
 
     def blocking_selected_summary(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:
@@ -623,7 +648,7 @@ class CompactionJournal:
             with self._transaction() as db:
                 if db.execute(
                     "SELECT 1 FROM operations WHERE session_file = ? "
-                    "AND status IN ('intent','unknown') LIMIT 1",
+                    f"AND status IN {sql_names(OperationState, unresolved=True)} LIMIT 1",
                     (canonical,),
                 ).fetchone() or self._blocking_selected_summary(db, canonical):
                     raise CompactionJournalError(
@@ -658,7 +683,7 @@ class CompactionJournal:
         with self._transaction() as db:
             if db.execute(
                 "SELECT 1 FROM operations WHERE session_file = ? "
-                "AND status IN ('intent','unknown') LIMIT 1",
+                f"AND status IN {sql_names(OperationState, unresolved=True)} LIMIT 1",
                 (canonical,),
             ).fetchone() or self._blocking_selected_summary(db, canonical):
                 raise CompactionJournalError("Selected or unresolved journal blocks native input")
@@ -673,14 +698,14 @@ class CompactionJournal:
         """Record transport uncertainty; never erase or retry the reservation."""
         with self._transaction() as db:
             row = db.execute(
-                "SELECT status FROM selected_summary_attempts WHERE operation_id = ?",
+                "SELECT status, commit_id, decline_reason FROM selected_summary_attempts WHERE operation_id = ?",
                 (operation_id,),
             ).fetchone()
-            if row is None or row[0] not in {"reserved", "unknown"}:
+            if row is None or not SummaryState.from_columns(*row).may_become(UnknownSummary()):
                 raise CompactionJournalError("Selected summary uncertainty transition forbidden")
             db.execute(
-                "UPDATE selected_summary_attempts SET status = 'unknown' WHERE operation_id = ?",
-                (operation_id,),
+                "UPDATE selected_summary_attempts SET status = ? WHERE operation_id = ?",
+                (UnknownSummary.declared_name, operation_id),
             )
 
     def decline_selected_summary_prestart(
@@ -701,21 +726,23 @@ class CompactionJournal:
         owner/ingress source before invoking this method; the journal is not
         that authority or evidence verifier.
         """
-        if type(reason) is not str or reason not in {"split_turn", "unsupported"}:
-            raise CompactionJournalError("Selected summary decline is not a clean skip")
+        try:
+            target = DeclinedPrestartSummary(reason)
+        except ValueError as error:
+            raise CompactionJournalError(str(error)) from error
         with self._transaction() as db:
             row = db.execute(
                 "SELECT session_file, source_json, status, commit_id, decline_reason "
                 "FROM selected_summary_attempts WHERE operation_id = ?",
                 (operation_id,),
             ).fetchone()
-            if row is None or row[2:] != ("reserved", None, None):
+            if row is None or not SummaryState.from_columns(*row[2:]).may_become(target):
                 raise CompactionJournalError("Selected summary prestart decline forbidden")
             before = db.total_changes
             db.execute(
-                "UPDATE selected_summary_attempts SET status = 'declined-prestart', "
-                "decline_reason = ? WHERE operation_id = ? AND status = 'reserved'",
-                (reason, operation_id),
+                "UPDATE selected_summary_attempts SET status = ?, "
+                "decline_reason = ? WHERE operation_id = ? AND status = ?",
+                (target.declared_name, reason, operation_id, ReservedSummary.declared_name),
             )
             after = db.execute(
                 "SELECT session_file, source_json, status, commit_id, decline_reason "
@@ -725,7 +752,7 @@ class CompactionJournal:
             if db.total_changes != before + 1 or after != (
                 row[0],
                 row[1],
-                "declined-prestart",
+                target.declared_name,
                 None,
                 reason,
             ):
@@ -735,7 +762,7 @@ class CompactionJournal:
 
             # This method's verified clean-decline SQL is the only issuer.
             # _transaction() has already returned COMMIT + parent-fsync ACK.
-            scope = (str(self.path), row[0], operation_id, "declined-prestart", None, row[1])
+            scope = (str(self.path), row[0], operation_id, target, row[1])
             receipt = _ReturnedTerminalAck()
             _issued_selected_acks[receipt] = scope
             return SelectedSummaryAdmission._from_returned_ack(
@@ -743,8 +770,7 @@ class CompactionJournal:
                 self.path,
                 row[0],
                 operation_id,
-                "declined-prestart",
-                None,
+                target,
                 row[1],
                 admission,
             )
@@ -766,6 +792,7 @@ class CompactionJournal:
         only after the native journal committed.
         An UNKNOWN provider attempt cannot be automatically linked or retried.
         """
+        target = LinkedSummary(commit_id)
         with self._transaction() as db:
             row = db.execute(
                 "SELECT session_file, status, source_json, commit_id, decline_reason "
@@ -784,10 +811,10 @@ class CompactionJournal:
                 bound = False
             if (
                 row is None
-                or row[1] != "reserved"
-                or row[3:] != (None, None)
+                or not SummaryState.from_columns(row[1], *row[3:]).may_become(target)
                 or commit is None
-                or commit[:2] != (row[0], "committed")
+                or commit[0] != row[0]
+                or not OperationState.decode(commit[1]).committed
                 or not bound
             ):
                 raise CompactionJournalError("Exact committed native result required to link")
@@ -799,9 +826,9 @@ class CompactionJournal:
                 raise CompactionJournalError("Selected native intent source digest required")
             before = db.total_changes
             db.execute(
-                "UPDATE selected_summary_attempts SET status = 'linked', commit_id = ? "
-                "WHERE operation_id = ? AND status = 'reserved'",
-                (commit_id, operation_id),
+                "UPDATE selected_summary_attempts SET status = ?, commit_id = ? "
+                "WHERE operation_id = ? AND status = ?",
+                (target.declared_name, commit_id, operation_id, ReservedSummary.declared_name),
             )
             after = db.execute(
                 "SELECT session_file, status, source_json, commit_id, decline_reason "
@@ -810,7 +837,7 @@ class CompactionJournal:
             ).fetchone()
             if db.total_changes != before + 1 or after != (
                 row[0],
-                "linked",
+                target.declared_name,
                 row[2],
                 commit_id,
                 None,
@@ -820,7 +847,7 @@ class CompactionJournal:
             from .selected_summary_admission import SelectedSummaryAdmission
 
             # Only this method's verified native-link SQL can mint on returned fsync.
-            scope = (str(self.path), row[0], operation_id, "linked", commit_id, row[2])
+            scope = (str(self.path), row[0], operation_id, target, row[2])
             receipt = _ReturnedTerminalAck()
             _issued_selected_acks[receipt] = scope
             return SelectedSummaryAdmission._from_returned_ack(
@@ -828,8 +855,7 @@ class CompactionJournal:
                 self.path,
                 row[0],
                 operation_id,
-                "linked",
-                commit_id,
+                target,
                 row[2],
                 admission,
             )
@@ -843,9 +869,9 @@ class CompactionJournal:
                 "SELECT p.commit_id, p.session_file, p.metadata_json, p.status, "
                 "o.evidence_json, o.session_file "
                 "FROM publications p JOIN operations o ON o.commit_id = p.commit_id "
-                "WHERE p.session_file = ? AND p.status = 'pending' AND o.status = 'committed' "
+                "WHERE p.session_file = ? AND p.status = ? AND o.status = ? "
                 "ORDER BY p.rowid LIMIT 32",
-                (canonical,),
+                (canonical, PendingPublication.declared_name, CommittedOperation.declared_name),
             ).fetchall()
         publications = []
         for commit_id, file, metadata, status, evidence_json, owner_file in rows:
@@ -858,7 +884,9 @@ class CompactionJournal:
                     raise ValueError("Changed publication")
             except (ValueError, TypeError, KeyError, AttributeError) as error:
                 raise CompactionJournalError("Compaction publication metadata changed") from error
-            publications.append(CompactionPublication(commit_id, file, metadata, status))
+            publications.append(
+                CompactionPublication(commit_id, file, metadata, PublicationState.decode(status)())
+            )
         return tuple(publications)
 
     def observe_publication(self, commit_id: str, metadata_json: str) -> None:
@@ -876,14 +904,14 @@ class CompactionJournal:
             ).fetchone()
             if row is None or row[0] != metadata_json:
                 raise CompactionJournalError("Unknown or changed publication metadata")
-            if row[1] == "pending":
+            if PublicationState.decode(row[1])().may_become(ObservedPublication()):
                 db.execute(
-                    "UPDATE publications SET status = 'observed' WHERE commit_id = ?",
-                    (commit_id,),
+                    "UPDATE publications SET status = ? WHERE commit_id = ?",
+                    (ObservedPublication.declared_name, commit_id),
                 )
 
     def resolve(
-        self, commit_id: str, outcome: Outcome, evidence: dict, *, publication: bool = False
+        self, commit_id: str, outcome: OperationState, evidence: dict, *, publication: bool = False
     ) -> None:
         """Persist bridge-validated native evidence; this does not verify it.
 
@@ -892,10 +920,8 @@ class CompactionJournal:
         pre-write native refusal. Once UNKNOWN, only writer-fenced exact-ID
         reconciliation may establish committed or aborted-no-write.
         """
-        if outcome not in _TERMINAL | {"unknown"}:
-            raise ValueError("Invalid compaction outcome")
         metadata = _publication_metadata(commit_id, evidence) if publication else None
-        if publication and outcome != "committed":
+        if publication and not outcome.committed:
             raise CompactionJournalError("Exact committed native metadata required")
         payload = json.dumps(evidence, sort_keys=True, separators=(",", ":"), allow_nan=False)
         if len(payload.encode()) > 65536:
@@ -904,14 +930,14 @@ class CompactionJournal:
             row = db.execute(
                 "SELECT status, session_file FROM operations WHERE commit_id = ?", (commit_id,)
             ).fetchone()
-            if row is None or row[0] in _TERMINAL or (row[0] == "unknown" and outcome == "refused"):
+            if row is None or not OperationState.decode(row[0])().may_become(outcome):
                 raise CompactionJournalError("Compaction outcome transition forbidden")
             db.execute(
                 "UPDATE operations SET status = ?, evidence_json = ? WHERE commit_id = ?",
-                (outcome, payload, commit_id),
+                (outcome.declared_name, payload, commit_id),
             )
             if metadata is not None:
                 db.execute(
-                    "INSERT INTO publications VALUES (?, ?, ?, 'pending')",
-                    (commit_id, row[1], metadata),
+                    "INSERT INTO publications VALUES (?, ?, ?, ?)",
+                    (commit_id, row[1], metadata, PendingPublication.declared_name),
                 )

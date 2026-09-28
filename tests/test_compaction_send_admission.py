@@ -12,6 +12,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
+from agent_comms.compaction_states import CommittedOperation, UnknownOperation
 from agent_comms.input_disposition import InputDispositions
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="Durable POSIX compaction journal")
@@ -27,10 +28,10 @@ def test_saved_session_barrier_does_not_create_or_repair_journal(tmp_path):
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
     first = journal.begin(str(session), {"source": "pre-summary"})
     assert not native_input_admitted(root, str(session))
-    journal.resolve(first, "unknown", {"status": "unknown", "reason": "lost reply"})
+    journal.resolve(first, UnknownOperation(), {"status": "unknown", "reason": "lost reply"})
     assert not native_input_admitted(root, str(session))
     assert native_input_admitted(root, None)
-    journal.resolve(first, "committed", {"status": "committed", "entryId": "entry"})
+    journal.resolve(first, CommittedOperation(), {"status": "committed", "entryId": "entry"})
     assert native_input_admitted(root, str(session))
     assert not native_input_admitted(root, str(root / "missing.jsonl"))
     assert [row.commit_id for row in journal.pending_publications(str(session))] == []
@@ -66,10 +67,10 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
         assert observed == [False]
         rows = InputDispositions(comms.root).unknown(frozenset({"project"}))
         assert len(rows) == 1 and rows[0]["native_id"] is None
-        assert journal.get(commit_id).status == "intent"
-        journal.resolve(commit_id, "unknown", {"status": "unknown", "reason": "uncertain"})
+        assert journal.get(commit_id).state.declared_name == "intent"
+        journal.resolve(commit_id, UnknownOperation(), {"status": "unknown", "reason": "uncertain"})
         await agent.inputs.run_owned_input("project", "project", "distinct later input")
         assert observed == [False, False]
-        assert journal.get(commit_id).status == "unknown"
+        assert journal.get(commit_id).state.declared_name == "unknown"
     finally:
         await agent.shutdown()
