@@ -560,7 +560,8 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.comms import Comms
 root = Path(sys.argv[1])
 mutation = sys.argv[2]
-lock_name = {'bus': 'bus.jsonl', 'input': 'input_dispositions.json', 'send': 'wire'}.get(mutation, 'registry.json')
+lock_name = {'bus': 'bus.jsonl', 'input': 'input_dispositions.json', 'send': 'wire'}.get(
+    mutation, 'registry.json')
 with (root / ('.' + lock_name + '.lock')).open('ab') as lock:
     try:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -569,7 +570,9 @@ with (root / ('.' + lock_name + '.lock')).open('ab') as lock:
     else:
         raise AssertionError('authority escaped before native write')
 if mutation == 'input':
-    InputDispositions(root / InputDispositions.filename).record('acp:late', seq=None, owner='owner', admission=int(sys.argv[3]), target='owner', text='late correction')
+    InputDispositions(root / InputDispositions.filename).record(
+        'acp:late', seq=None, owner='owner', admission=int(sys.argv[3]),
+        target='owner', text='late correction')
 else:
     registry = Registration(root / 'registry.json')
     if mutation == 'stop':
@@ -580,7 +583,8 @@ else:
         owner = registry.snapshot().threads['owner']
         registry.register(replace(owner, goal=Goal('new', 'new-goal')))
     elif mutation == 'bus':
-        MessageBus(root / 'bus.jsonl', registry).publisher.publish(Message(sender='owner', target='broadcast', body='late message', type=MessageType.INFO))
+        MessageBus(root / 'bus.jsonl', registry).publisher.publish(Message(
+            sender='owner', target='broadcast', body='late message', type=MessageType.INFO))
     else:
         Comms(root).messaging.send('owner', 'broadcast', 'late message')
 print('changed', flush=True)

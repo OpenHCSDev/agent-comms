@@ -264,6 +264,7 @@ async def test_reader_keeps_partial_record_on_cancel_and_enforces_bound():
 async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
     tmp_path, provider_error
 ):
+    package = Path(os.environ["PI_NATIVE_PACKAGE_DIR"]).resolve()
     env = dict(os.environ, PR95_RPC_FIXTURE="1", TMPDIR=str(tmp_path))
     if provider_error:
         env["PR95_PROVIDER_ERROR"] = "1"
@@ -287,7 +288,7 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
             persistent.revision = _session_revision(fixture["sessionFile"])
             persistent.launch_key = (
                 NativePiRpcLaunch(
-                    ("node",), tmp_path, env, tmp_path, Path(fixture["sessionFile"]), tmp_path
+                    ("node",), tmp_path, env, tmp_path, Path(fixture["sessionFile"]), package
                 ),
                 (0, 0),
             )
@@ -305,7 +306,7 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
                 FieldCodec.decode(NativeWitness, fixture["witness"]),
                 source,
                 tokens_before=fixture["tokensBefore"],
-                expected_package=tmp_path,
+                expected_package=package,
                 idle_timeout_seconds=5,
             )
             if provider_error:
@@ -324,8 +325,8 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
                 return
             result = await exchange
             assert "Synthetic summary" in result.summary.text
-            assert result.summary.details == dict(readFiles=[], modifiedFiles=[])
-            assert result.summary.usage["output"] > 0
+            assert result.summary.details.read_files == result.summary.details.modified_files == ()
+            assert result.summary.usage.output > 0
             assert file.read_bytes() == before
             assert journal.selected_summary(result.operation_id).state.declared_name == "reserved"
             assert not native_input_admitted(journal.path.parent, str(file))
