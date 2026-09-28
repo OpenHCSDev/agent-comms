@@ -1,236 +1,197 @@
-"""Channel model requests have per-recipient durable native-input outcomes."""
+"""Canonical channel notifications reflect each recipient's recorded outcome.
+
+The existing model-boundary fixture supplies responses. ACP routing, source
+identity, SQLite, native journals and notification projection are not mocked.
+"""
 
 import asyncio
-import os
+from dataclasses import replace
 
 import pytest
 
-from agent_comms import agent_events as ae
-from agent_comms.acp import CommsAgent
-from agent_comms.comms import wire
+from agent_comms import cohort_foreground, coordinated_runtime
+from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.coordination_store import MutationStore, StaleFence
 from agent_comms.goal_actions import SetGoalAction
-from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_drain import InputDrain
+from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_runtime_input import NativeRuntimeInput
+from delivery_owner_fixture import canonical_delivery_owner, native_model
+from test_coordinated_runtime import tmp_path as private_root_fixture
+
+tmp_path = private_root_fixture
 
 
-@pytest.mark.parametrize("revocation", ["goal", "stop", "reopen"])
-async def test_channel_queued_before_revocation_remains_visible_unknown(
+async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_path, monkeypatch):
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    async with canonical_delivery_owner(tmp_path) as (comms, owner, first, root_id):
+        alpha, alpha_calls = native_model(decision="IGNORE")
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", alpha)
+        assert await owner.inputs.drain_inbox("alpha") == 1
+        beta, beta_calls = native_model(decision="FULL")
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", beta)
+        assert await owner.inputs.drain_inbox("beta") == 1
+        assert len(alpha_calls) == 1 and len(beta_calls) == 2
+        second = comms.messaging.send_message("sender", "#team", "A distinct source")
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", alpha)
+        # Beta's prior reply is passive context, not another model request.
+        assert await owner.inputs.drain_inbox("alpha") == 1
+        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+
+            def evidence(name, message):
+                return read_historical_native_inputs(
+                    store,
+                    wire_root_id=root_id,
+                    recipient_lookup=stable_thread_lookup(comms.registry.require(name).created_at),
+                    source_seq=message.seq,
+                )
+
+            a, b, later = (
+                evidence("alpha", first),
+                evidence("beta", first),
+                evidence("alpha", second),
+            )
+            assert [row.stage for row in a] == ["triage"]
+            assert [row.stage for row in b] == ["triage", "full"]
+            assert [row.stage for row in later] == ["triage"]
+            assert a[0].triage_result == later[0].triage_result == "ignore"
+            assert len({row.input_id for row in (*a, *b, *later)}) == 4
+            assert all(row.expected_prompt_equality_established for row in (*a, *b, *later))
+        assert owner.inputs.dispositions.read().rows == {}
+        assert owner.inputs.pending_turns == {}
+        before = len(alpha_calls), len(beta_calls)
+        assert await owner.inputs.drain_inbox("alpha") == 0
+        assert (len(alpha_calls), len(beta_calls)) == before
+        outcomes = comms.views.message_notifications([first])[(first.seq, first.message_id)]
+        assert {row.recipient: row.state for row in outcomes} == {
+            "alpha": "Checked — no response",
+            "beta": "Responded",
+        }
+        assert not any(row.busy for row in outcomes)
+
+
+async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_path, monkeypatch):
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    model, calls = native_model(fail_on=1)
+    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", model)
+    async with canonical_delivery_owner(tmp_path) as (comms, owner, message, root_id):
+        with pytest.raises(NativePiUnavailable, match="died"):
+            await owner.inputs.drain_inbox("alpha")
+        assert len(calls) == 1
+        comms.messaging.acknowledge("alpha")
+        assert await owner.inputs.drain_inbox("alpha") == 0
+        assert len(calls) == 1 and not owner.inputs.pending_turns
+        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+            rows = NativeRuntimeInput.read(
+                store._connection.execute(f"SELECT * FROM {NativeRuntimeInput.declared_name}")
+            )
+            assert len(rows) == 1 and rows[0].session_id is None
+            assert (
+                read_historical_native_inputs(
+                    store,
+                    wire_root_id=root_id,
+                    recipient_lookup=stable_thread_lookup(
+                        comms.registry.require("alpha").created_at
+                    ),
+                    source_seq=message.seq,
+                )
+                == ()
+            )
+        notices = comms.views.message_notifications([message])[(message.seq, message.message_id)]
+        alpha = next(row for row in notices if row.recipient == "alpha")
+        assert alpha.state not in {"Responded", "Checked — no response"}
+        assert not alpha.busy
+
+
+@pytest.mark.parametrize("revocation", ["goal", "project", "stop"])
+async def test_selected_owner_revocation_before_send_never_creates_receipt(
     tmp_path, monkeypatch, revocation
 ):
-    comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
-    await agent.new_session(str(tmp_path / "worker"))
-    comms.channels.update_tags("worker", add=frozenset({"team"}))
-    message = comms.messaging.send_user_message("#team", "Durable request", worktree=str(tmp_path))
-    observed = []
-    advance = agent.inputs.delivery_cursors.advance
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    model, calls = native_model()
+    entered, release = asyncio.Event(), asyncio.Event()
 
-    def durable_before_cursor(aliases, through):
-        if through >= message.seq:
-            rows = (
-                InputDispositions(comms.root / InputDispositions.filename)
-                .read()
-                .unknown(frozenset({"worker"}))
-            )
-            assert [row.sequence for row in rows] == [message.seq]
-            observed.append(through)
-        advance(aliases, through)
+    async def suspended(*args, **kwargs):
+        entered.set()
+        await release.wait()
+        return await model(*args, **kwargs)
 
-    monkeypatch.setattr(
-        type(agent.inputs.delivery_cursors),
-        "advance",
-        lambda self, aliases, through: durable_before_cursor(aliases, through),
-    )
-
-    async def unexpected_backend(*args, **kwargs):
-        raise AssertionError("Revoked UNKNOWN input must not launch a backend")
-        yield {}
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", unexpected_backend)
-    try:
-        await agent.inputs.drain_inbox("worker")
-        assert observed
-        assert len(agent.inputs.pending_turns["worker"]) == 1
-        if revocation == "goal":
-            comms.goals.update_goal("worker", SetGoalAction(text="New goal"))
-        elif revocation == "stop":
-            comms.owners.stop("worker")
-        else:
-            await agent.shutdown()
-            agent = CommsAgent(wire(comms.root), agent_bin="pi", runtime_enabled=True)
-            monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-            await agent.load_session(str(tmp_path / "worker"), "worker")
-            await agent.inputs.drain_inbox("worker")
-        if revocation != "reopen":
-            InputDrain.schedule_wake(agent.inputs, "worker")
-            await asyncio.wait_for(agent.inputs.wake_tasks["worker"], 2)
-        assert not agent.inputs.pending_turns.get("worker")
-        updates = []
-
-        class Client:
-            async def session_update(self, **kwargs):
-                updates.append(kwargs["update"].model_dump(by_alias=True))
-
-        ledger = InputDispositions(comms.root / InputDispositions.filename)
-        before = ledger.read().rows
-        cursor_before = agent.inputs.delivery_cursors.path.read_bytes()
-        await agent.inputs.replay_unknown_inputs("worker", Client())
-        unknown = [row["_meta"]["agentComms"]["inputDisposition"] for row in updates]
-        overview = agent._comms.goals.input_delivery(
-            "worker", include_history=True, awaiting_keys=agent.inputs.awaiting_input_keys("worker")
-        )
-        assert overview["inputs"] == unknown
-        assert overview["dismissedHistoricalCount"] == 0
-        if revocation == "stop":
-            # No live owner context: preserve the compatibility projection.
-            assert overview["historicalCount"] == 0
-            assert overview["historicalInputs"] == []
-            visible = unknown
-        else:
-            # The live owner's queue is empty after revocation/reopen. These
-            # UNKNOWN notices remain explicitly inspectable, not awaiting work.
-            assert overview["currentScope"] == "owner_queue"
-            assert unknown == []
-            assert overview["historicalCount"] == 1
-            visible = overview["historicalInputs"]
-            assert len(visible) == 1 and visible[0]["noticeDismissed"] is False
-        assert [(row["sequence"], row["target"], row["status"]) for row in visible] == [
-            (message.seq, "#team", "unknown")
-        ]
-        assert [row.sequence for row in ledger.read().unknown(frozenset({"worker"}))] == [
-            message.seq
-        ]
-        assert ledger.read().rows == before
-        assert agent.inputs.delivery_cursors.path.read_bytes() == cursor_before
-        assert await agent.inputs.drain_inbox("worker") == 0
-        assert not agent.inputs.pending_turns.get("worker")
-        assert ledger.read().rows == before
-    finally:
-        await agent.shutdown()
-
-
-async def test_channel_native_receipts_are_per_recipient_and_per_sequence(tmp_path, monkeypatch):
-    comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-    for name in ("alpha", "beta"):
-        await agent.new_session(str(tmp_path / name))
-        comms.channels.update_tags(name, add=frozenset({"team"}))
-    calls = []
-
-    async def events(*args, **kwargs):
-        text = args[2]
-        calls.append((args[4]["AGENT_COMMS_THREAD"], text))
-        native = f"{len(calls):032x}"
-        with kwargs["send_boundary"](None, native, text) as allowed:
-            assert allowed is True
-        assert kwargs["native_start"](None, native, text)
-        yield ae.InputStarted(id=None)
-        yield ae.StreamSettled()
-        yield ae.Done(ok=True, text="Received")
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    try:
-        messages = [
-            comms.messaging.send_user_message("#team", text, worktree=str(tmp_path))
-            for text in ("Request one", "Request two")
-        ]
-        for name in ("alpha", "beta"):
-            await agent.inputs.drain_inbox(name)
-        await asyncio.gather(*(agent.inputs.wake_tasks[name] for name in ("alpha", "beta")))
-        rows = list(InputDispositions(comms.root / InputDispositions.filename).read().rows.values())
-        assert len(rows) == 4
-        assert {(row.owner, row.sequence, row.declared_name) for row in rows} == {
-            (name, message.seq, "started") for name in ("alpha", "beta") for message in messages
-        }
-        assert len({row.native_id for row in rows}) == len(calls) == 2
-        assert all("Request one" in text and "Request two" in text for _, text in calls)
-    finally:
-        await agent.shutdown()
-
-
-@pytest.mark.skipif(os.name == "nt", reason="POSIX crash durability uses /var/tmp")
-@pytest.mark.parametrize("crash_at", ["before_cursor", "after_queue"])
-async def test_channel_hard_exit_never_replays_unknown(crash_at, monkeypatch):
-    import subprocess
-    import sys
-    from pathlib import Path
-    from tempfile import TemporaryDirectory
-
-    code = "\nimport asyncio, os, sys\nfrom pathlib import Path\nfrom agent_comms.comms import wire\nfrom agent_comms.input_drain import InputDrain\nfrom agent_comms.acp import CommsAgent\n\nasync def run():\n    comms = wire(Path(sys.argv[1]))\n    agent = CommsAgent(comms, agent_bin='pi', runtime_enabled=True)\n    agent.inputs.ensure_live_drain = lambda session: None\n    agent.inputs.schedule_wake = lambda session: None\n    await agent.new_session(sys.argv[2])\n    comms.channels.update_tags('worker', add=frozenset({'team'}))\n    message = comms.messaging.send_user_message('#team', 'CRASH_REQUEST', worktree=sys.argv[2])\n    advance = agent.inputs.delivery_cursors.advance\n\n    def before_cursor(aliases, through):\n        if through == message.seq and sys.argv[3] == 'before_cursor':\n            pending = agent.inputs.dispositions.read().unknown(frozenset({'worker'}))[0]\n            assert pending.sequence == message.seq\n            os._exit(0)\n        advance(aliases, through)\n    type(agent.inputs.delivery_cursors).advance = lambda self, aliases, through: before_cursor(aliases, through)\n    await agent.inputs.drain_inbox('worker')\n    assert agent.inputs.pending_turns['worker']\n    assert agent.inputs.dispositions.read().unknown(frozenset({'worker'}))[0].sequence == message.seq\n    os._exit(0)\nasyncio.run(run())\n"
-    with TemporaryDirectory(prefix="ac-channel-crash-", dir="/var/tmp") as raw:
-        root = Path(raw)
-        environment = os.environ.copy()
-        for name in (
-            "PI_AGENT_ID",
-            "PI_PARENT_ID",
-            "PI_TASK",
-            "PI_WORKTREE",
-            "AGENT_COMMS_THREAD",
-            "AGENT_COMMS_MANAGED",
-            "AGENT_COMMS_ROOT",
-        ):
-            environment.pop(name, None)
-        environment["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
-        result = subprocess.run(
-            [sys.executable, "-c", code, str(root / "wire"), str(root / "worker"), crash_at],
-            env=environment,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        assert result.returncode == 0, result.stderr
-        comms = wire(root / "wire")
-        agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", suspended)
+    async with canonical_delivery_owner(tmp_path, direct=True) as (comms, owner, message, _root):
+        turn = asyncio.create_task(owner.inputs.drain_inbox("beta"))
         try:
-            await agent.load_session(str(root / "worker"), "worker")
-            await agent.inputs.drain_inbox("worker")
-            assert not agent.inputs.pending_turns.get("worker")
-            assert not agent.inputs.wake_tasks.get("worker")
-            rows = agent.inputs.dispositions.read().unknown(frozenset({"worker"}))
-            assert len(rows) == 1 and rows[0].native_id is None
-            assert rows[0].source_text.endswith("CRASH_REQUEST")
+            await asyncio.wait_for(entered.wait(), 5)
+            if revocation == "goal":
+                comms.goals.update_goal("beta", SetGoalAction(text="New independent task"))
+            elif revocation == "project":
+                project = tmp_path / "other-project"
+                project.mkdir()
+                comms.threads.set_project("beta", str(project))
+            else:
+                comms.registry.unregister("beta")
+            release.set()
+            with pytest.raises(StaleFence):
+                await asyncio.wait_for(turn, 5)
+            assert calls == []
+            assert await owner.inputs.drain_inbox("beta") == 0
+            assert calls == []
+            with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+                rows = NativeRuntimeInput.read(
+                    store._connection.execute(f"SELECT * FROM {NativeRuntimeInput.declared_name}")
+                )
+                assert len(rows) == 1 and rows[0].session_id is None
+            assert comms.bus.log.message_by_id(message.message_id) == message
+            assert not owner.inputs.pending_turns
         finally:
-            await agent.shutdown()
+            release.set()
+            turn.cancel()
+            await asyncio.gather(turn, return_exceptions=True)
 
 
-@pytest.mark.parametrize("mismatch", ["original", "native", "duplicate"])
-async def test_channel_batch_never_credits_omitted_or_duplicate_sequences(
-    tmp_path, monkeypatch, mismatch
-):
-    from agent_comms.routing import ScheduledTurn
+async def test_notification_busy_requires_matching_live_process_identity(tmp_path, monkeypatch):
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    model, calls = native_model()
+    entered, release = asyncio.Event(), asyncio.Event()
 
-    comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
-    await agent.new_session(str(tmp_path / "worker"))
-    comms.channels.update_tags("worker", add=frozenset({"team"}))
-    messages = tuple(
-        comms.messaging.send_user_message("#team", body, worktree=str(tmp_path))
-        for body in ("FIRST", "SECOND")
-    )
-    await agent.inputs.drain_inbox("worker")
-    prompt = "\n\n".join(ScheduledTurn.incoming(message).prompt for message in messages)
-    if mismatch == "original":
-        prompt = ScheduledTurn.incoming(messages[0]).prompt
-    origins = messages if mismatch != "duplicate" else (messages[0], messages[0])
+    async def suspended(*args, **kwargs):
+        entered.set()
+        await release.wait()
+        return await model(*args, **kwargs)
 
-    async def events(*args, **kwargs):
-        text = args[2] if mismatch != "native" else args[2].replace("SECOND", "OMITTED")
-        with kwargs["send_boundary"](None, "a" * 32, text) as allowed:
-            assert allowed is False
-        assert not kwargs["native_start"](None, "a" * 32, text)
-        yield ae.Done(ok=False, text="Refused malformed batch")
+    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", suspended)
+    async with canonical_delivery_owner(tmp_path, direct=True) as (comms, owner, message, _root):
+        turn = asyncio.create_task(owner.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            key = message.seq, message.message_id
+            notices = comms.views.message_notifications([message])[key]
+            assert len(notices) == 1
+            assert notices[0].state == "Responding…" and notices[0].busy
+            assert comms.views.recent_notifications("beta") == (
+                replace(notices[0], message=message),
+            )
+            assert calls == []  # Projection never launches or resends an input.
 
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    try:
-        await agent.turns.run_agent_turn("worker", "worker", prompt, origins=origins)
-        rows = agent.inputs.dispositions.read().unknown(frozenset({"worker"}))
-        assert {row.sequence for row in rows} == {message.seq for message in messages}
-        assert all(row.native_id is None for row in rows)
-    finally:
-        await agent.shutdown()
+            # Same PID, different process incarnation: even a retained active turn
+            # cannot supply liveness. Persist through the real typed registry.
+            with comms.registry.store.editing() as edit:
+                current = edit.document.threads["beta"]
+                identity = current.process_identity
+                assert identity is not None and current.active_turn is not None
+                edit.document.threads["beta"] = replace(
+                    current, process_identity=replace(identity, start_time=identity.start_time + 1)
+                )
+                edit.commit()
+            paused = comms.views.message_notifications([message])[key]
+            assert paused[0].state == "Paused" and not paused[0].busy
+            assert comms.views.recent_notifications("beta") == (
+                replace(paused[0], message=message),
+            )
+            assert calls == []
+        finally:
+            turn.cancel()
+            await asyncio.gather(turn, return_exceptions=True)

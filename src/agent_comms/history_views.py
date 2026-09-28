@@ -92,7 +92,7 @@ class HistoryViews:
         """Read one visible window's actual recipient outcomes; never schedule work.
 
         Display uses the coordinator's existing assignment decoder and lifecycle.
-        A missing legacy store or absent row supplies no receipt. Errors remain
+        A missing coordination store or absent row supplies no receipt. Errors remain
         visible to the caller instead of becoming false successful delivery.
         """
         if len(messages) > 120:
@@ -105,8 +105,8 @@ class HistoryViews:
         rows = self._notification_rows(
             f"w.wire_seq IN ({placeholders})", tuple(key[0] for key in keys)
         )
-        for row, notification in self._project_notifications(rows):
-            key = (row["wire_seq"], row["message_id"])
+        for assignment, notification in self._project_notifications(rows):
+            key = (assignment.wire_seq, assignment.message_id)
             if key in result:
                 result[key].append(notification)
         return {key: tuple(rows) for key, rows in result.items()}
@@ -128,9 +128,9 @@ class HistoryViews:
             limit=limit,
         )
         result = []
-        for row, notification in self._project_notifications(rows):
-            message = self.bus.log.message_by_id(row["message_id"])
-            if message is not None and message.seq == row["wire_seq"]:
+        for assignment, notification in self._project_notifications(rows):
+            message = self.bus.log.message_by_id(assignment.message_id)
+            if message is not None and message.seq == assignment.wire_seq:
                 result.append(replace(notification, message=message))
         return tuple(result)
 
@@ -138,7 +138,8 @@ class HistoryViews:
         import sqlite3
         from contextlib import closing
 
-        from .coordination import COORDINATION_SCHEMA_VERSION
+        from .coordination import COORDINATION_SCHEMA_VERSION, CurrentExecutions, WakeClaims
+        from .native_runtime_input import NativeRuntimeInput
         from .recovery_projection import _preflight
 
         database = self.root / "coordination.sqlite3"
@@ -160,10 +161,12 @@ class HistoryViews:
             ):
                 raise ValueError("Channel notification status has an unsupported schema")
             return tuple(connection.execute(
-                "SELECT w.*, EXISTS (SELECT 1 FROM native_runtime_inputs n "
-                "WHERE n.claim_id=w.claim_id AND n.stage='triage' AND n.verdict IS NULL) "
-                "AS triage_inflight, c.execution_id AS current_execution_id FROM wake_claims w "
-                "LEFT JOIN current_executions c ON c.owner_lookup=w.recipient_lookup "
+                f"SELECT w.*, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n "
+                "WHERE n.assignment_id=w.claim_id AND n.stage='triage' AND n.verdict IS NULL) "
+                "AS triage_inflight, c.execution_id AS current_execution_id "
+                f"FROM {WakeClaims.declared_name} w "
+                f"LEFT JOIN {CurrentExecutions.declared_name} c "
+                "ON c.owner_lookup=w.recipient_lookup "
                 f"WHERE {predicate} ORDER BY w.wire_seq DESC,w.recipient"
                 + (" LIMIT ?" if limit else ""),
                 (*parameters, limit) if limit else parameters,
@@ -172,13 +175,12 @@ class HistoryViews:
     def _project_notifications(self, rows):
         from .bus_publication import stable_thread_lookup
         from .coordination_store import _assignment
-        from .owner_lifecycle import OwnerLifecycle
 
         snapshot = self.registry.snapshot()
         owners = {
             stable_thread_lookup(thread.created_at): thread
             for name, thread in snapshot.threads.items()
-            if snapshot.statuses[name].active and thread.pid > 0
+            if snapshot.statuses[name].active and thread.process_alive
         }
         for row in rows:
             assignment = _assignment(row)
@@ -188,9 +190,8 @@ class HistoryViews:
                 and owner.active_turn is not None
                 and owner.active_turn.owner_pid == owner.pid
                 and owner.active_turn.started_at * 1000 <= assignment.updated_at_ms + 1
-                and OwnerLifecycle._process_alive(owner.pid)
             )
-            yield row, assignment.lifecycle.notification(
+            yield assignment, assignment.lifecycle.notification(
                 assignment.recipient,
                 owner_active=owner is not None,
                 current_turn=current_turn,
