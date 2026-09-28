@@ -49,6 +49,17 @@ def _nonnegative(value: int, *, minimum: int = 0) -> None:
 
 
 @dataclass(frozen=True, slots=True)
+class RecoveryRequest:
+    thread: str = field(metadata={"wire_required": True})
+
+    def __post_init__(self):
+        if not 1 <= len(self.thread) <= 256 or any(
+            ord(character) < 32 or ord(character) == 127 for character in self.thread
+        ):
+            raise ValueError("invalid thread")
+
+
+@dataclass(frozen=True, slots=True)
 class ProjectedAttempt(ProjectionRecord):
     ordinal: int
     phase: AttemptPhase

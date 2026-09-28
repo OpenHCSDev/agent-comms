@@ -32,7 +32,8 @@ from pathlib import Path
 from typing import Any
 
 from .coordination import COORDINATION_SCHEMA_VERSION, COORDINATION_SNAPSHOT_VERSION
-from .recovery_projection import read_recovery_projection
+from .field_codec import FieldCodec
+from .recovery_projection import RecoveryRequest, read_recovery_projection
 
 _MAX_REQUEST = 1024
 _MAX_REPLY = 4096
@@ -89,16 +90,7 @@ def _decode_request(raw: bytes) -> str:
     value = json.loads(
         raw.decode("utf-8", errors="strict"), object_pairs_hook=_reject_duplicate_keys
     )
-    if not isinstance(value, dict) or set(value) != {"thread"}:
-        raise ValueError("unexpected request fields")
-    thread = value["thread"]
-    if (
-        not isinstance(thread, str)
-        or not 1 <= len(thread) <= 256
-        or any(ord(character) < 32 or ord(character) == 127 for character in thread)
-    ):
-        raise ValueError("invalid thread")
-    return thread
+    return FieldCodec.decode(RecoveryRequest, value).thread
 
 
 def _validate_paths(root: Path, database: Path) -> None:

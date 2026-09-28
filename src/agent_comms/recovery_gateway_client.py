@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from .field_codec import FieldCodec
-from .recovery_projection import AvailableRecoveryProjection, RecoveryProjection
+from .recovery_projection import AvailableRecoveryProjection, RecoveryProjection, RecoveryRequest
 
 _MAX_REPLY = 4096
 _TIMEOUT = 0.75
@@ -106,16 +106,14 @@ async def read_gateway_projection(path: Path, thread: str) -> dict[str, object]:
     The UI caller MUST schedule this after first paint. No implicit gateway
     start, local SQLite fallback, retry action, monitor, or secret logging.
     """
-    if (
-        type(thread) is not str
-        or not 1 <= len(thread) <= 256
-        or any(ord(character) < 32 or ord(character) == 127 for character in thread)
-    ):
+    try:
+        query = FieldCodec.decode(RecoveryRequest, {"thread": thread})
+    except (TypeError, ValueError):
         return dict(_UNAVAILABLE)
     path = Path(path)
     if not _private_socket(path):
         return dict(_UNAVAILABLE)
-    request = (json.dumps({"thread": thread}, separators=(",", ":")) + "\n").encode()
+    request = (json.dumps(FieldCodec.encode(query), separators=(",", ":")) + "\n").encode()
     if len(request) > 1024:
         return dict(_UNAVAILABLE)
     writer: asyncio.StreamWriter | None = None

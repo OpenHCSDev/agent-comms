@@ -129,6 +129,9 @@ async def test_snapshot_offline_is_bounded_redacted_and_does_not_start_owner(
 @pytest.mark.parametrize(
     "raw",
     [
+        b'{}\n',
+        b'{"thread":true}\n',
+        b'{"thread":null}\n',
         b'{"thread":"Alice","thread":"Bob"}\n',
         b'{"thread":"Alice","owner_lookup":"a"}\n',
         b'{"thread":"Alice","wireRoot":"/tmp"}\n',
